@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,5,0,0,5,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,50,2,5,52,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+add,52,2,5,54,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -87,7 +87,7 @@ complex_log,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 complex_mul,11,0,1,11,0,,covered_by_family,category default for 'elementwise'
 complex_pow,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 complex_sqrt,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-cond,2,0,0,2,0,,structural_only,category default for 'control_flow'
+cond,3,0,0,3,0,,structural_only,category default for 'control_flow'
 conformal_energy_on_sphere,2,0,0,2,0,,needs_direct_test,category default for 'stable_reduction'
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
 constant_lr,3,0,0,3,0,,structural_only,category default for 'schedule'
@@ -174,7 +174,7 @@ flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_only
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
-fori_loop,4,0,1,4,0,,structural_only,category default for 'control_flow'
+fori_loop,6,0,1,6,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,1,0,3,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,2,2,0,4,0,,needs_direct_test,category default for 'attention'
@@ -244,7 +244,7 @@ lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'lina
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,232,141,12,373,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,240,141,12,381,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -319,7 +319,7 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,3,0,1,3,0,,needs_direct_test,category default for 'attention'
 rfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,34,4,1,38,0,bf16 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm,38,4,1,42,0,bf16 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,2,1,0,3,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -366,7 +366,7 @@ sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
 sigmoid,3,0,0,3,0,f32 fp32,covered_by_family,category default for 'elementwise'
 sigmoid_safe,3,0,0,3,0,,needs_direct_test,category default for 'stable_reduction'
 sign,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-silu,38,2,2,40,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+silu,44,2,2,46,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 silu_mul,6,10,0,16,0,fp32,covered_by_family,category default for 'elementwise'
 simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
@@ -433,4 +433,4 @@ vmap,0,0,0,0,1,,structural_only,category default for 'transform'
 wasserstein_distance,6,0,0,6,0,,covered_by_family,category default for 'loss'
 weight_norm,4,0,0,4,0,,needs_direct_test,category default for 'normalization'
 where,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-while_loop,3,0,1,3,0,,structural_only,category default for 'control_flow'
+while_loop,4,0,1,4,0,,structural_only,category default for 'control_flow'

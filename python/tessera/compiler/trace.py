@@ -387,14 +387,202 @@ def to_graphfn(traced: TracedFunction, *, elem: str = "f32",
     return g
 
 
+# ── Layer 2 (general) — concrete interpreter over a traced function ──────── #
+#
+# F3 lifts the GraphFn-executor constraints (return == construct result, loop
+# init == function arg) that limit the to_graphfn path: this walks the traced op
+# list with a concrete env, running straight-line ops as per-op Apple GPU kernels
+# (``agb.gpu_*``) and each control region as ONE fused ``run_graph_*`` dispatch
+# whose "args" are the live concrete values the region's body references — so a
+# control construct can sit anywhere, with straight-line code before and after.
+
+
+def _has_control_flow(traced: TracedFunction) -> bool:
+    return any(op.op_name.startswith("tessera.control_") for op in traced.body)
+
+
+def _branch_dicts(body_ops, idof: Dict[str, int], base: int):
+    """Serialize a region's straight-line body to the run_graph op-list ABI.
+    ``idof`` maps already-bound SSAs (live args + carry) to ids; op ``j`` binds id
+    ``base + j``. Returns ``(dicts, idof)``."""
+    from .graphfn_bridge import _OP_TABLE, _strip
+
+    idof = dict(idof)
+    out = []
+    for j, op in enumerate(body_ops):
+        entry = _OP_TABLE.get(op.op_name)
+        if entry is None:
+            raise TesseraTraceError(
+                f"trace exec: region op {op.op_name!r} is not executable on "
+                "apple_gpu")
+        name = entry[0]
+        e: dict = {"op": name, "in0": idof[_strip(op.operands[0])]}
+        if name == "matmul":
+            e["in1"] = idof[_strip(op.operands[1])]
+            e["transpose_a"] = bool(op.kwargs.get("transpose_a"))
+            e["transpose_b"] = bool(op.kwargs.get("transpose_b"))
+        elif name in ("add", "sub", "mul", "div"):
+            e["in1"] = idof[_strip(op.operands[1])]
+        elif name in ("rmsnorm", "layer_norm"):
+            e["eps"] = float(op.kwargs.get("eps", 1e-5))
+        out.append(e)
+        assert op.result is not None
+        idof[op.result] = base + j
+    return out, idof
+
+
+def _live_refs(bodies, exclude: set, extra_refs=()) -> List[str]:
+    """Ordered external SSAs referenced across ``bodies`` (region op-lists) plus
+    ``extra_refs`` (region OUTPUT ssas — a branch/cond can return a bare external
+    arg with no ops), excluding region-internal results and ``exclude`` (carry)."""
+    from .graphfn_bridge import _strip
+
+    internal = {op.result for body in bodies for op in body}
+    live: List[str] = []
+    seen: set = set()
+
+    def consider(s: str) -> None:
+        if s not in internal and s not in exclude and s not in seen:
+            seen.add(s)
+            live.append(s)
+
+    for body in bodies:
+        for op in body:
+            for o in op.operands:
+                consider(_strip(o))
+    for s in extra_refs:
+        consider(_strip(s))
+    return live
+
+
+def execute_traced(traced: TracedFunction, arrays: List[np.ndarray]):
+    """Concrete Apple GPU interpreter over a traced function (F3). Straight-line
+    ops run as per-op kernels; control regions run as one fused ``run_graph_*``
+    dispatch over their live concrete inputs. Supports straight-line code before
+    and after a (single-level) control construct."""
+    from tessera import _apple_gpu_backend as agb
+    from tessera import apple_mlpkg as mp
+
+    from .graphfn_bridge import _strip
+
+    env: Dict[str, np.ndarray] = {}
+    for (ssa, _shape, _dt), arr in zip(traced.args, arrays):
+        env[ssa] = np.ascontiguousarray(np.asarray(arr, dtype=np.float32))
+
+    def shapes(names):
+        return [tuple(env[s].shape) for s in names]
+
+    for op in traced.body:
+        assert op.result is not None
+        nm = op.op_name
+        if nm == "tessera.control_for":
+            kw = op.kwargs
+            carry_ssa, init_ssa = kw["_carry_ssa"], _strip(op.operands[0])
+            live = _live_refs([kw["_body"]], {carry_ssa}, [kw["_next_ssa"]])
+            args = [env[s] for s in live] + [env[init_ssa]]  # init is the last arg
+            n_args = len(args)
+            # ABI: ids 0..n_args-1 = args, n_args = the carry, n_args+1+j = body op
+            # j; the carry's initial value comes from args[carry_arg_index].
+            idof = {s: i for i, s in enumerate(live)}
+            idof[carry_ssa] = n_args
+            dicts, local = _branch_dicts(kw["_body"], idof, n_args + 1)
+            out = mp.run_graph_loop_f32(
+                args, shapes(live) + [tuple(env[init_ssa].shape)], len(live),
+                kw["_trip"], dicts, local[kw["_next_ssa"]],
+                tuple(env[init_ssa].shape))
+            env[op.result] = out
+        elif nm == "tessera.control_if":
+            kw = op.kwargs
+            flag_ssa = kw["_flag_ssa"]
+            live = _live_refs([kw["_then_body"], kw["_else_body"]], set(),
+                              [flag_ssa, kw["_then_ssa"], kw["_else_ssa"]])
+            if flag_ssa not in live:
+                live = [flag_ssa] + live
+            idof = {s: i for i, s in enumerate(live)}
+            tdicts, tlocal = _branch_dicts(kw["_then_body"], idof, len(live))
+            edicts, elocal = _branch_dicts(kw["_else_body"], idof, len(live))
+            args = [env[s] for s in live]
+            out_shape = tuple(env[kw["_then_ssa"]].shape) if kw["_then_ssa"] in env \
+                else _result_shape(op)
+            out = mp.run_graph_cond_f32(
+                args, shapes(live), live.index(flag_ssa),
+                tdicts, tlocal[kw["_then_ssa"]], edicts, elocal[kw["_else_ssa"]],
+                out_shape)
+            env[op.result] = out
+        elif nm == "tessera.control_while":
+            kw = op.kwargs
+            carry_ssa, init_ssa = kw["_carry_ssa"], _strip(op.operands[0])
+            live = _live_refs([kw["_body"], kw["_cond"]], {carry_ssa},
+                              [kw["_next_ssa"], kw["_pred_ssa"]])
+            args = [env[s] for s in live] + [env[init_ssa]]
+            n_args = len(args)
+            idof = {s: i for i, s in enumerate(live)}
+            idof[carry_ssa] = n_args
+            bdicts, blocal = _branch_dicts(kw["_body"], idof, n_args + 1)
+            cdicts, clocal = _branch_dicts(kw["_cond"], idof, n_args + 1)
+            out = mp.run_graph_while_f32(
+                args, shapes(live) + [tuple(env[init_ssa].shape)], len(live),
+                kw["_max_iters"], bdicts, blocal[kw["_next_ssa"]],
+                cdicts, clocal[kw["_pred_ssa"]], tuple(env[init_ssa].shape))
+            env[op.result] = out
+        else:
+            env[op.result] = _gpu_straightline_op(agb, op, env)
+        if env[op.result] is None:
+            raise TesseraTraceError(
+                f"trace exec: op {nm!r} dispatch failed / runtime unavailable")
+    return env[traced.outputs[0]].copy()
+
+
+def _result_shape(op: IROp) -> Tuple[int, ...]:
+    rt = op.result_type or ""
+    inside = rt[rt.find("<") + 1:rt.rfind("x")] if "<" in rt else ""
+    try:
+        return tuple(int(d) for d in inside.split("x") if d)
+    except ValueError:
+        return ()
+
+
+def _gpu_straightline_op(agb, op: IROp, env) -> np.ndarray:
+    from .graphfn_bridge import _strip
+
+    nm = op.op_name
+    ins = [env[_strip(o)] for o in op.operands]
+    kw = op.kwargs or {}
+    if nm in ("tessera.matmul", "tessera.gemm"):
+        a = ins[0].T if kw.get("transpose_a") else ins[0]
+        b = ins[1].T if kw.get("transpose_b") else ins[1]
+        return agb.gpu_matmul(np.ascontiguousarray(a), np.ascontiguousarray(b))
+    if nm == "tessera.softmax":
+        return agb.gpu_softmax(ins[0])
+    if nm == "tessera.gelu":
+        return agb.gpu_gelu(ins[0])
+    if nm in ("tessera.relu", "tessera.sigmoid", "tessera.tanh", "tessera.silu"):
+        return agb.gpu_unary(nm.split(".", 1)[1], ins[0])
+    if nm == "tessera.rmsnorm":
+        return agb.gpu_rmsnorm(ins[0], eps=float(kw.get("eps", 1e-5)))
+    if nm == "tessera.layer_norm":
+        return agb.gpu_layer_norm(ins[0], eps=float(kw.get("eps", 1e-5)))
+    if nm in ("tessera.add", "tessera.sub", "tessera.mul", "tessera.div"):
+        return agb.gpu_binary(nm.split(".", 1)[1], ins[0], ins[1])
+    if nm == "tessera.transpose":
+        return np.ascontiguousarray(ins[0].T)
+    raise TesseraTraceError(
+        f"trace exec: op {nm!r} is not executable on apple_gpu")
+
+
 def run_traced(fn: Callable, *arrays: np.ndarray, target: str = "apple_gpu"):
-    """Convenience: trace ``fn`` with ``arrays`` (as shape/dtype specs), lower to a
-    ``GraphFn``, and execute — returning the result as ``np.ndarray``. The
-    straight-line counterpart to ``jit_fori_loop`` for arbitrary ``tessera.ops``
-    bodies. (Straight-line graphs have no control_for, so ``run()`` is the
-    executor on both lanes.)"""
+    """Convenience: trace ``fn`` with ``arrays`` (as shape/dtype specs) and execute,
+    returning the result as ``np.ndarray``. The general successor to
+    ``jit_fori_loop`` for arbitrary ``tessera.ops`` + ``tessera.control`` bodies.
+
+    Straight-line traces lower to a ``GraphFn`` (fusion); traces containing
+    control flow use the F3 concrete interpreter (``execute_traced``), which lifts
+    the GraphFn-executor constraints so control flow can sit anywhere with
+    surrounding straight-line code."""
     arrs = [np.asarray(a) for a in arrays]
     traced = trace(fn, *arrs)
+    if target == "apple_gpu" and _has_control_flow(traced):
+        return execute_traced(traced, arrs)
     elem = "bf16" if (arrs and _np_dtype_to_elem(arrs[0].dtype) == "bf16") else "f32"
     g = to_graphfn(traced, elem=elem, target=target)
     return g.run(*arrs)

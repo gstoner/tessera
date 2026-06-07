@@ -500,11 +500,26 @@ last_updated: 2026-06-05
 >   is captured by natural Python variable flow (the body's returned Tracer) — no
 >   SSA/AST heuristics. E2E: traced fori (7e-10), cond both branches (~1e-8), while
 >   (0.0) vs numpy. `while_loop` needs an explicit `max_steps` bound under trace.
->   **+10 tests** `tests/unit/test_trace_f2.py`. (Surrounding straight-line code
->   *around* a construct still hits GraphFn's "return == construct result / init ==
->   arg" executor constraints — generalizing that is F3.) Next: F3 (generalize the
->   GraphFn loop/cond executors for arbitrary nesting + surrounding code), F4
->   (`@jit` trace-by-running), F5 (retire the AST bridge).
+>   **+10 tests** `tests/unit/test_trace_f2.py`.
+>
+> * **Phase F3 — general Layer-2 concrete interpreter landed 2026-06-06.** The
+>   genuine capability beyond the AST bridge: `trace.execute_traced` walks a traced
+>   function with a concrete env, running straight-line ops as per-op Apple GPU
+>   kernels (`agb.gpu_*`) and each control region as ONE fused `run_graph_*`
+>   dispatch whose "args" are the live concrete values the region's body
+>   references. This **lifts the GraphFn-executor constraints** (return ==
+>   construct result, loop init == function arg) — so a control construct can sit
+>   anywhere with straight-line code **before** (computing its carry/inputs, which
+>   need NOT be function args) and **after** (consuming its result), plus residuals
+>   to pre-construct values. `run_traced` routes control-flow traces through
+>   `execute_traced` and pure-straight-line traces through the fused GraphFn path.
+>   Key fix: the carry occupies id `len(args)` (a slot past all args incl. the
+>   init), and region OUTPUT ssas (a branch/cond can return a bare external arg)
+>   join the live set. E2E: loop+pre+post+residual, cond/while with surrounding
+>   code, computed loop consts — all ~1e-7 vs numpy. **+6 tests**
+>   `tests/unit/test_trace_f3.py`. (Nested control flow — a control op inside a
+>   region body — remains future: `run_graph_*` bodies are flat.) Next: F4 (`@jit`
+>   trace-by-running), F5 (retire the AST bridge).
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

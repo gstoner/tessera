@@ -518,8 +518,31 @@ last_updated: 2026-06-05
 >   join the live set. E2E: loop+pre+post+residual, cond/while with surrounding
 >   code, computed loop consts — all ~1e-7 vs numpy. **+6 tests**
 >   `tests/unit/test_trace_f3.py`. (Nested control flow — a control op inside a
->   region body — remains future: `run_graph_*` bodies are flat.) Next: F4 (`@jit`
->   trace-by-running), F5 (retire the AST bridge).
+>   region body — remains future: `run_graph_*` bodies are flat.)
+>
+> * **Phase F4 — `@jit(target="apple_gpu")` trace-by-running landed 2026-06-06.**
+>   Behind a flag (`TESSERA_JIT_TRACE` env / `trace.jit_trace()` context manager /
+>   `set_jit_trace`) while parity is oracled; `JitFn.__call__` routes apple_gpu
+>   calls through `trace.run_jit_traced` (trace `self._fn` with the call's args →
+>   `execute_traced` for control flow, fused GraphFn for straight-line). Default
+>   **off** → zero change to existing @jit behavior. **The tracer's domain (the
+>   JAX contract):** straight-line `tessera.ops`; a Python `for _ in range(N)` over
+>   a static N (**unrolls**); and explicit `tessera.control.*` for data-dependent
+>   control flow. A raw Python `if`/`while` on a traced value now raises via
+>   `Tracer.__bool__` ("use tessera.control.cond / while_loop") instead of silently
+>   taking one branch — the abstract-trace hazard. Parity: `loop_whole`'s raw
+>   `for range(4)` gives the same result through the AST bridge (→ `control_for`)
+>   and the tracer (→ unrolled) at 8e-10; `ctrl_cond` selects the right branch;
+>   straight-line matches numpy. **+8 tests** `tests/unit/test_trace_f4.py`.
+>
+>   *Refined "supersede" (vs the original plan):* the tracer supersedes the AST
+>   bridge for **explicit-style** code (`ts.ops` + `ts.control.*` + static-`for`).
+>   Raw *data-dependent* `if`/`while` is fundamentally incompatible with
+>   run-by-tracing, so F5's retirement of the AST bridge is paired with a
+>   migration note (rewrite raw data-`if`/`while` to `ts.control.cond`/`while_loop`)
+>   rather than a silent swap; raw static-`for` needs no change (it unrolls).
+>   Next: F5 (default the tracer + relax AST-emission-only decoration + retire the
+>   AST bridge for explicit-style code), F6 (vocab/scan/nesting).
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

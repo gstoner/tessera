@@ -16,6 +16,8 @@ wiring (F3–F5) build on this.
 
 from __future__ import annotations
 
+import contextlib
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -35,6 +37,15 @@ class Tracer:
     shape: Tuple[int, ...]
     dtype: str
     ssa: str
+
+    def __bool__(self):
+        # A raw Python ``if tracer:`` / ``while tracer:`` would silently take one
+        # path (a frozen dataclass is truthy) — the classic abstract-trace hazard.
+        # Force the explicit data-dependent control-flow surface instead.
+        raise TesseraTraceError(
+            "cannot branch on a traced value with a Python `if`/`while`; use "
+            "tessera.control.cond / tessera.control.while_loop for data-dependent "
+            "control flow (a Python `for _ in range(N)` over a static N unrolls)")
 
 
 @dataclass
@@ -568,6 +579,55 @@ def _gpu_straightline_op(agb, op: IROp, env) -> np.ndarray:
         return np.ascontiguousarray(ins[0].T)
     raise TesseraTraceError(
         f"trace exec: op {nm!r} is not executable on apple_gpu")
+
+
+# ── F4 — wire @jit(target="apple_gpu") to trace-by-running ────────────────── #
+#
+# Behind a flag while F4 oracles parity against the AST bridge; F5 flips it to the
+# default and retires the AST `_OpExtractor` + detect_loop_fn/detect_cond_fn path.
+
+_JIT_TRACE = [os.environ.get("TESSERA_JIT_TRACE", "") not in ("", "0", "false")]
+
+
+def jit_trace_enabled() -> bool:
+    """Whether `@jit(target="apple_gpu")` should execute by trace-by-running
+    (F4). Defaults from the ``TESSERA_JIT_TRACE`` env var; toggle with
+    ``set_jit_trace`` / the ``jit_trace`` context manager."""
+    return _JIT_TRACE[0]
+
+
+def set_jit_trace(on: bool) -> None:
+    _JIT_TRACE[0] = bool(on)
+
+
+@contextlib.contextmanager
+def jit_trace(on: bool = True):
+    """Context manager toggling @jit trace-by-running (used by parity tests)."""
+    prev = _JIT_TRACE[0]
+    _JIT_TRACE[0] = bool(on)
+    try:
+        yield
+    finally:
+        _JIT_TRACE[0] = prev
+
+
+def run_jit_traced(jitfn: Any, args: tuple, kwargs: dict):
+    """Execute a `@jit(target="apple_gpu")` function by trace-by-running: trace
+    ``jitfn._fn`` with the call's args, then dispatch via ``execute_traced`` (when
+    the trace has control flow) or the fused GraphFn path. Supersedes the AST
+    `_OpExtractor` + `detect_loop_fn`/`detect_cond_fn` bridge."""
+    names = list(getattr(jitfn, "arg_names", []) or [])
+    ordered: List[Any] = list(args)
+    for nm in names[len(ordered):]:
+        if nm in kwargs:
+            ordered.append(kwargs[nm])
+    arrays = [np.asarray(a) for a in ordered]
+    traced = trace(jitfn._fn, *arrays)
+    if _has_control_flow(traced):
+        return execute_traced(traced, arrays)
+    elem = "bf16" if (arrays and _np_dtype_to_elem(arrays[0].dtype) == "bf16") \
+        else "f32"
+    return to_graphfn(traced, elem=elem, target="apple_gpu").run(*arrays)
 
 
 def run_traced(fn: Callable, *arrays: np.ndarray, target: str = "apple_gpu"):

@@ -602,6 +602,15 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         try:
+            # Phase-F F4 — trace-by-running supersedes the AST bridge for
+            # apple_gpu (behind a flag while parity is oracled; F5 makes it the
+            # default). Handles arbitrary tessera.ops/tessera.control bodies with
+            # control flow anywhere + surrounding straight-line code.
+            if self.target == "apple_gpu":
+                from .trace import jit_trace_enabled, run_jit_traced
+
+                if jit_trace_enabled():
+                    return run_jit_traced(self, args, kwargs)
             # Phase-G close-out (Phase A) — a detected single-carry bounded loop
             # on apple_gpu executes via the GraphFn control_for path. An
             # untranslatable body op raises a stable diagnostic here (Decision

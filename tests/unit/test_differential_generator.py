@@ -26,28 +26,17 @@ import numpy as np
 import pytest
 
 import tessera as ts
-from tessera import _apple_gpu_backend as agb
-from tessera import _jit_boundary as jb
 from tessera.compiler.trace import run_traced, trace
 
-_GPU = agb.is_available() and jb.is_available()
-gpu = pytest.mark.skipif(
-    not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
+from _diff_lane import (  # noqa: E402  (sibling helper module, see _diff_lane.py)
+    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, stable, straightline_fn,
+)
 
-N = 8
+# Back-compat local aliases (kept so the test bodies read as before).
+_apply, _straightline_fn, _inputs, _stable = (
+    apply_op, straightline_fn, inputs, stable)
+
 _SEEDS = [0, 1, 2, 3, 7, 13, 42, 123, 999, 31337]
-# Executable-lane vocab (must be a subset of what `_gpu_straightline_op` runs).
-_UNARY = ["silu", "relu", "sigmoid", "tanh", "gelu", "softmax",
-          "rmsnorm", "layer_norm"]
-_BINARY = ["matmul", "add", "sub", "mul"]   # div excluded (oracle stability)
-_EXPECT = {op: f"tessera.{op}" for op in _UNARY + _BINARY}
-
-
-def _apply(op, vals, idxs):
-    """Apply one op given the value pool + chosen operand indices."""
-    if op in _BINARY:
-        return getattr(ts.ops, op)(vals[idxs[0]], vals[idxs[1]])
-    return getattr(ts.ops, op)(vals[idxs[0]])
 
 
 def _gen_prog(rng, n_ops):
@@ -64,33 +53,6 @@ def _gen_prog(rng, n_ops):
         prog.append((op, idxs))
         pool += 1
     return prog
-
-
-def _straightline_fn(prog):
-    def fn(x, w):
-        vals = [x, w]
-        for op, idxs in prog:
-            vals.append(_apply(op, vals, idxs))
-        return vals[-1]
-    return fn
-
-
-def _inputs(rng):
-    x = (rng.standard_normal((N, N)) / 8).astype(np.float32)
-    w = (rng.standard_normal((N, N)) / 3).astype(np.float32)
-    return x, w
-
-
-def _stable(fn, x, w):
-    """Eager oracle output; None if not finite / too large (skip — don't let a
-    numerically unstable *generated* program masquerade as a miscompile)."""
-    try:
-        out = np.asarray(fn(x, w), dtype=np.float32)
-    except Exception:                       # noqa: BLE001
-        return None
-    if not np.isfinite(out).all() or np.max(np.abs(out)) > 1e4:
-        return None
-    return out
 
 
 # ── runtime-free: every generated program traces, op-names round-trip ──────── #

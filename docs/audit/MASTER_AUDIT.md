@@ -218,7 +218,13 @@ synthesizes random programs over the executable lane (`tessera.ops` +
 the real **trace → GraphFn / `execute_traced` Metal path** — a miscompile
 detector for straight-line, fused `run_graph_loop`, and fused `run_graph_cond`;
 51 cases green on Apple GPU, runtime-free trace/op-name properties run
-everywhere). (The "claimed-complete must be proven" gate is P0 above —
+everywhere. A **hypothesis-backed sibling**
+[`test_differential_generator_hypothesis.py`](../../tests/unit/test_differential_generator_hypothesis.py)
+drives the same shared grammar/oracle [`_diff_lane.py`](../../tests/unit/_diff_lane.py)
+via `@given` for **automatic shrinking** — a Metal miscompile reduces to the
+minimal failing program — guarded by `importorskip("hypothesis")` so CI without
+it still passes on the stdlib harness). (The "claimed-complete must be proven"
+gate is P0 above —
 *Fixture-driven proof claims for complete conformance cells*.)
 
 ## Where To Go Next

@@ -87,7 +87,7 @@ complex_log,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 complex_mul,11,0,1,11,0,,covered_by_family,category default for 'elementwise'
 complex_pow,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 complex_sqrt,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-cond,13,0,1,13,0,,structural_only,category default for 'control_flow'
+cond,14,0,1,14,0,,structural_only,category default for 'control_flow'
 conformal_energy_on_sphere,2,0,0,2,0,,needs_direct_test,category default for 'stable_reduction'
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
 constant_lr,3,0,0,3,0,,structural_only,category default for 'schedule'
@@ -174,7 +174,7 @@ flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_only
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
-fori_loop,18,0,1,18,0,,structural_only,category default for 'control_flow'
+fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,1,0,3,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,2,2,0,4,0,,needs_direct_test,category default for 'attention'

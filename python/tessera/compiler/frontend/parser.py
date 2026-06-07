@@ -398,10 +398,14 @@ class _Parser:
             elif token and token.text == "let":
                 const_decls.append(self.parse_const_decl())
             else:
-                # The loop guard ``self._peek_text() != "}"`` plus the
-                # elif chain above means ``token`` is guaranteed
-                # non-None here.  Narrow for mypy.
-                assert token is not None
+                # The loop guard ``self._peek_text() != "}"`` is *also* true at
+                # end-of-input (``None != "}"``), so ``token`` can be None here —
+                # a module that's missing its closing ``}``. Emit a named
+                # diagnostic (Decision #21 / crash-safety) rather than asserting.
+                if token is None:
+                    raise FrontendSyntaxError(
+                        "unexpected end of input: expected '}' to close module",
+                        self._span(token))
                 raise FrontendSyntaxError(f"unsupported module declaration {token.text!r}", self._span(token))
         self.eat_text("}")
         return Module(name=name, funcs=funcs, meshes=meshes, type_decls=type_decls, const_decls=const_decls)

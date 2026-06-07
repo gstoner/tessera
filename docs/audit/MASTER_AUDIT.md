@@ -162,7 +162,22 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 ### P0
 
-- Fixture-driven proof claims for complete conformance cells.
+- ✅ **Fixture-driven proof claims for complete conformance cells (2026-06-07).**
+  A conformance cell can now only reach `numerical_check = complete` when a
+  **manifest-declared `execute_compare_fixture`** exists on disk (the
+  legacy filename/keyword heuristic is capped at `partial`). The generator
+  enforces it (`conformance_matrix._numerical_proof_source` →
+  `"fixture"`/`"heuristic"`/`None`); the gate is locked by
+  [`test_conformance_complete_cells_proven.py`](../../tests/unit/test_conformance_complete_cells_proven.py)
+  (every complete cell is fixture-proven, the fixture exists and genuinely
+  `assert_allclose`-compares a component op, and heuristic-only cells never
+  reach complete). Tightening demoted 35 keyword-only `numerical_check` sub-cells
+  to `partial` (e.g. `softmax/nvidia`, which has no execution path) with **zero
+  `overall` flips**; the 5 published complete cells (Apple matmul/softmax/
+  matmul_softmax/flash_attn) are each backed by a real execute-compare and all
+  15 declared fixtures pass `conformance_matrix --verify-fixtures`. Two
+  mis-declared fixtures (`matmul`/`rope` on apple_gpu pointed at the buffer-pool
+  RAII test) were corrected to genuine numerical compares.
 - Backend-kernel hardware proof on real NVIDIA/ROCm hardware.
 - Runtime execution rows only for genuinely executable backends.
 
@@ -188,12 +203,12 @@ software-actionable gap surface is small and specific; most incompleteness is
 hardware-gated (expected) or thin-test (better closed by generative differential
 testing than hand-written tests). Run
 [`scripts/stub_surface_report.py`](../../scripts/stub_surface_report.py) for the
-live ranked rollup → [`generated/stub_surface.md`](generated/stub_surface.md).
+live ranked rollup → [`stub_surface.md`](stub_surface.md).
 Stubs are an **oracle/conformance problem, not a fuzz problem** (a stub that
 returns a plausible artifact never crashes); fuzzing is layered on top of the
 differential oracle to catch the long tail.
 
-The actionable surface, ranked (numbers live in `generated/stub_surface.md`):
+The actionable surface, ranked (numbers live in `stub_surface.md`):
 - **Verifier stubs** — the `trivial_stub` verifiers (`Arch*` NAS ops +
   `KVCacheCreateOp` + `RingCreateOp`): `verify()` declared but no-ops. Plus a
   manual-triage pass on the `no_verifier` ops (control/collective/reshape-shaped

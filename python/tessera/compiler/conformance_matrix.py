@@ -281,30 +281,40 @@ def _test_text_index() -> dict[str, str]:
     return out
 
 
-def _numerical_check_present(op: str, target: str) -> bool:
-    """Resolve the ``numerical_check`` column for ``(op, target)``.
+def _numerical_proof_source(op: str, target: str) -> Optional[str]:
+    """How the ``numerical_check`` for ``(op, target)`` is satisfied:
+
+    - ``"fixture"`` — a manifest-declared ``execute_compare_fixture`` that
+      exists on disk. This is a **real** execute-and-compare proof and the
+      only source that may justify a ``complete`` claim (the P0
+      "claimed-complete must be proven" gate).
+    - ``"heuristic"`` — the legacy filename/keyword scan: some
+      ``tests/unit/test_*.py`` mentions both the op and the target. This is
+      *circumstantial* — it keeps a cell from regressing to ``missing`` but
+      can never, on its own, justify ``complete``.
+    - ``None`` — no proof of any kind.
 
     **Audit follow-up A.3 (2026-05-31) — manifest-first.** The first-class
-    answer is now ``BackendKernelEntry.execute_compare_fixture``: backends
-    that declare a numerical-correctness test for this (op, target) pair
-    will surface it via ``backend_manifest.manifest_for(op)``. The
-    conformance matrix consults that field directly — no scanning, no
-    heuristic — and verifies the declared file actually exists on disk.
-
-    For cells the manifest doesn't yet cover, fall back to the original
-    filename + content scan so cells with circumstantial coverage don't
-    regress to ``missing`` overnight. The fallback path is the dashboard's
-    legacy heuristic — over time the fixture map will subsume it.
+    answer is ``BackendKernelEntry.execute_compare_fixture``, surfaced via
+    ``backend_manifest.manifest_for(op)`` and verified on disk. The keyword
+    scan is the legacy fallback the fixture map is steadily subsuming.
     """
-    # Step 1 — manifest-declared fixture for (op, target). Symmetric with
-    # the nvidia/rocm/metalium aggregation that lives in
-    # ``_manifest_for_target``: any per-arch row whose target maps to the
-    # dashboard target counts.
+    # Step 1a — directly declared fixture in the numerical-fixtures map.
+    # This is the canonical "a fixture is declared for this (op, target)"
+    # test and is reachable even for *fused composite* rows (e.g.
+    # ``matmul_softmax``) that have no standalone manifest ``BackendKernelEntry``
+    # for ``_attach_numerical_fixtures`` to decorate.
     repo = Path(__file__).resolve().parents[3]
+    direct = _bm._NUMERICAL_FIXTURES.get((op, target))
+    if direct and (repo / direct).is_file():
+        return "fixture"
+    # Step 1b — manifest entry carrying a fixture (covers per-arch
+    # nvidia/rocm/metalium rows aggregated by ``_manifest_for_target``, and
+    # any entry that set the fixture via its constructor).
     for entry in _manifest_for_target(op, target):
         fixture = entry.execute_compare_fixture
         if fixture and (repo / fixture).is_file():
-            return True
+            return "fixture"
     # Step 2 — legacy heuristic for cells not yet covered by the manifest.
     target_keys = _TARGET_KEYWORDS.get(target, (target,))
     op_keys: tuple[str, ...] = (op,)
@@ -315,8 +325,15 @@ def _numerical_check_present(op: str, target: str) -> bool:
         if any(k in text for k in target_keys) and any(
             k in text for k in op_keys
         ):
-            return True
-    return False
+            return "heuristic"
+    return None
+
+
+def _numerical_check_present(op: str, target: str) -> bool:
+    """Whether ``(op, target)`` has *any* numerical-check signal (fixture or
+    heuristic). Presence grants at most ``partial``; only a real fixture
+    (``_numerical_proof_source == "fixture"``) may upgrade to ``complete``."""
+    return _numerical_proof_source(op, target) is not None
 
 
 # --- Per-cell deriver -----------------------------------------------------
@@ -390,11 +407,16 @@ def _proof_cell(op: ConformanceOp, target: str) -> ProofCell:
     else:
         runtime_execute = _proof_status_from_runtime(target, components)
 
-    # --- numerical_check: coarse filename presence. ---
-    if _numerical_check_present(op.name, target):
+    # --- numerical_check: presence grants partial; only a real declared
+    #     execute_compare_fixture may upgrade to complete (P0 gate —
+    #     "claimed-complete must be proven"). The legacy keyword heuristic is
+    #     circumstantial and caps the cell at partial. ---
+    proof_source = _numerical_proof_source(op.name, target)
+    if proof_source is not None:
         numerical_check = PROOF_PARTIAL  # presence ≠ rigor; partial by default
-        # If the op has a registered tests row marked 'complete', upgrade.
-        if graph_emitted == PROOF_COMPLETE:
+        # Upgrade to complete only when (a) a real fixture proves it AND
+        # (b) every component's registered tests row is itself 'complete'.
+        if proof_source == "fixture" and graph_emitted == PROOF_COMPLETE:
             statuses = [cov.contract_status.get("tests", "planned")
                         for _, cov in component_covers]
             if all(s == "complete" for s in statuses):

@@ -616,14 +616,25 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # apple_cpu
     ("matmul", "apple_cpu"): "tests/unit/test_apple_backend_roadmap.py",
     # apple_gpu — landed runtime paths
-    ("matmul", "apple_gpu"): "tests/unit/test_apple_gpu_buffer_pool.py",
+    # GPU matmul vs both the CPU lane and numpy (gpu == a @ b). The
+    # buffer-pool test executes matmul but asserts RAII invariants, not
+    # numerical equality — so it is NOT a valid execute_compare_fixture.
+    ("matmul", "apple_gpu"):
+        "tests/unit/test_production_jit_phase3_apple_gpu.py",
     ("softmax", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("softmax_safe", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("flash_attn", "apple_gpu"): "tests/unit/test_apple_gpu_fused_attention.py",
+    # Fused matmul→softmax single MSL kernel: the fixture runs
+    # ``agb.gpu_matmul_softmax(a, b)`` and compares it to both the un-fused
+    # CPU-lane composition and the numpy reference ``softmax(a @ b)``.
+    ("matmul_softmax", "apple_gpu"):
+        "tests/unit/test_production_jit_phase3_apple_gpu.py",
     ("conv2d", "apple_gpu"): "tests/unit/test_apple_gpu_conv2d.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
-    ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_buffer_pool.py",
+    # rope(q)/rope(k) vs a numpy rotary reference (execute-compare), not the
+    # buffer-pool RAII test.
+    ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_ops_interception.py",
     ("relu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops, multi-dtype.
     # Each fixture compares the encode-session output to a numpy

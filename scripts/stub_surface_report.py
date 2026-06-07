@@ -10,7 +10,7 @@ The point is a prioritized worklist, not a new source of truth: every number
 here is derived from the checked-in CSVs, so this is rerunnable and never drifts.
 
     python3 scripts/stub_surface_report.py            # print
-    python3 scripts/stub_surface_report.py --write    # write docs/audit/generated/stub_surface.md
+    python3 scripts/stub_surface_report.py --write    # write docs/audit/stub_surface.md
 """
 
 from __future__ import annotations
@@ -146,7 +146,10 @@ def main() -> int:
     args = ap.parse_args()
     report = build_report()
     if args.write:
-        dest = GEN / "stub_surface.md"
+        # A derived *report* (rerunnable, never the source of truth), not a
+        # registry-owned drift-gated dashboard — so it lives in docs/audit/
+        # root, NOT docs/audit/generated/ (Decision #26).
+        dest = AUDIT / "stub_surface.md"
         dest.write_text(report)
         print(f"wrote {dest}")
     else:

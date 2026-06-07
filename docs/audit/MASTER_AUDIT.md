@@ -181,6 +181,38 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 - Benchmark/performance gates tied to backend manifest rows.
 - Unify generated-doc regeneration + drift into one registry/`--write` contract (fold in `release_gate.py`, standardize generator CLIs, extend CSV-canonical to data-shaped dashboards). Detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) Next Work #6.
 
+## Compiler-Completeness & Testing Program
+
+Started 2026-06-07. Reframe: the compiler is **not stub-riddled** — the
+software-actionable gap surface is small and specific; most incompleteness is
+hardware-gated (expected) or thin-test (better closed by generative differential
+testing than hand-written tests). Run
+[`scripts/stub_surface_report.py`](../../scripts/stub_surface_report.py) for the
+live ranked rollup → [`generated/stub_surface.md`](generated/stub_surface.md).
+Stubs are an **oracle/conformance problem, not a fuzz problem** (a stub that
+returns a plausible artifact never crashes); fuzzing is layered on top of the
+differential oracle to catch the long tail.
+
+The actionable surface, ranked (numbers live in `generated/stub_surface.md`):
+- **Verifier stubs** — the `trivial_stub` verifiers (`Arch*` NAS ops +
+  `KVCacheCreateOp` + `RingCreateOp`): `verify()` declared but no-ops. Plus a
+  manual-triage pass on the `no_verifier` ops (control/collective/reshape-shaped
+  ones should get a real verifier; pure elementwise need none).
+- **Software conformance gaps** — the op×target cells that stop at `codegen` /
+  `numerical` (vs the hardware-gated `hardware_smoke`/`toolchain`/`link` rows):
+  `conv2d`/`kv_cache_read` → cpu (numerical: executes but unverified) and
+  conv2d/flash_attn/kv_cache_read → metalium/nvidia/rocm (codegen: lowering emits
+  no code).
+- **Thin-test tail** — the `needs_direct_test` ops: the target for a generative
+  differential harness (tracer vs numpy/CPU oracle).
+
+Workstream (chosen 2026-06-07): **(#1) quantify** — `stub_surface_report.py`
+(done); **(#4) IR round-trip property + fuzz** — cheapest crash-catcher, no oracle
+needed; **(#2) differential generator** — Hypothesis-backed program synthesizer
+over the executable lane, diffed against numpy/CPU; doubles as the fuzz generator.
+(The "claimed-complete must be proven" gate is P0 above — *Fixture-driven proof
+claims for complete conformance cells*.)
+
 ## Where To Go Next
 
 | Need | Read |

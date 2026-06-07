@@ -105,15 +105,19 @@ def test_cond_branch_returns_arg_directly():
 # ── envelope: v1 restrictions rejected ───────────────────────────────────────
 
 
-def test_cond_rejects_bf16():
+def test_cond_bf16_now_supported_via_host_upcast():
+    """Phase-G close-out C: a bf16 cond no longer raises 'f32-only' — it runs the
+    f32 executor via host upcast and returns bf16."""
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
     g = GraphFn(target="apple_gpu", elem="bf16")
     f = g.arg((1,))
     a, b = g.arg((4, 8)), g.arg((4, 8))
     g.ret(g.cond(f, lambda: g.silu(a), lambda: g.relu(b)))
-    import ml_dtypes
-    bf16 = ml_dtypes.bfloat16
-    with pytest.raises(TesseraJitError, match="f32-only"):
-        g.run(np.ones((1,), bf16), np.ones((4, 8), bf16), np.ones((4, 8), bf16))
+    spec = g._serialize_cond_spec()  # former f32-only gate must accept bf16
+    assert spec[0] == 0  # flag_arg_index
+    out = g.run(np.ones((1,), bf16), np.ones((4, 8), bf16), np.ones((4, 8), bf16))
+    assert out.dtype == bf16
 
 
 def test_cond_rejects_multiple_conds():

@@ -393,11 +393,27 @@ last_updated: 2026-06-05
 >   (`tests/unit/test_production_jit_phase3_control_flow_bf16.py`); the obsolete
 >   `test_loop_rejects_bf16` retargeted to assert bf16 now executes.
 >
-> Remaining close-out (plan `valiant-tickling-nest`): **C** `control_if` Target-IR
-> op + lowering + AST `if` bridge; **D** `control_while` Target-IR op + lowering +
+> * **Close-out Phase C1 — `control_if` Target-IR op + lowering + bf16-for-cond
+>   landed 2026-06-06.** New `tessera.control_if` Graph-IR op (`TesseraOps.td`) +
+>   `tessera_apple.gpu.control_if` Apple Target-IR op (`TesseraAppleOps.td`),
+>   carrying the then/else branches serialized to the run_graph_cond op-list ABI
+>   (then/else `opcodes`/`in0`/`in1`/`iattr`/`fattr`/`out_id` + `flag_arg_index` +
+>   `out_shape`). Lowering `ControlIfToAppleGPU.cpp` (`--tessera-control-if-to-apple_gpu`,
+>   manual module walk; symbol `tessera_apple_gpu_run_graph_cond_f32`), wired into
+>   the `tessera-lower-to-apple_gpu` pipeline. `GraphFn._serialize_cond_spec` /
+>   `_emit_control_if_mlir` / `run_cond_via_target_ir`; `apple_mlpkg.
+>   execute_control_if_mlir` reads the lowered op's payload + dispatches. cond also
+>   gained bf16 (host upcast, via `_coerce_loop_args`/`_finalize_loop_out`). E2E:
+>   both branches select correctly, ~8e-9 vs numpy, drives `control_if`. **+lit
+>   fixture** `apple_gpu_control_if.mlir` (phase8 56 PASS / 0 FAIL); **+tests**
+>   `test_production_jit_phase3_cond_exec.py`; obsolete `test_cond_rejects_bf16`
+>   retargeted. verifier_coverage regenerated for the new op.
+>
+> Remaining close-out (plan `valiant-tickling-nest`): **C2** AST `if` bridge
+> (`graphfn_bridge` → `control_if`); **D** `control_while` Target-IR op + lowering +
 > AST `while` bridge (reuses the existing `run_graph_while_f32`); **E**
-> `scan`/`while` front-ends (ys-collection / dynamic trip). Phases A (AST `for`
-> bridge) + B (bf16 loop) ✅ landed.
+> `scan`/`while` front-ends. Phases A (AST `for` bridge) + B (bf16 loop) + C1
+> (`control_if` IR/exec) ✅ landed.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

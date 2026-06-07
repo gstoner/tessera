@@ -1654,3 +1654,42 @@ def Tessera_ControlForOp : Op<
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
 }
+
+def Tessera_ControlIfOp : Op<
+  Tessera_Dialect, "control_if",
+  [Pure]
+> {
+  let summary = "Divergent control-flow if/else, single carried result (Phase-G close-out C)";
+  let description = [{
+    `O = flag>0 ? then(args) : else(args)`. Only the taken branch executes
+    (divergent, not a data-parallel select). The flag is the function arg at
+    `flag_arg_index` (a shape-(1,) tensor; `flag[0] > 0` selects `then`). Both
+    branch bodies are serialized to the run_graph_cond op-list ABI as the
+    executable payload (branch op j → operand-id `#operands + j`), so the lowered
+    Apple Target op (`tessera_apple.gpu.control_if`) is self-contained +
+    dispatchable via its recorded `symbol`. Optional payload: omit for IR-only.
+  }];
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$then_branch,
+                       FlatSymbolRefAttr:$else_branch,
+                       I64Attr:$flag_arg_index,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$then_fattr,
+                       OptionalAttr<I64Attr>:$then_out_id,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$else_fattr,
+                       OptionalAttr<I64Attr>:$else_out_id,
+                       // The merged result shape (the branch output is not an
+                       // operand, so unlike control_for it can't be recovered
+                       // from an arg — carry it explicitly).
+                       OptionalAttr<DenseI64ArrayAttr>:$out_shape);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}

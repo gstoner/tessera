@@ -9,8 +9,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `real` | 73 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 9 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 63 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 145 | |
+| `no_verifier` | 64 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 146 | |
 
 ## Per-dialect details
 
@@ -49,6 +49,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `CliffordReverseOp` | `real` |
 | `CliffordRotorSandwichOp` | `real` |
 | `ControlForOp` | `no_verifier` |
+| `ControlIfOp` | `no_verifier` |
 | `Conv2DNHWCOp` | `real` |
 | `CustomAdjointCallOp` | `no_verifier` |
 | `DCTOp` | `no_verifier` |

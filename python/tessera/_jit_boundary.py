@@ -1436,6 +1436,93 @@ class GraphFn:
         self._last_dispatch = ["control_loop"]
         return self._finalize_loop_out(out.copy())
 
+    # ── MLIR-driven cond execution (Phase-G close-out C) ─────────────────────
+    #
+    # Parallel to the for_loop pair: emit `tessera.control_if` (with the then/else
+    # op-list payload), lower it through `tessera-opt --tessera-control-if-to-
+    # apple_gpu` to `tessera_apple.gpu.control_if`, then dispatch off the lowered
+    # op's recorded `symbol` (`tessera_apple_gpu_run_graph_cond_f32`).
+
+    @staticmethod
+    def _encode_branch(ops):
+        """Encode a serialized branch op-list to the (opcodes,in0,in1,iattr,fattr)
+        i32/f32 arrays the control_if payload carries."""
+        from tessera.apple_mlpkg import GRAPH_OP
+
+        codes, i0, i1, ia, fa = [], [], [], [], []
+        for o in ops:
+            codes.append(GRAPH_OP[o["op"]])
+            i0.append(int(o["in0"]))
+            i1.append(int(o.get("in1", -1)))
+            ia.append((1 if o.get("transpose_a") else 0)
+                      | (2 if o.get("transpose_b") else 0))
+            fa.append(float(o.get("eps", 1e-5)))
+        return codes, i0, i1, ia, fa
+
+    def _emit_control_if_mlir(self) -> str:
+        (flag_arg_index, then_ops, then_out_id, else_ops, else_out_id,
+         out_shape) = self._serialize_cond_spec()
+        tc, ti0, ti1, tia, tfa = self._encode_branch(then_ops)
+        ec, ei0, ei1, eia, efa = self._encode_branch(else_ops)
+
+        def i32a(xs):
+            return "array<i32: " + ", ".join(str(x) for x in xs) + ">"
+
+        def f32a(xs):
+            return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">"
+
+        def i64a(xs):
+            return "array<i64: " + ", ".join(str(int(x)) for x in xs) + ">"
+
+        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        operand_ssas = ", ".join(s for s, _ in self._args)
+        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        out_ty = self._t(out_shape)
+        payload = (
+            f"flag_arg_index = {flag_arg_index} : i64, "
+            f"then_opcodes = {i32a(tc)}, then_in0 = {i32a(ti0)}, "
+            f"then_in1 = {i32a(ti1)}, then_iattr = {i32a(tia)}, "
+            f"then_fattr = {f32a(tfa)}, then_out_id = {then_out_id} : i64, "
+            f"else_opcodes = {i32a(ec)}, else_in0 = {i32a(ei0)}, "
+            f"else_in1 = {i32a(ei1)}, else_iattr = {i32a(eia)}, "
+            f"else_fattr = {f32a(efa)}, else_out_id = {else_out_id} : i64, "
+            f"out_shape = {i64a(out_shape)}")
+        op = (f'  %r = "tessera.control_if"({operand_ssas}) '
+              f"{{then_branch = @then_body, else_branch = @else_body, {payload}}} "
+              f": ({in_types}) -> {out_ty}")
+        return (f"func.func private @then_body({out_ty}) -> {out_ty}\n"
+                f"func.func private @else_body({out_ty}) -> {out_ty}\n"
+                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+                f"{op}\n  return %r : {out_ty}\n}}\n")
+
+    def run_cond_via_target_ir(self, *arrays: np.ndarray):
+        """Emit `tessera.control_if`, lower it through tessera-opt to
+        `tessera_apple.gpu.control_if`, and execute off the lowered op's recorded
+        runtime symbol. apple_gpu cond only."""
+        import subprocess
+
+        from tessera import apple_mlpkg as mp
+
+        if self._target != "apple_gpu" or self._cond is None:
+            raise TesseraJitError(
+                "run_cond_via_target_ir requires an apple_gpu cond graph")
+        mlir = self._emit_control_if_mlir()  # serialize + elem check first
+        ins = self._coerce_loop_args(arrays)
+        opt = _find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt binary not found (build it first)")
+        proc = subprocess.run(
+            [opt, "--tessera-control-if-to-apple_gpu"],
+            input=mlir, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
+        out = mp.execute_control_if_mlir(proc.stdout, ins)
+        if out is None:
+            raise TesseraJitError(
+                "control_if execution failed (op/payload absent or runtime down)")
+        self._last_dispatch = ["control_if"]
+        return self._finalize_loop_out(out.copy())
+
     def _serialize_branch(self, ops, idof, base, what):
         """Serialize a straight-line op-list (loop body / cond branch) to the
         author-dict form ``run_graph_*`` expects. Op ``j``'s output gets id
@@ -1479,29 +1566,21 @@ class GraphFn:
     # branch executes. Each branch is a straight-line op-list over the args; both
     # produce the same shape. f32, flag must be a function arg (v1).
 
-    def _run_apple_gpu_cond(self, arrays):
-        from tessera import apple_mlpkg as mp
-
+    def _serialize_cond_spec(self):
+        """Serialize the captured `_cond` to the run_graph_cond op-list ABI:
+        returns (flag_arg_index, then_ops, then_out_id, else_ops, else_out_id,
+        out_shape). Shared by the direct dispatch (`_run_apple_gpu_cond`) and the
+        Target-IR emit (`_emit_control_if_mlir`)."""
         cond = self._cond
         if "_unsupported" in cond:
             raise TesseraJitError(
                 f"apple_gpu GraphFn cond: {cond['_unsupported']} not supported (v1)")
-        if self._elem != "f32":
-            raise TesseraJitError("apple_gpu GraphFn cond is f32-only (bf16 follow-on)")
+        if self._elem not in ("f32", "bf16"):
+            raise TesseraJitError(
+                f"apple_gpu GraphFn cond supports f32/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != cond["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn cond must return exactly the cond result")
-        if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
-        ins = []
-        for (ssa, sh), arr in zip(self._args, arrays):
-            a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want float32{sh}")
-            ins.append(a)
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if cond["flag_ssa"] not in arg_index:
             raise TesseraJitError(
@@ -1516,15 +1595,24 @@ class GraphFn:
         if then_out_id is None or else_out_id is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn cond: a branch result is not in scope")
+        return (arg_index[cond["flag_ssa"]], then_ops, then_out_id, else_ops,
+                else_out_id, cond["out_shape"])
+
+    def _run_apple_gpu_cond(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        flag_arg_index, then_ops, then_out_id, else_ops, else_out_id, out_shape = \
+            self._serialize_cond_spec()
+        ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         out = mp.run_graph_cond_f32(
-            ins, arg_shapes, arg_index[cond["flag_ssa"]],
-            then_ops, then_out_id, else_ops, else_out_id, cond["out_shape"])
+            ins, arg_shapes, flag_arg_index,
+            then_ops, then_out_id, else_ops, else_out_id, out_shape)
         if out is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn cond dispatch failed / runtime unavailable")
         self._last_dispatch = ["cond"]  # one MPSGraph if dispatch
-        return out.copy()
+        return self._finalize_loop_out(out.copy())
 
     # ── Apple GPU bounded-while lane (Phase-G G-A.3) ─────────────────────────
     #

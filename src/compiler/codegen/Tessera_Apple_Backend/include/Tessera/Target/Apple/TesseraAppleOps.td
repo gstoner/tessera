@@ -306,4 +306,36 @@ def AppleGPU_ControlLoopOp : TesseraApple_Op<"gpu.control_loop", [Pure]> {
       "operands attr-dict `:` functional-type(operands, results)";
 }
 
+def AppleGPU_ControlIfOp : TesseraApple_Op<"gpu.control_if", [Pure]> {
+  let summary = "Apple GPU divergent control-flow if/else (Phase-G close-out C)";
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$then_branch,
+                       FlatSymbolRefAttr:$else_branch,
+                       I64Attr:$flag_arg_index,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$symbol,
+                       OptionalAttr<StrAttr>:$framework,
+                       // executable payload (carried through from
+                       // tessera.control_if) — then/else branches serialized to
+                       // the run_graph_cond op-list ABI, so the lowered op
+                       // dispatches via `symbol` directly off its attributes.
+                       OptionalAttr<DenseI32ArrayAttr>:$then_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$then_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$then_fattr,
+                       OptionalAttr<I64Attr>:$then_out_id,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$else_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$else_fattr,
+                       OptionalAttr<I64Attr>:$else_out_id,
+                       OptionalAttr<DenseI64ArrayAttr>:$out_shape);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
 #endif // TESSERA_TARGET_APPLE_OPS

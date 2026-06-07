@@ -451,10 +451,28 @@ last_updated: 2026-06-05
 >   surface is the explicit `jit_while_loop` front-end (Phase E), not an AST
 >   bridge.
 >
-> Remaining close-out (plan `valiant-tickling-nest`): **E** `jit_while_loop` +
-> `jit_scan` front-ends (the latter needs per-step `ys` collection). Phases A (AST
-> `for`) + B (bf16 loop) + C (`control_if` + AST `if`) + D (`control_while`) ✅
-> landed.
+> * **Close-out Phase E — `jit_while_loop` front-end landed 2026-06-06.**
+>   `jit_while_loop(max_iters, cond, body, init=, consts=)` traces a bounded while
+>   into `tessera.control_while` and executes it on Apple GPU (one MPSGraph forLoop
+>   + select-masking; the carry freezes once the predicate goes false). `cond`/
+>   `body` are `(g, carry, *consts) -> …` on GraphFn handles. `build_while_loop`
+>   returns the un-executed GraphFn. This is the bounded-while *user* surface
+>   (vs. an AST bridge — a Python `while` has no `max_iters`). **+tests**
+>   `test_production_jit_phase3_while_frontend.py`.
+>
+>   *`jit_scan` deferred (runtime-ABI follow-on, not a front-end wrapper):* a
+>   single-dispatch fused scan needs two ops the current GraphFn set lacks —
+>   **gather** to index `xs[t]` per step and **scatter**/dynamic-update to write
+>   each step's `y` into a `(trip, *y)` buffer — plus a `run_graph_scan_f32`
+>   executor that threads `(carry, ys_buffer, index)`. That is a distinct runtime
+>   project (new MSL/MPSGraph kernels + a ys-collection C ABI), tracked separately
+>   from the control-flow bridge.
+>
+> **Phase-G control-flow frontier is closed** for `for`/`if`/`while`: AST `@jit`
+> bridges (for, if) + bf16 + the three Target-IR ops (`control_for`/`control_if`/
+> `control_while`) with MLIR-driven execution + the `jit_fori_loop`/`jit_while_loop`
+> front-ends. Open follow-ons: AST `while` ergonomics, `jit_scan` (ys-collection),
+> native bf16 control-flow C symbols.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

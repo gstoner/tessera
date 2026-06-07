@@ -2291,3 +2291,68 @@ def jit_fori_loop(
             else bool(via_target_ir)
         return g.run_via_target_ir(*arrays) if use_ir else g.run(*arrays)
     return g.run(*arrays)
+
+
+def build_while_loop(
+    max_iters: int,
+    cond,
+    body,
+    *,
+    init_shape,
+    const_shapes=(),
+    name: str = "tessera_while",
+    elem: str = "f32",
+) -> "GraphFn":
+    """Trace a bounded ``while`` into a ``GraphFn`` carrying a
+    ``tessera.control_while`` (single tensor carry, apple_gpu only, v1).
+
+    ``cond`` is ``(g, carry, *consts) -> pred`` (``pred[...] > 0`` continues) and
+    ``body`` is ``(g, carry, *consts) -> carry``, both on GraphFn handles.
+    Returns the built ``GraphFn`` (not yet executed) for IR inspection.
+    """
+    g = GraphFn(name=name, elem=elem, target="apple_gpu")
+    carry = g.arg(tuple(init_shape))
+    consts = [g.arg(tuple(s)) for s in const_shapes]
+    out = g.while_loop(int(max_iters),
+                       cond=lambda c: cond(g, c, *consts),
+                       body=lambda c: body(g, c, *consts), init=carry)
+    g.ret(out)
+    return g
+
+
+def jit_while_loop(
+    max_iters: int,
+    cond,
+    body,
+    *,
+    init: "np.ndarray",
+    consts=(),
+    via_target_ir: "bool | None" = None,
+    name: str = "tessera_while",
+) -> "np.ndarray":
+    """Build (``build_while_loop``) and execute a bounded ``while`` on Apple GPU,
+    returning the final carry as an ``np.ndarray``.
+
+    Runs ``for up to max_iters: while cond(carry) > 0: carry = body(carry)`` as one
+    MPSGraph forLoop + select-masking (once the predicate goes false the carry
+    freezes). ``cond``/``body`` are ``(g, carry, *consts) -> ...`` on GraphFn
+    handles. Executes through the Target-IR path (``tessera.control_while`` ->
+    ``tessera-opt --tessera-control-while-to-apple_gpu`` ->
+    ``tessera_apple.gpu.control_while`` -> ``run_graph_while_f32``) when
+    ``tessera-opt`` is available; ``via_target_ir=False`` forces the direct
+    in-memory dispatch. apple_gpu only (GraphFn.while_loop has no CPU lane).
+    """
+    init_arr = np.asarray(init)
+    const_arrs = [np.asarray(c) for c in consts]
+    elem = "bf16" if (_ml_dtypes is not None
+                      and init_arr.dtype == _ml_dtypes.bfloat16) else "f32"
+    g = build_while_loop(
+        int(max_iters), cond, body,
+        init_shape=init_arr.shape,
+        const_shapes=[c.shape for c in const_arrs],
+        name=name, elem=elem,
+    )
+    arrays = [init_arr, *const_arrs]
+    use_ir = (_find_tessera_opt() is not None) if via_target_ir is None \
+        else bool(via_target_ir)
+    return g.run_while_via_target_ir(*arrays) if use_ir else g.run(*arrays)

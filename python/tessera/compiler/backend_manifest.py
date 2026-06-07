@@ -630,6 +630,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("matmul_softmax", "apple_gpu"):
         "tests/unit/test_production_jit_phase3_apple_gpu.py",
     ("conv2d", "apple_gpu"): "tests/unit/test_apple_gpu_conv2d.py",
+    # Mamba-2 selective scan: chunked-parallel SSD with Metal bmm contractions,
+    # validated bit-exact against the sequential numpy reference.
+    ("selective_ssm", "apple_gpu"): "tests/unit/test_mamba_ssd_gpu.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     # rope(q)/rope(k) vs a numpy rotary reference (execute-compare), not the

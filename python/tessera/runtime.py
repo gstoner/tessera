@@ -2257,10 +2257,13 @@ _APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
 # GPU linear-algebra lane (MPSMatrix) — only the registered Graph IR ops:
 # tessera.cholesky (1 operand) + tessera.tri_solve (2 operands, `lower` kwarg).
 _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
+# Mamba-2 selective state-space scan — chunked-parallel SSD with its batched
+# contractions on the Metal bmm lane (scalar-state A; (D,N) A falls back).
+_APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS
+    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS
 )
 
 
@@ -2498,6 +2501,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         elif op_name in _APPLE_GPU_LINALG_OPS:
             values[str(result)] = _apple_gpu_dispatch_linalg(
                 op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_SSM_OPS:
+            values[str(result)] = _apple_gpu_dispatch_selective_ssm(
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
                 np,
@@ -3955,6 +3964,33 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     if op_kind == "clifford_geometric_product":
         return _dispatch_gpu_clifford_geometric_product(inputs, call, np)
     return _dispatch_gpu_native_sparse_attn(inputs, call, np)
+
+
+def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Mamba-2 ``selective_ssm`` on Apple GPU via the chunked-parallel SSD form
+    (`_mamba_ssd.selective_ssm_parallel`), with its three batched contractions
+    (state projection, C·Bᵀ gram, state update) dispatched to the Metal `bmm`
+    lane. Scalar-state ``A`` (shape ``(D,)``) takes the parallel matmul form;
+    general ``(D, N)`` ``A`` falls back to the sequential numpy reference."""
+    from . import _mamba_ssd
+
+    x, A, B, C, delta = (np.asarray(o) for o in operands[:5])
+    gate = kwargs.get("gate")
+    state = kwargs.get("state")
+    chunk = int(kwargs.get("chunk_size", 64))
+
+    if not _mamba_ssd.supports_parallel(A):
+        import tessera as _ts
+        return _ts.ops.selective_ssm(
+            x, A, B, C, delta, gate=gate, state=state, chunk_size=chunk)
+
+    def _gpu_bmm(p: Any, q: Any) -> Any:
+        r = _apple_gpu_dispatch_bmm(p, q, np)
+        return r if r is not None else np.matmul(p, q)
+
+    return _mamba_ssd.selective_ssm_parallel(
+        x, A, B, C, delta, gate=gate, state=state, chunk_size=chunk,
+        matmul3d=_gpu_bmm)
 
 
 def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:

@@ -474,10 +474,15 @@ _APPLE_GPU_CONV_OPS: frozenset[str] = frozenset({"tessera.conv2d", "tessera.conv
 # f32; batched/non-f32 fall back to numpy inside the dispatcher.
 _APPLE_GPU_LINALG_OPS: frozenset[str] = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 
+# Mamba-2 selective state-space scan. Executes via the chunked-parallel SSD form
+# whose batched contractions run on the Metal bmm lane (scalar-state A; general
+# (D,N) A falls back to the sequential numpy reference inside the dispatcher).
+_APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS
+    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS
 )
 
 

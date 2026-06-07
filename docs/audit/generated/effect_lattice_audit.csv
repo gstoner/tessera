@@ -100,6 +100,7 @@ ge,pure,,1,0,0
 gelu,pure,pure,1,0,0
 gemm,pure,pure,1,1,0
 gqa_attention,state,,1,1,1
+grouped_gemm,pure,,1,0,0
 grpo_policy_loss,pure,,1,0,0
 gt,pure,,1,0,0
 huber_loss,pure,,1,0,0

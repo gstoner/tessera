@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 34 |
-| ``runnable_reference`` | 245 |
+| ``runnable_reference`` | 246 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 1 |
 | ``planned`` | 0 |
-| **total** | **280** |
+| **total** | **281** |
 
 ## complete (34)
 
@@ -70,7 +70,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (245)
+## runnable_reference (246)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -206,6 +206,7 @@ each row into a single E2E tier.
 | ``logical_xor`` | logical | public | public | registered | partial | reference | ready | none |
 | ``batched_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``factorized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
+| ``grouped_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_compress`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |

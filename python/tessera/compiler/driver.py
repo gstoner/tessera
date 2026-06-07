@@ -479,10 +479,14 @@ _APPLE_GPU_LINALG_OPS: frozenset[str] = frozenset({"tessera.cholesky", "tessera.
 # (D,N) A falls back to the sequential numpy reference inside the dispatcher).
 _APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
 
+# Ragged grouped matmul — the MoE expert-FFN compute core. Each contiguous token
+# group runs as a per-expert MPS matmul on the Metal lane.
+_APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({"tessera.grouped_gemm"})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS
+    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
 )
 
 

@@ -2260,10 +2260,12 @@ _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 # Mamba-2 selective state-space scan — chunked-parallel SSD with its batched
 # contractions on the Metal bmm lane (scalar-state A; (D,N) A falls back).
 _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
+# Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
+_APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS
+    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
 )
 
 
@@ -2507,6 +2509,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_SSM_OPS:
             values[str(result)] = _apple_gpu_dispatch_selective_ssm(
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_MOE_OPS:
+            values[str(result)] = _apple_gpu_dispatch_grouped_gemm(
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
                 np,
@@ -3964,6 +3972,33 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     if op_kind == "clifford_geometric_product":
         return _dispatch_gpu_clifford_geometric_product(inputs, call, np)
     return _dispatch_gpu_native_sparse_attn(inputs, call, np)
+
+
+def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Ragged grouped matmul on Apple GPU: each contiguous token group is
+    multiplied by its expert weight via a per-group MPS matmul on the Metal
+    `bmm`/matmul lane (numpy fallback per group when a shape isn't supported).
+    ``operands`` = (x, weights, group_sizes); group_sizes is integer routing
+    metadata resolved as the third graph operand."""
+    from . import _apple_gpu_backend as agb
+
+    x = np.asarray(operands[0], dtype=np.float32)
+    w = np.asarray(operands[1], dtype=np.float32)
+    gs = np.asarray(operands[2]).astype(np.int64).reshape(-1)
+    out = np.zeros((x.shape[0], w.shape[2]), dtype=np.float32)
+    off = 0
+    for e in range(w.shape[0]):
+        n = int(gs[e])
+        if n:
+            blk = np.ascontiguousarray(x[off:off + n])
+            we = np.ascontiguousarray(w[e])
+            try:
+                r = agb.gpu_matmul(blk, we)
+            except Exception:                       # noqa: BLE001 — per-group fallback
+                r = None
+            out[off:off + n] = r if r is not None else blk @ we
+        off += n
+    return out
 
 
 def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> Any:

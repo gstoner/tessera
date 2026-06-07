@@ -4134,6 +4134,26 @@ def vjp_batched_gemm(dout, a, b, **_):
     return (da, db)
 
 
+@_vjp("grouped_gemm")
+def vjp_grouped_gemm(dout, x, weights, group_sizes, **_):
+    # y[block e] = x[block e] @ W[e];  dx = dy @ W[e]ᵀ;  dW[e] = x[block e]ᵀ @ dy.
+    # group_sizes is integer routing metadata → no gradient (None).
+    xa = np.asarray(x, dtype=np.float64)
+    w = np.asarray(weights, dtype=np.float64)
+    dy = np.asarray(dout, dtype=np.float64)
+    gs = np.asarray(group_sizes).astype(np.int64).reshape(-1)
+    dx = np.zeros_like(xa)
+    dw = np.zeros_like(w)
+    off = 0
+    for e in range(w.shape[0]):
+        n = int(gs[e])
+        if n:
+            dx[off:off + n] = dy[off:off + n] @ w[e].T
+            dw[e] = xa[off:off + n].T @ dy[off:off + n]
+        off += n
+    return (dx, dw, None)
+
+
 @_vjp("factorized_matmul")
 def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
     return vjp_batched_gemm(dout, a, b)

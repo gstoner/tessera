@@ -160,6 +160,7 @@ logical_xor,logical,public,public,registered,complete,partial,reference,ready,no
 batched_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
 factorized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none
 gemm,loop_nest,public,public,registered,complete,partial,fused,ready,none
+grouped_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_compress,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference,ready,none

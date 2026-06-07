@@ -3013,6 +3013,30 @@ def jvp_batched_gemm(primals, tangents, **_):
     return primal, tan
 
 
+@_jvp("grouped_gemm")
+def jvp_grouped_gemm(primals, tangents, **_):
+    # Per group e: y = x@W;  dy = dx@W + x@dW (bilinear). group_sizes (3rd
+    # primal) is integer metadata — its tangent is ignored.
+    x, w, group_sizes = primals[0], primals[1], primals[2]
+    dx, dw = tangents[0], tangents[1]
+    xa = np.asarray(x, dtype=np.float64)
+    wa = np.asarray(w, dtype=np.float64)
+    gs = np.asarray(group_sizes).astype(np.int64).reshape(-1)
+    primal = np.zeros((xa.shape[0], wa.shape[2]), dtype=np.float64)
+    tan = np.zeros_like(primal)
+    off = 0
+    for e in range(wa.shape[0]):
+        n = int(gs[e])
+        if n:
+            primal[off:off + n] = xa[off:off + n] @ wa[e]
+            if dx is not None:
+                tan[off:off + n] += np.asarray(dx, dtype=np.float64)[off:off + n] @ wa[e]
+            if dw is not None:
+                tan[off:off + n] += xa[off:off + n] @ np.asarray(dw, dtype=np.float64)[e]
+        off += n
+    return primal, tan
+
+
 @_jvp("factorized_matmul")
 def jvp_factorized_matmul(primals, tangents, *, rank=None, **_):
     """y = (a @ b) when rank is given; bilinear → dy = da@b + a@db."""

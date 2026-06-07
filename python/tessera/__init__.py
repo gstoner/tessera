@@ -248,6 +248,42 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         r = max(1, min(int(rank), s.shape[-1]))
         return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
 
+    def grouped_gemm(x, weights, group_sizes):
+        """Ragged grouped matmul — the MoE expert-FFN compute core.
+
+        ``x`` shape ``(T, K)`` holds tokens **sorted by expert assignment**;
+        ``weights`` shape ``(E, K, N)`` holds one weight matrix per expert;
+        ``group_sizes`` shape ``(E,)`` (summing to ``T``) gives the token count
+        per expert. Row block ``e`` of the output is ``x[block e] @ weights[e]``,
+        i.e. each contiguous group is multiplied by *its own* expert weight.
+        Returns ``(T, N)``. Distinct from ``batched_gemm`` (equal-size batches):
+        groups are ragged, so the per-expert blocks vary in length.
+        """
+        xa = np.asarray(x._data if hasattr(x, "_data") else x)
+        w = np.asarray(weights._data if hasattr(weights, "_data") else weights)
+        gs = np.asarray(group_sizes).astype(np.int64).reshape(-1)
+        if xa.ndim != 2:
+            raise ValueError(f"grouped_gemm: x must be (T, K); got {xa.shape}")
+        if w.ndim != 3 or w.shape[0] != gs.shape[0]:
+            raise ValueError(
+                f"grouped_gemm: weights {w.shape} must be (E, K, N) with "
+                f"E == len(group_sizes)={gs.shape[0]}")
+        if w.shape[1] != xa.shape[1]:
+            raise ValueError(
+                f"grouped_gemm: K mismatch — x K={xa.shape[1]}, weights K={w.shape[1]}")
+        T = xa.shape[0]
+        if int(gs.sum()) != T:
+            raise ValueError(
+                f"grouped_gemm: group_sizes sum {int(gs.sum())} != T={T}")
+        out = np.zeros((T, w.shape[2]), dtype=xa.dtype)
+        off = 0
+        for e in range(w.shape[0]):
+            n = int(gs[e])
+            if n:
+                out[off:off + n] = xa[off:off + n] @ w[e]
+            off += n
+        return out
+
     def tri_solve(A, b, lower: bool = True):
         if hasattr(A, "_data"):
             A = A._data
@@ -3215,6 +3251,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "batched_gemm": batched_gemm,
         "einsum": einsum,
         "factorized_matmul": factorized_matmul,
+        "grouped_gemm": grouped_gemm,
         "tri_solve": tri_solve,
         "cholesky": cholesky,
         "cholesky_solve": cholesky_solve,
@@ -3521,6 +3558,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         batched_gemm=batched_gemm,
         einsum=einsum,
         factorized_matmul=factorized_matmul,
+        grouped_gemm=grouped_gemm,
         tri_solve=tri_solve,
         cholesky=cholesky,
         cholesky_solve=cholesky_solve,

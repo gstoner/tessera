@@ -603,7 +603,21 @@ last_updated: 2026-06-05
 > flow → fused `run_graph_*`; straight-line → canonical), superseding the AST
 > bridge, with `tessera.control.*` as the data-dependent control-flow contract.
 >
-> Next: Phase 4 (NVIDIA correctness-first).
+> * **Phase H1 — nested control flow landed 2026-06-07.** A control op inside a
+>   region body used to raise (`run_graph_*` bodies are flat op-lists).
+>   `execute_traced` (`compiler/trace.py`) is now recursive: `exec_op` dispatches a
+>   flat region to the fused `run_graph_*` path, and a region whose body contains a
+>   nested control op is **host-orchestrated** — the outer construct runs as a
+>   Python loop threading the concrete carry, recursively calling `exec_op` (so the
+>   inner construct still fuses; only the outer per-step dispatch is host-side).
+>   Cond on the host evaluates the flag and runs the taken branch; while matches
+>   the fused freeze-on-false semantics. `_region_flat` is the classifier. E2E:
+>   loop-in-loop / cond-in-loop / loop-in-cond match numpy ≤1e-9. Python-only, no
+>   C symbol. **+8 tests** `tests/unit/test_trace_h1_nested.py`; 47 trace + 336
+>   production/apple control-flow tests green.
+>
+> Next: H2 (native f16 control-flow C symbols), H3 (fused scan). Then Phase 4
+> (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

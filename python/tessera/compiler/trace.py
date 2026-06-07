@@ -489,81 +489,124 @@ def _live_refs(bodies, exclude: set, extra_refs=()) -> List[str]:
     return live
 
 
+def _region_flat(ops) -> bool:
+    """A region body/branch is *flat* (serializable to a single fused
+    ``run_graph_*`` op-list) iff it contains no nested control op."""
+    return not any(op.op_name.startswith("tessera.control_") for op in ops)
+
+
 def execute_traced(traced: TracedFunction, arrays: List[np.ndarray]):
-    """Concrete Apple GPU interpreter over a traced function (F3). Straight-line
-    ops run as per-op kernels; control regions run as one fused ``run_graph_*``
-    dispatch over their live concrete inputs. Supports straight-line code before
-    and after a (single-level) control construct."""
+    """Concrete Apple GPU interpreter over a traced function (F3 + H1). Walks the
+    op list with a concrete env; ``exec_op`` dispatches each op:
+
+    * straight-line → a per-op kernel (``_gpu_straightline_op``).
+    * a control region whose body/branches are **flat** → ONE fused
+      ``run_graph_*`` dispatch over its live concrete inputs.
+    * a control region whose body **contains a nested control op** (H1) →
+      host-orchestration: run the region's trip/branches as a Python loop,
+      threading the concrete carry, recursively calling ``exec_op`` (so the inner
+      construct still fuses while the outer runs per-step on the host).
+    """
     from tessera import _apple_gpu_backend as agb
     from tessera import apple_mlpkg as mp
 
     from .graphfn_bridge import _strip
 
-    env: Dict[str, np.ndarray] = {}
-    for (ssa, _shape, _dt), arr in zip(traced.args, arrays):
-        env[ssa] = np.ascontiguousarray(np.asarray(arr, dtype=np.float32))
+    def shapes(names, e):
+        return [tuple(e[s].shape) for s in names]
 
-    def shapes(names):
-        return [tuple(env[s].shape) for s in names]
+    def _replay(ops, base_env):
+        e = dict(base_env)
+        for bop in ops:
+            assert bop.result is not None
+            e[bop.result] = exec_op(bop, e)
+        return e
 
-    for op in traced.body:
-        assert op.result is not None
+    def _pred_true(arr) -> bool:
+        return float(np.asarray(arr).reshape(-1)[0]) > 0.0
+
+    def exec_op(op, env):
         nm = op.op_name
         if nm == "tessera.control_for":
             kw = op.kwargs
             carry_ssa, init_ssa = kw["_carry_ssa"], _strip(op.operands[0])
-            live = _live_refs([kw["_body"]], {carry_ssa}, [kw["_next_ssa"]])
-            args = [env[s] for s in live] + [env[init_ssa]]  # init is the last arg
-            n_args = len(args)
-            # ABI: ids 0..n_args-1 = args, n_args = the carry, n_args+1+j = body op
-            # j; the carry's initial value comes from args[carry_arg_index].
-            idof = {s: i for i, s in enumerate(live)}
-            idof[carry_ssa] = n_args
-            dicts, local = _branch_dicts(kw["_body"], idof, n_args + 1)
-            out = mp.run_graph_loop_f32(
-                args, shapes(live) + [tuple(env[init_ssa].shape)], len(live),
-                kw["_trip"], dicts, local[kw["_next_ssa"]],
-                tuple(env[init_ssa].shape))
-            env[op.result] = out
-        elif nm == "tessera.control_if":
+            if _region_flat(kw["_body"]):
+                live = _live_refs([kw["_body"]], {carry_ssa}, [kw["_next_ssa"]])
+                args = [env[s] for s in live] + [env[init_ssa]]
+                n_args = len(args)
+                idof = {s: i for i, s in enumerate(live)}
+                idof[carry_ssa] = n_args
+                dicts, local = _branch_dicts(kw["_body"], idof, n_args + 1)
+                return mp.run_graph_loop_f32(
+                    args, shapes(live, env) + [tuple(env[init_ssa].shape)],
+                    len(live), kw["_trip"], dicts, local[kw["_next_ssa"]],
+                    tuple(env[init_ssa].shape))
+            # H1 — nested control in the body: host-orchestrate the trip.
+            carry = env[init_ssa]
+            for _ in range(int(kw["_trip"])):
+                benv = _replay(kw["_body"], {**env, carry_ssa: carry})
+                carry = benv[kw["_next_ssa"]]
+            return carry
+        if nm == "tessera.control_if":
             kw = op.kwargs
             flag_ssa = kw["_flag_ssa"]
-            live = _live_refs([kw["_then_body"], kw["_else_body"]], set(),
-                              [flag_ssa, kw["_then_ssa"], kw["_else_ssa"]])
-            if flag_ssa not in live:
-                live = [flag_ssa] + live
-            idof = {s: i for i, s in enumerate(live)}
-            tdicts, tlocal = _branch_dicts(kw["_then_body"], idof, len(live))
-            edicts, elocal = _branch_dicts(kw["_else_body"], idof, len(live))
-            args = [env[s] for s in live]
-            out_shape = tuple(env[kw["_then_ssa"]].shape) if kw["_then_ssa"] in env \
-                else _result_shape(op)
-            out = mp.run_graph_cond_f32(
-                args, shapes(live), live.index(flag_ssa),
-                tdicts, tlocal[kw["_then_ssa"]], edicts, elocal[kw["_else_ssa"]],
-                out_shape)
-            env[op.result] = out
-        elif nm == "tessera.control_while":
+            if _region_flat(kw["_then_body"]) and _region_flat(kw["_else_body"]):
+                live = _live_refs([kw["_then_body"], kw["_else_body"]], set(),
+                                  [flag_ssa, kw["_then_ssa"], kw["_else_ssa"]])
+                if flag_ssa not in live:
+                    live = [flag_ssa] + live
+                idof = {s: i for i, s in enumerate(live)}
+                tdicts, tlocal = _branch_dicts(kw["_then_body"], idof, len(live))
+                edicts, elocal = _branch_dicts(kw["_else_body"], idof, len(live))
+                out_shape = tuple(env[kw["_then_ssa"]].shape) \
+                    if kw["_then_ssa"] in env else _result_shape(op)
+                return mp.run_graph_cond_f32(
+                    [env[s] for s in live], shapes(live, env),
+                    live.index(flag_ssa), tdicts, tlocal[kw["_then_ssa"]],
+                    edicts, elocal[kw["_else_ssa"]], out_shape)
+            # H1 — nested control in a branch: evaluate the flag on the host and
+            # run only the taken branch (divergent semantics, like the fused op).
+            if _pred_true(env[flag_ssa]):
+                return _replay(kw["_then_body"], env)[kw["_then_ssa"]]
+            return _replay(kw["_else_body"], env)[kw["_else_ssa"]]
+        if nm == "tessera.control_while":
             kw = op.kwargs
             carry_ssa, init_ssa = kw["_carry_ssa"], _strip(op.operands[0])
-            live = _live_refs([kw["_body"], kw["_cond"]], {carry_ssa},
-                              [kw["_next_ssa"], kw["_pred_ssa"]])
-            args = [env[s] for s in live] + [env[init_ssa]]
-            n_args = len(args)
-            idof = {s: i for i, s in enumerate(live)}
-            idof[carry_ssa] = n_args
-            bdicts, blocal = _branch_dicts(kw["_body"], idof, n_args + 1)
-            cdicts, clocal = _branch_dicts(kw["_cond"], idof, n_args + 1)
-            out = mp.run_graph_while_f32(
-                args, shapes(live) + [tuple(env[init_ssa].shape)], len(live),
-                kw["_max_iters"], bdicts, blocal[kw["_next_ssa"]],
-                cdicts, clocal[kw["_pred_ssa"]], tuple(env[init_ssa].shape))
-            env[op.result] = out
-        else:
-            env[op.result] = _gpu_straightline_op(agb, op, env)
+            if _region_flat(kw["_body"]) and _region_flat(kw["_cond"]):
+                live = _live_refs([kw["_body"], kw["_cond"]], {carry_ssa},
+                                  [kw["_next_ssa"], kw["_pred_ssa"]])
+                args = [env[s] for s in live] + [env[init_ssa]]
+                n_args = len(args)
+                idof = {s: i for i, s in enumerate(live)}
+                idof[carry_ssa] = n_args
+                bdicts, blocal = _branch_dicts(kw["_body"], idof, n_args + 1)
+                cdicts, clocal = _branch_dicts(kw["_cond"], idof, n_args + 1)
+                return mp.run_graph_while_f32(
+                    args, shapes(live, env) + [tuple(env[init_ssa].shape)],
+                    len(live), kw["_max_iters"], bdicts, blocal[kw["_next_ssa"]],
+                    cdicts, clocal[kw["_pred_ssa"]], tuple(env[init_ssa].shape))
+            # H1 — nested control: host-orchestrate (cond-then-body; freeze on
+            # false, matching the fused forLoop+select-masking semantics).
+            carry = env[init_ssa]
+            for _ in range(int(kw["_max_iters"])):
+                cenv = _replay(kw["_cond"], {**env, carry_ssa: carry})
+                if not _pred_true(cenv[kw["_pred_ssa"]]):
+                    break
+                benv = _replay(kw["_body"], {**env, carry_ssa: carry})
+                carry = benv[kw["_next_ssa"]]
+            return carry
+        return _gpu_straightline_op(agb, op, env)
+
+    env: Dict[str, np.ndarray] = {}
+    for (ssa, _shape, _dt), arr in zip(traced.args, arrays):
+        env[ssa] = np.ascontiguousarray(np.asarray(arr, dtype=np.float32))
+    for op in traced.body:
+        assert op.result is not None
+        env[op.result] = exec_op(op, env)
         if env[op.result] is None:
             raise TesseraTraceError(
-                f"trace exec: op {nm!r} dispatch failed / runtime unavailable")
+                f"trace exec: op {op.op_name!r} dispatch failed / runtime "
+                "unavailable")
     return env[traced.outputs[0]].copy()
 
 

@@ -55,10 +55,16 @@ LAST_EXECUTION_BACKEND = "mlir_llvm_jit"
 
 
 class TesseraJitError(RuntimeError):
-    """Raised when the production JIT lane cannot compile or invoke.
+    """The single canonical JIT error, raised by both lanes.
 
-    Notably this is raised *instead of* silently falling back to numpy — the
-    lane either executes compiled code or fails loudly.
+    * The ``@tessera.jit`` decoration / compilation pipeline (re-exported as
+      ``tessera.compiler.jit.TesseraJitError`` and the public
+      ``tessera.TesseraJitError``).
+    * The production GraphFn / runtime lane.
+
+    Raised *instead of* silently falling back to numpy — the JIT either executes
+    compiled code or fails loudly. ``RuntimeError`` base so any ``except
+    Exception`` / ``except RuntimeError`` catcher matches.
     """
 
 

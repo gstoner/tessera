@@ -39,15 +39,15 @@ from .fallback import FallbackReason, TesseraNativeRequiredError
 # ─────────────────────────────────────────────────────────────────────────────
 # Error type
 # ─────────────────────────────────────────────────────────────────────────────
-
-class TesseraJitError(Exception):
-    """
-    Raised by @jit when the compilation pipeline fails for any reason other
-    than a constraint or effect violation (those raise their own error types).
-
-    Wraps unexpected errors in the lowering or emission steps.
-    """
-    pass
+#
+# Single canonical class, defined in the low-level `_jit_boundary` (the GraphFn /
+# runtime lane). It is re-exported here so the `@jit` decoration lane and the
+# GraphFn lane raise the SAME exception — `except TesseraJitError` /
+# `pytest.raises(TesseraJitError)` catch both regardless of which module the name
+# was imported from. (`_jit_boundary` imports only stdlib + numpy, so this is
+# cycle-safe; the base is `RuntimeError`, a subclass of `Exception`, so every
+# existing catcher still matches.)
+from .._jit_boundary import TesseraJitError  # noqa: E402,F401 — re-exported
 
 
 # ─────────────────────────────────────────────────────────────────────────────

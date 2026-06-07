@@ -494,6 +494,26 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
         status="implemented",
     ),
+    DiagnosticCode(
+        code="JIT_APPLE_GPU_TRACE_DEFERRED",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="warning",
+        summary=(
+            "AST Graph IR emission failed for an apple_gpu function, but "
+            "decoration did not hard-fail — the Phase-F tracer executes "
+            "the function by running it (it never reads the AST graph_ir), "
+            "so the body still decorates and runs via the tracer at call time."
+        ),
+        fix_hint=(
+            "Informational; no action required. Use tessera.control.cond / "
+            "while_loop for data-dependent control flow if a raw `if`/`while` "
+            "on a traced value raises at call time."
+        ),
+        spec=None,
+        sprint="phase-f-followon",
+        language="python",
+        status="implemented",
+    ),
 
     # ── LayoutLegalityPass (V2 + V4a) ────────────────────────────────────
     DiagnosticCode(

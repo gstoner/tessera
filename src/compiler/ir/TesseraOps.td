@@ -1693,3 +1693,40 @@ def Tessera_ControlIfOp : Op<
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
 }
+
+def Tessera_ControlWhileOp : Op<
+  Tessera_Dialect, "control_while",
+  [Pure]
+> {
+  let summary = "Bounded while-loop carried by a single iter_arg (Phase-G close-out D)";
+  let description = [{
+    `for up to max_iters: while cond(carry)>0: carry = body(carry)`. Lowers (on
+    Apple) to an MPSGraph forLoop + select-masking (native `while` is unstable):
+    once the predicate goes false the carry freezes. The carry init is the
+    function arg at `carry_arg_index` (carry id = #operands; body/cond op j →
+    `#operands + 1 + j`). Both the body and cond bodies are serialized to the
+    run_graph_while op-list ABI as the executable payload, so the lowered Apple
+    Target op (`tessera_apple.gpu.control_while`) is self-contained +
+    dispatchable via its recorded `symbol`. Optional payload: omit for IR-only.
+  }];
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$body,
+                       FlatSymbolRefAttr:$cond,
+                       I64Attr:$carry_arg_index,
+                       I64Attr:$max_iters,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$body_fattr,
+                       OptionalAttr<I64Attr>:$body_out_id,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$cond_fattr,
+                       OptionalAttr<I64Attr>:$cond_out_id);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}

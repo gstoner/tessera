@@ -854,6 +854,25 @@ if _BF16 is not None:
     _ELEM_TO_NP["bf16"] = _BF16
 
 
+def _i32_array(xs) -> str:
+    """MLIR ``DenseI32ArrayAttr`` text. Empty must be ``array<i32>`` (no colon)."""
+    xs = list(xs)
+    return "array<i32: " + ", ".join(str(int(x)) for x in xs) + ">" if xs \
+        else "array<i32>"
+
+
+def _f32_array(xs) -> str:
+    xs = list(xs)
+    return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">" if xs \
+        else "array<f32>"
+
+
+def _i64_array(xs) -> str:
+    xs = list(xs)
+    return "array<i64: " + ", ".join(str(int(x)) for x in xs) + ">" if xs \
+        else "array<i64>"
+
+
 class _Val:
     """An SSA value in a GraphFn: its name and static shape."""
 
@@ -1385,11 +1404,7 @@ class GraphFn:
                       | (2 if o.get("transpose_b") else 0))
             fa.append(float(o.get("eps", 1e-5)))
 
-        def i32a(xs):
-            return "array<i32: " + ", ".join(str(x) for x in xs) + ">"
 
-        def f32a(xs):
-            return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">"
 
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
@@ -1397,9 +1412,9 @@ class GraphFn:
         out_ty = self._t(carry_shape)
         payload = (
             f"carry_arg_index = {carry_arg_index} : i64, "
-            f"body_opcodes = {i32a(codes)}, body_in0 = {i32a(i0)}, "
-            f"body_in1 = {i32a(i1)}, body_iattr = {i32a(ia)}, "
-            f"body_fattr = {f32a(fa)}, body_out_id = {body_out_id} : i64")
+            f"body_opcodes = {_i32_array(codes)}, body_in0 = {_i32_array(i0)}, "
+            f"body_in1 = {_i32_array(i1)}, body_iattr = {_i32_array(ia)}, "
+            f"body_fattr = {_f32_array(fa)}, body_out_id = {body_out_id} : i64")
         op = (f'  %r = "tessera.control_for"({operand_ssas}) '
               f"{{body = @loop_body, start = 0 : i64, stop = {trip} : i64, "
               f"step = 1 : i64, {payload}}} "
@@ -1465,14 +1480,8 @@ class GraphFn:
         tc, ti0, ti1, tia, tfa = self._encode_branch(then_ops)
         ec, ei0, ei1, eia, efa = self._encode_branch(else_ops)
 
-        def i32a(xs):
-            return "array<i32: " + ", ".join(str(x) for x in xs) + ">"
 
-        def f32a(xs):
-            return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">"
 
-        def i64a(xs):
-            return "array<i64: " + ", ".join(str(int(x)) for x in xs) + ">"
 
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
@@ -1480,13 +1489,13 @@ class GraphFn:
         out_ty = self._t(out_shape)
         payload = (
             f"flag_arg_index = {flag_arg_index} : i64, "
-            f"then_opcodes = {i32a(tc)}, then_in0 = {i32a(ti0)}, "
-            f"then_in1 = {i32a(ti1)}, then_iattr = {i32a(tia)}, "
-            f"then_fattr = {f32a(tfa)}, then_out_id = {then_out_id} : i64, "
-            f"else_opcodes = {i32a(ec)}, else_in0 = {i32a(ei0)}, "
-            f"else_in1 = {i32a(ei1)}, else_iattr = {i32a(eia)}, "
-            f"else_fattr = {f32a(efa)}, else_out_id = {else_out_id} : i64, "
-            f"out_shape = {i64a(out_shape)}")
+            f"then_opcodes = {_i32_array(tc)}, then_in0 = {_i32_array(ti0)}, "
+            f"then_in1 = {_i32_array(ti1)}, then_iattr = {_i32_array(tia)}, "
+            f"then_fattr = {_f32_array(tfa)}, then_out_id = {then_out_id} : i64, "
+            f"else_opcodes = {_i32_array(ec)}, else_in0 = {_i32_array(ei0)}, "
+            f"else_in1 = {_i32_array(ei1)}, else_iattr = {_i32_array(eia)}, "
+            f"else_fattr = {_f32_array(efa)}, else_out_id = {else_out_id} : i64, "
+            f"out_shape = {_i64_array(out_shape)}")
         op = (f'  %r = "tessera.control_if"({operand_ssas}) '
               f"{{then_branch = @then_body, else_branch = @else_body, {payload}}} "
               f": ({in_types}) -> {out_ty}")
@@ -1521,6 +1530,71 @@ class GraphFn:
             raise TesseraJitError(
                 "control_if execution failed (op/payload absent or runtime down)")
         self._last_dispatch = ["control_if"]
+        return self._finalize_loop_out(out.copy())
+
+    # ── MLIR-driven while execution (Phase-G close-out D) ────────────────────
+    #
+    # Parallel to the for/cond pairs: emit `tessera.control_while` (with the
+    # body+cond op-list payload), lower it through `tessera-opt
+    # --tessera-control-while-to-apple_gpu` to `tessera_apple.gpu.control_while`,
+    # then dispatch off the recorded `symbol`
+    # (`tessera_apple_gpu_run_graph_while_f32`).
+
+    def _emit_control_while_mlir(self) -> str:
+        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops,
+         cond_out_id, carry_shape) = self._serialize_while_spec()
+        bc, bi0, bi1, bia, bfa = self._encode_branch(body_ops)
+        cc, ci0, ci1, cia, cfa = self._encode_branch(cond_ops)
+
+
+
+        arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
+        operand_ssas = ", ".join(s for s, _ in self._args)
+        in_types = ", ".join(self._t(sh) for _, sh in self._args)
+        out_ty = self._t(carry_shape)
+        payload = (
+            f"carry_arg_index = {carry_arg_index} : i64, "
+            f"max_iters = {max_iters} : i64, "
+            f"body_opcodes = {_i32_array(bc)}, body_in0 = {_i32_array(bi0)}, "
+            f"body_in1 = {_i32_array(bi1)}, body_iattr = {_i32_array(bia)}, "
+            f"body_fattr = {_f32_array(bfa)}, body_out_id = {body_out_id} : i64, "
+            f"cond_opcodes = {_i32_array(cc)}, cond_in0 = {_i32_array(ci0)}, "
+            f"cond_in1 = {_i32_array(ci1)}, cond_iattr = {_i32_array(cia)}, "
+            f"cond_fattr = {_f32_array(cfa)}, cond_out_id = {cond_out_id} : i64")
+        op = (f'  %r = "tessera.control_while"({operand_ssas}) '
+              f"{{body = @while_body, cond = @while_cond, {payload}}} "
+              f": ({in_types}) -> {out_ty}")
+        return (f"func.func private @while_body({out_ty}) -> {out_ty}\n"
+                f"func.func private @while_cond({out_ty}) -> {out_ty}\n"
+                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+                f"{op}\n  return %r : {out_ty}\n}}\n")
+
+    def run_while_via_target_ir(self, *arrays: np.ndarray):
+        """Emit `tessera.control_while`, lower it through tessera-opt to
+        `tessera_apple.gpu.control_while`, and execute off the lowered op's
+        recorded runtime symbol. apple_gpu bounded while only."""
+        import subprocess
+
+        from tessera import apple_mlpkg as mp
+
+        if self._target != "apple_gpu" or self._while is None:
+            raise TesseraJitError(
+                "run_while_via_target_ir requires an apple_gpu while graph")
+        mlir = self._emit_control_while_mlir()  # serialize + elem check first
+        ins = self._coerce_loop_args(arrays)
+        opt = _find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt binary not found (build it first)")
+        proc = subprocess.run(
+            [opt, "--tessera-control-while-to-apple_gpu"],
+            input=mlir, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
+        out = mp.execute_control_while_mlir(proc.stdout, ins)
+        if out is None:
+            raise TesseraJitError(
+                "control_while execution failed (op/payload absent or runtime down)")
+        self._last_dispatch = ["control_while"]
         return self._finalize_loop_out(out.copy())
 
     def _serialize_branch(self, ops, idof, base, what):
@@ -1620,29 +1694,22 @@ class GraphFn:
     # MPSGraph `forLoop` with select-masking (carry freezes once cond goes false)
     # — MPSGraph's native `while` is unstable. f32, init must be a function arg.
 
-    def _run_apple_gpu_while(self, arrays):
-        from tessera import apple_mlpkg as mp
-
+    def _serialize_while_spec(self):
+        """Serialize the captured `_while` to the run_graph_while op-list ABI:
+        returns (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops,
+        cond_out_id, carry_shape). Shared by the direct dispatch
+        (`_run_apple_gpu_while`) and the Target-IR emit
+        (`_emit_control_while_mlir`)."""
         wl = self._while
         if "_unsupported" in wl:
             raise TesseraJitError(
                 f"apple_gpu GraphFn while: {wl['_unsupported']} not supported (v1)")
-        if self._elem != "f32":
-            raise TesseraJitError("apple_gpu GraphFn while is f32-only (bf16 follow-on)")
+        if self._elem not in ("f32", "bf16"):
+            raise TesseraJitError(
+                f"apple_gpu GraphFn while supports f32/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != wl["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn while must return exactly the while result")
-        if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
-        ins = []
-        for (ssa, sh), arr in zip(self._args, arrays):
-            a = np.ascontiguousarray(np.asarray(arr))
-            if a.dtype != np.float32 or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want float32{sh}")
-            ins.append(a)
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if wl["init_ssa"] not in arg_index:
             raise TesseraJitError(
@@ -1659,15 +1726,24 @@ class GraphFn:
         if body_out_id is None or cond_out_id is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn while: body/cond output is not in scope")
+        return (arg_index[wl["init_ssa"]], wl["max_iters"], body_ops, body_out_id,
+                cond_ops, cond_out_id, wl["carry_shape"])
+
+    def _run_apple_gpu_while(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops, cond_out_id,
+         carry_shape) = self._serialize_while_spec()
+        ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         out = mp.run_graph_while_f32(
-            ins, arg_shapes, arg_index[wl["init_ssa"]], wl["max_iters"],
-            body_ops, body_out_id, cond_ops, cond_out_id, wl["carry_shape"])
+            ins, arg_shapes, carry_arg_index, max_iters,
+            body_ops, body_out_id, cond_ops, cond_out_id, carry_shape)
         if out is None:
             raise TesseraJitError(
                 "apple_gpu GraphFn while dispatch failed / runtime unavailable")
         self._last_dispatch = ["while"]  # one MPSGraph forLoop+select dispatch
-        return out.copy()
+        return self._finalize_loop_out(out.copy())
 
     # ── Whole-graph lane: compile the GraphFn to ONE MPSGraph dispatch ───────
     #

@@ -55,6 +55,7 @@ PassPipelineRegistration<> gAppleGPUPipeline(
       // / control_if (before the generic Tile→Apple artifact lowering).
       pm.addPass(createLowerControlForToAppleGPUPass());
       pm.addPass(createLowerControlIfToAppleGPUPass());
+      pm.addPass(createLowerControlWhileToAppleGPUPass());
       pm.addPass(createLowerTileToAppleGPUPass());
     });
 

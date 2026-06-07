@@ -124,16 +124,20 @@ def test_while_rejects_on_cpu_target():
                      body=lambda cr: cr, init=c)
 
 
-def test_while_rejects_bf16():
+def test_while_bf16_now_supported_via_host_upcast():
+    """Phase-G close-out D: a bf16 while no longer raises 'f32-only' — it runs the
+    f32 executor via host upcast and returns bf16."""
+    ml_dtypes = pytest.importorskip("ml_dtypes")
+    bf16 = ml_dtypes.bfloat16
     g = GraphFn(target="apple_gpu", elem="bf16")
     c, h, o, t = g.arg((1, 8)), g.arg((1, 8)), g.arg((8, 1)), g.arg((1, 1))
     g.ret(g.while_loop(4, cond=lambda cr: g.sub(g.matmul(cr, o), t),
                        body=lambda cr: g.mul(cr, h), init=c))
-    import ml_dtypes
-    bf16 = ml_dtypes.bfloat16
-    with pytest.raises(TesseraJitError, match="f32-only"):
-        g.run(np.ones((1, 8), bf16), np.ones((1, 8), bf16),
-              np.ones((8, 1), bf16), np.ones((1, 1), bf16))
+    spec = g._serialize_while_spec()  # former f32-only gate must accept bf16
+    assert spec[1] == 4  # max_iters
+    out = g.run(np.ones((1, 8), bf16), np.ones((1, 8), bf16),
+                np.ones((8, 1), bf16), np.ones((1, 1), bf16))
+    assert out.dtype == bf16
 
 
 def test_while_rejects_init_not_an_arg():

@@ -429,10 +429,32 @@ last_updated: 2026-06-05
 >   branches ~8e-9 vs numpy, drive `control_if`. **+tests** in
 >   `test_jit_apple_gpu_loop_bridge.py`.
 >
-> Remaining close-out (plan `valiant-tickling-nest`): **D** `control_while`
-> Target-IR op + lowering + AST `while` bridge (reuses the existing
-> `run_graph_while_f32`); **E** `scan`/`while` front-ends. Phases A (AST `for`) +
-> B (bf16 loop) + C (`control_if` IR/exec + AST `if` bridge) ✅ landed.
+> * **Close-out Phase D — `control_while` Target-IR op + lowering landed
+>   2026-06-06.** New `tessera.control_while` Graph-IR op + `tessera_apple.gpu.
+>   control_while` Apple op, carrying the body+cond op-lists (body/cond
+>   `opcodes`/`in0`/`in1`/`iattr`/`fattr`/`out_id` + `carry_arg_index` +
+>   `max_iters`; carry is an arg so the shape is recoverable — no `out_shape`).
+>   Lowering `ControlWhileToAppleGPU.cpp` (`--tessera-control-while-to-apple_gpu`),
+>   reusing the existing `run_graph_while_f32` executor (MPSGraph forLoop +
+>   select-masking; native `while` is unstable). `GraphFn._serialize_while_spec` /
+>   `_emit_control_while_mlir` / `run_while_via_target_ir`; `apple_mlpkg.
+>   execute_control_while_mlir`. while also gained bf16. Also fixed empty
+>   `DenseArrayAttr` emission (an empty cond/branch op-list is `array<i32>`, not
+>   the invalid `array<i32: >`) via shared `_i32_array`/`_f32_array`/`_i64_array`
+>   helpers + parser tolerance. E2E ~1.5e-8 vs numpy, early-stop freezes the carry,
+>   drives `control_while`. **+lit** `apple_gpu_control_while.mlir` (phase8 57 PASS
+>   / 0 FAIL); **+tests** `test_production_jit_phase3_while_exec.py`; obsolete
+>   `test_while_rejects_bf16` retargeted.
+>
+>   *AST `while` bridge:* deliberately deferred — a Python `while` carries no
+>   `max_iters` but `GraphFn.while_loop` is bounded, so the bounded-while *user*
+>   surface is the explicit `jit_while_loop` front-end (Phase E), not an AST
+>   bridge.
+>
+> Remaining close-out (plan `valiant-tickling-nest`): **E** `jit_while_loop` +
+> `jit_scan` front-ends (the latter needs per-step `ys` collection). Phases A (AST
+> `for`) + B (bf16 loop) + C (`control_if` + AST `if`) + D (`control_while`) ✅
+> landed.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

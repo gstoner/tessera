@@ -1708,17 +1708,17 @@ def execute_control_loop_mlir(mlir_text: str, arg_arrays: "list"):
         return None
 
     def i32arr(name):
-        m = re.search(name + r"\s*=\s*array<i32:\s*([^>]*)>", attrs)
+        m = re.search(name + r"\s*=\s*array<i32(?::\s*([^>]*))?>", attrs)
         if m is None:
             return None
-        b = m.group(1).strip()
+        b = (m.group(1) or "").strip()
         return [int(x) for x in b.split(",")] if b else []
 
     def f32arr(name):
-        m = re.search(name + r"\s*=\s*array<f32:\s*([^>]*)>", attrs)
+        m = re.search(name + r"\s*=\s*array<f32(?::\s*([^>]*))?>", attrs)
         if m is None:
             return None
-        b = m.group(1).strip()
+        b = (m.group(1) or "").strip()
         return [float(x) for x in b.split(",")] if b else []
 
     def i64(name):
@@ -1786,24 +1786,24 @@ def execute_control_if_mlir(mlir_text: str, arg_arrays: "list"):
         return None
 
     def i32arr(name):
-        m = re.search(name + r"\s*=\s*array<i32:\s*([^>]*)>", attrs)
+        m = re.search(name + r"\s*=\s*array<i32(?::\s*([^>]*))?>", attrs)
         if m is None:
             return None
-        b = m.group(1).strip()
+        b = (m.group(1) or "").strip()
         return [int(x) for x in b.split(",")] if b else []
 
     def f32arr(name):
-        m = re.search(name + r"\s*=\s*array<f32:\s*([^>]*)>", attrs)
+        m = re.search(name + r"\s*=\s*array<f32(?::\s*([^>]*))?>", attrs)
         if m is None:
             return None
-        b = m.group(1).strip()
+        b = (m.group(1) or "").strip()
         return [float(x) for x in b.split(",")] if b else []
 
     def i64arr(name):
-        m = re.search(name + r"\s*=\s*array<i64:\s*([^>]*)>", attrs)
+        m = re.search(name + r"\s*=\s*array<i64(?::\s*([^>]*))?>", attrs)
         if m is None:
             return None
-        b = m.group(1).strip()
+        b = (m.group(1) or "").strip()
         return [int(x) for x in b.split(",")] if b else []
 
     def i64(name):
@@ -1857,6 +1857,90 @@ def execute_control_if_mlir(mlir_text: str, arg_arrays: "list"):
                               tuple(out_shape))
 
 
+def execute_control_while_mlir(mlir_text: str, arg_arrays: "list"):
+    """MLIR-driven execution (Phase-G close-out D): given a lowered module with a
+    `tessera_apple.gpu.control_while` op (carrying the body+cond op-list payload),
+    read the op's attributes and dispatch via its recorded runtime `symbol`
+    (`tessera_apple_gpu_run_graph_while_f32`). Returns the final carry as an
+    ``np.float32`` array, or ``None`` if the op/payload is absent or malformed."""
+    import re
+
+    import numpy as np
+
+    if "tessera_apple.gpu.control_while" not in mlir_text:
+        return None
+    seg = mlir_text[mlir_text.index("tessera_apple.gpu.control_while"):]
+    try:
+        attrs = seg[seg.index("{"):seg.index("}") + 1]
+    except ValueError:
+        return None
+
+    def i32arr(name):
+        m = re.search(name + r"\s*=\s*array<i32(?::\s*([^>]*))?>", attrs)
+        if m is None:
+            return None
+        b = (m.group(1) or "").strip()
+        return [int(x) for x in b.split(",")] if b else []
+
+    def f32arr(name):
+        m = re.search(name + r"\s*=\s*array<f32(?::\s*([^>]*))?>", attrs)
+        if m is None:
+            return None
+        b = (m.group(1) or "").strip()
+        return [float(x) for x in b.split(",")] if b else []
+
+    def i64(name):
+        m = re.search(name + r"\s*=\s*(-?\d+)\s*:\s*i64", attrs)
+        return int(m.group(1)) if m else None
+
+    def s(name):
+        m = re.search(name + r'\s*=\s*"([^"]*)"', attrs)
+        return m.group(1) if m else None
+
+    rev = {v: k for k, v in GRAPH_OP.items()}
+
+    def branch(prefix):
+        opcodes = i32arr(prefix + "_opcodes")
+        in0 = i32arr(prefix + "_in0")
+        in1, iattr, fattr = (i32arr(prefix + "_in1"), i32arr(prefix + "_iattr"),
+                             f32arr(prefix + "_fattr"))
+        out_id = i64(prefix + "_out_id")
+        if opcodes is None or in0 is None or out_id is None:
+            return None, None
+        ops: list = []
+        for j, code in enumerate(opcodes):
+            name = rev.get(code)
+            if name is None:
+                return None, None
+            e: dict = {"op": name, "in0": in0[j]}
+            if name == "matmul":
+                e["in1"] = (in1 or [])[j]
+                e["transpose_a"] = bool((iattr or [])[j] & 1)
+                e["transpose_b"] = bool((iattr or [])[j] & 2)
+            elif name in ("add", "sub", "mul", "div"):
+                e["in1"] = (in1 or [])[j]
+            elif name in ("rmsnorm", "layer_norm"):
+                e["eps"] = (fattr or [1e-5])[j]
+            ops.append(e)
+        return ops, out_id
+
+    carry_arg_index = i64("carry_arg_index")
+    max_iters = i64("max_iters")
+    symbol = s("symbol")
+    body_ops, body_out_id = branch("body")
+    cond_ops, cond_out_id = branch("cond")
+    if (carry_arg_index is None or max_iters is None or body_ops is None
+            or cond_ops is None
+            or symbol != "tessera_apple_gpu_run_graph_while_f32"):
+        return None
+
+    arg_shapes = [tuple(np.asarray(a).shape) for a in arg_arrays]
+    carry_shape = tuple(np.asarray(arg_arrays[carry_arg_index]).shape)
+    return run_graph_while_f32(arg_arrays, arg_shapes, carry_arg_index, max_iters,
+                               body_ops, body_out_id, cond_ops, cond_out_id,
+                               carry_shape)
+
+
 __all__ = [
     "ERROR_NONE",
     "ERROR_OS_UNAVAILABLE",
@@ -1881,6 +1965,7 @@ __all__ = [
     "run_graph_while_f32",
     "execute_control_loop_mlir",
     "execute_control_if_mlir",
+    "execute_control_while_mlir",
     "GRAPH_OP",
     "AUTHOR_CHAINS",
     "AUTHOR_OPS",

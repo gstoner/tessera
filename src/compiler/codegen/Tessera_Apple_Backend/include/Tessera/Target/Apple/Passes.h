@@ -36,6 +36,11 @@ std::unique_ptr<::mlir::Pass> createLowerControlForToAppleGPUPass();
 /// run_graph_cond runtime symbol).
 std::unique_ptr<::mlir::Pass> createLowerControlIfToAppleGPUPass();
 
+/// Phase-G close-out D: tessera.control_while (bounded while) →
+/// tessera_apple.gpu.control_while Target-IR op (value-preserving; records the
+/// run_graph_while runtime symbol).
+std::unique_ptr<::mlir::Pass> createLowerControlWhileToAppleGPUPass();
+
 /// tessera.matmul (rank-2, f32) → func.call into the Apple CPU runtime
 /// shim. Phase 8.2 — the executable counterpart to the artifact-only
 /// `tessera-lower-to-apple_cpu` pipeline.

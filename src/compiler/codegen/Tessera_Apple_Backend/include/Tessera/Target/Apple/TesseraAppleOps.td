@@ -338,4 +338,32 @@ def AppleGPU_ControlIfOp : TesseraApple_Op<"gpu.control_if", [Pure]> {
       "operands attr-dict `:` functional-type(operands, results)";
 }
 
+def AppleGPU_ControlWhileOp : TesseraApple_Op<"gpu.control_while", [Pure]> {
+  let summary = "Apple GPU bounded while-loop (Phase-G close-out D)";
+  let arguments = (ins Variadic<AnyType>:$iter_args,
+                       FlatSymbolRefAttr:$body,
+                       FlatSymbolRefAttr:$cond,
+                       I64Attr:$carry_arg_index,
+                       I64Attr:$max_iters,
+                       I64Attr:$ordinal,
+                       OptionalAttr<StrAttr>:$status,
+                       OptionalAttr<StrAttr>:$symbol,
+                       OptionalAttr<StrAttr>:$framework,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$body_fattr,
+                       OptionalAttr<I64Attr>:$body_out_id,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$cond_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$cond_fattr,
+                       OptionalAttr<I64Attr>:$cond_out_id);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+}
+
 #endif // TESSERA_TARGET_APPLE_OPS

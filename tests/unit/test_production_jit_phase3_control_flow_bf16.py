@@ -73,14 +73,15 @@ def test_jit_fori_bf16_direct_and_ir_paths_agree():
 
 
 @gpu
-def test_ast_bridge_bf16_executes():
+def test_bf16_loop_via_tracer_executes():
+    """F5: a bf16 raw-`for` @jit function executes through the tracer (the AST
+    bridge is retired) and returns bf16, matching the f32 reference."""
     rng = np.random.default_rng(1)
     x32 = (rng.standard_normal((1, 16)) / 16).astype(np.float32)
     w32 = (rng.standard_normal((16, 16)) / 4).astype(np.float32)
+    assert silu_loop_bf16._needs_trace is True
     out = silu_loop_bf16(x32.astype(bf16), w32.astype(bf16))
     assert out.dtype == bf16
-    g = next(iter(silu_loop_bf16._bridge_cache.values()))
-    assert g._elem == "bf16" and g.last_dispatch() == ["control_loop"]
     ref = _f32_ref(x32, w32, 4)
     np.testing.assert_allclose(out.astype(np.float32), ref, rtol=2e-2, atol=2e-3)
 

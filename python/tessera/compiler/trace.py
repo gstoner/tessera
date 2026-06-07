@@ -609,14 +609,43 @@ def _gpu_straightline_op(agb, op: IROp, env) -> np.ndarray:
 # Behind a flag while F4 oracles parity against the AST bridge; F5 flips it to the
 # default and retires the AST `_OpExtractor` + detect_loop_fn/detect_cond_fn path.
 
-_JIT_TRACE = [os.environ.get("TESSERA_JIT_TRACE", "") not in ("", "0", "false")]
+# F5: default ON. Only control-flow apple_gpu @jit functions are intercepted
+# (see ``function_needs_tracer`` + the surgical gate in ``JitFn.__call__``);
+# straight-line falls through to the existing package/auto_batch/canonical path
+# untouched. Set ``TESSERA_JIT_TRACE=0`` to force the legacy behavior.
+_JIT_TRACE = [os.environ.get("TESSERA_JIT_TRACE", "1") not in ("0", "false", "no")]
 
 
 def jit_trace_enabled() -> bool:
-    """Whether `@jit(target="apple_gpu")` should execute by trace-by-running
-    (F4). Defaults from the ``TESSERA_JIT_TRACE`` env var; toggle with
-    ``set_jit_trace`` / the ``jit_trace`` context manager."""
+    """Whether `@jit(target="apple_gpu")` routes **control-flow** functions through
+    the tracer (F5 — default on). Toggle with ``set_jit_trace`` / the ``jit_trace``
+    context manager / the ``TESSERA_JIT_TRACE`` env var."""
     return _JIT_TRACE[0]
+
+
+def function_needs_tracer(graph_ir_module: Any, fn) -> bool:
+    """Whether ``fn`` uses control flow and so must route through the tracer
+    (F5 surgical gate): a raw Python ``for``/``if`` (its graph_ir carries
+    ``tessera.scf.*`` markers) or an explicit ``tessera.control.*`` call. Pure
+    straight-line functions return ``False`` and keep the existing apple_gpu path
+    (package lane / auto_batch / canonical runtime) untouched."""
+    import inspect
+    import re
+
+    try:
+        for f in getattr(graph_ir_module, "functions", []) or []:
+            for op in getattr(f, "body", []):
+                if op.op_name.startswith("tessera.scf."):
+                    return True
+    except Exception:
+        pass
+    try:
+        src = inspect.getsource(fn)
+        if re.search(r"\bcontrol\.(fori_loop|cond|while_loop|scan)\b", src):
+            return True
+    except (OSError, TypeError):
+        pass
+    return False
 
 
 def set_jit_trace(on: bool) -> None:
@@ -634,51 +663,25 @@ def jit_trace(on: bool = True):
         _JIT_TRACE[0] = prev
 
 
-def _run_canonical_apple_gpu(jitfn: Any, args: tuple, kwargs: dict,
-                             traced=None, arrays=None):
-    """Straight-line apple_gpu execution: defer to the proven canonical
-    compile/runtime path (full vocab — rope/flash_attn/qkv/mla/MPSGraph/...). Only
-    when that path is unavailable do we fall back to the tracer's GraphFn lane
-    (the executable subset)."""
-    if (jitfn.cpu_plan is not None
-            and getattr(jitfn.cpu_plan, "target_kind", None) == "apple_gpu"
-            and jitfn.compile_bundle is not None
-            and getattr(jitfn.compile_bundle, "executable", False)):
-        return jitfn._apple_gpu_fast_call(args, kwargs)
-    if traced is None:
-        arrays = [np.asarray(a) for a in args]
-        traced = trace(jitfn._fn, *arrays)
-    elem = "bf16" if (arrays and _np_dtype_to_elem(arrays[0].dtype) == "bf16") \
-        else "f32"
-    return to_graphfn(traced, elem=elem, target="apple_gpu").run(*arrays)
-
-
 def run_jit_traced(jitfn: Any, args: tuple, kwargs: dict):
-    """Execute a `@jit(target="apple_gpu")` function as the unified front-end
-    (F6): trace ``jitfn._fn`` (concrete — full vocab); if the trace has control
-    flow, run it via ``execute_traced`` (fused ``run_graph_*``); otherwise defer
-    to the canonical apple_gpu path. Supersedes the AST bridge.
-
-    The control-flow-ness is structural (shape-independent), so it is cached: a
-    known-straight-line function skips re-tracing and goes straight to canonical.
-    """
+    """Execute a control-flow `@jit(target="apple_gpu")` function via the tracer
+    (F5). Reached only for functions ``function_needs_tracer`` flagged — straight-
+    line functions never get here; they keep the existing apple_gpu path. Trace
+    ``jitfn._fn`` (concrete, full vocab); explicit ``tessera.control.*`` runs via
+    ``execute_traced`` (fused ``run_graph_*``); a raw ``for _ in range(N)``
+    unrolls to a straight-line trace and runs via the GraphFn lane."""
     names = list(getattr(jitfn, "arg_names", []) or [])
     ordered: List[Any] = list(args)
     for nm in names[len(ordered):]:
         if nm in kwargs:
             ordered.append(kwargs[nm])
     arrays = [np.asarray(a) for a in ordered]
-
-    if getattr(jitfn, "_trace_is_control", None) is False:
-        return _run_canonical_apple_gpu(jitfn, args, kwargs)
-
     traced = trace(jitfn._fn, *arrays)
-    is_control = _has_control_flow(traced)
-    jitfn._trace_is_control = is_control
-    if is_control:
+    if _has_control_flow(traced):
         return execute_traced(traced, arrays)
-    return _run_canonical_apple_gpu(jitfn, args, kwargs, traced=traced,
-                                    arrays=arrays)
+    elem = "bf16" if (arrays and _np_dtype_to_elem(arrays[0].dtype) == "bf16") \
+        else "f32"
+    return to_graphfn(traced, elem=elem, target="apple_gpu").run(*arrays)
 
 
 def run_traced(fn: Callable, *arrays: np.ndarray, target: str = "apple_gpu"):

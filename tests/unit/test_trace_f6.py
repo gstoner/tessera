@@ -76,7 +76,7 @@ def test_straightline_defers_to_canonical_bit_identical():
     with jit_trace(True):
         traced = narrow_straightline(x, w)           # tracer → detects straight-line → canonical
     np.testing.assert_array_equal(base, traced)
-    assert narrow_straightline._trace_is_control is False
+    assert narrow_straightline._needs_trace is False
 
 
 @gpu
@@ -87,7 +87,7 @@ def test_broad_vocab_straightline_defers():
     with jit_trace(True):
         traced = broad_flash(q, q.copy(), q.copy())
     np.testing.assert_array_equal(base, traced)
-    assert broad_flash._trace_is_control is False
+    assert broad_flash._needs_trace is False
 
 
 @gpu
@@ -97,7 +97,7 @@ def test_control_flow_routes_to_execute_traced():
     w = (rng.standard_normal((8, 8)) / 3).astype(np.float32)
     with jit_trace(True):
         out = control_loop(x, w)
-    assert control_loop._trace_is_control is True
+    assert control_loop._needs_trace is True
     ref = x.copy()
     for _ in range(3):
         ref = _silu(ref @ w)
@@ -111,6 +111,6 @@ def test_control_flow_ness_is_cached():
     w = (rng.standard_normal((8, 8)) / 3).astype(np.float32)
     with jit_trace(True):
         narrow_straightline(x, w)
-        assert narrow_straightline._trace_is_control is False
+        assert narrow_straightline._needs_trace is False
         narrow_straightline(x, w)  # cached → no re-trace, straight to canonical
-        assert narrow_straightline._trace_is_control is False
+        assert narrow_straightline._needs_trace is False

@@ -67,11 +67,13 @@ def raw_if(flag, x, w):         # raw `if` on data → must raise under trace
 
 
 # --- flag plumbing (no runtime) --------------------------------------------- #
-def test_jit_trace_default_off():
-    assert jit_trace_enabled() is False
-    with jit_trace(True):
-        assert jit_trace_enabled() is True
-    assert jit_trace_enabled() is False
+def test_jit_trace_default_on():
+    # F5: the tracer is on by default (control-flow apple_gpu @jit routes through
+    # it). The context manager / set_jit_trace still toggle it.
+    assert jit_trace_enabled() is True
+    with jit_trace(False):
+        assert jit_trace_enabled() is False
+    assert jit_trace_enabled() is True
 
 
 @gpu
@@ -124,13 +126,15 @@ def test_ctrl_cond_trace_selects_branch(flagv):
 
 
 @gpu
-def test_trace_off_uses_ast_bridge():
-    """With the flag off (default), @jit still uses the AST bridge path."""
+def test_control_flow_function_is_flagged_for_tracer():
+    """F5: a control-flow function (raw static-for) is flagged ``_needs_trace`` and
+    executes through the tracer by default; the AST bridge is retired."""
     rng = np.random.default_rng(3)
     x = (rng.standard_normal((1, 8)) / 8).astype(np.float32)
     w = (rng.standard_normal((8, 8)) / 3).astype(np.float32)
-    out = loop_whole(x, w)  # no jit_trace → AST bridge
-    assert loop_whole._loop_shape is not None
+    assert loop_whole._needs_trace is True           # raw `for` → scf markers
+    assert straightline._needs_trace is False        # pure straight-line
+    out = loop_whole(x, w)  # default-on tracer → unrolled execution
     ref = x.copy()
     for _ in range(4):
         ref = _silu(ref @ w)

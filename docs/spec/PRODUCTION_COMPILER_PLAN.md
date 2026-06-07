@@ -566,6 +566,36 @@ last_updated: 2026-06-05
 >   `detect_loop_fn`/`detect_cond_fn`/`run_bridged_*` + relax decoration + migrate
 >   those 4 tests).
 >
+> * **Phase F5 — surgical supersede landed 2026-06-07.** The tracer is now the
+>   default apple_gpu control-flow front-end and the AST bridge is retired. The key
+>   correction over the original "flip a global flag" plan: a global default-on was
+>   too blunt (it bypassed the package-lane/auto_batch/exec-mode dispatch that
+>   lives *after* the hook, breaking ~15 feature tests). Instead, a **surgical
+>   gate**: `trace.function_needs_tracer(graph_ir, fn)` flags control-flow
+>   functions at decoration (raw `for`/`if` → `tessera.scf.*` markers, or an
+>   explicit `tessera.control.*` call); `JitFn.__call__` routes **only those**
+>   (`self._needs_trace`) through the tracer, and **pure straight-line falls
+>   through to the existing package/auto_batch/canonical path untouched**. Default
+>   on (`TESSERA_JIT_TRACE=0` to disable). **Retired** `detect_loop_fn`/
+>   `detect_cond_fn`/`run_bridged_loop`/`run_bridged_cond`/`build_*graphfn`/
+>   `LoopShape`/`CondShape` from `graphfn_bridge.py` (kept `_strip`/`_OP_TABLE`/
+>   `_apply_op` — the tracer's translation core) + the `JitFn` `_loop_shape`/
+>   `_cond_shape`/`_bridge_cache` plumbing. **Migration:** `test_jit_apple_gpu_loop_bridge.py`
+>   rewritten to test the tracer (loop functions unroll; `divergent_if` raw-`if` →
+>   `ts.control.cond`); bf16-loop + `_needs_trace` assertions retargeted. Validated:
+>   the ~15 feature tests now pass (straight-line untouched); 52 migrated
+>   bridge/bf16/trace tests green; mypy clean host + linux.
+>
+>   *Remaining F5 sub-item (separable):* relax `@jit(target="apple_gpu")`
+>   decoration so an AST-emission failure no longer hard-raises (defer to the
+>   tracer at call time) — unlocks bodies the AST can't emit (e.g. surrounding code
+>   around a loop). Not needed for the migration; noted as a follow-on.
+>
+> **The abstract-interp tracing lift (F1–F6) is complete:** the tracer is the
+> default apple_gpu control-flow front-end (concrete tracing → full vocab; control
+> flow → fused `run_graph_*`; straight-line → canonical), superseding the AST
+> bridge, with `tessera.control.*` as the data-dependent control-flow contract.
+>
 > Next: Phase 4 (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the

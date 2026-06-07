@@ -344,25 +344,20 @@ class JitFn:
         self.deterministic = deterministic
         self.seed = seed
         self.target = target
-        # Phase-G close-out (Phase A) — detect a single-carry bounded loop so an
-        # AST ``@jit(target="apple_gpu")`` for-loop executes through the GraphFn
-        # ``tessera.control_for`` path (see ``graphfn_bridge``). ``None`` for
-        # every non-matching function, which keeps the existing dispatch path.
-        # Pure structural inspection; a detect bug must not break decoration of
-        # unrelated functions, so it is best-effort here. The hard diagnostic for
-        # an untranslatable body op fires later, at build/run time (Decision #21).
-        self._loop_shape: Optional[Any] = None
-        self._cond_shape: Optional[Any] = None
-        self._bridge_cache: Dict[Any, Any] = {}
-        try:
-            from .graphfn_bridge import detect_cond_fn, detect_loop_fn
+        # Phase-F F5 — surgical tracer gate (supersedes the retired AST bridge).
+        # A control-flow apple_gpu function (raw for/if → tessera.scf.* markers,
+        # or an explicit tessera.control.* call) routes through the trace-by-
+        # running path; pure straight-line functions keep the existing
+        # package/auto_batch/canonical path untouched. Detected once at
+        # decoration; best-effort (a detect bug must not break decoration).
+        self._needs_trace: bool = False
+        if target == "apple_gpu":
+            try:
+                from .trace import function_needs_tracer
 
-            self._loop_shape = detect_loop_fn(graph_ir, target)
-            if self._loop_shape is None:
-                self._cond_shape = detect_cond_fn(graph_ir, target)
-        except Exception:
-            self._loop_shape = None
-            self._cond_shape = None
+                self._needs_trace = function_needs_tracer(graph_ir, fn)
+            except Exception:
+                self._needs_trace = False
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
         self.compile_bundle = compile_bundle
@@ -602,27 +597,16 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         try:
-            # Phase-F F4 — trace-by-running supersedes the AST bridge for
-            # apple_gpu (behind a flag while parity is oracled; F5 makes it the
-            # default). Handles arbitrary tessera.ops/tessera.control bodies with
-            # control flow anywhere + surrounding straight-line code.
-            if self.target == "apple_gpu":
+            # Phase-F F5 — surgical tracer dispatch (supersedes the AST bridge).
+            # ONLY control-flow apple_gpu functions route through the tracer; pure
+            # straight-line functions fall through to the existing package /
+            # auto_batch / canonical path below, untouched. Raw data-dependent
+            # `if`/`while` raises in the tracer ("use tessera.control.*").
+            if self.target == "apple_gpu" and self._needs_trace:
                 from .trace import jit_trace_enabled, run_jit_traced
 
                 if jit_trace_enabled():
                     return run_jit_traced(self, args, kwargs)
-            # Phase-G close-out (Phase A) — a detected single-carry bounded loop
-            # on apple_gpu executes via the GraphFn control_for path. An
-            # untranslatable body op raises a stable diagnostic here (Decision
-            # #21); it never silently falls back to host Python.
-            if self._loop_shape is not None:
-                from .graphfn_bridge import run_bridged_loop
-
-                return run_bridged_loop(self, args, kwargs)
-            if self._cond_shape is not None:
-                from .graphfn_bridge import run_bridged_cond
-
-                return run_bridged_cond(self, args, kwargs)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)

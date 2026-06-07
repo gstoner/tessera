@@ -965,8 +965,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/include/Tessera/Target/Apple/Passes.h": {
-    "mtime": 1780498741.603517,
-    "ast_hash": "486b0dbe93190d1e07a759f4adf95eef",
+    "mtime": 1780790945.045963,
+    "ast_hash": "1222a9c0fc9f7902314a467db3ee6f3e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp": {
@@ -975,18 +975,18 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp": {
-    "mtime": 1780575485.3206084,
-    "ast_hash": "a10903e4cb3287258ed7a7810b60551a",
+    "mtime": 1780844357.2037494,
+    "ast_hash": "1a7b0f4f3bc76abe725f00cc2199db63",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm": {
-    "mtime": 1780594134.2588906,
-    "ast_hash": "39d1f58c849321d4a173d02e5fae8ed5",
+    "mtime": 1780844463.5031295,
+    "ast_hash": "361c34602431434e8473d3e318331ca3",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp": {
-    "mtime": 1780070239.8116174,
-    "ast_hash": "3b73a797c24a429e47d71e5c11c57a33",
+    "mtime": 1780790950.0636365,
+    "ast_hash": "9db24d9893704d25a1068c7e090a02d0",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/TesseraAppleDialect.cpp": {
@@ -2055,8 +2055,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/CMakeLists.txt": {
-    "mtime": 1780491393.2317355,
-    "ast_hash": "0c454b2c3884b1eff0483d7e7ceb7d26",
+    "mtime": 1780790957.1445067,
+    "ast_hash": "07be11a55c935e1350e22b66abf44dbf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/README.md": {
@@ -2310,13 +2310,13 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/_apple_gpu_dispatch.py": {
-    "mtime": 1780544578.4961166,
-    "ast_hash": "cd164317b57d855f5732ffc76f2fe90e",
+    "mtime": 1780844408.7146208,
+    "ast_hash": "be5568c360746592aa18660bbe6bb67b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/control.py": {
-    "mtime": 1779400862.715483,
-    "ast_hash": "122612be6097bb5052df28488200a427",
+    "mtime": 1780847298.1967719,
+    "ast_hash": "1e5dfe232308a24713c27d65a893a195",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/collectives.py": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/runtime.py": {
-    "mtime": 1780697987.918192,
-    "ast_hash": "db9425aedffdd86b870657474e532dc5",
+    "mtime": 1780704911.4342687,
+    "ast_hash": "be500354c158819e23e4be35e3010a19",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/energy.py": {
@@ -2570,8 +2570,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/tape.py": {
-    "mtime": 1779400862.6566823,
-    "ast_hash": "6879e684ce5cdec3a292e37f560b5583",
+    "mtime": 1780806831.8831995,
+    "ast_hash": "6be730ff8a37754ebf7841c4cee6aeb4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/__init__.py": {
@@ -2585,8 +2585,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/vjp.py": {
-    "mtime": 1780698194.6162694,
-    "ast_hash": "6e8546b54cc9cbe0841c90d331e94d5c",
+    "mtime": 1780755497.6635914,
+    "ast_hash": "8843c4f1e4686bd9de700ded429e667e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/grad.py": {
@@ -2595,8 +2595,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/jvp.py": {
-    "mtime": 1780698194.6156206,
-    "ast_hash": "1f788c4e20e885767101998fd510f1f5",
+    "mtime": 1780755503.044489,
+    "ast_hash": "f81a5012c4c9b5da971badc59ff61d36",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/autodiff/geometric/registry.py": {
@@ -2875,8 +2875,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/jit.py": {
-    "mtime": 1780450360.6087537,
-    "ast_hash": "a210de4682d7740e9340e4263c4a8098",
+    "mtime": 1780839520.186143,
+    "ast_hash": "a4c9e50c55d0acedbd988fed1fe93dbf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/distributed_planner.py": {
@@ -2915,8 +2915,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/diagnostics.py": {
-    "mtime": 1780288146.4516513,
-    "ast_hash": "f7631a49739b92b83bd611174b187175",
+    "mtime": 1780838067.938872,
+    "ast_hash": "9963e1dde983887f4003d358755a5b6a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/cross_lane.py": {
@@ -2950,8 +2950,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/backend_manifest.py": {
-    "mtime": 1780580391.8330207,
-    "ast_hash": "a228f1e2451a3fe583f29cd7b0db02f3",
+    "mtime": 1780850784.8229656,
+    "ast_hash": "bd2e44f27fa8fb6eac204179de959110",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/numeric_policy_pass.py": {
@@ -3070,8 +3070,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/driver.py": {
-    "mtime": 1780575904.5011485,
-    "ast_hash": "b4d829aa14f36c3388fa6b6070165b67",
+    "mtime": 1780701174.5966177,
+    "ast_hash": "ac7fcab400bb08393fa2fd0bbe7f7b5e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/normalization.py": {
@@ -3115,8 +3115,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/graph_ir.py": {
-    "mtime": 1780547819.9673586,
-    "ast_hash": "91a2e9ce2329e26bfcbe60e4c916551d",
+    "mtime": 1780701153.2510097,
+    "ast_hash": "c0c2692e903b4e23faefcfa71f7cc886",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/frontend/__init__.py": {
@@ -3125,8 +3125,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/frontend/parser.py": {
-    "mtime": 1779400862.698349,
-    "ast_hash": "39ef0a9bde81e2fdf47b4fc1bfacccc3",
+    "mtime": 1780848935.1371398,
+    "ast_hash": "ff103572cd87ef43be503fa05e45984c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/canonical/kv_cache_append_prune_read.py": {
@@ -5365,8 +5365,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/diagnostic_codes.py": {
-    "mtime": 1780406366.40111,
-    "ast_hash": "f076e5ba35f0925384dfa40258480569",
+    "mtime": 1780839732.405036,
+    "ast_hash": "7f9caf74bce081037871bb2a71c4684b",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/tsol_coverage.py": {
@@ -8615,8 +8615,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/CLAUDE.md": {
-    "mtime": 1780417037.0238824,
-    "ast_hash": "7e39659bac6f498bb40ccd1d36e48e0b",
+    "mtime": 1780766922.1147144,
+    "ast_hash": "797a76ac543fb56d5b21ccf607233420",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/SECURITY.md": {
@@ -10235,57 +10235,57 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/support_table.md": {
-    "mtime": 1780698343.6360145,
+    "mtime": 1780850892.5372787,
     "ast_hash": "b57396fcdc2282ff014e032d4f493262",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/apple_target_map.md": {
-    "mtime": 1780698363.2842424,
+    "mtime": 1780850912.326905,
     "ast_hash": "9687ebfbd30da391b3e421b84c1f8340",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/docs_freshness.md": {
-    "mtime": 1780698374.3150249,
-    "ast_hash": "a74ecae26c58a10066cac8cc6de4aa41",
+    "mtime": 1780850923.362219,
+    "ast_hash": "a87d146393237b9e06e5dcd413d99e87",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/rocm_target_map.md": {
-    "mtime": 1780698363.2876258,
+    "mtime": 1780850912.330748,
     "ast_hash": "f643c3960879e6f6866192356072b3de",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/s_series_status.md": {
-    "mtime": 1780698363.1036572,
+    "mtime": 1780850912.1428022,
     "ast_hash": "be164d8eba1733544cc3018fdb2ffefb",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/tsol_coverage.md": {
-    "mtime": 1780698374.2808552,
+    "mtime": 1780850923.3264718,
     "ast_hash": "ac24779d376b95e3dc25e8cbbc3b1239",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_abi.md": {
-    "mtime": 1780698363.2351906,
-    "ast_hash": "722fe41beb7e336daacc03f6c7b2fdeb",
+    "mtime": 1780850912.2761922,
+    "ast_hash": "8315439db1e5e190f9118ebd078d18b3",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/e2e_op_coverage.md": {
-    "mtime": 1780698363.0922556,
+    "mtime": 1780850912.130418,
     "ast_hash": "d4d5630611db1e335faba8efb1fa187d",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/verifier_coverage.md": {
-    "mtime": 1780698363.2824817,
-    "ast_hash": "6f428949a1a4b6d2e199efbd6037f849",
+    "mtime": 1780850912.3248549,
+    "ast_hash": "26885ab1f18ab96a672955c2b9a0580c",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/effect_lattice_audit.md": {
-    "mtime": 1780698374.2841928,
+    "mtime": 1780850923.3297167,
     "ast_hash": "211a5275d42f591e815d9faf80f3fcdf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/nvidia_sm90_target_map.md": {
-    "mtime": 1780698363.2864022,
+    "mtime": 1780850912.3295116,
     "ast_hash": "e5303448884bbb7873772af80f2120c2",
     "semantic_hash": ""
   },
@@ -10770,8 +10770,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/README.md": {
-    "mtime": 1780406366.4016976,
-    "ast_hash": "ec992e352462f32884194b488965c3b0",
+    "mtime": 1780854441.0011148,
+    "ast_hash": "9388026dda3eaf4c39ccf0e4d900fb7a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/benchmarks/apple_gpu/README.md": {
@@ -11020,8 +11020,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/conformance_matrix.py": {
-    "mtime": 1780583142.4514728,
-    "ast_hash": "00b6543a92859f27c5416d13dbdf36d6",
+    "mtime": 1780850606.2292068,
+    "ast_hash": "6406edf70bc33e7654ac9dc751c8a49e",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/unit/test_canonical_compile.py": {
@@ -11100,12 +11100,12 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/op_target_conformance.md": {
-    "mtime": 1780698346.6437433,
-    "ast_hash": "78ac02d611cfbdf3d9f86a203e2588a4",
+    "mtime": 1780850925.6379924,
+    "ast_hash": "cb9e240bc21e85b791915fd281209ac4",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/runtime_execution_matrix.md": {
-    "mtime": 1780698363.2357616,
+    "mtime": 1780850912.27682,
     "ast_hash": "5b9e21917d5febef69c11baa3ba74f03",
     "semantic_hash": ""
   },
@@ -11175,8 +11175,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/apple_mlpkg.py": {
-    "mtime": 1780422454.8143983,
-    "ast_hash": "206930a98a8b764173865063b0cc9bb2",
+    "mtime": 1780844401.6919658,
+    "ast_hash": "3cb9594100c34d51aafcbb25fdcf7064",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_packaged_manifest.py": {
@@ -11385,8 +11385,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/.pre-commit-config.yaml": {
-    "mtime": 1780370587.1353347,
-    "ast_hash": "4d37257cc1591d42bb4b0cf8d3689954",
+    "mtime": 1780766656.1761415,
+    "ast_hash": "72a8335855f2482fbda3af1b0eaaa9fa",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tests/fixtures/apple_gpu/APPLE_SAMPLE_LICENSE.txt": {
@@ -11580,8 +11580,8 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/MASTER_AUDIT.md": {
-    "mtime": 1780585555.1601129,
-    "ast_hash": "42f69436357e2f1a299232a51b344f9a",
+    "mtime": 1780851218.578503,
+    "ast_hash": "be6ca3c4c91a52a114f9073f5138524a",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/backend/BACKEND_AUDIT.md": {
@@ -11840,23 +11840,23 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/surface_status.md": {
-    "mtime": 1780698374.3182971,
+    "mtime": 1780850923.3647826,
     "ast_hash": "b71d41a3faeaaa2166cd12a5f76aaacf",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/audit/generated/test_coverage.md": {
-    "mtime": 1780698374.247639,
-    "ast_hash": "eb8b4e66588f8ae66796de7444278885",
+    "mtime": 1780850923.2931113,
+    "ast_hash": "f4772588119a7c6e8959d26ce76a7173",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/_apple_gpu_backend.py": {
-    "mtime": 1780696029.8491433,
-    "ast_hash": "930dcccfc280aad257fc3da19e9e155a",
+    "mtime": 1780768254.0192065,
+    "ast_hash": "5ea781b088e4ef2c206f45c0e4cb3197",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/_jit_boundary.py": {
-    "mtime": 1780694810.0275583,
-    "ast_hash": "03b0f84fd9b79199b5d1adc937b9ee67",
+    "mtime": 1780844638.5082233,
+    "ast_hash": "efadec0966cab5eb2afc8f4f479c7df6",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/apple_target_descriptor.py": {
@@ -11960,13 +11960,263 @@
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/docs/spec/PRODUCTION_COMPILER_PLAN.md": {
-    "mtime": 1780696202.229104,
-    "ast_hash": "df62fe9b3c2279fb8d94f7d3ce4be2b4",
+    "mtime": 1780847719.6540031,
+    "ast_hash": "5602ef73e141ebe8ec303f3eb97783e6",
     "semantic_hash": ""
   },
   "/Users/gregorystoner/dev_project/tessera/tools/tessera-jit/CMakeLists.txt": {
     "mtime": 1780690126.705794,
     "ast_hash": "6f61c04f655917b3eafd98206a5512f6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/.githooks/pre-push": {
+    "mtime": 1780766629.2036042,
+    "ast_hash": "eec8d7b82f64b3a0ff85cce594f996b1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/lattice_reasoning_core/__init__.py": {
+    "mtime": 1780854332.7077677,
+    "ast_hash": "ebe1040f9e5654b79a0b2f70f863f914",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/lattice_reasoning_core/benchmark_lattice_reasoning.py": {
+    "mtime": 1780854402.399992,
+    "ast_hash": "79cb0feeff95bec83818e63051412d7a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/lattice_reasoning_core/core.py": {
+    "mtime": 1780854332.8772874,
+    "ast_hash": "288eedacdbf7cb70d6d3d3057ae040cd",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/_trace_hook.py": {
+    "mtime": 1780797806.0009613,
+    "ast_hash": "c77e53f59cca45a6e8b4c1940921046f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/graphfn_bridge.py": {
+    "mtime": 1780836165.778231,
+    "ast_hash": "ded1c223d6afcb47e7340dc520ae629e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/python/tessera/compiler/trace.py": {
+    "mtime": 1780847527.311586,
+    "ast_hash": "05dd9d45be7ae650fd2362453493df7c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/scripts/install-git-hooks.sh": {
+    "mtime": 1780766636.9115074,
+    "ast_hash": "1fe95dad37f67a7a750e9ffd3b31af87",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/scripts/stub_surface_report.py": {
+    "mtime": 1780851179.2463636,
+    "ast_hash": "8c4dcd643666bb586f02f9279ddc796b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/ControlForToAppleGPU.cpp": {
+    "mtime": 1780783942.7751427,
+    "ast_hash": "74a3cabf74ab9c050f8b0af009045e7b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/ControlIfToAppleGPU.cpp": {
+    "mtime": 1780790120.7460198,
+    "ast_hash": "58b95d0d79f03eeada659c8c0c75cf7d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Lowering/ControlWhileToAppleGPU.cpp": {
+    "mtime": 1780790933.8487215,
+    "ast_hash": "4e3c14ebbdb614d83e5c263c727e141e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/_diff_lane.py": {
+    "mtime": 1780849798.3089094,
+    "ast_hash": "353974535b1de5091aacf9bbd37956c2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_control_flow_f16.py": {
+    "mtime": 1780843853.948281,
+    "ast_hash": "773d1af35e75051fa4bc21f328123fa3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_apple_gpu_scan.py": {
+    "mtime": 1780844705.2409527,
+    "ast_hash": "79076cde57d5a35a53f70707691c122a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_conformance_complete_cells_proven.py": {
+    "mtime": 1780850720.0958033,
+    "ast_hash": "2d761bea214a9e437273344474f273b1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_differential_generator.py": {
+    "mtime": 1780849818.1591632,
+    "ast_hash": "6f1e1be2e5dc80735d73f45b22bbf9c0",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_differential_generator_hypothesis.py": {
+    "mtime": 1780849849.918387,
+    "ast_hash": "b0fa2b6a9aad579569e7d99245ca7f73",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_ir_roundtrip_fuzz.py": {
+    "mtime": 1780848875.1148176,
+    "ast_hash": "c0cb7f068fb5499185ff7af8b591c100",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_jit_apple_gpu_decoration_relax.py": {
+    "mtime": 1780837942.4852252,
+    "ast_hash": "38070b1b3d3c88de05f74139021d5066",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_jit_apple_gpu_loop_bridge.py": {
+    "mtime": 1780836238.9279473,
+    "ast_hash": "7e626933dd9b86c4676c359f213f3424",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_jit_error_identity.py": {
+    "mtime": 1780839574.5603101,
+    "ast_hash": "34fbcfe91a09e8a0c6f58d5bc659834c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_lattice_reasoning_benchmark_schema.py": {
+    "mtime": 1780854382.4414544,
+    "ast_hash": "7e232984e0808d0ae52d9f8bfb6c867a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_lattice_reasoning_core.py": {
+    "mtime": 1780854382.2631762,
+    "ast_hash": "0c0072d4fe43f1e0983a652e2ac24c17",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_bf16.py": {
+    "mtime": 1780768295.1887553,
+    "ast_hash": "7eefcd8406fb32931bc488cdaf83acb1",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_cond.py": {
+    "mtime": 1780790269.2280858,
+    "ast_hash": "5162f1245b346b0e870a3a963ce3afba",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_cond_exec.py": {
+    "mtime": 1780790284.0960546,
+    "ast_hash": "7761e92bdd4a4e4dc40b2548b801f19a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_control_flow_bf16.py": {
+    "mtime": 1780836266.113887,
+    "ast_hash": "84c836c8bb8b09cd3788f991dd4c732a",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_fori_frontend.py": {
+    "mtime": 1780785159.4561872,
+    "ast_hash": "960156bd3e6da74e82fec2e0eca82a21",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_graph.py": {
+    "mtime": 1780782076.9653864,
+    "ast_hash": "9db0c64f425ef0094bb14a152d3ee225",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_kernels.py": {
+    "mtime": 1780756064.0131485,
+    "ast_hash": "71080aeebf1c0998c2a26a0f38baaee6",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_loop.py": {
+    "mtime": 1780789562.2915058,
+    "ast_hash": "ac04b3ab7e769a8f3013aa66a693485b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_mlpkg.py": {
+    "mtime": 1780763254.4226906,
+    "ast_hash": "0b728c20015cbd3b17953c754763a66f",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_mtl4_mlp.py": {
+    "mtime": 1780763400.960481,
+    "ast_hash": "804d14465d38e1e4e58b37e521d6b2f2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_qkv.py": {
+    "mtime": 1780760843.0089183,
+    "ast_hash": "d6dddf1dcfc201f6629eed36be89dc3b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_rmsnorm_matmul.py": {
+    "mtime": 1780760794.6570816,
+    "ast_hash": "cf02de75c127ad507913ac9e4d05cd2e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_swiglu.py": {
+    "mtime": 1780760776.9197235,
+    "ast_hash": "36f619a4eee6209f3a2e40876ee5f492",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_target_ir_exec.py": {
+    "mtime": 1780784200.8199797,
+    "ast_hash": "4f6b24e92d952102bb1663756b89b0b2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_while.py": {
+    "mtime": 1780791167.6531923,
+    "ast_hash": "e1ccc10a82697c356601479045909413",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_while_exec.py": {
+    "mtime": 1780791187.12006,
+    "ast_hash": "5469b64b56dd078dd965dc6f578d8fc2",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_production_jit_phase3_while_frontend.py": {
+    "mtime": 1780791511.3232484,
+    "ast_hash": "563f33b4f1d7109535fa1ed7e4ac044c",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_f1.py": {
+    "mtime": 1780797951.6151905,
+    "ast_hash": "c98d26138e1a9eb40332c6ae543825af",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_f2.py": {
+    "mtime": 1780798508.151663,
+    "ast_hash": "18075b8bd2070a46ea0bac8c481653df",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_f3.py": {
+    "mtime": 1780799099.6113722,
+    "ast_hash": "27dcedfb8b411296fce2d2d0f3c71204",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_f4.py": {
+    "mtime": 1780836101.7050178,
+    "ast_hash": "e8bba89bcfa6c91fc5363f7d6e8e7534",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_f6.py": {
+    "mtime": 1780836040.3003411,
+    "ast_hash": "fd5944af531fa273bda708165d3d080e",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_h1_nested.py": {
+    "mtime": 1780842982.05099,
+    "ast_hash": "38c3089f29e4b8966d4e44fc41b3fa6b",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/tests/unit/test_trace_h3b_scan.py": {
+    "mtime": 1780847446.8885763,
+    "ast_hash": "f275b913977680bc92ee56e11be2571d",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/benchmarks/lattice_reasoning_core/README.md": {
+    "mtime": 1780854333.2119238,
+    "ast_hash": "5dd3b3eb4f4d0887702f2940d4b980e3",
+    "semantic_hash": ""
+  },
+  "/Users/gregorystoner/dev_project/tessera/docs/audit/stub_surface.md": {
+    "mtime": 1780851185.8861005,
+    "ast_hash": "3e82364cb0e7397f69c43136a7df2e2f",
     "semantic_hash": ""
   }
 }

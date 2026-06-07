@@ -207,11 +207,19 @@ The actionable surface, ranked (numbers live in `generated/stub_surface.md`):
   differential harness (tracer vs numpy/CPU oracle).
 
 Workstream (chosen 2026-06-07): **(#1) quantify** — `stub_surface_report.py`
-(done); **(#4) IR round-trip property + fuzz** — cheapest crash-catcher, no oracle
-needed; **(#2) differential generator** — Hypothesis-backed program synthesizer
-over the executable lane, diffed against numpy/CPU; doubles as the fuzz generator.
-(The "claimed-complete must be proven" gate is P0 above — *Fixture-driven proof
-claims for complete conformance cells*.)
+(✅ done); **(#4) IR round-trip property + fuzz** (✅ done —
+[`test_ir_roundtrip_fuzz.py`](../../tests/unit/test_ir_roundtrip_fuzz.py):
+generate→render→parse→compare op-names + malformed-input crash-safety; found &
+fixed a real parser EOF crash where `parse_module` asserted instead of raising a
+named `FrontendSyntaxError`); **(#2) differential generator** (✅ done —
+[`test_differential_generator.py`](../../tests/unit/test_differential_generator.py):
+synthesizes random programs over the executable lane (`tessera.ops` +
+`tessera.control.fori_loop`/`cond`) and diffs the **eager numpy oracle** against
+the real **trace → GraphFn / `execute_traced` Metal path** — a miscompile
+detector for straight-line, fused `run_graph_loop`, and fused `run_graph_cond`;
+51 cases green on Apple GPU, runtime-free trace/op-name properties run
+everywhere). (The "claimed-complete must be proven" gate is P0 above —
+*Fixture-driven proof claims for complete conformance cells*.)
 
 ## Where To Go Next
 

@@ -17,6 +17,28 @@ if [ "${TESSERA_SKIP_DOC_DRIFT:-}" = "1" ]; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
+
+# Gate 1 — structural spec/registry sync (fast, <1s). These are full-pytest-only
+# invariants that otherwise surface ~10 min into CI: a new op-catalog entry not
+# documented in PYTHON_API_SPEC.md, or a generated *.md dropped into
+# docs/audit/generated/ without a registry entry.
+echo "[pre-push] checking op-catalog/spec + generated-markdown registry sync…"
+if ! python3 "${repo_root}/scripts/check_spec_sync.py"; then
+  cat >&2 <<'MSG'
+
+[pre-push] BLOCKED: structural spec/registry sync failed (see above).
+  - Undocumented op → add a row to docs/spec/PYTHON_API_SPEC.md.
+  - Unregistered generated *.md → register it in
+    tessera.compiler.generated_docs.REGISTRY, or move a derived report out of
+    docs/audit/generated/ to docs/audit/ root.
+
+  Bypass (not recommended — CI will still fail):
+    TESSERA_SKIP_DOC_DRIFT=1 git push
+MSG
+  exit 1
+fi
+
+# Gate 2 — generated-doc drift (the audit dashboards; ~30s).
 echo "[pre-push] checking generated-doc drift (audit dashboards)…"
 if bash "${repo_root}/scripts/check_generated_docs.sh"; then
   exit 0

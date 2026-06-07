@@ -21,5 +21,7 @@ for h in .githooks/*; do
   [ -f "$h" ] && echo "  - $(basename "$h")"
 done
 echo ""
-echo "The pre-push hook runs scripts/check_generated_docs.sh (~30s) before each push."
+echo "The pre-push hook runs (before each push):"
+echo "  1. scripts/check_spec_sync.py      — op-catalog<->PYTHON_API_SPEC + generated-md registry (<1s)"
+echo "  2. scripts/check_generated_docs.sh — generated audit-dashboard drift (~30s)"
 echo "Bypass once with: TESSERA_SKIP_DOC_DRIFT=1 git push"

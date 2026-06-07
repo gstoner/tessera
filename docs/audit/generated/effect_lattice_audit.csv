@@ -17,6 +17,7 @@ argmax,pure,,1,0,0
 argmin,pure,,1,0,0
 argsort,pure,,1,0,0
 asin,pure,,1,0,0
+asymmetric_bce,pure,,1,0,0
 atan,pure,,1,0,0
 atan2,pure,,1,0,0
 attn_compressed_blocks,state,,1,1,1
@@ -56,6 +57,7 @@ conv2d,pure,pure,1,1,0
 conv3d,pure,pure,1,1,0
 cos,pure,,1,0,0
 cosh,pure,,1,0,0
+count_nonzero,pure,,1,0,0
 cross_entropy_loss,pure,,1,0,0
 cross_ratio,pure,,1,0,0
 cumprod,pure,,1,0,0
@@ -139,6 +141,7 @@ logsumexp,pure,,1,1,1
 lt,pure,,1,0,0
 lu,pure,,1,0,0
 mae_loss,pure,,1,0,0
+masked_categorical,random,,1,0,0
 masked_fill,pure,,1,0,0
 matmul,pure,pure,1,1,0
 maximum,pure,,1,0,0
@@ -168,6 +171,7 @@ ntk_rope,pure,,1,0,0
 pack,movement,,1,0,0
 pad,pure,,1,0,0
 permute,pure,,1,0,0
+popcount,pure,,1,0,0
 pow,pure,,1,0,0
 power_attn,state,,1,0,0
 ppo_policy_loss,pure,,1,0,0

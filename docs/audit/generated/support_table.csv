@@ -52,6 +52,7 @@ log,elementwise,public,public,registered,complete,partial,reference,ready,none
 log1p,elementwise,public,public,registered,complete,partial,reference,ready,none
 mod,elementwise,public,public,registered,complete,partial,reference,ready,none
 mul,elementwise,public,public,registered,complete,partial,reference,ready,none
+popcount,elementwise,public,public,registered,complete,partial,reference,ready,none
 pow,elementwise,public,public,registered,complete,partial,reference,ready,none
 relu,elementwise,public,public,registered,complete,partial,fused,ready,none
 rsqrt,elementwise,public,public,registered,complete,partial,reference,ready,none
@@ -103,6 +104,7 @@ dynamic_slice,indexing,public,public,registered,complete,partial,reference,ready
 dynamic_update_slice,indexing,public,public,registered,complete,partial,reference,ready,none
 index_select,indexing,public,public,registered,complete,partial,reference,ready,none
 index_update,indexing,public,public,registered,complete,partial,reference,ready,none
+masked_categorical,indexing,public,public,registered,complete,partial,reference,ready,none
 nonzero,indexing,public,public,registered,complete,partial,reference,ready,none
 scatter,indexing,public,public,registered,complete,partial,reference,ready,none
 scatter_add,indexing,public,public,registered,complete,partial,reference,ready,none
@@ -162,6 +164,7 @@ latent_kv_compress,loop_nest,public,public,registered,complete,partial,reference
 latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference,ready,none
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
+asymmetric_bce,loss,public,public,registered,complete,partial,reference,ready,none
 binary_cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 ddpm_noise_pred_loss,loss,public,public,registered,complete,partial,reference,ready,none
@@ -212,6 +215,7 @@ amax,reduction,public,public,registered,complete,partial,reference,ready,none
 amin,reduction,public,public,registered,complete,partial,reference,ready,none
 argmax,reduction,public,public,registered,complete,partial,reference,ready,none
 argmin,reduction,public,public,registered,complete,partial,reference,ready,none
+count_nonzero,reduction,public,public,registered,complete,partial,reference,ready,none
 cumprod,reduction,public,public,registered,complete,partial,reference,ready,none
 cumsum,reduction,public,public,registered,complete,partial,reference,ready,none
 mean,reduction,public,public,registered,complete,partial,reference,ready,none

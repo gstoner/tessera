@@ -68,6 +68,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `log1p` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `mod` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `popcount` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `pow` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `rsqrt` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -119,6 +120,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dynamic_update_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_select` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_update` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `masked_categorical` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `nonzero` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `scatter` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `scatter_add` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -178,6 +180,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `asymmetric_bce` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
@@ -228,6 +231,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `amin` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `argmax` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `argmin` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `count_nonzero` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `cumprod` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `cumsum` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `mean` | reduction | public | public | registered | complete | partial | reference | ready | none |
@@ -298,18 +302,18 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 34 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| elementwise | 35 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPGCp·N· PPnCFFFB PPnCFFNB PPnCFFFB PPnnFFFB PPnCFFFB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 17 | PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB PPnCFFFB |
-| indexing | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| indexing | 12 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | loop_nest | 7 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· |
-| loss | 10 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| loss | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
@@ -320,7 +324,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
-| reduction | 10 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| reduction | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rotary_embedding | 1 | PPGCpRN· |
 | segment_reduce | 1 | PPGCpRN· |

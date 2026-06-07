@@ -84,6 +84,43 @@ def binary_cross_entropy_loss(logits, targets, reduction: str = "mean"):
     return _reduce(loss, reduction)
 
 
+def asymmetric_bce(
+    logits,
+    targets,
+    pos_weight: float = 1.0,
+    neg_weight: float = 1.0,
+    reduction: str = "mean",
+):
+    """Asymmetric binary cross-entropy with logits.
+
+    Standard BCE penalizes false-negatives (the positive term) and
+    false-positives (the negative term) equally. LDT / lattice candidate-mask
+    objectives are *asymmetric*: eliminating a true candidate (false-negative)
+    is far more costly than keeping a spurious one (false-positive). This loss
+    decouples the two with ``pos_weight`` / ``neg_weight``::
+
+        L = pos_weight · t · softplus(-z)  +  neg_weight · (1-t) · softplus(z)
+
+    which reduces to ``binary_cross_entropy_loss`` when both weights are 1.
+    ``softplus`` is evaluated in the numerically stable ``log1p(exp(-|z|)) +
+    relu(±z)`` form so large |logits| never overflow.
+
+    Args:
+        logits:  pre-sigmoid scores ``z`` (any shape).
+        targets: binary targets ``t`` in ``{0, 1}`` (broadcastable to logits).
+        pos_weight: multiplier on the positive (false-negative) term.
+        neg_weight: multiplier on the negative (false-positive) term.
+        reduction: ``"mean"`` | ``"sum"`` | ``"none"``.
+    """
+    z = _asarray(logits).astype(np.float64, copy=False)
+    t = _asarray(targets).astype(np.float64, copy=False)
+    log1p_term = np.log1p(np.exp(-np.abs(z)))          # shared by both softplus
+    softplus_neg = np.maximum(-z, 0.0) + log1p_term    # softplus(-z) = -log σ(z)
+    softplus_pos = np.maximum(z, 0.0) + log1p_term     # softplus(+z) = -log(1-σ(z))
+    loss = pos_weight * t * softplus_neg + neg_weight * (1.0 - t) * softplus_pos
+    return _reduce(loss, reduction)
+
+
 def focal_loss(logits, targets, gamma: float = 2.0, alpha: float | None = None, reduction: str = "mean"):
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets)
@@ -302,6 +339,7 @@ def ctc_loss(log_probs, targets, input_lengths, target_lengths, blank: int = 0, 
 
 
 __all__ = [
+    "asymmetric_bce",
     "binary_cross_entropy_loss",
     "contrastive_loss",
     "cosine_embedding_loss",

@@ -62,3 +62,56 @@ def stable(fn, *arrays):
     if not np.isfinite(out).all() or np.max(np.abs(out)) > 1e4:
         return None
     return out
+
+
+# ── LDT / lattice-reasoning op differential cases ──────────────────────────── #
+# These ops aren't shape-preserving N×N (count_nonzero reduces, popcount needs
+# ints, asymmetric_bce → scalar, masked_categorical → indices), so they get
+# their own generators. Each case is (label, jitted_fn, args, oracle, exact):
+# the candidate is the op run on the **@jit(apple_gpu)** path (numpy-fallback
+# chain for non-Metal ops), diffed against an **independent** numpy oracle.
+
+def _agpu(fn):
+    import tessera as ts
+    return ts.jit(target="apple_gpu")(fn)
+
+
+def ldt_cases(nrng):
+    """Build the four LDT differential cases for one RNG draw."""
+    import tessera as ts
+    import tessera.losses as L
+
+    cases = []
+
+    # count_nonzero — candidate cardinality along the last axis.
+    x = (nrng.standard_normal((N, N)) * (nrng.random((N, N)) > 0.4)).astype(np.float32)
+    cases.append((
+        "count_nonzero", _agpu(lambda x: ts.ops.count_nonzero(x, axis=-1)),
+        (x,), np.count_nonzero(x, axis=-1), True))
+
+    # popcount — independent oracle via Python int.bit_count (not the impl path).
+    b = nrng.integers(0, 256, size=(N, N)).astype(np.int64)
+    oracle_pc = np.vectorize(lambda v: int(v).bit_count())(b).astype(np.int64)
+    cases.append((
+        "popcount", _agpu(lambda b: ts.ops.popcount(b)),
+        (b,), oracle_pc, True))
+
+    # asymmetric_bce — weighted logits loss; weights are kwargs (non-tensor).
+    z = nrng.standard_normal((N, N)).astype(np.float32)
+    t = (nrng.random((N, N)) < 0.5).astype(np.float32)
+    cases.append((
+        "asymmetric_bce",
+        _agpu(lambda z, t: ts.ops.asymmetric_bce(z, t, pos_weight=2.0, neg_weight=0.5)),
+        (z, t), np.asarray(L.asymmetric_bce(z, t, 2.0, 0.5)), False))
+
+    # masked_categorical — deterministic greedy decision over a candidate mask.
+    logits = nrng.standard_normal((N, N)).astype(np.float32)
+    mask = (nrng.random((N, N)) < 0.6)
+    mask[:, 0] = True                       # guarantee ≥1 candidate per row
+    mask = mask.astype(np.int32)
+    cases.append((
+        "masked_categorical",
+        _agpu(lambda lo, m: ts.ops.masked_categorical(lo, m)),
+        (logits, mask), np.asarray(ts.ops.masked_categorical(logits, mask)), True))
+
+    return cases

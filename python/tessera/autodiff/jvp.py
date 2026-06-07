@@ -585,6 +585,25 @@ def jvp_binary_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     return _reduce_loss(loss, tangent, reduction)
 
 
+@_jvp("asymmetric_bce")
+def jvp_asymmetric_bce(primals, tangents, *, pos_weight=1.0, neg_weight=1.0,
+                       reduction="mean", **_):
+    logits, targets = primals
+    dlogits, dtargets = tangents
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets, dtype=np.float64)
+    sigmoid = 1.0 / (1.0 + np.exp(-z))
+    log1p_term = np.log1p(np.exp(-np.abs(z)))
+    softplus_neg = np.maximum(-z, 0.0) + log1p_term
+    softplus_pos = np.maximum(z, 0.0) + log1p_term
+    loss = pos_weight * t * softplus_neg + neg_weight * (1.0 - t) * softplus_pos
+    # dL/dz = pos·t·(σ(z)-1) + neg·(1-t)·σ(z);  dL/dt = pos·sp(-z) - neg·sp(z)
+    dz = pos_weight * t * (sigmoid - 1.0) + neg_weight * (1.0 - t) * sigmoid
+    dt = pos_weight * softplus_neg - neg_weight * softplus_pos
+    tangent = dz * dlogits + dt * dtargets
+    return _reduce_loss(loss, tangent, reduction)
+
+
 @_jvp("cross_entropy_loss")
 def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     from tessera import losses as ts_losses

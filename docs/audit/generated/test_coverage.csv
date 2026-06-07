@@ -22,6 +22,7 @@ argmin,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 argsort,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 asin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
+asymmetric_bce,2,0,0,2,0,,covered_by_family,category default for 'loss'
 atan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 atan2,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 attn_compressed_blocks,2,2,0,4,0,,needs_direct_test,category default for 'attention'
@@ -102,6 +103,7 @@ cosh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 cosine_embedding_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
 cosine_lr,2,0,0,2,0,,structural_only,category default for 'schedule'
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
+count_nonzero,5,0,0,5,0,,structural_only,unclassified — defaults to structural_only
 cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 ctc_loss,7,0,0,7,0,,covered_by_family,category default for 'loss'
@@ -243,6 +245,7 @@ lt,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
+masked_categorical,6,0,0,6,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 matmul,263,141,14,404,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -296,6 +299,7 @@ pmean,2,0,0,2,0,,needs_direct_test,category default for 'collective'
 pmin,2,0,0,2,0,,needs_direct_test,category default for 'collective'
 polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
+popcount,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
 pow,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 power_attn,3,0,1,3,0,,needs_direct_test,category default for 'attention'
 ppo_policy_loss,8,11,0,19,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'rl_loss'

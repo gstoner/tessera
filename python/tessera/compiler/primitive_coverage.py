@@ -1797,10 +1797,14 @@ _NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
     # numeric_helper integer-output / boolean-output
     "floor", "ceil", "round", "trunc",
     "isnan", "isinf", "isfinite",
-    # reduction integer-output (indices)
-    "argmax", "argmin",
+    # reduction integer-output (indices / counts)
+    "argmax", "argmin", "count_nonzero",
+    # elementwise integer bit-op (population count)
+    "popcount",
     # indexing primitives that produce or use integer indices only
     "nonzero",
+    # masked categorical decision → returns indices (greedy argmax / sample)
+    "masked_categorical",
     # state-effect / movement ops without a canonical VJP
     "pack", "unpack",  # explicit memory-movement intrinsics
     "rearrange",       # axis-permutation; transpose handles the AD

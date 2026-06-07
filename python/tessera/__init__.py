@@ -3124,6 +3124,42 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def nonzero(x):
         return np.nonzero(_unwrap(x))
 
+    def count_nonzero(x, axis=None, keepdims: bool = False):
+        """Count of non-zero / truthy elements along ``axis`` (LDT candidate
+        cardinality). Reduction over a boolean predicate; version-independent."""
+        a = np.asarray(_unwrap(x))
+        return (a != 0).sum(axis=axis, keepdims=keepdims)
+
+    def popcount(x):
+        """Per-element population count (number of set bits) of an integer
+        tensor — e.g. candidates-remaining for a bitmask-encoded lattice cell.
+        Elementwise, shape-preserving, non-negative integers."""
+        a = np.asarray(_unwrap(x))
+        if hasattr(np, "bitwise_count"):          # numpy >= 2.0 fast path
+            return np.asarray(np.bitwise_count(a))
+        v = a.astype(np.uint64, copy=True)        # numpy < 2.0 masking fallback
+        out = np.zeros(v.shape, dtype=np.int64)
+        while np.any(v):
+            out += (v & np.uint64(1)).astype(np.int64)
+            v >>= np.uint64(1)
+        return out
+
+    def masked_categorical(logits, mask, key=None, axis: int = -1):
+        """Categorical decision over ``logits`` restricted to a candidate
+        ``mask`` (masked-out positions get ``-inf`` so they're never chosen).
+        ``key=None`` → deterministic greedy ``argmax`` (testable); a seed/key →
+        a Gumbel-max sample over the surviving candidates. Returns indices
+        (non-differentiable)."""
+        z = np.asarray(_unwrap(logits), dtype=np.float64)
+        m = np.asarray(_unwrap(mask)).astype(bool)
+        masked = np.where(m, z, -np.inf)
+        if key is None:
+            return np.argmax(masked, axis=axis)
+        seed = key if isinstance(key, (int, np.integer)) else (abs(hash(key)) % (2**32))
+        rng = np.random.default_rng(int(seed))
+        g = -np.log(-np.log(rng.random(size=masked.shape) + 1e-20) + 1e-20)
+        return np.argmax(np.where(np.isfinite(masked), masked + g, -np.inf), axis=axis)
+
     def top_k(x, k: int, axis: int = -1):
         a = _unwrap(x)
         idx = np.argsort(a, axis=axis)
@@ -3162,6 +3198,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     log_cosh_loss_ref = _lazy_module_fn("losses", "log_cosh_loss")
     cross_entropy_loss_ref = _lazy_module_fn("losses", "cross_entropy_loss")
     binary_cross_entropy_loss_ref = _lazy_module_fn("losses", "binary_cross_entropy_loss")
+    asymmetric_bce_ref = _lazy_module_fn("losses", "asymmetric_bce")
     ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
     score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
     vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
@@ -3391,6 +3428,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "scatter_reduce": scatter_reduce,
         "index_update": index_update,
         "nonzero": nonzero,
+        "count_nonzero": count_nonzero,
+        "popcount": popcount,
+        "masked_categorical": masked_categorical,
         "top_k": top_k,
         "sort": sort,
         "argsort": argsort,
@@ -3403,6 +3443,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "log_cosh_loss": log_cosh_loss_ref,
         "cross_entropy_loss": cross_entropy_loss_ref,
         "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
+        "asymmetric_bce": asymmetric_bce_ref,
         "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
         "score_matching_loss": score_matching_loss_ref,
         "vlb_loss": vlb_loss_ref,
@@ -3699,6 +3740,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         scatter_reduce=scatter_reduce,
         index_update=index_update,
         nonzero=nonzero,
+        count_nonzero=count_nonzero,
+        popcount=popcount,
+        masked_categorical=masked_categorical,
         top_k=top_k,
         sort=sort,
         argsort=argsort,
@@ -3711,6 +3755,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         log_cosh_loss=log_cosh_loss_ref,
         cross_entropy_loss=cross_entropy_loss_ref,
         binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
+        asymmetric_bce=asymmetric_bce_ref,
         ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
         score_matching_loss=score_matching_loss_ref,
         vlb_loss=vlb_loss_ref,

@@ -29,7 +29,8 @@ import tessera as ts
 from tessera.compiler.trace import run_traced, trace
 
 from _diff_lane import (  # noqa: E402  (sibling helper module, see _diff_lane.py)
-    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, stable, straightline_fn,
+    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, ldt_cases, stable,
+    straightline_fn,
 )
 
 # Back-compat local aliases (kept so the test bodies read as before).
@@ -165,3 +166,23 @@ def test_cond_matches_oracle(seed, flag):
             err_msg=f"COND MISCOMPILE seed={seed} flag={flag}")
         checked += 1
     assert checked > 0, f"seed={seed} flag={flag}: all branches unstable"
+
+
+# ── LDT-op differential — @jit(apple_gpu) vs an independent numpy oracle ────── #
+# count_nonzero / popcount / asymmetric_bce / masked_categorical aren't
+# shape-preserving N×N, so they run as their own cases (see _diff_lane.ldt_cases)
+# rather than in the op-chain grammar above. Integer/index ops compare exactly;
+# the loss compares at f32 tolerance.
+@gpu
+@pytest.mark.parametrize("seed", _SEEDS)
+def test_ldt_ops_match_oracle(seed):
+    nrng = np.random.default_rng(seed + 500)
+    for label, fn, args, oracle, exact in ldt_cases(nrng):
+        cand = np.asarray(fn(*args))
+        if exact:
+            np.testing.assert_array_equal(
+                cand, oracle, err_msg=f"LDT MISCOMPILE {label} seed={seed}")
+        else:
+            np.testing.assert_allclose(
+                cand, np.asarray(oracle), rtol=2e-3, atol=2e-3,
+                err_msg=f"LDT MISCOMPILE {label} seed={seed}")

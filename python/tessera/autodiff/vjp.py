@@ -2215,6 +2215,24 @@ def vjp_binary_cross_entropy_loss(dout, logits, targets, *, reduction="mean", **
     return (_sum_to_shape(grad_logits, logits_arr.shape), _sum_to_shape(grad_targets, targets_arr.shape))
 
 
+@_vjp("asymmetric_bce")
+def vjp_asymmetric_bce(dout, logits, targets, *, pos_weight=1.0, neg_weight=1.0,
+                       reduction="mean", **_):
+    # L = pos·t·softplus(-z) + neg·(1-t)·softplus(z)
+    #   dL/dz = pos·t·(σ(z)-1) + neg·(1-t)·σ(z)      [σ(-z) = 1-σ(z)]
+    #   dL/dt = pos·softplus(-z) - neg·softplus(z)
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets, dtype=np.float64)
+    sigmoid = 1.0 / (1.0 + np.exp(-z))
+    log1p_term = np.log1p(np.exp(-np.abs(z)))
+    softplus_neg = np.maximum(-z, 0.0) + log1p_term
+    softplus_pos = np.maximum(z, 0.0) + log1p_term
+    scale = _reduction_cotangent(dout, np.broadcast_shapes(z.shape, t.shape), reduction)
+    grad_logits = (pos_weight * t * (sigmoid - 1.0) + neg_weight * (1.0 - t) * sigmoid) * scale
+    grad_targets = (pos_weight * softplus_neg - neg_weight * softplus_pos) * scale
+    return (_sum_to_shape(grad_logits, z.shape), _sum_to_shape(grad_targets, t.shape))
+
+
 @_vjp("ddpm_noise_pred_loss")
 def vjp_ddpm_noise_pred_loss(dout, pred_noise, true_noise, *, reduction="mean", **kwargs):
     return vjp_mse_loss(dout, pred_noise, true_noise, reduction=reduction, **kwargs)

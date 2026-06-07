@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 34 |
-| ``runnable_reference`` | 239 |
+| ``runnable_reference`` | 243 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 1 |
 | ``planned`` | 0 |
-| **total** | **274** |
+| **total** | **278** |
 
 ## complete (34)
 
@@ -70,7 +70,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (239)
+## runnable_reference (243)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -127,6 +127,7 @@ each row into a single E2E tier.
 | ``log1p`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``mod`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``mul`` | elementwise | public | public | registered | partial | reference | ready | none |
+| ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``pow`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``rsqrt`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``sigmoid`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -150,6 +151,7 @@ each row into a single E2E tier.
 | ``dynamic_update_slice`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``index_select`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``index_update`` | indexing | public | public | registered | partial | reference | ready | none |
+| ``masked_categorical`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``nonzero`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``scatter`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``scatter_add`` | indexing | public | public | registered | partial | reference | ready | none |
@@ -207,6 +209,7 @@ each row into a single E2E tier.
 | ``latent_kv_compress`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |
+| ``asymmetric_bce`` | loss | public | public | registered | partial | reference | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``cross_entropy_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``ddpm_noise_pred_loss`` | loss | public | public | registered | partial | reference | ready | none |
@@ -257,6 +260,7 @@ each row into a single E2E tier.
 | ``amin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``argmin`` | reduction | public | public | registered | partial | reference | ready | none |
+| ``count_nonzero`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumprod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumsum`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | reference | ready | none |

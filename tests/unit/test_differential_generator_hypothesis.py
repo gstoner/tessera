@@ -23,7 +23,8 @@ import tessera as ts  # noqa: E402
 from tessera.compiler.trace import run_traced, trace  # noqa: E402
 
 from _diff_lane import (  # noqa: E402
-    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, stable, straightline_fn,
+    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, ldt_cases, stable,
+    straightline_fn,
 )
 
 # Apple-GPU dispatch dominates wall-time and isn't hypothesis's concern; give it
@@ -139,3 +140,20 @@ def test_cond_matches_oracle(then_p, else_p, flag, seed):
     np.testing.assert_allclose(
         cand, oracle, rtol=3e-3, atol=3e-3,
         err_msg=f"COND MISCOMPILE flag={flag} seed={seed}")
+
+
+# ── LDT-op differential — hypothesis-seeded, @jit(apple_gpu) vs numpy oracle ── #
+@gpu
+@_SETTINGS
+@given(seed=_SEED_ST)
+def test_ldt_ops_match_oracle(seed):
+    nrng = np.random.default_rng(seed)
+    for label, fn, args, oracle, exact in ldt_cases(nrng):
+        cand = np.asarray(fn(*args))
+        if exact:
+            np.testing.assert_array_equal(
+                cand, oracle, err_msg=f"LDT MISCOMPILE {label} seed={seed}")
+        else:
+            np.testing.assert_allclose(
+                cand, np.asarray(oracle), rtol=2e-3, atol=2e-3,
+                err_msg=f"LDT MISCOMPILE {label} seed={seed}")

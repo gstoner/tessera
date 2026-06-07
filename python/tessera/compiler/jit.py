@@ -352,13 +352,17 @@ class JitFn:
         # unrelated functions, so it is best-effort here. The hard diagnostic for
         # an untranslatable body op fires later, at build/run time (Decision #21).
         self._loop_shape: Optional[Any] = None
+        self._cond_shape: Optional[Any] = None
         self._bridge_cache: Dict[Any, Any] = {}
         try:
-            from .graphfn_bridge import detect_loop_fn
+            from .graphfn_bridge import detect_cond_fn, detect_loop_fn
 
             self._loop_shape = detect_loop_fn(graph_ir, target)
+            if self._loop_shape is None:
+                self._cond_shape = detect_cond_fn(graph_ir, target)
         except Exception:
             self._loop_shape = None
+            self._cond_shape = None
         self.attn_config = attn_config
         self.cpu_plan = cpu_plan
         self.compile_bundle = compile_bundle
@@ -606,6 +610,10 @@ class JitFn:
                 from .graphfn_bridge import run_bridged_loop
 
                 return run_bridged_loop(self, args, kwargs)
+            if self._cond_shape is not None:
+                from .graphfn_bridge import run_bridged_cond
+
+                return run_bridged_cond(self, args, kwargs)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)

@@ -30,6 +30,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _BEGIN = "tessera.scf.for.begin"
 _END = "tessera.scf.for.end"
+_IF_BEGIN = "tessera.scf.if.begin"
+_IF_ELSE = "tessera.scf.else"
+_IF_END = "tessera.scf.if.end"
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,78 @@ def detect_loop_fn(graph_ir_module: Any, target: Any) -> Optional[LoopShape]:
         next_carry_ssa=next_carry_ssa,
         trip=int(trip),
         body_ops=tuple(body_ops),
+    )
+
+
+@dataclass(frozen=True)
+class CondShape:
+    """A detected single-carry divergent if/else ready for GraphFn translation."""
+
+    arg_names: Tuple[str, ...]
+    flag_arg_index: int          # which arg is the (1,) runtime flag
+    flag_base: str
+    then_ops: Tuple[Any, ...]
+    then_out_ssa: str
+    else_ops: Tuple[Any, ...]
+    else_out_ssa: str
+
+
+def detect_cond_fn(graph_ir_module: Any, target: Any) -> Optional[CondShape]:
+    """Return a :class:`CondShape` if ``graph_ir_module``'s single function is a
+    supported single-carry dynamic if/else on ``apple_gpu``; else ``None``.
+
+    v1 shape: the if/else IS the function body (no ops before begin / after end),
+    a dynamic condition that is a function arg (the (1,) flag), a then- and an
+    else-branch each re-binding one shared carry, returned.
+    """
+    if target != "apple_gpu":
+        return None
+    fns = getattr(graph_ir_module, "functions", None)
+    if not fns or len(fns) != 1:
+        return None
+    fn = fns[0]
+    body = list(getattr(fn, "body", []))
+    arg_names = tuple(a.name for a in getattr(fn, "args", []))
+    if not arg_names:
+        return None
+
+    begins = [i for i, op in enumerate(body) if op.op_name == _IF_BEGIN]
+    elses = [i for i, op in enumerate(body) if op.op_name == _IF_ELSE]
+    ends = [i for i, op in enumerate(body) if op.op_name == _IF_END]
+    if len(begins) != 1 or len(elses) != 1 or len(ends) != 1:
+        return None
+    bi, mi, ei = begins[0], elses[0], ends[0]
+    if not (bi == 0 and ei == len(body) - 1 and bi < mi < ei):
+        return None
+
+    begin = body[bi]
+    if begin.kwargs.get("kind") != "dynamic" or not begin.operands:
+        return None  # static condition has no runtime flag → not v1
+    flag_base = _strip(begin.operands[0]).split("__", 1)[0]
+    if flag_base not in arg_names:
+        return None
+
+    then_ops = body[bi + 1:mi]
+    else_ops = body[mi + 1:ei]
+    if not then_ops or not else_ops:
+        return None
+
+    def bases(ops):
+        return {op.result.split("__", 1)[0]: op.result
+                for op in ops if op.result is not None}
+    tb, eb = bases(then_ops), bases(else_ops)
+    carries = set(tb) & set(eb)
+    if len(carries) != 1:
+        return None
+    carry_base = next(iter(carries))
+    return CondShape(
+        arg_names=arg_names,
+        flag_arg_index=arg_names.index(flag_base),
+        flag_base=flag_base,
+        then_ops=tuple(then_ops),
+        then_out_ssa=tb[carry_base],
+        else_ops=tuple(else_ops),
+        else_out_ssa=eb[carry_base],
     )
 
 
@@ -216,4 +291,61 @@ def run_bridged_loop(jitfn: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
 
     if _find_tessera_opt() is not None:
         return g.run_via_target_ir(*arrays)
+    return g.run(*arrays)
+
+
+def build_cond_graphfn(shape: CondShape, arg_shapes: List[Tuple[int, ...]],
+                       elem: str):
+    """Translate a :class:`CondShape` into an un-executed ``GraphFn`` carrying a
+    ``tessera.control_if`` (single carried result, v1)."""
+    from .._jit_boundary import GraphFn, TesseraJitError
+
+    g = GraphFn(name="tessera_jit_cond", elem=elem, target="apple_gpu")
+    arg_vals = {name: g.arg(tuple(sh))
+                for name, sh in zip(shape.arg_names, arg_shapes)}
+    flag_val = arg_vals[shape.flag_base]
+
+    def _branch(ops, out_ssa):
+        env = dict(arg_vals)
+        for op in ops:
+            env[op.result] = _apply_op(g, op, env, TesseraJitError)
+        return env[out_ssa]
+
+    out = g.cond(flag_val,
+                 then_fn=lambda: _branch(shape.then_ops, shape.then_out_ssa),
+                 else_fn=lambda: _branch(shape.else_ops, shape.else_out_ssa))
+    g.ret(out)
+    return g
+
+
+def run_bridged_cond(jitfn: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
+    """Execute a ``@jit(target='apple_gpu')`` divergent if/else through the GraphFn
+    control_if path (shape-specialized GraphFn cached on the JitFn)."""
+    import numpy as np
+
+    from .._jit_boundary import _find_tessera_opt
+
+    shape: CondShape = jitfn._cond_shape
+    ordered: List[Any] = list(args)
+    if len(ordered) < len(shape.arg_names):
+        for name in shape.arg_names[len(ordered):]:
+            if name not in kwargs:
+                raise TypeError(
+                    f"{jitfn._fn.__name__}() missing argument {name!r}")
+            ordered.append(kwargs[name])
+    arrays = [np.asarray(a) for a in ordered[:len(shape.arg_names)]]
+
+    # Element type from a non-flag (tensor) arg; the flag is a (1,) scalar.
+    rep = next((i for i in range(len(arrays)) if i != shape.flag_arg_index), 0)
+    dt = arrays[rep].dtype
+    elem = "bf16" if str(dt) in ("bfloat16",) else "f32"
+    key = tuple((a.shape, str(a.dtype)) for a in arrays)
+    cache = jitfn._bridge_cache
+    g = cache.get(key)
+    if g is None:
+        g = build_cond_graphfn(shape, [a.shape for a in arrays], elem)
+        cache[key] = g
+
+    if _find_tessera_opt() is not None:
+        return g.run_cond_via_target_ir(*arrays)
     return g.run(*arrays)

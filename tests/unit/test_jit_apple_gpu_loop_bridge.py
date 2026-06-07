@@ -57,6 +57,15 @@ def untranslatable_loop(x, w):  # tessera.sqrt has no GraphFn builder
     return x
 
 
+@ts.jit(target="apple_gpu")
+def divergent_if(flag, x, w):
+    if flag:
+        y = ts.ops.silu(ts.ops.matmul(x, w))
+    else:
+        y = ts.ops.relu(ts.ops.matmul(x, w))
+    return y
+
+
 def _silu(z):
     return z / (1.0 + np.exp(-z))
 
@@ -127,6 +136,30 @@ def test_bridge_prenorm_residual_matches_numpy():
     for _ in range(5):
         ref = ref + _rms(ref) @ w
     np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-4)
+
+
+# --- AST if-bridge (C2) ----------------------------------------------------- #
+def test_detects_divergent_if():
+    sh = divergent_if._cond_shape
+    assert sh is not None
+    assert sh.flag_arg_index == 0 and sh.flag_base == "flag"
+    assert sh.arg_names == ("flag", "x", "w")
+    assert divergent_if._loop_shape is None  # not a loop
+
+
+@gpu
+@pytest.mark.parametrize("flagv", [1.0, -1.0])
+def test_bridge_if_selects_branch_matches_numpy(flagv):
+    rng = np.random.default_rng(int(abs(flagv)) + 3)
+    d = 8
+    x = (rng.standard_normal((1, d)) / d).astype(np.float32)
+    w = (rng.standard_normal((d, d)) / np.sqrt(d)).astype(np.float32)
+    out = divergent_if(np.array([flagv], np.float32), x, w)
+    z = x @ w
+    ref = _silu(z) if flagv > 0 else np.maximum(z, 0.0)
+    np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-4)
+    g = next(iter(divergent_if._bridge_cache.values()))
+    assert g.last_dispatch() == ["control_if"]
 
 
 @gpu

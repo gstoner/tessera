@@ -409,11 +409,30 @@ last_updated: 2026-06-05
 >   `test_production_jit_phase3_cond_exec.py`; obsolete `test_cond_rejects_bf16`
 >   retargeted. verifier_coverage regenerated for the new op.
 >
-> Remaining close-out (plan `valiant-tickling-nest`): **C2** AST `if` bridge
-> (`graphfn_bridge` → `control_if`); **D** `control_while` Target-IR op + lowering +
-> AST `while` bridge (reuses the existing `run_graph_while_f32`); **E**
-> `scan`/`while` front-ends. Phases A (AST `for` bridge) + B (bf16 loop) + C1
-> (`control_if` IR/exec) ✅ landed.
+> * **Close-out Phase C2 — AST `if` bridge landed 2026-06-06.** A plain Python
+>   `if/else` in `@jit(target="apple_gpu")` now lowers to `control_if` and executes:
+>   ```python
+>   @jit(target="apple_gpu")
+>   def f(flag, x, w):
+>       if flag:
+>           y = ts.ops.silu(ts.ops.matmul(x, w))
+>       else:
+>           y = ts.ops.relu(ts.ops.matmul(x, w))
+>       return y
+>   ```
+>   `graphfn_bridge.detect_cond_fn` reads the `@jit` op-list (then-/else-ops
+>   between `tessera.scf.if.{begin,else,end}` markers, dynamic flag = the begin
+>   marker's operand arg), recovers the single carried result (the one base
+>   re-bound in both branches), and `build_cond_graphfn` replays both branches
+>   through `GraphFn.cond` → `run_cond_via_target_ir`. Wired into `JitFn` alongside
+>   the loop bridge (`_cond_shape`; dispatch after the loop check). E2E both
+>   branches ~8e-9 vs numpy, drive `control_if`. **+tests** in
+>   `test_jit_apple_gpu_loop_bridge.py`.
+>
+> Remaining close-out (plan `valiant-tickling-nest`): **D** `control_while`
+> Target-IR op + lowering + AST `while` bridge (reuses the existing
+> `run_graph_while_f32`); **E** `scan`/`while` front-ends. Phases A (AST `for`) +
+> B (bf16 loop) + C (`control_if` IR/exec + AST `if` bridge) ✅ landed.
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

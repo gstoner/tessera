@@ -855,7 +855,7 @@ def jit_gelu(a: np.ndarray) -> np.ndarray:
 # already supports this (markCInterface + the DPS rewrite walk every function);
 # GraphFn is just the Python surface to express the graph.
 
-_ELEM_TO_NP: dict[str, Any] = {"f32": np.float32}
+_ELEM_TO_NP: dict[str, Any] = {"f32": np.float32, "f16": np.float16}
 if _BF16 is not None:
     _ELEM_TO_NP["bf16"] = _BF16
 
@@ -1307,9 +1307,9 @@ class GraphFn:
         if "_unsupported" in loop:
             raise TesseraJitError(
                 f"apple_gpu GraphFn loop: {loop['_unsupported']} not supported (v1)")
-        if self._elem not in ("f32", "bf16"):
+        if self._elem not in ("f32", "f16", "bf16"):
             raise TesseraJitError(
-                f"apple_gpu GraphFn loop supports f32/bf16, got {self._elem!r}")
+                f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != loop["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn loop must return exactly the loop result")
@@ -1333,6 +1333,8 @@ class GraphFn:
         """numpy dtype the loop's args must carry, per the GraphFn ``_elem``."""
         if self._elem == "f32":
             return np.float32
+        if self._elem == "f16":
+            return np.float16
         if self._elem == "bf16":
             if _ml_dtypes is None:
                 raise TesseraJitError(
@@ -1340,16 +1342,14 @@ class GraphFn:
                     "(pip install '.[ml_dtypes]')")
             return _ml_dtypes.bfloat16
         raise TesseraJitError(
-            f"apple_gpu GraphFn loop supports f32/bf16, got {self._elem!r}")
+            f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
 
     def _coerce_loop_args(self, arrays):
         """Validate args against the declared ``_elem`` + recorded shapes and
-        return **f32** arrays for the executor. ``run_graph_loop_f32`` (and the
-        cond/while executors) are f32; bf16 control flow is host-upcast to f32 for
-        the run and the result is downcast back to bf16 by the caller — so a bf16
-        loop computes in f32 with an f32 carry (more accurate than per-step bf16
-        rounding; a native ``run_graph_loop_bf16`` is a perf/exact-rounding
-        follow-on). See ``_finalize_loop_out``."""
+        return arrays for the executor. f32 and **native f16** (Phase-H H2) pass
+        through to ``run_graph_*_f32``/``_f16``; **bf16** is host-upcast to f32
+        (MPSGraph has no bf16 type — the result is downcast back to bf16 by
+        ``_finalize_loop_out``, so a bf16 loop computes in f32 with an f32 carry)."""
         want = self._loop_elem_np()
         if len(arrays) != len(self._args):
             raise TesseraJitError(
@@ -1361,7 +1361,8 @@ class GraphFn:
                 raise TesseraJitError(
                     f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
                     f"want {np.dtype(want).name}{sh}")
-            ins.append(a.astype(np.float32) if want != np.float32 else a)
+            # f32 + native f16 pass through; bf16 host-upcasts to f32.
+            ins.append(a if want in (np.float32, np.float16) else a.astype(np.float32))
         return ins
 
     def _finalize_loop_out(self, out):
@@ -1379,7 +1380,8 @@ class GraphFn:
             self._serialize_loop_spec()
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
-        out = mp.run_graph_loop_f32(
+        run = mp.run_graph_loop_f16 if self._elem == "f16" else mp.run_graph_loop_f32
+        out = run(
             ins, arg_shapes, carry_arg_index, trip, body_ops, body_out_id,
             carry_shape)
         if out is None:
@@ -1655,9 +1657,9 @@ class GraphFn:
         if "_unsupported" in cond:
             raise TesseraJitError(
                 f"apple_gpu GraphFn cond: {cond['_unsupported']} not supported (v1)")
-        if self._elem not in ("f32", "bf16"):
+        if self._elem not in ("f32", "f16", "bf16"):
             raise TesseraJitError(
-                f"apple_gpu GraphFn cond supports f32/bf16, got {self._elem!r}")
+                f"apple_gpu GraphFn cond supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != cond["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn cond must return exactly the cond result")
@@ -1685,7 +1687,8 @@ class GraphFn:
             self._serialize_cond_spec()
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
-        out = mp.run_graph_cond_f32(
+        run = mp.run_graph_cond_f16 if self._elem == "f16" else mp.run_graph_cond_f32
+        out = run(
             ins, arg_shapes, flag_arg_index,
             then_ops, then_out_id, else_ops, else_out_id, out_shape)
         if out is None:
@@ -1710,9 +1713,9 @@ class GraphFn:
         if "_unsupported" in wl:
             raise TesseraJitError(
                 f"apple_gpu GraphFn while: {wl['_unsupported']} not supported (v1)")
-        if self._elem not in ("f32", "bf16"):
+        if self._elem not in ("f32", "f16", "bf16"):
             raise TesseraJitError(
-                f"apple_gpu GraphFn while supports f32/bf16, got {self._elem!r}")
+                f"apple_gpu GraphFn while supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != wl["result_ssa"]:
             raise TesseraJitError(
                 "apple_gpu GraphFn while must return exactly the while result")
@@ -1742,7 +1745,8 @@ class GraphFn:
          carry_shape) = self._serialize_while_spec()
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
-        out = mp.run_graph_while_f32(
+        run = mp.run_graph_while_f16 if self._elem == "f16" else mp.run_graph_while_f32
+        out = run(
             ins, arg_shapes, carry_arg_index, max_iters,
             body_ops, body_out_id, cond_ops, cond_out_id, carry_shape)
         if out is None:
@@ -1846,7 +1850,7 @@ class GraphFn:
 
         if self._target != "apple_gpu":
             raise TesseraJitError("run_mlpkg requires target='apple_gpu'")
-        if self._elem not in ("f32", "bf16"):
+        if self._elem not in ("f32", "f16", "bf16"):
             raise TesseraJitError(f"run_mlpkg supports f32/bf16, not {self._elem!r}")
         if self._has_control_flow:
             raise TesseraJitError("run_mlpkg does not support scf control flow")
@@ -1912,7 +1916,7 @@ class GraphFn:
 
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
-        if self._elem not in ("f32", "bf16"):
+        if self._elem not in ("f32", "f16", "bf16"):
             raise TesseraJitError(
                 f"apple_gpu GraphFn supports f32/bf16, not {self._elem!r}")
         if self._has_control_flow:
@@ -2281,10 +2285,13 @@ def jit_fori_loop(
     """
     init_arr = np.asarray(init)
     const_arrs = [np.asarray(c) for c in consts]
-    # Infer the element type from the carry: bf16 inits build a bf16 GraphFn
-    # (host-upcast to f32 for the executor, downcast on the way out — Phase B).
-    elem = "bf16" if (_ml_dtypes is not None
-                      and init_arr.dtype == _ml_dtypes.bfloat16) else "f32"
+    # Infer the element type from the carry: f16 builds a native-f16 GraphFn
+    # (Phase-H H2 → run_graph_loop_f16); bf16 builds a bf16 GraphFn (host-upcast
+    # to f32, downcast out — Phase B); else f32.
+    elem = ("f16" if init_arr.dtype == np.float16
+            else "bf16" if (_ml_dtypes is not None
+                            and init_arr.dtype == _ml_dtypes.bfloat16)
+            else "f32")
     g = build_fori_loop(
         int(trip), body,
         init_shape=init_arr.shape,
@@ -2293,8 +2300,11 @@ def jit_fori_loop(
     )
     arrays = [init_arr, *const_arrs]
     if target == "apple_gpu":
-        use_ir = (_find_tessera_opt() is not None) if via_target_ir is None \
-            else bool(via_target_ir)
+        # f16 routes natively through the direct lane (run_graph_loop_f16); the
+        # Target-IR path records the f32 symbol, so f16 uses the direct run.
+        use_ir = False if elem == "f16" else (
+            (_find_tessera_opt() is not None) if via_target_ir is None
+            else bool(via_target_ir))
         return g.run_via_target_ir(*arrays) if use_ir else g.run(*arrays)
     return g.run(*arrays)
 
@@ -2350,8 +2360,10 @@ def jit_while_loop(
     """
     init_arr = np.asarray(init)
     const_arrs = [np.asarray(c) for c in consts]
-    elem = "bf16" if (_ml_dtypes is not None
-                      and init_arr.dtype == _ml_dtypes.bfloat16) else "f32"
+    elem = ("f16" if init_arr.dtype == np.float16
+            else "bf16" if (_ml_dtypes is not None
+                            and init_arr.dtype == _ml_dtypes.bfloat16)
+            else "f32")
     g = build_while_loop(
         int(max_iters), cond, body,
         init_shape=init_arr.shape,
@@ -2359,6 +2371,8 @@ def jit_while_loop(
         name=name, elem=elem,
     )
     arrays = [init_arr, *const_arrs]
-    use_ir = (_find_tessera_opt() is not None) if via_target_ir is None \
-        else bool(via_target_ir)
+    # f16 routes natively through the direct lane (run_graph_while_f16).
+    use_ir = False if elem == "f16" else (
+        (_find_tessera_opt() is not None) if via_target_ir is None
+        else bool(via_target_ir))
     return g.run_while_via_target_ir(*arrays) if use_ir else g.run(*arrays)

@@ -616,7 +616,26 @@ last_updated: 2026-06-05
 >   C symbol. **+8 tests** `tests/unit/test_trace_h1_nested.py`; 47 trace + 336
 >   production/apple control-flow tests green.
 >
-> Next: H2 (native f16 control-flow C symbols), H3 (fused scan). Then Phase 4
+> * **Phase H2 — native f16 control flow landed 2026-06-07.** f16 control flow
+>   (previously unsupported — only f32 + bf16-via-upcast) now runs natively.
+>   Grounded finding: **MPSGraph has no bf16 type** (runtime + SDK headers), so
+>   bf16 stays correctly host-upcast; **MPSGraph DOES support f16**, so new
+>   `tessera_apple_gpu_run_graph_{loop,cond,while}_f16` C symbols
+>   (`apple_gpu_runtime.mm`) run f16 graphs over the f16-bit ABI (uint16_t I/O,
+>   2-byte buffers). A shared `run_mpsgraph_cf(dt, esz, …, build_block)` helper owns
+>   the placeholder/feed/run/readBytes plumbing (buffer-pool RAII preserved); each
+>   entry supplies the loop/cond/while build block — the **f32 functions are left
+>   untouched** (zero risk). Python: `apple_mlpkg.run_graph_*_f16` wrappers +
+>   non-Darwin stub parity; `_jit_boundary` routes `elem == "f16"` to the f16 lane
+>   natively (no upcast) via `_loop_elem_np`/`_coerce_loop_args` + the loop/cond/
+>   while dispatch; `jit_fori_loop`/`jit_while_loop` infer `f16` from an
+>   `np.float16` carry and use the direct lane (the Target-IR path records the f32
+>   symbol). `_SENTINEL_SYMBOL` bumped; `runtime_abi` regenerated. E2E: f16 loop
+>   3.4e-6 / cond / while 5.4e-5 vs f32 ref. **+6 tests**
+>   `tests/unit/test_apple_gpu_control_flow_f16.py` (incl. ABI probe + a
+>   no-native-bf16 regression guard); buffer-pool + bf16/f32 regression green.
+>
+> Next: H3 (fused scan — `run_graph_scan_f32` + tracer + `jit_scan`). Then Phase 4
 > (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the

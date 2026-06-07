@@ -11893,6 +11893,264 @@ extern "C" int32_t tessera_apple_gpu_run_graph_while_f32(
   return -1;
 }
 
+// ── Phase-H H2 — native f16 control flow ───────────────────────────────────
+//
+// MPSGraph supports f16 natively (unlike bf16 — MPS has no bf16 type, so bf16
+// control flow stays host-upcast to f32; see the bf16 matmul note above). These
+// f16 entry points mirror the f32 loop/cond/while exactly but build the graph in
+// f16 and use the f16-bit ABI (uint16_t I/O, 2-byte buffers). The shared
+// `run_mpsgraph_cf` helper owns the placeholder/feed/run/readBytes plumbing
+// (parameterized on `dt` + element size); each entry supplies a build block that
+// constructs the control-flow graph and returns the output tensor. The f32
+// functions are left untouched (zero risk to the tested path).
+
+static int32_t run_mpsgraph_cf(
+    MPSDataType dt, size_t esz, int32_t n_args, const void *const *arg_ptrs,
+    const int32_t *arg_rows, const int32_t *arg_cols, void *out,
+    MPSGraphTensor *(^build)(MPSGraph *g, NSArray<MPSGraphTensor *> *phs,
+                             MPSDataType dt, int32_t *err)) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;  // caller falls back to host
+  if (n_args <= 0 || !arg_ptrs || !arg_rows || !arg_cols || !out) return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSGraph *g = [MPSGraph new];
+      NSMutableArray<MPSGraphTensor *> *phs =
+          [NSMutableArray arrayWithCapacity:n_args];
+      NSMutableArray<NSArray<NSNumber *> *> *shapes =
+          [NSMutableArray arrayWithCapacity:n_args];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
+                                       ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
+                                       : @[ @(arg_rows[i]) ];
+        [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
+        [shapes addObject:shp];
+      }
+      int32_t err = 0;
+      MPSGraphTensor *outT = build(g, phs, dt, &err);
+      if (err != 0) return err;
+      if (!outT) return -3;
+      std::vector<MetalBufferGuard> guards;
+      guards.reserve(n_args);
+      NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = shapes[i];
+        size_t elems = 1;
+        for (NSNumber *n in shp) elems *= (size_t)n.intValue;
+        id<MTLBuffer> buf =
+            metal_buffer_acquire_with_bytes(ctx, arg_ptrs[i], elems * esz);
+        if (!buf) return -3;
+        guards.emplace_back(ctx, buf, elems * esz);
+        feeds[phs[i]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:buf
+                                                                shape:shp
+                                                             dataType:dt];
+      }
+      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                              feeds:feeds
+                                      targetTensors:@[ outT ]
+                                   targetOperations:nil];
+      MPSGraphTensorData *od = res[outT];
+      if (!od) return -3;
+      [[od mpsndarray] readBytes:out strideBytes:nil];
+      return 1;
+    }
+  }
+  return -1;
+}
+
+extern "C" int32_t tessera_apple_gpu_run_graph_loop_f16(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t carry_arg_index, int32_t trip,
+    int32_t n_body_ops, const int32_t *body_codes, const int32_t *body_in0,
+    const int32_t *body_in1, const int32_t *body_iattr, const float *body_fattr,
+    int32_t body_out_id, uint16_t *out) {
+  if (trip <= 0 || n_body_ops < 0 || carry_arg_index < 0 ||
+      carry_arg_index >= n_args || (n_body_ops > 0 && (!body_codes || !body_in0)))
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    return run_mpsgraph_cf(
+        MPSDataTypeFloat16, 2, n_args, arg_ptrs, arg_rows, arg_cols, out,
+        ^MPSGraphTensor *(MPSGraph *g, NSArray<MPSGraphTensor *> *phs,
+                          MPSDataType dt, int32_t *err) {
+          const int total = n_args + 1 + n_body_ops;
+          MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+          MPSGraphTensor *ub = [g constantWithScalar:trip
+                                            dataType:MPSDataTypeInt32];
+          MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+          __block int32_t berr = 0;
+          NSArray<MPSGraphTensor *> *results = [g
+              forLoopWithLowerBound:lb
+                         upperBound:ub
+                               step:st
+               initialBodyArguments:@[ phs[carry_arg_index] ]
+                               body:^NSArray<MPSGraphTensor *> *(
+                                   MPSGraphTensor *index,
+                                   NSArray<MPSGraphTensor *> *bodyArgs) {
+                                 (void)index;
+                                 NSMutableArray *t =
+                                     [NSMutableArray arrayWithCapacity:total];
+                                 for (int i = 0; i < total; ++i)
+                                   [t addObject:[NSNull null]];
+                                 for (int i = 0; i < n_args; ++i) t[i] = phs[i];
+                                 t[n_args] = bodyArgs[0];
+                                 auto bg = [&](int tid) -> MPSGraphTensor * {
+                                   if (tid < 0 || tid >= total) return nil;
+                                   id v = t[tid];
+                                   return (v == [NSNull null])
+                                              ? nil
+                                              : (MPSGraphTensor *)v;
+                                 };
+                                 for (int j = 0; j < n_body_ops; ++j) {
+                                   int code = body_codes[j];
+                                   MPSGraphTensor *a = bg(body_in0[j]);
+                                   MPSGraphTensor *b = nil;
+                                   if (code == 0 || (code >= 1 && code <= 4))
+                                     b = bg(body_in1 ? body_in1[j] : -1);
+                                   MPSGraphTensor *y = mpsg_build_graph_op(
+                                       g, code, a, b,
+                                       body_iattr ? body_iattr[j] : 0,
+                                       body_fattr ? body_fattr[j] : 1e-5f, dt);
+                                   if (!y) { berr = -6; y = bodyArgs[0]; }
+                                   t[n_args + 1 + j] = y;
+                                 }
+                                 MPSGraphTensor *nxt = bg(body_out_id);
+                                 if (!nxt) { berr = -6; nxt = bodyArgs[0]; }
+                                 return @[ nxt ];
+                               }
+                               name:nil];
+          *err = berr;
+          if (berr != 0) return nil;
+          if (!results || results.count < 1) { *err = -3; return nil; }
+          return results[0];
+        });
+  }
+  return -1;
+}
+
+extern "C" int32_t tessera_apple_gpu_run_graph_cond_f16(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t flag_arg_index, int32_t n_then_ops,
+    const int32_t *then_codes, const int32_t *then_in0, const int32_t *then_in1,
+    const int32_t *then_iattr, const float *then_fattr, int32_t then_out_id,
+    int32_t n_else_ops, const int32_t *else_codes, const int32_t *else_in0,
+    const int32_t *else_in1, const int32_t *else_iattr, const float *else_fattr,
+    int32_t else_out_id, uint16_t *out) {
+  if (flag_arg_index < 0 || flag_arg_index >= n_args || n_then_ops < 0 ||
+      n_else_ops < 0)
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    return run_mpsgraph_cf(
+        MPSDataTypeFloat16, 2, n_args, arg_ptrs, arg_rows, arg_cols, out,
+        ^MPSGraphTensor *(MPSGraph *g, NSArray<MPSGraphTensor *> *phs,
+                          MPSDataType dt, int32_t *err) {
+          MPSGraphTensor *flagS = [g reshapeTensor:phs[flag_arg_index]
+                                         withShape:@[]
+                                              name:nil];
+          MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
+          MPSGraphTensor *pred = [g greaterThanWithPrimaryTensor:flagS
+                                                 secondaryTensor:zero
+                                                            name:nil];
+          __block int32_t berr = 0;
+          NSArray<MPSGraphTensor *> *results = [g
+              ifWithPredicateTensor:pred
+                          thenBlock:^NSArray<MPSGraphTensor *> *() {
+                            MPSGraphTensor *y = mpsg_build_branch(
+                                g, phs, n_args, nil, dt, n_then_ops, then_codes,
+                                then_in0, then_in1, then_iattr, then_fattr,
+                                then_out_id);
+                            if (!y) {
+                              berr = -6;
+                              y = [g constantWithScalar:0.0 dataType:dt];
+                            }
+                            return @[ y ];
+                          }
+                          elseBlock:^NSArray<MPSGraphTensor *> *() {
+                            MPSGraphTensor *y = mpsg_build_branch(
+                                g, phs, n_args, nil, dt, n_else_ops, else_codes,
+                                else_in0, else_in1, else_iattr, else_fattr,
+                                else_out_id);
+                            if (!y) {
+                              berr = -6;
+                              y = [g constantWithScalar:0.0 dataType:dt];
+                            }
+                            return @[ y ];
+                          }
+                               name:nil];
+          *err = berr;
+          if (berr != 0) return nil;
+          if (!results || results.count < 1) { *err = -3; return nil; }
+          return results[0];
+        });
+  }
+  return -1;
+}
+
+extern "C" int32_t tessera_apple_gpu_run_graph_while_f16(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t carry_arg_index, int32_t max_iters,
+    int32_t n_body_ops, const int32_t *body_codes, const int32_t *body_in0,
+    const int32_t *body_in1, const int32_t *body_iattr, const float *body_fattr,
+    int32_t body_out_id, int32_t n_cond_ops, const int32_t *cond_codes,
+    const int32_t *cond_in0, const int32_t *cond_in1, const int32_t *cond_iattr,
+    const float *cond_fattr, int32_t cond_out_id, uint16_t *out) {
+  if (max_iters <= 0 || carry_arg_index < 0 || carry_arg_index >= n_args ||
+      n_body_ops < 0 || n_cond_ops < 0)
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    return run_mpsgraph_cf(
+        MPSDataTypeFloat16, 2, n_args, arg_ptrs, arg_rows, arg_cols, out,
+        ^MPSGraphTensor *(MPSGraph *g, NSArray<MPSGraphTensor *> *phs,
+                          MPSDataType dt, int32_t *err) {
+          MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+          MPSGraphTensor *ub = [g constantWithScalar:max_iters
+                                            dataType:MPSDataTypeInt32];
+          MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+          MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
+          __block int32_t berr = 0;
+          NSArray<MPSGraphTensor *> *results = [g
+              forLoopWithLowerBound:lb
+                         upperBound:ub
+                               step:st
+               initialBodyArguments:@[ phs[carry_arg_index] ]
+                               body:^NSArray<MPSGraphTensor *> *(
+                                   MPSGraphTensor *index,
+                                   NSArray<MPSGraphTensor *> *bodyArgs) {
+                                 (void)index;
+                                 MPSGraphTensor *carry = bodyArgs[0];
+                                 NSArray *extra = @[ carry ];
+                                 MPSGraphTensor *next = mpsg_build_branch(
+                                     g, phs, n_args, extra, dt, n_body_ops,
+                                     body_codes, body_in0, body_in1, body_iattr,
+                                     body_fattr, body_out_id);
+                                 MPSGraphTensor *c = mpsg_build_branch(
+                                     g, phs, n_args, extra, dt, n_cond_ops,
+                                     cond_codes, cond_in0, cond_in1, cond_iattr,
+                                     cond_fattr, cond_out_id);
+                                 if (!next || !c) {
+                                   berr = -6;
+                                   return @[ carry ];
+                                 }
+                                 MPSGraphTensor *pred =
+                                     [g greaterThanWithPrimaryTensor:c
+                                                     secondaryTensor:zero
+                                                                name:nil];
+                                 MPSGraphTensor *nextCarry =
+                                     [g selectWithPredicateTensor:pred
+                                              truePredicateTensor:next
+                                             falsePredicateTensor:carry
+                                                             name:nil];
+                                 return @[ nextCarry ];
+                               }
+                               name:nil];
+          *err = berr;
+          if (berr != 0) return nil;
+          if (!results || results.count < 1) { *err = -3; return nil; }
+          return results[0];
+        });
+  }
+  return -1;
+}
+
 // PK8b — author a *fused multi-op* `.mtlpackage` by composing MPSGraph nodes
 // into a single serialized executable. MPSGraph fuses the chain across the ML
 // pipeline, so the whole chain runs as one dispatch — the packaged equivalent

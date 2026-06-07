@@ -1688,6 +1688,149 @@ def run_graph_while_f32(
     return out if rc == 1 else None
 
 
+# ── Phase-H H2 — native f16 control flow ──────────────────────────────────────
+# MPSGraph supports f16 natively (bf16 has no MPSGraph type → it stays host-upcast
+# to f32). These mirror the f32 wrappers exactly but build/run in f16 over the
+# f16-bit ABI: args + the result are ``np.float16`` (the runtime takes
+# ``uint16_t*`` for the result). The body-op packing (`_flatten_ops`) is
+# dtype-independent.
+def run_graph_loop_f16(
+    arg_arrays: "list", arg_shapes: "list[tuple[int, ...]]", carry_arg_index: int,
+    trip: int, body_ops: "list[dict]", body_out_id: int,
+    out_shape: "tuple[int, ...]",
+):
+    """f16 counterpart of :func:`run_graph_loop_f32` (native f16 MPSGraph loop).
+    Returns the final carry as an ``np.float16`` array, or ``None``."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_loop_f16",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_uint16)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    flat = _flatten_ops(body_ops)
+    if flat is None:
+        return None
+    codes, in0, in1, iattr, fattr, nb = flat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float16)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    out = np.zeros(out_shape, dtype=np.float16)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols,
+                ctypes.c_int32(int(carry_arg_index)), ctypes.c_int32(int(trip)),
+                ctypes.c_int32(nb), codes, in0, in1, iattr, fattr,
+                ctypes.c_int32(int(body_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))))
+    return out if rc == 1 else None
+
+
+def run_graph_cond_f16(
+    arg_arrays: "list", arg_shapes: "list[tuple[int, ...]]", flag_arg_index: int,
+    then_ops: "list[dict]", then_out_id: int, else_ops: "list[dict]",
+    else_out_id: int, out_shape: "tuple[int, ...]",
+):
+    """f16 counterpart of :func:`run_graph_cond_f32`. Returns ``np.float16``/None."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_cond_f16",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_uint16)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    tflat, eflat = _flatten_ops(then_ops), _flatten_ops(else_ops)
+    if tflat is None or eflat is None:
+        return None
+    tc, ti0, ti1, tia, tfa, tnb = tflat
+    ec, ei0, ei1, eia, efa, enb = eflat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float16)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    out = np.zeros(out_shape, dtype=np.float16)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols, ctypes.c_int32(int(flag_arg_index)),
+                ctypes.c_int32(tnb), tc, ti0, ti1, tia, tfa, ctypes.c_int32(int(then_out_id)),
+                ctypes.c_int32(enb), ec, ei0, ei1, eia, efa, ctypes.c_int32(int(else_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))))
+    return out if rc == 1 else None
+
+
+def run_graph_while_f16(
+    arg_arrays: "list", arg_shapes: "list[tuple[int, ...]]", carry_arg_index: int,
+    max_iters: int, body_ops: "list[dict]", body_out_id: int,
+    cond_ops: "list[dict]", cond_out_id: int, out_shape: "tuple[int, ...]",
+):
+    """f16 counterpart of :func:`run_graph_while_f32`. Returns ``np.float16``/None."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_while_f16",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.c_int32, ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+         ctypes.POINTER(ctypes.c_uint16)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    bflat, cflat = _flatten_ops(body_ops), _flatten_ops(cond_ops)
+    if bflat is None or cflat is None:
+        return None
+    bc, bi0, bi1, bia, bfa, bnb = bflat
+    cc, ci0, ci1, cia, cfa, cnb = cflat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float16)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    out = np.zeros(out_shape, dtype=np.float16)
+    rc = int(fn(ctypes.c_int32(na), ptrs, rows, cols,
+                ctypes.c_int32(int(carry_arg_index)), ctypes.c_int32(int(max_iters)),
+                ctypes.c_int32(bnb), bc, bi0, bi1, bia, bfa, ctypes.c_int32(int(body_out_id)),
+                ctypes.c_int32(cnb), cc, ci0, ci1, cia, cfa, ctypes.c_int32(int(cond_out_id)),
+                out.ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))))
+    return out if rc == 1 else None
+
+
 def execute_control_loop_mlir(mlir_text: str, arg_arrays: "list"):
     """MLIR-driven execution (Phase-G G-B.2): given a lowered module containing a
     `tessera_apple.gpu.control_loop` op (with the serialized body op-list payload),
@@ -1963,6 +2106,9 @@ __all__ = [
     "run_graph_loop_f32",
     "run_graph_cond_f32",
     "run_graph_while_f32",
+    "run_graph_loop_f16",
+    "run_graph_cond_f16",
+    "run_graph_while_f16",
     "execute_control_loop_mlir",
     "execute_control_if_mlir",
     "execute_control_while_mlir",

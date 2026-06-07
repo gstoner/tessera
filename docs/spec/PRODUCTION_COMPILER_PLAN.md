@@ -474,6 +474,26 @@ last_updated: 2026-06-05
 > front-ends. Open follow-ons: AST `while` ergonomics, `jit_scan` (ys-collection),
 > native bf16 control-flow C symbols.
 >
+> * **Phase F1 — abstract-interp tracing lift (straight-line core) landed
+>   2026-06-06.** The general successor to the narrow AST bridge: interpret a
+>   function *once by running it* with abstract `Tracer` values that record
+>   graph_ir, instead of pattern-matching its AST. New
+>   `python/tessera/compiler/trace.py` (`Tracer`, `TraceBuilder`, shape rules,
+>   `trace`/`to_graphfn`/`run_traced`) + `compiler/_trace_hook.py` (a neutral
+>   `_ACTIVE_TRACER` contextvar). The enabling hook: `autodiff/tape.py::_make_wrapper`
+>   — already installed on every `tessera.ops.*` — now checks `active_tracer()`
+>   first and, under trace, records an `IROp` + returns a `Tracer` (shape from a
+>   rule), skipping numpy. Layer-2 reuses `graphfn_bridge._apply_op`/`_OP_TABLE` to
+>   replay the straight-line trace into an executable GraphFn. Proof:
+>   `run_traced(mlp_residual)` — a straight-line `silu(matmul)` + residual
+>   `add(matmul, x)` + `rmsnorm`, including the cross-reference to the original
+>   input the AST bridge can't express as one shape — matches numpy at 1.2e-7.
+>   **+12 tests** `tests/unit/test_trace_f1.py`; 813 autodiff/tape/production/vjp/jvp
+>   tests green (no eager/tape regression from the shared hook). Next: F2
+>   control-flow trace-awareness (`control.fori_loop`/`cond`/`while_loop` →
+>   `control_for`/`if`/`while`), then F3–F5 (arbitrary-nesting Layer-2, `@jit`
+>   trace-by-running, retire the AST bridge).
+>
 > Next: Phase 4 (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the

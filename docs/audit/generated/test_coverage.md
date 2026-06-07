@@ -7,32 +7,32 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **435** ops in `primitive_coverage` registry.
-- **1684** total Python-test references, **485** total lit-fixture references.
+- **1709** total Python-test references, **485** total lit-fixture references.
 - **122** ops have **zero** references in either test surface.
 - **229** ops have ≤1 reference ("thinly tested").
 - **33** ops have ≥10 references ("well tested").
-- **48** ops have at least one associated `pytest.raises` negative test.
+- **49** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  212 |  141 |  353 |  10 | `bf16`, `f16`, `f32`, `fp16` … |
+| `matmul` |  222 |  141 |  363 |  11 | `bf16`, `f16`, `f32`, `fp16` … |
 | `flash_attn` |   76 |   44 |  120 |   4 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   61 |   35 |   96 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
-| `relu` |   81 |    3 |   84 |   5 | `bf16`, `f16`, `f32`, `fp32` |
+| `relu` |   82 |    3 |   85 |   6 | `bf16`, `f16`, `f32`, `fp32` |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
 | `attn_local_window_2d` |   31 |   25 |   56 |   1 | `fp32` |
-| `add` |   46 |    2 |   48 |   4 | `bf16`, `f16`, `f32`, `fp32` |
+| `add` |   50 |    2 |   52 |   5 | `bf16`, `f16`, `f32`, `fp32` |
 | `cholesky` |   14 |   30 |   44 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
-| `rmsnorm` |   33 |    4 |   37 |   1 | `bf16`, `fp32` |
+| `rmsnorm` |   34 |    4 |   38 |   1 | `bf16`, `fp32` |
+| `silu` |   32 |    2 |   34 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   24 |    8 |   32 |   1 |  |
-| `gelu` |   20 |   10 |   30 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
+| `gelu` |   21 |   10 |   31 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `cast` |    4 |   22 |   26 |   0 | `fp32` |
 | `rope` |   16 |   10 |   26 |   0 |  |
-| `silu` |   24 |    2 |   26 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `transpose` |   12 |   13 |   25 |   0 | `fp32` |
 | `selective_ssm` |   24 |    0 |   24 |   1 |  |
 | `layer_norm` |   16 |    7 |   23 |   2 | `bf16`, `f16`, `f32`, `fp16` … |

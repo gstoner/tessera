@@ -303,6 +303,16 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         # Late import — avoids a load-time cycle through autodiff.__init__.
         from .mixed_precision import autocast_dtype, autocast_keep_fp32
 
+        # Abstract-interp trace (Phase F) — a sibling context to the tape. When a
+        # tracer is active, record this op into the trace graph and return a
+        # Tracer (shape from a rule); the numpy op is NOT run. Mutually exclusive
+        # with the tape. Lightweight neutral hook → no import cycle.
+        from ..compiler._trace_hook import active_tracer
+
+        _tracer = active_tracer()
+        if _tracer is not None:
+            return _tracer.record_op(name, args, kwargs)
+
         active = _ACTIVE_TAPE.get()
         if active is None:
             # No-tape fast path — keep `fast_args` as its own variable so

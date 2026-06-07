@@ -7,21 +7,13 @@
 
 ## P0 — verifier stubs (verify() declared but no-ops)
 
-ODS ops: **73 real**, **9 trivial_stub**, **65 no_verifier**, 0 absent.
+ODS ops: **100 real**, **1 trivial_stub**, **46 no_verifier**, 0 absent.
 
-**9 trivial-stub verifiers (definite stubs — close these):**
-  - `ArchGumbelSoftmaxOp` (TesseraOps.td)
-  - `ArchHardConcreteOp` (TesseraOps.td)
-  - `ArchMixedOp` (TesseraOps.td)
-  - `ArchParameterOp` (TesseraOps.td)
+**1 trivial-stub verifiers (definite stubs — close these):**
   - `ArchSTEOneHotOp` (TesseraOps.td)
-  - `ArchSwitchOp` (TesseraOps.td)
-  - `ArchWeightedSumOp` (TesseraOps.td)
-  - `KVCacheCreateOp` (TesseraOps.td)
-  - `RingCreateOp` (TesseraOps.td)
 
-_65 no-verifier ops need manual triage_ (many — pure elementwise — legitimately need none; control/collective/reshape-shaped ops should get one). Representative:
-  `ALiBiOp`, `AdafactorOp`, `AdamOp`, `AdamWOp`, `AddOp`, `AllGatherOp`, `AllReduceOp`, `CachePageLookupOp`, `ControlForOp`, `ControlIfOp`, `ControlWhileOp`, `CustomAdjointCallOp`, …
+_46 no-verifier ops need manual triage_ (many — pure elementwise — legitimately need none; control/collective/reshape-shaped ops should get one). Representative:
+  `ALiBiOp`, `AdafactorOp`, `AdamOp`, `AdamWOp`, `AddOp`, `AllGatherOp`, `AllReduceOp`, `CachePageLookupOp`, `CustomAdjointCallOp`, `DivOp`, `GeluOp`, `LionOp`, …
 
 ## P1 — software conformance gaps (op×target proof ladder)
 
@@ -44,7 +36,7 @@ _Hardware-gated (28 stop at ['hardware_smoke', 'link', 'toolchain']) — expecte
 
 ## P2 — thin-test tail (the differential-generator target, item #2)
 
-435 ops: {'structural_only': 184, 'covered_by_family': 124, 'needs_direct_test': 123, 'hardware_gated': 4}.
+442 ops: {'structural_only': 187, 'covered_by_family': 128, 'needs_direct_test': 123, 'hardware_gated': 4}.
 
 **123 `needs_direct_test`** + **118 zero-ref** ops — the long tail a generative differential harness (tracer vs numpy) covers far more cheaply than hand-written tests.
 

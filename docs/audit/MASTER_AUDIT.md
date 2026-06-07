@@ -209,10 +209,19 @@ returns a plausible artifact never crashes); fuzzing is layered on top of the
 differential oracle to catch the long tail.
 
 The actionable surface, ranked (numbers live in `stub_surface.md`):
-- **Verifier stubs** — the `trivial_stub` verifiers (`Arch*` NAS ops +
-  `KVCacheCreateOp` + `RingCreateOp`): `verify()` declared but no-ops. Plus a
-  manual-triage pass on the `no_verifier` ops (control/collective/reshape-shaped
-  ones should get a real verifier; pure elementwise need none).
+- **Verifier stubs — largely closed (2026-06-07).** Three verifier sprints
+  (V8 norm/softmax, V9 control-flow + stubs + MoR/quant/FFT) took
+  `verifier_coverage` from 73 → **100 `real`**, `trivial_stub` 9 → **1**
+  (`ArchSTEOneHotOp` — an opaque ArchParam→ArchGate with no scalar/shape
+  contract), `absent` **0**. Control flow (`control_for`/`if`/`while`) enforces
+  the run_graph payload-ABI invariant + carry/flag bounds; the 8 closed stubs
+  (Arch*/KVCacheCreate/RingCreate) got real resource/scalar contracts; MoR,
+  quantize/dequantize (FP8/FP4 format + shape), and the FFT family (axis bounds)
+  landed too. A latent `verifier_coverage.py` parser bug (one-line `def X :
+  Base<...>;` ops bled into the next op's block; base-class `hasVerifier` was
+  invisible) was fixed along the way. Remaining: the `no_verifier` tail is mostly
+  pure elementwise (legitimately need none); a few structural collective/reshape
+  ops could still get one.
 - **Software conformance gaps** — the op×target cells that stop at `codegen` /
   `numerical` (vs the hardware-gated `hardware_smoke`/`toolchain`/`link` rows):
   `conv2d`/`kv_cache_read` → cpu (numerical: executes but unverified) and

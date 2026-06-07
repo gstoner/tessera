@@ -152,6 +152,33 @@ class CompileResult:
                 return r.status
         return "unknown"
 
+    def descriptive_metadata(self) -> dict[str, Any]:
+        """The component-aware *descriptive* compile metadata (Sprint A): the
+        program's op vocabulary, per-component blockers, and the four
+        component-aware summaries (fusion groups, shape envelope, effects,
+        layout contracts).
+
+        Deliberately excludes the executability *decision* keys
+        (``executable`` / ``canonical_executable`` / ``compiler_path``), so it
+        is safe to merge into any ``RuntimeArtifact`` — including the `@jit`
+        fast paths that own their own executability call — without overriding
+        that decision. This is what makes the canonical metadata reach the
+        user-facing ``fn.runtime_artifact().metadata``."""
+        return {
+            "canonical_primary_op": self.primary_op,
+            # P1 (2026-06-02) — multi-op program identity.
+            "canonical_component_ops": list(self.component_ops),
+            "canonical_program_executable": self.program_executable,
+            "canonical_component_blockers": [
+                {"op": op, "gate": gate}
+                for (op, gate) in self.component_blockers
+            ],
+            "canonical_fusion_groups": list(self.fusion_groups),
+            "canonical_shape_envelope": self.shape_envelope,
+            "canonical_effects": self.effects,
+            "canonical_layout_contracts": self.layout_contracts,
+        }
+
     def to_runtime_artifact(self):
         """Project the canonical answer into a :class:`RuntimeArtifact`.
 
@@ -190,27 +217,16 @@ class CompileResult:
                 {"gate": r.gate, "status": r.status, "detail": r.detail}
                 for r in self.gate_results
             ],
-            "canonical_primary_op": self.primary_op,
-            # P1 (2026-06-02) — multi-op program identity. The full op
-            # vocabulary + the whole-program (all-components) gate answer +
-            # per-component blockers, so a runtime/dashboard consumer sees
-            # the program, not just its first op.
-            "canonical_component_ops": list(self.component_ops),
-            "canonical_program_executable": self.program_executable,
-            "canonical_component_blockers": [
-                {"op": op, "gate": gate}
-                for (op, gate) in self.component_blockers
-            ],
-            "canonical_fusion_groups": list(self.fusion_groups),
-            "canonical_shape_envelope": self.shape_envelope,
-            "canonical_effects": self.effects,
-            "canonical_layout_contracts": self.layout_contracts,
             # The bundle's executable claim — preserved so callers that
             # need to compare bundle-side vs canonical-side decisions can.
             "bundle_executable": self.bundle.executable,
             # Canonical answer is authoritative for `executable`.
             "executable": self.executable,
         })
+        # Component-aware descriptive metadata (Sprint A) — factored so the
+        # `@jit` runtime-artifact path can merge it without taking the
+        # executability *decision* keys above (those fast paths own that call).
+        meta.update(self.descriptive_metadata())
         # Apple Value Target IR (RV-P1, 2026-06-03) — the front door now
         # *consumes* the classifier/extractor instead of leaving them to docs.
         # The runtime artifact records whether the lowered Apple Target IR is
@@ -582,14 +598,77 @@ def _derive_layout_contracts(module: GraphIRModule) -> dict[str, Any]:
     }
 
 
-def _derive_fusion_groups(module: GraphIRModule) -> tuple[dict[str, Any], ...]:
-    """Conservative producer-consumer fusion candidates.
+# Linear fused chains the Apple GPU runtime collapses into a single kernel —
+# mirrors runtime.py's ``_apple_gpu_metadata_is_*_chain`` detectors. Ordered
+# longest-first so the attention block matches before its matmul→softmax prefix.
+# (SwiGLU is a DAG, not a linear chain, so it is matched separately.)
+_KNOWN_FUSION_CHAINS: tuple[tuple[str, ...], ...] = (
+    ("matmul", "softmax", "matmul"),   # attention block O = softmax(A@B)@C
+    ("matmul", "softmax"),             # scores → softmax
+    ("matmul", "gelu"),                # MLP matmul → gelu
+    ("matmul", "rmsnorm"),             # matmul → rmsnorm
+)
 
-    This is metadata, not a scheduling claim: adjacent pure ops in the same
-    lowering family that pass an SSA value directly are marked as candidates.
+
+def _chain_canon(op) -> str:
+    """Canonical op name with ``gemm`` folded to ``matmul`` for chain matching."""
+    cn = _canonical_op_name(op.op_name)
+    return "matmul" if cn == "gemm" else cn
+
+
+def _ssa_connected(body, start: int, length: int) -> bool:
+    """Each op in body[start:start+length] consumes a result of its predecessor
+    (so the chain is a real data-flow chain, not coincidental adjacency)."""
+    for k in range(1, length):
+        prev_results = set(body[start + k - 1].result_names)
+        operands = {_strip_percent(o) for o in body[start + k].operands}
+        if not (prev_results & operands):
+            return False
+    return True
+
+
+def _match_known_chains(fn) -> list[dict[str, Any]]:
+    body = fn.body
+    canon = [_chain_canon(op) for op in body]
+    n = len(body)
+    groups: list[dict[str, Any]] = []
+    i = 0
+    while i < n:
+        matched_len = 0
+        matched_chain: tuple[str, ...] = ()
+        for chain in _KNOWN_FUSION_CHAINS:                 # longest-first
+            L = len(chain)
+            if i + L <= n and tuple(canon[i:i + L]) == chain and _ssa_connected(body, i, L):
+                matched_len, matched_chain = L, chain
+                break
+        if matched_len:
+            groups.append({
+                "function": fn.name,
+                "kind": "known_chain",
+                "status": "candidate",
+                "fused_kernel": "_".join(matched_chain),
+                "ops": [
+                    {"index": i + k, "op": canon[i + k]}
+                    for k in range(matched_len)
+                ],
+            })
+            i += matched_len                               # don't overlap chains
+        else:
+            i += 1
+    return groups
+
+
+def _derive_fusion_groups(module: GraphIRModule) -> tuple[dict[str, Any], ...]:
+    """Fusion candidates — metadata, not a scheduling claim. Two signals:
+
+    * **known_chain** — a linear data-flow chain matching a fused kernel the
+      backend actually emits (matmul→softmax[→matmul], matmul→gelu/rmsnorm).
+    * **producer_consumer** — a conservative fallback: adjacent pure ops in the
+      same lowering family that pass an SSA value directly.
     """
     groups: list[dict[str, Any]] = []
     for fn in module.functions:
+        groups.extend(_match_known_chains(fn))
         producer_by_value: dict[str, tuple[int, Any]] = {}
         for i, op in enumerate(fn.body):
             effect = _op_effect(op.op_name, op.kwargs)

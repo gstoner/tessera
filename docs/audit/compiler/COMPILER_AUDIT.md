@@ -40,13 +40,22 @@ multiple root audit documents and compiler archive files.
 ## Still Open
 
 - **Program identity — component-op vectors + gating landed (2026-06-02);
-  richer metadata still open.** `CompileResult` now carries ``component_ops``
-  (the whole-program distinct op vocabulary), ``program_executable`` (gated
-  component-by-component, not just the primary op), and ``component_blockers``
-  ((op, failing-gate) pairs), surfaced in ``to_dict`` / ``to_runtime_artifact``.
-  Locked by `tests/unit/test_canonical_component_ops.py`. Still open: graph
-  outputs, ``effects``, ``shape_envelope``, and ``fusion_groups`` in the
-  canonical metadata.
+  component-aware metadata landed (2026-06-07).** `CompileResult` carries
+  ``component_ops`` (the whole-program distinct op vocabulary),
+  ``program_executable`` (gated component-by-component, not just the primary
+  op), and ``component_blockers`` ((op, failing-gate) pairs). **`effects` /
+  `shape_envelope` / `layout_contracts` / `fusion_groups` now reach the
+  user-facing `fn.runtime_artifact().metadata`** — derived in
+  `canonical_compile._derive_*`, factored into
+  `CompileResult.descriptive_metadata()`, and merged additively through
+  `JitFn._build_runtime_artifact` (previously discarded on the `@jit` path —
+  every key was absent for real jitted functions). `fusion_groups` recognizes
+  the cross-family chains the Apple GPU runtime actually fuses
+  (`matmul→softmax[→matmul]`, `matmul→gelu`, `matmul→rmsnorm`), not just
+  same-family adjacency. Locked by `tests/unit/test_canonical_component_ops.py`
+  + `tests/unit/test_canonical_metadata_jit.py`. Still open: graph outputs in
+  the canonical metadata, and making the runtime *consume* `fusion_groups`
+  instead of re-matching (the "fusion intent too late" item below).
 - **Fusion intent is too late.** Target IR and runtime still rediscover patterns
   that should be represented by Schedule/Tile/Target metadata.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
@@ -79,10 +88,13 @@ multiple root audit documents and compiler archive files.
 
 ## Next Work
 
-1. Add `component_ops`, `fusion_groups`, `shape_envelope`, `effects`, and
-   `layout_contracts` to canonical compile metadata. **`component_ops` landed
-   2026-06-02**; `fusion_groups` / `shape_envelope` / `effects` /
-   `layout_contracts` remain.
+1. ~~Add `component_ops`, `fusion_groups`, `shape_envelope`, `effects`, and
+   `layout_contracts` to canonical compile metadata.~~ **Landed** —
+   `component_ops` (2026-06-02) + `effects` / `shape_envelope` /
+   `layout_contracts` / `fusion_groups` (2026-06-07), all reaching the
+   user-facing `fn.runtime_artifact().metadata`. Remaining: graph outputs in the
+   canonical metadata, and runtime *consumption* of `fusion_groups` (Next Work
+   #3 / "fusion intent too late").
 2. ~~Gate whole programs and component ops separately.~~ **Landed 2026-06-02**
    — `program_executable` + `component_blockers` gate the whole program
    component-by-component alongside the primary-op `executable` answer.

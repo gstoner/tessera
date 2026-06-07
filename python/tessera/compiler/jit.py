@@ -1155,6 +1155,15 @@ class JitFn:
                 target_ir=target_ir_text,
             )
 
+        # Surface the component-aware canonical compile metadata (Sprint A —
+        # fusion_groups / shape_envelope / effects / layout_contracts +
+        # component_ops) on the user-facing artifact. Merged via
+        # ``descriptive_metadata()`` so the executability decision above (owned
+        # by the cpu/apple fast paths) is never overridden — additive only.
+        if self.compile_result is not None:
+            for key, value in self.compile_result.descriptive_metadata().items():
+                metadata.setdefault(key, value)
+
         return RuntimeArtifact(
             graph_ir=graph_ir_text,
             schedule_ir=schedule_ir_text,

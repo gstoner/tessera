@@ -1340,6 +1340,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `batched_gemm(A, B)` | `(array, array) → array` | `pure` | Batched `np.matmul` reference |
 | `einsum(spec, *tensors)` | `(str, arrays...) → array` | `pure` | `np.einsum` reference |
 | `factorized_matmul(A, B, rank)` | `(array, array) → array` | `pure` | Low-rank SVD reference over `A @ B` |
+| `grouped_gemm(x, weights, group_sizes)` | `(array, array, array) → array` | `pure` | Ragged grouped matmul (MoE expert-FFN core): each contiguous token group `e` is multiplied by `weights[e]`; Graph IR op `tessera.grouped_gemm`. Apple GPU per-group MPS matmul |
 | `tri_solve(A, b, lower=True)` | `(array, array) → array` | `pure` | Triangular `np.linalg.solve` reference |
 | `cholesky(A)` | `(array) → array` | `pure` | `np.linalg.cholesky` reference |
 | `cholesky_solve(L, b)` | `(array, array) → array` | `pure` | Solve `(L Lᵀ) x = b` from the Cholesky factor (LAPACK `potrs` analogue) |
@@ -1351,6 +1352,9 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
 | `reduce(x, op="sum", axis=None, keepdims=False)` | `(array) → array` | `pure` | NumPy sum reduction; non-sum reductions planned |
 | `sum(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | Alias for `reduce(..., op="sum")` |
+| `count_nonzero(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | LDT candidate-cardinality reduction (`(x != 0).sum`); Graph IR op `tessera.count_nonzero` |
+| `popcount(x)` | `(array) → array` | `pure` | LDT per-element set-bit count of an integer/bitmask tensor; Graph IR op `tessera.popcount` |
+| `masked_categorical(logits, mask, key=None)` | `(array, array) → array` | `random` | LDT masked categorical decision: greedy `argmax` over the candidate mask (`key=None`) or Gumbel-max sample; Graph IR op `tessera.masked_categorical` |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
 | `tanh(x)` | `(array) → array` | `pure` | NumPy tanh |
 | `add(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy addition; also used by Python frontend binary `+` lowering |
@@ -1374,6 +1378,9 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `log_cosh_loss(pred, target, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 log-cosh criterion; Graph IR op `tessera.loss.log_cosh` |
 | `cross_entropy_loss(logits, targets, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 cross-entropy criterion; Graph IR op `tessera.loss.cross_entropy` |
 | `binary_cross_entropy_loss(logits, targets, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 BCE-with-logits criterion; Graph IR op `tessera.loss.binary_cross_entropy` |
+| `asymmetric_bce(logits, targets, pos_weight=1.0, neg_weight=1.0, reduction="mean")` | `(array,array) → scalar/array` | `pure` | Asymmetric BCE-with-logits (separate false-negative/false-positive weights); reduces to BCE at weights=1; Graph IR op `tessera.loss.asymmetric_bce` |
+| `z_loss(router_logits, reduction="mean")` | `(array) → scalar/array` | `pure` | ST-MoE/PaLM router z-loss `reduce(logsumexp(logits,-1)²)`; Graph IR op `tessera.loss.z_loss` |
+| `load_balance_loss(router_probs, *, assignment=None, reduction="mean")` | `(array) → scalar/array` | `pure` | Switch-Transformer load-balancing aux loss `E·Σ_e f_e·P_e`; Graph IR op `tessera.loss.load_balance_loss` |
 | `ddpm_noise_pred_loss(pred_noise, true_noise, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 diffusion noise-prediction criterion; Graph IR op `tessera.loss.ddpm_noise_pred` |
 | `score_matching_loss(score, target_score, reduction="mean")` | `(array,array) → scalar/array` | `pure` | S11 score-matching criterion; Graph IR op `tessera.loss.score_matching` |
 | `vlb_loss(terms, reduction="mean")` | `(array) → scalar/array` | `pure` | S11 diffusion VLB reducer; Graph IR op `tessera.loss.vlb` |

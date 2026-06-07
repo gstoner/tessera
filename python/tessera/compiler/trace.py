@@ -37,6 +37,11 @@ class Tracer:
     shape: Tuple[int, ...]
     dtype: str
     ssa: str
+    # F6 concrete tracing — the op's numpy result, threaded so shape/dtype come
+    # from real execution (full-vocab inference, no per-op rule). ``None`` for
+    # value-less ``(shape, dtype)`` specs (the abstract / shape-rule path).
+    # Excluded from eq/hash (a numpy array is unhashable).
+    value: Any = field(default=None, compare=False, repr=False)
 
     def __bool__(self):
         # A raw Python ``if tracer:`` / ``while tracer:`` would silently take one
@@ -144,17 +149,17 @@ class TraceBuilder:
     outputs: List[str] = field(default_factory=list)
     _counter: int = 0
 
-    def arg(self, ssa: str, shape, dtype: str) -> Tracer:
+    def arg(self, ssa: str, shape, dtype: str, value: Any = None) -> Tracer:
         sh = tuple(int(d) for d in shape)
         self.args.append((ssa, sh, dtype))
-        return Tracer(sh, dtype, ssa)
+        return Tracer(sh, dtype, ssa, value)
 
     def _fresh(self) -> str:
         n = self._counter
         self._counter += 1
         return f"v{n}"
 
-    def record_op(self, name: str, args: tuple, kwargs: dict) -> Tracer:
+    def record_op(self, name: str, original, args: tuple, kwargs: dict) -> Tracer:
         graph_name = graph_name_for(name)
         if graph_name is None:
             raise TesseraTraceError(f"trace: op {name!r} is not in the op catalog")
@@ -163,12 +168,26 @@ class TraceBuilder:
             if not isinstance(a, Tracer):
                 raise TesseraTraceError(
                     f"trace: op {name!r} got a non-Tracer positional operand "
-                    f"({type(a).__name__}); F1 requires tensor inputs to be "
-                    "traced values (pass constants as keyword args)")
-        in_shapes = [t.shape for t in tracer_args]
-        out_shape = _infer_shape(name, in_shapes, kwargs)
-        dtype = tracer_args[0].dtype if tracer_args else "fp32"
+                    f"({type(a).__name__}); tensor inputs must be traced values "
+                    "(pass constants as keyword args)")
         ssa = self._fresh()
+        # F6 concrete tracing: when every input carries a concrete value, run the
+        # real numpy op to get the result's shape/dtype (works for ANY op, no
+        # per-op shape rule). Falls back to the shape-rule path for value-less
+        # specs (the executable subset only).
+        if tracer_args and all(t.value is not None for t in tracer_args):
+            out = original(*[t.value for t in tracer_args], **kwargs)
+            if isinstance(out, tuple):
+                raise TesseraTraceError(
+                    f"trace: multi-output op {name!r} is not supported (F6+)")
+            out = np.asarray(out)
+            out_shape = tuple(out.shape)
+            dtype = _np_dtype_to_elem(out.dtype)
+            value: Any = out
+        else:
+            out_shape = _infer_shape(name, [t.shape for t in tracer_args], kwargs)
+            dtype = tracer_args[0].dtype if tracer_args else "fp32"
+            value = None
         self.body.append(IROp(
             result=ssa,
             op_name=graph_name,
@@ -177,7 +196,7 @@ class TraceBuilder:
             result_type=_ty(out_shape, dtype),
             kwargs=dict(kwargs),
         ))
-        return Tracer(out_shape, dtype, ssa)
+        return Tracer(out_shape, dtype, ssa, value)
 
     def _trace_region(self, run) -> Any:
         """Run ``run()`` with a fresh sub-builder active (sharing this builder's
@@ -203,7 +222,8 @@ class TraceBuilder:
             raise TesseraTraceError("traced fori_loop: init_val must be a Tracer")
         trip = int(upper) - int(lower)
         carry_ssa = self._fresh()
-        carry = Tracer(init_carry.shape, init_carry.dtype, carry_ssa)
+        carry = Tracer(init_carry.shape, init_carry.dtype, carry_ssa,
+                       init_carry.value)
         sub_body, nxt = self._trace_region(lambda: body_fun(0, carry))
         if not isinstance(nxt, Tracer):
             raise TesseraTraceError("traced fori_loop: body must return a Tracer")
@@ -251,7 +271,7 @@ class TraceBuilder:
             raise TesseraTraceError(
                 "traced while_loop needs a bound: pass max_steps=N")
         carry_ssa = self._fresh()
-        carry = Tracer(init.shape, init.dtype, carry_ssa)
+        carry = Tracer(init.shape, init.dtype, carry_ssa, init.value)
         body_ops, nxt = self._trace_region(lambda: body_fun(carry))
         cond_ops, pred = self._trace_region(lambda: cond_fun(carry))
         if not (isinstance(nxt, Tracer) and isinstance(pred, Tracer)):
@@ -304,14 +324,17 @@ def _np_dtype_to_elem(dt) -> str:
 
 
 def trace(fn: Callable, *example_specs: Any) -> TracedFunction:
-    """Abstractly interpret ``fn`` over ``Tracer`` args, returning the recorded
-    :class:`TracedFunction`. ``example_specs`` are arrays, ``(shape, dtype)``
-    pairs, or bare shape tuples — only shape/dtype are used."""
+    """Interpret ``fn`` over ``Tracer`` args, returning the recorded
+    :class:`TracedFunction`. ``example_specs`` are arrays (concrete tracing —
+    shapes/dtypes come from real numpy execution, full vocab), ``(shape, dtype)``
+    pairs, or bare shape tuples (abstract tracing — shape rules, executable
+    subset only)."""
     tb = TraceBuilder()
     arg_tracers = []
     for i, spec in enumerate(example_specs):
         shape, dtype = _spec_shape_dtype(spec)
-        arg_tracers.append(tb.arg(f"a{i}", shape, dtype))
+        value = np.ascontiguousarray(spec) if isinstance(spec, np.ndarray) else None
+        arg_tracers.append(tb.arg(f"a{i}", shape, dtype, value))
     token = _trace_hook.set_active_tracer(tb)
     try:
         result = fn(*arg_tracers)
@@ -611,23 +634,51 @@ def jit_trace(on: bool = True):
         _JIT_TRACE[0] = prev
 
 
+def _run_canonical_apple_gpu(jitfn: Any, args: tuple, kwargs: dict,
+                             traced=None, arrays=None):
+    """Straight-line apple_gpu execution: defer to the proven canonical
+    compile/runtime path (full vocab — rope/flash_attn/qkv/mla/MPSGraph/...). Only
+    when that path is unavailable do we fall back to the tracer's GraphFn lane
+    (the executable subset)."""
+    if (jitfn.cpu_plan is not None
+            and getattr(jitfn.cpu_plan, "target_kind", None) == "apple_gpu"
+            and jitfn.compile_bundle is not None
+            and getattr(jitfn.compile_bundle, "executable", False)):
+        return jitfn._apple_gpu_fast_call(args, kwargs)
+    if traced is None:
+        arrays = [np.asarray(a) for a in args]
+        traced = trace(jitfn._fn, *arrays)
+    elem = "bf16" if (arrays and _np_dtype_to_elem(arrays[0].dtype) == "bf16") \
+        else "f32"
+    return to_graphfn(traced, elem=elem, target="apple_gpu").run(*arrays)
+
+
 def run_jit_traced(jitfn: Any, args: tuple, kwargs: dict):
-    """Execute a `@jit(target="apple_gpu")` function by trace-by-running: trace
-    ``jitfn._fn`` with the call's args, then dispatch via ``execute_traced`` (when
-    the trace has control flow) or the fused GraphFn path. Supersedes the AST
-    `_OpExtractor` + `detect_loop_fn`/`detect_cond_fn` bridge."""
+    """Execute a `@jit(target="apple_gpu")` function as the unified front-end
+    (F6): trace ``jitfn._fn`` (concrete — full vocab); if the trace has control
+    flow, run it via ``execute_traced`` (fused ``run_graph_*``); otherwise defer
+    to the canonical apple_gpu path. Supersedes the AST bridge.
+
+    The control-flow-ness is structural (shape-independent), so it is cached: a
+    known-straight-line function skips re-tracing and goes straight to canonical.
+    """
     names = list(getattr(jitfn, "arg_names", []) or [])
     ordered: List[Any] = list(args)
     for nm in names[len(ordered):]:
         if nm in kwargs:
             ordered.append(kwargs[nm])
     arrays = [np.asarray(a) for a in ordered]
+
+    if getattr(jitfn, "_trace_is_control", None) is False:
+        return _run_canonical_apple_gpu(jitfn, args, kwargs)
+
     traced = trace(jitfn._fn, *arrays)
-    if _has_control_flow(traced):
+    is_control = _has_control_flow(traced)
+    jitfn._trace_is_control = is_control
+    if is_control:
         return execute_traced(traced, arrays)
-    elem = "bf16" if (arrays and _np_dtype_to_elem(arrays[0].dtype) == "bf16") \
-        else "f32"
-    return to_graphfn(traced, elem=elem, target="apple_gpu").run(*arrays)
+    return _run_canonical_apple_gpu(jitfn, args, kwargs, traced=traced,
+                                    arrays=arrays)
 
 
 def run_traced(fn: Callable, *arrays: np.ndarray, target: str = "apple_gpu"):

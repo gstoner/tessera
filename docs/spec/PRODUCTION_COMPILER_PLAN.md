@@ -541,8 +541,30 @@ last_updated: 2026-06-05
 >   run-by-tracing, so F5's retirement of the AST bridge is paired with a
 >   migration note (rewrite raw data-`if`/`while` to `ts.control.cond`/`while_loop`)
 >   rather than a silent swap; raw static-`for` needs no change (it unrolls).
->   Next: F5 (default the tracer + relax AST-emission-only decoration + retire the
->   AST bridge for explicit-style code), F6 (vocab/scan/nesting).
+>   Next: F6 (execution-vocab parity — the prerequisite for the F5 flip), then F5.
+>
+> * **Phase F6 — execution-vocab parity landed 2026-06-06.** F4 revealed the
+>   blocker: the tracer's execution vocab is the ~15 `_OP_TABLE` ops, but the
+>   apple_gpu `@jit` surface uses `rope`/`flash_attn`/`qkv`/`mla`/`cholesky`/the
+>   MPSGraph lane/fused chains — handled by the **canonical compile/runtime path**
+>   (straight-line bypasses the bridge), not the tracer. F6 reaches parity without
+>   re-implementing every op's GPU execution: **(1) concrete tracing** — the op
+>   wrapper passes the original numpy op to `record_op`, which runs it on the
+>   inputs' concrete values, so shape/dtype come from real execution for **any**
+>   op (no per-op shape rule; `Tracer` carries the `value`; shape rules remain the
+>   value-less fallback). **(2) smart dispatch** — `run_jit_traced` traces (full
+>   vocab), routes control flow to `execute_traced` and **straight-line to the
+>   canonical apple_gpu path** (`_apple_gpu_fast_call`); control-flow-ness is
+>   cached (structural). **Validated:** 117 broad apple_gpu @jit tests
+>   (mla/mpsgraph-lane/llama-decoder/backend-roadmap) pass with
+>   `TESSERA_JIT_TRACE=1` (the F5-default simulation) — straight-line defers
+>   bit-identically; flash_attn traces concretely. **+6 tests**
+>   `tests/unit/test_trace_f6.py`; default still **off** → zero regression. The 4
+>   bridge-internal tests that fail under trace-on are the precise F5 migration
+>   list (`divergent_if` raw-`if` → `ts.control.cond`; `last_dispatch==control_loop`
+>   / `_bridge_cache` assertions). Next: F5 (flip default + retire
+>   `detect_loop_fn`/`detect_cond_fn`/`run_bridged_*` + relax decoration + migrate
+>   those 4 tests).
 >
 > Next: Phase 4 (NVIDIA correctness-first).
 >

@@ -311,7 +311,7 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
 
         _tracer = active_tracer()
         if _tracer is not None:
-            return _tracer.record_op(name, args, kwargs)
+            return _tracer.record_op(name, original, args, kwargs)
 
         active = _ACTIVE_TAPE.get()
         if active is None:

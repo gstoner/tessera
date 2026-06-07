@@ -110,6 +110,15 @@ def scan(
     axis_name: str = "scan",
 ) -> tuple[Any, Any]:
     """Sequential scan: ``(carry, ys) = scan(fn, init, xs)``."""
+    tr = _active_trace_builder()
+    if (tr is not None and hasattr(tr, "record_scan") and xs is not None
+            and not reverse):
+        # Phase-H H3b — under trace, a forward scan over a single Tracer xs lowers
+        # to a fused tessera.control_scan (run_graph_scan_f32). reverse / pytree-xs
+        # fall through to the host reference loop.
+        from .compiler.trace import Tracer as _Tracer
+        if isinstance(init, _Tracer) and isinstance(xs, _Tracer):
+            return tr.record_scan(fn, init, xs, length)
     n = int(length) if length is not None else _tree_length(xs)
     order = range(n - 1, -1, -1) if reverse else range(n)
     carry = init

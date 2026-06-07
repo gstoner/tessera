@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,5,0,0,5,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,55,2,7,57,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+add,58,2,7,60,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -174,7 +174,7 @@ flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_only
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
-fori_loop,15,0,1,15,0,,structural_only,category default for 'control_flow'
+fori_loop,16,0,1,16,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,1,0,3,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,2,2,0,4,0,,needs_direct_test,category default for 'attention'
@@ -244,7 +244,7 @@ lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'lina
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,261,141,14,402,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,263,141,14,404,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -350,7 +350,7 @@ rsqrt,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,5,0,2,5,0,,structural_only,category default for 'serialization'
-scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
+scan,8,0,0,8,0,,structural_only,category default for 'control_flow'
 scatter,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_add,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_reduce,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -366,7 +366,7 @@ sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
 sigmoid,3,0,0,3,0,f32 fp32,covered_by_family,category default for 'elementwise'
 sigmoid_safe,3,0,0,3,0,,needs_direct_test,category default for 'stable_reduction'
 sign,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-silu,61,2,4,63,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+silu,63,2,4,65,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 silu_mul,6,10,0,16,0,fp32,covered_by_family,category default for 'elementwise'
 simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'

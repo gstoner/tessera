@@ -649,11 +649,24 @@ last_updated: 2026-06-05
 >   exact (0.0); an RNN-style matmul-body scan (rank-2 carry, rank-3 xs/ys, const
 >   W) at ~2e-8 vs numpy. `_SENTINEL_SYMBOL` bumped; `runtime_abi` regenerated.
 >   **+6 tests** `tests/unit/test_apple_gpu_scan.py`; buffer-pool RAII preserved.
->   *Remaining H3b:* `tessera.control.scan` trace-awareness (`record_scan` +
->   `execute_traced` branch) so `@jit(apple_gpu)` scan routes through the tracer
->   like fori/cond/while; `jit_scan` is the working API today.
 >
-> Next: H3b (scan tracer-awareness). Then Phase 4 (NVIDIA correctness-first).
+> * **Phase H3b — `tessera.control.scan` trace-awareness landed 2026-06-07.** A
+>   forward `ts.control.scan(fn, init, xs)` over a single Tracer `xs` now lowers
+>   under trace to a `tessera.control_scan` IROp (`TraceBuilder.record_scan` — runs
+>   `fn(carry, x_t) -> (carry, y)` once over the carry + a per-step `x_t` slice,
+>   carrying the body op-list + carry/x_t/ys SSAs); `control.scan` delegates when a
+>   tracer is active. `execute_traced` gains a `control_scan` branch → fused
+>   `run_graph_scan_f32` (flat body) or **host-orchestration** (nested-control body,
+>   via H1); `execute_traced` now returns a tuple for the multi-output `(carry, ys)`
+>   result. So a `@jit(target="apple_gpu")` function using `ts.control.scan` routes
+>   through the tracer like fori/cond/while (auto-detected via `function_needs_tracer`'s
+>   `control.scan` regex). E2E: cumsum exact, an RNN-style `scan_decode` ~2e-8, and
+>   a **nested** scan-with-inner-loop (host-orchestrated, inner loop fuses) ~1.5e-8.
+>   Python-only. **+8 tests** `tests/unit/test_trace_h3b_scan.py`.
+>
+> **Phase H is complete** — nested control flow (H1), native f16 control flow (H2),
+> and fused scan + scan-tracer-awareness (H3/H3b). Next: Phase 4 (NVIDIA
+> correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

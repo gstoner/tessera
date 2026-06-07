@@ -293,6 +293,52 @@ class TraceBuilder:
         ))
         return Tracer(init.shape, init.dtype, res)
 
+    def record_scan(self, fn, init, xs, length) -> "Tuple[Tracer, Tracer]":
+        """Trace a fused ``scan`` into a ``tessera.control_scan`` IROp (H3b).
+        ``fn(carry, x_t) -> (carry, y)`` is traced once over the carry + a per-step
+        ``x_t`` slice; the op carries the body op-list + the carry/x_t/ys SSAs so
+        ``execute_traced`` can dispatch ``run_graph_scan_f32``. Returns the carry
+        Tracer; the stacked-ys Tracer is stashed on the op (``_ys_ssa``) and
+        returned by ``scan`` (see the wrapper below)."""
+        if not (isinstance(init, Tracer) and isinstance(xs, Tracer)):
+            raise TesseraTraceError("traced scan: init and xs must be Tracers")
+        if len(xs.shape) < 1:
+            raise TesseraTraceError("traced scan: xs must have a leading scan axis")
+        trip = int(length) if length is not None else int(xs.shape[0])
+        x_inner = tuple(xs.shape[1:])
+        carry_ssa, xt_ssa = self._fresh(), self._fresh()
+        carry = Tracer(init.shape, init.dtype, carry_ssa, init.value)
+        xt_val = (np.asarray(xs.value)[0] if xs.value is not None else None)
+        xt = Tracer(x_inner, xs.dtype, xt_ssa, xt_val)
+        body_ops, out = self._trace_region(lambda: fn(carry, xt))
+        if not (isinstance(out, tuple) and len(out) == 2
+                and isinstance(out[0], Tracer) and isinstance(out[1], Tracer)):
+            raise TesseraTraceError("traced scan: fn must return (carry, y)")
+        nxt, y = out
+        if nxt.shape != init.shape:
+            raise TesseraTraceError("traced scan: body must preserve carry shape")
+        res_c, res_y = self._fresh(), self._fresh()
+        ys_shape = (trip, *y.shape)
+        self.body.append(IROp(
+            result=res_c, op_name="tessera.control_scan",
+            operands=[f"%{init.ssa}", f"%{xs.ssa}"],
+            operand_types=[_ty(init.shape, init.dtype), _ty(xs.shape, xs.dtype)],
+            result_type=_ty(init.shape, init.dtype),
+            kwargs={"_region": "scan", "_trip": trip,
+                    "_carry_ssa": carry_ssa, "_xt_ssa": xt_ssa,
+                    "_init_ssa": init.ssa, "_xs_ssa": xs.ssa,
+                    "_body": body_ops, "_next_ssa": nxt.ssa, "_y_ssa": y.ssa,
+                    "_ys_ssa": res_y, "_carry_shape": tuple(init.shape),
+                    "_x_shape": x_inner, "_y_shape": tuple(y.shape)},
+        ))
+        # carry value = one-step (shape-correct); ys value is a shape-only
+        # placeholder (GPU computes the real values in execute_traced).
+        ys_val = (np.zeros(ys_shape, dtype=np.float32)
+                  if init.value is not None else None)
+        carry_t = Tracer(init.shape, init.dtype, res_c, nxt.value)
+        ys_t = Tracer(ys_shape, y.dtype, res_y, ys_val)
+        return carry_t, ys_t
+
     def set_outputs(self, outs: List[str]) -> None:
         self.outputs = list(outs)
 
@@ -595,6 +641,50 @@ def execute_traced(traced: TracedFunction, arrays: List[np.ndarray]):
                 benv = _replay(kw["_body"], {**env, carry_ssa: carry})
                 carry = benv[kw["_next_ssa"]]
             return carry
+        if nm == "tessera.control_scan":
+            # H3b — fused scan via run_graph_scan_f32 (or host-orchestrate when the
+            # body nests control). exec_op returns the carry and stashes the
+            # stacked ys in env under `_ys_ssa`.
+            kw = op.kwargs
+            carry_ssa, xt_ssa = kw["_carry_ssa"], kw["_xt_ssa"]
+            init_ssa, xs_ssa = _strip(op.operands[0]), _strip(op.operands[1])
+            trip = int(kw["_trip"])
+            xs = env[xs_ssa]
+            if _region_flat(kw["_body"]):
+                live = _live_refs([kw["_body"]],
+                                  {carry_ssa, xt_ssa, xs_ssa, init_ssa},
+                                  [kw["_next_ssa"], kw["_y_ssa"]])
+                # consts = [carry init] + the body's external refs; ids:
+                # init=0, live[i]=i+1, carry=nc, x_t=nc+1, body op j=nc+2+j.
+                const_arrays = [env[init_ssa]] + [env[s] for s in live]
+                const_shapes = [tuple(env[init_ssa].shape)] + shapes(live, env)
+                nc = len(const_arrays)
+                idof = {init_ssa: 0}
+                for i, s in enumerate(live):
+                    idof[s] = i + 1
+                idof[carry_ssa] = nc
+                idof[xt_ssa] = nc + 1
+                dicts, local = _branch_dicts(kw["_body"], idof, nc + 2)
+                res = mp.run_graph_scan_f32(
+                    const_arrays, const_shapes, 0, xs, trip,
+                    tuple(kw["_x_shape"]), dicts, local[kw["_next_ssa"]],
+                    local[kw["_y_ssa"]], tuple(kw["_carry_shape"]),
+                    tuple(kw["_y_shape"]))
+                if res is None:
+                    raise TesseraTraceError("trace exec: scan dispatch failed")
+                carry, ys = res
+                env[kw["_ys_ssa"]] = ys
+                return carry
+            # nested control in the scan body → host-orchestrate.
+            carry = env[init_ssa]
+            ys_list = []
+            for t in range(trip):
+                benv = _replay(kw["_body"],
+                               {**env, carry_ssa: carry, xt_ssa: xs[t]})
+                carry = benv[kw["_next_ssa"]]
+                ys_list.append(benv[kw["_y_ssa"]])
+            env[kw["_ys_ssa"]] = np.stack(ys_list)
+            return carry
         return _gpu_straightline_op(agb, op, env)
 
     env: Dict[str, np.ndarray] = {}
@@ -607,7 +697,9 @@ def execute_traced(traced: TracedFunction, arrays: List[np.ndarray]):
             raise TesseraTraceError(
                 f"trace exec: op {op.op_name!r} dispatch failed / runtime "
                 "unavailable")
-    return env[traced.outputs[0]].copy()
+    # Multi-output (e.g. scan → (carry, ys)) returns a tuple; single → the array.
+    outs = [env[s].copy() for s in traced.outputs]
+    return outs[0] if len(outs) == 1 else tuple(outs)
 
 
 def _result_shape(op: IROp) -> Tuple[int, ...]:

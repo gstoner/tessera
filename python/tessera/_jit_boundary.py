@@ -949,6 +949,7 @@ class GraphFn:
         self._loop: Any = None
         self._cond: Any = None
         self._while: Any = None
+        self._scan: Any = None
 
     def _t(self, shape: tuple[int, ...]) -> str:
         return "tensor<" + "x".join(str(s) for s in shape) + f"x{self._elem}>"
@@ -1209,6 +1210,95 @@ class GraphFn:
         else:
             self._while = {"_unsupported": "more than one while_loop"}
         return _Val(res, init.shape)
+
+    def scan(self, trip: int, init: _Val, xs: _Val, body):
+        """Apple GPU fused ``scan`` (Phase-H H3): ``(carry, ys) = scan(body, init,
+        xs)`` runs as ONE MPSGraph forLoop carrying ``[carry, ys]``; per step
+        ``x_t = xs[i]``; ``(carry, y) = body(carry, x_t)``; ``ys[i] = y``. ``body``
+        is ``(carry_val, x_t_val) -> (carry_val, y_val)``. ``xs`` is
+        ``(trip, *x_inner)``; the result is ``(final_carry, ys=(trip, *y))``. v1:
+        apple_gpu only, single scan, carry shape preserved."""
+        if self._target != "apple_gpu":
+            raise TesseraJitError("scan is apple_gpu-only")
+        self._has_control_flow = True
+        self._idx += 1
+        carry_ssa = f"%scarry{self._idx}"
+        xt_ssa = f"%sxt{self._idx}"
+        x_inner = tuple(xs.shape[1:])
+        body_start = len(self._ops)
+        out = body(_Val(carry_ssa, init.shape), _Val(xt_ssa, x_inner))
+        if not (isinstance(out, tuple) and len(out) == 2):
+            raise TesseraJitError("scan body must return (carry, y)")
+        nxt, y = out
+        if nxt.shape != init.shape:
+            raise TesseraJitError("scan body must preserve the carry shape")
+        res_c, res_y = self._fresh(), self._fresh()
+        if self._scan is None:
+            self._scan = {
+                "trip": int(trip), "carry_ssa": carry_ssa, "xt_ssa": xt_ssa,
+                "xs_ssa": xs.ssa, "init_ssa": init.ssa,
+                "next_carry_ssa": nxt.ssa, "y_ssa": y.ssa,
+                "body_ops": list(self._ops[body_start:]),
+                "carry_shape": tuple(init.shape), "x_shape": x_inner,
+                "y_shape": tuple(y.shape),
+            }
+        else:
+            self._scan = {"_unsupported": "more than one scan"}
+        return _Val(res_c, init.shape), _Val(res_y, (int(trip), *y.shape))
+
+    def _serialize_scan_spec(self):
+        """Serialize the captured ``_scan`` to the run_graph_scan ABI: returns
+        (const_args, carry_arg_index, body_ops, carry_out_id, y_out_id,
+        carry_shape, x_shape, y_shape, trip). consts = function args minus xs;
+        ids: consts 0..nc-1, carry = nc, x_t = nc+1, body op j = nc+2+j."""
+        sc = self._scan
+        if "_unsupported" in sc:
+            raise TesseraJitError(
+                f"apple_gpu GraphFn scan: {sc['_unsupported']} not supported (v1)")
+        if self._elem != "f32":
+            raise TesseraJitError("apple_gpu GraphFn scan is f32-only (v1)")
+        consts = [(ssa, sh) for (ssa, sh) in self._args if ssa != sc["xs_ssa"]]
+        arg_index = {ssa: k for k, (ssa, _sh) in enumerate(consts)}
+        if sc["init_ssa"] not in arg_index:
+            raise TesseraJitError(
+                "apple_gpu GraphFn scan: the carry init must be a function arg (v1)")
+        nc = len(consts)
+        idof = dict(arg_index)
+        idof[sc["carry_ssa"]] = nc
+        idof[sc["xt_ssa"]] = nc + 1
+        body_ops, idof = self._serialize_branch(
+            sc["body_ops"], idof, nc + 2, "scan body")
+        carry_out_id = idof.get(sc["next_carry_ssa"])
+        y_out_id = idof.get(sc["y_ssa"])
+        if carry_out_id is None or y_out_id is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn scan: a body output is not in scope")
+        return (consts, arg_index[sc["init_ssa"]], body_ops, carry_out_id,
+                y_out_id, sc["carry_shape"], sc["x_shape"], sc["y_shape"],
+                sc["trip"])
+
+    def _run_apple_gpu_scan(self, arrays):
+        from tessera import apple_mlpkg as mp
+
+        (consts, carry_arg_index, body_ops, carry_out_id, y_out_id, carry_shape,
+         x_shape, y_shape, trip) = self._serialize_scan_spec()
+        if len(arrays) != len(self._args):
+            raise TesseraJitError(
+                f"expected {len(self._args)} args, got {len(arrays)}")
+        by_ssa = {ssa: np.ascontiguousarray(np.asarray(a, dtype=np.float32))
+                  for (ssa, _sh), a in zip(self._args, arrays)}
+        xs = by_ssa[self._scan["xs_ssa"]]
+        const_arrays = [by_ssa[ssa] for (ssa, _sh) in consts]
+        const_shapes = [tuple(sh) for (_ssa, sh) in consts]
+        res = mp.run_graph_scan_f32(
+            const_arrays, const_shapes, carry_arg_index, xs, trip, x_shape,
+            body_ops, carry_out_id, y_out_id, carry_shape, y_shape)
+        if res is None:
+            raise TesseraJitError(
+                "apple_gpu GraphFn scan dispatch failed / runtime unavailable")
+        self._last_dispatch = ["scan"]  # one MPSGraph forLoop + gather/scatter
+        carry, ys = res
+        return carry.copy(), ys.copy()
 
     def write_row(self, buffer, value, row: int):
         """Functional KV-cache update: buffer (T,D) with row `row` set to value
@@ -2376,3 +2466,54 @@ def jit_while_loop(
         (_find_tessera_opt() is not None) if via_target_ir is None
         else bool(via_target_ir))
     return g.run_while_via_target_ir(*arrays) if use_ir else g.run(*arrays)
+
+
+def build_scan(
+    trip: int,
+    body,
+    *,
+    init_shape,
+    x_shape,
+    const_shapes=(),
+    name: str = "tessera_scan",
+    elem: str = "f32",
+) -> "GraphFn":
+    """Trace a fused ``scan`` into a ``GraphFn`` carrying a ``scan`` record
+    (Phase-H H3). ``body`` is ``(g, carry, x_t, *consts) -> (carry, y)`` on GraphFn
+    handles; ``init_shape`` is the carry shape, ``x_shape`` the per-step ``xs``
+    slice shape (so ``xs`` is ``(trip, *x_shape)``). Returns the un-executed
+    ``GraphFn``."""
+    g = GraphFn(name=name, elem=elem, target="apple_gpu")
+    carry = g.arg(tuple(init_shape))
+    xs = g.arg((int(trip), *tuple(x_shape)))
+    consts = [g.arg(tuple(s)) for s in const_shapes]
+    g.scan(int(trip), init=carry, xs=xs,
+           body=lambda c, xt: body(g, c, xt, *consts))
+    return g
+
+
+def jit_scan(
+    trip: int,
+    body,
+    *,
+    init: "np.ndarray",
+    xs: "np.ndarray",
+    consts=(),
+    name: str = "tessera_scan",
+):
+    """Build (``build_scan``) and execute a fused ``scan`` on Apple GPU, returning
+    ``(final_carry, stacked_ys)`` as ``np.ndarray`` (``ys`` is ``(trip, *y)``).
+
+    Runs ``carry = init; for t in range(trip): carry, ys[t] = body(carry, xs[t])``
+    as ONE MPSGraph forLoop (gather ``xs[t]`` + scatter ``ys[t]``). ``body`` is
+    ``(g, carry, x_t, *consts) -> (carry, y)`` on GraphFn handles. f32, v1."""
+    init_arr = np.asarray(init)
+    xs_arr = np.asarray(xs)
+    const_arrs = [np.asarray(c) for c in consts]
+    g = build_scan(
+        int(trip), body,
+        init_shape=init_arr.shape, x_shape=tuple(xs_arr.shape[1:]),
+        const_shapes=[c.shape for c in const_arrs], name=name,
+    )
+    arrays = [init_arr, xs_arr, *const_arrs]  # order matches build_scan's args
+    return g._run_apple_gpu_scan(arrays)

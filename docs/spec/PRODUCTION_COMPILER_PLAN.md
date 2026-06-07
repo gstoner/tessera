@@ -635,8 +635,25 @@ last_updated: 2026-06-05
 >   `tests/unit/test_apple_gpu_control_flow_f16.py` (incl. ABI probe + a
 >   no-native-bf16 regression guard); buffer-pool + bf16/f32 regression green.
 >
-> Next: H3 (fused scan — `run_graph_scan_f32` + tracer + `jit_scan`). Then Phase 4
-> (NVIDIA correctness-first).
+> * **Phase H3 (core) — fused scan landed 2026-06-07.** `(carry, ys) =
+>   scan(body, init, xs)` runs as ONE MPSGraph `forLoop` carrying `[carry, ys]`:
+>   per step `x_t = gatherWithUpdatesTensor(xs, [index], axis 0)` (slice),
+>   `(carry, y) = body(args, carry, x_t)`, `ys = scatterND(ys, [y], [[index]],
+>   Set)`. New `tessera_apple_gpu_run_graph_scan_f32` C symbol
+>   (`apple_gpu_runtime.mm`, body-op ids: consts `0..nc-1` / carry `nc` / x_t
+>   `nc+1` / op j `nc+2+j`; xs/ys are rank-3 `(trip, *2D-inner)`, consts/carry
+>   rank≤2) + stub parity + `apple_mlpkg.run_graph_scan_f32` wrapper. Front-end:
+>   `_jit_boundary.{GraphFn.scan, _serialize_scan_spec, _run_apple_gpu_scan,
+>   build_scan, jit_scan}` — `jit_scan(trip, body, init=, xs=, consts=) ->
+>   (carry, ys)`, `body = (g, carry, x_t, *consts) -> (carry, y)`. E2E: cumsum
+>   exact (0.0); an RNN-style matmul-body scan (rank-2 carry, rank-3 xs/ys, const
+>   W) at ~2e-8 vs numpy. `_SENTINEL_SYMBOL` bumped; `runtime_abi` regenerated.
+>   **+6 tests** `tests/unit/test_apple_gpu_scan.py`; buffer-pool RAII preserved.
+>   *Remaining H3b:* `tessera.control.scan` trace-awareness (`record_scan` +
+>   `execute_traced` branch) so `@jit(apple_gpu)` scan routes through the tracer
+>   like fori/cond/while; `jit_scan` is the working API today.
+>
+> Next: H3b (scan tracer-awareness). Then Phase 4 (NVIDIA correctness-first).
 >
 > **Fusion opportunities surveyed (grounded in `apple_gpu_runtime.mm`):** the
 > runtime already carries deeper fusion infra — (1) ~~`rmsnorm_matmul`~~ **DONE**;

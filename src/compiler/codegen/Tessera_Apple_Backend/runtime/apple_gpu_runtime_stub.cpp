@@ -1640,6 +1640,15 @@ extern "C" int32_t tessera_apple_gpu_run_graph_while_f16(
     unsigned short *) {
   return 0;  // no Metal on non-Darwin; caller falls back to host
 }
+// Phase-H H3 — fused scan parity.
+extern "C" int32_t tessera_apple_gpu_run_graph_scan_f32(
+    int32_t, const void *const *, const int32_t *, const int32_t *, int32_t,
+    const void *, int32_t, int32_t, int32_t, int32_t, const int32_t *,
+    const int32_t *, const int32_t *, const int32_t *, const float *, int32_t,
+    int32_t, int32_t, int32_t, int32_t, int32_t, const void *, float *,
+    float *) {
+  return 0;  // no Metal on non-Darwin; caller falls back to host
+}
 extern "C" int32_t tessera_apple_gpu_dylib_serialize(const char *, const char *,
                                                      const char *) {
   return -1;

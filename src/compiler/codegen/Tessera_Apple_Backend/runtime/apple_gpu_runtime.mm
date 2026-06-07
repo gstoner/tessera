@@ -12151,6 +12151,184 @@ extern "C" int32_t tessera_apple_gpu_run_graph_while_f16(
   return -1;
 }
 
+// ── Phase-H H3 — fused scan ────────────────────────────────────────────────
+//
+// `(carry, ys) = scan(fn, init, xs)` where `fn(carry, x_t) -> (carry, y_t)` runs
+// as ONE MPSGraph `forLoop` carrying `[carry, ys_accum]`. Per step `index`:
+//   x_t = gatherAlongAxis(0, xs, [index])           // xs[index]
+//   (next_carry, y_t) = body(args, carry, x_t)      // serialized op-list
+//   ys_accum = scatterND(ys_accum, [y_t], [[index]], Set)   // ys[index] = y_t
+// Returns (final_carry, ys). Body tensor ids: 0..n_args-1 = args (consts; the
+// carry init is args[carry_arg_index]), n_args = carry, n_args+1 = x_t,
+// n_args+2+j = body op j. `xs`/`ys` are rank (trip + 2D inner); consts/carry are
+// rank<=2. ys_zeros is fed (a zeros (trip,*y) buffer). f32.
+extern "C" int32_t tessera_apple_gpu_run_graph_scan_f32(
+    int32_t n_args, const void *const *arg_ptrs, const int32_t *arg_rows,
+    const int32_t *arg_cols, int32_t carry_arg_index, const void *xs_ptr,
+    int32_t trip, int32_t x_rows, int32_t x_cols, int32_t n_body_ops,
+    const int32_t *body_codes, const int32_t *body_in0, const int32_t *body_in1,
+    const int32_t *body_iattr, const float *body_fattr, int32_t carry_out_id,
+    int32_t y_out_id, int32_t carry_rows, int32_t carry_cols, int32_t y_rows,
+    int32_t y_cols, const void *ys_zeros, float *out_carry, float *out_ys) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;  // caller falls back to host
+  if (n_args <= 0 || trip <= 0 || n_body_ops < 0 || carry_arg_index < 0 ||
+      carry_arg_index >= n_args || !arg_ptrs || !arg_rows || !arg_cols ||
+      !xs_ptr || !ys_zeros || !out_carry || !out_ys ||
+      (n_body_ops > 0 && (!body_codes || !body_in0)))
+    return -2;
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+    @autoreleasepool {
+      MPSDataType dt = MPSDataTypeFloat32;
+      MPSGraph *g = [MPSGraph new];
+      NSMutableArray<MPSGraphTensor *> *phs =
+          [NSMutableArray arrayWithCapacity:n_args];
+      NSMutableArray<NSArray<NSNumber *> *> *shapes =
+          [NSMutableArray arrayWithCapacity:n_args];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = (arg_cols[i] > 0)
+                                       ? @[ @(arg_rows[i]), @(arg_cols[i]) ]
+                                       : @[ @(arg_rows[i]) ];
+        [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
+        [shapes addObject:shp];
+      }
+      NSArray<NSNumber *> *xsShape = (x_cols > 0)
+                                         ? @[ @(trip), @(x_rows), @(x_cols) ]
+                                         : @[ @(trip), @(x_rows) ];
+      NSArray<NSNumber *> *xtShape =
+          (x_cols > 0) ? @[ @(x_rows), @(x_cols) ] : @[ @(x_rows) ];
+      NSArray<NSNumber *> *ysShape = (y_cols > 0)
+                                         ? @[ @(trip), @(y_rows), @(y_cols) ]
+                                         : @[ @(trip), @(y_rows) ];
+      NSArray<NSNumber *> *yUpd = (y_cols > 0)
+                                      ? @[ @1, @(y_rows), @(y_cols) ]
+                                      : @[ @1, @(y_rows) ];
+      MPSGraphTensor *xsPh = [g placeholderWithShape:xsShape dataType:dt name:nil];
+      MPSGraphTensor *ysPh = [g placeholderWithShape:ysShape dataType:dt name:nil];
+      const int total = n_args + 2 + n_body_ops;
+      __block int32_t err = 0;
+      MPSGraphTensor *lb = [g constantWithScalar:0 dataType:MPSDataTypeInt32];
+      MPSGraphTensor *ub = [g constantWithScalar:trip dataType:MPSDataTypeInt32];
+      MPSGraphTensor *st = [g constantWithScalar:1 dataType:MPSDataTypeInt32];
+      NSArray<MPSGraphTensor *> *results = [g
+          forLoopWithLowerBound:lb
+                     upperBound:ub
+                           step:st
+           initialBodyArguments:@[ phs[carry_arg_index], ysPh ]
+                           body:^NSArray<MPSGraphTensor *> *(
+                               MPSGraphTensor *index,
+                               NSArray<MPSGraphTensor *> *bodyArgs) {
+                             MPSGraphTensor *carry = bodyArgs[0];
+                             MPSGraphTensor *ysAcc = bodyArgs[1];
+                             MPSGraphTensor *idx1 = [g reshapeTensor:index
+                                                          withShape:@[ @1 ]
+                                                               name:nil];
+                             MPSGraphTensor *xg =
+                                 [g gatherWithUpdatesTensor:xsPh
+                                             indicesTensor:idx1
+                                                      axis:0
+                                           batchDimensions:0
+                                                      name:nil];
+                             MPSGraphTensor *xt = [g reshapeTensor:xg
+                                                        withShape:xtShape
+                                                             name:nil];
+                             NSMutableArray *t =
+                                 [NSMutableArray arrayWithCapacity:total];
+                             for (int i = 0; i < total; ++i)
+                               [t addObject:[NSNull null]];
+                             for (int i = 0; i < n_args; ++i) t[i] = phs[i];
+                             t[n_args] = carry;
+                             t[n_args + 1] = xt;
+                             auto bg = [&](int tid) -> MPSGraphTensor * {
+                               if (tid < 0 || tid >= total) return nil;
+                               id v = t[tid];
+                               return (v == [NSNull null]) ? nil
+                                                           : (MPSGraphTensor *)v;
+                             };
+                             for (int j = 0; j < n_body_ops; ++j) {
+                               int code = body_codes[j];
+                               MPSGraphTensor *a = bg(body_in0[j]);
+                               MPSGraphTensor *b = nil;
+                               if (code == 0 || (code >= 1 && code <= 4))
+                                 b = bg(body_in1 ? body_in1[j] : -1);
+                               MPSGraphTensor *y = mpsg_build_graph_op(
+                                   g, code, a, b, body_iattr ? body_iattr[j] : 0,
+                                   body_fattr ? body_fattr[j] : 1e-5f, dt);
+                               if (!y) { err = -6; y = carry; }
+                               t[n_args + 2 + j] = y;
+                             }
+                             MPSGraphTensor *nc = bg(carry_out_id);
+                             MPSGraphTensor *yt = bg(y_out_id);
+                             if (!nc || !yt) {
+                               err = -6;
+                               return @[ carry, ysAcc ];
+                             }
+                             MPSGraphTensor *upd = [g reshapeTensor:yt
+                                                         withShape:yUpd
+                                                              name:nil];
+                             MPSGraphTensor *idx2 = [g reshapeTensor:index
+                                                          withShape:@[ @1, @1 ]
+                                                               name:nil];
+                             MPSGraphTensor *ysNew = [g
+                                 scatterNDWithDataTensor:ysAcc
+                                           updatesTensor:upd
+                                           indicesTensor:idx2
+                                         batchDimensions:0
+                                                    mode:MPSGraphScatterModeSet
+                                                    name:nil];
+                             return @[ nc, ysNew ];
+                           }
+                           name:nil];
+      if (err != 0) return err;
+      if (!results || results.count < 2) return -3;
+      (void)carry_rows;
+      (void)carry_cols;
+      std::vector<MetalBufferGuard> guards;
+      guards.reserve(n_args + 2);
+      NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
+      for (int i = 0; i < n_args; ++i) {
+        NSArray<NSNumber *> *shp = shapes[i];
+        size_t elems = 1;
+        for (NSNumber *n in shp) elems *= (size_t)n.intValue;
+        id<MTLBuffer> buf =
+            metal_buffer_acquire_with_bytes(ctx, arg_ptrs[i], elems * 4);
+        if (!buf) return -3;
+        guards.emplace_back(ctx, buf, elems * 4);
+        feeds[phs[i]] = [[MPSGraphTensorData alloc] initWithMTLBuffer:buf
+                                                                shape:shp
+                                                             dataType:dt];
+      }
+      {
+        size_t xe = (size_t)trip * x_rows * (x_cols > 0 ? x_cols : 1);
+        id<MTLBuffer> xb = metal_buffer_acquire_with_bytes(ctx, xs_ptr, xe * 4);
+        if (!xb) return -3;
+        guards.emplace_back(ctx, xb, xe * 4);
+        feeds[xsPh] = [[MPSGraphTensorData alloc] initWithMTLBuffer:xb
+                                                              shape:xsShape
+                                                           dataType:dt];
+        size_t ye = (size_t)trip * y_rows * (y_cols > 0 ? y_cols : 1);
+        id<MTLBuffer> yb = metal_buffer_acquire_with_bytes(ctx, ys_zeros, ye * 4);
+        if (!yb) return -3;
+        guards.emplace_back(ctx, yb, ye * 4);
+        feeds[ysPh] = [[MPSGraphTensorData alloc] initWithMTLBuffer:yb
+                                                              shape:ysShape
+                                                           dataType:dt];
+      }
+      NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                              feeds:feeds
+                                      targetTensors:@[ results[0], results[1] ]
+                                   targetOperations:nil];
+      MPSGraphTensorData *cd = res[results[0]];
+      MPSGraphTensorData *yd = res[results[1]];
+      if (!cd || !yd) return -3;
+      [[cd mpsndarray] readBytes:out_carry strideBytes:nil];
+      [[yd mpsndarray] readBytes:out_ys strideBytes:nil];
+      return 1;
+    }
+  }
+  return -1;
+}
+
 // PK8b — author a *fused multi-op* `.mtlpackage` by composing MPSGraph nodes
 // into a single serialized executable. MPSGraph fuses the chain across the ML
 // pipeline, so the whole chain runs as one dispatch — the packaged equivalent

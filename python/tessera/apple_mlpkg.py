@@ -1831,6 +1831,74 @@ def run_graph_while_f16(
     return out if rc == 1 else None
 
 
+def run_graph_scan_f32(
+    arg_arrays: "list", arg_shapes: "list[tuple[int, ...]]", carry_arg_index: int,
+    xs_array, trip: int, x_shape: "tuple[int, ...]", body_ops: "list[dict]",
+    carry_out_id: int, y_out_id: int, carry_shape: "tuple[int, ...]",
+    y_shape: "tuple[int, ...]",
+):
+    """Run a fused ``scan`` (Phase-H H3) as ONE MPSGraph ``forLoop`` carrying
+    ``[carry, ys]``: per step ``x_t = xs[index]``;
+    ``(carry, y_t) = body(args, carry, x_t)``; ``ys[index] = y_t``. Returns
+    ``(final_carry, ys)`` as ``np.float32`` arrays (``ys`` is ``(trip, *y_shape)``),
+    or ``None`` (runtime unavailable / malformed). Body tensor ids:
+    ``0..len(args)-1`` = args (consts; carry init = ``args[carry_arg_index]``),
+    ``len(args)`` = carry, ``len(args)+1`` = ``x_t``, ``len(args)+2+j`` = body op
+    ``j``. ``xs``/``ys`` are ``(trip, *2D-inner)``; consts/carry are rank<=2."""
+    import numpy as np
+
+    if apple_gpu_runtime() is None:
+        return None
+    fn = bind_symbol(
+        "tessera_apple_gpu_run_graph_scan_f32",
+        (ctypes.c_int32, ctypes.POINTER(ctypes.c_void_p),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.c_int32, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_int32),
+         ctypes.POINTER(ctypes.c_int32), ctypes.POINTER(ctypes.c_float),
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+         ctypes.c_int32, ctypes.c_int32, ctypes.c_void_p,
+         ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)),
+        restype=ctypes.c_int32,
+    )
+    if fn is None:
+        return None
+    flat = _flatten_ops(body_ops)
+    if flat is None:
+        return None
+    codes, in0, in1, iattr, fattr, nb = flat
+    na = len(arg_shapes)
+    cargs = [np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for a in arg_arrays]
+    ptrs = (ctypes.c_void_p * na)(
+        *[ctypes.cast(a.ctypes.data, ctypes.c_void_p) for a in cargs])
+    rows = (ctypes.c_int32 * na)(*[int(s[0]) for s in arg_shapes])
+    cols = (ctypes.c_int32 * na)(
+        *[int(s[1]) if len(s) > 1 else 0 for s in arg_shapes])
+    xs = np.ascontiguousarray(np.asarray(xs_array, dtype=np.float32))
+    x_rows = int(x_shape[0])
+    x_cols = int(x_shape[1]) if len(x_shape) > 1 else 0
+    c_rows = int(carry_shape[0])
+    c_cols = int(carry_shape[1]) if len(carry_shape) > 1 else 0
+    y_rows = int(y_shape[0])
+    y_cols = int(y_shape[1]) if len(y_shape) > 1 else 0
+    ys_zeros = np.zeros((int(trip), *y_shape), dtype=np.float32)
+    out_carry = np.zeros(carry_shape, dtype=np.float32)
+    out_ys = np.zeros((int(trip), *y_shape), dtype=np.float32)
+    rc = int(fn(
+        ctypes.c_int32(na), ptrs, rows, cols, ctypes.c_int32(int(carry_arg_index)),
+        ctypes.cast(xs.ctypes.data, ctypes.c_void_p), ctypes.c_int32(int(trip)),
+        ctypes.c_int32(x_rows), ctypes.c_int32(x_cols),
+        ctypes.c_int32(nb), codes, in0, in1, iattr, fattr,
+        ctypes.c_int32(int(carry_out_id)), ctypes.c_int32(int(y_out_id)),
+        ctypes.c_int32(c_rows), ctypes.c_int32(c_cols),
+        ctypes.c_int32(y_rows), ctypes.c_int32(y_cols),
+        ctypes.cast(ys_zeros.ctypes.data, ctypes.c_void_p),
+        out_carry.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out_ys.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
+    return (out_carry, out_ys) if rc == 1 else None
+
+
 def execute_control_loop_mlir(mlir_text: str, arg_arrays: "list"):
     """MLIR-driven execution (Phase-G G-B.2): given a lowered module containing a
     `tessera_apple.gpu.control_loop` op (with the serialized body op-list payload),
@@ -2109,6 +2177,7 @@ __all__ = [
     "run_graph_loop_f16",
     "run_graph_cond_f16",
     "run_graph_while_f16",
+    "run_graph_scan_f32",
     "execute_control_loop_mlir",
     "execute_control_if_mlir",
     "execute_control_while_mlir",

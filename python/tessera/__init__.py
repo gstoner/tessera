@@ -3199,6 +3199,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     cross_entropy_loss_ref = _lazy_module_fn("losses", "cross_entropy_loss")
     binary_cross_entropy_loss_ref = _lazy_module_fn("losses", "binary_cross_entropy_loss")
     asymmetric_bce_ref = _lazy_module_fn("losses", "asymmetric_bce")
+    z_loss_ref = _lazy_module_fn("losses", "z_loss")
+    load_balance_loss_ref = _lazy_module_fn("losses", "load_balance_loss")
     ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
     score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
     vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
@@ -3444,6 +3446,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "cross_entropy_loss": cross_entropy_loss_ref,
         "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
         "asymmetric_bce": asymmetric_bce_ref,
+        "z_loss": z_loss_ref,
+        "load_balance_loss": load_balance_loss_ref,
         "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
         "score_matching_loss": score_matching_loss_ref,
         "vlb_loss": vlb_loss_ref,
@@ -3756,6 +3760,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         cross_entropy_loss=cross_entropy_loss_ref,
         binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
         asymmetric_bce=asymmetric_bce_ref,
+        z_loss=z_loss_ref,
+        load_balance_loss=load_balance_loss_ref,
         ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
         score_matching_loss=score_matching_loss_ref,
         vlb_loss=vlb_loss_ref,

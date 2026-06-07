@@ -2233,6 +2233,34 @@ def vjp_asymmetric_bce(dout, logits, targets, *, pos_weight=1.0, neg_weight=1.0,
     return (_sum_to_shape(grad_logits, z.shape), _sum_to_shape(grad_targets, t.shape))
 
 
+@_vjp("z_loss")
+def vjp_z_loss(dout, router_logits, *, reduction="mean", **_):
+    # loss = reduce(lse²);  d(lse²)/d logit_j = 2·lse·softmax_j
+    z = np.asarray(router_logits, dtype=np.float64)
+    m = z.max(axis=-1, keepdims=True)
+    e = np.exp(z - m)
+    denom = e.sum(axis=-1, keepdims=True)
+    softmax = e / denom
+    lse = (m[..., 0] + np.log(denom[..., 0]))                 # (..,)
+    scale = _reduction_cotangent(dout, lse.shape, reduction)  # (..,) or scalar
+    grad = (2.0 * lse * np.asarray(scale))[..., None] * softmax
+    return (grad,)
+
+
+@_vjp("load_balance_loss")
+def vjp_load_balance_loss(dout, router_probs, *, assignment=None, reduction="mean", **_):
+    # aux = E·Σ_e f_e·P_e,  P_e = mean_t p[t,e];  ∂aux/∂p[t,e] = E·f_e/T
+    p = np.asarray(router_probs, dtype=np.float64)
+    n_experts, n_tokens = p.shape[-1], p.shape[-2]
+    idx = np.argmax(p, axis=-1) if assignment is None else np.asarray(assignment, dtype=np.int64)
+    f = np.eye(n_experts, dtype=np.float64)[idx].mean(axis=-2)   # (.., E) fraction routed
+    scale = np.asarray(_reduction_cotangent(dout, p.shape[:-2], reduction))
+    g_e = (n_experts / n_tokens) * f
+    g_e = g_e * scale[..., None] if scale.ndim > 0 else g_e * scale
+    grad = np.broadcast_to(g_e[..., None, :], p.shape).copy()    # (.., T, E)
+    return (grad,)
+
+
 @_vjp("ddpm_noise_pred_loss")
 def vjp_ddpm_noise_pred_loss(dout, pred_noise, true_noise, *, reduction="mean", **kwargs):
     return vjp_mse_loss(dout, pred_noise, true_noise, reduction=reduction, **kwargs)

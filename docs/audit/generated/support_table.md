@@ -185,12 +185,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `huber_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `load_balance_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `log_cosh_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `mae_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `mse_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `smooth_l1_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `vlb_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `z_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | partial | reference | ready | none |
 | `moe` | moe | public | public | registered | complete | partial | reference | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
@@ -313,7 +315,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | loop_nest | 7 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· |
-| loss | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| loss | 13 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |

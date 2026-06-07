@@ -604,6 +604,35 @@ def jvp_asymmetric_bce(primals, tangents, *, pos_weight=1.0, neg_weight=1.0,
     return _reduce_loss(loss, tangent, reduction)
 
 
+@_jvp("z_loss")
+def jvp_z_loss(primals, tangents, *, reduction="mean", **_):
+    (z,) = primals
+    (dz,) = tangents
+    z = np.asarray(z, dtype=np.float64)
+    m = z.max(axis=-1, keepdims=True)
+    e = np.exp(z - m)
+    denom = e.sum(axis=-1, keepdims=True)
+    softmax = e / denom
+    lse = m[..., 0] + np.log(denom[..., 0])
+    loss = lse * lse
+    tangent = 2.0 * lse * np.sum(softmax * dz, axis=-1)        # d(lse²) = 2·lse·(softmax·dz)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("load_balance_loss")
+def jvp_load_balance_loss(primals, tangents, *, assignment=None, reduction="mean", **_):
+    (p,) = primals
+    (dp,) = tangents
+    p = np.asarray(p, dtype=np.float64)
+    n_experts = p.shape[-1]
+    idx = np.argmax(p, axis=-1) if assignment is None else np.asarray(assignment, dtype=np.int64)
+    f = np.eye(n_experts, dtype=np.float64)[idx].mean(axis=-2)  # (.., E)
+    P = p.mean(axis=-2)                                         # (.., E)
+    aux = n_experts * np.sum(f * P, axis=-1)
+    tangent = n_experts * np.sum(f * np.asarray(dp).mean(axis=-2), axis=-1)
+    return _reduce_loss(aux, tangent, reduction)
+
+
 @_jvp("cross_entropy_loss")
 def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     from tessera import losses as ts_losses

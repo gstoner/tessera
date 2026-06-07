@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 435 |
-| `transpose_rule` | 0 | 439 |
-| `sharding_rule` | 33 | 406 |
-| `lowering_rule` | 0 | 439 |
-| `backend_kernel` | 439 | 0 |
+| `batching_rule` | 4 | 437 |
+| `transpose_rule` | 0 | 441 |
+| `sharding_rule` | 33 | 408 |
+| `lowering_rule` | 0 | 441 |
+| `backend_kernel` | 441 | 0 |
 
 ## Per-category breakdown
 
@@ -37,7 +37,7 @@
 | S10 | `optimizer` | 3 | — | — | — | — | 3 |
 | S10 | `schedule` | 8 | — | — | — | — | 8 |
 | S10 | `grad_transform` | 7 | — | — | — | — | 7 |
-| S11 | `loss` | 27 | — | — | — | — | 27 |
+| S11 | `loss` | 29 | — | — | — | — | 29 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
 | M6 | `ebm` | 13 | — | — | 5 | — | 13 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
@@ -90,7 +90,7 @@
 | S5 | 7 | 0 | 0 | 0 | 7 |
 | S7 | 50 | 0 | 0 | 7 | 50 |
 | S10 | 18 | 0 | 0 | 0 | 18 |
-| S11 | 31 | 0 | 0 | 0 | 31 |
+| S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 13 | 0 | 0 | 5 | 13 |
 | other | 249 | 4 | 0 | 21 | 249 |

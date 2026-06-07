@@ -129,6 +129,7 @@ linear_attn,state,,1,1,1
 linear_attn_state,state,,1,0,0
 linear_general,pure,,1,1,0
 lion,pure,,1,0,0
+load_balance_loss,pure,,1,0,0
 log,pure,,1,0,0
 log1p,pure,,1,0,0
 log_cosh_loss,pure,,1,0,0
@@ -252,3 +253,4 @@ var,pure,,1,0,0
 view,pure,,1,0,0
 vlb_loss,pure,,1,0,0
 where,pure,,1,0,0
+z_loss,pure,,1,0,0

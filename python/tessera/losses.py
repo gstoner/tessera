@@ -121,6 +121,51 @@ def asymmetric_bce(
     return _reduce(loss, reduction)
 
 
+def z_loss(router_logits, reduction: str = "mean"):
+    """Router z-loss (ST-MoE / PaLM): penalize large router logits by the
+    squared log-partition so the softmax denominator stays bounded::
+
+        z_loss = reduce( logsumexp(router_logits, axis=-1)² )
+
+    Acts as a numerical-stability regularizer on an MoE router; differentiable
+    in ``router_logits``. ``reduction`` is taken over the token / leading axes.
+    """
+    logits = _asarray(router_logits).astype(np.float64, copy=False)
+    lse = _logsumexp(logits, axis=-1)                  # (..,) over experts
+    return _reduce(lse * lse, reduction)
+
+
+def load_balance_loss(router_probs, *, assignment=None, reduction: str = "mean"):
+    """Switch-Transformer load-balancing auxiliary loss::
+
+        aux = E · Σ_e  f_e · P_e
+
+    where ``E`` is the expert count, ``f_e`` is the fraction of tokens routed to
+    expert ``e`` (a hard top-1 ``argmax`` — treated as a constant, stop-gradient),
+    and ``P_e`` is the mean router probability mass on expert ``e``. The gradient
+    flows only through ``P_e``, which pushes the router toward a uniform load.
+
+    Args:
+        router_probs: post-softmax probabilities, shape ``(..., T, E)``.
+        assignment:   optional precomputed top-1 expert indices, shape
+                      ``(..., T)``; defaults to ``argmax(router_probs, -1)``.
+        reduction:    ``"mean"`` averages the per-leading-group aux losses;
+                      ``"sum"`` adds them; ``"none"`` returns them per group.
+    """
+    p = _asarray(router_probs).astype(np.float64, copy=False)
+    n_experts = p.shape[-1]
+    n_tokens = p.shape[-2]
+    if assignment is None:
+        idx = np.argmax(p, axis=-1)
+    else:
+        idx = _asarray(assignment).astype(np.int64)
+    one_hot = np.eye(n_experts, dtype=np.float64)[idx]     # (..., T, E)
+    f = one_hot.mean(axis=-2)                              # (..., E) fraction routed
+    P = p.mean(axis=-2)                                    # (..., E) mean prob mass
+    aux = n_experts * np.sum(f * P, axis=-1)               # (...,) or scalar
+    return _reduce(np.asarray(aux), reduction)
+
+
 def focal_loss(logits, targets, gamma: float = 2.0, alpha: float | None = None, reduction: str = "mean"):
     logits = _asarray(logits).astype(np.float64, copy=False)
     targets = _asarray(targets)
@@ -342,6 +387,8 @@ __all__ = [
     "asymmetric_bce",
     "binary_cross_entropy_loss",
     "contrastive_loss",
+    "load_balance_loss",
+    "z_loss",
     "cosine_embedding_loss",
     "cross_entropy_loss",
     "ctc_loss",

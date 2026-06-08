@@ -22,9 +22,9 @@ gpu = pytest.mark.skipif(
     not _GPU, reason="apple_gpu runtime / libtessera_jit unavailable")
 
 
-def test_sentinel_and_envelope():
-    from tessera import _apple_gpu_dispatch as agd
-    assert agd._SENTINEL_SYMBOL == "tessera_apple_gpu_count_nonzero_lastaxis_f32"
+def test_envelope_has_candidate_axis_ops():
+    # The sentinel moves as kernels land (owned by the newest-symbol test); here
+    # we only assert the candidate-axis ops are in the apple_gpu envelope.
     for op in ("tessera.popcount", "tessera.count_nonzero"):
         assert op in _driver._APPLE_GPU_RUNTIME_OPS
         assert op in _runtime._APPLE_GPU_RUNTIME_OPS

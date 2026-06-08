@@ -85,7 +85,12 @@ def test_report_surfaces_current_apple_gpu_native_rows() -> None:
         assert row["metrics"]["observed_native_execution"] is True
 
 
-def test_report_keeps_non_runtime_apple_rows_artifact_only() -> None:
+def test_apple_ldt_moe_rows_reach_metal_runtime() -> None:
+    # 2026-06-07: all six LDT/MoE-aux primitives now have dedicated Metal kernels
+    # (MSL + MPSGraph subgraphs) and are in the apple_gpu envelope, so — like the
+    # selective_ssm / grouped_gemm rows above — they report execution_mode
+    # "metal_runtime" (envelope-classified) with a numerically-correct result,
+    # hence optimized_native. (Was artifact_only before the kernels landed.)
     report = build_report(smoke=True, reps=1)
     by_name = {row["operator"]["name"]: row for row in report["rows"]}
     for name in (
@@ -98,9 +103,10 @@ def test_report_keeps_non_runtime_apple_rows_artifact_only() -> None:
     ):
         row = by_name[name]
         assert row["compiler_path"] == "tessera_jit_apple_gpu"
-        assert row["execution_kind"] == "artifact_only"
-        assert row["runtime_status"] == "skipped"
-        assert row["metrics"]["observed_native_execution"] is False
+        assert row["execution_kind"] == "optimized_native"
+        assert row["runtime_status"] == "executable"
+        assert row["metrics"]["execution_mode"] == "metal_runtime"
+        assert row["metrics"]["observed_native_execution"] is True
     assert set(APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES) >= {
         "selective_ssm_scalar_A",
         "grouped_gemm_fused",

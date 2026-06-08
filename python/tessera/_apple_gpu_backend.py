@@ -102,6 +102,9 @@ def _load():
         # MoE-aux / LDT loss ops (MPSGraph subgraphs → scalar).
         ("tessera_apple_gpu_z_loss_f32", [fp, fp, i32, i32]),
         ("tessera_apple_gpu_asymmetric_bce_f32", [fp, fp, fp, i32, flt, flt]),
+        # MoE routing / LDT sampling (MPSGraph argMax/oneHot/select).
+        ("tessera_apple_gpu_load_balance_loss_f32", [fp, fp, i32, i32]),
+        ("tessera_apple_gpu_masked_categorical_f32", [fp, fp, ip, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -259,6 +262,37 @@ def gpu_asymmetric_bce(z: np.ndarray, t: np.ndarray, pos_w: float = 1.0,
     _load().tessera_apple_gpu_asymmetric_bce_f32(
         _ptr(za), _ptr(ta), _ptr(out), int(za.size), float(pos_w), float(neg_w))
     return float(out[0])
+
+
+def gpu_load_balance_loss(router_probs: np.ndarray) -> float:
+    """Switch load-balance aux loss on the Apple GPU (MPSGraph):
+    ``E·Σ_e f_e·P_e`` over the last (expert) axis. Returns a Python float."""
+    a = np.ascontiguousarray(router_probs, dtype=np.float32)
+    if a.ndim < 2:
+        raise AppleGpuError("gpu_load_balance_loss needs a (..., T, E) tensor")
+    experts = int(a.shape[-1])
+    rows = int(a.size // max(1, experts))
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_load_balance_loss_f32(
+        _ptr(a.reshape(rows, experts)), _ptr(out), rows, experts)
+    return float(out[0])
+
+
+def gpu_masked_categorical(logits: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Greedy masked-categorical decision on the Apple GPU (MPSGraph): argmax
+    over the last axis restricted to ``mask>0``. ``logits``/``mask`` are
+    (..., classes); returns int32 indices of shape ``logits.shape[:-1]``."""
+    lg = np.ascontiguousarray(logits, dtype=np.float32)
+    mk = np.ascontiguousarray(np.broadcast_to(np.asarray(mask, np.float32), lg.shape))
+    if lg.ndim < 1:
+        raise AppleGpuError("gpu_masked_categorical needs a >=1-D tensor")
+    classes = int(lg.shape[-1])
+    rows = int(lg.size // max(1, classes))
+    out = np.zeros((rows,), np.int32)
+    _load().tessera_apple_gpu_masked_categorical_f32(
+        _ptr(lg.reshape(rows, classes)), _ptr(mk.reshape(rows, classes)),
+        _i32ptr(out), rows, classes)
+    return out.reshape(lg.shape[:-1])
 
 
 def gpu_softmax(x: np.ndarray) -> np.ndarray:

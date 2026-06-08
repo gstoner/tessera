@@ -33,15 +33,16 @@ from benchmarks.common import (
 
 
 LDT_PRIMITIVE_GAPS: tuple[str, ...] = (
-    "candidate_axis_count_nonzero",
+    # GPU-backed via dedicated Metal kernels (2026-06-07): candidate_axis
+    # count_nonzero, masked_categorical_sample, asymmetric_bce all execute
+    # through metal_runtime now. Remaining are composites without a dedicated
+    # GPU op (empty_cell_conflict / singleton derive from the GPU count_nonzero).
     "empty_cell_conflict",
     "singleton_cell_detection",
     "lattice_meet_bool_mask",
     "lattice_join_solution_alpha_or",
     "threshold_eliminate",
-    "masked_categorical_sample",
     "branch_pin_update",
-    "asymmetric_bce_per_cell_ce_loss",
 )
 
 MODEL_PRIMITIVE_GAPS: dict[str, tuple[str, ...]] = {
@@ -86,8 +87,8 @@ APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES: tuple[str, ...] = (
 )
 
 REGISTRY_MISMATCH_NOTES: tuple[str, ...] = (
-    "capabilities.supports_op currently reports artifact_only for several Apple GPU ops that file-based tests execute through metal_runtime",
-    "benchmark rows treat observed metal_runtime execution as stronger evidence than the conservative registry status",
+    "all six LDT/MoE-aux primitives (count_nonzero, popcount, masked_categorical, asymmetric_bce, z_loss, load_balance_loss) now execute through metal_runtime via dedicated Metal kernels (MSL + MPSGraph subgraphs)",
+    "the integrated lattice_reasoning_step is a host-orchestrated branching composition, so its row stays artifact-only by nature; its primitives have stronger optimized_native rows",
 )
 
 

@@ -2120,6 +2120,38 @@ extern "C" void tessera_apple_gpu_asymmetric_bce_f32(const float* z,
   out[0] = static_cast<float>(acc / std::max(1, n));
 }
 
+extern "C" void tessera_apple_gpu_load_balance_loss_f32(const float* probs,
+                                                        float* out, int32_t rows,
+                                                        int32_t experts) {
+  std::vector<double> f(experts, 0.0), P(experts, 0.0);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = probs + static_cast<std::size_t>(r) * experts;
+    int32_t am = 0;
+    for (int32_t e = 1; e < experts; ++e) if (row[e] > row[am]) am = e;
+    f[am] += 1.0;
+    for (int32_t e = 0; e < experts; ++e) P[e] += row[e];
+  }
+  double s = 0.0;
+  for (int32_t e = 0; e < experts; ++e) s += (f[e] / rows) * (P[e] / rows);
+  out[0] = static_cast<float>(experts * s);
+}
+
+extern "C" void tessera_apple_gpu_masked_categorical_f32(const float* logits,
+                                                         const float* mask,
+                                                         int32_t* out,
+                                                         int32_t rows,
+                                                         int32_t classes) {
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* lr = logits + static_cast<std::size_t>(r) * classes;
+    const float* mr = mask + static_cast<std::size_t>(r) * classes;
+    int32_t best = -1;
+    float bestv = -3.0e38f;
+    for (int32_t c = 0; c < classes; ++c)
+      if (mr[c] > 0.0f && lr[c] > bestv) { bestv = lr[c]; best = c; }
+    out[r] = best < 0 ? 0 : best;
+  }
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float* logp_new, const float* logp_old, const float* advantages,
     float* out, int32_t n, float clip_epsilon) {

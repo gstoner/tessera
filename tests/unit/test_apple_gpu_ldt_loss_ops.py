@@ -24,8 +24,9 @@ gpu = pytest.mark.skipif(
 
 def test_sentinel_and_envelope():
     from tessera import _apple_gpu_dispatch as agd
-    assert agd._SENTINEL_SYMBOL == "tessera_apple_gpu_asymmetric_bce_f32"
-    for op in ("tessera.loss.z_loss", "tessera.loss.asymmetric_bce"):
+    assert agd._SENTINEL_SYMBOL == "tessera_apple_gpu_masked_categorical_f32"
+    for op in ("tessera.loss.z_loss", "tessera.loss.asymmetric_bce",
+               "tessera.loss.load_balance_loss", "tessera.masked_categorical"):
         assert op in _driver._APPLE_GPU_RUNTIME_OPS
         assert op in _runtime._APPLE_GPU_RUNTIME_OPS
 
@@ -97,3 +98,68 @@ def test_non_mean_reduction_falls_back_correct():
     np.testing.assert_allclose(float(np.asarray(f(logits))),
                                float(L.z_loss(logits, reduction="sum")),
                                rtol=1e-5, atol=1e-5)
+
+
+# ── load_balance_loss (argMax/oneHot subgraph) ─────────────────────────────── #
+@gpu
+@pytest.mark.parametrize("shape", [(64, 8), (128, 4), (32, 16)])
+def test_gpu_load_balance_matches_reference(shape):
+    rng = np.random.default_rng(sum(shape))
+    p = np.exp(rng.standard_normal(shape)).astype(np.float32)
+    p /= p.sum(-1, keepdims=True)
+    np.testing.assert_allclose(agb.gpu_load_balance_loss(p),
+                               float(L.load_balance_loss(p)), rtol=1e-5, atol=1e-6)
+
+
+@gpu
+def test_gpu_load_balance_bounds():
+    E = 8
+    uniform = np.full((512, E), 1.0 / E, np.float32)
+    np.testing.assert_allclose(agb.gpu_load_balance_loss(uniform), 1.0, atol=1e-4)
+    conc = np.zeros((512, E), np.float32); conc[:, 0] = 1.0
+    np.testing.assert_allclose(agb.gpu_load_balance_loss(conc), float(E), atol=1e-3)
+
+
+@gpu
+def test_load_balance_jit_metal_runtime():
+    @ts.jit(target="apple_gpu")
+    def f(p):
+        return ts.ops.load_balance_loss(p)
+    rng = np.random.default_rng(7)
+    p = np.exp(rng.standard_normal((64, 8))).astype(np.float32); p /= p.sum(-1, keepdims=True)
+    assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+    np.testing.assert_allclose(float(np.asarray(f(p))),
+                               float(L.load_balance_loss(p)), rtol=1e-5, atol=1e-6)
+
+
+# ── masked_categorical (select/argMax subgraph) ────────────────────────────── #
+@gpu
+def test_gpu_masked_categorical_greedy():
+    logits = np.array([[1.0, 5.0, 2.0], [3.0, 0.0, 4.0]], np.float32)
+    mask = np.array([[1, 0, 1], [1, 1, 0]], np.float32)   # mask out each row's max
+    np.testing.assert_array_equal(agb.gpu_masked_categorical(logits, mask), [2, 0])
+    full = np.ones_like(mask)
+    np.testing.assert_array_equal(
+        agb.gpu_masked_categorical(logits, full), np.argmax(logits, axis=-1))
+
+
+@gpu
+@pytest.mark.parametrize("shape", [(8, 5), (16, 9), (4, 3)])
+def test_gpu_masked_categorical_matches_reference(shape):
+    rng = np.random.default_rng(sum(shape))
+    logits = rng.standard_normal(shape).astype(np.float32)
+    mask = (rng.random(shape) < 0.6); mask[:, 0] = True
+    expect = ts.ops.masked_categorical(logits, mask.astype(np.int32))
+    np.testing.assert_array_equal(
+        agb.gpu_masked_categorical(logits, mask.astype(np.float32)), expect)
+
+
+@gpu
+def test_masked_categorical_jit_metal_runtime():
+    @ts.jit(target="apple_gpu")
+    def f(lo, m):
+        return ts.ops.masked_categorical(lo, m)
+    lo = np.array([[1.0, 5.0, 2.0], [3.0, 0.0, 4.0]], np.float32)
+    m = np.array([[1, 0, 1], [1, 1, 0]], np.float32)
+    np.testing.assert_array_equal(np.asarray(f(lo, m)), [2, 0])
+    assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"

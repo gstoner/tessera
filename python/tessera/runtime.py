@@ -2264,7 +2264,7 @@ _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
 # LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
 # innermost-axis nonzero count).
-_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce"})
+_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
@@ -2534,6 +2534,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         elif op_name == "tessera.loss.asymmetric_bce":
             values[str(result)] = _apple_gpu_dispatch_asymmetric_bce(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name == "tessera.loss.load_balance_loss":
+            values[str(result)] = _apple_gpu_dispatch_load_balance_loss(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name == "tessera.masked_categorical":
+            values[str(result)] = _apple_gpu_dispatch_masked_categorical(
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
             # Phase 8.4.x will broaden further; today single-op gating in
@@ -4072,6 +4078,32 @@ def _apple_gpu_dispatch_asymmetric_bce(operands: Any, kwargs: Any, np: Any) -> A
     return np.float32(agb.gpu_asymmetric_bce(
         z, t, float(kwargs.get("pos_weight", 1.0)),
         float(kwargs.get("neg_weight", 1.0))))
+
+
+def _apple_gpu_dispatch_load_balance_loss(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Switch load-balance aux loss on Metal (MPSGraph). reduction="mean" + the
+    default top-1 argmax assignment run on GPU; otherwise fall back."""
+    from . import _apple_gpu_backend as agb
+    p = np.asarray(operands[0], dtype=np.float32)
+    if (kwargs.get("reduction", "mean") != "mean"
+            or kwargs.get("assignment") is not None or p.ndim < 2):
+        import tessera.losses as _L
+        return _L.load_balance_loss(p, assignment=kwargs.get("assignment"),
+                                    reduction=kwargs.get("reduction", "mean"))
+    return np.float32(agb.gpu_load_balance_loss(p))
+
+
+def _apple_gpu_dispatch_masked_categorical(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Greedy masked categorical on Metal (MPSGraph argMax). Only the greedy
+    case (no rng key) runs on GPU; a keyed sample falls back to numpy."""
+    from . import _apple_gpu_backend as agb
+    logits = np.asarray(operands[0], dtype=np.float32)
+    mask = np.asarray(operands[1], dtype=np.float32)
+    if kwargs.get("key") is not None:
+        import tessera as _ts
+        return _ts.ops.masked_categorical(logits, mask, key=kwargs.get("key"),
+                                          axis=kwargs.get("axis", -1))
+    return agb.gpu_masked_categorical(logits, mask)
 
 
 def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> Any:

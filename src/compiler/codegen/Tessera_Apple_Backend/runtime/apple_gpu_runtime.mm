@@ -16086,6 +16086,180 @@ extern "C" void tessera_apple_gpu_asymmetric_bce_f32(const float *z,
   out[0] = (float)(acc / std::max(1, n));
 }
 
+//===---------------------------------------------------------------------===//
+// MoE / LDT routing ops on Metal (MPSGraph subgraphs — argMax / oneHot / select).
+//
+//  * load_balance_loss — Switch aux E·Σ_e f_e·P_e (f_e from top-1 argmax,
+//                        P_e mean prob mass). Scalar.
+//  * masked_categorical — greedy argMax over a candidate mask (masked-out →
+//                        −inf). int32 indices (rows,).
+//===---------------------------------------------------------------------===//
+static bool mpsg_run_load_balance_loss_f32(MetalDeviceContext &ctx,
+                                           const float *probs, float *out,
+                                           int32_t rows, int32_t experts) {
+  if (rows <= 0 || experts <= 0)
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)rows * experts * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufP, ctx, probs, bytes);
+    if (!bufP)
+      return false;
+    NSArray<NSNumber *> *shape = @[ @(rows), @(experts) ];
+    NSArray<NSNumber *> *axis0 = @[ @0 ];
+    NSArray<NSNumber *> *axisAll = @[ @0, @1 ];
+    NSString *key =
+        [NSString stringWithFormat:@"lbl:f32:%d:%d", rows, experts];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pp;
+    MPSGraphTensor *aux;
+    if (entry) {
+      g = entry[0];
+      pp = ((NSArray *)entry[1])[0];
+      aux = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pp = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *idx =
+          [g reductionArgMaximumWithTensor:pp axis:1 name:nil];  // (rows,1)
+      MPSGraphTensor *idxFlat =
+          [g reshapeTensor:idx withShape:@[ @(rows) ] name:nil];
+      MPSGraphTensor *oneHot =
+          [g oneHotWithIndicesTensor:idxFlat
+                               depth:(NSUInteger)experts
+                            dataType:MPSDataTypeFloat32
+                             onValue:1.0
+                            offValue:0.0
+                                name:nil];                       // (rows,experts)
+      MPSGraphTensor *f = [g meanOfTensor:oneHot axes:axis0 name:nil];
+      MPSGraphTensor *P = [g meanOfTensor:pp axes:axis0 name:nil];
+      MPSGraphTensor *fp =
+          [g multiplicationWithPrimaryTensor:f secondaryTensor:P name:nil];
+      MPSGraphTensor *s = [g reductionSumWithTensor:fp axes:axisAll name:nil];
+      MPSGraphTensor *eConst =
+          [g constantWithScalar:(double)experts dataType:MPSDataTypeFloat32];
+      aux = [g multiplicationWithPrimaryTensor:s secondaryTensor:eConst name:nil];
+      mpsg_cache_put(key, @[ g, @[ pp ], aux ]);
+    }
+    MPSGraphTensorData *pd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufP shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pp : pd}
+                                    targetTensors:@[ aux ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[aux];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_load_balance_loss_f32(const float *probs,
+                                                        float *out, int32_t rows,
+                                                        int32_t experts) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_load_balance_loss_f32(ctx, probs, out, rows, experts))
+    return;
+  std::vector<double> f(experts, 0.0), P(experts, 0.0);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = probs + (std::size_t)r * experts;
+    int32_t am = 0;
+    for (int32_t e = 1; e < experts; ++e)
+      if (row[e] > row[am]) am = e;
+    f[am] += 1.0;
+    for (int32_t e = 0; e < experts; ++e) P[e] += row[e];
+  }
+  double s = 0.0;
+  for (int32_t e = 0; e < experts; ++e)
+    s += (f[e] / rows) * (P[e] / rows);
+  out[0] = (float)(experts * s);
+}
+
+static bool mpsg_run_masked_categorical_f32(MetalDeviceContext &ctx,
+                                            const float *logits,
+                                            const float *mask, int32_t *out,
+                                            int32_t rows, int32_t classes) {
+  if (rows <= 0 || classes <= 0)
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)rows * classes * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufL, ctx, logits, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufM, ctx, mask, bytes);
+    if (!bufL || !bufM)
+      return false;
+    NSArray<NSNumber *> *shape = @[ @(rows), @(classes) ];
+    NSString *key =
+        [NSString stringWithFormat:@"maskedcat:f32:%d:%d", rows, classes];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pl;
+    MPSGraphTensor *pm;
+    MPSGraphTensor *idxFlat;
+    if (entry) {
+      g = entry[0];
+      pl = ((NSArray *)entry[1])[0];
+      pm = ((NSArray *)entry[1])[1];
+      idxFlat = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pl = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pm = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *zero =
+          [g constantWithScalar:0.0 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *pred =
+          [g greaterThanWithPrimaryTensor:pm secondaryTensor:zero name:nil];
+      MPSGraphTensor *ninf =
+          [g constantWithScalar:-1.0e30 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *masked = [g selectWithPredicateTensor:pred
+                                        truePredicateTensor:pl
+                                       falsePredicateTensor:ninf
+                                                       name:nil];
+      MPSGraphTensor *idx =
+          [g reductionArgMaximumWithTensor:masked axis:1 name:nil];  // (rows,1)
+      idxFlat = [g reshapeTensor:idx withShape:@[ @(rows) ] name:nil];
+      mpsg_cache_put(key, @[ g, @[ pl, pm ], idxFlat ]);
+    }
+    MPSGraphTensorData *ld =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufL shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *md =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufM shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pl : ld, pm : md}
+                                    targetTensors:@[ idxFlat ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[idxFlat];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_masked_categorical_f32(const float *logits,
+                                                         const float *mask,
+                                                         int32_t *out,
+                                                         int32_t rows,
+                                                         int32_t classes) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_masked_categorical_f32(ctx, logits, mask, out, rows, classes))
+    return;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *lr = logits + (std::size_t)r * classes;
+    const float *mr = mask + (std::size_t)r * classes;
+    int32_t best = -1;
+    float bestv = -3.0e38f;
+    for (int32_t c = 0; c < classes; ++c) {
+      if (mr[c] > 0.0f && lr[c] > bestv) { bestv = lr[c]; best = c; }
+    }
+    out[r] = best < 0 ? 0 : best;
+  }
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float *logp_new, const float *logp_old, const float *advantages,
     float *out, int32_t n, float clip_epsilon) {

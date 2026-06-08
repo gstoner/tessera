@@ -230,7 +230,7 @@ linear_attn_state,2,0,1,2,0,,needs_direct_test,category default for 'attention'
 linear_general,12,0,0,12,0,,needs_direct_test,category default for 'model_layer'
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 lion,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-load_balance_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
+load_balance_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
 load_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 load_state,13,0,2,13,0,,structural_only,category default for 'serialization'
 log,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
@@ -247,7 +247,7 @@ lt,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
-masked_categorical,6,0,0,6,0,,structural_only,unclassified — defaults to structural_only
+masked_categorical,9,0,0,9,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 matmul,269,141,14,410,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

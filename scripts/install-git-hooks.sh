@@ -22,6 +22,6 @@ for h in .githooks/*; do
 done
 echo ""
 echo "The pre-push hook runs (before each push):"
-echo "  1. scripts/check_spec_sync.py      — op-catalog<->PYTHON_API_SPEC + generated-md registry (<1s)"
+echo "  1. scripts/check_spec_sync.py      — op-catalog<->PYTHON_API_SPEC + generated-md registry + docs-freshness (<1s)"
 echo "  2. scripts/check_generated_docs.sh — generated audit-dashboard drift (~30s)"
 echo "Bypass once with: TESSERA_SKIP_DOC_DRIFT=1 git push"

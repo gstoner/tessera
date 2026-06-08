@@ -31,6 +31,11 @@ def test_generated_markdown_registered_passes_on_clean_tree():
     assert chk._check_generated_markdown_registered() == []
 
 
+def test_docs_dated_passes_on_clean_tree():
+    chk = _load_checker()
+    assert chk._check_docs_dated() == []
+
+
 def test_main_exit_zero_on_clean_tree():
     chk = _load_checker()
     assert chk.main() == 0

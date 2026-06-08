@@ -47,6 +47,23 @@ def _check_generated_markdown_registered() -> list[str]:
     return sorted(p.name for p in (on_disk - registered))
 
 
+def _check_docs_dated() -> list[str]:
+    """Every canonical-tree doc carries a ``last_updated:`` marker or is in the
+    docs-freshness allow-list (mirrors test_docs_freshness). The allow-list lives
+    in the test, so import it from there to stay single-source."""
+    try:
+        from tessera.compiler.docs_manifest import undated_docs
+    except Exception:                                    # noqa: BLE001
+        return []                                        # CI still gates
+    sys.path.insert(0, str(ROOT / "tests" / "unit"))
+    try:
+        from test_docs_freshness import _KNOWN_UNDATED_DOCS  # type: ignore
+    except Exception:                                    # noqa: BLE001
+        return []
+    undated = {e.path for e in undated_docs()}
+    return sorted(undated - set(_KNOWN_UNDATED_DOCS))
+
+
 def main() -> int:
     problems: list[str] = []
 
@@ -67,13 +84,22 @@ def main() -> int:
             "or — if it is a derived *report*, not a drift-gated dashboard — move "
             "it out of docs/audit/generated/ to docs/audit/ root (Decision #26).")
 
+    undated = _check_docs_dated()
+    if undated:
+        problems.append(
+            "docs missing a last_updated marker (not in the freshness allow-list):\n"
+            f"    {undated}\n"
+            "  Add YAML frontmatter `last_updated: YYYY-MM-DD` to the doc, or "
+            "extend _KNOWN_UNDATED_DOCS in tests/unit/test_docs_freshness.py.")
+
     if problems:
         print("[check_spec_sync] FAIL\n", file=sys.stderr)
         for p in problems:
             print("  - " + p + "\n", file=sys.stderr)
         return 1
 
-    print("[check_spec_sync] ok: op-catalog/spec + generated-markdown registry in sync")
+    print("[check_spec_sync] ok: op-catalog/spec + generated-markdown registry + "
+          "docs-freshness in sync")
     return 0
 
 

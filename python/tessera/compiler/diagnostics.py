@@ -170,6 +170,14 @@ class ConstrainedDiagnosticCode(str, Enum):
     #: ``@clifford_jit(target=...)`` got an unsupported target name.
     CLIFFORD_UNSUPPORTED_TARGET = "CLIFFORD_UNSUPPORTED_TARGET"
 
+    #: A ``@clifford_jit`` callable was invoked with a Multivector whose
+    #: algebra signature has no GPU kernel.  v1 ships only ``Cl(3,0)``
+    #: (``cl30``) kernels; other signatures (e.g. spacetime ``Cl(1,3)``)
+    #: are front-end-expressible but have no backend, so the lane refuses
+    #: rather than silently running the numpy reference.  Use the plain
+    #: ``tessera.ga.*`` lane for non-Cl(3,0) algebras.
+    CLIFFORD_UNSUPPORTED_SIGNATURE = "CLIFFORD_UNSUPPORTED_SIGNATURE"
+
     # ── Complex / Visual Complex lane ─────────────────────────────────
     #: ``@complex_jit`` / ``@analytic_symbolic`` rejected the function:
     #: it contains a non-holomorphic op (``complex_conjugate``,

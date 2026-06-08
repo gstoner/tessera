@@ -517,6 +517,37 @@ def _validate_target(target: str) -> None:
         )
 
 
+#: The only algebra signature with shipped Apple-GPU (cl30) kernels in v1.
+_SUPPORTED_SIGNATURE = (3, 0, 0)
+
+
+def _require_cl30_args(args: tuple[Any, ...], source_name: str) -> None:
+    """Gate the front-end/backend signature mismatch (close-out gap #4).
+
+    The Multivector front-end accepts arbitrary ``Cl(p,q,r)`` algebras, but v1
+    ships GPU kernels only for ``Cl(3,0)`` (``cl30``).  A ``@clifford_jit``
+    callable invoked with, say, spacetime ``Cl(1,3)`` inputs would otherwise
+    silently route to the numpy reference inside ``tessera.ga.*`` — exactly the
+    silent-fallback anti-pattern (Decision #21).  Mirror the existing
+    decoration-time ``dtype != 'f32'`` gate: refuse at call time with a stable
+    diagnostic.  Callers who genuinely want a non-Cl(3,0) algebra use the plain
+    ``tessera.ga.*`` numpy lane (no decorator).
+    """
+    for arg in args:
+        algebra = getattr(arg, "algebra", None)
+        sig = getattr(algebra, "signature", None)
+        if sig is not None and tuple(sig) != _SUPPORTED_SIGNATURE:
+            from .diagnostics import ConstrainedDiagnosticCode as _Code
+            raise CliffordJitError(
+                f"@clifford_jit({source_name}): v1 ships Apple-GPU kernels only "
+                f"for Cl(3,0); got a Multivector over Cl{tuple(sig)}. No GPU "
+                f"kernel exists for this signature — use the plain tessera.ga.* "
+                f"lane (numpy) for non-Cl(3,0) algebras, or open an issue to add "
+                f"Cl{tuple(sig)} kernels.",
+                code=_Code.CLIFFORD_UNSUPPORTED_SIGNATURE.value,
+            )
+
+
 def _validate_plan(plan: tuple[CliffordOpPlanEntry, ...]) -> None:
     """Every traced op must have an ``apple_gpu=fused`` manifest entry.
 
@@ -710,6 +741,9 @@ class _IRCompiledCallable(CliffordCompiledCallable):
                 op_name=f"@clifford_jit({self.artifact.source_name})",
                 arg_names=arg_names,
             )
+        # Gap #4: refuse non-Cl(3,0) signatures (no GPU kernel) rather than
+        # silently falling back to numpy inside tessera.ga.*.
+        _require_cl30_args(args, self.artifact.source_name)
         if self._native_required:
             # M3: refuse to dispatch if the host can't actually run
             # native MSL kernels — the alternative (silent reference
@@ -775,6 +809,10 @@ class _LazyCompiledCallable(CliffordCompiledCallable):
         self._native_required = bool(native_required)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        # Gap #4: gate non-Cl(3,0) signatures before the first-call compile
+        # trace (which would otherwise numpy-execute the unsupported algebra).
+        if not kwargs:
+            _require_cl30_args(args, self.artifact.source_name)
         if self._native_required:
             from .fallback import (
                 TesseraNativeRequiredError, classify_host,

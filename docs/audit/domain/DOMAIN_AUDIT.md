@@ -24,6 +24,21 @@ autodiff domain audit material.
   emission but the OP_SPECS import skips the registry-owned names). Callable/RNG
   EBM ops (energy, partition_function*, langevin_step, decode_init) intentionally
   stay on `tessera.ebm` — they cannot be flat `tessera.ops` ops.
+- **GA close-out tranche (2026-06-08):** `clifford_rotor_sandwich` (the GA
+  rotation-application op) joined the shim + autodiff + apple_gpu envelope
+  (VJP/JVP composed from the geometric-product + reverse rules). The
+  planned-entry coverage path now consults the live `_VJPS`/`_JVPS` registries,
+  so GA/EBM rows reflect registered autodiff (**GA 10 complete / 7 planned**;
+  the 7 = `exp`/`log` autodiff-pending + 5 unimplemented differential ops). The
+  10 EBM callable/RNG ops are reclassified `vjp/jvp=not_applicable` (they take an
+  `energy_fn` callable / RNG key — not flat tape ops). **Cl(1,3) signature gate
+  (gap #4):** the Multivector front-end allow-list is `{Cl(3,0), Cl(1,3)}` but
+  only Cl(3,0) has kernels; `@clifford_jit` now refuses a non-Cl(3,0) call at the
+  boundary with `CLIFFORD_UNSUPPORTED_SIGNATURE` (Decision #21) instead of
+  silently running the numpy reference — the plain `tessera.ga.*` lane stays
+  available for Cl(1,3). **Still open:** Apple-CPU GA/EBM native kernels, EBM
+  training losses (CD/PCD/ISM/DSM), GA/EBM cross-op fusion, and `exp`/`log`
+  autodiff.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

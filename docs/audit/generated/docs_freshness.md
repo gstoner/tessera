@@ -6,9 +6,9 @@ Reference date for staleness: **2026-06-07**.
 
 ## Headline
 
-- **65** docs catalogued across the canonical doc tree.
-- **61** carry a `last_updated:` marker; **4** are undated (invisible to the freshness audit until tagged).
-- **24** updated within the last 30 days.
+- **66** docs catalogued across the canonical doc tree.
+- **62** carry a `last_updated:` marker; **4** are undated (invisible to the freshness audit until tagged).
+- **25** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -103,6 +103,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler_gaps_1_3_5_plan.md` | - | _undated_ | - | _body_ |
 | `frontend_substrate_plan.md` | - | _undated_ | - | _body_ |
 | `proposals/cute_tessera_enhancement.md` | Proposal | 2026-04-26 | 42 | ✓ |
+| `proposals/tiled_ssd_tile_ir_schedule.md` | - | 2026-06-07 | 0 | ✓ |
 | `stencil_materialize_and_window_lowering.md` | - | _undated_ | - | _body_ |
 | `system_overview.md` | Informative | 2026-05-20 | 18 | ✓ |
 | `tessera_target_ir_usage_guide.md` | Informative | 2026-04-30 | 38 | ✓ |

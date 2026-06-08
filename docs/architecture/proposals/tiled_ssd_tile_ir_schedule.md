@@ -1,3 +1,10 @@
+---
+status: Decided (deferred, sequenced to NVIDIA/AMD execution)
+classification: Architecture Decision
+authority: Proposal; defers to docs/architecture/Compiler/Tessera_Compiler_TileIR_Design.md
+last_updated: 2026-06-07
+---
+
 # Tiled Fused SSD as a Tile-IR Schedule — Architecture Decision
 
 > **Status (2026-06-07): decided, deferred, sequenced to NVIDIA/AMD execution.**

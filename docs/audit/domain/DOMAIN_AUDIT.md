@@ -75,14 +75,30 @@ autodiff domain audit material.
   12 complete / 5 planned**; the 5 planned are exactly the unimplemented
   differential-form ops (`hodge_star`, `ext_deriv`, `codiff`, `vec_deriv`,
   `integral`) — their autodiff lands when those get Python implementations. The
-  pre-existing bf16 `control_for` "bug" was a **stale tessera-opt binary**, not a
-  defect: the `carry_arg_index` verifier already accepts multi-arg loops with
-  loop-invariant captures, and the test passes after rebuild. **Apple-CPU GA/EBM
+  bf16 `control_for` failure is resolved by a `ControlForOp::verify`
+  `carry_arg_index` branch (committed alongside): a loop that closes over a
+  loop-invariant const (e.g. a weight matrix) carries one value while passing the
+  const as an invariant capture, so #operands (2) ≠ #results (1) is legal —
+  mirroring `ControlWhileOp`. **Apple-CPU GA/EBM
   "native kernels" (#3) reassessed as a non-gap** — GA ops are fixed 8/16-coeff
   contractions and EBM energies/losses are small reductions, regimes where the
   numpy reference is already optimal on CPU (a BLAS/Accelerate hand-off adds call
   overhead for no gain); the canonical Apple-CPU path for GA/EBM is the numpy
   reference by design.
+- **GA differential-form autodiff (2026-06-08) — GA autodiff surface fully
+  closed.** The 5 "deferred" differential-form ops were already *implemented* in
+  `tessera.ga.calculus` (not unimplemented as previously stated); they only
+  lacked autodiff + canonical-surface presence. All are linear, so the JVP
+  re-applies the op to the tangent and the VJP is the exact discrete adjoint:
+  `hodge_star` (flat constant 8×8 map → transpose); `ext_deriv`/`vec_deriv`
+  (Σ_axis blade-matrix · np.gradient → transpose blade-matrix + transpose
+  gradient operator); `codiff = hodge∘ext∘hodge` (adjoint composition). All four
+  joined the canonical `tessera.ops` shim (apple_gpu envelope → `metal_runtime`
+  via cl30 kernels; field ops take a `spacing=` kwarg). `clifford_integral`
+  reduces over a `Manifold`/callable, so it is not a flat-tape op (vjp/jvp
+  `not_applicable`, like the EBM callable ops). **GA autodiff is now 16 complete
+  / 1 not_applicable / 0 planned** — the entire surface. Correctness locked by
+  the adjoint identity `<op(x),g> == <x,adj(g)>` + JVP-vs-finite-difference.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

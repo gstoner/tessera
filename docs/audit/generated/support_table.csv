@@ -83,14 +83,14 @@ lion,functional_optimizer_step,public,public,registered,complete,partial,referen
 momentum,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
 sgd,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
 fused_epilogue,fused_epilogue,public,public,registered,complete,partial,reference,ready,none
-clifford_codiff,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_codiff,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_conjugate,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_exp,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
-clifford_ext_deriv,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_ext_deriv,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_geometric_product,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_grade_involution,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_grade_projection,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
-clifford_hodge_star,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_hodge_star,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_inner,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_integral,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
 clifford_left_contraction,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
@@ -99,7 +99,7 @@ clifford_norm,geometric_algebra,public,public,not_applicable,complete,fused,fuse
 clifford_norm_squared,geometric_algebra,public,public,registered,complete,partial,planned,ready,none
 clifford_reverse,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_rotor_sandwich,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
-clifford_vec_deriv,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_vec_deriv,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_wedge,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 dynamic_slice,indexing,public,public,registered,complete,partial,reference,ready,none
 dynamic_update_slice,indexing,public,public,registered,complete,partial,reference,ready,none

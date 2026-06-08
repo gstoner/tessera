@@ -2352,6 +2352,107 @@ def vjp_clifford_rotor_sandwich(dout, rotor, x, **_):
     return (_sum_to_shape(dR, np.shape(rotor)), _sum_to_shape(dx, np.shape(x)))
 
 
+# hodge_star is a constant linear map ⋆ω = reverse(ω)·I; JVP re-applies it,
+# VJP applies the transpose of its (cached) 8×8 matrix M (M[:,i] = ⋆e_i).
+_CLIFFORD_HODGE_MATRIX = None
+
+
+def _clifford_hodge_matrix():
+    global _CLIFFORD_HODGE_MATRIX
+    if _CLIFFORD_HODGE_MATRIX is None:
+        from .. import _clifford_ops as C
+        e = np.eye(8, dtype=np.float64)
+        _CLIFFORD_HODGE_MATRIX = np.stack(
+            [np.asarray(C.clifford_hodge_star(e[i]), dtype=np.float64) for i in range(8)],
+            axis=1,
+        )  # M[:, i] = ⋆e_i  ⇒  out = M @ in
+    return _CLIFFORD_HODGE_MATRIX
+
+
+@_vjp("clifford_hodge_star")
+def vjp_clifford_hodge_star(dout, a, **_):
+    m = _clifford_hodge_matrix()
+    da = np.einsum("ji,...j->...i", m, np.asarray(dout, dtype=np.float64))
+    return (_sum_to_shape(da, np.shape(a)),)
+
+
+# ── differential-form field operators (linear finite-difference stencils) ──── #
+# ext_deriv/vec_deriv/codiff are linear maps on the flat field array (*spatial,8):
+# JVP = re-apply the op to the tangent; VJP = the exact discrete adjoint
+# (transpose of the constant blade matrix on the last axis + transpose of the
+# np.gradient operator along each spatial axis). Validated to the adjoint
+# identity <op(x),g> == <x,adj(g)> in test_clifford_field_autodiff.py.
+_CLIFFORD_GRAD_MATS: dict = {}
+_CLIFFORD_BLADE_MATS: dict = {}
+
+
+def _clifford_grad_matrix(length, h):
+    key = (int(length), float(h))
+    if key not in _CLIFFORD_GRAD_MATS:
+        d = np.zeros((key[0], key[0]), dtype=np.float64)
+        for i in range(key[0]):
+            e = np.zeros(key[0], dtype=np.float64)
+            e[i] = 1.0
+            d[:, i] = np.gradient(e, key[1], edge_order=2)
+        _CLIFFORD_GRAD_MATS[key] = d
+    return _CLIFFORD_GRAD_MATS[key]
+
+
+def _clifford_blade_matrix(kind, axis):
+    key = (kind, int(axis))
+    if key not in _CLIFFORD_BLADE_MATS:
+        from ..ga import calculus as cal
+        from ..ga.signature import Cl
+        cl = Cl(3, 0, 0)
+        probe = np.eye(8)  # row j = e_j; out[j] = B·e_j ⇒ B = out.T
+        fn = cal._wedge_left_basis if kind == "wedge" else cal._apply_left_basis_product
+        _CLIFFORD_BLADE_MATS[key] = np.asarray(fn(cl, axis, probe), dtype=np.float64).T
+    return _CLIFFORD_BLADE_MATS[key]
+
+
+def _clifford_apply_axis(field, mat, axis):
+    moved = np.moveaxis(field, axis, 0)
+    res = np.tensordot(mat, moved, axes=([1], [0]))
+    return np.moveaxis(res, 0, axis)
+
+
+def _clifford_field_adjoint(g, spacing, blade_kind):
+    # adj(g) = Σ_axis D_axisᵀ( B_axisᵀ · g )   (ext: wedge blade; vec: geo blade)
+    g = np.asarray(g, dtype=np.float64)
+    ndim = g.ndim - 1
+    sp = tuple(spacing) if spacing is not None else tuple(1.0 for _ in range(ndim))
+    out = np.zeros_like(g)
+    for ax in range(ndim):
+        b = _clifford_blade_matrix(blade_kind, ax)
+        bt_g = np.einsum("ji,...j->...i", b, g)          # Bᵀ on the last axis
+        d = _clifford_grad_matrix(g.shape[ax], sp[ax])
+        out = out + _clifford_apply_axis(bt_g, d.T, ax)  # Dᵀ along the spatial axis
+    return out
+
+
+def _clifford_hodge_adjoint(x):
+    m = _clifford_hodge_matrix()
+    return np.einsum("ji,...j->...i", m, np.asarray(x, dtype=np.float64))
+
+
+@_vjp("clifford_ext_deriv")
+def vjp_clifford_ext_deriv(dout, field, *, spacing=None, **_):
+    return (_clifford_field_adjoint(dout, spacing, "wedge"),)
+
+
+@_vjp("clifford_vec_deriv")
+def vjp_clifford_vec_deriv(dout, field, *, spacing=None, **_):
+    return (_clifford_field_adjoint(dout, spacing, "geo"),)
+
+
+@_vjp("clifford_codiff")
+def vjp_clifford_codiff(dout, field, *, spacing=None, **_):
+    # codiff = hodge ∘ ext ∘ hodge ⇒ adjoint = hodge* ∘ ext* ∘ hodge*.
+    g = _clifford_hodge_adjoint(dout)
+    g = _clifford_field_adjoint(g, spacing, "wedge")
+    return (_clifford_hodge_adjoint(g),)
+
+
 @_vjp("clifford_reverse")
 def vjp_clifford_reverse(dout, a, **_):
     from .. import _clifford_ops as C

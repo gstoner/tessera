@@ -64,8 +64,10 @@ _SPECS = [
     OpSpec("momentum", "tessera.momentum", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("adafactor", "tessera.adafactor", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("lion", "tessera.lion", 2, 3, lowering="functional_optimizer_step"),
-    OpSpec("ebm_energy_quadratic", "tessera.ebm.energy_quadratic", 2, 2,
-           lowering="ebm"),
+    # `ebm_energy_quadratic` is canonicalized to the flat-lane graph name
+    # `tessera.ebm_energy_quadratic` below; the dotted Graph IR ODS spelling
+    # `tessera.ebm.energy_quadratic` is a LEGACY_GRAPH_OP_ALIASES entry so it
+    # does not collide on public_name with the canonical flat-lane OpSpec.
     OpSpec("ebm_langevin_step", "tessera.ebm.langevin_step", 3, 3,
            lowering="ebm"),
     OpSpec("transpose", "tessera.transpose", 1, 1, lowering="layout_transform"),
@@ -287,6 +289,10 @@ _SPECS = [
     OpSpec("clifford_grade_involution", "tessera.clifford_grade_involution", 1, 1, lowering="elementwise"),
     OpSpec("clifford_conjugate", "tessera.clifford_conjugate", 1, 1, lowering="elementwise"),
     OpSpec("clifford_grade_projection", "tessera.clifford_grade_projection", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_hodge_star", "tessera.clifford_hodge_star", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_ext_deriv", "tessera.clifford_ext_deriv", 1, 1, lowering="stencil"),
+    OpSpec("clifford_vec_deriv", "tessera.clifford_vec_deriv", 1, 1, lowering="stencil"),
+    OpSpec("clifford_codiff", "tessera.clifford_codiff", 1, 1, lowering="stencil"),
     OpSpec("clifford_exp", "tessera.clifford_exp", 1, 1, lowering="elementwise"),
     OpSpec("clifford_log", "tessera.clifford_log", 1, 1, lowering="elementwise"),
     OpSpec("clifford_norm", "tessera.clifford_norm", 1, 1, lowering="reduction"),
@@ -379,6 +385,8 @@ SUPPORTED_CPU_OPS: frozenset[str] = frozenset(GRAPH_OP_TO_SPEC)
 LEGACY_GRAPH_OP_ALIASES: dict[str, str] = {
     "tessera.gemm": "tessera.matmul",
     "tessera.conv2d": "tessera.conv2d_nhwc",
+    # Dotted Graph IR ODS spelling → canonical flat EBM lane op (see op spec note).
+    "tessera.ebm.energy_quadratic": "tessera.ebm_energy_quadratic",
 }
 
 

@@ -89,6 +89,13 @@ def clifford_conjugate(a: Any) -> np.ndarray:
     return _coeffs(G.conjugate(_mv(a)))
 
 
+def clifford_hodge_star(a: Any) -> np.ndarray:
+    """Hodge star ``⋆ω = reverse(ω)·I`` (Hestenes convention; pointwise, linear).
+    Routes Cl(3,0) f32 to the cl30 ``hodge_star`` kernel."""
+    from tessera.ga import calculus as cal
+    return _coeffs(cal.hodge_star(_mv(a)))
+
+
 def clifford_grade_projection(a: Any, grade: int | None = None, *, k: int | None = None) -> np.ndarray:
     # `grade` may be passed positionally OR by keyword (`grade=`/`k=`). The
     # autodiff tape only captures array-like positional args + kwargs, so the
@@ -117,6 +124,37 @@ def clifford_log(a: Any) -> np.ndarray:
     return _coeffs(G.log_mv(_mv(a)))
 
 
+# ── differential-form field operators (Cl(3,0), grid layout (*spatial, 8)) ──── #
+# These wrap the tessera.ga.calculus MultivectorField ops. The flat array is the
+# field's coefficient layout; `spacing` (per-axis grid step) is a static kwarg so
+# the autodiff tape captures it. All three are LINEAR finite-difference stencils
+# (their VJP is the exact discrete adjoint; see autodiff/vjp.py).
+def _field(coeffs: Any, spacing):
+    from tessera.ga.calculus import MultivectorField
+    arr = np.asarray(coeffs)
+    if spacing is None:
+        spacing = tuple(1.0 for _ in range(arr.ndim - 1))
+    return MultivectorField(arr, _cl(), spacing=tuple(spacing))
+
+
+def clifford_ext_deriv(field: Any, *, spacing=None) -> np.ndarray:
+    """Exterior derivative ``dω = Σ_i e_i ∧ ∂_i ω`` on a sampled Cl(3,0) field."""
+    from tessera.ga import calculus as cal
+    return np.asarray(cal.ext_deriv(_field(field, spacing)).values)
+
+
+def clifford_vec_deriv(field: Any, *, spacing=None) -> np.ndarray:
+    """Geometric gradient ``∂F = Σ_i e_i · ∂_i F`` on a sampled Cl(3,0) field."""
+    from tessera.ga import calculus as cal
+    return np.asarray(cal.vec_deriv(_field(field, spacing)).values)
+
+
+def clifford_codiff(field: Any, *, spacing=None) -> np.ndarray:
+    """Codifferential ``d*ω = ⋆d⋆ω`` on a sampled Cl(3,0) field."""
+    from tessera.ga import calculus as cal
+    return np.asarray(cal.codiff(_field(field, spacing)).values)
+
+
 # ── norms (scalar-valued) ──────────────────────────────────────────────────── #
 def clifford_norm(a: Any) -> np.ndarray:
     from tessera.ga import ops as G
@@ -139,6 +177,10 @@ CLIFFORD_OPS = {
     "clifford_grade_involution": clifford_grade_involution,
     "clifford_conjugate": clifford_conjugate,
     "clifford_grade_projection": clifford_grade_projection,
+    "clifford_hodge_star": clifford_hodge_star,
+    "clifford_ext_deriv": clifford_ext_deriv,
+    "clifford_vec_deriv": clifford_vec_deriv,
+    "clifford_codiff": clifford_codiff,
     "clifford_exp": clifford_exp,
     "clifford_log": clifford_log,
     "clifford_norm": clifford_norm,

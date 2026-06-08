@@ -2274,6 +2274,9 @@ _APPLE_GPU_CLIFFORD_OPS = frozenset({
     "tessera.clifford_rotor_sandwich",
     "tessera.clifford_reverse", "tessera.clifford_grade_involution",
     "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
+    "tessera.clifford_hodge_star",
+    "tessera.clifford_ext_deriv", "tessera.clifford_vec_deriv",
+    "tessera.clifford_codiff",
     "tessera.clifford_exp", "tessera.clifford_log",
     "tessera.clifford_norm", "tessera.clifford_norm_squared",
 })
@@ -4089,6 +4092,8 @@ def _apple_gpu_dispatch_clifford(op_name: Any, operands: Any, kwargs: Any, np: A
     if short == "clifford_grade_projection":
         grade = kwargs.get("grade", kwargs.get("k"))
         return fn(np.asarray(operands[0]), grade=grade)
+    if short in ("clifford_ext_deriv", "clifford_vec_deriv", "clifford_codiff"):
+        return fn(np.asarray(operands[0]), spacing=kwargs.get("spacing"))
     return fn(*[np.asarray(o) for o in operands])
 
 

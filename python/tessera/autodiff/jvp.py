@@ -696,6 +696,41 @@ def jvp_clifford_rotor_sandwich(primals, tangents, **_):
     return out, tan
 
 
+@_jvp("clifford_hodge_star")
+def jvp_clifford_hodge_star(primals, tangents, **_):
+    # Linear map → tangent is the op applied to the tangent.
+    from .. import _clifford_ops as C
+    a = primals[0]
+    da = tangents[0]
+    return (np.asarray(C.clifford_hodge_star(a), dtype=np.float64),
+            np.asarray(C.clifford_hodge_star(da), dtype=np.float64))
+
+
+# Differential-form field operators are linear ⇒ tangent = op(tangent).
+@_jvp("clifford_ext_deriv")
+def jvp_clifford_ext_deriv(primals, tangents, *, spacing=None, **_):
+    from .. import _clifford_ops as C
+    out = np.asarray(C.clifford_ext_deriv(primals[0], spacing=spacing), dtype=np.float64)
+    tan = np.asarray(C.clifford_ext_deriv(tangents[0], spacing=spacing), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_vec_deriv")
+def jvp_clifford_vec_deriv(primals, tangents, *, spacing=None, **_):
+    from .. import _clifford_ops as C
+    out = np.asarray(C.clifford_vec_deriv(primals[0], spacing=spacing), dtype=np.float64)
+    tan = np.asarray(C.clifford_vec_deriv(tangents[0], spacing=spacing), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_codiff")
+def jvp_clifford_codiff(primals, tangents, *, spacing=None, **_):
+    from .. import _clifford_ops as C
+    out = np.asarray(C.clifford_codiff(primals[0], spacing=spacing), dtype=np.float64)
+    tan = np.asarray(C.clifford_codiff(tangents[0], spacing=spacing), dtype=np.float64)
+    return out, tan
+
+
 @_jvp("clifford_reverse")
 def jvp_clifford_reverse(primals, tangents, **_):
     from .. import _clifford_ops as C

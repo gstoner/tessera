@@ -45,14 +45,14 @@ each row into a single E2E tier.
 | ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_exp`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
-| ``clifford_ext_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_ext_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_geometric_product`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_grade_involution`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_grade_projection`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
-| ``clifford_hodge_star`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_hodge_star`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_inner`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_integral`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
@@ -60,7 +60,7 @@ each row into a single E2E tier.
 | ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
-| ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |

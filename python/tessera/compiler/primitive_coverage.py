@@ -1825,6 +1825,12 @@ _NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
     "ebm_decode_init",
     "ebm_sphere_langevin_step", "ebm_bivector_langevin_step",
     "ebm_sphere_langevin_sample", "ebm_bivector_langevin_sample",
+    # clifford_integral reduces an integrand over a Manifold (and accepts a
+    # Python callable integrand) — it is differentiable in principle but cannot
+    # be a flat (...,8) tape op (the manifold/callable args aren't tape values),
+    # so its flat-lane vjp/jvp are not_applicable. ext_deriv/vec_deriv/codiff DO
+    # have flat-array shims + registered VJP/JVP (see _clifford_ops / autodiff).
+    "clifford_integral",
 })
 # Drop masked_fill from the non-diff set (it has a registered VJP).
 _NONDIFFERENTIABLE_PER_NAME = _NONDIFFERENTIABLE_PER_NAME - {"masked_fill"}
@@ -2019,6 +2025,8 @@ _GA4_OWNED_OP_SPEC_NAMES: frozenset[str] = frozenset({
     "clifford_inner", "clifford_reverse", "clifford_grade_involution",
     "clifford_conjugate", "clifford_grade_projection", "clifford_norm",
     "clifford_rotor_sandwich", "clifford_exp", "clifford_log",
+    "clifford_hodge_star", "clifford_ext_deriv", "clifford_vec_deriv",
+    "clifford_codiff",
     # EBM equivalent: these names have authoritative `category="ebm"` rows from
     # the python-primitive / `_partial` registry. Their op_catalog OpSpecs feed
     # the AST graph builder (apple_gpu envelope) but must not shadow those rows.

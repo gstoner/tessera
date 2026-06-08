@@ -1902,9 +1902,26 @@ LogicalResult ControlForOp::verify() {
   if (getStep() == 0)
     return emitOpError("step must be non-zero");
   int64_t n = static_cast<int64_t>(getIterArgs().size());
-  if (auto idx = getCarryArgIndex())
-    if (*idx < 0 || *idx >= n)
-      return emitOpError("carry_arg_index out of range: ") << *idx;
+  // Executable-payload form: `iter_args` are [carry + loop-invariant consts],
+  // `carry_arg_index` selects the one loop-carried operand (the rest are
+  // invariant captures, not carried). The op yields exactly one result whose
+  // type matches the carried operand — mirroring ControlWhileOp. This is what
+  // the front-end emits whenever the loop closes over consts (a weight matrix,
+  // etc.); requiring one-result-per-operand here would reject every loop with
+  // a single const capture.
+  if (auto opt = getCarryArgIndex()) {
+    int64_t idx = static_cast<int64_t>(*opt);
+    if (idx < 0 || idx >= n)
+      return emitOpError("carry_arg_index out of range: ") << idx;
+    if (getResults().size() != 1)
+      return emitOpError("loop with carry_arg_index carries one value "
+                         "(#results=")
+             << getResults().size() << ", expected 1)";
+    if (n > 0 && getResults()[0].getType() != getIterArgs()[idx].getType())
+      return emitOpError("for result type must match the carried iter_arg type");
+    return verifyControlPayload(getOperation(), "body");
+  }
+  // Legacy IR-only form (no carry_arg_index): every iter_arg is loop-carried.
   if (getResults().size() != getIterArgs().size())
     return emitOpError("loop must carry each iter_arg to a result (#results=")
            << getResults().size() << ", #iter_args=" << getIterArgs().size()

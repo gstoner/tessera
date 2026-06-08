@@ -40,7 +40,11 @@ def test_tiny_training_step_with_data_loss_optimizer_and_checkpoint(tmp_path):
     }
     ckpt = tmp_path / "tiny_training_state.npz"
     ts.checkpoint.save_state(state, ckpt)
-    loaded = ts.checkpoint.load_state(ckpt, collections=("params", "metrics"))
+    loaded = ts.checkpoint.load_state(
+        ckpt,
+        collections=("params", "metrics"),
+        trust_treedef=True,
+    )
     np.testing.assert_allclose(loaded["params"]["w"], params1["w"])
     np.testing.assert_allclose(loaded["metrics"]["loss"], loss0)
 

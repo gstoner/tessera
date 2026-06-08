@@ -73,6 +73,12 @@ def test_report_has_no_unknown_execution_kind() -> None:
 def test_report_surfaces_current_apple_gpu_native_rows() -> None:
     report = build_report(smoke=True, reps=1)
     by_name = {row["operator"]["name"]: row for row in report["rows"]}
+    if "apple_gpu_current_compiler_primitives" in by_name:
+        row = by_name["apple_gpu_current_compiler_primitives"]
+        assert row["runtime_status"] == "skipped"
+        assert row["compiler_path"] == "runtime_unavailable"
+        assert "apple_gpu runtime" in row["reason"]
+        return
     for name in (
         "apple_gpu_mamba2_selective_ssm",
         "apple_gpu_grouped_gemm_fused",
@@ -93,6 +99,12 @@ def test_apple_ldt_moe_rows_reach_metal_runtime() -> None:
     # hence optimized_native. (Was artifact_only before the kernels landed.)
     report = build_report(smoke=True, reps=1)
     by_name = {row["operator"]["name"]: row for row in report["rows"]}
+    if "apple_gpu_current_compiler_primitives" in by_name:
+        row = by_name["apple_gpu_current_compiler_primitives"]
+        assert row["runtime_status"] == "skipped"
+        assert row["compiler_path"] == "runtime_unavailable"
+        assert "apple_gpu runtime" in row["reason"]
+        return
     for name in (
         "apple_gpu_ldt_count_nonzero",
         "apple_gpu_ldt_popcount",
@@ -127,4 +139,20 @@ def test_cli_writes_smoke_json(tmp_path: Path) -> None:
     payload = json.loads(out.read_text())
     assert payload["benchmark"] == "lattice_reasoning_core"
     assert payload["mode"] == "smoke"
-    assert len(payload["rows"]) >= 18
+    names = {row["operator"]["name"] for row in payload["rows"]}
+    assert {
+        "lattice_reasoning_step",
+        "ldt_count_nonzero_tessera",
+        "ldt_popcount_tessera",
+        "ldt_masked_categorical_tessera",
+        "ldt_asymmetric_bce_tessera",
+        "mopd_policy_loss_core",
+        "mamba2_ssd_core",
+        "gqa_decode_core",
+        "latent_moe_core",
+        "lattice_reasoning_compiler_artifact",
+    } <= names
+    if "apple_gpu_current_compiler_primitives" in names:
+        assert len(payload["rows"]) == 11
+    else:
+        assert len(payload["rows"]) >= 18

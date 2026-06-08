@@ -22,6 +22,29 @@ APPLE_STUB = (
 )
 
 
+def _fn_body(source: str, signature_prefix: str) -> str:
+    """Return the brace-balanced body of the function whose definition starts
+    with ``signature_prefix`` (e.g. ``static bool mpsg_run_ppo_policy_loss_f32``).
+
+    Precise by construction — only the function's own ``{ ... }`` is returned, so
+    unrelated code elsewhere in the .mm (e.g. a later kernel that happens to sit
+    before the function's ``extern "C"`` wrapper) can't leak into the assertions.
+    """
+    i = source.find(signature_prefix)
+    assert i != -1, f"{signature_prefix!r} not found"
+    brace = source.find("{", i)
+    assert brace != -1, f"no opening brace after {signature_prefix!r}"
+    depth = 0
+    for j in range(brace, len(source)):
+        if source[j] == "{":
+            depth += 1
+        elif source[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[i:j + 1]
+    raise AssertionError(f"unbalanced braces for {signature_prefix!r}")
+
+
 def _metal_runtime_active() -> tuple[bool, str]:
     if sys.platform != "darwin":
         return False, f"non-darwin host ({sys.platform})"
@@ -80,13 +103,10 @@ def _ppo_artifact(executable: bool = True, *, extended: bool = False,
 
 def test_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
     source = APPLE_MM.read_text(encoding="utf-8")
-    match = re.search(
-        r"static bool mpsg_run_ppo_policy_loss_f32[\s\S]*?"
-        r"extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_f32",
-        source,
-    )
-    assert match, "PPO MPSGraph helper missing"
-    body = match.group(0)
+    # The extern "C" wrapper must exist (the symbol is shipped)...
+    assert "extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_f32" in source
+    # ...and the MPSGraph helper it calls must be MPSGraph-backed (no host loop).
+    body = _fn_body(source, "static bool mpsg_run_ppo_policy_loss_f32")
     assert "MPSGraph" in body
     assert "runWithMTLCommandQueue" in body
     assert "meanOfTensor" in body
@@ -96,13 +116,8 @@ def test_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
 
 def test_extended_ppo_value_symbol_is_mpsgraph_backed_not_host_reference():
     source = APPLE_MM.read_text(encoding="utf-8")
-    match = re.search(
-        r"static bool mpsg_run_ppo_policy_loss_ex_f32[\s\S]*?"
-        r"extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_f32",
-        source,
-    )
-    assert match, "extended PPO MPSGraph helper missing"
-    body = match.group(0)
+    assert "extern \"C\" int32_t tessera_apple_gpu_ppo_policy_loss_ex_f32" in source
+    body = _fn_body(source, "static bool mpsg_run_ppo_policy_loss_ex_f32")
     assert "MPSGraph" in body
     assert "runWithMTLCommandQueue" in body
     assert "reductionSumWithTensor" in body

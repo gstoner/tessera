@@ -168,13 +168,17 @@ latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
 asymmetric_bce,loss,public,public,registered,complete,partial,reference,ready,none
 binary_cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
+contrastive_divergence_loss,loss,public,public,registered,complete,partial,reference,ready,none
 cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 ddpm_noise_pred_loss,loss,public,public,registered,complete,partial,reference,ready,none
+denoising_score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
 huber_loss,loss,public,public,registered,complete,partial,reference,ready,none
+implicit_score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
 load_balance_loss,loss,public,public,registered,complete,partial,reference,ready,none
 log_cosh_loss,loss,public,public,registered,complete,partial,reference,ready,none
 mae_loss,loss,public,public,registered,complete,partial,reference,ready,none
 mse_loss,loss,public,public,registered,complete,partial,reference,ready,none
+persistent_cd_loss,loss,public,public,registered,complete,partial,reference,ready,none
 score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
 smooth_l1_loss,loss,public,public,registered,complete,partial,reference,ready,none
 vlb_loss,loss,public,public,registered,complete,partial,reference,ready,none

@@ -64,6 +64,7 @@ complex_pow,pure,,1,0,0
 complex_sqrt,pure,,1,0,0
 conformal_energy_on_sphere,pure,,1,0,0
 conformal_jacobian,pure,,1,0,0
+contrastive_divergence_loss,pure,,1,0,0
 conv2d,pure,pure,1,1,0
 conv3d,pure,pure,1,1,0
 cos,pure,,1,0,0
@@ -77,6 +78,7 @@ dbar,pure,,1,0,0
 dct,pure,,1,1,0
 ddpm_noise_pred_loss,pure,,1,0,0
 deepseek_sparse_attention,state,,1,1,1
+denoising_score_matching_loss,pure,,1,0,0
 dequantize_fp4,pure,,1,1,0
 dequantize_fp6,pure,,1,1,0
 dequantize_fp8,pure,,1,1,0
@@ -120,6 +122,7 @@ gt,pure,,1,0,0
 huber_loss,pure,,1,0,0
 hybrid_attention,state,,1,1,1
 ifft,pure,pure,1,1,0
+implicit_score_matching_loss,pure,,1,0,0
 index_select,pure,,1,0,0
 index_update,pure,,1,0,0
 irfft,pure,pure,1,1,0
@@ -187,6 +190,7 @@ ntk_rope,pure,,1,0,0
 pack,movement,,1,0,0
 pad,pure,,1,0,0
 permute,pure,,1,0,0
+persistent_cd_loss,pure,,1,0,0
 popcount,pure,,1,0,0
 pow,pure,,1,0,0
 power_attn,state,,1,0,0

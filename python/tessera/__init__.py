@@ -3239,6 +3239,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     load_balance_loss_ref = _lazy_module_fn("losses", "load_balance_loss")
     ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
     score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
+    # EBM training losses (#5) — CD / PCD / ISM / DSM.
+    contrastive_divergence_loss_ref = _lazy_module_fn("losses", "contrastive_divergence_loss")
+    persistent_cd_loss_ref = _lazy_module_fn("losses", "persistent_cd_loss")
+    implicit_score_matching_loss_ref = _lazy_module_fn("losses", "implicit_score_matching_loss")
+    denoising_score_matching_loss_ref = _lazy_module_fn("losses", "denoising_score_matching_loss")
     vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
     normalize_group_advantages_ref = _lazy_module_fn("rl", "normalize_group_advantages")
     ppo_policy_loss_ref = _lazy_module_fn("rl", "ppo_policy_loss")
@@ -3487,6 +3492,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "load_balance_loss": load_balance_loss_ref,
         "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
         "score_matching_loss": score_matching_loss_ref,
+        "contrastive_divergence_loss": contrastive_divergence_loss_ref,
+        "persistent_cd_loss": persistent_cd_loss_ref,
+        "implicit_score_matching_loss": implicit_score_matching_loss_ref,
+        "denoising_score_matching_loss": denoising_score_matching_loss_ref,
         "vlb_loss": vlb_loss_ref,
         "normalize_group_advantages": normalize_group_advantages_ref,
         "ppo_policy_loss": ppo_policy_loss_ref,
@@ -3829,6 +3838,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         load_balance_loss=load_balance_loss_ref,
         ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
         score_matching_loss=score_matching_loss_ref,
+        contrastive_divergence_loss=contrastive_divergence_loss_ref,
+        persistent_cd_loss=persistent_cd_loss_ref,
+        implicit_score_matching_loss=implicit_score_matching_loss_ref,
+        denoising_score_matching_loss=denoising_score_matching_loss_ref,
         vlb_loss=vlb_loss_ref,
         normalize_group_advantages=normalize_group_advantages_ref,
         ppo_policy_loss=ppo_policy_loss_ref,

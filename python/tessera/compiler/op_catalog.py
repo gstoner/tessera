@@ -316,6 +316,12 @@ _SPECS = [
     OpSpec("load_balance_loss", "tessera.loss.load_balance_loss", 1, 1, lowering="loss"),
     OpSpec("ddpm_noise_pred_loss", "tessera.loss.ddpm_noise_pred", 2, 2, lowering="loss"),
     OpSpec("score_matching_loss", "tessera.loss.score_matching", 2, 2, lowering="loss"),
+    # EBM training losses (#5) — reductions over energy/score tensors; apple_gpu
+    # routes reduction="mean" to the EBM-loss MPSGraph kernels (runtime.py).
+    OpSpec("contrastive_divergence_loss", "tessera.loss.contrastive_divergence", 2, 2, lowering="loss"),
+    OpSpec("persistent_cd_loss", "tessera.loss.persistent_cd", 2, 2, lowering="loss"),
+    OpSpec("implicit_score_matching_loss", "tessera.loss.implicit_score_matching", 2, 2, lowering="loss"),
+    OpSpec("denoising_score_matching_loss", "tessera.loss.denoising_score_matching", 3, 3, lowering="loss"),
     OpSpec("vlb_loss", "tessera.loss.vlb", 1, 1, lowering="loss"),
     OpSpec("ppo_policy_loss", "tessera.rl.ppo_policy_loss", 3, 6, lowering="rl_loss"),
     OpSpec("grpo_policy_loss", "tessera.rl.grpo_policy_loss", 2, 3, lowering="rl_loss"),

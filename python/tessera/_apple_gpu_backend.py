@@ -105,6 +105,11 @@ def _load():
         # MoE routing / LDT sampling (MPSGraph argMax/oneHot/select).
         ("tessera_apple_gpu_load_balance_loss_f32", [fp, fp, i32, i32]),
         ("tessera_apple_gpu_masked_categorical_f32", [fp, fp, ip, i32, i32]),
+        # EBM training losses (MPSGraph reductions → scalar).
+        ("tessera_apple_gpu_ebm_energy_diff_mean_f32", [fp, fp, fp, i32]),
+        ("tessera_apple_gpu_ebm_half_mse_f32", [fp, fp, fp, i32]),
+        ("tessera_apple_gpu_ebm_ism_f32", [fp, fp, fp, i32, i32]),
+        ("tessera_apple_gpu_ebm_dsm_f32", [fp, fp, fp, fp, i32, i32, flt]),
     ):
         try:
             sym = getattr(lib, name)
@@ -275,6 +280,61 @@ def gpu_load_balance_loss(router_probs: np.ndarray) -> float:
     out = np.zeros((1,), np.float32)
     _load().tessera_apple_gpu_load_balance_loss_f32(
         _ptr(a.reshape(rows, experts)), _ptr(out), rows, experts)
+    return float(out[0])
+
+
+def gpu_ebm_energy_diff_mean(energy_pos: np.ndarray, energy_neg: np.ndarray) -> float:
+    """Contrastive-Divergence / PCD loss on the Apple GPU (MPSGraph):
+    ``mean(E⁺ − E⁻)`` over all elements. Returns a Python float."""
+    ep = np.ascontiguousarray(energy_pos, dtype=np.float32)
+    en = np.ascontiguousarray(np.broadcast_to(np.asarray(energy_neg, np.float32), ep.shape))
+    ep = ep.ravel(); en = en.ravel()
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_ebm_energy_diff_mean_f32(_ptr(ep), _ptr(en), _ptr(out), int(ep.size))
+    return float(out[0])
+
+
+def gpu_ebm_half_mse(a: np.ndarray, b: np.ndarray) -> float:
+    """Explicit score-matching loss on the Apple GPU (MPSGraph):
+    ``½·mean_all((a − b)²)``. Returns a Python float."""
+    aa = np.ascontiguousarray(a, dtype=np.float32)
+    bb = np.ascontiguousarray(np.broadcast_to(np.asarray(b, np.float32), aa.shape))
+    aa = aa.ravel(); bb = bb.ravel()
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_ebm_half_mse_f32(_ptr(aa), _ptr(bb), _ptr(out), int(aa.size))
+    return float(out[0])
+
+
+def gpu_ebm_ism(score: np.ndarray, divergence: np.ndarray) -> float:
+    """Implicit score-matching loss on the Apple GPU (MPSGraph):
+    ``mean(½·Σ_D score² + divergence)``. ``score`` is (rows, dim),
+    ``divergence`` is (rows,). Returns a Python float."""
+    s = np.ascontiguousarray(score, dtype=np.float32)
+    if s.ndim < 2:
+        raise AppleGpuError("gpu_ebm_ism needs a (rows, dim) score tensor")
+    dim = int(s.shape[-1])
+    rows = int(s.size // max(1, dim))
+    d = np.ascontiguousarray(np.asarray(divergence, np.float32)).ravel()
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_ebm_ism_f32(_ptr(s.reshape(rows, dim)), _ptr(d), _ptr(out), rows, dim)
+    return float(out[0])
+
+
+def gpu_ebm_dsm(score: np.ndarray, y_clean: np.ndarray, y_noisy: np.ndarray,
+                inv_sigma2: float) -> float:
+    """Denoising score-matching loss on the Apple GPU (MPSGraph):
+    ``½·mean_rows(Σ_D (score + (ỹ − y)·inv_sigma2)²)``. All (rows, dim).
+    Returns a Python float."""
+    s = np.ascontiguousarray(score, dtype=np.float32)
+    if s.ndim < 2:
+        raise AppleGpuError("gpu_ebm_dsm needs a (rows, dim) score tensor")
+    dim = int(s.shape[-1])
+    rows = int(s.size // max(1, dim))
+    yc = np.ascontiguousarray(np.broadcast_to(np.asarray(y_clean, np.float32), s.shape)).reshape(rows, dim)
+    yn = np.ascontiguousarray(np.broadcast_to(np.asarray(y_noisy, np.float32), s.shape)).reshape(rows, dim)
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_ebm_dsm_f32(
+        _ptr(s.reshape(rows, dim)), _ptr(yc), _ptr(yn), _ptr(out), rows, dim, float(inv_sigma2))
     return float(out[0])
 
 

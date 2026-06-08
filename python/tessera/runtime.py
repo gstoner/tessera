@@ -2283,11 +2283,19 @@ _APPLE_GPU_EBM_OPS = frozenset({
     "tessera.ebm_energy_quadratic", "tessera.ebm_self_verify",
     "tessera.ebm_refinement", "tessera.ebm_inner_step",
 })
+# EBM training losses (CD / PCD / score-matching / ISM / DSM) — MPSGraph
+# reductions over energy/score tensors. reduction="mean" runs on GPU.
+_APPLE_GPU_EBM_LOSS_OPS = frozenset({
+    "tessera.loss.contrastive_divergence", "tessera.loss.persistent_cd",
+    "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
+    "tessera.loss.denoising_score_matching",
+})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
+    | _APPLE_GPU_EBM_LOSS_OPS
 )
 
 
@@ -2565,6 +2573,10 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         elif op_name in _APPLE_GPU_EBM_OPS:
             values[str(result)] = _apple_gpu_dispatch_ebm(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name in _APPLE_GPU_EBM_LOSS_OPS:
+            values[str(result)] = _apple_gpu_dispatch_ebm_loss(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
@@ -4145,6 +4157,46 @@ def _apple_gpu_dispatch_asymmetric_bce(operands: Any, kwargs: Any, np: Any) -> A
     return np.float32(agb.gpu_asymmetric_bce(
         z, t, float(kwargs.get("pos_weight", 1.0)),
         float(kwargs.get("neg_weight", 1.0))))
+
+
+def _apple_gpu_dispatch_ebm_loss(op_name: Any, operands: Any, kwargs: Any, np: Any) -> Any:
+    """EBM training losses on Metal (MPSGraph reductions). Only reduction="mean"
+    (the default) runs on GPU; sum/none fall back to the numpy reference.
+
+      tessera.loss.contrastive_divergence / persistent_cd → mean(E⁺ − E⁻)
+      tessera.loss.score_matching                        → ½·mean_all((s − t)²)
+      tessera.loss.implicit_score_matching               → mean(½·Σ s² + div)
+      tessera.loss.denoising_score_matching              → mean(½·Σ (s + (ỹ−y)/σ²)²)
+    """
+    from . import _apple_gpu_backend as agb
+    import tessera.losses as _L
+    short = str(op_name).rsplit(".", 1)[-1]
+    reduction = kwargs.get("reduction", "mean")
+    a = np.asarray(operands[0], dtype=np.float32)
+    if short in ("contrastive_divergence", "persistent_cd"):
+        b = np.asarray(operands[1], dtype=np.float32)
+        if reduction != "mean":
+            ref = (_L.contrastive_divergence_loss if short == "contrastive_divergence"
+                   else _L.persistent_cd_loss)
+            return ref(a, b, reduction=reduction)
+        return np.float32(agb.gpu_ebm_energy_diff_mean(a, b))
+    if short == "score_matching":
+        b = np.asarray(operands[1], dtype=np.float32)
+        if reduction != "mean":
+            return _L.score_matching_loss(a, b, reduction=reduction)
+        return np.float32(agb.gpu_ebm_half_mse(a, b))
+    if short == "implicit_score_matching":
+        div = np.asarray(operands[1], dtype=np.float32)
+        if reduction != "mean" or a.ndim < 2:
+            return _L.implicit_score_matching_loss(a, div, reduction=reduction)
+        return np.float32(agb.gpu_ebm_ism(a, div))
+    # denoising_score_matching
+    yc = np.asarray(operands[1], dtype=np.float32)
+    yn = np.asarray(operands[2], dtype=np.float32)
+    sigma = float(kwargs["sigma"])
+    if reduction != "mean" or a.ndim < 2:
+        return _L.denoising_score_matching_loss(a, yc, yn, sigma, reduction=reduction)
+    return np.float32(agb.gpu_ebm_dsm(a, yc, yn, 1.0 / (sigma * sigma)))
 
 
 def _apple_gpu_dispatch_load_balance_loss(operands: Any, kwargs: Any, np: Any) -> Any:

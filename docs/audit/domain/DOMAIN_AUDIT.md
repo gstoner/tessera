@@ -39,6 +39,18 @@ autodiff domain audit material.
   available for Cl(1,3). **Still open:** Apple-CPU GA/EBM native kernels, EBM
   training losses (CD/PCD/ISM/DSM), GA/EBM cross-op fusion, and `exp`/`log`
   autodiff.
+- **EBM training losses on Metal (gap #5, 2026-06-08):** the four EBM training
+  losses — contrastive_divergence / persistent_cd / implicit_score_matching /
+  denoising_score_matching (plus the explicit score_matching) — now have a
+  kernel path. Dedicated MPSGraph reduction kernels
+  (`tessera_apple_gpu_ebm_{energy_diff_mean,half_mse,ism,dsm}_f32`) compute the
+  `reduction="mean"` case on GPU (sum/none fall back to the numpy reference);
+  the ops are on the canonical `tessera.ops` surface + op_catalog
+  (`tessera.loss.*`) + apple_gpu envelope, so `@jit(target="apple_gpu")` reports
+  `execution_mode="metal_runtime"`. All five already had VJP+JVP. **Still open:**
+  Apple-CPU GA/EBM native kernels, GA/EBM cross-op fusion, `exp`/`log` GA
+  autodiff, and a pre-existing bf16 `control_for` lowering bug
+  (iter_args≠results) tracked separately.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

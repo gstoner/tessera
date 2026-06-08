@@ -4,9 +4,9 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 ## Headline
 
-- **261** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **265** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **103** Apple GPU kernel families with per-dtype variants.
+- **107** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 250 |
+| `apple` | 254 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -62,10 +62,14 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `conv3d` | `f16`, `f32` |
 | `count_nonzero_lastaxis` | `f32` |
 | `ebm_decode_init_noise_apply` | `f32` |
+| `ebm_dsm` | `f32` |
 | `ebm_ebt_tiny_refinement_argmin` | `f32` |
+| `ebm_energy_diff_mean` | `f32` |
 | `ebm_energy_quadratic` | `f32` |
 | `ebm_energy_quadratic_value` | `f32` |
+| `ebm_half_mse` | `f32` |
 | `ebm_inner_step` | `f32` |
+| `ebm_ism` | `f32` |
 | `ebm_langevin_step` | `f32` |
 | `ebm_langevin_step_philox` | `f32` |
 | `ebm_langevin_step_value` | `f32` |

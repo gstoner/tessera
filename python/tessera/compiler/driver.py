@@ -504,11 +504,19 @@ _APPLE_GPU_EBM_OPS: frozenset[str] = frozenset({
     "tessera.ebm_refinement", "tessera.ebm_inner_step",
 })
 
+# EBM training losses (CD / PCD / score-matching / ISM / DSM) — MPSGraph
+# reductions; routed to the EBM-loss kernels by runtime.py::_apple_gpu_dispatch_ebm_loss.
+_APPLE_GPU_EBM_LOSS_OPS: frozenset[str] = frozenset({
+    "tessera.loss.contrastive_divergence", "tessera.loss.persistent_cd",
+    "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
+    "tessera.loss.denoising_score_matching",
+})
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
+    | _APPLE_GPU_EBM_LOSS_OPS
 )
 
 

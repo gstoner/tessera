@@ -2136,6 +2136,58 @@ extern "C" void tessera_apple_gpu_load_balance_loss_f32(const float* probs,
   out[0] = static_cast<float>(experts * s);
 }
 
+// EBM training losses (reduction="mean") — non-Darwin reference parity.
+extern "C" void tessera_apple_gpu_ebm_energy_diff_mean_f32(const float* ep,
+                                                           const float* en,
+                                                           float* out,
+                                                           int32_t n) {
+  double acc = 0.0;
+  for (int32_t i = 0; i < n; ++i) acc += static_cast<double>(ep[i]) - en[i];
+  out[0] = static_cast<float>(acc / std::max(1, n));
+}
+
+extern "C" void tessera_apple_gpu_ebm_half_mse_f32(const float* a,
+                                                   const float* b, float* out,
+                                                   int32_t total) {
+  double acc = 0.0;
+  for (int32_t i = 0; i < total; ++i) {
+    double d = static_cast<double>(a[i]) - b[i];
+    acc += d * d;
+  }
+  out[0] = static_cast<float>(0.5 * acc / std::max(1, total));
+}
+
+extern "C" void tessera_apple_gpu_ebm_ism_f32(const float* score,
+                                              const float* div, float* out,
+                                              int32_t rows, int32_t dim) {
+  double acc = 0.0;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = score + static_cast<std::size_t>(r) * dim;
+    double ss = 0.0;
+    for (int32_t c = 0; c < dim; ++c) ss += static_cast<double>(row[c]) * row[c];
+    acc += 0.5 * ss + static_cast<double>(div[r]);
+  }
+  out[0] = static_cast<float>(acc / std::max(1, rows));
+}
+
+extern "C" void tessera_apple_gpu_ebm_dsm_f32(const float* score,
+                                              const float* yc, const float* yn,
+                                              float* out, int32_t rows,
+                                              int32_t dim, float inv_sigma2) {
+  double acc = 0.0;
+  for (int32_t r = 0; r < rows; ++r) {
+    const std::size_t base = static_cast<std::size_t>(r) * dim;
+    double ss = 0.0;
+    for (int32_t c = 0; c < dim; ++c) {
+      double d = static_cast<double>(score[base + c]) +
+                 (static_cast<double>(yn[base + c]) - yc[base + c]) * inv_sigma2;
+      ss += d * d;
+    }
+    acc += 0.5 * ss;
+  }
+  out[0] = static_cast<float>(acc / std::max(1, rows));
+}
+
 extern "C" void tessera_apple_gpu_masked_categorical_f32(const float* logits,
                                                          const float* mask,
                                                          int32_t* out,

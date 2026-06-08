@@ -24,7 +24,9 @@ gpu = pytest.mark.skipif(
 
 def test_sentinel_and_envelope():
     from tessera import _apple_gpu_dispatch as agd
-    assert agd._SENTINEL_SYMBOL == "tessera_apple_gpu_masked_categorical_f32"
+    # The staleness sentinel moves as new C ABI symbols land (owned by the
+    # newest-symbol test); here we only assert it is a real apple_gpu symbol.
+    assert agd._SENTINEL_SYMBOL.startswith("tessera_apple_gpu_")
     for op in ("tessera.loss.z_loss", "tessera.loss.asymmetric_bce",
                "tessera.loss.load_balance_loss", "tessera.masked_categorical"):
         assert op in _driver._APPLE_GPU_RUNTIME_OPS

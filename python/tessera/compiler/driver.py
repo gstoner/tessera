@@ -36,7 +36,6 @@ PIPELINE_BY_TARGET = {
     "rocm": "tessera-lower-to-rocm",
     "apple_cpu": "tessera-lower-to-apple_cpu",
     "apple_gpu": "tessera-lower-to-apple_gpu",
-    "metalium": "tessera-lower-to-metalium",
 }
 
 

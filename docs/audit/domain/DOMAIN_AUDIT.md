@@ -46,7 +46,7 @@ autodiff domain audit material.
 2. Promote domain feature claims only when coverage and backend dashboards agree.
 3. Continue pruning old roadmap prose into specific compiler/backend work items.
 4. Use Apple-specialized success as evidence for Apple, not as a claim about
-   NVIDIA/ROCm/Metalium.
+   NVIDIA/ROCm.
 
 ## Source Material Consolidated
 
@@ -58,4 +58,3 @@ autodiff domain audit material.
 - `archive/corrdiff_compiler_split_evaluation.md`
 - `archive/sharding_partial_audit.md`
 - `archive/source_base_review_2026_05_17.md`
-

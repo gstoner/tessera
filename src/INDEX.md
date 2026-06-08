@@ -70,20 +70,7 @@ compiler/
 │   ├── mlir
 │   └── tessera_autotuner
 │
-├── codegen/                   ← All hardware backends
-│   ├── Tessera_Cerebras_backend/
-│   │   ├── docs/tessera
-│   │   ├── examples/ (flashattn_tiny, gemm)
-│   │   ├── include/tessera/targets/ (cerebras, ttarget)
-│   │   ├── lib
-│   │   ├── tessera/targets/cerebras
-│   │   ├── tests
-│   │   └── tools
-│   ├── Tessera_Metalium_Backend/
-│   │   ├── include/Tessera/Target/Metalium/Util
-│   │   ├── lib/Target/Metalium/ (Codegen, Lowering, Util)
-│   │   ├── test/metalium
-│   │   └── tools/ (metalium-codegen-demo, tessera-metalium-opt)
+├── codegen/                   ← Retained hardware backends
 │   ├── Tessera_ROCM_Backend/
 │   │   ├── ci
 │   │   ├── docs
@@ -92,21 +79,6 @@ compiler/
 │   │   ├── lib/ (Conversion, IR)
 │   │   ├── runtime/hip/examples
 │   │   ├── test/rocm
-│   │   └── tools
-│   ├── Tessera_RubinCPX_Backend/
-│   │   ├── cmake
-│   │   ├── docs
-│   │   ├── include/tessera/ (Dialect/TargetIR, Target/NVRubinCPX, Transforms)
-│   │   ├── lib/ (Target/NVRubinCPX, Transforms)
-│   │   ├── test/ (kv, partition, vec, video)
-│   │   └── tools/tessera-cpx-opt
-│   ├── Tessera_TPU_Backend/
-│   │   ├── docs
-│   │   ├── examples
-│   │   ├── include/tessera/tpu
-│   │   ├── runtime
-│   │   ├── src/passes
-│   │   ├── tests/lit
 │   │   └── tools
 │   ├── tessera_gpu_backend_NVIDIA/
 │   │   ├── bench
@@ -246,8 +218,6 @@ Superseded material — retained for reference only. Do not add build targets he
 |--------|--------------|
 | `../archive/src/PDDL_Instruct/` | n/a — research scratch |
 | `../archive/src/Sandbox_Toy_compilers/` | Full compiler stack |
-| `../archive/src/Tessera_RubinCPX_Compiler_v1_1/` | `compiler/codegen/Tessera_RubinCPX_Backend/` |
-| `../archive/src/Tessera_TPU_Backend_Starter/` | `compiler/codegen/Tessera_TPU_Backend/` |
 | `../archive/src/codegen_prototypes/` | Promoted to proper modules or discarded |
 | `../archive/src/tessera_scaling_resilience_v1/` | `solvers/scaling_resilience/` |
 | `../archive/src/tile_opt_fa4_old/` | `compiler/tile_opt_fa4/` |
@@ -255,4 +225,4 @@ Superseded material — retained for reference only. Do not add build targets he
 
 ---
 
-*Last updated: April 2026 — restart rebuild after RubinCPX rename, compiler consolidation, `Operators/`, `solvers/core`, and archive additions.*
+*Last updated: June 2026 — retained-backend focus, compiler consolidation, `Operators/`, `solvers/core`, and archive additions.*

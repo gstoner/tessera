@@ -14,8 +14,8 @@ What's guarded:
        - Apple CPU has Accelerate (cblas_sgemm + BNNS bf16/fp16) for
          matmul/gemm; numpy reference for the rest.
        - x86 AMX ships bf16 GEMM.
-       - NVIDIA / ROCm / Metalium ship Target IR artifacts (gated on
-         Phase G/H/I execution).
+       - NVIDIA / ROCm ship Target IR artifacts (gated on
+         Phase G/H execution).
   3. Audit walker classifies every dtype as canonical; no aliases /
      unknowns leak into the manifest.
   4. Registry attaches ``metadata["backend_kernel_manifest"]`` per op.
@@ -215,7 +215,7 @@ class TestAggregateManifest:
         # Every backend we ship should appear.
         for target in ("x86", "apple_cpu", "apple_gpu", "cpu",
                        "nvidia_sm80", "nvidia_sm90", "nvidia_sm100",
-                       "nvidia_sm120", "rocm", "metalium"):
+                       "nvidia_sm120", "rocm"):
             assert target in summary, f"{target} missing from summary"
 
     def test_apple_gpu_has_fused_kernels(self):
@@ -256,22 +256,10 @@ class TestBackendDtypeAudit:
             f"alias dtype strings in manifest: {buckets['alias'][:5]}"
         )
 
-    def test_planned_gated_only_via_explicit_metalium_blockfp(self):
-        """Only the explicit Tenstorrent `metalium_blockfp` target may
-        carry planned/gated dtypes (`bfp8`/`bfp4`) — Sprint I-2 added
-        those deliberately to surface the block-FP family without
-        promoting them to the general dtype matrix.  All other targets
-        must stay 0 planned-gated."""
+    def test_planned_gated_bucket_is_empty_for_retained_targets(self):
+        """Retained backend manifest entries use canonical dtypes only."""
         buckets = audit_backend_dtypes()
-        for op_name, key, dt in buckets["planned_gated"]:
-            assert "metalium_blockfp" in key, (
-                f"planned-gated dtype {dt!r} on {key!r} should only appear "
-                f"via the metalium_blockfp target"
-            )
-        # Both bfp8 and bfp4 must be present (Sprint I-2 ships them).
-        gated_dtypes = {dt for _, _, dt in buckets["planned_gated"]}
-        assert "bfp8" in gated_dtypes
-        assert "bfp4" in gated_dtypes
+        assert buckets["planned_gated"] == []
 
     def test_canonical_bucket_substantial(self):
         buckets = audit_backend_dtypes()

@@ -1422,8 +1422,7 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     #   dispatch is wired through `jit_bridge.dispatch_via_manifest`
     #   for every fused primitive — lowering coverage is complete on
     #   the CPU + Apple-GPU axis.  Per Decision #1 the lowering for
-    #   NVIDIA / ROCm / Cerebras / Metalium remains gated on
-    #   Phase G / H / I.
+    #   NVIDIA / ROCm remains gated on Phase G / H.
     "geometric_algebra":   "complete",
     "ebm":                 "complete",
 
@@ -2859,6 +2858,10 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              notes="EBM1: user-provided scalar energy E(x, y; theta). "
                    "Native fused MSL kernel (quadratic specialization) "
                    "in ``_EBM_APPLE_GPU_FUSED[\"ebm_energy\"]``."),
+    _partial("ebm_energy_quadratic", "ebm", ("EBT", "RBM", "score_matching"),
+             references=("LeCun 2006",),
+             notes="EBM keystone tensor-clean quadratic energy shim; "
+                   "closed-form VJP/JVP and Apple GPU value lane are wired."),
     _partial("ebm_inner_step", "ebm", ("EBT", "RBM", "score_matching"),
              references=("Du & Mordatch 2019",),
              notes="EBM1: pluggable inner-loop update y' = y - eta*grad [+ noise]. "

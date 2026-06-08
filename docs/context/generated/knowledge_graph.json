@@ -109,24 +109,6 @@
     },
     {
       "authority": "normative",
-      "description": "TPU target planning and StableHLO export surface.",
-      "id": "backend.tpu",
-      "name": "TPU StableHLO Backend",
-      "references": [
-        {
-          "path": "docs/spec/COMPILER_REFERENCE.md"
-        },
-        {
-          "path": "python/tessera/compiler/tpu_target.py"
-        },
-        {
-          "path": "tests/tessera-ir/phase4/tpu_shardy_export.mlir"
-        }
-      ],
-      "type": "backend"
-    },
-    {
-      "authority": "normative",
       "description": "CPU backend and proxy execution path used for default local validation.",
       "id": "backend.x86",
       "name": "x86 AMX/AVX512 Backend",

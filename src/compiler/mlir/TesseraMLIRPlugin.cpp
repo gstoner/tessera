@@ -10,7 +10,6 @@
 //     TesseraNeighborsPasses    — lib/Dialect/Neighbors/Transforms/*.cpp
 //     TesseraPMV11Passes        — programming_model/tools/tessera-opt/*.cpp
 //     TesseraPMVerifiers        — programming_model/ir/ScheduleOps.cpp
-//     TesseraTPUBackend         — codegen/Tessera_TPU_Backend/src/passes/*.cpp
 //     MLIRPass, MLIRIR, etc.
 //===----------------------------------------------------------------------===//
 
@@ -45,14 +44,6 @@ namespace tessera {
   void buildPMV11LegalizePipeline(mlir::OpPassManager &pm);
 } // namespace tessera
 
-// TPU backend passes  (declared in RegisterPasses.cpp)
-namespace tessera {
-  void registerTesseraTPUBackendPasses();
-  void registerTesseraTPUBackendDialects(mlir::DialectRegistry &registry);
-  void buildTesseraTPUBackendPipeline(mlir::OpPassManager &pm);
-} // namespace tessera
-
-
 namespace tessera {
 
 // ===========================================================================
@@ -62,9 +53,6 @@ namespace tessera {
 void registerTesseraDialects(mlir::DialectRegistry &registry) {
   // Neighbors dialect (tessera.neighbors.*)
   registerNeighborsDialect(registry);
-
-  // TPU backend brings in stablehlo + any target dialects it needs
-  registerTesseraTPUBackendDialects(registry);
 
   // The Queue / Attn dialects are Python-only at this stage; their MLIR ops
   // are represented as generic `tessera.queue.*` / `tessera.attn.*` strings
@@ -103,8 +91,6 @@ void registerTesseraAllPasses() {
   // ---- Programming Model v1.1 passes -------------------------------------
   registerPMV11Passes();
 
-  // ---- TPU backend passes -------------------------------------------------
-  registerTesseraTPUBackendPasses();
 }
 
 // ===========================================================================
@@ -130,16 +116,10 @@ void registerTesseraAllPipelines() {
       "Full Graph IR → Schedule → Tile lowering",
       [](mlir::OpPassManager &pm) { buildPMLegalizePipeline(pm); });
 
-  // TPU backend pipeline
-  mlir::PassPipelineRegistration<>(
-      "tessera-tpu-backend",
-      "Lower Tessera Graph IR to TPU StableHLO + Shardy sharding",
-      [](mlir::OpPassManager &pm) { buildTesseraTPUBackendPipeline(pm); });
-
   // Full end-to-end pipeline
   mlir::PassPipelineRegistration<>(
       "tessera-full-pipeline",
-      "Neighbors + PM legalize + TPU backend end-to-end",
+      "Neighbors + PM legalize end-to-end",
       [](mlir::OpPassManager &pm) { buildFullPipeline(pm); });
 }
 
@@ -169,9 +149,6 @@ void buildFullPipeline(mlir::OpPassManager &pm) {
 
   // Phase 2: legalize PM v1.1 Graph IR → Schedule → Tile
   buildPMV11LegalizePipeline(pm);
-
-  // Phase 3: lower to StableHLO + attach Shardy sharding annotations
-  buildTesseraTPUBackendPipeline(pm);
 
   // Final cleanup
   pm.addPass(mlir::createCSEPass());

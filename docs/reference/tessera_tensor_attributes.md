@@ -100,7 +100,6 @@ canonical spelling.
 | Complex | `complex64`, `complex128`; possible future `complex32` | Planned; no canonical Graph IR complex dtype family today |
 | Direct packed INT4 | `int4` | Planned/gated; current quantized paths should not imply a first-class packed int4 tensor type. AMD GFX12 `IU4` WMMA/SWMMAC instructions are tracked against this planned-gated dtype until Tessera grows a separate unsigned packed-4 policy. |
 | AMD MX formats | `mxfp8`, `mxfp6`, `mxfp4` | Planned/gated; needs block-scale metadata and ROCm/CDNA target gates |
-| Tenstorrent BFP/block formats | `bfp8`, `bfp4`, `blockfp8`, `blockfp4` | Planned/gated; do not alias to OCP FP8/FP4, AMD MXFP, or NVIDIA NVFP4 |
 | TF32 | Not a storage dtype | Model as `math_mode="tf32"` on `fp32` tensors or numeric policy, not as `dtype="tf32"` |
 
 ## Canonical Dtype API

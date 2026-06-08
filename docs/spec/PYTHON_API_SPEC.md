@@ -37,7 +37,7 @@ Resolution as of 2026-05-22:
   artifacts without launching tensors.
 - **Translate CLI** — `tessera-translate` (entry:
   `python/tessera/cli/translate.py`) routes through `tessera.aot` (S14)
-  for StableHLO / GGUF / SafeTensors export plus an `mlir` subcommand
+  for GGUF / SafeTensors export plus an `mlir` subcommand
   that pass-throughs to the C++ `tessera-translate-mlir` binary.
 - **S-series surfaces (S2–S15)** — `tessera.rng`, `tessera.state`,
   `tessera.control`, `tessera.sharding`, `tessera.losses`,

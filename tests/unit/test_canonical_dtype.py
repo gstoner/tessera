@@ -91,10 +91,6 @@ class TestPlannedGatedSet:
         for n in ("mxfp8", "mxfp6", "mxfp4"):
             assert is_planned_gated_dtype(n), n
 
-    def test_tt_block_planned_gated(self):
-        for n in ("bfp8", "bfp4", "blockfp8", "blockfp4"):
-            assert is_planned_gated_dtype(n), n
-
     def test_canonical_and_planned_are_disjoint(self):
         assert canonical_dtypes() & planned_gated_dtypes() == frozenset()
 
@@ -170,14 +166,13 @@ class TestPlannedGatedGate:
         "complex64", "complex128",
         "int4",
         "mxfp8", "mxfp6", "mxfp4",
-        "bfp8", "bfp4", "blockfp8", "blockfp4",
     ])
     def test_planned_gated_rejected_without_flag(self, name):
         with pytest.raises(TesseraDtypeError, match="planned/gated"):
             canonicalize_dtype(name)
 
     @pytest.mark.parametrize("name", [
-        "uint8", "complex64", "int4", "mxfp8", "bfp4",
+        "uint8", "complex64", "int4", "mxfp8",
     ])
     def test_planned_gated_accepted_with_flag(self, name):
         assert canonicalize_dtype(name, allow_planned_gated=True) == name

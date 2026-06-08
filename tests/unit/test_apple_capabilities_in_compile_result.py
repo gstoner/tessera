@@ -155,7 +155,7 @@ def test_compile_result_non_apple_target_omits_capability_keys():
     """A NVIDIA / CPU compile result has no Apple-capability keys —
     otherwise dashboards would render Apple flags on irrelevant rows."""
     from tessera.compiler.canonical_compile import canonical_compile
-    for target in ("cpu", "nvidia_sm90", "rocm", "metalium"):
+    for target in ("cpu", "nvidia_sm90", "rocm"):
         result = canonical_compile(_tiny_matmul_module(), target=target)
         d = result.to_dict()
         assert "apple_gpu_capabilities" not in d, (

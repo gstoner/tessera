@@ -24,7 +24,7 @@ Python object-model debug markers (`tile.debug_artifact`,
 `tile.debug_barrier`, plus Schedule-IR carriers) are **dropped before
 Target IR codegen** by `python/tessera/compiler/target_ir.py`. This is
 a normative contract — no Target IR consumer (NVIDIA WGMMA, Apple MSL,
-ROCm MFMA, Metalium tile-local, x86 AMX) is permitted to depend on
+ROCm MFMA, x86 AMX) is permitted to depend on
 marker presence. Verified by
 `tests/unit/test_target_ir.py::test_debug_markers_elided_before_target`.
 
@@ -45,11 +45,7 @@ runtime ABI. Use `RUNTIME_ABI_SPEC.md` for the C ABI contract.
 | Apple CPU | ✅ `tessera_apple.cpu.*` | ✅ Phase 8.2 (Accelerate cblas + BNNS f16/bf16) | bf16 GEMM via BNNS |
 | Apple GPU | ✅ `tessera_apple.gpu.*` plus packaged-kernel binding contracts | ✅ MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and PK1–PK7 packaged `.mtlpackage` lifecycle on capable Darwin hosts | Metal buffer pool, Metal 4 capability gates, `AppleTensorBindingSpec` / `AppleKernelBindingSpec` reflection validation |
 | NVIDIA SM_80+ | ✅ `tessera_nvidia.*` ODS + WGMMA placeholders | 🟡 IR artifact; gated on Phase G hardware | Sprint G-1 pins CUDA 13.2 U1 |
-| NVIDIA RubinCPX | ✅ `tessera.target.cpx` dialect + 4 passes | 🟡 separate `tessera-cpx-opt` driver | Phase 7+ |
 | ROCm gfx90a / 940 / 942 / 950 / 1100 | ✅ `tessera_rocm.*` ODS + MFMA table | 🟡 artifact only; gated on Phase H | Sprint H-1 pins ROCm 7.2.3 |
-| TPU | ✅ TPU MXU lowering via StableHLO + Shardy | 🟡 PJRT execute stubbed | Phase 4 |
-| Tenstorrent Metalium | ✅ `tessera_metalium.*` ODS + tile-local matmul | 🟡 artifact + 3 lit fixtures | Phase 7 / Sprint I-1 (3 new lit fixtures: softmax/layer_norm/rmsnorm) |
-| Cerebras WSE-3 | ✅ `tessera_cerebras.*` ODS | 🟡 artifact (487 LOC real impl) | Phase 7 |
 
 Architecture Decision #21 (CLAUDE.md): when a backend cannot lower an
 op, it must emit a **stable diagnostic** naming the op and target —
@@ -777,7 +773,6 @@ module @flash_attn_sm90 attributes {tessera.version = "1.0", tessera.target_sm =
 | `tessera.nvgpu.wgmma.*` | 3 | lit-testable target artifact; placeholder kernels are not native-runtime claims |
 | `tessera.nvgpu.wmma.*` | 3 | lit-testable target artifact |
 | NCCL/RCCL native collectives | 4 | planned / scaffolded mock support |
-| TPU StableHLO/Shardy artifacts | 4 | implemented / lit-testable; PJRT execute remains scaffolded |
 | ROCm MFMA artifact path | 6 | implemented / lit-testable / scaffolded runtime |
 | Apple CPU/GPU artifact and packaged-kernel paths | 8 + Metal 4 + PK1-PK7 | implemented / lit-testable / hardware-runtime where capability-gated |
 
@@ -790,8 +785,4 @@ Target IR status is reported separately from native runtime status:
 | CPU/x86 | `tessera.cpu.*` matmul, elementwise, attention, and state contracts | implemented / lit-testable | NumPy-backed CPU execution for supported ops | AMX/AVX-512 hardware-runtime path for supported kernels |
 | NVIDIA | FA-4, queue, WGMMA/TMA contracts | lit-testable | Python/JIT artifact inspection | planned unless backend-specific hardware tests are run |
 | ROCm | MFMA/async-copy contracts | implemented / lit-testable | artifact-only | scaffolded; HIP loader/runtime paths require build flags and devices |
-| TPU | TPU profile, StableHLO/Shardy export | implemented / lit-testable | artifact-only | PJRT execute is scaffolded |
 | Apple | CPU/GPU target contracts, Metal 4 lanes, and packaged `.mtlpackage` ABI contracts | implemented / lit-testable | artifact inspection plus CPU fallback where applicable | hardware-runtime on capable Darwin hosts through Accelerate/BNNS, MPS/MPSGraph/custom MSL, Metal 4, and packaged-kernel validation |
-| Metalium | DMA/load/store/matmul dialect shape | scaffolded / lit-testable | artifact-only | hardware execution planned; matmul lowers to artifact op when generated Metalium ops are enabled |
-| Cerebras | TTarget/Cerebras pass shape | stubbed / scaffolded | tool stubs | planned |
-| Rubin CPX | CPX-specific ODS and target-contract tests | scaffolded / lit-testable | artifact-only | planned |

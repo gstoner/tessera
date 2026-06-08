@@ -138,14 +138,6 @@ def test_rocm_matmul_names_toolchain_gate():
     assert "hipcc" in result.first_failing_gate.detail
 
 
-def test_metalium_matmul_names_link_gate():
-    result = cn.canonical_compile(_tiny_matmul_module(), target="metalium")
-    assert result.executable is False
-    # Metalium's toolchain probe is intentionally not_evaluated; the first
-    # FAIL is `link` (artifact_only — IR emits, no linked-kernel path).
-    assert result.first_failing_gate.gate == pg.GATE_LINK
-
-
 # ---- Pure aggregator ----
 
 def test_module_is_pure_aggregator():

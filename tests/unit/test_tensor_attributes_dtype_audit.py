@@ -47,10 +47,6 @@ PLANNED_OR_GATED_DTYPES = {
     "mxfp8",
     "mxfp6",
     "mxfp4",
-    "bfp8",
-    "bfp4",
-    "blockfp8",
-    "blockfp4",
 }
 
 MLIR_CANONICAL = {

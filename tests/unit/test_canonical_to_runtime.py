@@ -126,14 +126,6 @@ def test_launch_trusts_canonical_first_failing_gate_for_rocm():
     assert "hipcc" in response["first_failing_gate_detail"]
 
 
-def test_launch_trusts_canonical_link_gate_for_metalium():
-    result = canonical_compile(_tiny_matmul_module(), target="metalium")
-    artifact = result.to_runtime_artifact()
-    response = launch(artifact, args={})
-    assert response["ok"] is False
-    assert response["first_failing_gate"] == "link"
-
-
 # ---- Legacy artifacts still work (B.2 preserved) ----
 
 def test_legacy_artifact_still_uses_b2_rederive():
@@ -163,7 +155,7 @@ def test_canonical_artifact_runtime_status_stays_honest():
     """Adding the canonical answer must not silently flip ok=True or rewrite
     the runtime_status enum. The audit-named gate is an *additional*
     channel."""
-    for target in ("nvidia_sm90", "rocm", "metalium"):
+    for target in ("nvidia_sm90", "rocm"):
         result = canonical_compile(_tiny_matmul_module(), target=target)
         artifact = result.to_runtime_artifact()
         response = launch(artifact, args={})

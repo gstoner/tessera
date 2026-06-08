@@ -326,9 +326,8 @@ human-readable summary; for the current per-component picture, read
 | Area | Status |
 |------|--------|
 | NCCL/RCCL collectives + cluster execution | Implemented lowering and adapter surfaces — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`; production multi-rank execution remains validation-gated. |
-| TPU StableHLO backend | Implemented — `tpu_target.py` + `Tessera_TPU_Backend/` (StableHLO + Shardy export); quantized dot lit-tested. |
 | Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships 241 VJPs + 236 JVPs; `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
 | Activation checkpointing + ZeRO sharding | Implemented — `tessera.autodiff.rematerialize` + ZeRO stage 2 via `OptimizerShardPass`. |
 | Bayesian autotuning | Implemented — `tessera.autotune` + `compiler/autotune_v2.py` (Optuna TPE + Hyperband + SQLite cache v2). |
 | Runtime Python wrapper | Implemented — `tessera.runtime.TesseraRuntime` over the C ABI. |
-| ROCm MFMA + RubinCPX + Cerebras + Metalium + Apple backends | Backend surfaces implemented to varying levels; native execution is target- and validation-gated. |
+| ROCm MFMA + Apple backends | Backend surfaces implemented to varying levels; native execution is target- and validation-gated. |

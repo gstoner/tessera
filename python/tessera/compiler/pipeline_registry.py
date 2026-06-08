@@ -206,21 +206,6 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         sprint="Phase 3",
     ),
     PipelineSpec(
-        name="tessera-lower-to-metalium",
-        passes=(
-            "tessera-effect-annotate",
-            "canonicalize",
-            "tessera-distribution-lower",
-            "tessera-lower-to-metalium",
-        ),
-        required_dialects=("tessera", "func", "scf", "arith"),
-        targets=("metalium",),
-        lit_fixtures=(),
-        phase="lowering",
-        status="wired",
-        sprint="Phase 7",
-    ),
-    PipelineSpec(
         name="tessera-lower-to-rocm",
         passes=(
             "tessera-effect-annotate",

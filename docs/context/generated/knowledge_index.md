@@ -16,7 +16,6 @@ Use this generated index for navigation, then verify claims against the canonica
 | --- | --- | --- | --- | --- |
 | `backend.nvidia_gpu` | NVIDIA GPU Backend | normative | docs/spec/TARGET_IR_SPEC.md, python/tessera/compiler/gpu_target.py, src/runtime/src/backend/cuda_backend.cpp | tested_by -> test.mlir_lit; pass.lower_to_gpu -> depends_on |
 | `backend.rocm` | ROCm Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt, src/runtime/src/backend/hip_backend.cpp | none |
-| `backend.tpu` | TPU StableHLO Backend | normative | docs/spec/COMPILER_REFERENCE.md, python/tessera/compiler/tpu_target.py, tests/tessera-ir/phase4/tpu_shardy_export.mlir | none |
 | `backend.x86` | x86 AMX/AVX512 Backend | normative | docs/spec/COMPILER_REFERENCE.md, src/compiler/codegen/tessera_x86_backend/CMakeLists.txt, src/runtime/src/backend/cpu_backend.cpp | tested_by -> test.unit |
 
 ## concept

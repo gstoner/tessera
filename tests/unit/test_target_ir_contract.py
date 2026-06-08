@@ -20,7 +20,6 @@ def test_target_kind_normalization_accepts_planned_backend_aliases():
     assert normalize_target_kind("sm120") == "nvidia_sm120"
     assert normalize_target_kind(GPUTargetProfile(isa=ISA.SM_100)) == "nvidia_sm100"
     assert normalize_target_kind("hip") == "rocm"
-    assert normalize_target_kind("tt_metalium") == "metalium"
     assert normalize_target_kind("macos_cpu") == "apple_cpu"
     assert normalize_target_kind("m-series-gpu") == "apple_gpu"
 
@@ -75,18 +74,6 @@ def test_jit_blackwell_target_emits_tcgen05_and_tmem_artifact():
     assert "tessera_nvidia.tmem_alloc" in mm.target_ir
     assert "tessera_nvidia.tcgen05_mma" in mm.target_ir
     assert 'block_scaled = true' in mm.target_ir
-
-
-def test_jit_metalium_target_emits_dma_and_matmul_artifact():
-    @ts.jit(target="metalium")
-    def mm(A, B):
-        return ts.ops.gemm(A, B)
-
-    assert "tessera.matmul" in mm.ir_text()
-    assert 'target = "metalium"' in mm.target_ir
-    assert "tessera_metalium.dma" in mm.target_ir
-    assert "tessera_metalium.matmul" in mm.target_ir
-    assert "tile.mma" in mm.tile_ir
 
 
 def test_jit_apple_cpu_target_emits_accelerate_artifact():
@@ -207,9 +194,6 @@ def test_static_target_contract_files_define_backend_spine():
         root
         / "src/compiler/codegen/Tessera_Apple_Backend/include/Tessera/Target/Apple/TesseraAppleOps.td"
     ).read_text(encoding="utf-8")
-    metalium_cmake = (
-        root / "src/compiler/codegen/Tessera_Metalium_Backend/CMakeLists.txt"
-    ).read_text(encoding="utf-8")
     rocm_passes = (
         root / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp"
     ).read_text(encoding="utf-8")
@@ -217,5 +201,4 @@ def test_static_target_contract_files_define_backend_spine():
     assert "cpu.accelerate_gemm" in apple
     assert "gpu.metal_kernel" in apple
     assert "gpu.dispatch" in apple
-    assert "TesseraMetaliumOpsIncGen" in metalium_cmake
     assert "tessera-lower-to-rocm" in rocm_passes

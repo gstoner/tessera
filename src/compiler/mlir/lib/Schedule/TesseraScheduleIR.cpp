@@ -58,7 +58,7 @@ void emitMeshDefine(
 
 // ---------------------------------------------------------------------------
 // Collect all schedule.mesh.define ops in a module and return a map of
-// axis_name → size.  Used by the Shardy export pass to build the mesh.
+  // axis_name → size.  Used by distributed planning passes to build the mesh.
 // ---------------------------------------------------------------------------
 llvm::StringMap<int64_t> collectScheduleMeshAxes(ModuleOp mod) {
   llvm::StringMap<int64_t> result;

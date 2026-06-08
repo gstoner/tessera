@@ -11,7 +11,7 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   and header counts.
 - **Executable rows:** Apple CPU, Apple GPU, native CPU, and JIT CPU numpy are
   explicit executable rows.
-- **Non-executable targets are honest:** NVIDIA, ROCm, and Metalium are
+- **Non-executable targets are honest:** NVIDIA and ROCm are
   recognized but return unsupported/unimplemented behavior rather than fake
   success.
 - **Toolchain pins:** CUDA, NCCL, and ROCm pins agree in generated dashboards.
@@ -22,10 +22,8 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 
 - **NVIDIA runtime execution:** no execution-matrix rows yet.
 - **ROCm runtime execution:** no execution-matrix rows yet.
-- **Metalium runtime execution:** still shared-backend frontier material, not a
-  platform-specific execution lane.
 - **Universal backend-kernel axis:** every S-series primitive entry is still
-  open on backend-kernel proof (universal Phase-G/H/I gate) — live count in
+  open on backend-kernel proof (universal Phase-G/H gate) — live count in
   [`../generated/s_series_status.md`](../generated/s_series_status.md).
 - **Numerical proof discipline:** backend rows need explicit compare fixtures or
   hardware/package validation before promotion.
@@ -40,15 +38,14 @@ language/IR spec include:
   `fp8_e4m3`, `fp8_e5m2`, `fp6_e2m3`, `fp6_e3m2`, `fp4_e2m1`, `nvfp4`.
 - Integer/storage: `int64`, `i64`, `int32`, `i32`, `int16`, `i16`, `int8`,
   `i8`, `uint8`, `u8`, `uint16`, `uint32`, `uint64`, `int4`, `i4`, `bool`.
-- Planned policy families: `mxfp8`, `mxfp6`, `mxfp4`, `bfp8_b`, `bfp4_b`,
-  `blockfp*`.
+- Planned policy families: `mxfp8`, `mxfp6`, `mxfp4`.
 
 Policy rules:
 
 - `tf32` is a math mode on `fp32` tensors, not a storage dtype.
 - Direct `int4` requires an explicit packed-storage policy before target
   support can be advertised as native execution.
-- AMD MX formats, NVIDIA `nvfp4`, and Tenstorrent BFP/BLOCKFP formats must stay
+- AMD MX formats and NVIDIA `nvfp4` must stay
   separate policy families.
 - Apple CPU/GPU claims should remain conservative: `fp32`, `fp16`, and integer
   storage are primary; BF16 depends on OS/Metal exposure; FP8/FP4 are not native
@@ -61,8 +58,6 @@ Policy rules:
 2. Add runtime execution rows only after target launch paths are implemented.
 3. Promote manifest rows only with runtime ABI, hardware smoke, and numerical
    proof.
-4. Split Metalium into its own folder only when there is enough target-specific
-   audit material to justify it.
 
 ## Source Material Consolidated
 

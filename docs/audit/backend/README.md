@@ -15,9 +15,6 @@ backend rules.
   [../generated/runtime_abi.md](../generated/runtime_abi.md).
 - Hardware proof remains target-specific; Apple, NVIDIA, and ROCm have separate
   platform folders when the issue is platform-specialized.
-- Metalium has shared-backend frontier notes only; no dedicated platform folder
-  is created until there is enough Tenstorrent-specific audit material.
-
 ## Platform Folders
 
 - Apple: [apple/APPLE_AUDIT.md](apple/APPLE_AUDIT.md)

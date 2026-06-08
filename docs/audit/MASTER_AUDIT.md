@@ -12,7 +12,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Area | Current state | Still open |
 |---|---|---|
 | Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; remaining dashboard consolidation (target maps, e2e/s_series rollups) is optional cleanup. |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated. | NVIDIA, ROCm, and Metalium have no executable runtime rows yet. |
+| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated. | NVIDIA and ROCm have no executable runtime rows yet. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
 | ROCm | ROCm/gfx target map and execute-and-compare plan exist. | Real HIP/ROCm hardware proof and runtime launch bridge remain. |
@@ -74,7 +74,6 @@ Still needs work:
 - Add runtime execution rows for NVIDIA/ROCm only after actual launch paths exist.
 - Keep artifact-only, compileable, executable, numerical, and hardware-verified statuses separate.
 - Use `execute_compare_fixture` consistently for promoted backend claims.
-- Decide whether Metalium deserves a dedicated platform folder once there is enough target-specific audit content.
 
 Primary detail: [backend/BACKEND_AUDIT.md](backend/BACKEND_AUDIT.md).
 
@@ -225,7 +224,7 @@ The actionable surface, ranked (numbers live in `stub_surface.md`):
 - **Software conformance gaps** — the op×target cells that stop at `codegen` /
   `numerical` (vs the hardware-gated `hardware_smoke`/`toolchain`/`link` rows):
   `conv2d`/`kv_cache_read` → cpu (numerical: executes but unverified) and
-  conv2d/flash_attn/kv_cache_read → metalium/nvidia/rocm (codegen: lowering emits
+  conv2d/flash_attn/kv_cache_read → nvidia/rocm (codegen: lowering emits
   no code).
 - **Thin-test tail** — the `needs_direct_test` ops: the target for a generative
   differential harness (tracer vs numpy/CPU oracle).
@@ -265,4 +264,3 @@ gate is P0 above —
 | Primitive/op coverage | [coverage/COVERAGE_AUDIT.md](coverage/COVERAGE_AUDIT.md) |
 | GA/EBM/attention/CorrDiff/sharding | [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md) |
 | Planning history | [roadmap/ROADMAP_AUDIT.md](roadmap/ROADMAP_AUDIT.md) |
-

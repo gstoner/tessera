@@ -150,6 +150,7 @@ ebm_bivector_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs r
 ebm_bivector_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_decode_init,0,0,0,0,1,,covered_by_family,scaffold for ebm decode tests
 ebm_energy,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
+ebm_energy_quadratic,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 ebm_inner_step,3,0,0,3,0,,covered_by_family,covered by ebm_step / ebm_step_chain tests
 ebm_langevin_step,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_ais,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
@@ -171,7 +172,7 @@ expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 fake_quantize,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 fft,8,2,0,10,0,f32 fp32,needs_direct_test,category default for 'spectral'
-flash_attn,78,44,4,122,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'attention'
+flash_attn,78,40,4,118,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'attention'
 flatten,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_only
@@ -184,7 +185,7 @@ gated_deltanet,2,2,0,4,0,,needs_direct_test,category default for 'attention'
 gather,6,1,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 gelu,22,10,1,32,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
-gemm,69,2,6,71,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+gemm,68,2,6,70,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
 grad_scaler_step,3,0,0,3,0,,needs_direct_test,category default for 'numerics'
@@ -250,7 +251,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,9,0,0,9,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,269,141,14,410,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,268,137,14,405,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

@@ -42,7 +42,7 @@ material.
 
 - **Backend-kernel proof is open on every S-series primitive** — a universal
   Phase-G/H/I gate (each entry needs *all* declared targets to ship real
-  kernels; gated on NVIDIA/ROCm/Metalium hardware). Live open/complete counts:
+  kernels; gated on NVIDIA/ROCm hardware). Live open/complete counts:
   [`generated/s_series_status.md`](../generated/s_series_status.md).
 - **Long-tail transform axes** — `batching_rule` and `transpose_rule` are now
   closed; `sharding_rule` is the remaining increment (2026-06-02).
@@ -77,4 +77,3 @@ material.
 - `archive/kv_cache_coverage_matrix.md`
 - `archive/partial_ops_uplift_plan.md`
 - `archive/primitive_coverage_state.md`
-

@@ -11,8 +11,7 @@ execution_matrix + primitive_coverage + toolchain probes. These tests lock:
    gate for ``matmul``. (If the test runs off-Darwin, apple_* hardware_smoke
    becomes fail — handled by the platform-gate spec.)
 4. **Known-failing targets** — nvidia / rocm name ``toolchain`` as the first
-   failing gate on a developer Mac without CUDA/ROCm toolchains. Metalium
-   names ``link`` (its toolchain probe is intentionally not_evaluated).
+   failing gate on a developer Mac without CUDA/ROCm toolchains.
 5. **No silent passes** — every target/op pair either all-pass or has a
    concrete first_failing_gate with a non-empty detail string.
 """
@@ -103,18 +102,10 @@ def test_rocm_matmul_first_failing_gate_is_toolchain():
     assert "hipcc" in result.detail
 
 
-def test_metalium_matmul_first_failing_gate_is_link():
-    """Metalium intentionally lists its toolchain probe as not_evaluated
-    (separate SDK surface); the first FAIL is therefore link."""
-    result = pg.first_failing_gate("metalium", "matmul")
-    assert result is not None
-    assert result.gate == pg.GATE_LINK
-
-
 def test_every_failing_gate_has_a_nonempty_detail():
     """No silent fails. The audit's whole point is that 'unsupported' must
     name *why*."""
-    targets = ("cpu", "apple_cpu", "apple_gpu", "nvidia", "rocm", "metalium")
+    targets = ("cpu", "apple_cpu", "apple_gpu", "nvidia", "rocm")
     ops = ("matmul", "softmax", "flash_attn", "conv2d", "kv_cache_read")
     for t in targets:
         for op in ops:

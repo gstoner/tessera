@@ -108,7 +108,7 @@ def from_text(
     target:
         Forwarded to ``@tessera.jit(target=...)`` — accepts a
         :class:`GPUTargetProfile` instance or one of the documented
-        string aliases (``"rocm"`` / ``"metalium"`` / ``"apple_cpu"``
+        string aliases (``"rocm"`` / ``"apple_cpu"``
         / ``"apple_gpu"``).  Documented as a first-class kwarg in U5
         (2026-05-19) so notebook flows don't have to drill through
         ``**jit_kwargs``.

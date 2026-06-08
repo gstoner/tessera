@@ -173,7 +173,7 @@ class TestNextActionDerivation:
         """When execution_kind is artifact_only, the front door
         surfaces the IR inspection hint."""
 
-        @tessera.jit(target="metalium")
+        @tessera.jit(target="rocm")
         def g(
             x: tessera.Tensor["B", "D"],
             y: tessera.Tensor["B", "D"],

@@ -1252,7 +1252,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
     if target != "cpu":
         # G4 — consult the single-source execution matrix instead of hard-coding
         # the "non-CPU = unimplemented" rule. Today the matrix has no executor
-        # for non-Apple non-CPU targets (NVIDIA/ROCm/Metalium/TPU), so the
+        # for non-Apple non-CPU targets (NVIDIA/ROCm), so the
         # behavior is the same; but adding a new backend executor only requires
         # one matrix row + one runtime fn (no second hard-coded branch here).
         # The Apple-CPU and Apple-GPU branches above are themselves entries in

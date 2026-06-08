@@ -1,4 +1,4 @@
-"""Sprint G-1 + H-1 + I-1/I-2/I-3 — Target toolchain pins.
+"""Sprint G-1 + H-1 — Target toolchain pins.
 
 Locks the per-target hardware-free pre-work landed 2026-05-11:
 
@@ -13,23 +13,9 @@ Locks the per-target hardware-free pre-work landed 2026-05-11:
        cluster_mode) + arch strings (gfx90a/gfx940/gfx942/gfx950/
        gfx1100) + dtype matrix + MFMA shape variants.
 
-  I-1: Metalium kernel inventory expanded — softmax / layer_norm /
-       rmsnorm lit fixtures landed under
-       `src/compiler/codegen/Tessera_Metalium_Backend/test/metalium/`.
-
-  I-2: BackendKernelManifest gains the `compileable` status + Metalium
-       block-FP planned/gated entries (`bfp8`, `bfp4`) surfaced as a
-       separate `metalium_blockfp` target so the audit walker correctly
-       classifies them as planned_gated.
-
-  I-3: `docs/metalium_kernel_inventory.md` documents RISC-V grid
-       mapping, shipped kernel surface, dtype matrix, and execution
-       gates.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
@@ -293,145 +279,6 @@ class TestROCmCapabilityRegistry:
         assert "mfma" not in cap.features
         for dt in ("fp8_e4m3", "fp8_e5m2", "int32", "int4"):
             assert dt in cap.supported_dtypes
-
-
-# ──────────────────────────────────────────────────────────────────────────
-#               I-1: Metalium kernel lit fixtures present
-# ──────────────────────────────────────────────────────────────────────────
-
-REPO = Path(__file__).resolve().parents[2]
-METALIUM_TEST_DIR = (
-    REPO / "src" / "compiler" / "codegen" / "Tessera_Metalium_Backend"
-    / "test" / "metalium"
-)
-
-
-class TestMetaliumLitFixtures:
-    @pytest.mark.parametrize("fixture", [
-        "softmax_to_metalium.mlir",
-        "layer_norm_to_metalium.mlir",
-        "rmsnorm_to_metalium.mlir",
-    ])
-    def test_fixture_exists(self, fixture):
-        path = METALIUM_TEST_DIR / fixture
-        assert path.exists(), f"{fixture} not found at {path}"
-
-    @pytest.mark.parametrize("fixture", [
-        "softmax_to_metalium.mlir",
-        "layer_norm_to_metalium.mlir",
-        "rmsnorm_to_metalium.mlir",
-    ])
-    def test_fixture_has_metalium_dialect_ops(self, fixture):
-        body = (METALIUM_TEST_DIR / fixture).read_text()
-        # Lowering target — both DMA and matmul should appear.
-        assert "tessera_metalium.dma" in body
-        assert "tessera_metalium.matmul" in body
-        # FileCheck directive sanity
-        assert "RUN: tessera-metalium-opt" in body
-        assert "REQUIRES: tessera_metalium_opt" in body
-
-    @pytest.mark.parametrize("fixture", [
-        "softmax_to_metalium.mlir",
-        "layer_norm_to_metalium.mlir",
-        "rmsnorm_to_metalium.mlir",
-    ])
-    def test_fixture_uses_bf16(self, fixture):
-        """Sprint I-1 fixtures all use bf16 as the canonical reasoning-
-        model storage dtype."""
-        body = (METALIUM_TEST_DIR / fixture).read_text()
-        assert "bf16" in body
-        # element_size_bytes = 2 is the bf16 DMA descriptor signature
-        assert "element_size_bytes = 2" in body
-
-
-# ──────────────────────────────────────────────────────────────────────────
-#               I-2: Metalium dtype matrix + planned/gated entries
-# ──────────────────────────────────────────────────────────────────────────
-
-class TestMetaliumManifest:
-    def test_matmul_has_metalium_artifact(self):
-        from tessera.compiler.backend_manifest import manifest_for
-        entries = {e.target: e for e in manifest_for("matmul")}
-        assert "metalium" in entries
-        m = entries["metalium"]
-        assert m.status == "artifact_only"
-        assert "bf16" in m.dtypes
-        assert "fp32" in m.dtypes
-        assert "tile_local_matmul" in m.feature_flags
-
-    def test_matmul_has_block_fp_planned_entry(self):
-        from tessera.compiler.backend_manifest import manifest_for
-        entries = {e.target: e for e in manifest_for("matmul")}
-        assert "metalium_blockfp" in entries
-        m = entries["metalium_blockfp"]
-        assert m.status == "planned"
-        assert "bfp8" in m.dtypes
-        assert "bfp4" in m.dtypes
-        assert "block_fp" in m.feature_flags
-
-    def test_softmax_layer_norm_rmsnorm_metalium_artifacts(self):
-        from tessera.compiler.backend_manifest import manifest_for
-        for op_name in ("softmax", "layer_norm", "rmsnorm"):
-            entries = {e.target: e for e in manifest_for(op_name)}
-            assert "metalium" in entries, f"{op_name} missing metalium entry"
-            assert entries["metalium"].status == "artifact_only"
-            assert "bf16" in entries["metalium"].dtypes
-
-
-class TestMetaliumAuditWalker:
-    def test_planned_gated_bfp_entries_classified_correctly(self):
-        from tessera.compiler.backend_manifest import audit_backend_dtypes
-        buckets = audit_backend_dtypes()
-        # bfp8 / bfp4 should be in the planned_gated bucket, NOT unknown.
-        names_seen = {dt for _, _, dt in buckets["planned_gated"]}
-        assert "bfp8" in names_seen
-        assert "bfp4" in names_seen
-        # And none of them should leak into the unknown bucket.
-        for _, _, dt in buckets["unknown"]:
-            assert dt not in ("bfp8", "bfp4", "blockfp8", "blockfp4"), (
-                f"{dt} should be planned_gated, not unknown"
-            )
-
-    def test_zero_unknown_dtypes_after_metalium_extension(self):
-        from tessera.compiler.backend_manifest import audit_backend_dtypes
-        buckets = audit_backend_dtypes()
-        assert buckets["unknown"] == [], (
-            f"Sprint I-2 must not introduce unknown dtypes; got: "
-            f"{buckets['unknown'][:5]}"
-        )
-
-
-# ──────────────────────────────────────────────────────────────────────────
-#               I-3: kernel inventory doc present
-# ──────────────────────────────────────────────────────────────────────────
-
-class TestMetaliumKernelInventoryDoc:
-    def test_doc_exists(self):
-        doc = REPO / "docs" / "metalium_kernel_inventory.md"
-        assert doc.exists(), f"Sprint I-3 doc missing at {doc}"
-
-    def test_doc_covers_required_sections(self):
-        doc = REPO / "docs" / "metalium_kernel_inventory.md"
-        body = doc.read_text()
-        # Required sections
-        for section in (
-            "RISC-V grid mapping",
-            "Shipped kernel inventory",
-            "Phase 7",
-            "Sprint I-1",
-            "block-floating-point",
-            "bfp8",
-            "bfp4",
-            "Execution gates",
-        ):
-            assert section in body, f"Section {section!r} missing from doc"
-
-    def test_doc_mentions_per_core_roles(self):
-        doc = REPO / "docs" / "metalium_kernel_inventory.md"
-        body = doc.read_text()
-        # Per-RISC-V-core role documentation
-        for role in ("BRISC", "NCRISC", "TRISC0", "Tensix"):
-            assert role in body, f"role {role} missing"
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -44,7 +44,7 @@ already know how `@tessera.jit`, `tessera.ops.*`, `tessera.nn.*`, and
 | Phantom (in examples) | Today's API | Notes |
 |------------------------|-------------|-------|
 | `@tessera.function` | `@tessera.jit` | The single decorator name. Optional `target=...` selects backend. |
-| `@ts.compile(backend="...")` | `@tessera.jit(target="...")` | Valid string targets: `"x86"`, `"rocm"`, `"metalium"`, `"apple_cpu"`, `"apple_gpu"`. Use `GPUTargetProfile` for SM-specific config. |
+| `@ts.compile(backend="...")` | `@tessera.jit(target="...")` | Valid string targets: `"x86"`, `"rocm"`, `"apple_cpu"`, `"apple_gpu"`. Use `GPUTargetProfile` for SM-specific config. |
 | `tessera.autodiff` (decorator form) | `tessera.autodiff.reverse(fn)` | `reverse` is the canonical wrapper. See `docs/spec/AUTODIFF_SPEC.md`. |
 | `tessera.autocast` (top-level) | `tessera.autodiff.autocast("fp16")` | Lives under autodiff. Accepts `fp16`, `bf16`, `fp32`, `fp64`, `fp8_e4m3`, `fp8_e5m2`. |
 | `tessera.checkpoint` (top-level context) | `tessera.autodiff.rematerialize()` or `tessera.autodiff.checkpoint(fn)` | Phase F2 — activation checkpointing. |

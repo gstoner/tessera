@@ -1,8 +1,8 @@
 //===- TesseraAppleDialect.h - Apple Silicon Target IR --------*- C++ -*-===//
 //
 // Hardware-free Target IR dialect for Apple Silicon CPU (Accelerate / vecLib /
-// BNNS) and GPU (Metal / MPS) artifacts. Mirrors the ROCm and Metalium
-// backend pattern (Architecture Decision #19).
+// BNNS) and GPU (Metal / MPS) artifacts. Mirrors the retained backend
+// pattern (Architecture Decision #19).
 //
 //===----------------------------------------------------------------------===//
 

@@ -95,7 +95,5 @@ def _opt_help_contains(needle: str) -> bool:
         return False
     return needle in out
 
-if _opt_help_contains("tessera-lower-to-metalium"):
-    config.available_features.add("tessera-metalium-backend")
 if _opt_help_contains("tessera-lower-to-rocm"):
     config.available_features.add("tessera-rocm-backend")

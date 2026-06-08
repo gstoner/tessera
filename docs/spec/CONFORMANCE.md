@@ -161,11 +161,11 @@ present.
 
 ### 4.3 Profile T2 — Cluster
 
-**Purpose:** Multi-node distributed training. Adds NCCL/RCCL collectives, TPU
-backend, pipeline parallelism, and Cyclic MoE distribution.
+**Purpose:** Multi-node distributed training. Adds NCCL/RCCL collectives,
+pipeline parallelism, and Cyclic MoE distribution.
 
 **Current status:** T2 is mixed. Cyclic distribution, mock collectives,
-collective insertion scaffolding, pipeline planning, and TPU artifacts are
+collective insertion scaffolding, and pipeline planning are
 implemented/scaffolded/lit-testable. Native NCCL/RCCL/MPI cluster execution is
 planned, not conformant.
 
@@ -177,9 +177,7 @@ planned, not conformant.
 | `NCCLAdapter` / `RCCLAdapter` with `all_reduce`, `reduce_scatter`, `all_gather` | `RUNTIME_ABI_SPEC §7` (Phase 6) |
 | `GPUCollectiveInsertionPass` at DP mesh boundaries | `LOWERING_PIPELINE_SPEC` (Phase 4) |
 | `PipelineStageInsertionPass` — 1F1B schedule | `LOWERING_PIPELINE_SPEC` (Phase 4) |
-| TPU StableHLO backend (`tessera-lower-to-tpu` pipeline) | `TARGET_IR_SPEC` (Phase 4) |
 | `collective.reduce_scatter` / `collective.all_gather` IR ops | `TARGET_IR_SPEC §6` |
-| Shardy mesh export | `TARGET_IR_SPEC §7` |
 
 > **Graduation criteria:** T2 becomes conformant only after native collective
 > runtime tests cover all-reduce, reduce-scatter, all-gather, failure behavior,
@@ -195,7 +193,7 @@ planned, not conformant.
 | Phase 1 | T0 Python frontend (decorators, Region, domain, dist, constraints, effects, Graph IR) | implemented |
 | Phase 2 | T0 x86 lowering chain and `tessera-lower-to-x86` | implemented / lit-testable |
 | Phase 3 | T1 compiler subset (GPUTargetProfile, FA-4 Tile IR, GPU target artifacts) | implemented / lit-testable |
-| Phase 4 | T2 distributed planner/collective/TPU artifacts | implemented / scaffolded / lit-testable |
+| Phase 4 | T2 distributed planner/collective artifacts | implemented / scaffolded / lit-testable |
 | Phase 5 | Checkpointing, optimizer sharding, autotuning, resilience foundations | implemented / lit-testable |
 | Phase 6 | Runtime C ABI, Python wrapper, diagnostics, benchmark smoke; ROCm artifacts | implemented / mock-runtime / scaffolded |
 | Phase 7 | Neighbors/halo/stencil passes | implemented / lit-testable |
@@ -206,8 +204,8 @@ Graph IR, and CPU/x86 lowering subset.
 A **T1 compiler-subset implementation** exists today for GPU target artifacts,
 FA-4 Tile IR, queues, and runtime ABI foundations. Full T1 native hardware
 runtime conformance requires hardware-backed CUDA/HIP/device runtime tests.  
-A **T2 compiler-subset implementation** exists today for distributed planners,
-mock collectives, and TPU artifacts. Full T2 conformance requires native
+A **T2 compiler-subset implementation** exists today for distributed planners
+and mock collectives. Full T2 conformance requires native
 NCCL/RCCL/MPI collective execution and multi-rank launch/teardown tests.
 
 ---
@@ -224,7 +222,7 @@ hardware).
 |---------|---------------------|------------|
 | T0 | `tests/unit/` plus Phase 2 lit fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase2/ -v` |
 | T1 compiler subset | T0 plus Phase 3 and relevant Phase 6 runtime fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase3/ tests/tessera-ir/phase6/ -v` |
-| T2 compiler subset | T1 subset plus Phase 4 distributed/TPU fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase4/ -v` |
+| T2 compiler subset | T1 subset plus Phase 4 distributed fixtures | `pytest tests/unit -v && lit tests/tessera-ir/phase4/ -v` |
 | Full T1/T2 native runtime | Hardware-backed backend suites | Backend-specific CUDA/HIP/NCCL/RCCL/MPI commands; not required for hardware-free CI. |
 
 GPU tests that require SM_90+ hardware may be skipped with `@pytest.mark.skipif`

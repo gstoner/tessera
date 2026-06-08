@@ -25,4 +25,4 @@ This is an agent-friendly rendering of the project eval strategy. `tests/COMPILE
 | Fast local | Spec conformance, documentation smoke checks, context graph generation checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
 | CI deterministic | Project evals that require no accelerator, including context graph output freshness, and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
 | Scheduled | Numerical sweeps, broader sample execution, documentation execution, and performance regression checks. | Nightly or weekly depending on runtime cost. |
-| Hardware-marked | SM80/SM90/SM100, ROCm, TPU, and distributed backend evals. | Opt-in with explicit hardware environment flags. |
+| Hardware-marked | SM80/SM90/SM100, ROCm, and distributed backend evals. | Opt-in with explicit hardware environment flags. |

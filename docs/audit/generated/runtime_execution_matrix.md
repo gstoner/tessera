@@ -25,7 +25,7 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 These targets are recognized by the capability registry (so an artifact can carry them and lower correctly) but have no executable runtime row. `launch()` returns `runtime_status = "unimplemented"` when the target capability is present, or `"missing_backend"` otherwise — never silent success, never a fabricated output.
 
 ```
-nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1200, metalium
+nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1200
 ```
 
 ## Known executor IDs

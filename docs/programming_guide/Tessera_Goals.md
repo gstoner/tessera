@@ -4,7 +4,7 @@ classification: Tutorial
 last_updated: 2026-04-26
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), TPU StableHLO, Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
 
 
 # Goals
@@ -18,7 +18,7 @@ Numerics, data movement, state, and parallelism are first-class.
 •	Single source of truth: one language for modeling, training, serving, and kernels (no C++ sidecar).
 •	Multi-level IRs: Graph IR (autodiff & algebra/MLIR), Schedule IR (fusion/tiling/pipeline/MLIR), Tile IR (blocks/warps/TensorCores/MLIR), Target IR (PTX/MLIR/LLVM).
 •	Auto & manual: sane defaults with first-party autotuning, but everything overridable with explicit schedules.
-•	Portability: CPU, NVIDIA/AMD/Intel GPUs, TPUs/NPUs, and WebGPU—no vendor lock-in.
+•	Portability: x86 CPUs, Apple Silicon CPU/GPU, NVIDIA CUDA, and AMD ROCm—no vendor lock-in.
 •	Determinism → performance dial: reproducible by default; opt in to “fast-math/async nondet” modes.
 
 2) The high-level modeling language

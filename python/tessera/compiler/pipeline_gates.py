@@ -118,8 +118,8 @@ def _manifest_entries(op: str, target: str) -> list[_bm.BackendKernelEntry]:
 
     Audit fix (2026-05-31, P2): the manifest keys per-target are
     inconsistent — NVIDIA emits per-SM rows (``nvidia_sm80``..``sm120``)
-    while ROCm emits a single family row (``rocm`` / ``rocm_blockfp``),
-    and Metalium emits ``metalium`` + ``metalium_blockfp``. The previous
+    while ROCm emits a single family row (``rocm`` / ``rocm_blockfp``).
+    The previous
     implementation only mapped family→per-SM for NVIDIA, so passing a
     per-arch ROCm target like ``rocm_gfx942`` matched zero rows and the
     codegen gate spuriously failed. We now map symmetrically: ROCm
@@ -141,8 +141,6 @@ def _manifest_entries(op: str, target: str) -> list[_bm.BackendKernelEntry]:
         elif target.startswith("rocm_") and t in ("rocm", target):
             # per-arch target inherits the rocm family manifest row, since
             # the manifest keys ROCm by family today.
-            out.append(e)
-        elif target == "metalium" and t in ("metalium", "metalium_blockfp"):
             out.append(e)
         elif t == target:
             out.append(e)
@@ -268,10 +266,6 @@ def _eval_toolchain(target: str, op_name: Optional[str]) -> GateResult:
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "hipcc present")
         return GateResult(GATE_TOOLCHAIN, STATUS_FAIL,
                           "hipcc not on PATH (ROCm 7.2.3 not installed)")
-    if target == "metalium":
-        # Metalium toolchain isn't a standard PATH binary; treat as not-evaluated.
-        return GateResult(GATE_TOOLCHAIN, STATUS_NOT_EVALUATED,
-                          "Metalium SDK probe is a separate surface")
     return GateResult(GATE_TOOLCHAIN, STATUS_FAIL, f"unknown target {target!r}")
 
 
@@ -305,7 +299,7 @@ def _eval_link(target: str, op_name: Optional[str]) -> GateResult:
 def _eval_runtime_abi(target: str, op_name: Optional[str]) -> GateResult:
     """The runtime ABI has a launcher for this target. Today: 4 targets in
     ``execution_matrix`` (cpu / apple_cpu / apple_gpu / cpu+jit_cpu_numpy).
-    NVIDIA / ROCm / Metalium return UNIMPLEMENTED with a precise reason
+    NVIDIA / ROCm return UNIMPLEMENTED with a precise reason
     from G6 ("no native C-ABI launch bridge for target=...")."""
     if _execution_row(target) is None:
         return GateResult(GATE_RUNTIME_ABI, STATUS_FAIL,
@@ -321,7 +315,6 @@ def _eval_hardware_smoke(target: str, op_name: Optional[str]) -> GateResult:
     * apple_cpu / apple_gpu — pass on Darwin; fail elsewhere.
     * nvidia / rocm — would need a GPU probe; without one, fail with a
       precise reason instead of pretending.
-    * metalium — same.
     """
     if target == "cpu":
         return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS, "host CPU present")
@@ -339,9 +332,6 @@ def _eval_hardware_smoke(target: str, op_name: Optional[str]) -> GateResult:
     if target == "rocm":
         return GateResult(GATE_HARDWARE_SMOKE, STATUS_NOT_EVALUATED,
                           "AMD GPU not probed by this gate (CI lane gap)")
-    if target == "metalium":
-        return GateResult(GATE_HARDWARE_SMOKE, STATUS_NOT_EVALUATED,
-                          "Tenstorrent device not probed by this gate (CI lane gap)")
     return GateResult(GATE_HARDWARE_SMOKE, STATUS_FAIL,
                       f"unknown target {target!r}")
 

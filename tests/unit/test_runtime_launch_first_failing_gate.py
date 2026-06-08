@@ -12,7 +12,6 @@ Today on a developer Mac:
 
 * ``nvidia`` artifact → first failing gate = ``toolchain`` (no nvcc).
 * ``rocm`` artifact → first failing gate = ``toolchain`` (no hipcc).
-* ``metalium`` artifact → first failing gate = ``link`` (artifact_only).
 * A CPU artifact whose op isn't in the native_cpu / jit_cpu_numpy
   capability set falls through with the CPU-level gate.
 
@@ -52,7 +51,7 @@ def _unsupported_artifact(target: str, op: str = "matmul") -> RuntimeArtifact:
     )
 
 
-# ---- the three audit-named cases ----
+# ---- audit-named cases ----
 
 def test_nvidia_unsupported_launch_names_toolchain_gate():
     art = _unsupported_artifact("nvidia_sm90", "matmul")
@@ -78,17 +77,6 @@ def test_rocm_unsupported_launch_names_toolchain_gate():
     assert result["reason"].startswith("unsupported: first failing gate `toolchain`")
 
 
-def test_metalium_unsupported_launch_names_link_gate():
-    art = _unsupported_artifact("metalium", "matmul")
-    result = launch(art, args={})
-    assert result["ok"] is False
-    # Metalium's toolchain probe is intentionally not_evaluated; the first
-    # FAIL is `link` (artifact_only — IR emits, no linked-kernel path).
-    assert result["first_failing_gate"] == "link", result
-    assert "artifact_only" in result["first_failing_gate_detail"]
-    assert result["reason"].startswith("unsupported: first failing gate `link`")
-
-
 # ---- shape guards ----
 
 def test_unsupported_response_carries_structured_gate_fields():
@@ -110,7 +98,7 @@ def test_unsupported_status_stays_honest():
     """The structured runtime_status is still one of the unsupported variants
     — adding the gate name to the diagnostic shouldn't silently flip ok=True
     or change the status enum."""
-    for target in ("nvidia_sm90", "rocm", "metalium"):
+    for target in ("nvidia_sm90", "rocm"):
         art = _unsupported_artifact(target, "matmul")
         result = launch(art, args={})
         assert result["ok"] is False

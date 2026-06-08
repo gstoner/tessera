@@ -106,8 +106,8 @@
    (related to native `ebm_energy` work — the v1 `ebm_energy`
    specialization only covers the quadratic case).
 
-6. **NVIDIA / AMD / Cerebras / Metalium**: GA + EBM manifest entries
-   for these targets read `status="planned"` — gated on Phase G / H / I.
+6. **NVIDIA / AMD**: GA + EBM manifest entries for these targets read
+   `status="planned"` — gated on Phase G / H.
 
 ## How to run
 
@@ -162,8 +162,7 @@ In priority order (descending):
    small shapes and write one MSL kernel that consumes the whole
    chain.
 
-5. **NVIDIA / AMD / Cerebras / Metalium** GA + EBM coverage — gated
-   on Phase G / H / I.
+5. **NVIDIA / AMD** GA + EBM coverage — gated on Phase G / H.
 
 ## Sources
 

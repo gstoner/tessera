@@ -18,15 +18,18 @@ models. The active Clifford / geometric algebra (`tessera.ga`) and
 energy-based model (`tessera.ebm`) tracks make algebra signatures,
 multivector grades, energy minimization, sampling loops, and manifold-aware
 integrators visible to the compiler rather than treating them as plain tensor
-conventions.
+conventions. Their flat-array keystone shims now project the tensor-clean
+subset onto canonical `tessera.ops.clifford_*` and `tessera.ops.ebm_*` ops, so
+autodiff, Graph IR emission, and Apple GPU runtime routing share the same op
+vocabulary.
 
-Target work exists for NVIDIA, AMD ROCm, Google TPU, Apple Silicon, Tenstorrent
-Metalium, Cerebras, Rubin CPX, and x86 AMX/AVX512. Backend maturity varies by
-target: x86 AMX and Apple Silicon (CPU + GPU) execute natively today; NVIDIA
-and ROCm have toolchain-pinned Target IR + lit fixtures with native execution
-gated on real hardware (Phase G/H — see
+Target work exists for x86 AMX/AVX512, Apple Silicon CPU/GPU, NVIDIA CUDA, and
+AMD ROCm. Backend maturity varies by target: x86 AMX and Apple Silicon
+(CPU + GPU) execute natively today; NVIDIA and ROCm have toolchain-pinned
+Target IR + lit fixtures with native execution gated on real hardware
+(Phase G/H — see
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md));
-other paths are artifact-only or lit-testable. See
+see
 [`docs/README.md`](docs/README.md) for the status labels used across docs.
 
 ---
@@ -95,19 +98,17 @@ Current high-level status (as of June 8, 2026):
 | Object-backed Graph / Schedule / Tile IR + per-target Target IR artifacts | implemented / lit-testable |
 | **x86 AMX BF16 + AVX512 lowering and execution** (Phase 2) | **implemented / hardware-runtime** |
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
-| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 250 unique Apple C ABI symbols, 103 Apple GPU kernel families, GA/EBM/M7 fused kernels, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
+| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 207 Apple runtime C ABI symbols, 84 Apple GPU kernel families, GA/EBM/M7 fused kernels, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
-| TPU target profile and StableHLO / Shardy artifacts | implemented / lit-testable |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
-| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 442 entries × 12 contract axes tracked in `primitive_coverage.py`; backend-kernel proof remains the universal open Phase G/H/I gate |
+| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 432 entries × 12 contract axes tracked in `primitive_coverage.py`; backend-kernel proof remains the universal open Phase G/H gate |
 | **Reasoning-model attention family** — DeepSeek sparse attention, MiniMax Lightning, Kimi-Delta, gated/hybrid/MLA decode + RL post-training losses, all with VJP+JVP | implemented / lit-testable |
-| Clifford / geometric algebra Python surface, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; **17/17 Apple GPU GA primitives benchmarked** |
-| Energy-based model Python surface, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel) |
+| Clifford / geometric algebra Python surface, canonical `tessera.ops.clifford_*` shim, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; **10 canonical ops route through autodiff + Apple GPU metal_runtime; 17/17 Apple GPU GA primitives benchmarked** |
+| Energy-based model Python surface, canonical `tessera.ops.ebm_*` tensor-clean shim, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **4 canonical ops route through autodiff + Apple GPU metal_runtime; 9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel) |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
-| Cerebras WSE-3, Tenstorrent Metalium, Rubin CPX backend trees | scaffolded / lit-testable |
-| **Audit-as-data infrastructure** — 5 manifest families + 15 generated audit dashboards, with CSV-canonical artifacts where applicable, drift-gated by `tests/unit/` | implemented |
+| **Audit-as-data infrastructure** — 5 manifest families + 17 generated audit dashboards, with CSV-canonical artifacts where applicable, drift-gated by `tests/unit/` | implemented |
 
 The ~6,850-test fast unit suite passes under `-m "not slow"` in ~4 minutes;
 the full Python suite collects ~7,630 tests including heavy benchmark contracts.
@@ -123,7 +124,7 @@ over phase prose when they disagree. As of the June 8, 2026 source review:
 | Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 261 unique `extern "C" tessera_*` C ABI symbols, 250 unique Apple symbols, and 103 Apple GPU kernel families. |
 | Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_backend.md` (canonical CPU+GPU reference) and `docs/apple_gpu_metal4_adoption.md` (forward-looking ladder). |
 | Compiler gap focus | The frontend and IR artifact spine are broad, but production promotion still depends on executable codegen plus oracle/fixture comparison. Current open work is runtime consumption of `fusion_groups`, stronger dtype/layout/aliasing/buffer-binding contracts, graph outputs in canonical metadata, and fixture-backed numerical proof before backend cells become complete. |
-| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 442 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
+| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 443 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
 | Known Apple test gaps | Apple runtime claims require a capable Darwin host. Non-Darwin stubs are CI fallbacks, and hardware proof should come from fresh-process runtime checks or the backend-specific benchmark/test lanes before promoting a new Apple claim. |
 | Documentation | The freshness dashboard is healthy but date-sensitive (66 docs catalogued; current manifest summary: 62 dated, 25 within 30 days, 0 older than 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
 
@@ -147,7 +148,7 @@ Schedule IR (schedule.* dialect: mesh.define/region, pipeline.region, stage, yie
 Tile IR     (tile.* ops, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
      |
      v
-Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, TPU, Apple, ...)
+Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 ```
 
 The Python compiler carries object models and verifier checks for Graph IR,
@@ -181,10 +182,8 @@ canonical pipelines registered in `tessera-opt` today:
 | `tessera-lower-to-rocm` | implemented / lit-testable / artifact-only |
 | `tessera-lower-to-apple_cpu` (artifact) / `tessera-lower-to-apple_cpu-runtime` (Accelerate) | implemented / hardware-runtime |
 | `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / hardware-runtime |
-| `tessera-lower-to-metalium` | scaffolded / target-contract artifacts |
 | `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
 | `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
-| `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` (NV Rubin CPX) | implemented (separate `tessera-cpx-opt` driver) |
 
 ---
 
@@ -196,11 +195,17 @@ structure is part of the IR contract:
 - **Clifford / geometric algebra (`tessera.ga`)** — v1 supports `Cl(3,0)` and
   `Cl(1,3)`, grade-aware `Multivector` values, geometric products, rotor
   sandwich operations, differential-form primitives, and a parallel geometric
-  autodiff registry.
+  autodiff registry. The canonical flat-array `tessera.ops.clifford_*` shim
+  covers 10 tensor-clean ops and validates closed-form VJP/JVP rules against
+  finite differences while preserving the richer `geometric_algebra` coverage
+  rows.
 - **Energy-based models (`tessera.ebm`)** — energy primitives, inner-loop
   refinement, self-verification, Langevin / MALA / HMC / Gibbs samplers,
   partition-function estimators, EBM losses, and manifold-aware sphere /
-  bivector Langevin reference paths.
+  bivector Langevin reference paths. The canonical `tessera.ops.ebm_*` shim
+  covers the tensor-clean subset (`energy_quadratic`, `self_verify`,
+  `refinement`, `inner_step`); callable/RNG EBM APIs intentionally remain on
+  `tessera.ebm`.
 - **Reasoning-model attention family + RL** — DeepSeek sparse attention, MiniMax
   Lightning, Kimi-Delta, gated/hybrid/MLA decode (each with VJP+JVP); `tessera.rl`
   ships PPO/GRPO/CISPO policy losses for post-training. Backed by
@@ -215,6 +220,19 @@ Key documents:
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | Layered status for Python reference, MLIR/lit, manifests, and native execution |
 | [`docs/status/ga_ebm_milestone.md`](docs/status/ga_ebm_milestone.md) | Canonical GA/EBM native milestone status, health check, non-claims, and next targets |
 | [`docs/audit/domain/DOMAIN_AUDIT.md`](docs/audit/domain/DOMAIN_AUDIT.md) | Sprint roadmap and acceptance history for the GA + EBM tracks |
+
+The June 8 lane-unification keystone closes the earlier GA/EBM gap between the
+specialized math namespaces and the canonical compiler op surface:
+
+- `tessera.ops.clifford_*` exposes 10 flat-coefficient GA ops that flow through
+  the autodiff tape, emit canonical Graph IR ops, and route
+  `@jit(target="apple_gpu")` to the cl30 MSL kernels with
+  `execution_mode="metal_runtime"`.
+- `tessera.ops.ebm_*` exposes 4 tensor-clean EBM ops with the same
+  autodiff + Graph IR + Apple GPU routing contract.
+- The primitive coverage importer skips registry-owned GA/EBM names so the
+  authoritative `category="geometric_algebra"` and `category="ebm"` rows keep
+  their references, halo/sharding notes, and dialect alignment.
 
 Native execution status is layer-specific:
 
@@ -237,7 +255,7 @@ consolidated into one generated dashboard:
 - [`docs/audit/generated/surface_status.md`](docs/audit/generated/surface_status.md) (human) + [`surface_status.csv`](docs/audit/generated/surface_status.csv) (canonical, machine-readable) — examples / benchmarks / research / tools / tests + operator-benchmark coverage.
 
 Plus 13 op-level / compiler-level audit registries covering primitive
-coverage (`primitive_coverage.py` — 442 entries × 12 contract axes), backend
+coverage (`primitive_coverage.py` — 443 entries × 12 contract axes), backend
 kernel manifests, MLIR verifier coverage, dialect registration, named-pipeline
 registry, diagnostic codes, docs freshness, effect lattice, runtime C ABI
 surface, test coverage by op family, TSOL canonical-op coverage, and
@@ -277,7 +295,7 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/spec/RUNTIME_ABI_SPEC.md`](docs/spec/RUNTIME_ABI_SPEC.md) | Runtime C ABI |
 | [`docs/reference/tessera_tensor_attributes.md`](docs/reference/tessera_tensor_attributes.md) | Normative tensor attributes + dtype names (six attributes, canonical/alias/planned-gated dtype sets, promotion rules) |
 | [`docs/audit/roadmap/ROADMAP_AUDIT.md`](docs/audit/roadmap/ROADMAP_AUDIT.md) | Phases A–I + S-series S0–S15 standalone compiler track with per-task acceptance criteria |
-| [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm / Metalium |
+| [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
 | [`docs/apple_backend.md`](docs/apple_backend.md) | **Canonical Apple CPU + GPU reference** — architecture, kernel inventory, datatypes, and Metal 4 implementation state (consolidates the former overview / kernel-inventory / datatypes / integration-review docs) |
@@ -406,7 +424,7 @@ src/
   compiler/programming_model/  Schedule / programming-model IR
   compiler/tile_opt_fa4/ FA-4 attention and queue dialects/passes
   compiler/tessera_neighbors/  Neighbor / halo / stencil dialect and passes
-  compiler/codegen/      x86, NVIDIA, ROCm, TPU, Apple, Metalium, Cerebras, Rubin CPX
+  compiler/codegen/      x86, NVIDIA, ROCm, Apple
   compiler/diagnostics/  ErrorReporter, ShapeInferencePass
   compiler/autotuning/   Autotuner v1 framework
   collectives/           Collective IR + NCCL/RCCL adapters + chunk planner

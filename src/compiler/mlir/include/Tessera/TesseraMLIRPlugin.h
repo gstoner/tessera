@@ -57,9 +57,6 @@ void registerTesseraDialects(mlir::DialectRegistry &registry);
 //   -tessera-pm-verify             (PMV11VerifierPass)
 //   -tessera-graph-to-schedule     (GraphToSchedulePass)
 //   -tessera-schedule-to-tile      (ScheduleToTilePass)
-//   -tessera-lower-to-stablehlo    (TPU backend)
-//   -tessera-annotate-sharding     (TPU backend)
-//   -tessera-export-shardy         (ShardyExportPass)
 // ---------------------------------------------------------------------------
 void registerTesseraAllPasses();
 
@@ -73,8 +70,7 @@ void registerTesseraAllPasses();
 //   tessera-neighbors-pipeline     — HaloInfer + StencilLower + PipelineOverlap
 //   tessera-pm-verify-pipeline     — PMV11VerifierPass + CSE + Canonicalize
 //   tessera-pm-legalize-pipeline   — verify + GraphToSchedule + ScheduleToTile
-//   tessera-tpu-backend            — full TPU lowering (stablehlo + shardy)
-//   tessera-full-pipeline          — all of the above end-to-end
+//   tessera-full-pipeline          — retained layers end-to-end
 // ---------------------------------------------------------------------------
 void registerTesseraAllPipelines();
 
@@ -100,7 +96,7 @@ void buildPMVerifyPipeline(mlir::OpPassManager &pm);
 /// Build the Programming Model v1.1 legalization pipeline.
 void buildPMLegalizePipeline(mlir::OpPassManager &pm);
 
-/// Build the full Tessera → StableHLO + Shardy pipeline.
+/// Build the full retained Tessera pipeline.
 void buildFullPipeline(mlir::OpPassManager &pm);
 
 } // namespace tessera

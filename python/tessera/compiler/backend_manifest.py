@@ -75,7 +75,7 @@ _PACKAGED_STATUS = "packaged"
 # computable property (a primitive is complete iff every declared
 # target row is ``hardware_verified``).  Today (2026-05-22) zero
 # entries claim this status — flipping the first one requires real
-# NVIDIA / ROCm / Metalium hardware proof.
+# NVIDIA / ROCm hardware proof.
 _HARDWARE_VERIFIED_STATUS = "hardware_verified"
 
 _VALID_STATUSES = frozenset({
@@ -872,61 +872,6 @@ _APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sprint I-2 (2026-05-11) — Tenstorrent Metalium kernel inventory.
-#
-# Metalium is the canonical user of the planned/gated `bfp*` block-FP
-# dtype family (per `docs/reference/tessera_tensor_attributes.md`).
-# Each entry below declares `metadata.dtype_status="planned_gated"`
-# implicitly via the dtype set membership — the registry walker is the
-# enforcement point for that.
-#
-# Matmul + DMA already shipped (Phase 7).  Softmax / LayerNorm / RMSNorm
-# land as Sprint I-1 lit fixtures with `_ARTIFACT_STATUS` (the Metalium
-# pass currently lowers `tessera.tile.softmax` to a `dma + matmul`
-# decomposition; lit-testable, execution gated on Wormhole hardware).
-# ─────────────────────────────────────────────────────────────────────────────
-_METALIUM_KERNELS: dict[str, dict[str, Any]] = {
-    "matmul": {
-        "status": _ARTIFACT_STATUS,
-        "dtypes": ("bf16", "fp32"),
-        "notes": "Tile-local matmul intrinsic via `tessera_metalium.matmul` (Phase 7); FP4/FP6 lanes via `bfp4`/`bfp8` block-FP (planned/gated)",
-    },
-    "softmax": {
-        "status": _ARTIFACT_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "DMA→tile_local_reduce(via matmul)→exp/scale→DMA (Sprint I-1)",
-    },
-    "softmax_safe": {
-        "status": _ARTIFACT_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "Alias of softmax with explicit max-subtract for numerical safety",
-    },
-    "layer_norm": {
-        "status": _ARTIFACT_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "Two tile-local reductions (Σx, Σ(x-μ)²) via matmul (Sprint I-1)",
-    },
-    "rmsnorm": {
-        "status": _ARTIFACT_STATUS,
-        "dtypes": ("bf16",),
-        "notes": "One tile-local Σx² reduction via matmul (Sprint I-1)",
-    },
-}
-
-
-# Metalium planned/gated dtype declarations.  `bfp8` / `bfp4` are the
-# Tenstorrent block-FP formats; entries that reference them carry
-# `metadata.dtype_status="planned_gated"` enforced by the registry walker.
-_METALIUM_PLANNED_GATED_KERNELS: dict[str, dict[str, Any]] = {
-    "matmul": {
-        "status": _PLANNED_STATUS,
-        "dtypes": ("bfp8", "bfp4"),
-        "notes": "Tenstorrent block-FP MFMA-style matmul; planned/gated dtype family",
-    },
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # GA9 (2026-05-17) — Clifford / Geometric-Algebra kernel manifest.
 #
 # Parallel to the tensor-op manifest above: the 17 `clifford_*` primitives
@@ -940,7 +885,7 @@ _METALIUM_PLANNED_GATED_KERNELS: dict[str, dict[str, Any]] = {
 #               for matmul-flavored ops is a GA9-followup).
 #   apple_gpu → planned status for v1 (custom MSL kernels for fused
 #               geo_product / rotor_sandwich are post-GA9 work).
-#   NVIDIA / ROCm / Metalium → planned (post-Phase G/H/I).
+#   NVIDIA / ROCm → planned (post-Phase G/H).
 #
 # Two headline ops (geo_product, rotor_sandwich) get expanded fp16/bf16
 # coverage on Apple GPU because they're the load-bearing primitives the
@@ -958,7 +903,7 @@ _CLIFFORD_APPLE_GPU_HEADLINE_DTYPES = ("fp32", "fp16", "bf16")
 # every GA op are GA10/GA11 follow-on conformance work).
 _CLIFFORD_APPLE_GPU_BASELINE_DTYPES = ("fp32",)
 
-# NVIDIA / ROCm / Metalium dtype targets for the planned-only entries.
+# NVIDIA / ROCm dtype targets for the planned-only entries.
 _CLIFFORD_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
 
 
@@ -1082,8 +1027,8 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     Python conformance suite).  Apple GPU coverage is planned for v1;
     the two headline ops (geo_product, rotor_sandwich) declare
     fp32/fp16/bf16 slots so the post-GA9 MSL kernel work has a
-    pre-locked dtype target.  NVIDIA / ROCm / Metalium entries are
-    planned, gated on Phase G/H/I respectively.
+    pre-locked dtype target.  NVIDIA / ROCm entries are planned,
+    gated on Phase G/H respectively.
     """
     if op_name not in _CLIFFORD_PRIMITIVES:
         return []
@@ -1761,7 +1706,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for ``op_name``.
 
     Order: cpu / x86 / apple_cpu / apple_gpu / nvidia_sm80 / sm90 / sm100 /
-    sm120 / rocm / metalium.  Each entry's status reflects whether the
+    sm120 / rocm.  Each entry's status reflects whether the
     target ships a fused kernel, a reference path, an artifact-only stub,
     or has no plan.
 
@@ -1935,51 +1880,6 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             hipcc_version_min="7.2.3",
             expected_mfu=mfu,
         ))
-
-    # Tenstorrent Metalium — Sprint I-1/I-2 (2026-05-11): shipped kernel
-    # inventory takes precedence over the generic capability lookup so
-    # the manifest reflects the actual dialect coverage (softmax /
-    # layer_norm / rmsnorm via `dma + matmul` decomposition).
-    metalium = _METALIUM_KERNELS.get(op_name)
-    if metalium is not None:
-        entries.append(BackendKernelEntry(
-            target="metalium",
-            status=str(metalium["status"]),
-            dtypes=tuple(metalium["dtypes"]),
-            feature_flags=("dma_contract", "tile_local_matmul", "risc_v_grid"),
-            notes=str(metalium.get("notes", "")),
-        ))
-        # Planned/gated dtype variants (bfp8 / bfp4) are recorded as a
-        # separate entry so the audit walker can verify the
-        # `metadata.dtype_status="planned_gated"` annotation.
-        gated = _METALIUM_PLANNED_GATED_KERNELS.get(op_name)
-        if gated is not None:
-            entries.append(BackendKernelEntry(
-                target="metalium_blockfp",
-                status=str(gated["status"]),
-                dtypes=tuple(gated["dtypes"]),
-                feature_flags=("dma_contract", "block_fp", "tt_native"),
-                notes=str(gated.get("notes", "")),
-            ))
-    else:
-        cap = _capability_status("metalium", op_name)
-        if cap is not None:
-            status, dtypes = cap
-            mapped = (
-                _FUSED_KERNEL_STATUS if status == "ready"
-                else _ARTIFACT_STATUS if status == "artifact_only"
-                else _PLANNED_STATUS
-            )
-            entries.append(BackendKernelEntry(
-                target="metalium",
-                status=mapped,
-                dtypes=dtypes,
-                feature_flags=("dma_contract",),
-                notes=(
-                    "Metalium target artifact scaffolded"
-                    if mapped == _ARTIFACT_STATUS else ""
-                ),
-            ))
 
     # CPU numpy reference — always available as fallback
     cap = _capability_status("cpu", op_name)

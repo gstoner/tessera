@@ -21,8 +21,7 @@ Rules locked here:
    math_mode="tf32")`` instead.
 
 3. **Planned/gated dtypes are not first-class today.** ``uint8/16/32/64``,
-   ``complex64/128``, packed ``int4``, AMD ``mxfp8/6/4``, and Tenstorrent
-   ``bfp8/4`` / ``blockfp8/4`` are recognized by ``is_planned_gated_dtype``
+   ``complex64/128``, packed ``int4``, and AMD ``mxfp8/6/4`` are recognized by ``is_planned_gated_dtype``
    but ``canonicalize_dtype()`` will raise unless ``allow_planned_gated=True``
    is passed. Registry entries that reference these must declare
    ``metadata.dtype_status = "planned_gated"``.
@@ -105,17 +104,11 @@ _PLANNED_AMD_MX: frozenset[str] = frozenset({
     "mxfp8", "mxfp6", "mxfp4",
 })
 
-_PLANNED_TT_BLOCK: frozenset[str] = frozenset({
-    "bfp8", "bfp4",
-    "blockfp8", "blockfp4",
-})
-
 _PLANNED_GATED_DTYPES: frozenset[str] = (
     _PLANNED_UNSIGNED
     | _PLANNED_COMPLEX
     | _PLANNED_PACKED_INT
     | _PLANNED_AMD_MX
-    | _PLANNED_TT_BLOCK
 )
 
 
@@ -231,7 +224,7 @@ def canonicalize_dtype(
         ``"fp32"``).
     allow_planned_gated : bool, default False
         If True, allow names from the planned/gated set
-        (``uint*``/``complex*``/``int4``/``mxfp*``/``bfp*``).  The caller
+        (``uint*``/``complex*``/``int4``/``mxfp*``).  The caller
         accepts responsibility for declaring ``dtype_status="planned_gated"``
         in any registry metadata.
     """

@@ -155,7 +155,6 @@ CONFORMANCE_TARGETS: tuple[str, ...] = (
     "apple_gpu",
     "nvidia",
     "rocm",
-    "metalium",
 )
 
 
@@ -207,8 +206,6 @@ def _manifest_for_target(op: str, target: str) -> list[_bm.BackendKernelEntry]:
         t = e.target
         if target == "nvidia" and t.startswith("nvidia_"):
             out.append(e)
-        elif target == "metalium" and t in ("metalium", "metalium_blockfp"):
-            out.append(e)
         elif t == target:
             out.append(e)
     return out
@@ -253,7 +250,6 @@ _TARGET_KEYWORDS = {
     "nvidia": ("nvidia", "cuda", "sm80", "sm90", "sm100", "sm120",
                "wgmma", "tma", "tcgen05"),
     "rocm": ("rocm", "mfma", "hip"),
-    "metalium": ("metalium", "tenstorrent"),
 }
 
 
@@ -309,7 +305,7 @@ def _numerical_proof_source(op: str, target: str) -> Optional[str]:
     if direct and (repo / direct).is_file():
         return "fixture"
     # Step 1b — manifest entry carrying a fixture (covers per-arch
-    # nvidia/rocm/metalium rows aggregated by ``_manifest_for_target``, and
+    # nvidia/rocm rows aggregated by ``_manifest_for_target``, and
     # any entry that set the fixture via its constructor).
     for entry in _manifest_for_target(op, target):
         fixture = entry.execute_compare_fixture

@@ -21,7 +21,7 @@ Tessera is a **pre-alpha, tile-centric programming model and compiler** for deep
 
 The Python surface (`@tessera.jit`, `Region[...]`, `tessera.domain`) provides a clean, declarative API. Below it, a four-layer MLIR IR stack provides rigorous semantics at each lowering stage. The compiler is **static and AOT** — there is no tracing JIT.
 
-Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm, Google TPU, Cerebras WSE-3, Tenstorrent Metalium, and x86 AMX/AVX-512.
+Target hardware: x86 AMX/AVX-512, Apple Silicon CPU/GPU, NVIDIA CUDA, and AMD ROCm.
 
 ---
 
@@ -122,7 +122,6 @@ generated support and E2E dashboards.
 | Component | Phase |
 |-----------|-------|
 | Native NCCL/RCCL hardware-runtime execution for all collectives | scaffolded / mock-runtime tests |
-| TPU hardware-runtime execution | lit-testable artifacts |
 | Non-CPU backend native execution from Python `@jit` | artifact-only unless backend docs say otherwise |
 | Production deployment guarantees | planned |
 

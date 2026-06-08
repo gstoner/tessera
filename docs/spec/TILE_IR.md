@@ -49,7 +49,7 @@ question. Resolution:
 
 Tile IR is the **third layer** of the Tessera four-layer IR stack. It is produced by
 `TileIRLoweringPass` from Schedule IR and consumed by the target backends (x86, NVIDIA,
-ROCm, TPU).
+ROCm, Apple).
 
 ```
 Schedule IR  (schedule.* dialect)

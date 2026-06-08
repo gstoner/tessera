@@ -83,7 +83,7 @@ The per-op catalog below uses six axes from `primitive_coverage.py`
 - 31 / 47 have `complete` sharding; 16 sit at `partial` pending
   Phase G mesh verification.
 - **0 / 47** claim `complete` `backend_kernel` — by registry design
-  this requires real NVIDIA / ROCm / Metalium hardware proof
+  this requires real NVIDIA / ROCm hardware proof
   (see [backend audit](../audit/backend/BACKEND_AUDIT.md)).
   The `◐ partial` status documents which targets have shipping
   kernels today (Apple GPU + x86 paths are real; the rest are

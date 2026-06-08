@@ -428,7 +428,7 @@ def render_dashboard() -> str:
         "complete` requires every declared target to ship a real "
         "hardware kernel with numerical proof.  Today **zero** TSOL "
         "entries can claim `complete` because NVIDIA / ROCm / "
-        "Tenstorrent Metalium proofs aren't available on this Mac.  "
+        "NVIDIA / ROCm proofs aren't available on this Mac.  "
         "See `docs/audit/backend/BACKEND_AUDIT.md` for the "
         "full hardware-gated punch list."
     )

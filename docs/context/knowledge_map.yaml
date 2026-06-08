@@ -211,16 +211,6 @@ entities:
       - path: src/compiler/codegen/Tessera_ROCM_Backend/CMakeLists.txt
       - path: src/runtime/src/backend/hip_backend.cpp
 
-  - id: backend.tpu
-    type: backend
-    name: TPU StableHLO Backend
-    description: "TPU target planning and StableHLO export surface."
-    authority: normative
-    references:
-      - path: docs/spec/COMPILER_REFERENCE.md
-      - path: python/tessera/compiler/tpu_target.py
-      - path: tests/tessera-ir/phase4/tpu_shardy_export.mlir
-
   - id: runtime.c_abi
     type: runtime_component
     name: Runtime C ABI

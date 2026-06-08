@@ -610,7 +610,7 @@ def _public_doc_paths() -> list[Path]:
 # one of these, the manifest must have a `fused` entry for the (op,
 # target) pair.  Anything else is silent over-claiming.
 _TESSERA_SYMBOL_RE = re.compile(
-    r"tessera_(?P<target>apple_gpu|apple_cpu|x86|nvidia|rocm|metalium)_"
+    r"tessera_(?P<target>apple_gpu|apple_cpu|x86|nvidia|rocm)_"
     r"(?P<op>[A-Za-z0-9_]+?)_(?P<dtype>f32|f16|bf16|fp32|fp16)"
 )
 

@@ -342,7 +342,7 @@ Full pass-by-pass specification: `docs/spec/LOWERING_PIPELINE_SPEC.md`.
 | 1 | ✅ Complete | — |
 | 2 | ✅ Complete | — |
 | 3 | ✅ Complete | — |
-| 4 | 🔲 Next | NCCL/RCCL adapters, `GPUCollectiveInsertionPass`, `PipelineStageInsertionPass`, TPU StableHLO backend, `Cyclic` distribution full implementation |
+| 4 | 🔲 Next | NCCL/RCCL adapters, `GPUCollectiveInsertionPass`, `PipelineStageInsertionPass`, `Cyclic` distribution full implementation |
 | 5 | 🔲 Future | `InsertRecomputePass`, `OptimizerShardPass`, `BayesianAutotuner`, sparse/RNG solvers |
 | 6 | 🔲 Future | ROCm MFMA full coverage, Runtime C ABI Python wrapper, benchmark suite |
 

@@ -109,10 +109,6 @@ _BACKEND_SOURCE_ROOTS: tuple[tuple[str, str], ...] = (
     ("x86", "src/compiler/codegen/tessera_x86_backend/src"),
     ("nvidia", "src/compiler/codegen/tessera_gpu_backend_NVIDIA"),
     ("rocm", "src/compiler/codegen/Tessera_ROCM_Backend"),
-    ("metalium", "src/compiler/codegen/Tessera_Metalium_Backend"),
-    ("cerebras", "src/compiler/codegen/Tessera_Cerebras_backend"),
-    ("tpu", "src/compiler/codegen/Tessera_TPU_Backend"),
-    ("rubincpx", "src/compiler/codegen/Tessera_RubinCPX_Backend"),
     ("runtime_core", "src/runtime"),
 )
 
@@ -167,7 +163,6 @@ def _classify_symbol(name: str, backend: str) -> tuple[str, str | None]:
     backend_prefixes = (
         "apple_cpu_", "apple_gpu_",
         "x86_", "cuda_", "hip_",
-        "metalium_", "cerebras_", "tpu_", "rubincpx_",
     )
     for prefix in backend_prefixes:
         if stem.startswith(prefix):

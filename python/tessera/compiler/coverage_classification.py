@@ -12,7 +12,7 @@ not the same as "untested" — many of those ops are:
     custom-primitive registration) whose direct numerical tests would
     be meaningless — they're exercised by the harnesses that USE them.
   * Hardware-gated paths where direct execute-and-compare needs real
-    NVIDIA / ROCm / Metalium hardware that this Mac doesn't have.
+    NVIDIA / ROCm hardware that this Mac doesn't have.
   * Deprecated or internal helpers we should not count as test debt.
 
 This module classifies every thinly-tested op into one of five buckets

@@ -10,7 +10,7 @@
 //   - emitAsyncCopy()        — builder helper for staged async DMA copies
 //
 // Relationship to other layers:
-//   Graph IR  →  Schedule IR  →  [Target IR]  →  StableHLO / PTX
+//   Graph IR  →  Schedule IR  →  [Target IR]  →  backend artifacts
 //
 //===----------------------------------------------------------------------===//
 

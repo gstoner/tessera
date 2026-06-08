@@ -481,16 +481,6 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         ),
         features=("wmma_f16", "wmma_bf16", "wmma_f8", "buffer_load_lds", "rocm_7_2_3"),
     ),
-    "metalium": TargetCapability(
-        name="metalium",
-        aliases=("metalium", "tt_metalium", "tt"),
-        family="metalium",
-        runtime_backend="metalium",
-        default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul",), reason="Metalium target contract is scaffolded"),
-        supported_dtypes=("bf16", "fp32", "f32"),
-        features=("dma_contract",),
-    ),
     "apple_cpu": TargetCapability(
         name="apple_cpu",
         aliases=("macos_cpu", "m_series_cpu"),

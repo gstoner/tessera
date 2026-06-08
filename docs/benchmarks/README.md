@@ -10,7 +10,7 @@ last_updated: 2026-04-30
 TesseraBench is the official benchmarking and performance validation framework
 for the Tessera programming model. It is inspired by tritonbench and provides
 systematic performance evaluation across the full multi-level IR stack — from
-Graph IR to Target IR — on NVIDIA, AMD, x86, and TPU backends.
+Graph IR to Target IR — on NVIDIA, AMD ROCm, Apple, and x86 backends.
 
 All examples use the current Tessera API: `@tessera.jit`, `@tessera.kernel`,
 `tessera.ops.*`, `tessera.domain.Rect`, `tessera.dist.Block/Replicated`, and

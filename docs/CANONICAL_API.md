@@ -9,7 +9,7 @@ last_updated: 2026-05-11
 **Last updated:** May 11, 2026  
 **Use this document** to resolve any naming disagreement in other docs. If something here conflicts with another doc, this file wins.
 
-> **Tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical reference for the six tensor attributes (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype names + accepted aliases, the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, `mxfp*`, `bfp*`), and the JAX-like promotion direction. Every dtype string used in this file (`"fp32"`, `"bf16"`, `"fp16"`, `"fp8_e4m3"`, etc.) follows that vocabulary; aliases like `"f32"` are accepted at API boundaries but should normalize before storage.
+> **Tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical reference for the six tensor attributes (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype names + accepted aliases, the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, `mxfp*`), and the JAX-like promotion direction. Every dtype string used in this file (`"fp32"`, `"bf16"`, `"fp16"`, `"fp8_e4m3"`, etc.) follows that vocabulary; aliases like `"f32"` are accepted at API boundaries but should normalize before storage.
 
 ---
 
@@ -249,7 +249,6 @@ Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `
 | `None`, `"cpu"` | `cpu` | CPU/mock-runtime path when supported by the op graph |
 | `"cuda"`, `"nvidia"`, `"gpu"`, `"sm90"`, `"sm_90"`, `"sm90a"`, `"sm_90a"`, `"hopper"` | `nvidia_sm90` | NVIDIA artifact target |
 | `"rocm"`, `"amd"`, `"hip"` | `rocm` | ROCm Target IR artifact |
-| `"metalium"`, `"tt_metalium"`, `"tt"` | `metalium` | Metalium Target IR artifact |
 | `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | Apple CPU Target IR artifact |
 | `"apple_gpu"` | `apple_gpu` | Apple GPU Target IR artifact |
 
@@ -276,7 +275,7 @@ Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `
 ### Planned / gated (not first-class today)
 
 `uint8`/`uint16`/`uint32`/`uint64`, `complex64`/`complex128`, packed `int4`,
-AMD `mxfp8`/`mxfp6`/`mxfp4`, Tenstorrent `bfp8`/`bfp4`/`blockfp8`/`blockfp4`,
+AMD `mxfp8`/`mxfp6`/`mxfp4`,
 and TF32 (which is **not** a storage dtype — model it as `math_mode="tf32"`
 on `fp32` tensors via `numeric_policy`, not as `dtype="tf32"`).
 
@@ -790,5 +789,4 @@ The Python tape (above) remains the production path until the MLIR build runs `c
 | `tessera.autodiff.tape / reverse / custom_rule` (v1, numpy-reference) | ✅ | Tier 2 — see `docs/spec/AUTODIFF_SPEC.md` |
 | `tessera.autodiff.rematerialize / mixed_precision / Graph-IR adjoints / distributed adjoint collectives` | 🔲 planned | Phase 5 follow-ups |
 | NCCL/RCCL collectives | partial | scaffolded / mock-runtime tests |
-| TPU target profile and artifacts | ✅ | implemented / lit-testable |
 | Runtime C ABI Python wrapper | ✅ | CPU reference/mock path; native CPU C ABI when built; Apple CPU/GPU runtime-backed via Accelerate / MPS / MPSGraph / MSL |

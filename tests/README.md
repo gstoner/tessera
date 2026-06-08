@@ -43,7 +43,6 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 | `hardware_apple_gpu` | Tests that require a Darwin host with Metal hardware. Skipped silently when collecting on non-Darwin or in CI without hardware. |
 | `hardware_nvidia` | Tests that require an NVIDIA GPU with CUDA toolkit. |
 | `hardware_rocm` | Tests that require an AMD GPU with the ROCm toolkit. |
-| `hardware_tpu` | Tests that require a Google TPU. |
 
 The `hardware_*` markers are how `scripts/release_gate.py --target=<accel>` selects per-target tests for the release-gate hardware lane. Tests not yet using a marker still rely on `skipif(sys.platform != "darwin")`-style guards; landing the marker on each hardware test is incremental work and tracked in the tests-manifest dashboard.
 

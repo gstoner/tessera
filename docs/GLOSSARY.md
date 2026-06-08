@@ -202,7 +202,7 @@ lowering. Phase 5 planned.
 ## Target IR
 
 The fourth and final IR layer. Lowers Tile IR to vendor-specific intrinsics:
-WGMMA, TMA, mbarrier for NVIDIA; MFMA/LDS for AMD; StableHLO for TPU.
+WGMMA, TMA, mbarrier for NVIDIA; MFMA/LDS for AMD.
 
 ## TesseraBench
 

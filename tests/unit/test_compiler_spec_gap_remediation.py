@@ -18,7 +18,6 @@ SHAPE_SPEC = ROOT / "docs" / "spec" / "SHAPE_SYSTEM.md"
 CONFORMANCE = ROOT / "docs" / "spec" / "CONFORMANCE.md"
 COMPILER_REF = ROOT / "docs" / "spec" / "COMPILER_REFERENCE.md"
 LOWERING_SPEC = ROOT / "docs" / "spec" / "LOWERING_PIPELINE_SPEC.md"
-METALIUM_LOWERING = ROOT / "src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Lowering/TileToMetalium.cpp"
 TMEM_PTX = ROOT / "src/compiler/tile_opt_fa4/lib/Conversion/TesseraTileToPTX/LowerTileToPTX.cpp"
 TILING_INTERFACE = ROOT / "src/compiler/ir/TesseraTiling.cpp"
 PM_VERIFY = ROOT / "src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp"
@@ -96,8 +95,6 @@ def test_target_ir_spec_splits_artifact_runtime_and_backend_status():
         "placeholder kernels are not native-runtime claims",
         "matmul lowers to artifact op",
         "PJRT execute is scaffolded",
-        "Cerebras",
-        "Rubin CPX",
         "debug markers",
         "Target IR lowering elides them",
     ]
@@ -259,17 +256,6 @@ def test_backend_mvp_source_contracts_are_not_placeholders():
     ):
         assert term in ptx
     assert "schematic placeholder" not in ptx
-
-    metalium = METALIUM_LOWERING.read_text(encoding="utf-8")
-    for term in (
-        'OperationState state(loc, "tessera_metalium.matmul")',
-        "tile_shape",
-        "artifact_only",
-        "rewriter.replaceOp",
-    ):
-        assert term in metalium
-    assert "Metalium matmul lowering is not implemented" not in metalium
-
 
 def test_memory_model_verifier_source_covers_structural_negative_cases():
     text = PM_VERIFY.read_text(encoding="utf-8")

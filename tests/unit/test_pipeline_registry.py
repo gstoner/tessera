@@ -34,8 +34,8 @@ from tessera.compiler.pipeline_registry import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Pipelines are registered across multiple .cpp files — the canonical
-# Passes.cpp owns the lowering chain, while each backend's Passes.cpp
-# owns its `tessera-lower-to-{rocm,metalium,apple_cpu,apple_gpu}` etc.
+# Passes.cpp owns the lowering chain, while each retained backend's Passes.cpp
+# owns its `tessera-lower-to-{rocm,apple_cpu,apple_gpu}` etc.
 _PASS_REGISTRATION_FILES = (
     REPO_ROOT / "src/transforms/lib/Passes.cpp",
     # L-series linalg pilot: the cross-library `-full` Apple spine aliases are
@@ -44,10 +44,6 @@ _PASS_REGISTRATION_FILES = (
     REPO_ROOT / "tools/tessera-opt/tessera-opt.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
-    REPO_ROOT / "src/compiler/codegen/Tessera_Metalium_Backend/lib/Target/Metalium/Passes.cpp",
-    REPO_ROOT / "src/compiler/codegen/Tessera_Cerebras_backend/lib/Passes.cpp",
-    REPO_ROOT / "src/compiler/codegen/Tessera_RubinCPX_Backend/lib/Transforms/Passes.cpp",
-    REPO_ROOT / "src/compiler/codegen/Tessera_TPU_Backend/src/passes/RegisterPasses.cpp",
     REPO_ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
     REPO_ROOT / "src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp",
     REPO_ROOT / "src/compiler/mlir/TesseraMLIRPlugin.cpp",
@@ -183,8 +179,6 @@ _KNOWN_UNTRACKED_PIPELINES: frozenset[str] = frozenset({
     # future sprints should slot each one into REGISTERED_PIPELINES.
     # Solver / out-of-tree-tool pipelines (separate driver binaries).
     "tessera-clifford-pipeline",
-    "tessera-cpx-pipeline",
-    "tessera-cpx-context-pipeline",
     "tessera-ebm-pipeline",
     "tessera-spectral-pipeline",
     "tessera-spectral-cleanup",
@@ -194,10 +188,7 @@ _KNOWN_UNTRACKED_PIPELINES: frozenset[str] = frozenset({
     "tessera-neighbors-pipeline",
     # Per-backend convenience aliases (separate from the
     # `tessera-lower-to-*` umbrella names tracked here).
-    "tessera-cerebras-backend",
-    "tessera-metalium",
     "tessera-rocm-backend",
-    "tessera-tpu-backend",
     "tessera-lower-to-nvidia",
     "tessera-lower-to-blackwell",
     "tessera-lower-to-hopper",

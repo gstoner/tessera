@@ -107,7 +107,6 @@ markers = [
     "hardware_apple_gpu: requires a Darwin host with Metal hardware",
     "hardware_nvidia: requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm: requires an AMD GPU with the ROCm toolkit",
-    "hardware_tpu: requires a Google TPU",
 ]
 
 # ----------------------------------------------------------------------------

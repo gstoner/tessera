@@ -69,7 +69,7 @@ tanh,elementwise,public,public,registered,complete,partial,reference,ready,none
 ebm_bivector_langevin,energy_based_models,public,public,not_applicable,not_applicable,fused,fused,fused,benchmarked
 ebm_decode_init,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked
 ebm_energy,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked
-ebm_energy_quadratic,energy_based_models,public,public,missing,not_applicable,planned,planned,ready,none
+ebm_energy_quadratic,energy_based_models,public,public,missing,complete,planned,planned,ready,none
 ebm_inner_step,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_langevin_step,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_partition_exact,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked

@@ -12,8 +12,8 @@ Pins the new schema fields + hardware_verified contract:
   * Only the Apple GPU encode-session ops claim hardware_verified
     (Project 3 / Sprint A, 2026-06-01) — each runs a real Metal /
     MPSGraph kernel on this Mac's GPU with a checked-in numerical
-    fixture. Discrete NVIDIA / ROCm / Metalium accelerators still may
-    not claim it (that hardware is unavailable here); a Phase G/H/I
+    fixture. Discrete NVIDIA / ROCm accelerators still may
+    not claim it (that hardware is unavailable here); a Phase G/H
     sprint lighting up the first such proof updates that expectation.
 """
 
@@ -176,7 +176,7 @@ def test_primitive_is_complete_rejects_fused_only() -> None:
 # MPSGraph kernel on this Mac's GPU AND ships a checked-in
 # ``execute_compare_fixture`` that numerically validates it against
 # numpy. Apple Silicon GPU IS real hardware (unlike the discrete
-# NVIDIA / ROCm / Metalium accelerators, which are genuinely
+# NVIDIA / ROCm accelerators, which are genuinely
 # unavailable here), so these claims are honest. This is the
 # "first proof landed → update the test" event the original guard's
 # docstring anticipated.
@@ -191,10 +191,10 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
     Apple GPU encode-session ops with a real Metal kernel + checked-in
     numerical fixture (Project 3 / Sprint A, 2026-06-01).
 
-    Discrete-accelerator targets (NVIDIA / ROCm / Metalium) still may
+    Discrete-accelerator targets (NVIDIA / ROCm) still may
     NOT claim hardware_verified — that hardware isn't available on this
-    Mac, so any such claim would be under-evidenced. The Phase G/H/I
-    frontier audit tracks that gap. When real NVIDIA/ROCm/Metalium
+    Mac, so any such claim would be under-evidenced. The Phase G/H
+    frontier audit tracks that gap. When real NVIDIA/ROCm
     proof lands, extend this test to allow that target too."""
     by_op = all_manifests()
     hw_verified: list[tuple[str, BackendKernelEntry]] = [
@@ -217,8 +217,8 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
     assert not offenders, (
         "Unexpected hardware_verified claim — only Apple GPU encode-"
         "session ops with a real Metal kernel + checked-in "
-        "execute_compare_fixture may claim it today (NVIDIA/ROCm/"
-        "Metalium hardware is unavailable on this Mac). Offenders: "
+        "execute_compare_fixture may claim it today (NVIDIA/ROCm "
+        "hardware is unavailable on this Mac). Offenders: "
         + ", ".join(
             f"{op}/{e.target} via {e.runtime_symbol}"
             for op, e in offenders

@@ -86,7 +86,6 @@ Python compiler constructs them from verified object models:
   `tessera.attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
 - **Target IR:** `TargetIRModule` lowers Tile IR into verified CPU/x86,
   NVIDIA/CUDA, Apple CPU/GPU, and ROCm hardware-free target artifacts.
-  Metalium keeps its existing artifact renderer in this path.
 
 To see whether a function used the compiler path:
 
@@ -149,7 +148,7 @@ Supported:
   with `._data`
 - hardware-free Target IR artifact selection with `target="cpu"`,
   `target="nvidia_sm90"`, `target="nvidia_sm100"`, `target="rocm"`,
-  `target="metalium"`, `target="apple_cpu"`, and `target="apple_gpu"`
+  `target="apple_cpu"`, and `target="apple_gpu"`
 - direct textual DSL lowering through Graph IR into Schedule/Tile/Target IR
   object models
 
@@ -157,7 +156,7 @@ Not yet supported:
 
 - cost-model driven Schedule IR selection
 - native C ABI CPU launch
-- GPU/ROCm/Apple/Metalium runtime dispatch from this frontend path
+- GPU/ROCm/Apple runtime dispatch from this frontend path
 - arbitrary Python control flow lowering in the Python AST frontend
 - complete native MLIR Python binding construction for every layer
 - full Tensor shape/type inference beyond the current verifier checks
@@ -215,7 +214,6 @@ Current hardware-free target contracts:
 
 - `target="rocm"` lowers Tile IR to `tessera_rocm.*` MFMA, async-copy, wait,
   elementwise, and diagnostic artifacts.
-- `target="metalium"` emits `tessera_metalium.*` DMA and matmul artifacts.
 - `target="apple_cpu"` lowers Tile IR to Accelerate/vecLib-style
   `tessera_apple.cpu.*` artifacts.
 - `target="apple_gpu"` lowers Tile IR to Metal/MPS-style

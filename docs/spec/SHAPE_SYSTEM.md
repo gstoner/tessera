@@ -355,7 +355,7 @@ through to each backend?
 | CPU reference (no `target=`) | ✅ accepted; numpy reference handles concrete call shapes | ✅ | ✅ | `JitFn.__call__` resolves symbolic dims from actual arguments and raises `TesseraConstraintError` for violations |
 | `target="apple_cpu"` (Accelerate) | ✅ accepted; rank-2 / rank-3 GEMM dispatch reads runtime shape | ✅ | ✅ | Tested 4×8 ⊗ 8×16 and 4×16 ⊗ 16×16 with one decorator |
 | `target="apple_gpu"` (MPS + MSL) | ✅ accepted; MPS matrix descriptors built from concrete shape | ✅ | ✅ | Verified in `tests/unit/test_dynamic_shapes.py` |
-| `target="rocm"` / `"metalium"` / `"nvidia"` / `"cerebras"` / TPU | n/a — artifact-only, no execution to test | ✅ | n/a | Symbolic dims appear in emitted IR text; runtime semantics undefined until backend executes |
+| `target="rocm"` / `"nvidia"` | n/a — artifact-only, no execution to test | ✅ | n/a | Symbolic dims appear in emitted IR text; runtime semantics undefined until backend executes |
 
 ### Call-time constraint enforcement
 

@@ -873,7 +873,7 @@ class JitFn:
     @property
     def is_gpu(self) -> bool:
         target_kind = normalize_target_kind(self.target)
-        return target_kind.startswith("nvidia") or target_kind in {"rocm", "metalium", "apple_gpu"}
+        return target_kind.startswith("nvidia") or target_kind in {"rocm", "apple_gpu"}
 
     @property
     def arg_names(self) -> List[str]:
@@ -1269,7 +1269,7 @@ def jit(
         bindings     : optional dict of dim_name → concrete size for
                        constraint checking at decoration time
         target       : GPUTargetProfile or target string. Supported strings are
-                       "rocm", "metalium", "apple_cpu", and "apple_gpu".
+                       "rocm", "apple_cpu", and "apple_gpu".
                        None = executable CPU/NumPy path.
         attn_config  : FlashAttnLoweringConfig; when None and target is set with
                        isa >= SM_90, SM90_DEFAULT is used automatically.

@@ -525,8 +525,6 @@ def _render_target_ir(
     tile: tuple[int, int, int],
     target_kind: str,
 ) -> str:
-    if target_kind == "metalium":
-        return _render_metalium_target_ir(fn, ops)
     if target_kind in {"cpu", "rocm", "apple_cpu", "apple_gpu"} or target_kind.startswith("nvidia"):
         return _render_object_target_ir(module, tile=tile, target_kind=target_kind)
     lines = [
@@ -583,35 +581,6 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
             f'    "tessera_rocm.async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : () -> ()'
         )
         lines.append(f'    "tessera_rocm.wait"() {{ordinal = {idx} : i64}} : () -> ()')
-    lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
-        "}",
-    ])
-    return "\n".join(lines)
-
-
-def _render_metalium_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
-    lines = [
-        'module attributes {tessera.ir.level = "target", target = "metalium", arch = "wormhole"} {',
-        '  "tessera_metalium.program"() ({',
-    ]
-    for idx, op in enumerate(ops):
-        op_name = _canonical_op_name(op.op_name)
-        if op_name in MATMUL_OPS:
-            lines.append(
-                f'    "tessera_metalium.dma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, direction = "dram_to_sram", burst = 256 : i64}} : () -> ()'
-            )
-            lines.append(
-                f'    "tessera_metalium.matmul"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, tile = [64, 64, 32], layout = "row_col", accumulate = "f32"}} : () -> ()'
-            )
-        elif op_name.startswith("tessera.kv_cache."):
-            lines.append(
-                f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "metalium", severity = "unsupported", reason = "KV-cache paged-buffer target contract is not implemented for Metalium in this phase"}} : () -> ()'
-            )
-        else:
-            lines.append(
-                f'    "tessera_metalium.kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, program = "mock_queue"}} : () -> ()'
-            )
     lines.extend([
         f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
         "}",

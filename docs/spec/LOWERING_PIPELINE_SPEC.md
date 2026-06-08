@@ -28,12 +28,10 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 | `tessera-lower-to-x86` | x86 AMX/AVX-512 | 2 | ✅ executable runtime |
 | `tessera-lower-to-gpu` | NVIDIA SM_80+ WGMMA/TMA | 3 | 🟡 IR artifact; runtime gated on Phase G |
 | `tessera-lower-to-rocm` | AMD ROCm MFMA (gfx90a / 940 / 942 / 950 / 1100) | 8 | 🟡 artifact; runtime gated on Phase H |
-| `tessera-lower-to-metalium` | Tenstorrent Metalium | 7/8 | 🟡 artifact + tile-local matmul |
 | `tessera-lower-to-apple_cpu` | Apple Silicon CPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU (Accelerate cblas_sgemm + BNNS f16/bf16) | 8.2 | ✅ executable runtime |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged-kernel ABI validation) | 8.3 → Metal 4 + PK1–PK7 | ✅ executable runtime on capable Darwin hosts |
-| `tessera-cpx-pipeline` / `tessera-cpx-context-pipeline` | NV Rubin CPX | — | ✅ separate `tessera-cpx-opt` driver |
 | `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H/I batch 3) |
 | `tessera-spectral-pipeline` | Spectral solver end-to-end | 5 | ✅ via `ts-spectral-opt` |
 | `tpp-space-time` | Tensor Parallel Primitives | 5 | ✅ via `tessera-opt` (4/4 lit fixtures) |
@@ -67,7 +65,7 @@ Tessera-authored production kernel.
 `python/tessera/compiler/jit.py::JitFn` accepts `target=` as either a
 `GPUTargetProfile` or a string alias. String dispatch goes through
 `compiler/matmul_pipeline.py`; valid string targets per CLAUDE.md
-Architecture Decision #20 are: `"rocm"`, `"metalium"`, `"apple_cpu"`,
+Architecture Decision #20 are: `"rocm"`, `"apple_cpu"`,
 `"apple_gpu"`. The Python object-model lowering passes (preserve debug
 markers across Schedule and Tile lowering, drop them at Target IR) are
 in `python/tessera/compiler/{schedule_ir,tile_ir,target_ir}.py`. Source

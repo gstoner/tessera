@@ -31,7 +31,7 @@ Python @jit frontend
 | Tier 1 MLIR lit | Positive and negative FileCheck coverage for every named pass and pipeline | Always on when `tessera-opt` is built |
 | Tier 2 numerical | Reference-vs-compiled CPU/mock results for supported ops and deterministic seeded behavior | Scheduled or opt-in locally |
 | Tier 3 performance proxy | Compile latency, artifact size, CPU/mock execution timing, benchmark JSON schema | Scheduled / release gate |
-| Tier 4 hardware-marked | SM80, SM90, ROCm, TPU native backend checks | Opt-in with explicit hardware environment flags |
+| Tier 4 hardware-marked | SM80, SM90, ROCm native backend checks | Opt-in with explicit hardware environment flags |
 
 The T1 runtime path is staged through `RuntimeArtifact`: `@jit` emits Graph,
 Schedule, Tile, and Target IR plus JSON-safe metadata; CPU/mock artifacts marked
@@ -65,7 +65,7 @@ fastest existing test mechanism for each concern until a dedicated
 | Fast local | Spec conformance, documentation smoke checks, context graph generation checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
 | CI deterministic | Project evals that require no accelerator, including context graph output freshness, and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
 | Scheduled | Numerical sweeps, broader sample execution, documentation execution, and performance regression checks. | Nightly or weekly depending on runtime cost. |
-| Hardware-marked | SM80/SM90/SM100, ROCm, TPU, and distributed backend evals. | Opt-in with explicit hardware environment flags. |
+| Hardware-marked | SM80/SM90/SM100, ROCm, and distributed backend evals. | Opt-in with explicit hardware environment flags. |
 
 ## Unit Test Matrix
 
@@ -77,7 +77,7 @@ fastest existing test mechanism for each concern until a dedicated
 | Graph IR emission | function args, Region effects, nested op extraction, keyword attrs | `test_graph_ir.py`, `test_lowering_chain.py` |
 | CPU compiler path | supported op graph execution, artifacts for all compiler layers, eager fallback diagnostics | `test_end_to_end_matmul_cpu_path.py`, `test_transformer_compiler_example.py` |
 | Runtime artifact launch | `JitFn.runtime_artifact()`, stable artifact hashes, CPU/mock launch result schema, unsupported artifact statuses | `test_runtime_api_foundation.py` |
-| Target profiles | GPU/TPU capability gates and lowering config attrs | `test_gpu_target.py`, `test_tpu_lowering.py`, `test_flash_attn_lowering.py` |
+| Target profiles | GPU capability gates and lowering config attrs | `test_gpu_target.py`, `test_flash_attn_lowering.py` |
 | Distributed planning | DP/TP/PP plans, pipeline stages, collective insertion preconditions | `test_distributed_plan.py`, `test_pipeline_stage_insertion.py`, `test_gpu_collective_insertion.py` |
 | Reliability/runtime contracts | diagnostics, shape inference, runtime ABI, replay/QA helpers | `test_error_reporter.py`, `test_shape_inference.py`, `test_runtime_abi.py`, `test_qa_reliability_foundation.py` |
 
@@ -101,6 +101,6 @@ Performance tests should avoid requiring accelerators by default. Hardware-backe
 1. Add lit coverage for every named lowering pipeline alias exposed by `tessera-opt`.
 2. Expand executable `RuntimeArtifact` coverage from CPU/mock straight-line ops to FlashAttention parity and then native runtime ABI launch.
 3. Add compile-time regression thresholds for larger transformer blocks once multi-op native lowering exists.
-4. Add hardware-marked performance gates for SM80, SM90, ROCm MFMA, and TPU backends.
+4. Add hardware-marked performance gates for SM80, SM90, and ROCm MFMA backends.
 5. Track benchmark baselines in JSON and compare against tolerances rather than absolute single-machine timings.
 6. Promote context graph, spec, docs, and sample checks from unit guard tests into `tests/evals/` manifests once the generated-output workflow stabilizes.

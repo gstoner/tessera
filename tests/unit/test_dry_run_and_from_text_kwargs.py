@@ -55,9 +55,9 @@ class TestDryRun:
         def add(x, y):
             return tessera.ops.add(x, y)
 
-        ex = dry_run(add, target="metalium")
+        ex = dry_run(add, target="rocm")
         # Target IR was emitted for the alternate target.
-        assert "metalium" in ex.target or ex.execution_kind == "artifact_only"
+        assert "rocm" in ex.target or ex.execution_kind == "artifact_only"
 
 
 class TestFromTextDocumentedKwargs:
@@ -79,10 +79,10 @@ class TestFromTextDocumentedKwargs:
                 def f(x, y):
                     return ts.ops.add(x, y)
             """,
-            target="metalium",
+            target="rocm",
         )
         ex = f.explain()
-        assert "metalium" in ex.target
+        assert "rocm" in ex.target
 
     def test_deterministic_kwarg_forwarded(self) -> None:
         """``deterministic=True`` keeps an effect-free function

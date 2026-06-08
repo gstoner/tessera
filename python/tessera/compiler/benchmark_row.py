@@ -1,6 +1,6 @@
 """Canonical benchmark-row schema — M5 deliverable.
 
-Each Tessera benchmark harness (CPU, Apple GPU, NVIDIA, ROCm, TPU)
+Each Tessera benchmark harness (CPU, Apple GPU, NVIDIA, ROCm)
 emits JSON rows describing what it ran.  Before M5 the field set
 drifted between harnesses — some emit ``backend`` / ``mode``, some
 emit ``namespace`` / ``dispatched_on_gpu``, some omit timing

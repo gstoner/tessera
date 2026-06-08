@@ -11,7 +11,7 @@ This document uses the current Tessera API and compiler vocabulary from `docs/CA
 The Tessera programming model introduces unique challenges and opportunities for performance benchmarking:
 
 - **Multi-Level IR Stack**: Performance characteristics vary across Graph IR → Schedule IR → Tile IR → Target IR transformations
-- **Architecture-Specific Optimization**: Different Target IR backends (LLVM/AMX, NVVM/PTX, StableHLO, ROCDL) require specialized benchmarking
+- **Architecture-Specific Optimization**: Different Target IR backends (LLVM/AMX, NVVM/PTX, ROCDL, Apple Metal/Accelerate) require specialized benchmarking
 - **Numerical Precision Policies**: FP4/FP6/FP8/BF16/FP16/FP32 combinations need systematic evaluation
 - **Distributed Execution**: Multi-GPU meshes with TP/DP/PP parallelism require distributed benchmarking
 - **Autotuning Integration**: Performance-guided optimization requires robust measurement infrastructure

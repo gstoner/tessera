@@ -93,8 +93,9 @@ def test_target_ir_spec_splits_artifact_runtime_and_backend_status():
         "Mock/runtime fallback",
         "Native hardware runtime",
         "placeholder kernels are not native-runtime claims",
-        "matmul lowers to artifact op",
-        "PJRT execute is scaffolded",
+        # NOTE: "matmul lowers to artifact op" (Metalium) and "PJRT execute is
+        # scaffolded" (TPU) were dropped when those backends were retired
+        # (commit b1cfade — focus on x86 + Apple + NVIDIA + ROCm).
         "debug markers",
         "Target IR lowering elides them",
     ]

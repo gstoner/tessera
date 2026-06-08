@@ -3544,11 +3544,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "ebm_energy_quadratic": _ts_ebm.energy_quadratic,
         "ebm_langevin_step": _ts_ebm.langevin_step,
     })
+    # Canonical GA shim: tessera.ops.clifford_* flat-coefficient wrappers over the
+    # tessera.ga.* Multivector lane (which already GPU-dispatches to the cl30
+    # kernels). Registering here puts them on the tessera.ops surface AND through
+    # the autodiff tape (so their VJP/JVP in autodiff/{vjp,jvp}.py are honored).
+    from . import _clifford_ops as _clifford_ops_mod
+    references.update(_clifford_ops_mod.CLIFFORD_OPS)
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
 
-    return types.SimpleNamespace(
+    _ns = types.SimpleNamespace(
+        clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
+        clifford_wedge=_clifford_ops_mod.clifford_wedge,
+        clifford_left_contraction=_clifford_ops_mod.clifford_left_contraction,
+        clifford_inner=_clifford_ops_mod.clifford_inner,
+        clifford_reverse=_clifford_ops_mod.clifford_reverse,
+        clifford_grade_involution=_clifford_ops_mod.clifford_grade_involution,
+        clifford_conjugate=_clifford_ops_mod.clifford_conjugate,
+        clifford_grade_projection=_clifford_ops_mod.clifford_grade_projection,
+        clifford_norm=_clifford_ops_mod.clifford_norm,
+        clifford_norm_squared=_clifford_ops_mod.clifford_norm_squared,
         registry=_ops_registry,
         register_reference=_register_reference,
         register_lowering=_register_lowering,
@@ -3808,6 +3824,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         grpo_policy_loss=grpo_policy_loss_ref,
         cispo_policy_loss=cispo_policy_loss_ref,
     )
+    return _ns
 
 
 ops = _make_ops_namespace()

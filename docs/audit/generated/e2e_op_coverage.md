@@ -27,9 +27,9 @@ each row into a single E2E tier.
 | ``complete`` | 34 |
 | ``runnable_reference`` | 246 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 1 |
+| ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **281** |
+| **total** | **282** |
 
 ## complete (34)
 
@@ -46,22 +46,22 @@ each row into a single E2E tier.
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_exp`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_ext_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_geometric_product`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_grade_involution`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_grade_projection`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_geometric_product`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``clifford_grade_involution`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``clifford_grade_projection`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_hodge_star`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_inner`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_inner`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_integral`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_log`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
@@ -321,11 +321,12 @@ each row into a single E2E tier.
 | ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
 
-## partial (1)
+## partial (2)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``ebm_energy_quadratic`` | energy_based_models | public | public | registered | partial | planned | ready | none |
+| ``clifford_norm_squared`` | geometric_algebra | public | public | registered | partial | planned | ready | none |
 
 ## How to extend
 

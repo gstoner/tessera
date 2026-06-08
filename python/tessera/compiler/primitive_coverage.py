@@ -1992,11 +1992,28 @@ def _apply_effect_overrides(
         contract["masking_effect_rule"] = "complete"
 
 
+# GA4 (geometric_algebra) clifford primitives are the audit-authoritative
+# `_planned()` rows (with their references, halo-sharding proof, and Clifford
+# `.td` dialect alignment). They ALSO have op_catalog OpSpecs now (so the AST
+# graph builder emits `tessera.clifford_*` IR for apple_gpu envelope routing),
+# but the OP_SPECS auto-import must NOT shadow the richer planned rows — the
+# planned entries are added via ``setdefault`` after this loop, so skipping the
+# overlapping names here lets the GA4 rows win. (`clifford_norm_squared` is not
+# in the GA4 / Clifford-`.td` set, so it imports normally as a `reduction` row.)
+_GA4_OWNED_OP_SPEC_NAMES: frozenset[str] = frozenset({
+    "clifford_geometric_product", "clifford_wedge", "clifford_left_contraction",
+    "clifford_inner", "clifford_reverse", "clifford_grade_involution",
+    "clifford_conjugate", "clifford_grade_projection", "clifford_norm",
+})
+
+
 def _existing_coverage() -> dict[str, PrimitiveCoverage]:
     registered_vjps = _vjp_registered_names()
     registered_jvps = _jvp_registered_names()
     entries: dict[str, PrimitiveCoverage] = {}
     for name, spec in sorted(OP_SPECS.items()):
+        if name in _GA4_OWNED_OP_SPEC_NAMES:
+            continue
         has_vjp = _existing_op_has_vjp(name, registered_vjps)
         has_jvp = _existing_op_has_jvp(name, registered_jvps)
         contract_status = _existing_contracts(

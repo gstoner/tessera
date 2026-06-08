@@ -14,18 +14,18 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 438 |
-| `transpose_rule` | 0 | 442 |
-| `sharding_rule` | 33 | 409 |
-| `lowering_rule` | 0 | 442 |
-| `backend_kernel` | 442 | 0 |
+| `batching_rule` | 4 | 439 |
+| `transpose_rule` | 0 | 443 |
+| `sharding_rule` | 33 | 410 |
+| `lowering_rule` | 0 | 443 |
+| `backend_kernel` | 443 | 0 |
 
 ## Per-category breakdown
 
 | sprint | category | total | batching | transpose | sharding | lowering | backend |
 |---|---|---:|---:|---:|---:|---:|---:|
 | S2 | `tensor_algebra` | 19 | — | — | — | — | 19 |
-| S2 | `reduction` | 15 | — | — | — | — | 15 |
+| S2 | `reduction` | 16 | — | — | — | — | 16 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
@@ -86,7 +86,7 @@
 
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
-| S2 | 55 | 0 | 0 | 0 | 55 |
+| S2 | 56 | 0 | 0 | 0 | 56 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
 | S7 | 50 | 0 | 0 | 7 | 50 |
 | S10 | 18 | 0 | 0 | 0 | 18 |

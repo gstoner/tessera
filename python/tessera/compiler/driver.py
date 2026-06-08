@@ -485,12 +485,22 @@ _APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({"tessera.grouped_gemm"})
 
 # LDT candidate-axis ops with dedicated Metal kernels.
 _APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
+# Geometric-algebra (Clifford Cl(3,0)) flat-coefficient lane — canonical
+# tessera.ops projection of tessera.ga.*; routed to the cl30 MSL kernels by
+# runtime.py::_apple_gpu_dispatch_clifford.
+_APPLE_GPU_CLIFFORD_OPS: frozenset[str] = frozenset({
+    "tessera.clifford_geometric_product", "tessera.clifford_wedge",
+    "tessera.clifford_left_contraction", "tessera.clifford_inner",
+    "tessera.clifford_reverse", "tessera.clifford_grade_involution",
+    "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
+    "tessera.clifford_norm", "tessera.clifford_norm_squared",
+})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS
+    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS
 )
 
 

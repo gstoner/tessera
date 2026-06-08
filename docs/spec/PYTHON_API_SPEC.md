@@ -1355,6 +1355,16 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `count_nonzero(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | LDT candidate-cardinality reduction (`(x != 0).sum`); Graph IR op `tessera.count_nonzero` |
 | `popcount(x)` | `(array) → array` | `pure` | LDT per-element set-bit count of an integer/bitmask tensor; Graph IR op `tessera.popcount` |
 | `masked_categorical(logits, mask, key=None)` | `(array, array) → array` | `random` | LDT masked categorical decision: greedy `argmax` over the candidate mask (`key=None`) or Gumbel-max sample; Graph IR op `tessera.masked_categorical` |
+| `clifford_geometric_product(a, b)` | `(array, array) → array` | `pure` | GA Cl(3,0) geometric product over flat 8-coefficient multivectors; canonical `tessera.ops` projection of `tessera.ga.geometric_product`; apple_gpu routes to the cl30 MSL kernel; Graph IR op `tessera.clifford_geometric_product` |
+| `clifford_wedge(a, b)` | `(array, array) → array` | `pure` | GA Cl(3,0) outer (wedge) product; Graph IR op `tessera.clifford_wedge` |
+| `clifford_left_contraction(a, b)` | `(array, array) → array` | `pure` | GA Cl(3,0) left contraction; Graph IR op `tessera.clifford_left_contraction` |
+| `clifford_inner(a, b)` | `(array, array) → scalar/array` | `pure` | GA Cl(3,0) inner product (scalar-valued); Graph IR op `tessera.clifford_inner` |
+| `clifford_reverse(a)` | `(array) → array` | `pure` | GA Cl(3,0) reverse involution; Graph IR op `tessera.clifford_reverse` |
+| `clifford_grade_involution(a)` | `(array) → array` | `pure` | GA Cl(3,0) grade involution; Graph IR op `tessera.clifford_grade_involution` |
+| `clifford_conjugate(a)` | `(array) → array` | `pure` | GA Cl(3,0) Clifford conjugation; Graph IR op `tessera.clifford_conjugate` |
+| `clifford_grade_projection(a, grade)` | `(array) → array` | `pure` | GA Cl(3,0) grade-`k` projection (grade passed positionally or `grade=`/`k=`); Graph IR op `tessera.clifford_grade_projection` |
+| `clifford_norm(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) multivector norm (Euclidean); Graph IR op `tessera.clifford_norm` |
+| `clifford_norm_squared(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) squared norm; Graph IR op `tessera.clifford_norm_squared` |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
 | `tanh(x)` | `(array) → array` | `pure` | NumPy tanh |
 | `add(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy addition; also used by Python frontend binary `+` lowering |

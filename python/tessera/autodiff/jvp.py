@@ -633,6 +633,110 @@ def jvp_load_balance_loss(primals, tangents, *, assignment=None, reduction="mean
     return _reduce_loss(aux, tangent, reduction)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Clifford / GA primitives (Cl(3,0)). Linear ops: tangent = op(tangent). Bilinear
+# ops f(a,b): tangent = f(da, b) + f(a, db). Norms: directional derivative.
+# Validated against finite-difference in tests/unit/test_clifford_ops_autodiff.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("clifford_geometric_product")
+def jvp_clifford_geometric_product(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a, b = primals
+    da, db = tangents
+    gp = C.clifford_geometric_product
+    out = np.asarray(gp(a, b), dtype=np.float64)
+    tan = np.asarray(gp(da, b), dtype=np.float64) + np.asarray(gp(a, db), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_wedge")
+def jvp_clifford_wedge(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a, b = primals
+    da, db = tangents
+    out = np.asarray(C.clifford_wedge(a, b), dtype=np.float64)
+    tan = np.asarray(C.clifford_wedge(da, b), dtype=np.float64) + np.asarray(C.clifford_wedge(a, db), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_left_contraction")
+def jvp_clifford_left_contraction(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a, b = primals
+    da, db = tangents
+    op = C.clifford_left_contraction
+    out = np.asarray(op(a, b), dtype=np.float64)
+    tan = np.asarray(op(da, b), dtype=np.float64) + np.asarray(op(a, db), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_inner")
+def jvp_clifford_inner(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a, b = primals
+    da, db = tangents
+    out = np.asarray(C.clifford_inner(a, b), dtype=np.float64)
+    tan = np.asarray(C.clifford_inner(da, b), dtype=np.float64) + np.asarray(C.clifford_inner(a, db), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_reverse")
+def jvp_clifford_reverse(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    return np.asarray(C.clifford_reverse(primals[0]), dtype=np.float64), np.asarray(C.clifford_reverse(tangents[0]), dtype=np.float64)
+
+
+@_jvp("clifford_grade_involution")
+def jvp_clifford_grade_involution(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    return np.asarray(C.clifford_grade_involution(primals[0]), dtype=np.float64), np.asarray(C.clifford_grade_involution(tangents[0]), dtype=np.float64)
+
+
+@_jvp("clifford_conjugate")
+def jvp_clifford_conjugate(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    return np.asarray(C.clifford_conjugate(primals[0]), dtype=np.float64), np.asarray(C.clifford_conjugate(tangents[0]), dtype=np.float64)
+
+
+@_jvp("clifford_grade_projection")
+def jvp_clifford_grade_projection(primals, tangents, *, grade=None, k=None, **_):
+    from .. import _clifford_ops as C
+    a = primals[0]
+    da = tangents[0]
+    g = grade if grade is not None else k
+    if g is None and len(primals) > 1:
+        g = primals[1]
+    out = np.asarray(C.clifford_grade_projection(a, grade=int(g)), dtype=np.float64)
+    tan = np.asarray(C.clifford_grade_projection(da, grade=int(g)), dtype=np.float64)
+    return out, tan
+
+
+@_jvp("clifford_norm_squared")
+def jvp_clifford_norm_squared(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a = np.asarray(primals[0], dtype=np.float64)
+    da = np.asarray(tangents[0], dtype=np.float64)
+    g = np.array([float(C.clifford_norm_squared(np.eye(8)[i])) for i in range(8)], dtype=np.float64)
+    out = np.asarray(C.clifford_norm_squared(a), dtype=np.float64)
+    tan = np.sum(2.0 * g * a * da, axis=-1)
+    return out, tan
+
+
+@_jvp("clifford_norm")
+def jvp_clifford_norm(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    a = np.asarray(primals[0], dtype=np.float64)
+    da = np.asarray(tangents[0], dtype=np.float64)
+    g = np.array([float(C.clifford_norm_squared(np.eye(8)[i])) for i in range(8)], dtype=np.float64)
+    nrm = np.asarray(C.clifford_norm(a), dtype=np.float64)
+    safe = np.where(nrm > 0.0, nrm, 1.0)
+    out = nrm
+    tan = np.sum(g * a * da, axis=-1) / safe
+    return out, tan
+
+
 @_jvp("cross_entropy_loss")
 def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     from tessera import losses as ts_losses

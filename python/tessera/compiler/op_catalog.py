@@ -273,6 +273,21 @@ _SPECS = [
     OpSpec("popcount", "tessera.popcount", 1, 1, lowering="elementwise"),
     OpSpec("masked_categorical", "tessera.masked_categorical", 2, 2,
            effect="random", lowering="indexing"),
+    # Geometric-algebra (Clifford Cl(3,0)) flat-coefficient lane. These are the
+    # canonical tessera.ops projection of the tessera.ga.* Multivector surface;
+    # the apple_gpu runtime routes them to the cl30 MSL kernels (see runtime.py
+    # _apple_gpu_dispatch_clifford). Bilinear products = loop_nest; the diagonal
+    # ±1 involutions/projection = elementwise; the scalar norms = reduction.
+    OpSpec("clifford_geometric_product", "tessera.clifford_geometric_product", 2, 2, lowering="loop_nest"),
+    OpSpec("clifford_wedge", "tessera.clifford_wedge", 2, 2, lowering="loop_nest"),
+    OpSpec("clifford_left_contraction", "tessera.clifford_left_contraction", 2, 2, lowering="loop_nest"),
+    OpSpec("clifford_inner", "tessera.clifford_inner", 2, 2, lowering="loop_nest"),
+    OpSpec("clifford_reverse", "tessera.clifford_reverse", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_grade_involution", "tessera.clifford_grade_involution", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_conjugate", "tessera.clifford_conjugate", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_grade_projection", "tessera.clifford_grade_projection", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_norm", "tessera.clifford_norm", 1, 1, lowering="reduction"),
+    OpSpec("clifford_norm_squared", "tessera.clifford_norm_squared", 1, 1, lowering="reduction"),
     OpSpec("top_k", "tessera.top_k", 1, 1, lowering="sort"),
     OpSpec("sort", "tessera.sort", 1, 1, lowering="sort"),
     OpSpec("argsort", "tessera.argsort", 1, 1, lowering="sort"),

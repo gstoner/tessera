@@ -2261,6 +2261,131 @@ def vjp_load_balance_loss(dout, router_probs, *, assignment=None, reduction="mea
     return (grad,)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Clifford / GA primitives (Cl(3,0), flat 8-coefficient lane — see _clifford_ops)
+#
+# All adjoints below are closed-form and validated against multivector_check_grad
+# / finite-difference to ~1e-13 (see tests/unit/test_clifford_ops_autodiff.py):
+#   * geometric_product is the Euclidean Cl(3,0) geometric product, whose adjoint
+#     is itself via the reverse involution: ∂L/∂a = gp(dout, reverse(b)),
+#     ∂L/∂b = gp(reverse(a), dout).
+#   * wedge / left_contraction are bilinear — their adjoints are the transpose of
+#     the per-argument linearized map, recovered by a basis probe (8 columns).
+#   * reverse / grade_involution / conjugate are diagonal ±1 sign maps → self-
+#     adjoint, so the VJP applies the same involution to the cotangent.
+#   * grade_projection is a 0/1 diagonal projector → self-adjoint + idempotent.
+#   * norm_squared / norm reduce to the Euclidean metric (all +1), recovered by
+#     probing each basis blade.
+# Batched leading dims are supported (the GA lane operates on the last axis).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CLIFFORD_E8 = np.eye(8, dtype=np.float64)
+
+
+def _clifford_probe_left(op, b):
+    """Matrix M[...,o,i] of the linear map a ↦ op(a, b), one column per blade."""
+    cols = [np.asarray(op(_CLIFFORD_E8[i], b), dtype=np.float64) for i in range(8)]
+    return np.stack(cols, axis=-1)  # (..., 8_out, 8_in)
+
+
+def _clifford_probe_right(op, a):
+    """Matrix N[...,o,j] of the linear map b ↦ op(a, b), one column per blade."""
+    cols = [np.asarray(op(a, _CLIFFORD_E8[j]), dtype=np.float64) for j in range(8)]
+    return np.stack(cols, axis=-1)
+
+
+@_vjp("clifford_geometric_product")
+def vjp_clifford_geometric_product(dout, a, b, **_):
+    from .. import _clifford_ops as C
+    rev = C.clifford_reverse
+    gp = C.clifford_geometric_product
+    da = np.asarray(gp(dout, rev(b)), dtype=np.float64)
+    db = np.asarray(gp(rev(a), dout), dtype=np.float64)
+    return (_sum_to_shape(da, np.shape(a)), _sum_to_shape(db, np.shape(b)))
+
+
+@_vjp("clifford_wedge")
+def vjp_clifford_wedge(dout, a, b, **_):
+    from .. import _clifford_ops as C
+    d = np.asarray(dout, dtype=np.float64)
+    da = np.einsum("...o,...oi->...i", d, _clifford_probe_left(C.clifford_wedge, b))
+    db = np.einsum("...o,...oi->...i", d, _clifford_probe_right(C.clifford_wedge, a))
+    return (_sum_to_shape(da, np.shape(a)), _sum_to_shape(db, np.shape(b)))
+
+
+@_vjp("clifford_left_contraction")
+def vjp_clifford_left_contraction(dout, a, b, **_):
+    from .. import _clifford_ops as C
+    op = C.clifford_left_contraction
+    d = np.asarray(dout, dtype=np.float64)
+    da = np.einsum("...o,...oi->...i", d, _clifford_probe_left(op, b))
+    db = np.einsum("...o,...oi->...i", d, _clifford_probe_right(op, a))
+    return (_sum_to_shape(da, np.shape(a)), _sum_to_shape(db, np.shape(b)))
+
+
+@_vjp("clifford_inner")
+def vjp_clifford_inner(dout, a, b, **_):
+    # scalar output: ∂s/∂a = [inner(e_i, b)]_i, ∂s/∂b = [inner(a, e_j)]_j
+    from .. import _clifford_ops as C
+    inner = C.clifford_inner
+    d = np.asarray(dout, dtype=np.float64)
+    ga = np.stack([np.asarray(inner(_CLIFFORD_E8[i], b), dtype=np.float64) for i in range(8)], axis=-1)
+    gb = np.stack([np.asarray(inner(a, _CLIFFORD_E8[j]), dtype=np.float64) for j in range(8)], axis=-1)
+    da = d[..., None] * ga
+    db = d[..., None] * gb
+    return (_sum_to_shape(da, np.shape(a)), _sum_to_shape(db, np.shape(b)))
+
+
+@_vjp("clifford_reverse")
+def vjp_clifford_reverse(dout, a, **_):
+    from .. import _clifford_ops as C
+    return (_sum_to_shape(np.asarray(C.clifford_reverse(dout), dtype=np.float64), np.shape(a)),)
+
+
+@_vjp("clifford_grade_involution")
+def vjp_clifford_grade_involution(dout, a, **_):
+    from .. import _clifford_ops as C
+    return (_sum_to_shape(np.asarray(C.clifford_grade_involution(dout), dtype=np.float64), np.shape(a)),)
+
+
+@_vjp("clifford_conjugate")
+def vjp_clifford_conjugate(dout, a, **_):
+    from .. import _clifford_ops as C
+    return (_sum_to_shape(np.asarray(C.clifford_conjugate(dout), dtype=np.float64), np.shape(a)),)
+
+
+@_vjp("clifford_grade_projection")
+def vjp_clifford_grade_projection(dout, a, grade=None, *, k=None, **_):
+    # self-adjoint projector; `grade` is a static integer → non-differentiable.
+    # The tape captures only array inputs, so grade arrives via kwargs.
+    from .. import _clifford_ops as C
+    g = grade if grade is not None else k
+    da = np.asarray(C.clifford_grade_projection(dout, grade=int(g)), dtype=np.float64)
+    return (_sum_to_shape(da, np.shape(a)),)
+
+
+@_vjp("clifford_norm_squared")
+def vjp_clifford_norm_squared(dout, a, **_):
+    # ∂‖a‖²/∂a = 2·g·a, g[i] = norm_squared(e_i) (Euclidean Cl(3,0): all +1).
+    from .. import _clifford_ops as C
+    g = np.array([float(C.clifford_norm_squared(_CLIFFORD_E8[i])) for i in range(8)], dtype=np.float64)
+    a64 = np.asarray(a, dtype=np.float64)
+    d = np.asarray(dout, dtype=np.float64)
+    return (d[..., None] * (2.0 * g * a64),)
+
+
+@_vjp("clifford_norm")
+def vjp_clifford_norm(dout, a, **_):
+    # ∂‖a‖/∂a = g·a/‖a‖ (guarded at the origin).
+    from .. import _clifford_ops as C
+    g = np.array([float(C.clifford_norm_squared(_CLIFFORD_E8[i])) for i in range(8)], dtype=np.float64)
+    a64 = np.asarray(a, dtype=np.float64)
+    nrm = np.asarray(C.clifford_norm(a), dtype=np.float64)
+    safe = np.where(nrm > 0.0, nrm, 1.0)
+    d = np.asarray(dout, dtype=np.float64)
+    return (d[..., None] * (g * a64 / safe[..., None]),)
+
+
 @_vjp("ddpm_noise_pred_loss")
 def vjp_ddpm_noise_pred_loss(dout, pred_noise, true_noise, *, reduction="mean", **kwargs):
     return vjp_mse_loss(dout, pred_noise, true_noise, reduction=reduction, **kwargs)

@@ -2265,11 +2265,21 @@ _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
 # LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
 # innermost-axis nonzero count).
 _APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
+# Geometric-algebra (Clifford Cl(3,0)) flat-coefficient lane — the canonical
+# tessera.ops projection of the tessera.ga.* Multivector surface. The dispatcher
+# calls the GA lane, which internally routes Cl(3,0) f32 to the cl30 MSL kernels.
+_APPLE_GPU_CLIFFORD_OPS = frozenset({
+    "tessera.clifford_geometric_product", "tessera.clifford_wedge",
+    "tessera.clifford_left_contraction", "tessera.clifford_inner",
+    "tessera.clifford_reverse", "tessera.clifford_grade_involution",
+    "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
+    "tessera.clifford_norm", "tessera.clifford_norm_squared",
+})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS
+    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS
 )
 
 
@@ -2540,6 +2550,10 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         elif op_name == "tessera.masked_categorical":
             values[str(result)] = _apple_gpu_dispatch_masked_categorical(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name in _APPLE_GPU_CLIFFORD_OPS:
+            values[str(result)] = _apple_gpu_dispatch_clifford(
+                op_name,
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
             # Phase 8.4.x will broaden further; today single-op gating in
@@ -4033,6 +4047,24 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
             out[off:off + n] = r if r is not None else blk @ we
         off += n
     return out
+
+
+def _apple_gpu_dispatch_clifford(op_name: Any, operands: Any, kwargs: Any, np: Any) -> Any:
+    """Geometric-algebra (Clifford Cl(3,0)) flat-coefficient op on Metal.
+
+    Routes through the GA lane shim (``_clifford_ops``), which internally
+    dispatches Cl(3,0) f32 inputs to the ``cl30`` MSL kernels via
+    ``tessera.ga.ops._try_apple_gpu_*`` (falling back to the numpy reference for
+    other signatures/dtypes). The shim is the single source of GA truth — the
+    runtime does not re-implement the products here.
+    """
+    from . import _clifford_ops as C
+    short = str(op_name).split(".", 1)[1] if "." in str(op_name) else str(op_name)
+    fn: Any = C.CLIFFORD_OPS[short]
+    if short == "clifford_grade_projection":
+        grade = kwargs.get("grade", kwargs.get("k"))
+        return fn(np.asarray(operands[0]), grade=grade)
+    return fn(*[np.asarray(o) for o in operands])
 
 
 def _apple_gpu_dispatch_popcount(operands: Any, kwargs: Any, np: Any) -> Any:

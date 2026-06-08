@@ -6,10 +6,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **442** ops in `primitive_coverage` registry.
-- **1920** total Python-test references, **508** total lit-fixture references.
-- **118** ops have **zero** references in either test surface.
-- **225** ops have ≤1 reference ("thinly tested").
+- **443** ops in `primitive_coverage` registry.
+- **1936** total Python-test references, **508** total lit-fixture references.
+- **110** ops have **zero** references in either test surface.
+- **223** ops have ≤1 reference ("thinly tested").
 - **38** ops have ≥10 references ("well tested").
 - **52** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **225** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **223** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -73,22 +73,20 @@ These **225** ops have at most one test reference across the whole test surface.
 | `chunk` |    1 |    0 |    1 |
 | `clamp` |    1 |    0 |    1 |
 | `clifford_codiff` |    0 |    0 |    0 |
-| `clifford_conjugate` |    0 |    0 |    0 |
+| `clifford_conjugate` |    1 |    0 |    1 |
 | `clifford_exp` |    0 |    0 |    0 |
 | `clifford_ext_deriv` |    0 |    0 |    0 |
-| `clifford_geometric_product` |    1 |    0 |    1 |
-| `clifford_grade_involution` |    0 |    0 |    0 |
-| `clifford_grade_projection` |    0 |    0 |    0 |
+| `clifford_grade_involution` |    1 |    0 |    1 |
 | `clifford_hodge_star` |    0 |    0 |    0 |
-| `clifford_inner` |    0 |    0 |    0 |
+| `clifford_inner` |    1 |    0 |    1 |
 | `clifford_integral` |    0 |    0 |    0 |
-| `clifford_left_contraction` |    0 |    0 |    0 |
+| `clifford_left_contraction` |    1 |    0 |    1 |
 | `clifford_log` |    0 |    0 |    0 |
-| `clifford_norm` |    0 |    0 |    0 |
-| `clifford_reverse` |    0 |    0 |    0 |
+| `clifford_norm_squared` |    1 |    0 |    1 |
+| `clifford_reverse` |    1 |    0 |    1 |
 | `clifford_rotor_sandwich` |    1 |    0 |    1 |
 | `clifford_vec_deriv` |    0 |    0 |    0 |
-| `clifford_wedge` |    0 |    0 |    0 |
+| `clifford_wedge` |    1 |    0 |    1 |
 | `complex_arg` |    0 |    0 |    0 |
 | `complex_div` |    1 |    0 |    1 |
 | `complex_log` |    0 |    0 |    0 |
@@ -104,8 +102,10 @@ These **225** ops have at most one test reference across the whole test surface.
 | `cummax` |    1 |    0 |    1 |
 | `cummin` |    1 |    0 |    1 |
 | `custom_batching` |    0 |    0 |    0 |
+| `custom_call` |    0 |    0 |    0 |
+| `custom_jvp` |    0 |    0 |    0 |
 
-_(165 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(163 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**225** ops have ≤1 direct test reference.  They break down as:
+**223** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   94 | Tested via a parent op or family wrapper |
-| `structural_only`        |  127 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   91 | Tested via a parent op or family wrapper |
+| `structural_only`        |  128 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 94 ops
+## `covered_by_family` — 91 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -162,15 +162,12 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `clifford_conjugate` | category default for 'geometric_algebra' |
 | `clifford_exp` | category default for 'geometric_algebra' |
 | `clifford_ext_deriv` | category default for 'geometric_algebra' |
-| `clifford_geometric_product` | category default for 'geometric_algebra' |
 | `clifford_grade_involution` | category default for 'geometric_algebra' |
-| `clifford_grade_projection` | category default for 'geometric_algebra' |
 | `clifford_hodge_star` | category default for 'geometric_algebra' |
 | `clifford_inner` | category default for 'geometric_algebra' |
 | `clifford_integral` | category default for 'geometric_algebra' |
 | `clifford_left_contraction` | category default for 'geometric_algebra' |
 | `clifford_log` | category default for 'geometric_algebra' |
-| `clifford_norm` | category default for 'geometric_algebra' |
 | `clifford_reverse` | category default for 'geometric_algebra' |
 | `clifford_rotor_sandwich` | category default for 'geometric_algebra' |
 | `clifford_vec_deriv` | category default for 'geometric_algebra' |
@@ -181,10 +178,13 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `complex_pow` | category default for 'elementwise' |
 | `complex_sqrt` | category default for 'elementwise' |
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
+| `contrastive_divergence_loss` | category default for 'loss' |
+| `cos` | category default for 'elementwise' |
+| `cosh` | category default for 'elementwise' |
 
-_(64 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(61 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 127 ops
+## `structural_only` — 128 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -211,6 +211,7 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `checkpoint` | category default for 'transform' |
 | `chunk` | unclassified — defaults to structural_only |
 | `clamp` | unclassified — defaults to structural_only |
+| `clifford_norm_squared` | unclassified — defaults to structural_only |
 | `cosine_warmup_lr` | category default for 'schedule' |
 | `cummax` | unclassified — defaults to structural_only |
 | `cummin` | unclassified — defaults to structural_only |
@@ -219,6 +220,5 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `custom_jvp` | category default for 'extension' |
 | `custom_lowering` | category default for 'extension' |
 | `custom_primitive` | category default for 'extension' |
-| `custom_vjp` | category default for 'extension' |
 
-_(97 additional structural ops omitted.)_
+_(98 additional structural ops omitted.)_

@@ -682,6 +682,20 @@ def jvp_clifford_inner(primals, tangents, **_):
     return out, tan
 
 
+@_jvp("clifford_rotor_sandwich")
+def jvp_clifford_rotor_sandwich(primals, tangents, **_):
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    rev = C.clifford_reverse
+    R, x = primals
+    dR, dx = tangents
+    A = gp(R, x)
+    out = np.asarray(gp(A, rev(R)), dtype=np.float64)
+    dA = np.asarray(gp(dR, x), dtype=np.float64) + np.asarray(gp(R, dx), dtype=np.float64)
+    tan = np.asarray(gp(dA, rev(R)), dtype=np.float64) + np.asarray(gp(A, rev(dR)), dtype=np.float64)
+    return out, tan
+
+
 @_jvp("clifford_reverse")
 def jvp_clifford_reverse(primals, tangents, **_):
     from .. import _clifford_ops as C

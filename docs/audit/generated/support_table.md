@@ -114,7 +114,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_norm_squared` | geometric_algebra | public | public | registered | complete | partial | planned | ready | none |
 | `clifford_reverse` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
+| `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_vec_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
 | `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `dynamic_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -310,7 +310,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PP·C··N· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
-| geometric_algebra | 18 | PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFNB PPGCp·N· PPnCFFNB PPnCFFFB PPnCFFFB PPnCFFNB |
+| geometric_algebra | 18 | PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFFB PPnCFFNB PPGCp·N· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB |
 | indexing | 12 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |

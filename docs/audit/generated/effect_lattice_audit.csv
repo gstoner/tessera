@@ -50,6 +50,7 @@ clifford_left_contraction,pure,,1,0,0
 clifford_norm,pure,,1,0,0
 clifford_norm_squared,pure,,1,0,0
 clifford_reverse,pure,,1,0,0
+clifford_rotor_sandwich,pure,,1,0,0
 clifford_wedge,pure,,1,0,0
 clip,pure,,1,0,0
 complex_abs,pure,,1,0,0

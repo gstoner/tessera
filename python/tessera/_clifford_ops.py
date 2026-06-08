@@ -65,6 +65,14 @@ def clifford_inner(a: Any, b: Any) -> np.ndarray:
     return np.asarray(G.inner(_mv(a), _mv(b)))
 
 
+def clifford_rotor_sandwich(rotor: Any, x: Any) -> np.ndarray:
+    """Rotor conjugation ``R x R†`` — the GA rotation of ``x`` by rotor ``R``.
+    Routes Cl(3,0) f32 to the cl30 ``rotor_sandwich`` MSL kernel via the GA lane.
+    """
+    from tessera.ga import ops as G
+    return _coeffs(G.rotor_sandwich(_mv(rotor), _mv(x)))
+
+
 # ── linear involutions / projections ──────────────────────────────────────── #
 def clifford_reverse(a: Any) -> np.ndarray:
     from tessera.ga import ops as G
@@ -110,6 +118,7 @@ CLIFFORD_OPS = {
     "clifford_wedge": clifford_wedge,
     "clifford_left_contraction": clifford_left_contraction,
     "clifford_inner": clifford_inner,
+    "clifford_rotor_sandwich": clifford_rotor_sandwich,
     "clifford_reverse": clifford_reverse,
     "clifford_grade_involution": clifford_grade_involution,
     "clifford_conjugate": clifford_conjugate,

@@ -98,7 +98,7 @@ clifford_log,geometric_algebra,public,public,not_applicable,complete,fused,fused
 clifford_norm,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_norm_squared,geometric_algebra,public,public,registered,complete,partial,planned,ready,none
 clifford_reverse,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
-clifford_rotor_sandwich,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_rotor_sandwich,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_vec_deriv,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
 clifford_wedge,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 dynamic_slice,indexing,public,public,registered,complete,partial,reference,ready,none

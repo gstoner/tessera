@@ -59,7 +59,7 @@ each row into a single E2E tier.
 | ``clifford_log`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
-| ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | none |

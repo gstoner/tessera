@@ -28,6 +28,7 @@ _BILINEAR = [
     "clifford_wedge",
     "clifford_left_contraction",
     "clifford_inner",
+    "clifford_rotor_sandwich",  # quadratic in the rotor arg; composed adjoint
 ]
 _UNARY = [
     "clifford_reverse",

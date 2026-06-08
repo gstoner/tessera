@@ -3565,6 +3565,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         clifford_wedge=_clifford_ops_mod.clifford_wedge,
         clifford_left_contraction=_clifford_ops_mod.clifford_left_contraction,
         clifford_inner=_clifford_ops_mod.clifford_inner,
+        clifford_rotor_sandwich=_clifford_ops_mod.clifford_rotor_sandwich,
         clifford_reverse=_clifford_ops_mod.clifford_reverse,
         clifford_grade_involution=_clifford_ops_mod.clifford_grade_involution,
         clifford_conjugate=_clifford_ops_mod.clifford_conjugate,

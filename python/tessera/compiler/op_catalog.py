@@ -282,6 +282,7 @@ _SPECS = [
     OpSpec("clifford_wedge", "tessera.clifford_wedge", 2, 2, lowering="loop_nest"),
     OpSpec("clifford_left_contraction", "tessera.clifford_left_contraction", 2, 2, lowering="loop_nest"),
     OpSpec("clifford_inner", "tessera.clifford_inner", 2, 2, lowering="loop_nest"),
+    OpSpec("clifford_rotor_sandwich", "tessera.clifford_rotor_sandwich", 2, 2, lowering="loop_nest"),
     OpSpec("clifford_reverse", "tessera.clifford_reverse", 1, 1, lowering="elementwise"),
     OpSpec("clifford_grade_involution", "tessera.clifford_grade_involution", 1, 1, lowering="elementwise"),
     OpSpec("clifford_conjugate", "tessera.clifford_conjugate", 1, 1, lowering="elementwise"),

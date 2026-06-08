@@ -2336,6 +2336,22 @@ def vjp_clifford_inner(dout, a, b, **_):
     return (_sum_to_shape(da, np.shape(a)), _sum_to_shape(db, np.shape(b)))
 
 
+@_vjp("clifford_rotor_sandwich")
+def vjp_clifford_rotor_sandwich(dout, rotor, x, **_):
+    # out = gp(gp(R, x), reverse(R));  adjoint composed from the gp + reverse
+    # rules (reverse is self-adjoint and an involution). Validated vs FD.
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    rev = C.clifford_reverse
+    d = np.asarray(dout, dtype=np.float64)
+    A = gp(rotor, x)
+    dA_adj = np.asarray(gp(d, rotor), dtype=np.float64)         # reverse(reverse(R)) = R
+    dRrev_adj = np.asarray(gp(rev(A), d), dtype=np.float64)
+    dx = np.asarray(gp(rev(rotor), dA_adj), dtype=np.float64)
+    dR = np.asarray(gp(dA_adj, rev(x)), dtype=np.float64) + np.asarray(rev(dRrev_adj), dtype=np.float64)
+    return (_sum_to_shape(dR, np.shape(rotor)), _sum_to_shape(dx, np.shape(x)))
+
+
 @_vjp("clifford_reverse")
 def vjp_clifford_reverse(dout, a, **_):
     from .. import _clifford_ops as C

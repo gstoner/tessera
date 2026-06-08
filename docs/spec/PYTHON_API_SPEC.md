@@ -1359,6 +1359,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `clifford_wedge(a, b)` | `(array, array) → array` | `pure` | GA Cl(3,0) outer (wedge) product; Graph IR op `tessera.clifford_wedge` |
 | `clifford_left_contraction(a, b)` | `(array, array) → array` | `pure` | GA Cl(3,0) left contraction; Graph IR op `tessera.clifford_left_contraction` |
 | `clifford_inner(a, b)` | `(array, array) → scalar/array` | `pure` | GA Cl(3,0) inner product (scalar-valued); Graph IR op `tessera.clifford_inner` |
+| `clifford_rotor_sandwich(rotor, x)` | `(array, array) → array` | `pure` | GA Cl(3,0) rotor conjugation `R x R†` (the GA rotation of `x`); apple_gpu routes to the cl30 kernel; VJP/JVP composed from the geometric-product + reverse rules; Graph IR op `tessera.clifford_rotor_sandwich` |
 | `clifford_reverse(a)` | `(array) → array` | `pure` | GA Cl(3,0) reverse involution; Graph IR op `tessera.clifford_reverse` |
 | `clifford_grade_involution(a)` | `(array) → array` | `pure` | GA Cl(3,0) grade involution; Graph IR op `tessera.clifford_grade_involution` |
 | `clifford_conjugate(a)` | `(array) → array` | `pure` | GA Cl(3,0) Clifford conjugation; Graph IR op `tessera.clifford_conjugate` |

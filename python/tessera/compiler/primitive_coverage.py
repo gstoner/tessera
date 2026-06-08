@@ -1813,6 +1813,18 @@ _NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
     "tile_view",       # in-place view, no copy
     "arange",          # constant-generating
     "masked_fill",     # already has VJP; keeping placeholder is incorrect — drop from list
+    # EBM ops that take an ``energy_fn`` callable and/or an RNG key — they
+    # cannot be flat ``tessera.ops`` tape primitives: any gradient flows through
+    # the *user's* traced energy_fn (or is undefined for the RNG sampler /
+    # init), not through a registered VJP. So vjp/jvp are not_applicable for the
+    # flat autodiff lane (distinct from the kernel-backed flat ops
+    # energy_quadratic / self_verify / refinement / inner_step, which DO have
+    # registered VJP+JVP). See _ebm_ops.py for the flat-shimmable subset.
+    "ebm_energy", "ebm_langevin_step",
+    "ebm_partition_exact", "ebm_partition_monte_carlo", "ebm_partition_ais",
+    "ebm_decode_init",
+    "ebm_sphere_langevin_step", "ebm_bivector_langevin_step",
+    "ebm_sphere_langevin_sample", "ebm_bivector_langevin_sample",
 })
 # Drop masked_fill from the non-diff set (it has a registered VJP).
 _NONDIFFERENTIABLE_PER_NAME = _NONDIFFERENTIABLE_PER_NAME - {"masked_fill"}
@@ -2006,6 +2018,7 @@ _GA4_OWNED_OP_SPEC_NAMES: frozenset[str] = frozenset({
     "clifford_geometric_product", "clifford_wedge", "clifford_left_contraction",
     "clifford_inner", "clifford_reverse", "clifford_grade_involution",
     "clifford_conjugate", "clifford_grade_projection", "clifford_norm",
+    "clifford_rotor_sandwich",
     # EBM equivalent: these names have authoritative `category="ebm"` rows from
     # the python-primitive / `_partial` registry. Their op_catalog OpSpecs feed
     # the AST graph builder (apple_gpu envelope) but must not shadow those rows.
@@ -3080,6 +3093,13 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
 
 def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     entries = _existing_coverage()
+    # Consult the live autodiff registries so a `_planned`/`_partial` entry whose
+    # VJP/JVP is actually registered (e.g. the GA clifford_* + EBM flat ops) flips
+    # its vjp/jvp axis planned→complete — the same hook the OP_SPECS + python-
+    # primitive paths use. Without this, registering a VJP doesn't show up on the
+    # planned-entry dashboard rows.
+    registered_vjps = _vjp_registered_names()
+    registered_jvps = _jvp_registered_names()
     planned_names: set[str] = set()
     for entry in _PLANNED_ENTRIES:
         if entry.name in planned_names:
@@ -3094,6 +3114,14 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
         # promoted contract_status; the rest of the entry is
         # preserved verbatim.
         promoted = dict(entry.contract_status)
+        # Registered (V/J)VP flips planned→complete before the nondiff per-name
+        # classifier (which only downgrades planned→not_applicable), so an op
+        # with a real rule wins and one without (e.g. EBM callable/RNG ops) is
+        # correctly marked not_applicable.
+        if _existing_op_has_vjp(entry.name, registered_vjps) and promoted.get("vjp") == "planned":
+            promoted["vjp"] = "complete"
+        if _existing_op_has_jvp(entry.name, registered_jvps) and promoted.get("jvp") == "planned":
+            promoted["jvp"] = "complete"
         _apply_category_overrides(promoted, entry.category)
         _apply_effect_overrides(promoted, entry.effect or "pure")
         _apply_per_name_overrides(promoted, entry.name)

@@ -24,6 +24,7 @@ _CLIFFORD_GRAPH_OPS = [
     "tessera.clifford_wedge",
     "tessera.clifford_left_contraction",
     "tessera.clifford_inner",
+    "tessera.clifford_rotor_sandwich",
     "tessera.clifford_reverse",
     "tessera.clifford_grade_involution",
     "tessera.clifford_conjugate",

@@ -2271,6 +2271,7 @@ _APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "te
 _APPLE_GPU_CLIFFORD_OPS = frozenset({
     "tessera.clifford_geometric_product", "tessera.clifford_wedge",
     "tessera.clifford_left_contraction", "tessera.clifford_inner",
+    "tessera.clifford_rotor_sandwich",
     "tessera.clifford_reverse", "tessera.clifford_grade_involution",
     "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
     "tessera.clifford_norm", "tessera.clifford_norm_squared",

@@ -99,6 +99,9 @@ def _load():
         # LDT candidate-axis ops on Metal.
         ("tessera_apple_gpu_popcount_i32", [ip, ip, i32]),
         ("tessera_apple_gpu_count_nonzero_lastaxis_f32", [fp, ip, i32, i32]),
+        # MoE-aux / LDT loss ops (MPSGraph subgraphs → scalar).
+        ("tessera_apple_gpu_z_loss_f32", [fp, fp, i32, i32]),
+        ("tessera_apple_gpu_asymmetric_bce_f32", [fp, fp, fp, i32, flt, flt]),
     ):
         try:
             sym = getattr(lib, name)
@@ -229,6 +232,33 @@ def gpu_count_nonzero_lastaxis(x: np.ndarray) -> np.ndarray:
     _load().tessera_apple_gpu_count_nonzero_lastaxis_f32(
         _ptr(a), _i32ptr(out), outer, axis_len)
     return out.reshape(a.shape[:-1])
+
+
+def gpu_z_loss(logits: np.ndarray) -> float:
+    """Router z-loss on the Apple GPU (MPSGraph): mean over rows of
+    ``logsumexp(row)²``. ``logits`` is (..., classes); returns a Python float."""
+    a = np.ascontiguousarray(logits, dtype=np.float32)
+    if a.ndim < 1:
+        raise AppleGpuError("gpu_z_loss needs a >=1-D tensor")
+    classes = int(a.shape[-1])
+    rows = int(a.size // max(1, classes))
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_z_loss_f32(
+        _ptr(a.reshape(rows, classes)), _ptr(out), rows, classes)
+    return float(out[0])
+
+
+def gpu_asymmetric_bce(z: np.ndarray, t: np.ndarray, pos_w: float = 1.0,
+                       neg_w: float = 1.0) -> float:
+    """Asymmetric BCE-with-logits (mean) on the Apple GPU (MPSGraph):
+    ``mean(pos·t·softplus(-z) + neg·(1-t)·softplus(z))``. Returns a float."""
+    za = np.ascontiguousarray(z, dtype=np.float32)
+    ta = np.ascontiguousarray(np.broadcast_to(np.asarray(t, np.float32), za.shape))
+    za = za.ravel(); ta = ta.ravel()
+    out = np.zeros((1,), np.float32)
+    _load().tessera_apple_gpu_asymmetric_bce_f32(
+        _ptr(za), _ptr(ta), _ptr(out), int(za.size), float(pos_w), float(neg_w))
+    return float(out[0])
 
 
 def gpu_softmax(x: np.ndarray) -> np.ndarray:

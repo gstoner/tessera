@@ -2264,7 +2264,7 @@ _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
 # LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
 # innermost-axis nonzero count).
-_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero"})
+_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
@@ -2528,6 +2528,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         elif op_name == "tessera.count_nonzero":
             values[str(result)] = _apple_gpu_dispatch_count_nonzero(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name == "tessera.loss.z_loss":
+            values[str(result)] = _apple_gpu_dispatch_z_loss(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name == "tessera.loss.asymmetric_bce":
+            values[str(result)] = _apple_gpu_dispatch_asymmetric_bce(
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
             # Phase 8.4.x will broaden further; today single-op gating in
@@ -4040,6 +4046,32 @@ def _apple_gpu_dispatch_count_nonzero(operands: Any, kwargs: Any, np: Any) -> An
     if x.ndim >= 1 and not keepdims and axis in (-1, last):
         return agb.gpu_count_nonzero_lastaxis(x)
     return (x != 0).sum(axis=axis, keepdims=keepdims)
+
+
+def _apple_gpu_dispatch_z_loss(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Router z-loss on Metal (MPSGraph). Only ``reduction="mean"`` runs on GPU;
+    other reductions fall back to the numpy reference."""
+    from . import _apple_gpu_backend as agb
+    x = np.asarray(operands[0], dtype=np.float32)
+    if kwargs.get("reduction", "mean") != "mean" or x.ndim < 1:
+        import tessera.losses as _L
+        return _L.z_loss(x, reduction=kwargs.get("reduction", "mean"))
+    return np.float32(agb.gpu_z_loss(x))
+
+
+def _apple_gpu_dispatch_asymmetric_bce(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Asymmetric BCE (mean) on Metal (MPSGraph); non-mean reductions fall back."""
+    from . import _apple_gpu_backend as agb
+    z = np.asarray(operands[0], dtype=np.float32)
+    t = np.asarray(operands[1], dtype=np.float32)
+    if kwargs.get("reduction", "mean") != "mean":
+        import tessera.losses as _L
+        return _L.asymmetric_bce(z, t, kwargs.get("pos_weight", 1.0),
+                                 kwargs.get("neg_weight", 1.0),
+                                 reduction=kwargs.get("reduction", "mean"))
+    return np.float32(agb.gpu_asymmetric_bce(
+        z, t, float(kwargs.get("pos_weight", 1.0)),
+        float(kwargs.get("neg_weight", 1.0))))
 
 
 def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> Any:

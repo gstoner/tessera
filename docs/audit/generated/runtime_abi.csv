@@ -12,6 +12,8 @@ apple,tessera_apple_cpu_svd_f32,svd,f32,src/compiler/codegen/Tessera_Apple_Backe
 apple,tessera_apple_cpu_tri_solve_f32,tri_solve,f32,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_cpu_runtime.cpp
 apple,tessera_apple_gpu_aligned_buffer_nbytes,aligned_buffer_nbytes,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
 apple,tessera_apple_gpu_aligned_buffer_nbytes,aligned_buffer_nbytes,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
+apple,tessera_apple_gpu_asymmetric_bce_f32,asymmetric_bce,f32,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
+apple,tessera_apple_gpu_asymmetric_bce_f32,asymmetric_bce,f32,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
 apple,tessera_apple_gpu_binary_dev_f32_enc,binary_dev_f32_enc,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
 apple,tessera_apple_gpu_binary_dev_f32_enc,binary_dev_f32_enc,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
 apple,tessera_apple_gpu_bmm_bf16,bmm,bf16,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
@@ -441,6 +443,8 @@ apple,tessera_apple_gpu_unary_dev_f16_enc,unary_dev_f16_enc,,src/compiler/codege
 apple,tessera_apple_gpu_unary_dev_f16_enc,unary_dev_f16_enc,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
 apple,tessera_apple_gpu_unary_dev_f32_enc,unary_dev_f32_enc,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
 apple,tessera_apple_gpu_unary_dev_f32_enc,unary_dev_f32_enc,,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
+apple,tessera_apple_gpu_z_loss_f32,z_loss,f32,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm
+apple,tessera_apple_gpu_z_loss_f32,z_loss,f32,src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime_stub.cpp
 nvidia,tessera_gpu_available,gpu_available,,src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/target.h
 nvidia,tessera_gpu_available,gpu_available,,src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp
 nvidia,tessera_gpu_imma_int8,gpu_imma,int8,src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp

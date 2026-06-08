@@ -2090,6 +2090,36 @@ extern "C" void tessera_apple_gpu_count_nonzero_lastaxis_f32(const float* X,
   }
 }
 
+// MoE-aux / LDT loss ops (non-Darwin reference parity).
+extern "C" void tessera_apple_gpu_z_loss_f32(const float* logits, float* out,
+                                             int32_t rows, int32_t classes) {
+  double acc = 0.0;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = logits + static_cast<std::size_t>(r) * classes;
+    float m = row[0];
+    for (int32_t c = 1; c < classes; ++c) m = std::max(m, row[c]);
+    double s = 0.0;
+    for (int32_t c = 0; c < classes; ++c) s += std::exp((double)row[c] - m);
+    double lse = std::log(s) + m;
+    acc += lse * lse;
+  }
+  out[0] = static_cast<float>(acc / std::max(1, rows));
+}
+
+extern "C" void tessera_apple_gpu_asymmetric_bce_f32(const float* z,
+                                                     const float* t, float* out,
+                                                     int32_t n, float pos_w,
+                                                     float neg_w) {
+  double acc = 0.0;
+  for (int32_t i = 0; i < n; ++i) {
+    double zi = z[i], ti = t[i], a = std::fabs(zi);
+    double log1p = std::log(1.0 + std::exp(-a));
+    double spNeg = std::max(-zi, 0.0) + log1p, spPos = std::max(zi, 0.0) + log1p;
+    acc += pos_w * ti * spNeg + neg_w * (1.0 - ti) * spPos;
+  }
+  out[0] = static_cast<float>(acc / std::max(1, n));
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float* logp_new, const float* logp_old, const float* advantages,
     float* out, int32_t n, float clip_epsilon) {

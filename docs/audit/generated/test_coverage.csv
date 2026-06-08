@@ -22,7 +22,7 @@ argmin,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 argsort,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 asin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
-asymmetric_bce,2,0,0,2,0,,covered_by_family,category default for 'loss'
+asymmetric_bce,3,0,0,3,0,,covered_by_family,category default for 'loss'
 atan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 atan2,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 attn_compressed_blocks,2,2,0,4,0,,needs_direct_test,category default for 'attention'
@@ -440,4 +440,4 @@ wasserstein_distance,6,0,0,6,0,,covered_by_family,category default for 'loss'
 weight_norm,4,0,0,4,0,,needs_direct_test,category default for 'normalization'
 where,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 while_loop,4,0,1,4,0,,structural_only,category default for 'control_flow'
-z_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
+z_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'

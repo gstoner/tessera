@@ -15912,6 +15912,180 @@ extern "C" void tessera_apple_gpu_count_nonzero_lastaxis_f32(const float *X,
   }
 }
 
+//===---------------------------------------------------------------------===//
+// MoE-aux / LDT loss ops on Metal (MPSGraph subgraphs; mirrors the PPO loss).
+//
+//  * z_loss          — mean over rows of logsumexp(row)²  (router z-loss).
+//  * asymmetric_bce  — mean of pos·t·softplus(-z) + neg·(1-t)·softplus(z).
+//
+// Both reduce to a scalar. Stable softplus = relu(u)+log(1+exp(-|u|)).
+//===---------------------------------------------------------------------===//
+static bool mpsg_run_z_loss_f32(MetalDeviceContext &ctx, const float *logits,
+                                float *out, int32_t rows, int32_t classes) {
+  if (rows <= 0 || classes <= 0)
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)rows * classes * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, logits, bytes);
+    if (!bufX)
+      return false;
+    NSArray<NSNumber *> *shape = @[ @(rows), @(classes) ];
+    NSArray<NSNumber *> *axisLast = @[ @1 ];
+    NSArray<NSNumber *> *axisAll = @[ @0, @1 ];
+    NSString *key = [NSString stringWithFormat:@"zloss:f32:%d:%d", rows, classes];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *px;
+    MPSGraphTensor *yMean;
+    if (entry) {
+      g = entry[0];
+      px = ((NSArray *)entry[1])[0];
+      yMean = entry[2];
+    } else {
+      g = [MPSGraph new];
+      px = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *rmax =
+          [g reductionMaximumWithTensor:px axes:axisLast name:nil];
+      MPSGraphTensor *sh =
+          [g subtractionWithPrimaryTensor:px secondaryTensor:rmax name:nil];
+      MPSGraphTensor *e = [g exponentWithTensor:sh name:nil];
+      MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axisLast name:nil];
+      MPSGraphTensor *lse =
+          [g additionWithPrimaryTensor:[g logarithmWithTensor:s name:nil]
+                       secondaryTensor:rmax
+                                  name:nil];
+      MPSGraphTensor *sq =
+          [g multiplicationWithPrimaryTensor:lse secondaryTensor:lse name:nil];
+      yMean = [g meanOfTensor:sq axes:axisAll name:nil];
+      mpsg_cache_put(key, @[ g, @[ px ], yMean ]);
+    }
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX
+                                               shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{px : xd}
+                                    targetTensors:@[ yMean ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[yMean];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_z_loss_f32(const float *logits, float *out,
+                                             int32_t rows, int32_t classes) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_z_loss_f32(ctx, logits, out, rows, classes))
+    return;
+  double acc = 0.0;
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = logits + (std::size_t)r * classes;
+    float m = row[0];
+    for (int32_t c = 1; c < classes; ++c) m = std::max(m, row[c]);
+    double s = 0.0;
+    for (int32_t c = 0; c < classes; ++c) s += std::exp((double)row[c] - m);
+    double lse = std::log(s) + m;
+    acc += lse * lse;
+  }
+  out[0] = (float)(acc / std::max(1, rows));
+}
+
+static bool mpsg_run_asymmetric_bce_f32(MetalDeviceContext &ctx, const float *z,
+                                        const float *t, float *out, int32_t n,
+                                        float pos_w, float neg_w) {
+  if (n <= 0)
+    return false;
+  @autoreleasepool {
+    size_t bytes = (size_t)n * sizeof(float);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufZ, ctx, z, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufT, ctx, t, bytes);
+    if (!bufZ || !bufT)
+      return false;
+    NSArray<NSNumber *> *shape = @[ @(n) ];
+    NSArray<NSNumber *> *axis0 = @[ @0 ];
+    NSString *key = [NSString stringWithFormat:@"asymbce:f32:%d:%a:%a", n,
+                                               (double)pos_w, (double)neg_w];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *pz;
+    MPSGraphTensor *pt;
+    MPSGraphTensor *yMean;
+    if (entry) {
+      g = entry[0];
+      pz = ((NSArray *)entry[1])[0];
+      pt = ((NSArray *)entry[1])[1];
+      yMean = entry[2];
+    } else {
+      g = [MPSGraph new];
+      pz = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      pt = [g placeholderWithShape:shape dataType:MPSDataTypeFloat32 name:nil];
+      MPSGraphTensor *one =
+          [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *absz = [g absoluteWithTensor:pz name:nil];
+      MPSGraphTensor *expn =
+          [g exponentWithTensor:[g negativeWithTensor:absz name:nil] name:nil];
+      MPSGraphTensor *log1p = [g logarithmWithTensor:
+          [g additionWithPrimaryTensor:one secondaryTensor:expn name:nil] name:nil];
+      MPSGraphTensor *spNeg = [g additionWithPrimaryTensor:
+          [g reLUWithTensor:[g negativeWithTensor:pz name:nil] name:nil]
+                                           secondaryTensor:log1p name:nil];
+      MPSGraphTensor *spPos = [g additionWithPrimaryTensor:
+          [g reLUWithTensor:pz name:nil] secondaryTensor:log1p name:nil];
+      MPSGraphTensor *posw =
+          [g constantWithScalar:(double)pos_w dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *negw =
+          [g constantWithScalar:(double)neg_w dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *oneT =
+          [g subtractionWithPrimaryTensor:one secondaryTensor:pt name:nil];
+      MPSGraphTensor *term1 = [g multiplicationWithPrimaryTensor:
+          [g multiplicationWithPrimaryTensor:pt secondaryTensor:spNeg name:nil]
+                                                 secondaryTensor:posw name:nil];
+      MPSGraphTensor *term2 = [g multiplicationWithPrimaryTensor:
+          [g multiplicationWithPrimaryTensor:oneT secondaryTensor:spPos name:nil]
+                                                 secondaryTensor:negw name:nil];
+      MPSGraphTensor *loss =
+          [g additionWithPrimaryTensor:term1 secondaryTensor:term2 name:nil];
+      yMean = [g meanOfTensor:loss axes:axis0 name:nil];
+      mpsg_cache_put(key, @[ g, @[ pz, pt ], yMean ]);
+    }
+    MPSGraphTensorData *zd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufZ shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData *td =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufT shape:shape
+                                            dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pz : zd, pt : td}
+                                    targetTensors:@[ yMean ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[yMean];
+    if (!od)
+      return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_asymmetric_bce_f32(const float *z,
+                                                     const float *t, float *out,
+                                                     int32_t n, float pos_w,
+                                                     float neg_w) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_asymmetric_bce_f32(ctx, z, t, out, n, pos_w, neg_w))
+    return;
+  double acc = 0.0;
+  for (int32_t i = 0; i < n; ++i) {
+    double zi = z[i], ti = t[i], a = std::fabs(zi);
+    double log1p = std::log(1.0 + std::exp(-a));
+    double spNeg = std::max(-zi, 0.0) + log1p, spPos = std::max(zi, 0.0) + log1p;
+    acc += pos_w * ti * spNeg + neg_w * (1.0 - ti) * spPos;
+  }
+  out[0] = (float)(acc / std::max(1, n));
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float *logp_new, const float *logp_old, const float *advantages,
     float *out, int32_t n, float clip_epsilon) {

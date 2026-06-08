@@ -484,7 +484,7 @@ _APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
 _APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({"tessera.grouped_gemm"})
 
 # LDT candidate-axis ops with dedicated Metal kernels.
-_APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero"})
+_APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce"})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS

@@ -3579,6 +3579,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         clifford_grade_involution=_clifford_ops_mod.clifford_grade_involution,
         clifford_conjugate=_clifford_ops_mod.clifford_conjugate,
         clifford_grade_projection=_clifford_ops_mod.clifford_grade_projection,
+        clifford_exp=_clifford_ops_mod.clifford_exp,
+        clifford_log=_clifford_ops_mod.clifford_log,
         clifford_norm=_clifford_ops_mod.clifford_norm,
         clifford_norm_squared=_clifford_ops_mod.clifford_norm_squared,
         ebm_energy_quadratic=_ebm_ops_mod.ebm_energy_quadratic,

@@ -2018,7 +2018,7 @@ _GA4_OWNED_OP_SPEC_NAMES: frozenset[str] = frozenset({
     "clifford_geometric_product", "clifford_wedge", "clifford_left_contraction",
     "clifford_inner", "clifford_reverse", "clifford_grade_involution",
     "clifford_conjugate", "clifford_grade_projection", "clifford_norm",
-    "clifford_rotor_sandwich",
+    "clifford_rotor_sandwich", "clifford_exp", "clifford_log",
     # EBM equivalent: these names have authoritative `category="ebm"` rows from
     # the python-primitive / `_partial` registry. Their op_catalog OpSpecs feed
     # the AST graph builder (apple_gpu envelope) but must not shadow those rows.

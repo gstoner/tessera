@@ -101,6 +101,22 @@ def clifford_grade_projection(a: Any, grade: int | None = None, *, k: int | None
     return _coeffs(G.grade_projection(_mv(a), int(g)))
 
 
+# ── transcendental (exp / log) ─────────────────────────────────────────────── #
+def clifford_exp(a: Any) -> np.ndarray:
+    """Multivector exponential ``exp(a)`` (Cl(3,0); closed-form for pure
+    bivectors, power series otherwise). Routes f32 to the cl30 ``exp`` kernel."""
+    from tessera.ga import ops as G
+    return _coeffs(G.exp_mv(_mv(a)))
+
+
+def clifford_log(a: Any) -> np.ndarray:
+    """Multivector logarithm ``log(a)`` (Cl(3,0) closed-form rotor log
+    ``(θ/2)·B̂`` for scalar+bivector inputs). Routes f32 to the cl30 ``log``
+    kernel."""
+    from tessera.ga import ops as G
+    return _coeffs(G.log_mv(_mv(a)))
+
+
 # ── norms (scalar-valued) ──────────────────────────────────────────────────── #
 def clifford_norm(a: Any) -> np.ndarray:
     from tessera.ga import ops as G
@@ -123,6 +139,8 @@ CLIFFORD_OPS = {
     "clifford_grade_involution": clifford_grade_involution,
     "clifford_conjugate": clifford_conjugate,
     "clifford_grade_projection": clifford_grade_projection,
+    "clifford_exp": clifford_exp,
+    "clifford_log": clifford_log,
     "clifford_norm": clifford_norm,
     "clifford_norm_squared": clifford_norm_squared,
 }

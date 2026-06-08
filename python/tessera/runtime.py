@@ -2274,6 +2274,7 @@ _APPLE_GPU_CLIFFORD_OPS = frozenset({
     "tessera.clifford_rotor_sandwich",
     "tessera.clifford_reverse", "tessera.clifford_grade_involution",
     "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
+    "tessera.clifford_exp", "tessera.clifford_log",
     "tessera.clifford_norm", "tessera.clifford_norm_squared",
 })
 # Energy-based-model flat-array lane — canonical tessera.ops projection of the

@@ -287,6 +287,8 @@ _SPECS = [
     OpSpec("clifford_grade_involution", "tessera.clifford_grade_involution", 1, 1, lowering="elementwise"),
     OpSpec("clifford_conjugate", "tessera.clifford_conjugate", 1, 1, lowering="elementwise"),
     OpSpec("clifford_grade_projection", "tessera.clifford_grade_projection", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_exp", "tessera.clifford_exp", 1, 1, lowering="elementwise"),
+    OpSpec("clifford_log", "tessera.clifford_log", 1, 1, lowering="elementwise"),
     OpSpec("clifford_norm", "tessera.clifford_norm", 1, 1, lowering="reduction"),
     OpSpec("clifford_norm_squared", "tessera.clifford_norm_squared", 1, 1, lowering="reduction"),
     # Energy-based-model (EBM) flat-array lane — canonical tessera.ops projection

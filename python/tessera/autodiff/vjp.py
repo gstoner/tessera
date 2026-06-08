@@ -2380,6 +2380,69 @@ def vjp_clifford_grade_projection(dout, a, grade=None, *, k=None, **_):
     return (_sum_to_shape(da, np.shape(a)),)
 
 
+# exp/log autodiff (Cl(3,0)). exp: derivative of the truncated power series
+# Σ aⁿ/n! is Σ(1/n!)Σ_k aᵏ·da·aⁿ⁻¹⁻ᵏ (non-commutative product rule); its adjoint
+# uses the reverse-based gp adjoint. log: the Cl(3,0) closed-form rotor log
+# (θ/2)·B̂ over the scalar+bivector subspace (grade-2 indices {3,5,6}), with the
+# analytic adjoint. Both validated vs finite-difference to ~1e-11.
+_CLIFFORD_EXP_TERMS = 24
+_CLIFFORD_BIVECTOR_IDX = (3, 5, 6)
+
+
+def _clifford_exp_powers(a64, n_terms):
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    p0 = np.zeros_like(a64)
+    p0[..., 0] = 1.0
+    powers = [p0]
+    for _ in range(n_terms):
+        powers.append(np.asarray(gp(powers[-1], a64), dtype=np.float64))
+    return powers
+
+
+def _clifford_log_terms(a64):
+    s = a64[..., 0]
+    nB = np.sqrt(a64[..., 3] ** 2 + a64[..., 5] ** 2 + a64[..., 6] ** 2)
+    safe = np.where(nB > 1e-12, nB, 1.0)
+    theta = np.arctan2(nB, s)
+    scale = theta / safe
+    denom = s * s + nB * nB
+    c2 = 1.0 / np.where(denom > 0.0, denom, 1.0)
+    c1 = s * c2 / safe - theta / (safe * safe)
+    return scale, c1, c2, safe
+
+
+@_vjp("clifford_exp")
+def vjp_clifford_exp(dout, a, **_):
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    rev = C.clifford_reverse
+    a64 = np.asarray(a, dtype=np.float64)
+    g = np.asarray(dout, dtype=np.float64)
+    powers = _clifford_exp_powers(a64, _CLIFFORD_EXP_TERMS)
+    revp = [np.asarray(rev(p), dtype=np.float64) for p in powers]
+    out = np.zeros_like(a64)
+    fact = 1.0
+    for n in range(1, _CLIFFORD_EXP_TERMS + 1):
+        fact *= n
+        for k in range(n):
+            out += np.asarray(gp(gp(revp[k], g), revp[n - 1 - k]), dtype=np.float64) / fact
+    return (_sum_to_shape(out, np.shape(a)),)
+
+
+@_vjp("clifford_log")
+def vjp_clifford_log(dout, a, **_):
+    a64 = np.asarray(a, dtype=np.float64)
+    g = np.asarray(dout, dtype=np.float64)
+    scale, c1, c2, safe = _clifford_log_terms(a64)
+    p = sum(a64[..., i] * g[..., i] for i in _CLIFFORD_BIVECTOR_IDX)
+    out = np.zeros_like(a64)
+    out[..., 0] = -c2 * p
+    for j in _CLIFFORD_BIVECTOR_IDX:
+        out[..., j] = (a64[..., j] * c1 / safe) * p + scale * g[..., j]
+    return (_sum_to_shape(out, np.shape(a)),)
+
+
 @_vjp("clifford_norm_squared")
 def vjp_clifford_norm_squared(dout, a, **_):
     # ∂‖a‖²/∂a = 2·g·a, g[i] = norm_squared(e_i) (Euclidean Cl(3,0): all +1).

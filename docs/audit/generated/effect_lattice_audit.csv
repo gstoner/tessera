@@ -42,11 +42,13 @@ chunk,pure,,1,0,0
 cispo_policy_loss,pure,,1,0,0
 clamp,pure,,1,0,0
 clifford_conjugate,pure,,1,0,0
+clifford_exp,pure,,1,0,0
 clifford_geometric_product,pure,,1,0,0
 clifford_grade_involution,pure,,1,0,0
 clifford_grade_projection,pure,,1,0,0
 clifford_inner,pure,,1,0,0
 clifford_left_contraction,pure,,1,0,0
+clifford_log,pure,,1,0,0
 clifford_norm,pure,,1,0,0
 clifford_norm_squared,pure,,1,0,0
 clifford_reverse,pure,,1,0,0

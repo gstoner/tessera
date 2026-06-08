@@ -1364,6 +1364,8 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `clifford_grade_involution(a)` | `(array) → array` | `pure` | GA Cl(3,0) grade involution; Graph IR op `tessera.clifford_grade_involution` |
 | `clifford_conjugate(a)` | `(array) → array` | `pure` | GA Cl(3,0) Clifford conjugation; Graph IR op `tessera.clifford_conjugate` |
 | `clifford_grade_projection(a, grade)` | `(array) → array` | `pure` | GA Cl(3,0) grade-`k` projection (grade passed positionally or `grade=`/`k=`); Graph IR op `tessera.clifford_grade_projection` |
+| `clifford_exp(a)` | `(array) → array` | `pure` | GA Cl(3,0) multivector exponential (closed-form Euler for pure bivectors, power series otherwise); apple_gpu routes to the cl30 kernel; VJP/JVP via non-commutative series differentiation; Graph IR op `tessera.clifford_exp` |
+| `clifford_log(a)` | `(array) → array` | `pure` | GA Cl(3,0) multivector logarithm (closed-form rotor log `(θ/2)·B̂`); VJP/JVP via the analytic rotor-log derivative; Graph IR op `tessera.clifford_log` |
 | `clifford_norm(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) multivector norm (Euclidean); Graph IR op `tessera.clifford_norm` |
 | `clifford_norm_squared(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) squared norm; Graph IR op `tessera.clifford_norm_squared` |
 | `ebm_self_verify(energies, candidates, beta=None)` | `(array, array) → array` | `pure` | EBM candidate reduction: hard argmin (`beta=None`) or differentiable soft-min (`beta>0`); canonical `tessera.ops` projection of `tessera.ebm.self_verify`; apple_gpu routes to the EBM MSL kernel; Graph IR op `tessera.ebm_self_verify` |

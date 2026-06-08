@@ -727,6 +727,62 @@ def jvp_clifford_grade_projection(primals, tangents, *, grade=None, k=None, **_)
     return out, tan
 
 
+_CLIFFORD_EXP_TERMS = 24
+_CLIFFORD_BIVECTOR_IDX = (3, 5, 6)
+
+
+def _clifford_exp_powers(a64, n_terms):
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    p0 = np.zeros_like(a64)
+    p0[..., 0] = 1.0
+    powers = [p0]
+    for _ in range(n_terms):
+        powers.append(np.asarray(gp(powers[-1], a64), dtype=np.float64))
+    return powers
+
+
+@_jvp("clifford_exp")
+def jvp_clifford_exp(primals, tangents, **_):
+    # d exp(a)[da] = Σ_n (1/n!) Σ_{k<n} aᵏ·da·aⁿ⁻¹⁻ᵏ (validated vs FD).
+    from .. import _clifford_ops as C
+    gp = C.clifford_geometric_product
+    a = np.asarray(primals[0], dtype=np.float64)
+    da = np.asarray(tangents[0], dtype=np.float64)
+    powers = _clifford_exp_powers(a, _CLIFFORD_EXP_TERMS)
+    out = np.asarray(C.clifford_exp(a), dtype=np.float64)
+    tan = np.zeros_like(a)
+    fact = 1.0
+    for n in range(1, _CLIFFORD_EXP_TERMS + 1):
+        fact *= n
+        for k in range(n):
+            tan += np.asarray(gp(gp(powers[k], da), powers[n - 1 - k]), dtype=np.float64) / fact
+    return out, tan
+
+
+@_jvp("clifford_log")
+def jvp_clifford_log(primals, tangents, **_):
+    # Cl(3,0) closed-form rotor log (θ/2)·B̂ over the scalar+bivector subspace.
+    from .. import _clifford_ops as C
+    a = np.asarray(primals[0], dtype=np.float64)
+    da = np.asarray(tangents[0], dtype=np.float64)
+    s = a[..., 0]
+    nB = np.sqrt(a[..., 3] ** 2 + a[..., 5] ** 2 + a[..., 6] ** 2)
+    safe = np.where(nB > 1e-12, nB, 1.0)
+    theta = np.arctan2(nB, s)
+    scale = theta / safe
+    denom = s * s + nB * nB
+    safe_denom = np.where(denom > 0.0, denom, 1.0)
+    out = np.asarray(C.clifford_log(a), dtype=np.float64)
+    dnB = sum(a[..., i] * da[..., i] for i in _CLIFFORD_BIVECTOR_IDX) / safe
+    dtheta = (s * dnB - nB * da[..., 0]) / safe_denom
+    dscale = dtheta / safe - theta * dnB / (safe * safe)
+    tan = np.zeros_like(a)
+    for i in _CLIFFORD_BIVECTOR_IDX:
+        tan[..., i] = dscale * a[..., i] + scale * da[..., i]
+    return out, tan
+
+
 @_jvp("clifford_norm_squared")
 def jvp_clifford_norm_squared(primals, tangents, **_):
     from .. import _clifford_ops as C

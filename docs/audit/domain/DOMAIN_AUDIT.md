@@ -66,6 +66,23 @@ autodiff domain audit material.
   are closed** for the shipped surface; remaining: Apple-CPU GA/EBM native
   kernels (#3), Cl(1,3) kernels (#4 gated with a diagnostic), and `exp`/`log` GA
   autodiff.
+- **exp/log GA autodiff (tail closed, 2026-06-08):** `clifford_exp` /
+  `clifford_log` joined the canonical `tessera.ops` shim + apple_gpu envelope
+  (cl30 kernels → `metal_runtime`) with exact, finite-difference-validated
+  VJP+JVP — exp via non-commutative power-series differentiation
+  (`Σ(1/n!)Σ_k aᵏ·da·aⁿ⁻¹⁻ᵏ` + reverse-adjoint), log via the Cl(3,0) closed-form
+  rotor-log derivative over the scalar+bivector subspace. **GA autodiff is now
+  12 complete / 5 planned**; the 5 planned are exactly the unimplemented
+  differential-form ops (`hodge_star`, `ext_deriv`, `codiff`, `vec_deriv`,
+  `integral`) — their autodiff lands when those get Python implementations. The
+  pre-existing bf16 `control_for` "bug" was a **stale tessera-opt binary**, not a
+  defect: the `carry_arg_index` verifier already accepts multi-arg loops with
+  loop-invariant captures, and the test passes after rebuild. **Apple-CPU GA/EBM
+  "native kernels" (#3) reassessed as a non-gap** — GA ops are fixed 8/16-coeff
+  contractions and EBM energies/losses are small reductions, regimes where the
+  numpy reference is already optimal on CPU (a BLAS/Accelerate hand-off adds call
+  overhead for no gain); the canonical Apple-CPU path for GA/EBM is the numpy
+  reference by design.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

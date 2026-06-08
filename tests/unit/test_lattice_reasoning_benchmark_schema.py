@@ -14,7 +14,9 @@ for p in (REPO_ROOT, REPO_ROOT / "python"):
 
 from benchmarks.common import ExecutionKind, RuntimeStatus  # noqa: E402
 from benchmarks.lattice_reasoning_core import (  # noqa: E402
+    APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES,
     LDT_PRIMITIVE_GAPS,
+    LANDED_LDT_PRIMITIVES,
     LatticeReasoningBenchmark,
     LatticeReasoningConfig,
     build_report,
@@ -54,7 +56,8 @@ def test_artifact_row_emits_declared_primitive_gaps() -> None:
     report = build_report(smoke=True, reps=1)
     rows = report["rows"]
     artifact = next(row for row in rows if row["operator"]["name"] == "lattice_reasoning_compiler_artifact")
-    assert set(artifact["metrics"]["primitive_gaps"]) == set(LDT_PRIMITIVE_GAPS)
+    assert set(artifact["metrics"]["landed_primitives"]) == set(LANDED_LDT_PRIMITIVES)
+    assert set(artifact["metrics"]["remaining_integrated_step_work"]) == set(LDT_PRIMITIVE_GAPS)
     assert artifact["execution_kind"] == "artifact_only"
     assert artifact["runtime_status"] == "artifact_only"
 
@@ -62,8 +65,46 @@ def test_artifact_row_emits_declared_primitive_gaps() -> None:
 def test_report_has_no_unknown_execution_kind() -> None:
     report = build_report(smoke=True, reps=1)
     kinds = {row["execution_kind"] for row in report["rows"]}
-    assert kinds == {"reference", "artifact_only"}
+    assert {"reference", "artifact_only"} <= kinds
+    assert kinds <= {"reference", "artifact_only", "optimized_native"}
     assert "unknown" not in kinds
+
+
+def test_report_surfaces_current_apple_gpu_native_rows() -> None:
+    report = build_report(smoke=True, reps=1)
+    by_name = {row["operator"]["name"]: row for row in report["rows"]}
+    for name in (
+        "apple_gpu_mamba2_selective_ssm",
+        "apple_gpu_grouped_gemm_fused",
+    ):
+        row = by_name[name]
+        assert row["compiler_path"] == "tessera_jit_apple_gpu"
+        assert row["execution_kind"] == "optimized_native"
+        assert row["runtime_status"] == "executable"
+        assert row["metrics"]["execution_mode"] == "metal_runtime"
+        assert row["metrics"]["observed_native_execution"] is True
+
+
+def test_report_keeps_non_runtime_apple_rows_artifact_only() -> None:
+    report = build_report(smoke=True, reps=1)
+    by_name = {row["operator"]["name"]: row for row in report["rows"]}
+    for name in (
+        "apple_gpu_ldt_count_nonzero",
+        "apple_gpu_ldt_popcount",
+        "apple_gpu_ldt_masked_categorical",
+        "apple_gpu_ldt_asymmetric_bce",
+        "apple_gpu_moe_z_loss",
+        "apple_gpu_moe_load_balance_loss",
+    ):
+        row = by_name[name]
+        assert row["compiler_path"] == "tessera_jit_apple_gpu"
+        assert row["execution_kind"] == "artifact_only"
+        assert row["runtime_status"] == "skipped"
+        assert row["metrics"]["observed_native_execution"] is False
+    assert set(APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES) >= {
+        "selective_ssm_scalar_A",
+        "grouped_gemm_fused",
+    }
 
 
 def test_cli_writes_smoke_json(tmp_path: Path) -> None:
@@ -80,4 +121,4 @@ def test_cli_writes_smoke_json(tmp_path: Path) -> None:
     payload = json.loads(out.read_text())
     assert payload["benchmark"] == "lattice_reasoning_core"
     assert payload["mode"] == "smoke"
-    assert len(payload["rows"]) == 6
+    assert len(payload["rows"]) >= 18

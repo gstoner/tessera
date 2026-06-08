@@ -11,6 +11,7 @@ from tessera.telemetry import make_event
 
 class CompilerPath(str, Enum):
     TESSERA_JIT_CPU = "tessera_jit_cpu"
+    TESSERA_JIT_APPLE_GPU = "tessera_jit_apple_gpu"
     GRAPH_IR_ONLY = "graph_ir_only"
     RUNTIME_UNAVAILABLE = "runtime_unavailable"
     REFERENCE = "reference"

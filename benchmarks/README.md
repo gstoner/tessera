@@ -18,7 +18,7 @@ is available.
 | `Tessera_Operator_Benchmarks/` | Active C++ harness | CPU reference timing for all 7 registered op groups, Graph IR artifact coverage, `tessera.telemetry.v1` JSON summaries, and explicit `backend_unavailable` Tessera-runtime status. |
 | `../archive/benchmarks/matrix_multiplication/` | Archived | Blackwell concept sketch using non-existent APIs; future Blackwell work should land as Target IR tests/runtime kernels/operator cases. |
 | `DeepScholar-Bench/` | Active CPU smoke | Current-API research-synthesis smoke using `@tessera.jit`, matmul, softmax, layer_norm, and NumPy text/source embeddings. LOTUS integration remains optional and guarded. |
-| `lattice_reasoning_core/` | Active reference + artifact visibility | LDT-style lattice step plus MOPD, Mamba-2, GQA, and Latent MoE primitive microbenchmarks. Emits reference rows and an artifact-only compiler row with explicit primitive gaps. |
+| `lattice_reasoning_core/` | Active current-compiler probe | LDT-style lattice step plus MOPD, Mamba-2, GQA, and Latent MoE primitive microbenchmarks. Emits NumPy reference rows, public Tessera primitive rows, Apple GPU native rows when `metal_runtime` is observed, and an artifact-only integrated-step row for remaining LDT fusion work. |
 
 ## Quick Checks
 

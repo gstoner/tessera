@@ -1,9 +1,11 @@
-"""Reference LDT/model-primitive benchmark kernels.
+"""Current-compiler LDT/model-primitive benchmark kernels.
 
-The package intentionally starts as a reference plus artifact-visibility
-benchmark.  It exercises the state shapes and primitive families needed by
-Lattice Deduction Transformers, MOPD/OPD, Mamba-2, GQA, and Latent MoE without
-claiming native compiler execution before oracle-backed fixtures exist.
+The package emits three proof levels:
+
+* NumPy reference rows for correctness-bearing oracle timing.
+* Tessera primitive rows that call the public compiler/runtime API.
+* Apple GPU executable rows when `@jit(target="apple_gpu")` reaches the Metal
+  runtime and numerically agrees with the oracle.
 """
 
 from __future__ import annotations
@@ -64,6 +66,47 @@ MODEL_PRIMITIVE_GAPS: dict[str, tuple[str, ...]] = {
         "grouped_gemm_or_segment_reduce",
     ),
 }
+
+LANDED_LDT_PRIMITIVES: tuple[str, ...] = (
+    "count_nonzero",
+    "popcount",
+    "masked_categorical",
+    "asymmetric_bce",
+)
+
+APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES: tuple[str, ...] = (
+    "count_nonzero",
+    "popcount",
+    "masked_categorical",
+    "asymmetric_bce",
+    "selective_ssm_scalar_A",
+    "grouped_gemm_fused",
+    "z_loss",
+    "load_balance_loss",
+)
+
+REGISTRY_MISMATCH_NOTES: tuple[str, ...] = (
+    "capabilities.supports_op currently reports artifact_only for several Apple GPU ops that file-based tests execute through metal_runtime",
+    "benchmark rows treat observed metal_runtime execution as stronger evidence than the conservative registry status",
+)
+
+
+def _import_tessera():
+    try:
+        import tessera as ts  # type: ignore
+        import tessera.losses as losses  # type: ignore
+    except Exception:
+        return None, None
+    return ts, losses
+
+
+def _apple_gpu_available() -> bool:
+    try:
+        from tessera import _apple_gpu_backend as agb  # type: ignore
+        from tessera import _jit_boundary as jb  # type: ignore
+    except Exception:
+        return False
+    return bool(agb.is_available() and jb.is_available())
 
 
 @dataclass(frozen=True)
@@ -393,7 +436,8 @@ def _artifact_texts() -> dict[str, str]:
         "  %elim = tessera.where %p >= theta_elim, %state, false",
         "  %counts = tessera.count_nonzero %elim axis = candidate",
         "  %conflict = tessera.any %counts == 0 or %cls > theta_cls",
-        "  %branch = tessera.masked_categorical_sample %candidate_logits, %elim",
+        "  %branch = tessera.masked_categorical %candidate_logits, %elim",
+        "  %loss = tessera.loss.asymmetric_bce %candidate_logits, %target",
         "}",
     ))
     schedule = "schedule @lattice_reasoning_core { recurrent_iterations = 16, tile = [4, 4] }"
@@ -448,6 +492,7 @@ class LatticeReasoningBenchmark:
 
     def rows(self, cfg: LatticeReasoningConfig) -> list[BenchmarkRow]:
         rows: list[BenchmarkRow] = []
+        lattice, logits, solutions, mask = _make_lattice_case(cfg)
         step, latency_ms = self.run_lattice_step(cfg)
         cells = cfg.B * cfg.H * cfg.W
         rows.append(BenchmarkRow(
@@ -468,7 +513,9 @@ class LatticeReasoningBenchmark:
         ))
 
         rng = np.random.default_rng(cfg.seed + 17)
+        rows.extend(self._ldt_primitive_rows(cfg, lattice, logits, solutions, mask))
         rows.extend(self._model_primitive_rows(cfg, rng))
+        rows.extend(self._apple_gpu_executable_rows(cfg, rng))
 
         texts = _artifact_texts()
         artifact_hash = _artifact_hash(texts)
@@ -484,10 +531,12 @@ class LatticeReasoningBenchmark:
                 artifact_hash=artifact_hash,
             ),
             metrics={
-                "primitive_gaps": list(LDT_PRIMITIVE_GAPS),
+                "landed_primitives": list(LANDED_LDT_PRIMITIVES),
+                "remaining_integrated_step_work": list(LDT_PRIMITIVE_GAPS),
+                "registry_mismatch_notes": list(REGISTRY_MISMATCH_NOTES),
                 "artifact_hash_inputs": sorted(texts),
             },
-            reason="compiler primitive targets are visible, but native lowering/execution is not claimed",
+            reason="integrated LDT step remains artifact-only; individual primitives have stronger rows",
             execution_kind=ExecutionKind.ARTIFACT_ONLY,
         ))
 
@@ -495,6 +544,52 @@ class LatticeReasoningBenchmark:
         for row in rows:
             out.append(row if row.telemetry else _with_telemetry(row, cfg))
         return out
+
+    def _ldt_primitive_rows(
+        self,
+        cfg: LatticeReasoningConfig,
+        lattice: np.ndarray,
+        logits: np.ndarray,
+        solutions: np.ndarray,
+        mask: np.ndarray,
+    ) -> list[BenchmarkRow]:
+        target = lattice_meet(lattice, lattice_alpha(solutions, lattice)).astype(np.float32)
+        live = lattice.astype(np.float32)
+        bitmask = np.packbits(lattice.astype(np.uint8), axis=-1).astype(np.int64)
+        return [
+            _tessera_metric_row(
+                "ldt_count_nonzero_tessera",
+                "f32",
+                cfg.shape_signature,
+                lambda: _tessera_count_nonzero(live),
+                candidate_counts(lattice, mask),
+                {"primitive": "count_nonzero", "axis": -1},
+            ),
+            _tessera_metric_row(
+                "ldt_popcount_tessera",
+                "i64",
+                cfg.shape_signature,
+                lambda: _tessera_popcount(bitmask),
+                _popcount_ref(bitmask),
+                {"primitive": "popcount", "encoding": "packed_candidate_bits"},
+            ),
+            _tessera_metric_row(
+                "ldt_masked_categorical_tessera",
+                "f32",
+                cfg.shape_signature,
+                lambda: _tessera_masked_categorical(logits, lattice.astype(np.int32)),
+                np.argmax(np.where(lattice, logits, -np.inf), axis=-1),
+                {"primitive": "masked_categorical", "mode": "greedy"},
+            ),
+            _tessera_metric_row(
+                "ldt_asymmetric_bce_tessera",
+                "f32",
+                cfg.shape_signature,
+                lambda: _tessera_asymmetric_bce(logits, target),
+                asymmetric_bce_loss(logits, target, w_pos=8.0, w_neg=1.0),
+                {"primitive": "asymmetric_bce", "pos_weight": 8.0, "neg_weight": 1.0},
+            ),
+        ]
 
     def _model_primitive_rows(self, cfg: LatticeReasoningConfig, rng: np.random.Generator) -> list[BenchmarkRow]:
         B, T, V = cfg.B, max(cfg.H, 4), cfg.V
@@ -559,6 +654,100 @@ class LatticeReasoningBenchmark:
         ))
         return rows
 
+    def _apple_gpu_executable_rows(self, cfg: LatticeReasoningConfig, rng: np.random.Generator) -> list[BenchmarkRow]:
+        if not _apple_gpu_available():
+            return [_skipped_row(
+                "apple_gpu_current_compiler_primitives",
+                "f32",
+                cfg.shape_signature,
+                reason="apple_gpu runtime or libtessera_jit unavailable",
+            )]
+
+        rows: list[BenchmarkRow] = []
+        lattice, logits, solutions, _mask = _make_lattice_case(cfg)
+        target = lattice_meet(lattice, lattice_alpha(solutions, lattice)).astype(np.float32)
+        live = lattice.astype(np.float32)
+        bitmask = np.packbits(lattice.astype(np.uint8), axis=-1).astype(np.int64)
+        rows.extend([
+            _apple_gpu_metric_row(
+                "apple_gpu_ldt_count_nonzero",
+                "f32",
+                cfg.shape_signature,
+                lambda: _apple_gpu_count_nonzero(live),
+                candidate_counts(lattice),
+                {"primitive": "count_nonzero"},
+            ),
+            _apple_gpu_metric_row(
+                "apple_gpu_ldt_popcount",
+                "i64",
+                cfg.shape_signature,
+                lambda: _apple_gpu_popcount(bitmask),
+                _popcount_ref(bitmask),
+                {"primitive": "popcount"},
+            ),
+            _apple_gpu_metric_row(
+                "apple_gpu_ldt_masked_categorical",
+                "f32",
+                cfg.shape_signature,
+                lambda: _apple_gpu_masked_categorical(logits, lattice.astype(np.int32)),
+                np.argmax(np.where(lattice, logits, -np.inf), axis=-1),
+                {"primitive": "masked_categorical", "mode": "greedy"},
+            ),
+            _apple_gpu_metric_row(
+                "apple_gpu_ldt_asymmetric_bce",
+                "f32",
+                cfg.shape_signature,
+                lambda: _apple_gpu_asymmetric_bce(logits, target),
+                asymmetric_bce_loss(logits, target, w_pos=8.0, w_neg=1.0),
+                {"primitive": "asymmetric_bce"},
+            ),
+        ])
+
+        x, A, Bm, C, delta = _selective_ssm_inputs(rng, B=cfg.B, S=max(cfg.H * 2, 8), D=max(cfg.V, 4), N=3)
+        ts, _losses = _import_tessera()
+        ssm_ref = np.asarray(ts.ops.selective_ssm(x, A, Bm, C, delta)) if ts is not None else np.zeros_like(x)
+        rows.append(_apple_gpu_metric_row(
+            "apple_gpu_mamba2_selective_ssm",
+            "f32",
+            f"B{cfg.B}_S{max(cfg.H * 2, 8)}_D{max(cfg.V, 4)}_N3",
+            lambda: _apple_gpu_selective_ssm(x, A, Bm, C, delta),
+            ssm_ref,
+            {"primitive": "selective_ssm", "scope": "scalar_A", "execution_mode_expected": "metal_runtime"},
+        ))
+
+        gx, gw, group_sizes = _grouped_gemm_inputs(rng)
+        grouped_ref = _grouped_gemm_ref(gx, gw, group_sizes)
+        rows.append(_apple_gpu_metric_row(
+            "apple_gpu_grouped_gemm_fused",
+            "f32",
+            f"T{gx.shape[0]}_K{gx.shape[1]}_N{gw.shape[2]}_E{gw.shape[0]}",
+            lambda: _apple_gpu_grouped_gemm(gx, gw, group_sizes),
+            grouped_ref,
+            {"primitive": "grouped_gemm", "path": "fused_msl_one_dispatch"},
+        ))
+
+        router_logits = rng.normal(size=(32, 4)).astype(np.float32)
+        router_probs = np.exp(router_logits - router_logits.max(axis=-1, keepdims=True))
+        router_probs /= router_probs.sum(axis=-1, keepdims=True)
+        if _losses is not None:
+            rows.append(_apple_gpu_metric_row(
+                "apple_gpu_moe_z_loss",
+                "f32",
+                "T32_E4",
+                lambda: _apple_gpu_z_loss(router_logits),
+                _losses.z_loss(router_logits),
+                {"primitive": "z_loss"},
+            ))
+            rows.append(_apple_gpu_metric_row(
+                "apple_gpu_moe_load_balance_loss",
+                "f32",
+                "T32_E4",
+                lambda: _apple_gpu_load_balance_loss(router_probs.astype(np.float32)),
+                _losses.load_balance_loss(router_probs),
+                {"primitive": "load_balance_loss"},
+            ))
+        return rows
+
     def to_json(self, rows: Sequence[BenchmarkRow], path: str | Path) -> None:
         Path(path).write_text(json.dumps([row.to_dict() for row in rows], indent=2) + "\n")
 
@@ -587,6 +776,280 @@ def _reference_metric_row(
         },
         reason="numpy oracle reference for model primitive core",
         execution_kind=ExecutionKind.REFERENCE,
+    )
+
+
+def _popcount_ref(x: np.ndarray) -> np.ndarray:
+    return np.vectorize(lambda v: int(v).bit_count())(np.asarray(x))
+
+
+def _tessera_count_nonzero(x: np.ndarray) -> np.ndarray:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+    return np.asarray(ts.ops.count_nonzero(x, axis=-1))
+
+
+def _tessera_popcount(x: np.ndarray) -> np.ndarray:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+    return np.asarray(ts.ops.popcount(x))
+
+
+def _tessera_masked_categorical(logits: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+    return np.asarray(ts.ops.masked_categorical(logits, mask))
+
+
+def _tessera_asymmetric_bce(logits: np.ndarray, target: np.ndarray) -> np.ndarray:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+    return np.asarray(ts.ops.asymmetric_bce(logits, target, pos_weight=8.0, neg_weight=1.0))
+
+
+def _selective_ssm_inputs(
+    rng: np.random.Generator,
+    *,
+    B: int,
+    S: int,
+    D: int,
+    N: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    x = rng.normal(size=(B, S, D)).astype(np.float32)
+    A = (-np.abs(rng.normal(size=D)) - 0.1).astype(np.float32)
+    Bm = rng.normal(size=(B, S, N)).astype(np.float32)
+    C = rng.normal(size=(B, S, N)).astype(np.float32)
+    delta = (np.abs(rng.normal(size=(B, S, D))) * 0.25).astype(np.float32)
+    return x, A, Bm, C, delta
+
+
+def _grouped_gemm_inputs(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    group_sizes = np.array([5, 3, 4], dtype=np.int64)
+    x = rng.normal(size=(int(group_sizes.sum()), 8)).astype(np.float32)
+    weights = rng.normal(size=(len(group_sizes), 8, 6)).astype(np.float32)
+    return x, weights, group_sizes
+
+
+def _grouped_gemm_ref(x: np.ndarray, weights: np.ndarray, group_sizes: np.ndarray) -> np.ndarray:
+    out = np.zeros((x.shape[0], weights.shape[2]), dtype=np.float32)
+    offset = 0
+    for expert in range(weights.shape[0]):
+        n = int(group_sizes[expert])
+        out[offset:offset + n] = x[offset:offset + n] @ weights[expert]
+        offset += n
+    return out
+
+
+def _apple_gpu_count_nonzero(x: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(x):
+        return ts.ops.count_nonzero(x, axis=-1)
+
+    out = np.asarray(f(x))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_popcount(x: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(x):
+        return ts.ops.popcount(x)
+
+    out = np.asarray(f(x))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_masked_categorical(logits: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(logits, mask):
+        return ts.ops.masked_categorical(logits, mask)
+
+    out = np.asarray(f(logits, mask))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_asymmetric_bce(logits: np.ndarray, target: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(logits, target):
+        return ts.ops.asymmetric_bce(logits, target, pos_weight=8.0, neg_weight=1.0)
+
+    out = np.asarray(f(logits, target))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_selective_ssm(
+    x: np.ndarray,
+    A: np.ndarray,
+    Bm: np.ndarray,
+    C: np.ndarray,
+    delta: np.ndarray,
+) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(x, A, Bm, C, delta):
+        return ts.ops.selective_ssm(x, A, Bm, C, delta)
+
+    out = np.asarray(f(x, A, Bm, C, delta))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_grouped_gemm(
+    x: np.ndarray,
+    weights: np.ndarray,
+    group_sizes: np.ndarray,
+) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(x, weights, group_sizes):
+        return ts.ops.grouped_gemm(x, weights, group_sizes)
+
+    out = np.asarray(f(x, weights, group_sizes))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_z_loss(router_logits: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(router_logits):
+        return ts.ops.z_loss(router_logits)
+
+    out = np.asarray(f(router_logits))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _apple_gpu_load_balance_loss(router_probs: np.ndarray) -> tuple[np.ndarray, str]:
+    ts, _losses = _import_tessera()
+    if ts is None:
+        raise RuntimeError("tessera import failed")
+
+    @ts.jit(target="apple_gpu")
+    def f(router_probs):
+        return ts.ops.load_balance_loss(router_probs)
+
+    out = np.asarray(f(router_probs))
+    return out, str(f.runtime_artifact().metadata.get("execution_mode"))
+
+
+def _tessera_metric_row(
+    name: str,
+    dtype: str,
+    shape: str,
+    fn,
+    expected: np.ndarray | float,
+    metrics: dict[str, Any],
+) -> BenchmarkRow:
+    start = time.perf_counter()
+    out = fn()
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    arr = np.asarray(out)
+    exp = np.asarray(expected)
+    passed = bool(np.allclose(arr, exp, rtol=1e-5, atol=1e-6))
+    return BenchmarkRow(
+        operator=BenchmarkOperator(name, dtype, shape),
+        compiler_path=CompilerPath.REFERENCE,
+        runtime_status=RuntimeStatus.EXECUTABLE,
+        correctness=Correctness(
+            max_error=float(np.max(np.abs(arr.astype(np.float64) - exp.astype(np.float64)))) if arr.size and exp.size else 0.0,
+            tolerance=1.0e-5,
+            passed=passed,
+        ),
+        profile=Profile(cpu_wall_ms=elapsed_ms, memory_bytes=int(arr.size * max(arr.itemsize, 1))),
+        metrics={
+            "primitive_api": "tessera.ops",
+            "output_shape": list(arr.shape),
+            "output_checksum": float(np.sum(arr, dtype=np.float64)),
+            **metrics,
+        },
+        reason="public Tessera primitive API reference/runtime row",
+        execution_kind=ExecutionKind.REFERENCE,
+    )
+
+
+def _apple_gpu_metric_row(
+    name: str,
+    dtype: str,
+    shape: str,
+    fn,
+    expected: np.ndarray | float,
+    metrics: dict[str, Any],
+) -> BenchmarkRow:
+    try:
+        start = time.perf_counter()
+        raw = fn()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        if isinstance(raw, tuple) and len(raw) == 2:
+            out, execution_mode = raw
+        else:
+            out, execution_mode = raw, "unknown"
+        arr = np.asarray(out)
+        exp = np.asarray(expected)
+        max_error = float(np.max(np.abs(arr.astype(np.float64) - exp.astype(np.float64)))) if arr.size and exp.size else 0.0
+        passed = bool(np.allclose(arr, exp, rtol=1e-3, atol=1e-4))
+        executable = execution_mode == "metal_runtime" and passed
+        return BenchmarkRow(
+            operator=BenchmarkOperator(name, dtype, shape, target="apple_gpu"),
+            compiler_path=CompilerPath.TESSERA_JIT_APPLE_GPU,
+            runtime_status=RuntimeStatus.EXECUTABLE if executable else RuntimeStatus.SKIPPED,
+            correctness=Correctness(max_error=max_error, tolerance=1.0e-3, passed=passed),
+            profile=Profile(kernel_elapsed_ms=elapsed_ms, memory_bytes=int(arr.size * max(arr.itemsize, 1))),
+            metrics={
+                "execution_mode": execution_mode,
+                "observed_native_execution": executable,
+                "output_shape": list(arr.shape),
+                "output_checksum": float(np.sum(arr, dtype=np.float64)),
+                **metrics,
+            },
+            reason="Apple GPU @jit row reached metal_runtime" if executable else "Apple GPU row did not prove metal_runtime execution",
+            execution_kind=ExecutionKind.OPTIMIZED_NATIVE if executable else ExecutionKind.ARTIFACT_ONLY,
+        )
+    except Exception as exc:
+        return _skipped_row(name, dtype, shape, reason=str(exc), metrics=metrics)
+
+
+def _skipped_row(
+    name: str,
+    dtype: str,
+    shape: str,
+    *,
+    reason: str,
+    metrics: dict[str, Any] | None = None,
+) -> BenchmarkRow:
+    return BenchmarkRow(
+        operator=BenchmarkOperator(name, dtype, shape),
+        compiler_path=CompilerPath.RUNTIME_UNAVAILABLE,
+        runtime_status=RuntimeStatus.SKIPPED,
+        correctness=Correctness(passed=None),
+        metrics=dict(metrics or {}),
+        reason=reason,
+        execution_kind=ExecutionKind.ARTIFACT_ONLY,
     )
 
 

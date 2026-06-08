@@ -2,6 +2,8 @@
 
 from .core import (
     LDT_PRIMITIVE_GAPS,
+    APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES,
+    LANDED_LDT_PRIMITIVES,
     LatticeReasoningBenchmark,
     LatticeReasoningConfig,
     StepResult,
@@ -21,6 +23,8 @@ from .core import (
 
 __all__ = [
     "LDT_PRIMITIVE_GAPS",
+    "APPLE_GPU_EXECUTABLE_MODEL_PRIMITIVES",
+    "LANDED_LDT_PRIMITIVES",
     "LatticeReasoningBenchmark",
     "LatticeReasoningConfig",
     "StepResult",

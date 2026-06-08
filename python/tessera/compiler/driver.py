@@ -496,11 +496,19 @@ _APPLE_GPU_CLIFFORD_OPS: frozenset[str] = frozenset({
     "tessera.clifford_norm", "tessera.clifford_norm_squared",
 })
 
+# Energy-based-model flat-array lane — canonical tessera.ops projection of the
+# tensor-clean tessera.ebm.* subset; routed to the EBM MSL kernels by
+# runtime.py::_apple_gpu_dispatch_ebm.
+_APPLE_GPU_EBM_OPS: frozenset[str] = frozenset({
+    "tessera.ebm_energy_quadratic", "tessera.ebm_self_verify",
+    "tessera.ebm_refinement", "tessera.ebm_inner_step",
+})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS
+    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
 )
 
 

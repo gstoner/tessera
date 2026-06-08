@@ -1365,6 +1365,9 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `clifford_grade_projection(a, grade)` | `(array) → array` | `pure` | GA Cl(3,0) grade-`k` projection (grade passed positionally or `grade=`/`k=`); Graph IR op `tessera.clifford_grade_projection` |
 | `clifford_norm(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) multivector norm (Euclidean); Graph IR op `tessera.clifford_norm` |
 | `clifford_norm_squared(a)` | `(array) → scalar/array` | `pure` | GA Cl(3,0) squared norm; Graph IR op `tessera.clifford_norm_squared` |
+| `ebm_self_verify(energies, candidates, beta=None)` | `(array, array) → array` | `pure` | EBM candidate reduction: hard argmin (`beta=None`) or differentiable soft-min (`beta>0`); canonical `tessera.ops` projection of `tessera.ebm.self_verify`; apple_gpu routes to the EBM MSL kernel; Graph IR op `tessera.ebm_self_verify` |
+| `ebm_refinement(y0, grad, eta, T)` | `(array, array) → array` | `pure` | EBM fixed-gradient refinement `y0 − T·eta·grad` (T inner steps); Graph IR op `tessera.ebm_refinement` |
+| `ebm_inner_step(y, grad, eta, noise_scale=0.0)` | `(array, array) → array` | `pure` | EBM single Langevin/SGD inner step `y − eta·grad` (+ optional noise); Graph IR op `tessera.ebm_inner_step` |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
 | `tanh(x)` | `(array) → array` | `pure` | NumPy tanh |
 | `add(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy addition; also used by Python frontend binary `+` lowering |

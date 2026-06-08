@@ -150,13 +150,13 @@ ebm_bivector_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs r
 ebm_bivector_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_decode_init,0,0,0,0,1,,covered_by_family,scaffold for ebm decode tests
 ebm_energy,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_energy_quadratic,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_inner_step,0,0,0,0,1,,covered_by_family,covered by ebm_step / ebm_step_chain tests
+ebm_inner_step,3,0,0,3,0,,covered_by_family,covered by ebm_step / ebm_step_chain tests
 ebm_langevin_step,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_ais,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_exact,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_monte_carlo,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_self_verify,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
+ebm_refinement,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+ebm_self_verify,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 einsum,6,0,0,6,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,structural_only,unclassified — defaults to structural_only

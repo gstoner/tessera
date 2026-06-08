@@ -3550,6 +3550,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # the autodiff tape (so their VJP/JVP in autodiff/{vjp,jvp}.py are honored).
     from . import _clifford_ops as _clifford_ops_mod
     references.update(_clifford_ops_mod.CLIFFORD_OPS)
+    # Canonical EBM shim: tessera.ops.ebm_* flat-array wrappers over the
+    # tessera.ebm.* lane (tensor-clean subset; several GPU-dispatch to dedicated
+    # MSL kernels). Same unification as the clifford shim — onto tessera.ops +
+    # through the tape so their VJP/JVP in autodiff/{vjp,jvp}.py are honored.
+    from . import _ebm_ops as _ebm_ops_mod
+    references.update(_ebm_ops_mod.EBM_OPS)
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -3565,6 +3571,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         clifford_grade_projection=_clifford_ops_mod.clifford_grade_projection,
         clifford_norm=_clifford_ops_mod.clifford_norm,
         clifford_norm_squared=_clifford_ops_mod.clifford_norm_squared,
+        ebm_energy_quadratic=_ebm_ops_mod.ebm_energy_quadratic,
+        ebm_self_verify=_ebm_ops_mod.ebm_self_verify,
+        ebm_refinement=_ebm_ops_mod.ebm_refinement,
+        ebm_inner_step=_ebm_ops_mod.ebm_inner_step,
         registry=_ops_registry,
         register_reference=_register_reference,
         register_lowering=_register_lowering,

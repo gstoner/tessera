@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **443** ops in `primitive_coverage` registry.
-- **1936** total Python-test references, **508** total lit-fixture references.
-- **110** ops have **zero** references in either test surface.
-- **223** ops have ≤1 reference ("thinly tested").
+- **1943** total Python-test references, **508** total lit-fixture references.
+- **107** ops have **zero** references in either test surface.
+- **221** ops have ≤1 reference ("thinly tested").
 - **38** ops have ≥10 references ("well tested").
 - **52** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **223** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **221** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **223** ops have at most one test reference across the whole test surface.
 | `custom_call` |    0 |    0 |    0 |
 | `custom_jvp` |    0 |    0 |    0 |
 
-_(163 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(161 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**223** ops have ≤1 direct test reference.  They break down as:
+**221** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   91 | Tested via a parent op or family wrapper |
-| `structural_only`        |  128 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   90 | Tested via a parent op or family wrapper |
+| `structural_only`        |  127 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 91 ops
+## `covered_by_family` — 90 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -182,9 +182,9 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `cos` | category default for 'elementwise' |
 | `cosh` | category default for 'elementwise' |
 
-_(61 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(60 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 128 ops
+## `structural_only` — 127 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -221,4 +221,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `custom_lowering` | category default for 'extension' |
 | `custom_primitive` | category default for 'extension' |
 
-_(98 additional structural ops omitted.)_
+_(97 additional structural ops omitted.)_

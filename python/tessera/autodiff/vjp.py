@@ -2386,6 +2386,69 @@ def vjp_clifford_norm(dout, a, **_):
     return (d[..., None] * (g * a64 / safe[..., None]),)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Energy-based-model primitives (tensor-clean subset — see _ebm_ops). All
+# adjoints closed-form, validated vs finite-difference in
+# tests/unit/test_ebm_ops_autodiff.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_vjp("ebm_energy_quadratic")
+def vjp_ebm_energy_quadratic(dout, x, y, **_):
+    # E_b = 0.5·Σ(x_b − y_b)²  (reduced over all but the batch axis).
+    # dE/dx = (x − y)·dout_b, dE/dy = −(x − y)·dout_b.
+    xa = np.asarray(x, dtype=np.float64)
+    ya = np.asarray(y, dtype=np.float64)
+    diff = xa - ya
+    d = np.asarray(dout, dtype=np.float64)
+    if xa.ndim > 1:
+        d = d.reshape(d.shape + (1,) * (xa.ndim - d.ndim))
+    return (diff * d, -diff * d)
+
+
+@_vjp("ebm_self_verify")
+def vjp_ebm_self_verify(dout, energies, candidates, *, beta=None, **_):
+    e = np.asarray(energies, dtype=np.float64)
+    c = np.asarray(candidates, dtype=np.float64)
+    d = np.asarray(dout, dtype=np.float64)
+    event = (None,) * (c.ndim - 2)
+    if beta is None:
+        # hard argmin: selects candidates[b, argmin_k]; energies grad = 0.
+        idx = np.argmin(e, axis=1)
+        b = np.arange(e.shape[0])
+        dc = np.zeros_like(c)
+        dc[b, idx] = d
+        return (np.zeros_like(e), dc)
+    # soft-min: w = softmax(−β·e); out = Σ_k w_k c_k.
+    logits = -float(beta) * e
+    logits -= logits.max(axis=1, keepdims=True)
+    w = np.exp(logits)
+    w /= w.sum(axis=1, keepdims=True)
+    out = (c * w[(slice(None), slice(None)) + event]).sum(axis=1)        # (B,*event)
+    dc = w[(slice(None), slice(None)) + event] * d[:, None, ...]          # (B,K,*event)
+    # de_bj = Σ_event dout_b · (−β·w_bj·(c_bj − out_b))
+    contrib = -float(beta) * w * (
+        (c - out[:, None, ...]) * d[:, None, ...]
+    ).reshape(c.shape[0], c.shape[1], -1).sum(axis=-1)
+    return (contrib, dc)
+
+
+@_vjp("ebm_refinement")
+def vjp_ebm_refinement(dout, y0, grad, *, eta, T, **_):
+    # y_T = y0 − T·eta·grad → dy0 = dout, dgrad = −T·eta·dout.
+    d = np.asarray(dout, dtype=np.float64)
+    scale = float(eta) * int(T)
+    return (d, -scale * d)
+
+
+@_vjp("ebm_inner_step")
+def vjp_ebm_inner_step(dout, y, grad, *, eta, noise_scale=0.0, **_):
+    # y − eta·grad (+ noise; noise is non-differentiable) → dy = dout,
+    # dgrad = −eta·dout.
+    d = np.asarray(dout, dtype=np.float64)
+    return (d, -float(eta) * d)
+
+
 @_vjp("ddpm_noise_pred_loss")
 def vjp_ddpm_noise_pred_loss(dout, pred_noise, true_noise, *, reduction="mean", **kwargs):
     return vjp_mse_loss(dout, pred_noise, true_noise, reduction=reduction, **kwargs)

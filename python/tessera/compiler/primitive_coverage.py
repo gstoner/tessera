@@ -308,6 +308,9 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
 }
 
 _EXISTING_CATEGORIES: dict[str, str] = {
+    # New EBM op (not in the python-primitive registry) — group it with the
+    # rest of the EBM lane in the audit dashboard.
+    "ebm_refinement": "ebm",
     # S2 tensor-algebra names are layout-transform lowering targets in Graph IR,
     # but the audit dashboard groups them by their compiler primitive family.
     "reshape": "tensor_algebra",
@@ -2004,6 +2007,12 @@ _GA4_OWNED_OP_SPEC_NAMES: frozenset[str] = frozenset({
     "clifford_geometric_product", "clifford_wedge", "clifford_left_contraction",
     "clifford_inner", "clifford_reverse", "clifford_grade_involution",
     "clifford_conjugate", "clifford_grade_projection", "clifford_norm",
+    # EBM equivalent: these names have authoritative `category="ebm"` rows from
+    # the python-primitive / `_partial` registry. Their op_catalog OpSpecs feed
+    # the AST graph builder (apple_gpu envelope) but must not shadow those rows.
+    # (`ebm_refinement` is NOT here — it's new, mapped to "ebm" via
+    # `_EXISTING_CATEGORIES` so it imports as a proper ebm-category row.)
+    "ebm_energy_quadratic", "ebm_self_verify", "ebm_inner_step",
 })
 
 

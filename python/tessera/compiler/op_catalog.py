@@ -288,6 +288,13 @@ _SPECS = [
     OpSpec("clifford_grade_projection", "tessera.clifford_grade_projection", 1, 1, lowering="elementwise"),
     OpSpec("clifford_norm", "tessera.clifford_norm", 1, 1, lowering="reduction"),
     OpSpec("clifford_norm_squared", "tessera.clifford_norm_squared", 1, 1, lowering="reduction"),
+    # Energy-based-model (EBM) flat-array lane — canonical tessera.ops projection
+    # of the tensor-clean tessera.ebm.* subset; apple_gpu routes them to the EBM
+    # MSL kernels (see runtime.py _apple_gpu_dispatch_ebm).
+    OpSpec("ebm_energy_quadratic", "tessera.ebm_energy_quadratic", 2, 2, lowering="reduction"),
+    OpSpec("ebm_self_verify", "tessera.ebm_self_verify", 2, 2, lowering="indexing"),
+    OpSpec("ebm_refinement", "tessera.ebm_refinement", 2, 2, lowering="elementwise"),
+    OpSpec("ebm_inner_step", "tessera.ebm_inner_step", 2, 2, lowering="elementwise"),
     OpSpec("top_k", "tessera.top_k", 1, 1, lowering="sort"),
     OpSpec("sort", "tessera.sort", 1, 1, lowering="sort"),
     OpSpec("argsort", "tessera.argsort", 1, 1, lowering="sort"),

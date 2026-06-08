@@ -87,7 +87,10 @@ dynamic_slice,pure,,1,0,0
 dynamic_update_slice,pure,,1,0,0
 dz,pure,,1,0,0
 ebm_energy_quadratic,pure,,1,0,0
+ebm_inner_step,pure,,1,0,0
 ebm_langevin_step,pure,,1,0,0
+ebm_refinement,pure,,1,0,0
+ebm_self_verify,pure,,1,0,0
 einsum,pure,,1,1,0
 eq,pure,,1,0,0
 erf,pure,,1,0,0

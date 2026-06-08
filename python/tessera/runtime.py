@@ -2275,11 +2275,18 @@ _APPLE_GPU_CLIFFORD_OPS = frozenset({
     "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
     "tessera.clifford_norm", "tessera.clifford_norm_squared",
 })
+# Energy-based-model flat-array lane — canonical tessera.ops projection of the
+# tensor-clean tessera.ebm.* subset; the dispatcher calls the EBM lane, which
+# internally routes f32 inputs to the dedicated EBM MSL kernels.
+_APPLE_GPU_EBM_OPS = frozenset({
+    "tessera.ebm_energy_quadratic", "tessera.ebm_self_verify",
+    "tessera.ebm_refinement", "tessera.ebm_inner_step",
+})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS
+    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
 )
 
 
@@ -2553,6 +2560,10 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         elif op_name in _APPLE_GPU_CLIFFORD_OPS:
             values[str(result)] = _apple_gpu_dispatch_clifford(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name in _APPLE_GPU_EBM_OPS:
+            values[str(result)] = _apple_gpu_dispatch_ebm(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
@@ -4065,6 +4076,29 @@ def _apple_gpu_dispatch_clifford(op_name: Any, operands: Any, kwargs: Any, np: A
         grade = kwargs.get("grade", kwargs.get("k"))
         return fn(np.asarray(operands[0]), grade=grade)
     return fn(*[np.asarray(o) for o in operands])
+
+
+def _apple_gpu_dispatch_ebm(op_name: Any, operands: Any, kwargs: Any, np: Any) -> Any:
+    """Energy-based-model flat-array op on Metal.
+
+    Routes through the EBM lane shim (``_ebm_ops``), which internally dispatches
+    f32 inputs to the dedicated EBM MSL kernels
+    (``tessera_apple_gpu_ebm_{energy_quadratic,self_verify,refinement,inner_step}_f32``),
+    falling back to the numpy reference otherwise. The shim is the single source
+    of EBM truth — the runtime does not re-implement the energies here.
+    """
+    from . import _ebm_ops as B
+    short = str(op_name).split(".", 1)[1] if "." in str(op_name) else str(op_name)
+    fn: Any = B.EBM_OPS[short]
+    ops = [np.asarray(o) for o in operands]
+    if short == "ebm_energy_quadratic":
+        return fn(ops[0], ops[1])
+    if short == "ebm_self_verify":
+        return fn(ops[0], ops[1], beta=kwargs.get("beta"))
+    if short == "ebm_refinement":
+        return fn(ops[0], ops[1], eta=kwargs["eta"], T=kwargs["T"])
+    # ebm_inner_step
+    return fn(ops[0], ops[1], eta=kwargs["eta"], noise_scale=kwargs.get("noise_scale", 0.0))
 
 
 def _apple_gpu_dispatch_popcount(operands: Any, kwargs: Any, np: Any) -> Any:

@@ -39,11 +39,11 @@ each row into a single E2E tier.
 | ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
-| ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
@@ -325,7 +325,7 @@ each row into a single E2E tier.
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
-| ``ebm_energy_quadratic`` | energy_based_models | public | public | registered | partial | planned | ready | none |
+| ``ebm_energy_quadratic`` | energy_based_models | public | public | missing | planned | planned | ready | none |
 | ``clifford_norm_squared`` | geometric_algebra | public | public | registered | partial | planned | ready | none |
 
 ## How to extend

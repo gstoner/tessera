@@ -737,6 +737,67 @@ def jvp_clifford_norm(primals, tangents, **_):
     return out, tan
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Energy-based-model primitives (tensor-clean subset — see _ebm_ops).
+# Validated against finite-difference in tests/unit/test_ebm_ops_autodiff.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("ebm_energy_quadratic")
+def jvp_ebm_energy_quadratic(primals, tangents, **_):
+    x, y = primals
+    dx, dy = tangents
+    xa = np.asarray(x, dtype=np.float64)
+    ya = np.asarray(y, dtype=np.float64)
+    diff = xa - ya
+    out = 0.5 * (diff * diff).sum(axis=tuple(range(1, xa.ndim))) if xa.ndim > 1 else np.asarray(0.5 * diff * diff)
+    ddiff = np.asarray(dx, dtype=np.float64) - np.asarray(dy, dtype=np.float64)
+    tan = (diff * ddiff).sum(axis=tuple(range(1, xa.ndim))) if xa.ndim > 1 else (diff * ddiff)
+    return out, tan
+
+
+@_jvp("ebm_self_verify")
+def jvp_ebm_self_verify(primals, tangents, *, beta=None, **_):
+    e = np.asarray(primals[0], dtype=np.float64)
+    c = np.asarray(primals[1], dtype=np.float64)
+    de = np.asarray(tangents[0], dtype=np.float64)
+    dc = np.asarray(tangents[1], dtype=np.float64)
+    event = (None,) * (c.ndim - 2)
+    if beta is None:
+        idx = np.argmin(e, axis=1)
+        b = np.arange(e.shape[0])
+        return c[b, idx], dc[b, idx]
+    logits = -float(beta) * e
+    logits -= logits.max(axis=1, keepdims=True)
+    w = np.exp(logits)
+    w /= w.sum(axis=1, keepdims=True)
+    we = w[(slice(None), slice(None)) + event]
+    out = (c * we).sum(axis=1)
+    # dw_k = −β·w_k·(de_k − Σ_j w_j de_j)
+    ebar = (w * de).sum(axis=1, keepdims=True)
+    dw = -float(beta) * w * (de - ebar)
+    tan = (dc * we).sum(axis=1) + (c * dw[(slice(None), slice(None)) + event]).sum(axis=1)
+    return out, tan
+
+
+@_jvp("ebm_refinement")
+def jvp_ebm_refinement(primals, tangents, *, eta, T, **_):
+    y0, grad = primals
+    dy0, dgrad = tangents
+    out = np.asarray(y0, dtype=np.float64) - float(eta) * int(T) * np.asarray(grad, dtype=np.float64)
+    tan = np.asarray(dy0, dtype=np.float64) - float(eta) * int(T) * np.asarray(dgrad, dtype=np.float64)
+    return out, tan
+
+
+@_jvp("ebm_inner_step")
+def jvp_ebm_inner_step(primals, tangents, *, eta, noise_scale=0.0, **_):
+    y, grad = primals
+    dy, dgrad = tangents
+    out = np.asarray(y, dtype=np.float64) - float(eta) * np.asarray(grad, dtype=np.float64)
+    tan = np.asarray(dy, dtype=np.float64) - float(eta) * np.asarray(dgrad, dtype=np.float64)
+    return out, tan
+
+
 @_jvp("cross_entropy_loss")
 def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     from tessera import losses as ts_losses

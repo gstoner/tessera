@@ -2262,10 +2262,14 @@ _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 # Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
 _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
+# LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
+# innermost-axis nonzero count).
+_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero"})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
+    | _APPLE_GPU_LDT_OPS
 )
 
 
@@ -2519,6 +2523,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 kwargs,
                 np,
             )
+        elif op_name == "tessera.popcount":
+            values[str(result)] = _apple_gpu_dispatch_popcount(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
+        elif op_name == "tessera.count_nonzero":
+            values[str(result)] = _apple_gpu_dispatch_count_nonzero(
+                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
         else:
             # Phase 8.4.x will broaden further; today single-op gating in
             # driver.py is the authoritative envelope. A non-MPS, non-MSL op
@@ -4011,6 +4021,25 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
             out[off:off + n] = r if r is not None else blk @ we
         off += n
     return out
+
+
+def _apple_gpu_dispatch_popcount(operands: Any, kwargs: Any, np: Any) -> Any:
+    """LDT popcount on Metal (MSL `popcount` intrinsic), shape-preserving."""
+    from . import _apple_gpu_backend as agb
+    return agb.gpu_popcount(np.asarray(operands[0]))
+
+
+def _apple_gpu_dispatch_count_nonzero(operands: Any, kwargs: Any, np: Any) -> Any:
+    """LDT count_nonzero on Metal. The innermost-axis case runs the dedicated
+    MSL kernel; other axes / keepdims fall back to numpy (still correct)."""
+    from . import _apple_gpu_backend as agb
+    x = np.asarray(operands[0])
+    axis = kwargs.get("axis")
+    keepdims = bool(kwargs.get("keepdims", False))
+    last = x.ndim - 1
+    if x.ndim >= 1 and not keepdims and axis in (-1, last):
+        return agb.gpu_count_nonzero_lastaxis(x)
+    return (x != 0).sum(axis=axis, keepdims=keepdims)
 
 
 def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> Any:

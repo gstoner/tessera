@@ -2071,6 +2071,25 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
   }
 }
 
+// LDT candidate-axis ops (non-Darwin reference parity).
+extern "C" void tessera_apple_gpu_popcount_i32(const int32_t* X, int32_t* O,
+                                               int32_t n) {
+  for (int32_t i = 0; i < n; ++i)
+    O[i] = static_cast<int32_t>(__builtin_popcount(static_cast<uint32_t>(X[i])));
+}
+
+extern "C" void tessera_apple_gpu_count_nonzero_lastaxis_f32(const float* X,
+                                                             int32_t* O,
+                                                             int32_t outer,
+                                                             int32_t axis_len) {
+  for (int32_t i = 0; i < outer; ++i) {
+    int32_t c = 0;
+    for (int32_t j = 0; j < axis_len; ++j)
+      if (X[static_cast<std::size_t>(i) * axis_len + j] != 0.0f) ++c;
+    O[i] = c;
+  }
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float* logp_new, const float* logp_old, const float* advantages,
     float* out, int32_t n, float clip_epsilon) {

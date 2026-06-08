@@ -96,6 +96,9 @@ def _load():
         ("tessera_apple_gpu_layer_norm_bf16", [u16, u16, u16, u16, i32, i32, flt]),
         # Thrust #3a — fused ragged grouped-GEMM (X, W, expert_ids, O, T, K, N, E).
         ("tessera_apple_gpu_grouped_gemm_f32", [fp, fp, ip, fp, i32, i32, i32, i32]),
+        # LDT candidate-axis ops on Metal.
+        ("tessera_apple_gpu_popcount_i32", [ip, ip, i32]),
+        ("tessera_apple_gpu_count_nonzero_lastaxis_f32", [fp, ip, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -199,6 +202,33 @@ def gpu_grouped_gemm(x: np.ndarray, w: np.ndarray,
         _ptr(x), _ptr(w), e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, N, E)
     return out
+
+
+def _i32ptr(a: np.ndarray):
+    return a.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+
+
+def gpu_popcount(x: np.ndarray) -> np.ndarray:
+    """Per-element population count (set bits) of an integer tensor on the Apple
+    GPU (MSL ``popcount`` intrinsic). Returns int32, same shape."""
+    a = np.ascontiguousarray(x).astype(np.int32, copy=False)
+    out = np.zeros(a.shape, np.int32)
+    _load().tessera_apple_gpu_popcount_i32(_i32ptr(a), _i32ptr(out), int(a.size))
+    return out
+
+
+def gpu_count_nonzero_lastaxis(x: np.ndarray) -> np.ndarray:
+    """Count of non-zero entries along the innermost axis on the Apple GPU.
+    ``x`` is (..., axis_len) f32; returns int32 of shape ``x.shape[:-1]``."""
+    a = np.ascontiguousarray(x).astype(np.float32, copy=False)
+    if a.ndim < 1:
+        raise AppleGpuError("gpu_count_nonzero_lastaxis needs a >=1-D tensor")
+    axis_len = int(a.shape[-1])
+    outer = int(a.size // max(1, axis_len))
+    out = np.zeros((outer,), np.int32)
+    _load().tessera_apple_gpu_count_nonzero_lastaxis_f32(
+        _ptr(a), _i32ptr(out), outer, axis_len)
+    return out.reshape(a.shape[:-1])
 
 
 def gpu_softmax(x: np.ndarray) -> np.ndarray:

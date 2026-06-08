@@ -483,10 +483,14 @@ _APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
 # group runs as a per-expert MPS matmul on the Metal lane.
 _APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({"tessera.grouped_gemm"})
 
+# LDT candidate-axis ops with dedicated Metal kernels.
+_APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero"})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
+    | _APPLE_GPU_LDT_OPS
 )
 
 

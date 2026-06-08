@@ -27,11 +27,16 @@ def _ref(x, w, gs):
     return out
 
 
-def test_sentinel_symbol_bumped_to_grouped_gemm():
-    # The new C ABI symbol is the staleness sentinel, so a stale prebuilt is
-    # rejected and the runtime recompiles to pick it up.
+def test_grouped_gemm_symbol_present_in_runtime():
+    # The sentinel is always the *newest* symbol (it moves as kernels land);
+    # what matters for grouped_gemm is that its C ABI symbol is loadable in the
+    # current runtime image (i.e. the recompile picked it up).
     from tessera import _apple_gpu_dispatch as agd
-    assert agd._SENTINEL_SYMBOL == "tessera_apple_gpu_grouped_gemm_f32"
+    assert isinstance(agd._SENTINEL_SYMBOL, str) and agd._SENTINEL_SYMBOL
+    if not _GPU:
+        pytest.skip("apple_gpu runtime unavailable")
+    lib = agb._load()
+    assert hasattr(lib, "tessera_apple_gpu_grouped_gemm_f32")
 
 
 @gpu

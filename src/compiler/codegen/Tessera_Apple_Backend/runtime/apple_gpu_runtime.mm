@@ -15781,6 +15781,137 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
   reference_grouped_gemm_f32(X, W, E, O, T, K, N);
 }
 
+//===---------------------------------------------------------------------===//
+// LDT / lattice candidate-axis ops on Metal.
+//
+//  * popcount        — per-element set-bit count of an int tensor (the MSL
+//                      `popcount` intrinsic; one thread per element).
+//  * count_nonzero   — number of non-zero entries along the innermost axis
+//                      (one thread per outer row).
+//
+// These promote the LDT candidate-axis primitives from the numpy-fallback
+// (metal_artifact) lane to metal_runtime. f32 / i32; reference fallbacks.
+//===---------------------------------------------------------------------===//
+namespace {
+
+bool dispatch_popcount_msl(MetalDeviceContext &ctx, const int32_t *X,
+                           int32_t *O, int32_t n) {
+  static NSString *const kPopcountSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void popcount_i32(
+    device const uint* X [[buffer(0)]],
+    device int*        O [[buffer(1)]],
+    constant int&      n [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)n) return;
+    O[gid] = (int)popcount(X[gid]);
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kPopcountSource, @"popcount_i32");
+    if (!pso) return false;
+    NSUInteger bytes = sizeof(int32_t) * (NSUInteger)n;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, bytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bytes);
+    if (!bufX || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&n length:sizeof(int32_t) atIndex:2];
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)n,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "popcount_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], bytes);
+    return true;
+  }
+}
+
+bool dispatch_count_nonzero_msl(MetalDeviceContext &ctx, const float *X,
+                                int32_t *O, int32_t outer, int32_t axis_len) {
+  static NSString *const kCountNonzeroSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+kernel void count_nonzero_lastaxis_f32(
+    device const float* X [[buffer(0)]],
+    device int*         O [[buffer(1)]],
+    constant int&       outer    [[buffer(2)]],
+    constant int&       axis_len [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)outer) return;
+    int base = (int)gid * axis_len;
+    int c = 0;
+    for (int j = 0; j < axis_len; ++j) if (X[base + j] != 0.0f) ++c;
+    O[gid] = c;
+}
+)MSL";
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kCountNonzeroSource, @"count_nonzero_lastaxis_f32");
+    if (!pso) return false;
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)outer * (NSUInteger)axis_len;
+    NSUInteger oBytes = sizeof(int32_t) * (NSUInteger)outer;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufO) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&outer length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&axis_len length:sizeof(int32_t) atIndex:3];
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)outer,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake((NSUInteger)outer, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "count_nonzero_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_popcount_i32(const int32_t *X, int32_t *O,
+                                               int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && n > 0 && dispatch_popcount_msl(ctx, X, O, n)) return;
+  for (int32_t i = 0; i < n; ++i) {
+    uint32_t v = static_cast<uint32_t>(X[i]);
+    O[i] = static_cast<int32_t>(__builtin_popcount(v));
+  }
+}
+
+extern "C" void tessera_apple_gpu_count_nonzero_lastaxis_f32(const float *X,
+                                                             int32_t *O,
+                                                             int32_t outer,
+                                                             int32_t axis_len) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && outer > 0 && axis_len > 0 &&
+      dispatch_count_nonzero_msl(ctx, X, O, outer, axis_len))
+    return;
+  for (int32_t i = 0; i < outer; ++i) {
+    int32_t c = 0;
+    for (int32_t j = 0; j < axis_len; ++j)
+      if (X[(std::size_t)i * axis_len + j] != 0.0f) ++c;
+    O[i] = c;
+  }
+}
+
 extern "C" int32_t tessera_apple_gpu_ppo_policy_loss_f32(
     const float *logp_new, const float *logp_old, const float *advantages,
     float *out, int32_t n, float clip_epsilon) {

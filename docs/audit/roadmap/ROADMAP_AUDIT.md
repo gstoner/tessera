@@ -65,6 +65,19 @@ Mamba, Hyena, Linformer, cosFormer, Griffin, Megalodon, JEPA, and Titans/Atlas.
 3. Delete or archive roadmap fragments once their decisions are represented in
    the owning theme audit.
 
+## Deferred — sequenced to the NVIDIA/AMD backend timeline
+
+- **Tiled fused SSD (Mamba-2) as a Tile-IR schedule** — decided 2026-06-07,
+  deferred. SSD is matmul-dominant by construction, so its fusion belongs at
+  Tile IR as a tiled GEMM schedule with the matmul intrinsic selected per backend
+  (`simdgroup_matrix` / WGMMA / MFMA), **not** as a one-off Apple Metal kernel.
+  The current Apple `selective_ssm` (chunked-parallel, 3 MPS-`bmm` + host) stays
+  as the functional reference; the naive per-channel Apple fused kernel is an
+  explicit anti-pattern (loses the cross-channel gram sharing → slower than the
+  3-`bmm` path). Apple is the *executable validation backend* for the schedule;
+  NVIDIA/AMD lowerings inherit it. Full design + sequencing + acceptance criteria:
+  [`docs/architecture/proposals/tiled_ssd_tile_ir_schedule.md`](../../architecture/proposals/tiled_ssd_tile_ir_schedule.md).
+
 ## Source Material Consolidated
 
 - `archive/execution_roadmap.md`

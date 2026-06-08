@@ -7759,6 +7759,117 @@ extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32(
 }
 
 //===---------------------------------------------------------------------===//
+// clifford_rotor_sandwich_norm_cl30_f32 — FUSED ‖R · v · R†‖ (close-out gap #6).
+//
+// The canonical GA chain rotor_sandwich → norm is the most common rotor-
+// invariant (the @clifford_jit docstring example). Fusing it into one MSL
+// dispatch keeps the 8-vector sandwich result in registers and emits only the
+// scalar norm per batch element — no global-memory round-trip for the
+// intermediate multivector, and one dispatch instead of two.
+//===---------------------------------------------------------------------===//
+namespace {
+
+inline void reference_clifford_rotor_sandwich_norm_cl30_f32(
+    const float* R, const float* V, float* Out, int32_t batch) {
+  std::vector<float> tmp((size_t)std::max(0, batch) * 8);
+  reference_clifford_rotor_sandwich_cl30_f32(R, V, tmp.data(), batch);
+  for (int32_t b = 0; b < batch; ++b) {
+    double ss = 0.0;
+    for (int i = 0; i < 8; ++i) {
+      double s = tmp[(size_t)b * 8 + i];
+      ss += s * s;
+    }
+    Out[b] = (float)std::sqrt(ss);
+  }
+}
+
+bool dispatch_clifford_rotor_sandwich_norm_cl30_f32_msl(
+    MetalDeviceContext &ctx, const float* R, const float* V,
+    float* Out, int32_t batch) {
+  static NSString *const kCliffordRotorSandwichNormCl30F32 = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+inline void cl30_geo_product(
+    thread float a[8], thread float b[8], thread float c[8])
+{
+    c[0] = a[0]*b[0] + a[1]*b[1] + a[2]*b[2] - a[3]*b[3] + a[4]*b[4] - a[5]*b[5] - a[6]*b[6] - a[7]*b[7];
+    c[1] = a[0]*b[1] + a[1]*b[0] - a[2]*b[3] + a[3]*b[2] - a[4]*b[5] + a[5]*b[4] - a[6]*b[7] - a[7]*b[6];
+    c[2] = a[0]*b[2] + a[1]*b[3] + a[2]*b[0] - a[3]*b[1] - a[4]*b[6] + a[5]*b[7] + a[6]*b[4] + a[7]*b[5];
+    c[3] = a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0] + a[4]*b[7] - a[5]*b[6] + a[6]*b[5] + a[7]*b[4];
+    c[4] = a[0]*b[4] + a[1]*b[5] + a[2]*b[6] - a[3]*b[7] + a[4]*b[0] - a[5]*b[1] - a[6]*b[2] - a[7]*b[3];
+    c[5] = a[0]*b[5] + a[1]*b[4] - a[2]*b[7] + a[3]*b[6] - a[4]*b[1] + a[5]*b[0] - a[6]*b[3] - a[7]*b[2];
+    c[6] = a[0]*b[6] + a[1]*b[7] + a[2]*b[4] - a[3]*b[5] - a[4]*b[2] + a[5]*b[3] + a[6]*b[0] + a[7]*b[1];
+    c[7] = a[0]*b[7] + a[1]*b[6] - a[2]*b[5] + a[3]*b[4] + a[4]*b[3] - a[5]*b[2] + a[6]*b[1] + a[7]*b[0];
+}
+
+kernel void clifford_rotor_sandwich_norm_cl30_f32(
+    device const float* R   [[buffer(0)]],
+    device const float* V   [[buffer(1)]],
+    device float*       Out [[buffer(2)]],
+    constant int&       batch [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)batch) return;
+    uint off = gid * 8;
+    float r[8], v[8], rd[8], t[8], o[8];
+    for (uint i = 0; i < 8; ++i) { r[i] = R[off+i]; v[i] = V[off+i]; }
+    rd[0]=r[0]; rd[1]=r[1]; rd[2]=r[2]; rd[3]=-r[3];
+    rd[4]=r[4]; rd[5]=-r[5]; rd[6]=-r[6]; rd[7]=-r[7];
+    cl30_geo_product(r, v, t);
+    cl30_geo_product(t, rd, o);
+    float ss = 0.0f;
+    for (uint i = 0; i < 8; ++i) ss += o[i]*o[i];
+    Out[gid] = sqrt(ss);
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kCliffordRotorSandwichNormCl30F32,
+        @"clifford_rotor_sandwich_norm_cl30_f32");
+    if (!pso) return false;
+
+    NSUInteger inBytes = sizeof(float) * static_cast<NSUInteger>(batch) * 8u;
+    NSUInteger outBytes = sizeof(float) * static_cast<NSUInteger>(batch);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufR, ctx, R, inBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, inBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, outBytes);
+    if (!bufR || !bufV || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufR offset:0 atIndex:0];
+    [enc setBuffer:bufV offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&batch length:sizeof(int32_t) atIndex:3];
+
+    MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(batch), 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(static_cast<NSUInteger>(batch),
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "clifford_rotor_sandwich_norm_cl30_f32_msl")) return false;
+    std::memcpy(Out, [bufO contents], outBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_f32(
+    const float* R, const float* V, float* Out, int32_t batch)
+{
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_clifford_rotor_sandwich_norm_cl30_f32_msl(ctx, R, V, Out, batch)) return;
+  reference_clifford_rotor_sandwich_norm_cl30_f32(R, V, Out, batch);
+}
+
+//===---------------------------------------------------------------------===//
 // GA10 conformance — pointwise GA3 / GA5 MSL kernels (2026-05-17).
 //
 // Each kernel below is the Cl(3,0) f32 native MSL implementation of one

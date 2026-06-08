@@ -55,7 +55,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
 | tensor | 14 | 3 | 2 |
-| ga | 17 | 17 | 0 |
+| ga | 18 | 18 | 0 |
 | ebm | 13 | 13 | 0 |
 | m7 | 4 | 4 | 0 |
 
@@ -78,7 +78,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | softmax | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | softmax_safe | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 
-## ga (17)
+## ga (18)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -97,6 +97,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | clifford_norm | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_norm_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_reverse | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_reverse_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_rotor_sandwich | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_clifford_rotor_sandwich_cl30_{fp32,fp16,bf16} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
+| clifford_rotor_sandwich_norm | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_vec_deriv | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_vec_deriv_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_wedge | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_wedge_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 

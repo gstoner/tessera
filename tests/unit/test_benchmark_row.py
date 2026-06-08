@@ -194,5 +194,6 @@ def test_from_compile_report_extracts_symbols_from_routes() -> None:
         device="apple_silicon_metal",
     )
     symbols = set(row.symbols)
-    assert "tessera_apple_gpu_clifford_rotor_sandwich_cl30_f32" in symbols
-    assert "tessera_apple_gpu_clifford_norm_cl30_f32" in symbols
+    # The rotor_sandwich→norm chain fuses into one dispatch (gap #6), so the row
+    # carries the single fused C ABI symbol.
+    assert "tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_f32" in symbols

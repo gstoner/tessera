@@ -927,6 +927,13 @@ _CLIFFORD_APPLE_GPU_FUSED = {
         "symbol_prefix": "tessera_apple_gpu_clifford_rotor_sandwich_cl30_",
         "dtypes": ("fp32", "fp16", "bf16"),
     },
+    # Fused rotor-invariant ‖R x R†‖ (gap #6) — one dispatch for the
+    # rotor_sandwich→norm chain. Not a GA primitive (excluded from
+    # _CLIFFORD_PRIMITIVES); it is a fusion op the clifford_jit IR pass emits.
+    "clifford_rotor_sandwich_norm": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_",
+        "dtypes": ("fp32",),
+    },
     "clifford_reverse": {
         "symbol_prefix": "tessera_apple_gpu_clifford_reverse_cl30_",
         "dtypes": ("fp32",),
@@ -1017,6 +1024,12 @@ _CLIFFORD_PRIMITIVES = (
     "clifford_integral",
 )
 
+# Fused GA chains (gap #6) — NOT primitives, but they ship a fused Apple-GPU
+# kernel + a CPU reference (the unfused composition), so `clifford_manifest_for`
+# reports them. Kept separate from `_CLIFFORD_PRIMITIVES` so the "17 primitives"
+# audits/counts stay exact.
+_CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm"})
+
 
 def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for a `clifford_*` primitive.
@@ -1030,7 +1043,7 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     pre-locked dtype target.  NVIDIA / ROCm entries are planned,
     gated on Phase G/H respectively.
     """
-    if op_name not in _CLIFFORD_PRIMITIVES:
+    if op_name not in _CLIFFORD_PRIMITIVES and op_name not in _CLIFFORD_FUSION_OPS:
         return []
     entries: list[BackendKernelEntry] = []
 

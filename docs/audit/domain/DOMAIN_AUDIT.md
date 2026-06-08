@@ -51,6 +51,21 @@ autodiff domain audit material.
   Apple-CPU GA/EBM native kernels, GA/EBM cross-op fusion, `exp`/`log` GA
   autodiff, and a pre-existing bf16 `control_for` lowering bug
   (iter_args≠results) tracked separately.
+- **GA cross-op fusion (gap #6, 2026-06-08):** the canonical rotor-invariant
+  `norm(rotor_sandwich(R, x))` now fuses into a single
+  `clifford_rotor_sandwich_norm` dispatch. A fused MSL kernel
+  (`tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_f32`) keeps the two
+  geometric products in registers and emits only the scalar norm — no
+  intermediate-multivector global-memory round-trip. `ga.rotor_sandwich_norm` is
+  the direct entry; a `@clifford_jit` decorator fusion pass
+  (`_fuse_rotor_sandwich_norm`) collapses the AST-lowered 2-op chain to the fused
+  op when the intermediate is consumed exactly once (structural
+  `lower_function_to_ir` stays unfused; fusion is a separate pass). Wired through
+  the bridge manifest (`_CLIFFORD_APPLE_GPU_FUSED` + `_CLIFFORD_FUSION_OPS`, kept
+  out of the 17 `_CLIFFORD_PRIMITIVES`). **Of the original 6 GA/EBM gaps, #1/#2/#5/#6
+  are closed** for the shipped surface; remaining: Apple-CPU GA/EBM native
+  kernels (#3), Cl(1,3) kernels (#4 gated with a diagnostic), and `exp`/`log` GA
+  autodiff.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

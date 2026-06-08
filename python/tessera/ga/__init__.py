@@ -55,6 +55,7 @@ from tessera.ga.ops import (
     reverse,
     rotor_from_axis,
     rotor_sandwich,
+    rotor_sandwich_norm,
     wedge,
 )
 from tessera.ga.signature import (
@@ -108,6 +109,7 @@ __all__ = [
     "reverse",
     "rotor_from_axis",
     "rotor_sandwich",
+    "rotor_sandwich_norm",
     "wedge",
     # Differential calculus + manifolds (GA5)
     "MultivectorField",

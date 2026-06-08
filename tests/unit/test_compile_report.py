@@ -176,13 +176,13 @@ def test_rotor_sandwich_norm_carries_ir_hash() -> None:
 
 
 def test_rotor_sandwich_norm_proof_routes_on_darwin() -> None:
-    """On Darwin the bridge trace must show clifford_rotor_sandwich
-    + clifford_norm; on non-Darwin routes are empty (the fallback
-    reason explains why)."""
+    """On Darwin the bridge trace shows the fused clifford_rotor_sandwich_norm
+    op (the rotor_sandwich→norm chain fuses into one dispatch — gap #6); on
+    non-Darwin routes are empty (the fallback reason explains why)."""
     report = rotor_sandwich_norm.run()
     if sys.platform == "darwin":
         op_names = [r.op_name for r in report.proof_routes]
-        assert op_names == ["clifford_rotor_sandwich", "clifford_norm"]
+        assert op_names == ["clifford_rotor_sandwich_norm"]
         assert report.fallback_reason is None
     else:
         assert report.proof_routes == ()

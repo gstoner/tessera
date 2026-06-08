@@ -144,9 +144,13 @@ def test_native_ebm_ops_show_fused_at_target_ir_and_tile_ir() -> None:
 
 
 def test_native_ga_ops_show_fused_at_target_ir() -> None:
-    """All 17 GA primitives surface as fused at target_ir."""
+    """All 17 GA primitives surface as fused at target_ir.
+
+    Iterates the primitives (not `_CLIFFORD_APPLE_GPU_FUSED`, which also carries
+    fused-chain ops like clifford_rotor_sandwich_norm that aren't benchmarked
+    primitives — gap #6)."""
     from tessera.compiler import backend_manifest as bm
-    for op in bm._CLIFFORD_APPLE_GPU_FUSED:
+    for op in bm._CLIFFORD_PRIMITIVES:
         row = audit.support_row_for(op)
         assert row.cells["target_ir"].status == "fused", op
         assert row.cells["bench"].status == "benchmarked", op

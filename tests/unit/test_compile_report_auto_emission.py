@@ -115,8 +115,9 @@ def test_clifford_jit_auto_emits_on_call() -> None:
         f(ga.Multivector(R, a), ga.Multivector(V, a))
     assert len(sink) == 2
     assert all(r.frontend == "clifford_jit" for r in sink)
-    # Proof routes are populated on Darwin.
-    assert all(len(r.proof_routes) == 2 for r in sink)
+    # Proof routes are populated on Darwin. The rotor_sandwich→norm chain fuses
+    # into one dispatch (gap #6), so a single proof route.
+    assert all(len(r.proof_routes) == 1 for r in sink)
 
 
 # ---------------------------------------------------------------------------

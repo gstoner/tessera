@@ -406,6 +406,49 @@ def _try_apple_gpu_rotor_sandwich_cl30_f32(
         op_name="clifford_rotor_sandwich")
 
 
+def _try_apple_gpu_rotor_sandwich_norm_cl30_f32(
+    rotor: Multivector, x: Multivector,
+) -> Optional[np.ndarray]:
+    """Fused ``‖R x R†‖`` on ``Cl(3,0)`` f32 — one dispatch (gap #6).
+
+    The two geometric products of the sandwich stay in registers and only the
+    scalar norm per batch element is written out, so the rotor_sandwich→norm
+    chain becomes a single kernel instead of two dispatches + an intermediate.
+    Returns the per-batch norms (scalar for unbatched input)."""
+    if rotor.algebra != x.algebra or rotor.algebra.signature != (3, 0, 0):
+        return None
+    R = rotor.coefficients
+    X = x.coefficients
+    if not _is_cl30_f32_8axis(R, X):
+        return None
+    try:
+        import ctypes
+        from tessera.compiler import jit_bridge as _bridge
+    except ImportError:
+        return None
+    R_c = np.ascontiguousarray(R.reshape(-1, 8))
+    X_c = np.ascontiguousarray(X.reshape(-1, 8))
+    batch = R_c.shape[0]
+    out = np.zeros(batch, dtype=np.float32)
+    p = ctypes.POINTER(ctypes.c_float)
+    try:
+        ok = _bridge.dispatch_via_manifest(
+            "clifford_rotor_sandwich_norm",
+            argtypes=(ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.POINTER(ctypes.c_float),
+                      ctypes.c_int32),
+            args=(R_c.ctypes.data_as(p), X_c.ctypes.data_as(p),
+                  out.ctypes.data_as(p), ctypes.c_int32(batch)),
+            args_summary=_bridge.shaped_summary(R_c, X_c),
+        )
+    except _bridge.JitBridgeMiss:
+        return None
+    if not ok:
+        return None
+    return out.reshape(R.shape[:-1]) if R.ndim > 1 else out[0]
+
+
 def _try_apple_gpu_binary_8x8_cl30_f32(
     a: Multivector, b: Multivector, symbol: str, *,
     op_name: Optional[str] = None,
@@ -719,6 +762,26 @@ def rotor_sandwich(rotor: Multivector, x: Multivector) -> Multivector:
     return geometric_product(geometric_product(rotor, x), reverse(rotor))
 
 
+def rotor_sandwich_norm(rotor: Multivector, x: Multivector) -> np.ndarray:
+    """Fused ``‖R x R†‖`` — the rotor-invariant magnitude (close-out gap #6).
+
+    Mathematically ``norm(rotor_sandwich(rotor, x))``, but on ``Cl(3,0)`` f32 it
+    runs as a single fused MSL dispatch
+    (``tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_f32``) — the
+    intermediate sandwiched multivector never round-trips through global memory.
+    Falls back to the unfused ``norm(rotor_sandwich(...))`` reference otherwise.
+    Returns the per-batch norm (scalar for unbatched input)."""
+    if rotor.algebra != x.algebra:
+        raise TesseraAlgebraError(
+            f"rotor_sandwich_norm: algebras must match; got "
+            f"{rotor.algebra!r} and {x.algebra!r}."
+        )
+    gpu_out = _try_apple_gpu_rotor_sandwich_norm_cl30_f32(rotor, x)
+    if gpu_out is not None:
+        return gpu_out
+    return norm(rotor_sandwich(rotor, x))
+
+
 __all__ = [
     "conjugate",
     "exp_mv",
@@ -733,5 +796,6 @@ __all__ = [
     "reverse",
     "rotor_from_axis",
     "rotor_sandwich",
+    "rotor_sandwich_norm",
     "wedge",
 ]

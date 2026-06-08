@@ -104,6 +104,9 @@ _GA_ATTR_TO_OP_NAME: dict[str, str] = {
     "log_mv":             "clifford_log",
     "rotor_sandwich":     "clifford_rotor_sandwich",
     "hodge_star":         "clifford_hodge_star",
+    # Fused rotor-invariant (gap #6) — emitted by the rotor_sandwich→norm
+    # fusion pass; also callable directly as ga.rotor_sandwich_norm.
+    "rotor_sandwich_norm": "clifford_rotor_sandwich_norm",
 }
 
 
@@ -267,6 +270,9 @@ def lower_function_to_ir(fn: Callable[..., Any]) -> CliffordIRProgram:
     generic = _ast_ir.lower_function(
         fn, _CLIFFORD_LOWERING_CONFIG,
     )
+    # Structural lowering only — fusion is a separate pass
+    # (`_fuse_rotor_sandwich_norm`) applied by the @clifford_jit decorator so
+    # `lower_function_to_ir` stays a faithful 1:1 AST→IR projection.
     return CliffordIRProgram(
         arg_names=generic.arg_names,
         ops=tuple(
@@ -280,6 +286,53 @@ def lower_function_to_ir(fn: Callable[..., Any]) -> CliffordIRProgram:
         ),
         return_ref=generic.return_ref,
     )
+
+
+def _fuse_rotor_sandwich_norm(ir: CliffordIRProgram) -> CliffordIRProgram:
+    """Rewrite each ``norm(rotor_sandwich(R, x))`` chain into one
+    ``clifford_rotor_sandwich_norm`` op.
+
+    Only fuses when the intermediate sandwich result is consumed **exactly
+    once** (by the norm) and isn't itself the program return — otherwise the
+    intermediate multivector is still needed and the two ops stay separate.
+    """
+    from collections import Counter
+
+    uses: Counter[str] = Counter()
+    for op in ir.ops:
+        for ref in op.operand_refs:
+            uses[ref] += 1
+    by_result = {op.result_name: op for op in ir.ops}
+
+    consumed: set[str] = set()
+    fused = False
+    out: list[CliffordIROpCall] = []
+    for op in ir.ops:
+        if op.result_name in consumed:
+            continue
+        if op.op_name == "clifford_norm" and len(op.operand_refs) == 1:
+            src_ref = op.operand_refs[0]
+            src = by_result.get(src_ref)
+            if (src is not None
+                    and src.op_name == "clifford_rotor_sandwich"
+                    and uses[src_ref] == 1
+                    and src_ref != ir.return_ref):
+                # Drop the already-emitted sandwich op; emit one fused op.
+                out = [o for o in out if o.result_name != src_ref]
+                out.append(CliffordIROpCall(
+                    op_name="clifford_rotor_sandwich_norm",
+                    operand_refs=src.operand_refs,
+                    result_name=op.result_name,
+                    python_attr="rotor_sandwich_norm",
+                ))
+                consumed.add(src_ref)
+                fused = True
+                continue
+        out.append(op)
+    if not fused:
+        return ir
+    return CliffordIRProgram(
+        arg_names=ir.arg_names, ops=tuple(out), return_ref=ir.return_ref)
 
 
 def _execute_ir(
@@ -639,7 +692,9 @@ def clifford_jit(
         # back to the trace-capture variant.
         wrapper: Any
         try:
-            ir = lower_function_to_ir(fn)
+            # Gap #6 — apply cross-op fusion (rotor_sandwich→norm → one fused
+            # dispatch) to the structurally-lowered IR before building the plan.
+            ir = _fuse_rotor_sandwich_norm(lower_function_to_ir(fn))
         except CliffordJitError as exc:
             if "cannot read source" in str(exc):
                 wrapper = _LazyCompiledCallable(

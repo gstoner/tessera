@@ -89,9 +89,10 @@ def test_first_call_captures_op_plan() -> None:
     V = rng.randn(8, 8).astype(np.float32)
     out = point_cloud_rotor_invariant(ga.Multivector(R, a),
                                        ga.Multivector(V, a))
-    # Plan is now frozen.
+    # Plan is now frozen. The rotor_sandwich→norm chain fuses into a single
+    # clifford_rotor_sandwich_norm op (gap #6).
     plan = point_cloud_rotor_invariant.artifact.op_names()
-    assert plan == ("clifford_rotor_sandwich", "clifford_norm")
+    assert plan == ("clifford_rotor_sandwich_norm",)
     # Output shape is per-batch scalar.
     assert np.asarray(out).shape == (8,)
 
@@ -552,6 +553,7 @@ def test_decorator_artifact_metadata_embeds_ir() -> None:
     meta = f.artifact.as_metadata()
     assert "ir" in meta
     assert meta["ir"]["arg_names"] == ["rotor", "points"]
+    # The decorator fuses rotor_sandwich→norm into one op (gap #6).
     assert [op["op"] for op in meta["ir"]["ops"]] == [
-        "clifford_rotor_sandwich", "clifford_norm",
+        "clifford_rotor_sandwich_norm",
     ]

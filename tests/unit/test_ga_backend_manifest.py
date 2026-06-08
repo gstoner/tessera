@@ -87,7 +87,10 @@ def test_cpu_targets_carry_reference_status(op_name: str) -> None:
     assert by_target["apple_cpu"].status == "reference"
 
 
-FUSED_APPLE_GPU_OPS = frozenset(bm._CLIFFORD_APPLE_GPU_FUSED.keys())
+# Restrict to the 17 GA *primitives* — _CLIFFORD_APPLE_GPU_FUSED also carries
+# fused-chain ops (e.g. clifford_rotor_sandwich_norm, gap #6) that are not
+# primitives and are asserted separately below.
+FUSED_APPLE_GPU_OPS = frozenset(bm._CLIFFORD_APPLE_GPU_FUSED.keys()) & EXPECTED_CLIFFORD_OPS
 PLANNED_APPLE_GPU_OPS = EXPECTED_CLIFFORD_OPS - FUSED_APPLE_GPU_OPS
 
 
@@ -139,10 +142,22 @@ def test_headline_ops_ship_fp32_fp16_bf16_msl_kernels(op_name: str) -> None:
     assert "metal" in apple_gpu.feature_flags
 
 
+def test_rotor_sandwich_norm_fusion_op_is_fused() -> None:
+    """The fused rotor_sandwich→norm chain (gap #6) is not a GA primitive but
+    ships a fused fp32 Apple-GPU kernel + a CPU reference fallback."""
+    assert "clifford_rotor_sandwich_norm" in bm._CLIFFORD_FUSION_OPS
+    assert "clifford_rotor_sandwich_norm" not in bm._CLIFFORD_PRIMITIVES
+    manifest = bm.clifford_manifest_for("clifford_rotor_sandwich_norm")
+    by_target = {e.target: e for e in manifest}
+    assert by_target["apple_gpu"].status == "fused"
+    assert by_target["apple_gpu"].dtypes == ("fp32",)
+    assert by_target["x86"].status == bm._REFERENCE_STATUS
+
+
 @pytest.mark.parametrize(
     "op_name",
-    sorted(bm._CLIFFORD_APPLE_GPU_FUSED.keys() - {"clifford_geometric_product",
-                                                  "clifford_rotor_sandwich"}),
+    sorted((bm._CLIFFORD_APPLE_GPU_FUSED.keys() & EXPECTED_CLIFFORD_OPS)
+           - {"clifford_geometric_product", "clifford_rotor_sandwich"}),
 )
 def test_non_headline_fused_ops_fp32_only(op_name: str) -> None:
     """The 9 pointwise GA3/GA5 ops added in the GA10 follow-on are

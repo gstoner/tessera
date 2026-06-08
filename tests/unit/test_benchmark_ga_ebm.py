@@ -1163,11 +1163,11 @@ def test_vertical_slice_row_emitted_when_runtime_available(report: dict) -> None
     art = row["compiled_artifact"]
     assert art["target"] == "apple_gpu"
     assert art["dtype"] == "f32"
-    # The traced plan should be ``rotor_sandwich → norm`` — every entry
+    # The rotor_sandwich → norm chain fuses into one op (gap #6); every entry
     # must carry the manifest-resolved symbol.
     from tessera.compiler import jit_bridge as bridge_mod
     plan_ops = [e["op"] for e in art["plan"]]
-    assert plan_ops == ["clifford_rotor_sandwich", "clifford_norm"]
+    assert plan_ops == ["clifford_rotor_sandwich_norm"]
     for entry in art["plan"]:
         assert entry["target"] == "apple_gpu"
         assert entry["status"] == "fused"

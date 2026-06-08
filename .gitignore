@@ -79,3 +79,9 @@ src/solvers/tpp/test/TPP/.lit_test_times.txt
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 .claude/settings.local.json
+
+# graphify knowledge graph — local code-intelligence artifact. Untracked
+# (2026-06-08): `graphify update` only adds/updates nodes and never prunes
+# deleted files, so a tracked graph goes stale on refactors and churns the
+# cache dir on every run. Keep it local; regenerate via `graphify update .`.
+graphify-out/

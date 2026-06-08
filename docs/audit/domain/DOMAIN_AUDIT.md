@@ -10,6 +10,20 @@ autodiff domain audit material.
 - EBM scope decisions and archive disposition are locked.
 - GA/EBM Python surfaces and Apple-specialized runtime lanes are substantially
   built.
+- **GA/EBM lane unification (2026-06-08):** the GA Multivector lane
+  (`tessera.ga.*`) and the tensor-clean EBM subset (`tessera.ebm.*`) are now
+  projected onto the canonical `tessera.ops` surface via flat-array shims
+  (`tessera.ops.clifford_*` — 10 ops; `tessera.ops.ebm_*` — 4 ops:
+  energy_quadratic / self_verify / refinement / inner_step). This closes the two
+  long-standing GA/EBM gaps: (#1) the ops flow through the autodiff tape with
+  closed-form VJP+JVP rules (validated vs finite-difference), and (#2)
+  `@jit(target="apple_gpu")` routes them to the cl30 / EBM MSL kernels and
+  classifies them `execution_mode="metal_runtime"` (envelope-gated in
+  `runtime.py` + `driver.py`). The authoritative `category="geometric_algebra"`
+  / `category="ebm"` coverage rows are preserved (op_catalog OpSpecs feed IR
+  emission but the OP_SPECS import skips the registry-owned names). Callable/RNG
+  EBM ops (energy, partition_function*, langevin_step, decode_init) intentionally
+  stay on `tessera.ebm` — they cannot be flat `tessera.ops` ops.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

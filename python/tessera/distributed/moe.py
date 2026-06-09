@@ -301,3 +301,218 @@ def plan_all_to_all(
         recv_counts=recv_counts,
         experts_per_rank=experts_per_rank,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Distributed MegaMoE — expert-parallel forward (token all-to-all dispatch/combine)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The deferred north star: a real expert-parallel MoE layer where experts are
+# sharded across ranks and tokens are routed to the rank owning their expert via
+# a 2× all-to-all (GShard / Switch-Transformer pattern), with the heavy expert
+# FFN running through the fused GPU `moe_swiglu_block` kernel.
+#
+# Capacity-based dispatch keeps every exchange buffer a fixed size so the
+# all-to-all is uniform (the only kind the mock thread group expresses): each
+# expert receives exactly `capacity` token slots — overflow is dropped, underflow
+# zero-padded. Per Decision #6, multi-rank tests run in-process via MockRankGroup
+# (threads), so this is the production-shaped forward AND its own test harness.
+
+
+class MegaMoEResult(NamedTuple):
+    """Per-rank output of ``megamoe_forward``.
+
+    y_local     : (T_local, Kout) combined expert outputs for this rank's tokens
+    n_dropped   : tokens dropped to capacity overflow (load-imbalance telemetry)
+    capacity    : per-expert capacity used for the dispatch buffers
+    """
+    y_local: np.ndarray
+    n_dropped: int
+    capacity: int
+
+
+def expert_capacity(tokens_per_rank: int, num_experts: int, num_ranks: int,
+                    top_k: int, capacity_factor: float) -> int:
+    """Per-expert capacity for a uniform all-to-all dispatch buffer.
+
+    Each expert reserves ``capacity_factor × (global token-slots / num_experts)``
+    slots, so the dispatch tensor is fixed-size across ranks. Global token-slots
+    = ``tokens_per_rank × num_ranks × top_k``.
+    """
+    global_slots = tokens_per_rank * num_ranks * top_k
+    return max(1, int(np.ceil(capacity_factor * global_slots / num_experts)))
+
+
+def megamoe_forward(
+    rank,
+    x_local: np.ndarray,
+    W_router: np.ndarray,
+    local_W_gate: np.ndarray,
+    local_W_up: np.ndarray,
+    local_W_down: np.ndarray,
+    *,
+    config: MoEConfig,
+    capacity: Optional[int] = None,
+    quant=None,
+) -> MegaMoEResult:
+    """Expert-parallel MoE forward for one rank — the distributed MegaMoE layer.
+
+    Experts are sharded across ``rank.world_size`` ranks: rank ``r`` owns the
+    contiguous expert block ``[r·Ep, (r+1)·Ep)`` (``Ep = num_experts/world_size``)
+    and holds ONLY those experts' weights — ``local_W_*`` are shaped
+    ``(Ep, …)``, not the full expert set (the memory win of expert parallelism).
+    The router (``W_router``, shape ``(K, num_experts)``) is replicated.
+
+    Forward (the GShard 2× all-to-all):
+
+        1. route this rank's ``x_local`` tokens through the global router (top-k)
+        2. scatter tokens into a capacity-padded dispatch buffer keyed by their
+           destination expert's owner rank
+        3. all-to-all DISPATCH — every rank receives the tokens bound for its
+           local experts, gathered from all source ranks
+        4. local expert FFN over the received tokens via the fused GPU
+           ``moe_swiglu_block`` (Ep ragged groups, one dispatch)
+        5. all-to-all COMBINE — send each result back to the rank that owns the
+           originating token
+        6. weighted scatter-combine of each token's top-k expert outputs
+
+    Returns a :class:`MegaMoEResult`. Designed to be called inside
+    ``MockRankGroup.run(worker)`` — see :func:`megamoe_layer` for the harness.
+    """
+    from .. import ops as _ops
+
+    R = int(rank.world_size)
+    E = int(config.num_experts)
+    if E % R != 0:
+        raise ValueError(
+            f"megamoe_forward: num_experts={E} must be divisible by "
+            f"world_size={R} for balanced expert parallelism")
+    Ep = E // R
+
+    x_local = np.ascontiguousarray(x_local, dtype=np.float32)
+    Wr = np.asarray(W_router, dtype=np.float32)
+    Tl, K = x_local.shape
+    top_k = int(config.top_k)
+    Kout = int(np.asarray(local_W_down).shape[2])
+
+    if capacity is None:
+        capacity = expert_capacity(Tl, E, R, top_k, config.capacity_factor)
+    C = int(capacity)
+
+    # 1. Local routing through the global (replicated) router. No capacity drop
+    #    here — capacity is enforced by the fixed-size dispatch buffer below.
+    scores = np.asarray(_ops.gemm(x_local, Wr), dtype=np.float32)
+    route = route_tokens(scores, config, capacity=Tl * top_k + 1)
+    assign = route.assignment                          # (Tl, top_k)
+    weights = route.weights.astype(np.float32)         # (Tl, top_k)
+
+    # 2. Scatter tokens into the dispatch buffer (R, Ep, C, K) keyed by the
+    #    destination expert's owner rank. Track (expert, slot) per token slot so
+    #    the combine can gather the matching result back.
+    send = np.zeros((R, Ep, C, K), dtype=np.float32)
+    disp_e = np.full((Tl, top_k), -1, dtype=np.int64)  # global expert per slot
+    disp_c = np.full((Tl, top_k), -1, dtype=np.int64)  # capacity position
+    fill = np.zeros(E, dtype=np.int64)
+    n_dropped = 0
+    for t in range(Tl):
+        for k in range(top_k):
+            e = int(assign[t, k])
+            if e < 0:
+                continue
+            c = int(fill[e])
+            if c >= C:                                 # capacity overflow → drop
+                n_dropped += 1
+                continue
+            fill[e] += 1
+            send[e // Ep, e % Ep, c] = x_local[t]
+            disp_e[t, k] = e
+            disp_c[t, k] = c
+
+    # 3. All-to-all DISPATCH: row `dst` of `send` goes to rank `dst`; after the
+    #    exchange row `s` of `recv` holds rank `s`'s tokens for our local experts.
+    recv = rank.all_to_all(send.reshape(R, -1), scatter_axis=0, gather_axis=0)
+    recv = recv.reshape(R, Ep, C, K)
+
+    # 4. Local expert FFN over the (R·C) tokens per local expert — Ep ragged
+    #    groups through the fused GPU MoE-SwiGLU kernel in a single dispatch.
+    grouped_x = np.ascontiguousarray(
+        np.transpose(recv, (1, 0, 2, 3)).reshape(Ep * R * C, K))  # ep-major
+    group_sizes = np.full(Ep, R * C, dtype=np.int64)
+    y = np.asarray(
+        _ops.moe_swiglu_block(grouped_x, local_W_gate, local_W_up, local_W_down,
+                              group_sizes, quant=quant),
+        dtype=np.float32)
+    out = np.transpose(y.reshape(Ep, R, C, Kout), (1, 0, 2, 3))   # (R, Ep, C, Kout)
+
+    # 5. All-to-all COMBINE: send results back to the originating rank.
+    back = rank.all_to_all(np.ascontiguousarray(out.reshape(R, -1)),
+                           scatter_axis=0, gather_axis=0)
+    back = back.reshape(R, Ep, C, Kout)
+
+    # 6. Weighted scatter-combine of each token's top-k expert outputs.
+    y_local = np.zeros((Tl, Kout), dtype=np.float32)
+    for t in range(Tl):
+        for k in range(top_k):
+            e = int(disp_e[t, k])
+            if e < 0:
+                continue
+            y_local[t] += weights[t, k] * back[e // Ep, e % Ep, int(disp_c[t, k])]
+
+    return MegaMoEResult(y_local=y_local, n_dropped=n_dropped, capacity=C)
+
+
+def megamoe_layer(
+    x,
+    W_router,
+    W_gate,
+    W_up,
+    W_down,
+    *,
+    world_size: int,
+    config: MoEConfig,
+    capacity: Optional[int] = None,
+    quant=None,
+):
+    """Run the distributed MegaMoE forward across a mock rank group and return
+    ``(y, n_dropped)`` with ``y`` the gathered ``(T, Kout)`` output — the
+    single-call harness over :func:`megamoe_forward`.
+
+    ``W_gate`` / ``W_up`` are ``(E, K, H)`` and ``W_down`` is ``(E, H, Kout)`` —
+    the FULL expert set; this helper shards them across ranks (rank ``r`` gets the
+    ``Ep``-expert block it owns) and shards ``x`` ``(T, K)`` row-wise across ranks
+    (``T`` must be divisible by ``world_size``). Tokens are gathered back into the
+    original ``(T, Kout)`` order. Numerically equivalent to the single-device
+    ``nn.functional.moe_layer`` when ``capacity`` is large enough to drop nothing.
+    """
+    from ..testing.mock_collective import MockRankGroup
+
+    x = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+    Wg = np.asarray(W_gate, dtype=np.float32)
+    Wu = np.asarray(W_up, dtype=np.float32)
+    Wd = np.asarray(W_down, dtype=np.float32)
+    T = x.shape[0]
+    E = config.num_experts
+    if T % world_size != 0:
+        raise ValueError(
+            f"megamoe_layer: T={T} must be divisible by world_size={world_size}")
+    if E % world_size != 0:
+        raise ValueError(
+            f"megamoe_layer: num_experts={E} must be divisible by "
+            f"world_size={world_size}")
+    Ep = E // world_size
+    Tl = T // world_size
+
+    def worker(rank):
+        r = rank.rank
+        x_local = x[r * Tl:(r + 1) * Tl]
+        lg = Wg[r * Ep:(r + 1) * Ep]
+        lu = Wu[r * Ep:(r + 1) * Ep]
+        ld = Wd[r * Ep:(r + 1) * Ep]
+        return megamoe_forward(
+            rank, x_local, W_router, lg, lu, ld,
+            config=config, capacity=capacity, quant=quant)
+
+    results = MockRankGroup(n=world_size).run(worker)
+    y = np.concatenate([res.y_local for res in results], axis=0)
+    n_dropped = int(sum(res.n_dropped for res in results))
+    return y, n_dropped

@@ -195,7 +195,7 @@ grpo_policy_loss,3,3,0,6,0,,needs_direct_test,category default for 'rl_loss'
 gru_cell,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
 gt,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 huber_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
-hybrid_attention,4,2,0,6,0,,needs_direct_test,category default for 'attention'
+hybrid_attention,10,2,0,12,0,,needs_direct_test,category default for 'attention'
 ifft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
 implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

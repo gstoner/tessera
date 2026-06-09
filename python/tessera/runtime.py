@@ -2287,6 +2287,8 @@ _APPLE_GPU_DELTA_ATTN_OPS = frozenset({
     "tessera.gated_deltanet", "tessera.kimi_delta_attention",
     "tessera.modified_delta_attention",
 })
+# hybrid_attention — policy wrapper routing to the now-proven delegates.
+_APPLE_GPU_HYBRID_ATTN_OPS = frozenset({"tessera.hybrid_attention"})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2372,7 +2374,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
-    | _APPLE_GPU_DELTA_ATTN_OPS
+    | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
 )
 
 
@@ -2621,6 +2623,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_DELTA_ATTN_OPS:
             values[str(result)] = _apple_gpu_dispatch_delta_attn(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_HYBRID_ATTN_OPS:
+            values[str(result)] = _apple_gpu_dispatch_hybrid_attn(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -6042,6 +6051,58 @@ def _apple_gpu_dispatch_linear_attn(op_name: str, operands: list[Any],
     if O is None:
         return None
     return np.asarray(O).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_hybrid_attn(op_name: str, operands: list[Any],
+                                    kwargs: dict, np: Any) -> Any:
+    """hybrid_attention (Sub-sprint D) — a named policy wrapper that dispatches
+    to a now-GPU-proven delegate per layer: Lightning / Kimi-Delta / Gated
+    DeltaNet, or softmax flash attention for the MLA slot.  Routes to the
+    matching delegate dispatcher; returns None for the return_state path or the
+    weight-supplied MLA-fused slot (which fall back to numpy)."""
+    if kwargs.get("return_state"):
+        return None
+    Q = np.asarray(operands[0])
+    K = np.asarray(operands[1])
+    V = np.asarray(operands[2])
+    if Q.ndim != 4:
+        return None
+    pattern = str(kwargs.get("pattern", "auto")).lower()
+    layer_index = int(kwargs.get("layer_index", 0))
+    causal = bool(kwargs.get("causal", True))
+    gate = kwargs.get("gate")
+    beta = kwargs.get("beta")
+    decay = kwargs.get("decay")
+
+    def _flash_slot() -> Any:
+        if kwargs.get("w_dkv") is not None:
+            return None  # MLA-fused slot — not yet GPU-routed
+        return _apple_gpu_dispatch_gqa(
+            Q, K, V, int(Q.shape[1]), int(Q.shape[1]), np, causal=causal)
+
+    def _lightning() -> Any:
+        return _apple_gpu_dispatch_linear_attn(
+            "tessera.lightning_attention", [Q, K, V], {"decay": decay, "causal": causal}, np)
+
+    def _kimi() -> Any:
+        return _apple_gpu_dispatch_delta_attn(
+            "tessera.kimi_delta_attention", [Q, K, V],
+            {"gate": gate, "beta": beta, "decay": decay, "causal": causal}, np)
+
+    def _gated_deltanet() -> Any:
+        return _apple_gpu_dispatch_delta_attn(
+            "tessera.gated_deltanet", [Q, K, V],
+            {"gate": gate, "beta": beta, "decay": decay, "causal": causal}, np)
+
+    if pattern in ("ling_1_7_mla_lightning", "ling2_5", "ling_2_5"):
+        return _flash_slot() if layer_index % 8 == 7 else _lightning()
+    if pattern in ("kimi_kda_mla", "kimi_linear", "kimi"):
+        return _flash_slot() if layer_index % 2 == 1 else _kimi()
+    if pattern in ("gated_deltanet", "delta"):
+        return _gated_deltanet()
+    if pattern in ("lightning", "auto"):
+        return _lightning()
+    return None
 
 
 def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any],

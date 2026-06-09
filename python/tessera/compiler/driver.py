@@ -570,6 +570,8 @@ _APPLE_GPU_DELTA_ATTN_OPS: frozenset[str] = frozenset({
     "tessera.gated_deltanet", "tessera.kimi_delta_attention",
     "tessera.modified_delta_attention",
 })
+# hybrid_attention — policy wrapper over the now-proven delegates.
+_APPLE_GPU_HYBRID_ATTN_OPS: frozenset[str] = frozenset({"tessera.hybrid_attention"})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
@@ -579,7 +581,7 @@ _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
-    | _APPLE_GPU_DELTA_ATTN_OPS
+    | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
 )
 
 

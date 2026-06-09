@@ -196,6 +196,30 @@ def Tessera_BatchedGemmOp : Op<
   let hasVerifier = 1;
 }
 
+// DeepGEMM-inspired grouped GEMM (MoE expert FFN) with the grouped-layout
+// contract as first-class IR attributes (2026-06).  `grouped_kind` selects the
+// family (dense / contiguous / masked / k_grouped); `grouped_alignment` is the
+// per-group tile alignment; `quant` names the low-precision scale-layout dtype
+// (the full ScaleLayout is resolved from the dtype at lowering).  The verifier
+// enforces the family set, a power-of-two alignment, and (T,K)·(E,K,N)->(T,N)
+// shape consistency — making the contract verifiable at the IR level, not just
+// runtime kwargs.
+def Tessera_GroupedGemmOp : Op<
+  Tessera_Dialect, "grouped_gemm",
+  [Pure]
+> {
+  let summary = "Ragged grouped matmul (MoE expert FFN) with a grouped-layout contract";
+  let arguments = (ins TensorType:$x,
+                        TensorType:$weights,
+                        TensorType:$group_sizes,
+                        DefaultValuedAttr<StrAttr, "\"contiguous\"">:$grouped_kind,
+                        OptionalAttr<I64Attr>:$grouped_alignment,
+                        OptionalAttr<StrAttr>:$quant);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Stage 13 — RL post-training loss Graph IR surface. These ops make PPO/GRPO/
 // CISPO compiler-visible at the Graph layer. Only PPO's strict fp32 mean
 // envelope is promoted to Apple GPU value execution in this stage; GRPO/CISPO

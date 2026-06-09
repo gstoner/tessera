@@ -81,6 +81,50 @@ LogicalResult BatchedGemmOp::verify() {
   return success();
 }
 
+LogicalResult GroupedGemmOp::verify() {
+  // DeepGEMM-inspired grouped-layout contract, verified at the IR level.
+  StringRef kind = getGroupedKind();
+  if (kind != "dense" && kind != "contiguous" && kind != "masked" &&
+      kind != "k_grouped")
+    return emitOpError("grouped_kind must be one of "
+                       "{dense, contiguous, masked, k_grouped}; got ")
+           << kind;
+  if (auto a = getGroupedAlignment()) {
+    int64_t v = *a;
+    if (v <= 0 || (v & (v - 1)) != 0)
+      return emitOpError("grouped_alignment must be a positive power of two; got ")
+             << v;
+  }
+
+  auto xType = dyn_cast<RankedTensorType>(getX().getType());
+  auto wType = dyn_cast<RankedTensorType>(getWeights().getType());
+  auto gType = dyn_cast<RankedTensorType>(getGroupSizes().getType());
+  auto rType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!xType || !wType || !rType)
+    return success(); // dynamic / unranked — nothing to check
+  if (xType.getRank() != 2)
+    return emitOpError("x must be a rank-2 (T, K) tensor");
+  if (wType.getRank() != 3)
+    return emitOpError("weights must be a rank-3 (E, K, N) tensor");
+  if (rType.getRank() != 2)
+    return emitOpError("result must be a rank-2 (T, N) tensor");
+
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  if (!agree(xType.getDimSize(1), wType.getDimSize(1)))
+    return emitOpError("contracting dim mismatch: x K vs weights K");
+  if (!agree(rType.getDimSize(0), xType.getDimSize(0)))
+    return emitOpError("result T must equal x T");
+  if (!agree(rType.getDimSize(1), wType.getDimSize(2)))
+    return emitOpError("result N must equal weights N");
+  if (gType && gType.getRank() == 1 &&
+      !agree(gType.getDimSize(0), wType.getDimSize(0)))
+    return emitOpError("group_sizes length must equal the expert count E "
+                       "(weights dim 0)");
+  return success();
+}
+
 namespace {
 bool isFloatTensor(RankedTensorType ty) {
   Type elem = ty.getElementType();

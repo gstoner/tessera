@@ -57,6 +57,7 @@ src/compiler/ir/TesseraOps.td,GQAAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedDeltaNetOp,1,1,real
 src/compiler/ir/TesseraOps.td,GeluOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,GroupedGemmOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,IRFFTOp,1,1,real

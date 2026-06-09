@@ -22,8 +22,11 @@ module {
   // Must lower to a metal_kernel + dispatch with status=metal_runtime, just
   // like the matmul/softmax/rope/flash_attn quartet above.
   "tile.mock"() {source = "tessera.conv2d", result = "Y", ordinal = 5 : i64} : () -> ()
-  // A generic elementwise op is NOT in the runtime envelope -> artifact_only.
-  "tile.mock"() {source = "tessera.add", result = "S", ordinal = 6 : i64} : () -> ()
+  // A host-class op (gather) is NOT in the runtime envelope -> artifact_only.
+  // (tessera.add and the other elementwise opcodes now execute on the GPU via
+  // the MPSGraph binary lane, so they are no longer a valid artifact_only
+  // sentinel — see _APPLE_GPU_BINARY_OPCODES.)
+  "tile.mock"() {source = "tessera.gather", result = "S", ordinal = 6 : i64} : () -> ()
 }
 
 // G3: status mirrors the Python runtime envelope (driver._APPLE_GPU_{MPS,MSL}_OPS):
@@ -78,6 +81,6 @@ module {
 
 // CHECK:      tessera_apple.gpu.metal_kernel
 // CHECK-SAME: kernel = "elementwise_contract"
-// CHECK-SAME: source = "tessera.add"
+// CHECK-SAME: source = "tessera.gather"
 // CHECK-SAME: status = "artifact_only"
 // CHECK-NEXT: tessera_apple.gpu.dispatch

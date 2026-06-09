@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **444** ops in `primitive_coverage` registry.
-- **1954** total Python-test references, **500** total lit-fixture references.
+- **1960** total Python-test references, **500** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
-- **216** ops have ≤1 reference ("thinly tested").
+- **214** ops have ≤1 reference ("thinly tested").
 - **39** ops have ≥10 references ("well tested").
 - **52** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **216** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **214** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -95,8 +95,6 @@ These **216** ops have at most one test reference across the whole test surface.
 | `cosine_warmup_lr` |    1 |    0 |    1 |
 | `cross_entropy_loss` |    1 |    0 |    1 |
 | `cross_ratio` |    0 |    0 |    0 |
-| `cummax` |    1 |    0 |    1 |
-| `cummin` |    1 |    0 |    1 |
 | `custom_batching` |    0 |    0 |    0 |
 | `custom_call` |    0 |    0 |    0 |
 | `custom_jvp` |    0 |    0 |    0 |
@@ -104,8 +102,10 @@ These **216** ops have at most one test reference across the whole test surface.
 | `custom_primitive` |    0 |    0 |    0 |
 | `custom_vjp` |    0 |    0 |    0 |
 | `cyclical_lr` |    1 |    0 |    1 |
+| `dataset_batch` |    0 |    0 |    0 |
+| `dataset_checkpoint` |    0 |    0 |    0 |
 
-_(156 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(154 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**216** ops have ≤1 direct test reference.  They break down as:
+**214** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   85 | Tested via a parent op or family wrapper |
-| `structural_only`        |  127 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |  125 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -184,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(55 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 127 ops
+## `structural_only` — 125 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -213,12 +213,12 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `clamp` | unclassified — defaults to structural_only |
 | `clifford_norm_squared` | unclassified — defaults to structural_only |
 | `cosine_warmup_lr` | category default for 'schedule' |
-| `cummax` | unclassified — defaults to structural_only |
-| `cummin` | unclassified — defaults to structural_only |
 | `custom_batching` | category default for 'extension' |
 | `custom_call` | category default for 'extension' |
 | `custom_jvp` | category default for 'extension' |
 | `custom_lowering` | category default for 'extension' |
 | `custom_primitive` | category default for 'extension' |
+| `custom_vjp` | category default for 'extension' |
+| `cyclical_lr` | category default for 'schedule' |
 
-_(97 additional structural ops omitted.)_
+_(95 additional structural ops omitted.)_

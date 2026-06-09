@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 34 |
-| ``runnable_reference`` | 250 |
+| ``runnable_reference`` | 252 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **286** |
+| **total** | **288** |
 
 ## complete (34)
 
@@ -70,7 +70,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (250)
+## runnable_reference (252)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -268,6 +268,8 @@ each row into a single E2E tier.
 | ``argmax`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``argmin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``count_nonzero`` | reduction | public | public | registered | partial | reference | ready | none |
+| ``cummax`` | reduction | public | public | registered | partial | reference | ready | none |
+| ``cummin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumprod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumsum`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | reference | ready | none |

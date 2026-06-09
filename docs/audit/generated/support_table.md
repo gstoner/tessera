@@ -240,6 +240,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `argmax` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `argmin` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `count_nonzero` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `cummax` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `cummin` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `cumprod` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `cumsum` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `mean` | reduction | public | public | registered | complete | partial | reference | ready | none |
@@ -332,7 +334,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
-| reduction | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| reduction | 13 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rotary_embedding | 1 | PPGCpRN· |
 | segment_reduce | 1 | PPGCpRN· |

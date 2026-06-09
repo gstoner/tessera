@@ -263,6 +263,8 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       "tessera.maximum", "tessera.minimum", "tessera.pow", "tessera.atan2",
       "tessera.mod", "tessera.floor_div", "tessera.eq", "tessera.ne",
       "tessera.lt", "tessera.le", "tessera.gt", "tessera.ge",
+      // Batch 2 (2026-06-08) — reduce/scan opcode completions.
+      "tessera.logsumexp", "tessera.cummax", "tessera.cummin",
       // Task C (2026-06-01) — conv2d / conv3d. Project 5 wired the
       // encode-session lane for conv2d (`tessera_apple_gpu_conv2d_dev_f32_enc`);
       // Sprint A extended it to {f16, bf16}. conv3d uses an im2col + GPU

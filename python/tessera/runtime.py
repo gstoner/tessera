@@ -2267,6 +2267,10 @@ _APPLE_GPU_REDUCE_OPS = {
     "tessera.argmin": ("arg", 1),
     "tessera.cumsum": ("scan", 0),
     "tessera.cumprod": ("scan", 1),
+    # Batch 2 (2026-06-08) — reduce/scan opcode completions.
+    "tessera.logsumexp": ("reduce", 7),
+    "tessera.cummax": ("scan", 2),
+    "tessera.cummin": ("scan", 3),
 }
 _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
@@ -4530,11 +4534,18 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,
                 return f(x, axis=axis, keepdims=keepdims)
             if op == 5:
                 return np.var(x, axis=axis, keepdims=keepdims, ddof=ddof)
+            if op == 7:  # logsumexp = log(Σ exp(x − max)) + max  (stable)
+                m = np.max(x, axis=axis, keepdims=True)
+                r = np.log(np.sum(np.exp(x - m), axis=axis, keepdims=True)) + m
+                return r if keepdims else np.squeeze(
+                    r, axis=(tuple(range(x.ndim)) if axis is None else axis))
             return np.std(x, axis=axis, keepdims=keepdims, ddof=ddof)
         if kind == "arg":
             r = (np.argmax if op == 0 else np.argmin)(x, axis=axis)
             return np.expand_dims(r, axis) if (keepdims and axis is not None) else r
-        return (np.cumsum if op == 0 else np.cumprod)(x, axis=axis)
+        scan_fn = {0: np.cumsum, 1: np.cumprod,
+                   2: np.maximum.accumulate, 3: np.minimum.accumulate}[op]
+        return scan_fn(x, axis=axis)
 
     if not is_float or x.ndim == 0:
         return _ref()

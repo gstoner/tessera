@@ -16880,6 +16880,14 @@ static MPSGraphTensor *mpsg_reduce_node(MPSGraph *g, MPSGraphTensor *x, int op,
       MPSGraphTensor *var = [g meanOfTensor:sq axes:axis1 name:nil];
       return op == 5 ? var : [g squareRootWithTensor:var name:nil];
     }
+    case 7: {  // logsumexp = log(Σ exp(x − max)) + max   (stable)
+      MPSGraphTensor *m = [g reductionMaximumWithTensor:x axes:axis1 name:nil];
+      MPSGraphTensor *e = [g exponentWithTensor:
+          [g subtractionWithPrimaryTensor:x secondaryTensor:m name:nil] name:nil];
+      MPSGraphTensor *s = [g reductionSumWithTensor:e axes:axis1 name:nil];
+      return [g additionWithPrimaryTensor:[g logarithmWithTensor:s name:nil]
+                          secondaryTensor:m name:nil];
+    }
     default: return nil;
   }
 }
@@ -16982,7 +16990,9 @@ static bool mpsg_run_scan(MetalDeviceContext &ctx, int op, const float *x,
       g = [MPSGraph new];
       ph = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
       y = op == 0 ? [g cumulativeSumWithTensor:ph axis:1 name:nil]
-                  : [g cumulativeProductWithTensor:ph axis:1 name:nil];
+        : op == 1 ? [g cumulativeProductWithTensor:ph axis:1 name:nil]
+        : op == 2 ? [g cumulativeMaximumWithTensor:ph axis:1 name:nil]
+                  : [g cumulativeMinimumWithTensor:ph axis:1 name:nil];
       mpsg_cache_put(key, @[ g, @[ ph ], y ]);
     }
     MPSGraphTensorData *xd =
@@ -17008,6 +17018,7 @@ static void reference_reduce(int op, const float *x, float *out, int32_t rows,
       case 2: { double m = row[0]; for (int32_t c = 1; c < cols; ++c) m = row[c] > m ? row[c] : m; acc = m; break; }
       case 3: { double m = row[0]; for (int32_t c = 1; c < cols; ++c) m = row[c] < m ? row[c] : m; acc = m; break; }
       case 4: { double p = 1; for (int32_t c = 0; c < cols; ++c) p *= row[c]; acc = p; break; }
+      case 7: { double mx = row[0]; for (int32_t c = 1; c < cols; ++c) mx = row[c] > mx ? row[c] : mx; double s = 0; for (int32_t c = 0; c < cols; ++c) s += std::exp((double)row[c] - mx); acc = std::log(s) + mx; break; }
       default: { double s = 0; for (int32_t c = 0; c < cols; ++c) s += row[c]; double m = s / cols; double v = 0; for (int32_t c = 0; c < cols; ++c) { double d = row[c] - m; v += d * d; } v /= cols; acc = op == 6 ? std::sqrt(v) : v; break; }
     }
     out[r] = (float)acc;
@@ -17229,9 +17240,16 @@ extern "C" void tessera_apple_gpu_mpsgraph_scan_f32(int32_t op, const float *x,
   for (int32_t r = 0; r < rows; ++r) {
     const float *row = x + (size_t)r * cols;
     float *o = out + (size_t)r * cols;
-    double acc = op == 1 ? 1.0 : 0.0;
+    if (cols <= 0) continue;
+    double acc = (op == 1) ? 1.0 : 0.0;
+    if (op == 2 || op == 3) acc = row[0];
     for (int32_t c = 0; c < cols; ++c) {
-      acc = op == 1 ? acc * row[c] : acc + row[c];
+      switch (op) {
+        case 1: acc = acc * row[c]; break;
+        case 2: acc = (c == 0) ? row[c] : std::max(acc, (double)row[c]); break;
+        case 3: acc = (c == 0) ? row[c] : std::min(acc, (double)row[c]); break;
+        default: acc = acc + row[c]; break;
+      }
       o[c] = (float)acc;
     }
   }

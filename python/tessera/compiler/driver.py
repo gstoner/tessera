@@ -474,6 +474,8 @@ _APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
     "tessera.reduce", "tessera.mean", "tessera.amax", "tessera.amin",
     "tessera.prod", "tessera.var", "tessera.std", "tessera.argmax",
     "tessera.argmin", "tessera.cumsum", "tessera.cumprod",
+    # Batch 2 (2026-06-08) — reduce/scan opcode completions.
+    "tessera.logsumexp", "tessera.cummax", "tessera.cummin",
 })
 
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node

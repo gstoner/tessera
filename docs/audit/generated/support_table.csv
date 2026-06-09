@@ -224,6 +224,8 @@ amin,reduction,public,public,registered,complete,partial,reference,ready,none
 argmax,reduction,public,public,registered,complete,partial,reference,ready,none
 argmin,reduction,public,public,registered,complete,partial,reference,ready,none
 count_nonzero,reduction,public,public,registered,complete,partial,reference,ready,none
+cummax,reduction,public,public,registered,complete,partial,reference,ready,none
+cummin,reduction,public,public,registered,complete,partial,reference,ready,none
 cumprod,reduction,public,public,registered,complete,partial,reference,ready,none
 cumsum,reduction,public,public,registered,complete,partial,reference,ready,none
 mean,reduction,public,public,registered,complete,partial,reference,ready,none

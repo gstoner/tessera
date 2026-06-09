@@ -333,7 +333,9 @@ following primitives now have numpy reference implementations and are
 addressable via `ops.<name>`:
 
 - *Reductions:* `mean`, `prod`, `amax`, `amin`, `var`, `std`, `argmax`,
-  `argmin`, `cumsum`, `cumprod`. All accept `axis=` and `keepdims=`.
+  `argmin`, `cumsum`, `cumprod`, `cummax`, `cummin`. All accept `axis=` and
+  `keepdims=`. `cummax`/`cummin` (Graph IR ops `tessera.cummax`/`tessera.cummin`)
+  route to the Apple GPU MPSGraph scan lane (`cumulativeMaximum`/`Minimum`).
 - *Numerical-stability primitives:* `logsumexp`, `log_softmax`, `log1p`,
   `expm1`, `softplus`, `sigmoid_safe`. Each lowers to `tessera.<name>` and
   registers a VJP for reverse-mode autodiff.

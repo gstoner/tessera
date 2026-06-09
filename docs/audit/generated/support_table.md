@@ -190,6 +190,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `denoising_score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `huber_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `implicit_score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `js_divergence` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `kl_divergence` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `load_balance_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `log_cosh_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `mae_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
@@ -325,7 +327,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | loop_nest | 8 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· |
-| loss | 17 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |

@@ -544,6 +544,7 @@ _APPLE_GPU_LOSS_COMPOSE_OPS: frozenset[str] = frozenset({
     "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
     "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
     "tessera.loss.cross_entropy",
+    "tessera.loss.kl_divergence", "tessera.loss.js_divergence",
 })
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (

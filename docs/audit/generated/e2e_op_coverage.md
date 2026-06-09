@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 34 |
-| ``runnable_reference`` | 254 |
+| ``runnable_reference`` | 256 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **290** |
+| **total** | **292** |
 
 ## complete (34)
 
@@ -70,7 +70,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (254)
+## runnable_reference (256)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -218,6 +218,8 @@ each row into a single E2E tier.
 | ``denoising_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``huber_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``implicit_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
+| ``js_divergence`` | loss | public | public | registered | partial | reference | ready | none |
+| ``kl_divergence`` | loss | public | public | registered | partial | reference | ready | none |
 | ``load_balance_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``log_cosh_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``mae_loss`` | loss | public | public | registered | partial | reference | ready | none |

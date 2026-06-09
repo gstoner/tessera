@@ -2258,6 +2258,7 @@ _APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
     "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
     "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
     "tessera.loss.cross_entropy",
+    "tessera.loss.kl_divergence", "tessera.loss.js_divergence",
 })
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
@@ -7609,6 +7610,26 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict,
         prod = bb("mul", targets, lp)
         s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1}, np)
         return reduce_all(u("neg", s))
+
+    def sum_last(x: Any) -> Any:
+        return _apple_gpu_dispatch_reduce(
+            "tessera.reduce", [np.asarray(x, np.float32)], {"axis": -1}, np)
+
+    def clamp_lo(x: Any) -> Any:  # max(x, 1e-12), matches the loss reference
+        return _apple_gpu_dispatch_clamp("tessera.clamp", [x], {"min": 1e-12}, np)
+
+    if short == "tessera.loss.kl_divergence":
+        # a = p_log_probs, c = q_probs.  sum(exp(p_log) * (p_log - log q)).
+        p = u("exp", a)
+        diff = bb("sub", a, u("log", clamp_lo(c)))
+        return reduce_all(sum_last(bb("mul", p, diff)))
+    if short == "tessera.loss.js_divergence":
+        # a = p_probs, c = q_probs.  0.5*(KL(p||m) + KL(q||m)), m = (p+q)/2.
+        m = bs("mul", bb("add", a, c), 0.5)
+        lm = u("log", clamp_lo(m))
+        kl_pm = sum_last(bb("mul", a, bb("sub", u("log", clamp_lo(a)), lm)))
+        kl_qm = sum_last(bb("mul", c, bb("sub", u("log", clamp_lo(c)), lm)))
+        return reduce_all(bs("mul", bb("add", kl_pm, kl_qm), 0.5))
     raise ValueError(f"apple_gpu loss dispatcher has no recipe for {op_name!r}")
 
 

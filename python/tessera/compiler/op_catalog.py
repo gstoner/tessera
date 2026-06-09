@@ -328,6 +328,10 @@ _SPECS = [
     OpSpec("load_balance_loss", "tessera.loss.load_balance_loss", 1, 1, lowering="loss"),
     OpSpec("ddpm_noise_pred_loss", "tessera.loss.ddpm_noise_pred", 2, 2, lowering="loss"),
     OpSpec("score_matching_loss", "tessera.loss.score_matching", 2, 2, lowering="loss"),
+    # Distribution-matching losses — pure exp/log/sub/mul/sum-last-axis chains,
+    # so apple_gpu composes them from the batch-1/2 opcode lanes (runtime.py).
+    OpSpec("kl_divergence", "tessera.loss.kl_divergence", 2, 2, lowering="loss"),
+    OpSpec("js_divergence", "tessera.loss.js_divergence", 2, 2, lowering="loss"),
     # EBM training losses (#5) — reductions over energy/score tensors; apple_gpu
     # routes reduction="mean" to the EBM-loss MPSGraph kernels (runtime.py).
     OpSpec("contrastive_divergence_loss", "tessera.loss.contrastive_divergence", 2, 2, lowering="loss"),

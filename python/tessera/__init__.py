@@ -3245,6 +3245,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     implicit_score_matching_loss_ref = _lazy_module_fn("losses", "implicit_score_matching_loss")
     denoising_score_matching_loss_ref = _lazy_module_fn("losses", "denoising_score_matching_loss")
     vlb_loss_ref = _lazy_module_fn("losses", "vlb_loss")
+    kl_divergence_ref = _lazy_module_fn("losses", "kl_divergence")
+    js_divergence_ref = _lazy_module_fn("losses", "js_divergence")
     normalize_group_advantages_ref = _lazy_module_fn("rl", "normalize_group_advantages")
     ppo_policy_loss_ref = _lazy_module_fn("rl", "ppo_policy_loss")
     grpo_policy_loss_ref = _lazy_module_fn("rl", "grpo_policy_loss")
@@ -3487,6 +3489,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "log_cosh_loss": log_cosh_loss_ref,
         "cross_entropy_loss": cross_entropy_loss_ref,
         "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
+        "kl_divergence": kl_divergence_ref,
+        "js_divergence": js_divergence_ref,
         "asymmetric_bce": asymmetric_bce_ref,
         "z_loss": z_loss_ref,
         "load_balance_loss": load_balance_loss_ref,
@@ -3839,6 +3843,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         log_cosh_loss=log_cosh_loss_ref,
         cross_entropy_loss=cross_entropy_loss_ref,
         binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
+        kl_divergence=kl_divergence_ref,
+        js_divergence=js_divergence_ref,
         asymmetric_bce=asymmetric_bce_ref,
         z_loss=z_loss_ref,
         load_balance_loss=load_balance_loss_ref,

@@ -111,3 +111,51 @@ def test_huber_jit_metal_runtime():
 
     np.testing.assert_allclose(float(np.asarray(f(a, b))), float(L.huber_loss(a, b)), atol=1e-3)
     assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+
+
+def _probs(seed, shape=(4, 6)):
+    rng = np.random.default_rng(seed)
+    p = np.abs(rng.standard_normal(shape).astype(np.float32)) + 0.1
+    q = np.abs(rng.standard_normal(shape).astype(np.float32)) + 0.1
+    return p / p.sum(-1, keepdims=True), q / q.sum(-1, keepdims=True)
+
+
+def test_kl_js_in_envelope():
+    for op in ("tessera.loss.kl_divergence", "tessera.loss.js_divergence"):
+        assert op in _driver._APPLE_GPU_RUNTIME_OPS, op
+        assert op in _runtime._APPLE_GPU_RUNTIME_OPS, op
+        assert op in _driver._APPLE_GPU_LOSS_COMPOSE_OPS, op
+
+
+@gpu
+@pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+def test_kl_divergence(reduction):
+    p, q = _probs(11)
+    plog = np.log(p)  # kl_divergence takes log-probs as the first arg
+    out = R._apple_gpu_dispatch_loss(
+        "tessera.loss.kl_divergence", [plog, q], {"reduction": reduction}, np)
+    np.testing.assert_allclose(
+        np.asarray(out), np.asarray(L.kl_divergence(plog, q, reduction=reduction)), atol=1e-3)
+
+
+@gpu
+@pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+def test_js_divergence(reduction):
+    p, q = _probs(12)
+    out = R._apple_gpu_dispatch_loss(
+        "tessera.loss.js_divergence", [p, q], {"reduction": reduction}, np)
+    np.testing.assert_allclose(
+        np.asarray(out), np.asarray(L.js_divergence(p, q, reduction=reduction)), atol=1e-3)
+
+
+@gpu
+def test_kl_jit_metal_runtime():
+    p, q = _probs(13)
+    plog = np.log(p)
+
+    @ts.jit(target="apple_gpu")
+    def f(a, b):
+        return ts.ops.kl_divergence(a, b)
+
+    np.testing.assert_allclose(float(np.asarray(f(plog, q))), float(L.kl_divergence(plog, q)), atol=1e-3)
+    assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"

@@ -139,7 +139,9 @@ isfinite,pure,,1,0,0
 isinf,pure,,1,0,0
 isnan,pure,,1,0,0
 istft,pure,,1,1,0
+js_divergence,pure,,1,0,0
 kimi_delta_attention,state,,1,1,1
+kl_divergence,pure,,1,0,0
 kv_cache_append,state,,1,0,0
 kv_cache_prune,state,,1,0,0
 kv_cache_read,state,,1,0,0

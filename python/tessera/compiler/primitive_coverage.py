@@ -155,6 +155,10 @@ class NumericPolicy:
     quant_axis: int | None = None
     deterministic: bool = False
     math_mode: str | None = None  # None | "tf32" | "ieee" | "fast"
+    # DeepGEMM-inspired: FP8/FP4 scale *layout* (granularity / packing /
+    # alignment / transposed) as a compiler-visible contract, not just the
+    # `scale` name above.  ``grouped_layout.ScaleLayout | None``.
+    scale_layout: Any = None
 
     def __post_init__(self) -> None:
         # Validate canonical-dtype membership at construction time so a
@@ -171,13 +175,13 @@ class NumericPolicy:
             if canon_accum != self.accum:
                 object.__setattr__(self, "accum", canon_accum)
 
-    def as_metadata_dict(self) -> dict[str, str | int | bool | None]:
+    def as_metadata_dict(self) -> dict[str, Any]:
         """Flatten the policy to plain JSON-style values for the dashboard.
 
         The registry walker (`audit_canonical_dtypes`) scans these keys to
         verify storage + accum + scale dtypes are canonical.
         """
-        return {
+        md: dict[str, Any] = {
             "storage": self.storage,
             "accum": self.accum,
             "rounding": self.rounding,
@@ -186,6 +190,9 @@ class NumericPolicy:
             "deterministic": self.deterministic,
             "math_mode": self.math_mode,
         }
+        if self.scale_layout is not None:
+            md["scale_layout"] = self.scale_layout.as_metadata_dict()
+        return md
 
 
 @dataclass(frozen=True)
@@ -1608,21 +1615,28 @@ def _stable_reduce_policy() -> "NumericPolicy":
 
 
 def _quant_int8_policy(quant_axis: int | None = None) -> "NumericPolicy":
+    from .grouped_layout import ScaleLayout
     return NumericPolicy(
         storage="int8",
         accum="fp32",
         scale="per_channel_symmetric" if quant_axis is not None else "per_tensor_symmetric",
         quant_axis=quant_axis,
+        scale_layout=ScaleLayout(
+            granularity="per_channel" if quant_axis is not None else "per_tensor"),
     )
 
 
 def _quant_low_fp_policy(storage: str) -> "NumericPolicy":
-    """fp8 / fp6 / fp4 / nvfp4 quantizers — block-scaled storage,
-    fp32 accumulator for the rescale."""
+    """fp8 / fp6 / fp4 / nvfp4 quantizers — block-scaled storage, fp32
+    accumulator for the rescale.  The scale *layout* (block shape / packed
+    scale format / alignment) is the DeepGEMM-inspired compiler-visible
+    contract, resolved per low-precision dtype."""
+    from .grouped_layout import scale_layout_for
     return NumericPolicy(
         storage=storage,
         accum="fp32",
-        scale="blockfp_per_stage",
+        scale="block_scaled",
+        scale_layout=scale_layout_for(storage),
     )
 
 
@@ -1727,6 +1741,29 @@ def _policy_for_name(name: str) -> "NumericPolicy | None":
     return factory() if factory is not None else None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# DeepGEMM-inspired grouped-GEMM layout contracts.  Maps op name → GroupedLayout
+# factory; attached as `metadata.grouped_layout` so the grouped-GEMM family
+# (dense / M-grouped contiguous / M-grouped masked / K-grouped) is a
+# compiler-visible contract, not just runtime shape handling.
+# ─────────────────────────────────────────────────────────────────────────────
+def _grouped_layout_for_name(name: str) -> "Any | None":
+    from .grouped_layout import contiguous_layout, masked_layout, k_grouped_layout
+    table = {
+        # Tessera's existing grouped_gemm is the M-grouped *contiguous* family
+        # (experts laid out back-to-back along the token axis).
+        "grouped_gemm":            contiguous_layout,
+        "grouped_gemm_contiguous": contiguous_layout,
+        "grouped_gemm_masked":     masked_layout,
+        "k_grouped_gemm":          k_grouped_layout,
+        # MoE dispatch/combine route tokens into the same M-grouped layout.
+        "moe_dispatch":            contiguous_layout,
+        "grouped_gemm_dispatch":   contiguous_layout,
+    }
+    factory = table.get(name)
+    return factory() if factory is not None else None
+
+
 def _manifest_for_name(name: str) -> list[dict[str, object]] | None:
     """Return the backend-kernel manifest entries for ``name`` as plain
     dicts (Sprint E, 2026-05-11).
@@ -1762,6 +1799,9 @@ def _supplemental_metadata(name: str, graph_ir_state: str) -> dict[str, object]:
     policy = _policy_for_name(name)
     if policy is not None:
         md["numeric_policy"] = policy.as_metadata_dict()
+    grouped = _grouped_layout_for_name(name)
+    if grouped is not None:
+        md["grouped_layout"] = grouped.as_metadata_dict()
     return md
 
 
@@ -2068,6 +2108,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         policy = _policy_for_name(name)
         if policy is not None:
             metadata["numeric_policy"] = policy.as_metadata_dict()
+        grouped = _grouped_layout_for_name(name)
+        if grouped is not None:
+            metadata["grouped_layout"] = grouped.as_metadata_dict()
         # Sprint E (2026-05-11): attach the per-target backend-kernel
         # manifest synthesized from the capability registry +
         # Apple GPU kernel inventory + x86 AMX backend.

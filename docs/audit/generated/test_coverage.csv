@@ -139,7 +139,7 @@ dequantize_fp6,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test
 dequantize_fp8,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
 dequantize_int4,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 dequantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-dequantize_nvfp4,2,0,0,2,0,,needs_direct_test,category default for 'quantize'
+dequantize_nvfp4,4,0,0,4,0,fp32 fp4_e2m1 fp8_e4m3 int8 nvfp4,needs_direct_test,category default for 'quantize'
 digamma,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 div,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
 dropout,18,5,3,23,0,f32 fp32 fp64,structural_only,unclassified — defaults to structural_only
@@ -313,10 +313,10 @@ qkv_projection,5,0,0,5,0,fp32,structural_only,unclassified — defaults to struc
 qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 quantize_fp4,8,0,1,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
 quantize_fp6,7,0,1,7,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
-quantize_fp8,12,3,1,15,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
+quantize_fp8,14,3,1,17,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,needs_direct_test,category default for 'quantize'
 quantize_int4,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 quantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-quantize_nvfp4,5,0,1,5,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
+quantize_nvfp4,7,0,1,7,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,needs_direct_test,category default for 'quantize'
 rearrange,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reduce,66,0,6,66,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'

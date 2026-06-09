@@ -302,6 +302,43 @@ not on `dtype`. For ops where storage and accumulator differ intrinsically
 the Promotion And Casting Policy section of the source document for the
 five governing rules.
 
+#### Scale *layout* for FP8/FP4 (`numeric_policy.scale_layout`)
+
+For low-precision quantization, the dtype name and a scalar `scale` are not
+enough — the **scale layout** is a compiler-visible contract (DeepGEMM-inspired).
+`numeric_policy.scale_layout` is a `compiler.grouped_layout.ScaleLayout`:
+
+| field | meaning |
+|---|---|
+| `granularity` | `per_tensor` / `per_row` / `per_channel` / `block` |
+| `block` | `(rows, cols)` micro-block shape (block granularity) — e.g. `(1,128)` FP8, `(1,16)` NVFP4 |
+| `packing` | packed scale element format: `none` / `e4m3` / `e5m2` / `e8m0` / `ue8m0` |
+| `vector_size` | elements sharing one scale (16 for NVFP4, 128 for 1×128 block) |
+| `alignment` | scale-tensor alignment (TMA needs aligned scales) |
+| `transposed` | TMA-ready transposed (MN-major) scale layout |
+
+`compiler.grouped_layout.scale_layout_for(dtype)` returns the canonical layout
+per low-precision dtype; the FP8/FP4/NVFP4/INT8 quantizers carry it on their
+`numeric_policy` in the audit registry.
+
+### Grouped GEMM is a first-class op family (`grouped_layout`)
+
+Grouped GEMM (MoE) carries an explicit `grouped_layout` contract
+(`compiler.grouped_layout.GroupedLayout`) on its op metadata — the family is
+modelled, not just runtime shape handling:
+
+| field | meaning |
+|---|---|
+| `kind` | `dense` / `contiguous` (M-grouped) / `masked` (M-grouped fixed-shape) / `k_grouped` |
+| `group_axis` | implied by `kind`: `M` (contiguous/masked), `K` (k_grouped), `None` (dense) |
+| `alignment` | per-group alignment along the grouped axis (power of two; default 128) |
+| `compiled_dims` | dims baked into the specialized kernel (default `N`,`K`) |
+| `dynamic_dims` | dims left runtime-dynamic (`M` + `num_groups` for M-grouped) |
+
+`tessera.grouped_gemm` is the M-grouped **contiguous** family. The masked /
+K-grouped variants and the distributed MegaMoE fusion (`grouped_gemm → swiglu →
+grouped_gemm`, then dispatch/combine overlap) are the planned follow-on rungs.
+
 ---
 
 ## Top-level Tensor Factories

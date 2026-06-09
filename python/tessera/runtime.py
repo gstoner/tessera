@@ -2281,6 +2281,12 @@ _APPLE_GPU_LINEAR_ATTN_OPS = frozenset({
 _APPLE_GPU_MASKED_ATTN_OPS = frozenset({
     "tessera.attn_compressed_blocks", "tessera.attn_sliding_window",
 })
+# Delta-rule attention family (Sub-sprint D) — gated_deltanet / kimi_delta /
+# modified_delta as the quadratic form with a per-token column-weight mask.
+_APPLE_GPU_DELTA_ATTN_OPS = frozenset({
+    "tessera.gated_deltanet", "tessera.kimi_delta_attention",
+    "tessera.modified_delta_attention",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2366,6 +2372,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
+    | _APPLE_GPU_DELTA_ATTN_OPS
 )
 
 
@@ -2607,6 +2614,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_MASKED_ATTN_OPS:
             values[str(result)] = _apple_gpu_dispatch_masked_attn(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_DELTA_ATTN_OPS:
+            values[str(result)] = _apple_gpu_dispatch_delta_attn(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -6028,6 +6042,76 @@ def _apple_gpu_dispatch_linear_attn(op_name: str, operands: list[Any],
     if O is None:
         return None
     return np.asarray(O).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any],
+                                   kwargs: dict, np: Any) -> Any:
+    """Delta-rule attention family (Sub-sprint D) — gated_deltanet,
+    kimi_delta_attention, modified_delta_attention.  Each sequential delta
+    recurrence is algebraically the quadratic form O = (QKᵀ ⊙ mask) @ V where
+    the mask carries a per-token *column* weight c_r = β_r·decay_ratio
+    [/(1+‖K_r‖‖V_r‖) for the modified rule], plus an optional output gate.
+    Two GPU batched matmuls + a host-constructed mask + a GPU mask multiply;
+    returns None for the (rare) return_state path so it falls back to numpy."""
+    short = str(op_name)
+    if kwargs.get("return_state"):
+        return None
+    Q = np.asarray(operands[0])
+    K = np.asarray(operands[1])
+    V = np.asarray(operands[2])
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        return None
+    if not bool(kwargs.get("causal", True)):
+        return None  # non-causal delta reference uses a different closed form
+    B, H, S, _ = Q.shape
+    out_dtype = np.result_type(Q, K, V)
+    modified = (short == "tessera.modified_delta_attention")
+    beta = kwargs.get("beta")
+    decay = kwargs.get("decay")
+    gate = kwargs.get("gate")
+
+    Kf = K.astype(np.float64)
+    Vf = V.astype(np.float64)
+    phiQ = np.ascontiguousarray(Q.astype(np.float32))
+    phiK_T = np.ascontiguousarray(np.swapaxes(K.astype(np.float32), -1, -2))
+    A = _apple_gpu_dispatch_bmm(phiQ, phiK_T, np)             # [B,H,S,S]
+    if A is None:
+        return None
+    A = np.ascontiguousarray(np.asarray(A, np.float32))
+
+    # Per-token column weight c_r and the causal[⊙decay] mask (host constant).
+    c = np.ones((B, H, S), np.float64)
+    if beta is not None:
+        c = c * np.asarray(beta, np.float64)
+    if modified:
+        nK = np.linalg.norm(Kf, axis=-1)
+        nV = np.linalg.norm(Vf, axis=-1)
+        c = c / (1.0 + nK * nV)
+    tril = np.tril(np.ones((S, S), np.float64))
+    if decay is not None:
+        dc = np.cumprod(np.asarray(decay, np.float64), axis=2)
+        ratio = dc[:, :, :, None] / dc[:, :, None, :]
+        mask = tril[None, None] * ratio
+    else:
+        mask = np.broadcast_to(tril, (B, H, S, S))
+    mask = np.ascontiguousarray((mask * c[:, :, None, :]).astype(np.float32))
+    A = np.asarray(
+        _apple_gpu_dispatch_mpsgraph_binary("tessera.mul", [A, mask], {}, np), np.float32)
+    O = _apple_gpu_dispatch_bmm(np.ascontiguousarray(A),
+                                np.ascontiguousarray(V.astype(np.float32)), np)  # [B,H,S,Dv]
+    if O is None:
+        return None
+    O = np.asarray(O, np.float32)
+    if gate is not None:
+        g = np.asarray(
+            _apple_gpu_dispatch_unary("tessera.sigmoid", [np.ascontiguousarray(
+                np.asarray(gate, np.float32))], np), np.float32)
+        O = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.mul", [np.ascontiguousarray(O),
+                                np.ascontiguousarray(np.broadcast_to(g, O.shape))], {}, np),
+            np.float32)
+    return O.astype(out_dtype)
 
 
 def _apple_gpu_dispatch_masked_attn(op_name: str, operands: list[Any],

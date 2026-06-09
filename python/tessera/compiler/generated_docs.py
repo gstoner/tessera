@@ -88,6 +88,11 @@ def _r_s_series() -> str:
     return s_series_status.render_markdown()
 
 
+def _r_accel_proof() -> str:
+    from . import accelerator_proof
+    return accelerator_proof.render_markdown()
+
+
 def _r_runtime_abi_md() -> str:
     from . import runtime_abi_audit
     return runtime_abi_audit.render_dashboard()
@@ -349,6 +354,10 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     ),
     GeneratedDoc(
         "s_series_status", "op_coverage", _GEN / "s_series_status.md", _r_s_series,
+    ),
+    GeneratedDoc(
+        "s_series_accelerator_proof", "op_coverage",
+        _GEN / "s_series_accelerator_proof.md", _r_accel_proof,
     ),
     # ── Runtime / ABI ──
     GeneratedDoc(

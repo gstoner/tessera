@@ -6,17 +6,17 @@
 // SM_90+ TMA path:
 //   tile.async_copy(%src) {tile_rows, tile_cols}
 //   →
-//   tessera.tma.descriptor { src_ptr, tile_rows, tile_cols, dtype }
-//   tessera.tma.copy_async  { descriptor, dst_smem_offset, mbarrier_slot }
+//   tile.tma.descriptor { src_ptr, tile_rows, tile_cols, dtype }
+//   tile.tma.copy_async  { descriptor, dst_smem_offset, mbarrier_slot }
 //
 // SM < 90 fallback (cp.async):
 //   tile.async_copy(%src)
 //   →
-//   tessera.cp_async.copy_row { src_ptr, dst_smem_offset, num_bytes }
-//   tessera.cp_async.commit_group
+//   tile.cp_async.copy_row { src_ptr, dst_smem_offset, num_bytes }
+//   tile.cp_async.commit_group
 //
-// tile.wait_async → tessera.mbarrier.wait (SM_90) or
-//                   tessera.cp_async.wait_all (SM < 90)
+// tile.wait_async → tile.mbarrier.wait (SM_90) or
+//                   tile.cp_async.wait_all (SM < 90)
 //
 // Registration: --tessera-async-copy-lowering
 //   Options:
@@ -43,7 +43,7 @@ namespace {
 // ─────────────────────────────────────────────────────────────────────────────
 static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
                                      int64_t tileRows, int64_t tileCols) {
-  OperationState st(loc, "tessera.tma.descriptor");
+  OperationState st(loc, "tile.tma.descriptor");
   st.addOperands({src});
   st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
   st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
@@ -55,7 +55,7 @@ static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
                                     Value descriptor, int64_t mbarrierSlot,
                                     Type resultType) {
-  OperationState st(loc, "tessera.tma.copy_async");
+  OperationState st(loc, "tile.tma.copy_async");
   st.addOperands({descriptor});
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
   // Produce the loaded tile so it can replace the original tile.async_copy
@@ -73,12 +73,12 @@ static void emitCpAsyncFallback(OpBuilder &b, Location loc, Value src,
                                  int64_t tileRows, int64_t tileCols) {
   int64_t numBytes = tileRows * tileCols * 2; // BF16 = 2 bytes
 
-  OperationState cpSt(loc, "tessera.cp_async.copy_row");
+  OperationState cpSt(loc, "tile.cp_async.copy_row");
   cpSt.addOperands({src});
   cpSt.addAttribute("num_bytes", b.getI64IntegerAttr(numBytes));
   b.create(cpSt);
 
-  OperationState commitSt(loc, "tessera.cp_async.commit_group");
+  OperationState commitSt(loc, "tile.cp_async.commit_group");
   b.create(commitSt);
 }
 
@@ -148,11 +148,11 @@ struct LowerWaitAsync : public RewritePattern {
                                 PatternRewriter &rewriter) const override {
     Location loc = op->getLoc();
     if (smVersion >= 90) {
-      OperationState st(loc, "tessera.mbarrier.wait");
+      OperationState st(loc, "tile.mbarrier.wait");
       st.addAttribute("slot", rewriter.getI64IntegerAttr(0));
       rewriter.create(st);
     } else {
-      OperationState st(loc, "tessera.cp_async.wait_all");
+      OperationState st(loc, "tile.cp_async.wait_all");
       rewriter.create(st);
     }
     rewriter.eraseOp(op);

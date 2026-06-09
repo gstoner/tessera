@@ -48,14 +48,23 @@ namespace tessera {
 namespace attn {
 
 // ── LseSaveOp verifier ────────────────────────────────────────────────────
-// scores must be a ranked tensor; LSE result has one fewer dimension (row vec).
+// The input is the log-sum-exp, a PER-ROW quantity — not a [rows, cols] score
+// tile.  In the FA-2 tile lowering it is the running reduction over a Q-tile:
+// either a per-row vector [tile_q] (rank-1 ranked tensor) or, when the tile is
+// collapsed to a single running value, a scalar float.  It must therefore have
+// rank <= 1; a rank >= 2 input would mean a score tile was mis-routed here.
 mlir::LogicalResult LseSaveOp::verify() {
-  auto srcType = mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
-  if (!srcType)
-    return emitOpError("scores must be a ranked tensor");
-  if (srcType.getRank() < 2)
-    return emitOpError("scores tensor must have rank >= 2 (at least [rows, cols])");
-  return mlir::success();
+  mlir::Type t = getScores().getType();
+  if (mlir::isa<mlir::FloatType>(t))
+    return mlir::success(); // scalar per-tile LSE
+  if (auto rt = mlir::dyn_cast<mlir::RankedTensorType>(t)) {
+    if (rt.getRank() > 1)
+      return emitOpError(
+                 "lse must be a per-row value (scalar or rank-1 tensor); got rank ")
+             << rt.getRank();
+    return mlir::success(); // per-row LSE vector [tile_q] (or rank-0 tensor)
+  }
+  return emitOpError("lse must be a scalar float or a rank-1 ranked tensor");
 }
 
 // Sprint V6c (2026-05-22) — target-aware tile size limits.

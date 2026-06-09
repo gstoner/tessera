@@ -4,16 +4,18 @@
 //
 // 2026-06: un-XFAIL'd.  flash_attn now carries the required head_dim attr, and
 // the pass lowers to FA-4 Tile IR ops in the unregistered `tile.*` dialect
-// (tile.async_copy / tile.mma), so --allow-unregistered-dialect is required —
-// which forces generic module printing, hence the sym_name label match.
+// (tile.async_copy / tile.mma) — so --allow-unregistered-dialect is required,
+// but the result VERIFIES (the registered tessera.attn.* ops are valid after the
+// LseSaveOp per-row-LSE verifier fix), so no --verify-each=false is needed.  The
+// func.func prints pretty; the unregistered tile.* ops print generically inline.
 //
 // RUN: tessera-opt --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
-// RUN:   --allow-unregistered-dialect --verify-each=false %s | FileCheck %s
+// RUN:   --allow-unregistered-dialect %s | FileCheck %s
 //
 // RUN: tessera-opt --tessera-tile-ir-lowering='sm=80' \
-// RUN:   --allow-unregistered-dialect --verify-each=false %s | FileCheck %s --check-prefix=SM80
+// RUN:   --allow-unregistered-dialect %s | FileCheck %s --check-prefix=SM80
 
-// CHECK:       sym_name = "flash_attn_step"
+// CHECK:       func.func @flash_attn_step
 // CHECK:       tile.async_copy
 // CHECK:       tile.wait_async
 // CHECK:       tessera.attn.scaled_dot_product
@@ -24,7 +26,7 @@
 
 // The flash_attn lowering is FA-4-shaped on every SM target (the online-softmax
 // attn pipeline), so sm=80 produces the same async-copy + attn op sequence.
-// SM80:        sym_name = "flash_attn_step"
+// SM80:        func.func @flash_attn_step
 // SM80:        tile.async_copy
 // SM80:        tessera.attn.scaled_dot_product
 

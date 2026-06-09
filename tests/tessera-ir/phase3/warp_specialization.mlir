@@ -11,7 +11,7 @@
 // the warp `role` attr prints on the region's closing brace (plain CHECK).
 //
 // RUN: tessera-opt --tessera-warp-specialization --allow-unregistered-dialect \
-// RUN:   --verify-each=false %s | FileCheck %s
+// RUN:   %s | FileCheck %s
 
 // CHECK: @gemm_kernel
 // CHECK: schedule.warp

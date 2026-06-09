@@ -102,7 +102,7 @@ static void emitMbarrierArriveWait(OpBuilder &b, Location loc,
                                     bool isTMA) {
   // arrive.expect_tx signals the mbarrier that `expectTx` bytes will arrive.
   {
-    OperationState st(loc, "tessera.mbarrier.arrive.expect_tx");
+    OperationState st(loc, "tile.mbarrier.arrive.expect_tx");
     st.addAttribute("slot",      b.getI64IntegerAttr(slot));
     st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
     st.addAttribute("is_tma",    b.getBoolAttr(isTMA));
@@ -110,7 +110,7 @@ static void emitMbarrierArriveWait(OpBuilder &b, Location loc,
   }
   // try_wait.parity blocks until the mbarrier is satisfied.
   {
-    OperationState st(loc, "tessera.mbarrier.try_wait.parity");
+    OperationState st(loc, "tile.mbarrier.try_wait.parity");
     st.addAttribute("slot",    b.getI64IntegerAttr(slot));
     st.addAttribute("parity",  b.getI64IntegerAttr(0)); // phase 0 → phase 1
     b.create(st);
@@ -182,11 +182,11 @@ struct NVFlashAttnKernelEmitterPass
         attachLaunchBounds(funcOp, warpsPerCTA, smVersion);
 
       // Step 3: insert mbarrier arrive/wait around TMA copy ops.
-      // For each tessera.tma.setup_descriptor, emit arrive-expect-tx
+      // For each tile.tma.setup_descriptor, emit arrive-expect-tx
       // immediately after the descriptor setup and try-wait before consumer.
       int64_t slotIdx = 0;
       funcOp.walk([&](Operation *op) {
-        if (op->getName().getStringRef() != "tessera.tma.setup_descriptor")
+        if (op->getName().getStringRef() != "tile.tma.setup_descriptor")
           return;
         int64_t expectTx = tileQ * tileKV * 2; // BF16 = 2 bytes
         if (auto a = op->getAttrOfType<IntegerAttr>("expect_tx"))

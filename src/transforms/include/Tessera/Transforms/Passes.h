@@ -88,7 +88,7 @@ std::unique_ptr<mlir::Pass> createTileIRLoweringPass();
 std::unique_ptr<mlir::Pass> createWarpSpecializationPass();
 
 // AsyncCopyLoweringPass — lowers tile.async_copy + tile.wait_async to
-// tessera.tma.* (SM≥90) or tessera.cp_async.* (SM<90).
+// tile.tma.* (SM≥90) or tile.cp_async.* (SM<90).
 // Options:
 //   --sm  target SM version (default 90)
 std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass();
@@ -99,7 +99,7 @@ std::unique_ptr<mlir::Pass> createAsyncCopyLoweringPass();
 //   --sm  target SM version (default 90)
 std::unique_ptr<mlir::Pass> createNVWGMMALoweringPass();
 
-// NVTMADescriptorPass — hoists tessera.tma.descriptor ops to the kernel
+// NVTMADescriptorPass — hoists tile.tma.descriptor ops to the kernel
 // preamble, deduplicates them, and assigns unique mbarrier slot indices.
 std::unique_ptr<mlir::Pass> createNVTMADescriptorPass();
 

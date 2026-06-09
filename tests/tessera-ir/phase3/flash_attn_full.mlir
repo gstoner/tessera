@@ -12,9 +12,15 @@
 //      dangling Value (→ segfault when later folded/printed).  It now carries
 //      the tile result type for a 1:1 replacement.
 // The flash-attn path lowers through the attn.* online-softmax pipeline (not
-// tile.mma), so there is no wgmma in the output.  --verify-each=false is still
-// needed for the unregistered schedule.*/tile.* ops + a separate pre-existing
-// tessera.attn.lse.save scalar-vs-tensor verifier mismatch.
+// tile.mma), so there is no wgmma in the output.
+//
+// VERIFIER-CLEAN (2026-06): the chain now runs under --allow-unregistered-dialect
+// ALONE — no --verify-each=false.  Two follow-on fixes made it verify:
+//   * LseSaveOp::verify required rank>=2 (a score-tile contract) but the LSE is
+//     a per-row quantity (scalar / rank-1 [tile_q]); the verifier now matches.
+//   * the TMA / mbarrier / cp_async marker ops moved off the *registered*
+//     tessera.* prefix to the unregistered tile.* Tile-IR placeholder namespace
+//     (alongside tile.async_copy / tile.mma), so they round-trip as opaque ops.
 //
 // RUN: tessera-opt \
 // RUN:   --tessera-distribution-lowering='mesh-axes=tp mesh-sizes=1' \
@@ -25,21 +31,23 @@
 // RUN:   --tessera-nvwgmma-lowering='sm=90' \
 // RUN:   --tessera-nvtma-descriptor \
 // RUN:   --tessera-nvflash-attn-emitter='sm=90 tile-q=64 tile-kv=64 warps=4' \
-// RUN:   --verify-each=false %s | FileCheck %s
+// RUN:   %s | FileCheck %s
 //
 // Alternatively, use the named pipeline:
-// RUN: tessera-opt -tessera-lower-to-gpu --verify-each=false %s \
+// RUN: tessera-opt -tessera-lower-to-gpu %s \
 // RUN:   | FileCheck %s --check-prefix=PIPE
 
-// The unregistered schedule.*/tile.* ops force generic printing, so match the
-// generic sym_name + the lowered op sequence in emitted order.
-// CHECK:          sym_name = "flash_attn_fwd"
-// CHECK:          tessera.tma.setup_descriptor
-// CHECK:          tessera.mbarrier.arrive.expect_tx
-// CHECK:          tessera.mbarrier.try_wait.parity
-// CHECK:          tessera.mbarrier.init
+// The func.func prints pretty (nvvm.kernel is a func attr); the unregistered
+// tile.*/schedule.* ops print generically inline.  Match the func + the lowered
+// op sequence in emitted order.
+// CHECK:          func.func @flash_attn_fwd
+// CHECK-SAME:     nvvm.kernel
+// CHECK:          tile.tma.setup_descriptor
+// CHECK:          tile.mbarrier.arrive.expect_tx
+// CHECK:          tile.mbarrier.try_wait.parity
+// CHECK:          tile.mbarrier.init
 // CHECK:          schedule.warp
-// CHECK:          tessera.tma.copy_async
+// CHECK:          tile.tma.copy_async
 // CHECK:          role = "producer"
 // CHECK:          schedule.warp
 // CHECK:          tessera.attn.scaled_dot_product
@@ -48,14 +56,13 @@
 // CHECK:          tessera.attn.lse_accumulate
 // CHECK:          tessera.attn.lse.save
 // CHECK:          role = "consumer"
-// CHECK:          nvvm.kernel
 // CHECK-NOT:      tessera.flash_attn
 // CHECK-NOT:      tile.mma
 
-// PIPE:           sym_name = "flash_attn_fwd"
-// PIPE:           tessera.tma.copy_async
+// PIPE:           func.func @flash_attn_fwd
+// PIPE-SAME:      nvvm.kernel
+// PIPE:           tile.tma.copy_async
 // PIPE:           tessera.attn.scaled_dot_product
-// PIPE:           nvvm.kernel
 
 module attributes {tessera.ir.version = "1.0",
                    tessera.target = {sm = 90 : i32, warps = 4 : i32,

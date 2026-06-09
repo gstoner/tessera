@@ -5,26 +5,26 @@
 //
 // Design contract (CLAUDE.md §Phase 3 Design Contract 2):
 //   "TMA descriptors are generated once per kernel, not per tile."
-//   This pass implements that contract by collecting all tessera.tma.descriptor
+//   This pass implements that contract by collecting all tile.tma.descriptor
 //   ops, deduplicating them by (src_ptr, tile_rows, tile_cols), and hoisting
 //   a single cuTensorMapEncode call to the function entry block.
 //
 // Input:
 //   func.func @flash_attn_kernel(...) {
 //     ...
-//     %desc_q = tessera.tma.descriptor(%Q) {tile_rows=64, tile_cols=64}
-//     tessera.tma.copy_async %desc_q {mbarrier_slot=0}
-//     %desc_q2 = tessera.tma.descriptor(%Q) {tile_rows=64, tile_cols=64}  // dup
-//     tessera.tma.copy_async %desc_q2 {mbarrier_slot=0}
+//     %desc_q = tile.tma.descriptor(%Q) {tile_rows=64, tile_cols=64}
+//     tile.tma.copy_async %desc_q {mbarrier_slot=0}
+//     %desc_q2 = tile.tma.descriptor(%Q) {tile_rows=64, tile_cols=64}  // dup
+//     tile.tma.copy_async %desc_q2 {mbarrier_slot=0}
 //   }
 //
 // Output:
 //   func.func @flash_attn_kernel(%Q_desc: i64, ...) {
 //     // Preamble: mbarrier init for each unique descriptor slot.
-//     tessera.mbarrier.init {slots=2, phase_bits=2}
+//     tile.mbarrier.init {slots=2, phase_bits=2}
 //     ...
 //     // Inner loop: just the copy_async referencing the hoisted descriptor.
-//     tessera.tma.copy_async %Q_desc {mbarrier_slot=0, expect_tx=8192}
+//     tile.tma.copy_async %Q_desc {mbarrier_slot=0, expect_tx=8192}
 //   }
 //
 // Registration: --tessera-nvtma-descriptor
@@ -94,10 +94,10 @@ struct NVTMADescriptorPass
     MLIRContext *ctx = funcOp.getContext();
     OpBuilder b(ctx);
 
-    // Collect all tessera.tma.descriptor ops in program order.
+    // Collect all tile.tma.descriptor ops in program order.
     SmallVector<Operation *> descOps;
     funcOp.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.tma.descriptor")
+      if (op->getName().getStringRef() == "tile.tma.descriptor")
         descOps.push_back(op);
     });
 
@@ -118,7 +118,7 @@ struct NVTMADescriptorPass
     // (Actual slot count filled in after dedup.)
     Operation *mbarrierInitPlaceholder = nullptr;
     {
-      OperationState st(funcOp.getLoc(), "tessera.mbarrier.init");
+      OperationState st(funcOp.getLoc(), "tile.mbarrier.init");
       st.addAttribute("slots", b.getI64IntegerAttr(0)); // placeholder
       st.addAttribute("phase_bits", b.getI64IntegerAttr(2));
       mbarrierInitPlaceholder = b.create(st);
@@ -140,7 +140,7 @@ struct NVTMADescriptorPass
       if (it == canonMap.end()) {
         // Hoist a new descriptor setup to preamble.
         b.setInsertionPoint(mbarrierInitPlaceholder);
-        OperationState st(desc->getLoc(), "tessera.tma.setup_descriptor");
+        OperationState st(desc->getLoc(), "tile.tma.setup_descriptor");
         st.addOperands({src});
         st.addAttribute("tile_rows", b.getI64IntegerAttr(tileRows));
         st.addAttribute("tile_cols", b.getI64IntegerAttr(tileCols));
@@ -169,10 +169,10 @@ struct NVTMADescriptorPass
           "slots", b.getI64IntegerAttr(nextSlot));
     }
 
-    // Update all tessera.tma.copy_async ops with their correct mbarrier slot.
+    // Update all tile.tma.copy_async ops with their correct mbarrier slot.
     // (Slot 0 is the default; the setup ops assigned sequential slots above.)
     funcOp.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.tma.copy_async") {
+      if (op->getName().getStringRef() == "tile.tma.copy_async") {
         if (op->getNumOperands() == 0)
           return;
         Value descriptor = op->getOperand(0);

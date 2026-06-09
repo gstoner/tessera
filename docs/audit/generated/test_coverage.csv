@@ -180,14 +180,14 @@ floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
 fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,1,0,3,0,,structural_only,unclassified — defaults to structural_only
-gated_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
+gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,2,2,0,4,0,,needs_direct_test,category default for 'attention'
 gather,9,1,0,10,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 gelu,22,10,1,32,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,68,2,6,70,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
-gqa_attention,3,0,0,3,0,,needs_direct_test,category default for 'attention'
+gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
 grad_scaler_step,3,0,0,3,0,,needs_direct_test,category default for 'numerics'
 group_norm,5,0,0,5,0,,needs_direct_test,category default for 'normalization'
 grouped_gemm,17,0,1,17,0,,structural_only,unclassified — defaults to structural_only
@@ -262,7 +262,7 @@ memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 min_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
 minimum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-mla_decode,0,2,0,2,0,,needs_direct_test,category default for 'attention'
+mla_decode,3,2,0,5,0,,needs_direct_test,category default for 'attention'
 mla_decode_fused,2,8,0,10,0,,needs_direct_test,category default for 'attention'
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
@@ -276,10 +276,10 @@ momentum,3,0,0,3,0,,needs_direct_test,category default for 'functional_optimizer
 mor_partition,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
 mor_router,5,3,1,8,0,,needs_direct_test,category default for 'layout_transform'
 mor_scatter,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
-mqa_attention,1,0,0,1,1,,covered_by_family,covered by attention family + scaled_dot_product tests
+mqa_attention,3,0,0,3,0,,covered_by_family,covered by attention family + scaled_dot_product tests
 mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
 mul,62,0,6,62,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
-multi_head_attention,1,0,0,1,1,,covered_by_family,covered by attention family + flash_attn tests
+multi_head_attention,4,0,0,4,0,,covered_by_family,covered by attention family + flash_attn tests
 muon,5,0,0,5,0,,needs_direct_test,category default for 'optimizer'
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,0,0,0,0,1,,covered_by_family,category default for 'comparison'

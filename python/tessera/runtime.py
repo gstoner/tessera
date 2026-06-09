@@ -2264,6 +2264,12 @@ _APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
 _APPLE_GPU_NORM_COMPOSE_OPS = frozenset({
     "tessera.group_norm", "tessera.instance_norm", "tessera.weight_norm",
 })
+# Standard attention family (Sub-sprint A) — thin wrappers over the proven GQA
+# flash-attention kernel (multi_head/gqa/mqa/mla_decode/gated_attention).
+_APPLE_GPU_ATTN_WRAPPER_OPS = frozenset({
+    "tessera.multi_head_attention", "tessera.gqa_attention",
+    "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2347,7 +2353,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
-    | _APPLE_GPU_NORM_COMPOSE_OPS
+    | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
 )
 
 
@@ -2568,6 +2574,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_NORM_COMPOSE_OPS:
             values[str(result)] = _apple_gpu_dispatch_norm(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_ATTN_WRAPPER_OPS:
+            values[str(result)] = _apple_gpu_dispatch_attn_wrapper(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -5806,6 +5819,91 @@ def _apple_gpu_dispatch_batched_attention(Q: Any, K: Any, V: Any, np: Any,
         fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         sym(fp(a), fp(bmat), fp(c), fp(out), *dims)
     return out.reshape(Q.shape).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
+                                     kwargs: dict, np: Any) -> Any:
+    """Standard attention family (Sub-sprint A) routed through the proven GQA
+    flash-attention kernel.  Each op is a thin wrapper over softmax((QKᵀ)·scale)
+    @V — multi_head_attention reshapes [B,S,H*D]→[B,H,S,D]; gqa/mqa pick the
+    KV-group counts; mla_decode optionally projects the latent K/V; gated_attention
+    multiplies by a (sigmoid) gate.  Reshapes are host-side views; the attention
+    FLOPs run on the GPU.  Returns None on unsupported shapes/dtypes so the
+    op-loop falls back to the numpy reference."""
+    short = str(op_name)
+    scale = kwargs.get("scale")
+    causal = bool(kwargs.get("causal", False))
+    Q = np.asarray(operands[0])
+
+    if short == "tessera.multi_head_attention":
+        num_heads = int(kwargs["num_heads"])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        if Q.ndim != 3:
+            return None
+        B, Sq, hd = Q.shape
+        if hd % num_heads != 0:
+            return None
+        D = hd // num_heads
+
+        def split(t: Any) -> Any:
+            St = int(t.shape[1])
+            return np.ascontiguousarray(
+                t.reshape(B, St, num_heads, D).transpose(0, 2, 1, 3))
+
+        out = _apple_gpu_dispatch_gqa(
+            split(Q), split(K), split(V), num_heads, num_heads, np,
+            scale=scale, causal=causal)
+        if out is None:
+            return None
+        out = np.asarray(out)
+        return np.ascontiguousarray(out.transpose(0, 2, 1, 3).reshape(B, Sq, hd))
+
+    if short in ("tessera.gqa_attention", "tessera.mqa_attention"):
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        if Q.ndim != 4:
+            return None
+        if short == "tessera.mqa_attention":
+            nq, nkv = int(Q.shape[1]), 1
+        else:
+            nq = int(kwargs["num_query_heads"])
+            nkv = int(kwargs["num_kv_heads"])
+        return _apple_gpu_dispatch_gqa(Q, K, V, nq, nkv, np, scale=scale, causal=causal)
+
+    if short == "tessera.mla_decode":
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        w_k = operands[3] if len(operands) > 3 else kwargs.get("W_k")
+        w_v = operands[4] if len(operands) > 4 else kwargs.get("W_v")
+        if w_k is not None:
+            K = np.matmul(K, np.asarray(w_k, K.dtype))
+        if w_v is not None:
+            V = np.matmul(V, np.asarray(w_v, V.dtype))
+        if Q.ndim != 4 or K.ndim != 4:
+            return None
+        return _apple_gpu_dispatch_gqa(
+            Q, K, V, int(Q.shape[1]), int(K.shape[1]), np, scale=scale, causal=causal)
+
+    if short == "tessera.gated_attention":
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        gate = np.asarray(operands[3])
+        if Q.ndim != 4:
+            return None
+        attn = _apple_gpu_dispatch_gqa(
+            Q, K, V, int(Q.shape[1]), int(Q.shape[1]), np, scale=scale, causal=causal)
+        if attn is None:
+            return None
+        attn = np.asarray(attn)
+        act = kwargs.get("gate_activation", "sigmoid")
+        if act == "sigmoid":
+            gate = 1.0 / (1.0 + np.exp(-gate.astype(np.float64))).astype(attn.dtype)
+        elif act not in ("identity", "none"):
+            raise ValueError("gate_activation must be 'sigmoid', 'identity', or 'none'")
+        return attn * np.broadcast_to(np.asarray(gate, attn.dtype), attn.shape)
+
+    return None
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

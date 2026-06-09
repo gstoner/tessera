@@ -551,6 +551,11 @@ _APPLE_GPU_LOSS_COMPOSE_OPS: frozenset[str] = frozenset({
 _APPLE_GPU_NORM_COMPOSE_OPS: frozenset[str] = frozenset({
     "tessera.group_norm", "tessera.instance_norm", "tessera.weight_norm",
 })
+# Standard attention family (Sub-sprint A) routed through the proven GQA kernel.
+_APPLE_GPU_ATTN_WRAPPER_OPS: frozenset[str] = frozenset({
+    "tessera.multi_head_attention", "tessera.gqa_attention",
+    "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
+})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
@@ -558,7 +563,7 @@ _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
-    | _APPLE_GPU_NORM_COMPOSE_OPS
+    | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
 )
 
 

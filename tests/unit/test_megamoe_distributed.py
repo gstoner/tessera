@@ -174,3 +174,93 @@ def test_overlap_composes_with_fp8xfp4():
     # is close, not bit-identical (a real, expected property of per-chunk quant).
     rel = np.linalg.norm(y_ov - y_plain) / (np.linalg.norm(y_plain) + 1e-9)
     assert rel < 0.05, f"overlap+fp8xfp4 vs monolithic rel {rel:.4f}"
+
+
+# ── Rung 4: REAL wall-clock comm/compute overlap (async GPU command buffers) ──
+from tessera import _apple_gpu_backend as _agb  # noqa: E402
+from tessera import _jit_boundary as _jb  # noqa: E402
+from tessera.distributed.moe import (  # noqa: E402
+    PipelineStats,
+    megamoe_forward_pipelined,
+    megamoe_layer_pipelined,
+)
+
+_GPU = _agb.is_available() and _jb.is_available()
+gpu = pytest.mark.skipif(not _GPU, reason="apple_gpu runtime unavailable")
+
+
+@pytest.mark.parametrize("num_chunks", [1, 2, 4])
+def test_pipelined_matches_non_overlapped(num_chunks):
+    # Async pipelining is numerically identical to the monolithic forward.
+    x, Wr, Wg, Wu, Wd = _inputs(num_chunks + 60, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_plain, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg)
+    y_pl, dropped, stats = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=num_chunks)
+    assert dropped == 0
+    np.testing.assert_allclose(y_pl, y_plain, rtol=1e-4, atol=1e-4)
+    assert isinstance(stats, PipelineStats)
+
+
+def test_compute_runs_off_the_comm_thread():
+    # Proof of async: every chunk's expert FFN ran on a worker thread, not the
+    # rank thread that issued the comm — i.e. the GPU command buffer was in
+    # flight while the CPU did the dispatch all-to-all.
+    x, Wr, Wg, Wu, Wd = _inputs(2, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    _, _, stats = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=3)
+    assert stats.num_chunks == 3
+    assert len(stats.compute_thread_ids) == 3
+    assert all(tid != stats.main_thread_id for tid in stats.compute_thread_ids)
+    assert stats.all_offloaded is True
+
+
+def test_pipelined_composes_with_fp8xfp4():
+    x, Wr, Wg, Wu, Wd = _inputs(8, T=32, K=64, E=8, Fdim=32, N=16)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_ov, _, _ = megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=2, quant="fp8xfp4")
+    y_pl, _, _ = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=2, quant="fp8xfp4")
+    # Same chunking + same quant scales → identical to the sequential overlap path.
+    np.testing.assert_allclose(y_pl, y_ov, rtol=1e-4, atol=1e-4)
+
+
+@gpu
+def test_real_overlap_hides_dispatch_comm_under_gpu_compute():
+    # The headline: with a real GPU expert FFN and a modeled interconnect
+    # latency per all-to-all, the async pipeline hides the DISPATCH comm under
+    # GPU compute, so it beats the sequential-chunked overlap path that exposes
+    # every comm round. Large shape so the GPU dispatch dominates; the GPU
+    # command buffer runs async (GIL released) while the CPU issues comm.
+    import time
+
+    rng = np.random.default_rng(0)
+    T, K, E, Fdim, N = 4096, 256, 8, 256, 256
+    x = rng.standard_normal((T, K)).astype(np.float32)
+    Wr = rng.standard_normal((K, E)).astype(np.float32)
+    Wg = rng.standard_normal((E, K, Fdim)).astype(np.float32)
+    Wu = rng.standard_normal((E, K, Fdim)).astype(np.float32)
+    Wd = rng.standard_normal((E, Fdim, N)).astype(np.float32)
+    cfg = MoEConfig(num_experts=E, top_k=2, capacity_factor=4.0)
+    L = 0.012  # modeled 12 ms interconnect transfer per all-to-all
+
+    # Warm the fused kernel (one-time MSL compile) so timing is steady-state.
+    megamoe_layer_pipelined(x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=4)
+
+    def wall(fn, reps=3):
+        best = 1e9
+        for _ in range(reps):
+            t0 = time.perf_counter()
+            fn()
+            best = min(best, time.perf_counter() - t0)
+        return best
+
+    seq = wall(lambda: megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=4, comm_latency_s=L))
+    pll = wall(lambda: megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=4, comm_latency_s=L))
+    # The 4 dispatch comms (~48 ms) hide under compute → pipelined < seq-chunked.
+    # Generous margin (0.92×) keeps it robust under scheduler noise.
+    assert pll < seq * 0.92, f"pipelined {pll*1e3:.1f}ms vs seq-chunked {seq*1e3:.1f}ms"

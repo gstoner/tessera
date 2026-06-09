@@ -231,6 +231,53 @@ def validate_grouped_alignment(group_sizes: Any, alignment: int,
 QUANT_GROUPED_DTYPES = ("fp8_e4m3", "fp8_e5m2", "fp8", "nvfp4")
 
 
+# Mixed-precision grouped-GEMM schemes — separate activation / weight dtypes.
+# The FP8×FP4 family (FP8 activations × FP4 weights) is the Blackwell / DeepGEMM
+# MoE scheme: activations carry the dynamic range in FP8 while weights compress
+# to FP4 (NVFP4, 1×16 block scale). ``<act>x<weight>`` is the canonical spelling.
+MIXED_QUANT_SCHEMES = {
+    "fp8xfp4": ("fp8_e4m3", "nvfp4"),
+    "fp8_e4m3xnvfp4": ("fp8_e4m3", "nvfp4"),
+    "fp8_e5m2xnvfp4": ("fp8_e5m2", "nvfp4"),
+}
+
+
+def quant_scheme_for(quant: str) -> "tuple[str, str]":
+    """Resolve ``quant`` to an ``(act_dtype, weight_dtype)`` pair.
+
+    A plain grouped dtype (``fp8_e4m3`` / ``nvfp4`` / …) applies to both
+    activations and weights; a mixed scheme (``fp8xfp4`` / ``fp8_e4m3xnvfp4`` /
+    ``fp8_e5m2xnvfp4``) splits the two.
+    """
+    d = str(quant).lower()
+    if d in MIXED_QUANT_SCHEMES:
+        return MIXED_QUANT_SCHEMES[d]
+    if d in QUANT_GROUPED_DTYPES:
+        return (d, d)
+    raise ValueError(
+        f"grouped_gemm: quant {quant!r} has no dequant-on-host grouped path; "
+        f"expected one of {QUANT_GROUPED_DTYPES} or a mixed scheme "
+        f"{tuple(MIXED_QUANT_SCHEMES)}")
+
+
+def _qdq_2d(arr: Any, dtype: str, *, quantize_fp8: Any, quantize_nvfp4: Any,
+            dequantize_nvfp4: Any) -> "np.ndarray":
+    """Quantize-then-dequantize a single 2-D array to fp32 per ``dtype``'s scale
+    layout (the per-operand primitive behind the grouped quant path)."""
+    d = str(dtype).lower()
+    arr = np.asarray(arr, dtype=np.float32)
+    if d in ("fp8_e4m3", "fp8", "fp8_e5m2"):
+        fmt = "e5m2" if d == "fp8_e5m2" else "e4m3"
+        return np.asarray(quantize_fp8(arr, format=fmt)[0], dtype=np.float32)
+    if d == "nvfp4":
+        bs = 16
+        return np.asarray(
+            dequantize_nvfp4(*quantize_nvfp4(arr, block_size=bs), block_size=bs),
+            dtype=np.float32)
+    raise ValueError(  # pragma: no cover — guarded by quant_scheme_for
+        f"grouped_gemm: per-operand quant dtype {dtype!r} has no runtime path")
+
+
 def apply_quant_for_grouped(xa: Any, w: Any, quant: str, *,
                             quantize_fp8: Any, quantize_nvfp4: Any,
                             dequantize_nvfp4: Any) -> "tuple[np.ndarray, np.ndarray]":
@@ -238,31 +285,20 @@ def apply_quant_for_grouped(xa: Any, w: Any, quant: str, *,
     canonical scale layout for ``quant``, returning fp32 arrays ready for the
     f32 grouped GEMM (the dequant-on-host quantized grouped-GEMM capability).
 
+    ``quant`` may be a single grouped dtype (applied to both operands) or a mixed
+    ``<act>x<weight>`` scheme — e.g. ``fp8xfp4`` quantizes activations to FP8 and
+    each expert's weights to NVFP4 (the Blackwell / DeepGEMM mixed MoE path).
+
     The quantizers are dependency-injected so this stays a leaf module (no
     import of the ``tessera.ops`` namespace).
     """
-    d = str(quant).lower()
-    if d not in QUANT_GROUPED_DTYPES:
-        raise ValueError(
-            f"grouped_gemm: quant dtype {quant!r} has no dequant-on-host grouped "
-            f"path; expected one of {QUANT_GROUPED_DTYPES}")
-    xa = np.asarray(xa, dtype=np.float32)
+    act_dtype, w_dtype = quant_scheme_for(quant)
+    qkw = dict(quantize_fp8=quantize_fp8, quantize_nvfp4=quantize_nvfp4,
+               dequantize_nvfp4=dequantize_nvfp4)
+    xa = _qdq_2d(xa, act_dtype, **qkw)
     w = np.asarray(w, dtype=np.float32)
     E = int(w.shape[0])
-    if d in ("fp8_e4m3", "fp8", "fp8_e5m2"):
-        fmt = "e5m2" if d == "fp8_e5m2" else "e4m3"
-        xa = np.asarray(quantize_fp8(xa, format=fmt)[0], dtype=np.float32)
-        w = np.stack([np.asarray(quantize_fp8(w[e], format=fmt)[0], dtype=np.float32)
-                      for e in range(E)])
-    elif d == "nvfp4":
-        bs = 16
-        xa = np.asarray(dequantize_nvfp4(*quantize_nvfp4(xa, block_size=bs), block_size=bs),
-                        dtype=np.float32)
-        w = np.stack([
-            np.asarray(dequantize_nvfp4(*quantize_nvfp4(w[e], block_size=bs), block_size=bs),
-                       dtype=np.float32) for e in range(E)])
-    else:  # pragma: no cover — guarded by scale_layout_for above
-        raise ValueError(f"grouped_gemm: quant={quant!r} has no runtime dequant path")
+    w = np.stack([_qdq_2d(w[e], w_dtype, **qkw) for e in range(E)])
     return xa, w
 
 

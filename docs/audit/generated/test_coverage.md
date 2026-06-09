@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **445** ops in `primitive_coverage` registry.
-- **2080** total Python-test references, **514** total lit-fixture references.
+- **2087** total Python-test references, **514** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
 - **206** ops have ≤1 reference ("thinly tested").
-- **43** ops have ≥10 references ("well tested").
+- **44** ops have ≥10 references ("well tested").
 - **54** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -30,7 +30,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `rmsnorm` |   41 |    9 |   50 |   1 | `bf16`, `fp32` |
 | `cholesky` |   14 |   30 |   44 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
-| `grouped_gemm` |   25 |   10 |   35 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
+| `grouped_gemm` |   26 |   10 |   36 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `selective_ssm` |   35 |    0 |   35 |   2 |  |
 | `gelu` |   22 |   10 |   32 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `cast` |    4 |   23 |   27 |   0 | `fp32` |

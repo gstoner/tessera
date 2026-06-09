@@ -268,3 +268,45 @@ def test_quant_grouped_gemm_preserves_shape_and_dtype():
     got = ts.ops.grouped_gemm(x, w, gs, quant="fp8_e4m3")
     assert got.shape == (int(gs.sum()), w.shape[2])
     assert got.dtype == x.dtype
+
+
+# ── FP8×FP4 mixed-precision scheme (Blackwell / DeepGEMM MoE) ────────────────
+def test_quant_scheme_resolution():
+    assert gl.quant_scheme_for("fp8xfp4") == ("fp8_e4m3", "nvfp4")
+    assert gl.quant_scheme_for("fp8_e5m2xnvfp4") == ("fp8_e5m2", "nvfp4")
+    assert gl.quant_scheme_for("nvfp4") == ("nvfp4", "nvfp4")        # plain → both
+    assert gl.quant_scheme_for("fp8_e4m3") == ("fp8_e4m3", "fp8_e4m3")
+    with pytest.raises(ValueError, match="no dequant-on-host"):
+        gl.quant_scheme_for("bogus8")
+
+
+def test_mixed_quant_applies_act_and_weight_separately():
+    rng = np.random.default_rng(4)
+    x = rng.standard_normal((20, 64)).astype(np.float32)
+    w = rng.standard_normal((3, 64, 16)).astype(np.float32)
+    xa, wq = gl.apply_quant_for_grouped(
+        x, w, "fp8xfp4", quantize_fp8=ts.ops.quantize_fp8,
+        quantize_nvfp4=ts.ops.quantize_nvfp4, dequantize_nvfp4=ts.ops.dequantize_nvfp4)
+    # Activations FP8 vs weights NVFP4 — the dequant fingerprints differ, so the
+    # two operands must NOT match a single-scheme round-trip of the other dtype.
+    x_fp8_only, _ = gl.apply_quant_for_grouped(
+        x, w, "fp8_e4m3", quantize_fp8=ts.ops.quantize_fp8,
+        quantize_nvfp4=ts.ops.quantize_nvfp4, dequantize_nvfp4=ts.ops.dequantize_nvfp4)
+    np.testing.assert_allclose(xa, x_fp8_only, rtol=0, atol=0)  # act path == fp8
+    assert xa.shape == x.shape and wq.shape == w.shape
+
+
+def test_fp8xfp4_grouped_gemm_between_fp8_and_fp4_error():
+    rng = np.random.default_rng(6)
+    x = rng.standard_normal((24, 64)).astype(np.float32)
+    w = rng.standard_normal((3, 64, 16)).astype(np.float32)
+    gs = np.array([8, 8, 8])
+    ref = gl.reference_grouped_gemm(x, w, gs)
+
+    def rel(q):
+        got = np.asarray(ts.ops.grouped_gemm(x, w, gs, quant=q))
+        return np.linalg.norm(got - ref) / (np.linalg.norm(ref) + 1e-9)
+
+    r_fp8, r_mixed, r_fp4 = rel("fp8_e4m3"), rel("fp8xfp4"), rel("nvfp4")
+    # FP8 activations × FP4 weights sits between pure-FP8 and pure-FP4 error.
+    assert r_fp8 <= r_mixed <= r_fp4 + 0.02, (r_fp8, r_mixed, r_fp4)

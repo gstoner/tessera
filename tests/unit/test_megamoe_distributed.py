@@ -76,6 +76,21 @@ def test_quantized_distributed_within_budget():
     assert rel < 0.15, f"fp8 distributed MoE rel {rel:.4f}"
 
 
+def test_fp8xfp4_mixed_precision_distributed():
+    # FP8 activations × FP4 weights (Blackwell / DeepGEMM MoE) over the
+    # distributed forward — error sits between pure-FP8 and pure-FP4.
+    x, Wr, Wg, Wu, Wd = _inputs(15, T=32, K=64, E=8, Fdim=32, N=16)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_ref, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg)
+
+    def rel(q):
+        y, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, quant=q)
+        return np.linalg.norm(y - y_ref) / (np.linalg.norm(y_ref) + 1e-9)
+
+    r_fp8, r_mixed, r_fp4 = rel("fp8_e4m3"), rel("fp8xfp4"), rel("nvfp4")
+    assert r_fp8 <= r_mixed <= r_fp4 + 0.05, (r_fp8, r_mixed, r_fp4)
+
+
 def test_experts_not_divisible_by_world_size_raises():
     x, Wr, Wg, Wu, Wd = _inputs(3, T=16, E=8)
     cfg = MoEConfig(num_experts=8, top_k=1, capacity_factor=8.0)

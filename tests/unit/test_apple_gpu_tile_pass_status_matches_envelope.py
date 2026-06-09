@@ -89,6 +89,9 @@ def test_runtime_ops_lower_to_metal_runtime_status():
 
 
 def test_non_envelope_op_is_artifact_only():
-    # A generic op outside the envelope must stay artifact_only.
-    status = _lower_and_parse(["tessera.add"])
-    assert status.get("tessera.add") == "artifact_only", status
+    # An op outside the envelope must stay artifact_only. (`tessera.add` joined
+    # the MPSGraph binary lane in batch 1 — use `tessera.gather`, a host-class
+    # layout op that is never accelerator-routed.)
+    assert "tessera.gather" not in _runtime_envelope()
+    status = _lower_and_parse(["tessera.gather"])
+    assert status.get("tessera.gather") == "artifact_only", status

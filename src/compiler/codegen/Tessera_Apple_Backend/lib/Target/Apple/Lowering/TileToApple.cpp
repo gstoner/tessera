@@ -253,6 +253,16 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       "tessera.relu", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.rsqrt",
       "tessera.sigmoid", "tessera.sigmoid_safe", "tessera.silu",
       "tessera.silu_mul", "tessera.softplus", "tessera.sqrt", "tessera.tanh",
+      // Batch 1 (2026-06-08) — float-output elementwise math + comparison on the
+      // MPSGraph unary/binary opcode lane (driver._APPLE_GPU_MPSGRAPH_OPS).
+      "tessera.sin", "tessera.cos", "tessera.tan", "tessera.asin", "tessera.acos",
+      "tessera.atan", "tessera.sinh", "tessera.cosh", "tessera.erf", "tessera.erfc",
+      "tessera.expm1", "tessera.log1p", "tessera.reciprocal", "tessera.sign",
+      "tessera.floor", "tessera.ceil", "tessera.round", "tessera.trunc",
+      "tessera.add", "tessera.sub", "tessera.mul", "tessera.div",
+      "tessera.maximum", "tessera.minimum", "tessera.pow", "tessera.atan2",
+      "tessera.mod", "tessera.floor_div", "tessera.eq", "tessera.ne",
+      "tessera.lt", "tessera.le", "tessera.gt", "tessera.ge",
       // Task C (2026-06-01) — conv2d / conv3d. Project 5 wired the
       // encode-session lane for conv2d (`tessera_apple_gpu_conv2d_dev_f32_enc`);
       // Sprint A extended it to {f16, bf16}. conv3d uses an im2col + GPU

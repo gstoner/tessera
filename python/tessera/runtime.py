@@ -2215,6 +2215,23 @@ _APPLE_GPU_UNARY_OPCODES = {
     "tessera.negative": 10,
     "tessera.abs": 11,
     "tessera.absolute": 11,
+    # Batch 1 (2026-06-08) — float-output elementwise math (MPSGraph nodes).
+    "tessera.sin": 12, "tessera.cos": 13, "tessera.tan": 14,
+    "tessera.asin": 15, "tessera.acos": 16, "tessera.atan": 17,
+    "tessera.sinh": 18, "tessera.cosh": 19, "tessera.erf": 20, "tessera.erfc": 21,
+    "tessera.expm1": 22, "tessera.log1p": 23, "tessera.reciprocal": 24,
+    "tessera.sign": 25, "tessera.floor": 26, "tessera.ceil": 27,
+    "tessera.round": 28, "tessera.trunc": 29,
+}
+# Batch 1 (2026-06-08) — binary float math + comparison → f32 mask. op_name ->
+# opcode in apple_gpu_runtime.mm mpsg_binary_node. add/sub/mul/div/maximum/minimum
+# reuse the existing C nodes (0-5); 7-10 math; 11-16 comparison.
+_APPLE_GPU_BINARY_OPCODES = {
+    "tessera.add": 0, "tessera.sub": 1, "tessera.mul": 2, "tessera.div": 3,
+    "tessera.maximum": 4, "tessera.minimum": 5,
+    "tessera.pow": 7, "tessera.atan2": 8, "tessera.mod": 9, "tessera.floor_div": 10,
+    "tessera.eq": 11, "tessera.ne": 12, "tessera.lt": 13, "tessera.le": 14,
+    "tessera.gt": 15, "tessera.ge": 16,
 }
 # op_name -> rowop kind (0 layer_norm, 1 rmsnorm, 3 log_softmax). Softmax stays
 # on its dedicated MSL path for single-op; the MPSGraph softmax symbol is used
@@ -2227,6 +2244,7 @@ _APPLE_GPU_ROWOP_KINDS = {
 }
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
+    | frozenset(_APPLE_GPU_BINARY_OPCODES)
     | frozenset(_APPLE_GPU_ROWOP_KINDS)
     | frozenset({"tessera.silu_mul"})
 )
@@ -2490,6 +2508,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             values[str(result)] = _apple_gpu_dispatch_unary(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name in _APPLE_GPU_BINARY_OPCODES:
+            values[str(result)] = _apple_gpu_dispatch_mpsgraph_binary(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
                 np,
             )
         elif op_name in _APPLE_GPU_ROWOP_KINDS:
@@ -7291,7 +7316,28 @@ def _apple_gpu_unary_numpy(op_name: str, x: Any, np: Any) -> Any:
         "tessera.negative": lambda v: -v,
         "tessera.abs": np.abs,
         "tessera.absolute": np.abs,
+        # Batch 1 — float-output elementwise math.
+        "tessera.sin": np.sin, "tessera.cos": np.cos, "tessera.tan": np.tan,
+        "tessera.asin": np.arcsin, "tessera.acos": np.arccos, "tessera.atan": np.arctan,
+        "tessera.sinh": np.sinh, "tessera.cosh": np.cosh,
+        "tessera.erf": _np_erf, "tessera.erfc": lambda v: 1.0 - _np_erf(v),
+        "tessera.expm1": np.expm1, "tessera.log1p": np.log1p,
+        "tessera.reciprocal": lambda v: 1.0 / v, "tessera.sign": np.sign,
+        "tessera.floor": np.floor, "tessera.ceil": np.ceil,
+        "tessera.round": np.round, "tessera.trunc": np.trunc,
     }[op_name](f)
+
+
+def _np_erf(v: Any) -> Any:
+    """erf without scipy — Abramowitz-Stegun 7.1.26 (matches MPSGraph/std::erf to
+    ~1e-7, adequate for the CI/non-Darwin reference path)."""
+    import numpy as _np
+    s = _np.sign(v)
+    a = _np.abs(v)
+    t = 1.0 / (1.0 + 0.3275911 * a)
+    y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+               - 0.284496736) * t + 0.254829592) * t * _np.exp(-a * a)
+    return (s * y).astype(_np.float32)
 
 
 def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any:
@@ -7343,6 +7389,59 @@ def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any
         return _apple_gpu_unary_numpy(op_name, x, np).astype(bf16_dtype).reshape(shape)
 
     return _apple_gpu_unary_numpy(op_name, x, np).astype(x.dtype).reshape(shape)
+
+
+def _apple_gpu_binary_numpy(op_name: str, a: Any, b: Any, np: Any) -> Any:
+    """Host reference matching apple_gpu_runtime.mm mpsg_binary_node."""
+    return {
+        "tessera.add": lambda x, y: x + y,
+        "tessera.sub": lambda x, y: x - y,
+        "tessera.mul": lambda x, y: x * y,
+        "tessera.div": lambda x, y: x / y,
+        "tessera.maximum": np.maximum,
+        "tessera.minimum": np.minimum,
+        "tessera.pow": np.power,
+        "tessera.atan2": np.arctan2,
+        "tessera.mod": lambda x, y: x - y * np.floor(x / y),
+        "tessera.floor_div": lambda x, y: np.floor(x / y),
+        "tessera.eq": lambda x, y: (x == y).astype(np.float32),
+        "tessera.ne": lambda x, y: (x != y).astype(np.float32),
+        "tessera.lt": lambda x, y: (x < y).astype(np.float32),
+        "tessera.le": lambda x, y: (x <= y).astype(np.float32),
+        "tessera.gt": lambda x, y: (x > y).astype(np.float32),
+        "tessera.ge": lambda x, y: (x >= y).astype(np.float32),
+    }[op_name](a, b)
+
+
+def _apple_gpu_dispatch_mpsgraph_binary(op_name: str, operands: list[Any],
+                                        kwargs: dict, np: Any) -> Any:
+    """Elementwise binary via the MPSGraph lane. Broadcasts the two operands on
+    the host, runs the f32 kernel element-wise (comparison ops → f32 0/1 mask).
+    The scalar second-operand form (`add(x, scalar=s)`) is supported."""
+    op = _APPLE_GPU_BINARY_OPCODES[op_name]
+    a = np.asarray(operands[0], dtype=np.float32)
+    if len(operands) >= 2:
+        b = np.asarray(operands[1], dtype=np.float32)
+    else:
+        sc = kwargs.get("scalar", kwargs.get("other"))
+        if sc is None:
+            raise ValueError(f"{op_name!r} needs a second operand or a scalar= kwarg")
+        b = np.asarray(sc, dtype=np.float32)
+    a, b = np.broadcast_arrays(a, b)
+    shape = a.shape
+    n = int(a.size)
+    af = np.ascontiguousarray(a).reshape(-1)
+    bf = np.ascontiguousarray(b).reshape(-1)
+    sym = _apple_gpu_mpsgraph_binary_f32()
+    if sym is not None and n > 0:
+        out = np.empty(n, dtype=np.float32)
+        sym(ctypes.c_int32(op),
+            af.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            bf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int64(n))
+        return out.reshape(shape)
+    return _apple_gpu_binary_numpy(op_name, a, b, np).reshape(shape)
 
 
 def _apple_gpu_rowop_numpy(kind: int, x: Any, eps: float, np: Any) -> Any:

@@ -11074,6 +11074,37 @@ static MPSGraphTensor *mpsg_unary_node(MPSGraph *g, MPSGraphTensor *x, int op) {
     }
     case 10: return [g negativeWithTensor:x name:nil];
     case 11: return [g absoluteWithTensor:x name:nil];
+    // Batch 1 (2026-06-08) — float-output elementwise math (1:1 MPSGraph nodes).
+    case 12: return [g sinWithTensor:x name:nil];
+    case 13: return [g cosWithTensor:x name:nil];
+    case 14: return [g tanWithTensor:x name:nil];
+    case 15: return [g asinWithTensor:x name:nil];
+    case 16: return [g acosWithTensor:x name:nil];
+    case 17: return [g atanWithTensor:x name:nil];
+    case 18: return [g sinhWithTensor:x name:nil];
+    case 19: return [g coshWithTensor:x name:nil];
+    case 20: return [g erfWithTensor:x name:nil];
+    case 21: {  // erfc = 1 - erf(x)
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      return [g subtractionWithPrimaryTensor:one
+                              secondaryTensor:[g erfWithTensor:x name:nil] name:nil];
+    }
+    case 22: {  // expm1 = exp(x) - 1
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      return [g subtractionWithPrimaryTensor:[g exponentWithTensor:x name:nil]
+                              secondaryTensor:one name:nil];
+    }
+    case 23: {  // log1p = log(1 + x)
+      MPSGraphTensor *one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
+      return [g logarithmWithTensor:[g additionWithPrimaryTensor:x
+                                                 secondaryTensor:one name:nil] name:nil];
+    }
+    case 24: return [g reciprocalWithTensor:x name:nil];
+    case 25: return [g signWithTensor:x name:nil];
+    case 26: return [g floorWithTensor:x name:nil];
+    case 27: return [g ceilWithTensor:x name:nil];
+    case 28: return [g roundWithTensor:x name:nil];
+    case 29: return [g truncateWithTensor:x name:nil];
     default: return nil;
   }
 }
@@ -11092,6 +11123,31 @@ static MPSGraphTensor *mpsg_binary_node(MPSGraph *g, MPSGraphTensor *a,
       MPSGraphTensor *sb = [g multiplicationWithPrimaryTensor:b secondaryTensor:s name:nil];
       return [g multiplicationWithPrimaryTensor:a secondaryTensor:sb name:nil];
     }
+    // Batch 1 (2026-06-08) — binary float math.
+    case 7: return [g powerWithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 8: return [g atan2WithPrimaryTensor:a secondaryTensor:b name:nil];
+    case 9: {  // mod = a - b*floor(a/b)  (np.mod floor-mod, not C fmod)
+      MPSGraphTensor *q = [g floorWithTensor:[g divisionWithPrimaryTensor:a
+                                                    secondaryTensor:b name:nil] name:nil];
+      return [g subtractionWithPrimaryTensor:a
+                  secondaryTensor:[g multiplicationWithPrimaryTensor:b
+                                          secondaryTensor:q name:nil] name:nil];
+    }
+    case 10: return [g floorWithTensor:[g divisionWithPrimaryTensor:a
+                                               secondaryTensor:b name:nil] name:nil];
+    // Comparison → f32 0/1 mask (MPSGraph predicate cast to Float32).
+    case 11: return [g castTensor:[g equalWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 12: return [g castTensor:[g notEqualWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 13: return [g castTensor:[g lessThanWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 14: return [g castTensor:[g lessThanOrEqualToWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 15: return [g castTensor:[g greaterThanWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 16: return [g castTensor:[g greaterThanOrEqualToWithPrimaryTensor:a secondaryTensor:b name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
     default: return nil;
   }
 }
@@ -12674,6 +12730,24 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,
       case 9: out[i] = 1.0f / std::sqrt(v); break;
       case 10: out[i] = -v; break;
       case 11: out[i] = std::fabs(v); break;
+      case 12: out[i] = std::sin(v); break;
+      case 13: out[i] = std::cos(v); break;
+      case 14: out[i] = std::tan(v); break;
+      case 15: out[i] = std::asin(v); break;
+      case 16: out[i] = std::acos(v); break;
+      case 17: out[i] = std::atan(v); break;
+      case 18: out[i] = std::sinh(v); break;
+      case 19: out[i] = std::cosh(v); break;
+      case 20: out[i] = std::erf(v); break;
+      case 21: out[i] = std::erfc(v); break;
+      case 22: out[i] = std::expm1(v); break;
+      case 23: out[i] = std::log1p(v); break;
+      case 24: out[i] = 1.0f / v; break;
+      case 25: out[i] = (v > 0.0f) - (v < 0.0f); break;
+      case 26: out[i] = std::floor(v); break;
+      case 27: out[i] = std::ceil(v); break;
+      case 28: out[i] = std::round(v); break;
+      case 29: out[i] = std::trunc(v); break;
       default: out[i] = v; break;
     }
   }
@@ -12704,6 +12778,16 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a
       case 4: out[i] = x > y ? x : y; break;
       case 5: out[i] = x < y ? x : y; break;
       case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
+      case 7: out[i] = std::pow(x, y); break;
+      case 8: out[i] = std::atan2(x, y); break;
+      case 9: out[i] = x - y * std::floor(x / y); break;
+      case 10: out[i] = std::floor(x / y); break;
+      case 11: out[i] = (x == y) ? 1.0f : 0.0f; break;
+      case 12: out[i] = (x != y) ? 1.0f : 0.0f; break;
+      case 13: out[i] = (x < y) ? 1.0f : 0.0f; break;
+      case 14: out[i] = (x <= y) ? 1.0f : 0.0f; break;
+      case 15: out[i] = (x > y) ? 1.0f : 0.0f; break;
+      case 16: out[i] = (x >= y) ? 1.0f : 0.0f; break;
       default: out[i] = x; break;
     }
   }

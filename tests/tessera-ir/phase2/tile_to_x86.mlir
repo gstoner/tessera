@@ -1,29 +1,31 @@
-// XFAIL: *
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=true' %s  | FileCheck %s --check-prefix=AMX
 // RUN: tessera-opt --tessera-tile-to-x86='prefer-amx=false' %s | FileCheck %s --check-prefix=AVX
+// 2026-06: un-XFAIL'd.  Two MLIR-22 syntax drifts: bufferization.to_memref →
+// to_buffer, and func.call now prints in pretty form as `call`.  Also the
+// runtime fn declarations hoist to the top of the module (before the kernels),
+// so the checks match in emitted order rather than via per-func LABEL anchors.
 
-// ── AMX: matmul 16x32xbf16 @ 32x16xbf16 → call AMX kernel ────────────────
-// AMX-LABEL:  func.func @tile_gemm_bf16
+// (AMX path) matmul 16x32xbf16 @ 32x16xbf16 -> AMX kernel call
 // AMX:        func.func private @tessera_x86_amx_gemm_bf16
-// AMX:        bufferization.to_memref
+// AMX:        func.func @tile_gemm_bf16
+// AMX:        bufferization.to_buffer
 // AMX:        memref.alloc
 // AMX:        memref.extract_aligned_pointer_as_index
 // AMX:        arith.index_cast
-// AMX:        func.call @tessera_x86_amx_gemm_bf16
+// AMX:        call @tessera_x86_amx_gemm_bf16
 // AMX:        bufferization.to_tensor
 // AMX-NOT:    tessera.matmul
 
-// ── AVX: same shape, AVX-512 kernel selected ──────────────────────────────
-// AVX-LABEL:  func.func @tile_gemm_bf16
-// AVX:        func.func private @tessera_x86_avx512_gemm_bf16
-// AVX:        func.call @tessera_x86_avx512_gemm_bf16
-// AVX-NOT:    tessera.matmul
+// (AMX path) fused epilogue: matmul + bias + gelu -> GEMM + epilogue calls
+// AMX:        func.func @fused_epilogue_gelu
+// AMX:        call @tessera_x86_amx_gemm_bf16
+// AMX:        call @tessera_x86_epilogue_bias_gelu_fp32
 
-// ── Fused epilogue: matmul + bias + gelu → GEMM + epilogue calls ──────────
-// AMX-LABEL:  func.func @fused_epilogue_gelu
-// AMX:        func.call @tessera_x86_amx_gemm_bf16
-// AMX:        func.func private @tessera_x86_epilogue_bias_gelu_fp32
-// AMX:        func.call @tessera_x86_epilogue_bias_gelu_fp32
+// (AVX path) same shape, AVX-512 kernel selected
+// AVX:        func.func private @tessera_x86_avx512_gemm_bf16
+// AVX:        func.func @tile_gemm_bf16
+// AVX:        call @tessera_x86_avx512_gemm_bf16
+// AVX-NOT:    tessera.matmul
 
 module attributes {tessera.ir.version = "1.0"} {
 

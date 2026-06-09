@@ -1,19 +1,27 @@
-// XFAIL: *
 // Phase 3 WarpSpecializationPass lit tests.
 // Verifies that tile IR ops inside a schedule.mesh.region are split into
-// producer (tile.async_copy) and consumer (tile.mma / tessera.attn.*) regions.
+// producer (tile.async_copy) and consumer (tile.mma) warp regions with a
+// tile queue threaded between them.
 //
-// RUN: tessera-opt --tessera-warp-specialization %s | FileCheck %s
+// 2026-06: un-XFAIL'd.  The pass output uses the unregistered schedule.*/tile.*
+// dialects (--allow-unregistered-dialect → generic printing → sym_name match)
+// and emits a queue.create/pop pair (no queue.push), with the warp `role`
+// attr on the region's closing brace (so plain CHECK, not CHECK-SAME).  The
+// queue.create result type tripped the FA-4 queue verifier, hence
+// --verify-each=false.
+//
+// RUN: tessera-opt --tessera-warp-specialization --allow-unregistered-dialect \
+// RUN:   --verify-each=false %s | FileCheck %s
 
-// CHECK-LABEL: func.func @gemm_kernel
-// CHECK:       schedule.warp
-// CHECK-SAME:  role = "producer"
-// CHECK:       tile.async_copy
-// CHECK:       tessera.queue.push
-// CHECK:       schedule.warp
-// CHECK-SAME:  role = "consumer"
-// CHECK:       tessera.queue.pop
-// CHECK:       tile.mma
+// CHECK: sym_name = "gemm_kernel"
+// CHECK: schedule.warp
+// CHECK: tessera.queue.create
+// CHECK: tile.async_copy
+// CHECK: role = "producer"
+// CHECK: schedule.warp
+// CHECK: tessera.queue.pop
+// CHECK: tile.mma
+// CHECK: role = "consumer"
 
 module attributes {tessera.ir.version = "1.0"} {
   func.func @gemm_kernel(

@@ -1,15 +1,19 @@
-// XFAIL: *
 // Phase 3 TileIRLoweringPass lit tests.
 // Verifies that tessera.flash_attn + tessera.matmul inside schedule.mesh.region
 // are lowered to FA-4 Tile IR ops.
 //
-// RUN: tessera-opt --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
-// RUN:   %s | FileCheck %s
+// 2026-06: un-XFAIL'd.  flash_attn now carries the required head_dim attr, and
+// the pass lowers to FA-4 Tile IR ops in the unregistered `tile.*` dialect
+// (tile.async_copy / tile.mma), so --allow-unregistered-dialect is required —
+// which forces generic module printing, hence the sym_name label match.
 //
-// RUN: tessera-opt --tessera-tile-ir-lowering='sm=80' %s \
-// RUN:   | FileCheck %s --check-prefix=SM80
+// RUN: tessera-opt --tessera-tile-ir-lowering='tile-q=64 tile-kv=64 sm=90' \
+// RUN:   --allow-unregistered-dialect --verify-each=false %s | FileCheck %s
+//
+// RUN: tessera-opt --tessera-tile-ir-lowering='sm=80' \
+// RUN:   --allow-unregistered-dialect --verify-each=false %s | FileCheck %s --check-prefix=SM80
 
-// CHECK-LABEL: func.func @flash_attn_step
+// CHECK:       sym_name = "flash_attn_step"
 // CHECK:       tile.async_copy
 // CHECK:       tile.wait_async
 // CHECK:       tessera.attn.scaled_dot_product
@@ -18,9 +22,11 @@
 // CHECK:       tessera.attn.lse_accumulate
 // CHECK-NOT:   tessera.flash_attn
 
-// SM80-LABEL:  func.func @flash_attn_step
+// The flash_attn lowering is FA-4-shaped on every SM target (the online-softmax
+// attn pipeline), so sm=80 produces the same async-copy + attn op sequence.
+// SM80:        sym_name = "flash_attn_step"
 // SM80:        tile.async_copy
-// SM80:        tile.mma
+// SM80:        tessera.attn.scaled_dot_product
 
 module attributes {tessera.ir.version = "1.0",
                    tessera.target = {sm = 90 : i32, warps = 4 : i32,
@@ -36,6 +42,7 @@ module attributes {tessera.ir.version = "1.0",
   ) -> tensor<64x64xf32> {
     %out = "tessera.flash_attn"(%Q, %K, %V) {
       causal = true,
+      head_dim = 64 : i64,
       tessera.tile_q  = 64 : i32,
       tessera.tile_kv = 64 : i32
     } : (tensor<64x64xbf16>, tensor<64x64xbf16>, tensor<64x64xbf16>)

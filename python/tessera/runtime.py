@@ -2260,6 +2260,10 @@ _APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
     "tessera.loss.cross_entropy",
     "tessera.loss.kl_divergence", "tessera.loss.js_divergence",
 })
+# Group/instance/weight norm composed from the rowop (layer_norm) + reduce lanes.
+_APPLE_GPU_NORM_COMPOSE_OPS = frozenset({
+    "tessera.group_norm", "tessera.instance_norm", "tessera.weight_norm",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2343,6 +2347,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
+    | _APPLE_GPU_NORM_COMPOSE_OPS
 )
 
 
@@ -2556,6 +2561,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_LOSS_COMPOSE_OPS:
             values[str(result)] = _apple_gpu_dispatch_loss(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_NORM_COMPOSE_OPS:
+            values[str(result)] = _apple_gpu_dispatch_norm(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -7631,6 +7643,71 @@ def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict,
         kl_qm = sum_last(bb("mul", c, bb("sub", u("log", clamp_lo(c)), lm)))
         return reduce_all(bs("mul", bb("add", kl_pm, kl_qm), 0.5))
     raise ValueError(f"apple_gpu loss dispatcher has no recipe for {op_name!r}")
+
+
+def _apple_gpu_dispatch_norm(op_name: str, operands: list[Any], kwargs: dict,
+                             np: Any) -> Any:
+    """group_norm / instance_norm / weight_norm composed from the GPU rowop
+    (layer_norm) + reduce lanes.  The normalized axes are folded to the last
+    axis so the MPSGraph layer_norm row-op does the mean/var reduction on the
+    GPU; the optional per-channel affine is a GPU mul/add with a materialized
+    broadcast weight.  weight_norm uses the GPU sum-reduce lane for ||w||."""
+    short = str(op_name)
+    x = np.asarray(operands[0], np.float32)
+    weight = operands[1] if len(operands) > 1 else kwargs.get("weight")
+    bias = operands[2] if len(operands) > 2 else kwargs.get("bias")
+    eps = float(kwargs.get("eps", 1e-5))
+
+    def rownorm(folded: Any) -> Any:
+        return np.asarray(
+            _apple_gpu_dispatch_rowop("tessera.layer_norm", [folded], {"eps": eps}, np),
+            np.float32)
+
+    def affine(y: Any) -> Any:
+        # weight/bias are per-channel [C]; broadcast over [N, C, *spatial].
+        c = int(x.shape[1])
+        shp = (1, c) + (1,) * (x.ndim - 2)
+        if weight is not None:
+            w = np.broadcast_to(np.asarray(weight, np.float32).reshape(shp), x.shape)
+            y = _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.mul", [np.ascontiguousarray(y), np.ascontiguousarray(w)], {}, np)
+        if bias is not None:
+            b = np.broadcast_to(np.asarray(bias, np.float32).reshape(shp), x.shape)
+            y = _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.add", [np.ascontiguousarray(np.asarray(y, np.float32)),
+                                np.ascontiguousarray(b)], {}, np)
+        return np.asarray(y, np.float32)
+
+    if short == "tessera.instance_norm":
+        if x.ndim < 3:
+            raise ValueError(f"instance_norm expects rank >= 3; got {x.shape}")
+        n, c = x.shape[:2]
+        folded = np.ascontiguousarray(x.reshape(n * c, -1))
+        y = rownorm(folded).reshape(x.shape)
+        return affine(y)
+    if short == "tessera.group_norm":
+        num_groups = int(kwargs.get("num_groups", operands[1] if len(operands) > 1 else 1))
+        n, c = x.shape[:2]
+        if c % num_groups != 0:
+            raise ValueError(f"channels {c} must be divisible by num_groups {num_groups}")
+        folded = np.ascontiguousarray(x.reshape(n * num_groups, -1))
+        y = rownorm(folded).reshape(x.shape)
+        return affine(y)
+    if short == "tessera.weight_norm":
+        axis = int(kwargs.get("axis", 0))
+        axis = axis if axis >= 0 else x.ndim + axis
+        # Move `axis` to front, fold the rest to one column dim, sum-reduce w**2.
+        moved = np.ascontiguousarray(np.moveaxis(x, axis, 0))
+        rows = int(moved.shape[0])
+        flat = moved.reshape(rows, -1)
+        sq = _apple_gpu_dispatch_mpsgraph_binary(
+            "tessera.mul", [np.ascontiguousarray(flat), np.ascontiguousarray(flat)], {}, np)
+        ss = np.asarray(_apple_gpu_dispatch_reduce(
+            "tessera.reduce", [np.asarray(sq, np.float32)], {"axis": -1}, np), np.float32)
+        norm = np.sqrt(ss.reshape(rows, 1) + float(kwargs.get("eps", 1e-12)))
+        out = (flat / norm).reshape(moved.shape)
+        return np.moveaxis(out, 0, axis)
+    raise ValueError(f"apple_gpu norm dispatcher has no recipe for {op_name!r}")
 
 
 def _apple_gpu_rowop_numpy(kind: int, x: Any, eps: float, np: Any) -> Any:

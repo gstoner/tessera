@@ -1350,6 +1350,9 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `qr(A)` | `(array) → tuple` | `pure` | `np.linalg.qr` reference |
 | `svd(A)` | `(array) → tuple` | `pure` | `np.linalg.svd(..., full_matrices=False)` reference |
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |
+| `group_norm(x, num_groups, weight=None, bias=None, eps=1e-5)` | `(array) → array` | `pure` | GroupNorm; Graph IR op `tessera.group_norm`; apple_gpu folds the normalized axes to last + runs the layer_norm row-op on GPU |
+| `instance_norm(x, weight=None, bias=None, eps=1e-5)` | `(array) → array` | `pure` | InstanceNorm; Graph IR op `tessera.instance_norm`; apple_gpu composes it from the rowop + reduce lanes |
+| `weight_norm(weight, axis=0, eps=1e-12)` | `(array) → array` | `pure` | WeightNorm; Graph IR op `tessera.weight_norm`; apple_gpu uses the GPU sum-reduce lane for ‖w‖ |
 | `softmax(x, axis=-1)` | `(array) → array` | `pure` | NumPy softmax |
 | `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
 | `reduce(x, op="sum", axis=None, keepdims=False)` | `(array) → array` | `pure` | NumPy sum reduction; non-sum reductions planned |

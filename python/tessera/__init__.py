@@ -3225,6 +3225,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     gqa_attention_ref = _lazy_module_fn("nn.functional", "gqa_attention")
     mqa_attention_ref = _lazy_module_fn("nn.functional", "mqa_attention")
     mla_decode_ref = _lazy_module_fn("nn.functional", "mla_decode")
+    group_norm_ref = _lazy_module_fn("nn.functional", "group_norm")
+    instance_norm_ref = _lazy_module_fn("nn.functional", "instance_norm")
+    weight_norm_ref = _lazy_module_fn("nn.functional", "weight_norm")
     fake_quantize_ref = _lazy_module_fn("quantization", "fake_quantize")
     sgd_ref = _lazy_module_fn("optim", "sgd")
     mse_loss_ref = _lazy_module_fn("losses", "mse_loss")
@@ -3491,6 +3494,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "binary_cross_entropy_loss": binary_cross_entropy_loss_ref,
         "kl_divergence": kl_divergence_ref,
         "js_divergence": js_divergence_ref,
+        "group_norm": group_norm_ref,
+        "instance_norm": instance_norm_ref,
+        "weight_norm": weight_norm_ref,
         "asymmetric_bce": asymmetric_bce_ref,
         "z_loss": z_loss_ref,
         "load_balance_loss": load_balance_loss_ref,
@@ -3845,6 +3851,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         binary_cross_entropy_loss=binary_cross_entropy_loss_ref,
         kl_divergence=kl_divergence_ref,
         js_divergence=js_divergence_ref,
+        group_norm=group_norm_ref,
+        instance_norm=instance_norm_ref,
+        weight_norm=weight_norm_ref,
         asymmetric_bce=asymmetric_bce_ref,
         z_loss=z_loss_ref,
         load_balance_loss=load_balance_loss_ref,

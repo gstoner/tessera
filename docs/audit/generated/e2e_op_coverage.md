@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 34 |
-| ``runnable_reference`` | 256 |
+| ``runnable_reference`` | 259 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **292** |
+| **total** | **295** |
 
 ## complete (34)
 
@@ -70,7 +70,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (256)
+## runnable_reference (259)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -233,9 +233,12 @@ each row into a single E2E tier.
 | ``moe`` | moe | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
+| ``group_norm`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``instance_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``abs`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``absolute`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | reference | ready | none |

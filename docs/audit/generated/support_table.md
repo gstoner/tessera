@@ -205,9 +205,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `moe` | moe | public | public | registered | complete | partial | reference | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
+| `group_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `instance_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `rmsnorm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `weight_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
 | `ceil` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
@@ -331,7 +334,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
+| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | position_encoding | 2 | PPGCpRN· PPGCpRN· |
 | projection | 1 | PPGCpRN· |

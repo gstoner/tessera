@@ -124,6 +124,7 @@ ge,pure,,1,0,0
 gelu,pure,pure,1,0,0
 gemm,pure,pure,1,1,0
 gqa_attention,state,,1,1,1
+group_norm,pure,,1,1,0
 grouped_gemm,pure,,1,0,0
 grpo_policy_loss,pure,,1,0,0
 gt,pure,,1,0,0
@@ -133,6 +134,7 @@ ifft,pure,pure,1,1,0
 implicit_score_matching_loss,pure,,1,0,0
 index_select,pure,,1,0,0
 index_update,pure,,1,0,0
+instance_norm,pure,,1,1,0
 irfft,pure,pure,1,1,0
 is_concyclic,pure,,1,0,0
 isfinite,pure,,1,0,0
@@ -283,5 +285,6 @@ unsqueeze,pure,,1,0,0
 var,pure,,1,0,0
 view,pure,,1,0,0
 vlb_loss,pure,,1,0,0
+weight_norm,pure,,1,1,0
 where,pure,,1,0,0
 z_loss,pure,,1,0,0

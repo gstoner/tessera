@@ -189,9 +189,12 @@ linear_general,model_layer,public,public,registered,complete,partial,reference,r
 moe,moe,public,public,registered,complete,partial,reference,ready,none
 moe_combine,moe_transport,public,public,registered,complete,partial,reference,ready,none
 moe_dispatch,moe_transport,public,public,registered,complete,partial,reference,ready,none
+group_norm,normalization,public,public,registered,complete,partial,reference,ready,none
+instance_norm,normalization,public,public,registered,complete,partial,reference,ready,none
 layer_norm,normalization,public,public,registered,complete,partial,reference,ready,none
 rmsnorm,normalization,public,public,registered,complete,partial,reference,ready,none
 rmsnorm_safe,normalization,public,public,registered,complete,partial,reference,ready,none
+weight_norm,normalization,public,public,registered,complete,partial,reference,ready,none
 abs,numeric_helper,public,public,registered,complete,partial,reference,ready,none
 absolute,numeric_helper,public,public,registered,complete,partial,reference,ready,none
 ceil,numeric_helper,public,public,registered,complete,partial,reference,ready,none

@@ -138,6 +138,11 @@ _SPECS = [
     OpSpec("tile_view", "tessera.tile_view", 1, 1, lowering="layout_transform"),
     OpSpec("rmsnorm", "tessera.rmsnorm", 1, 1, lowering="normalization"),
     OpSpec("rmsnorm_safe", "tessera.rmsnorm_safe", 1, 1, lowering="normalization"),
+    # Group/instance/weight norm — reduce-then-normalize over a reshaped view, so
+    # apple_gpu composes them from the rowop (layer_norm) + reduce opcode lanes.
+    OpSpec("group_norm", "tessera.group_norm", 1, 3, lowering="normalization"),
+    OpSpec("instance_norm", "tessera.instance_norm", 1, 3, lowering="normalization"),
+    OpSpec("weight_norm", "tessera.weight_norm", 1, 1, lowering="normalization"),
     OpSpec("rope", "tessera.rope", 2, 2, lowering="rotary_embedding"),
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),

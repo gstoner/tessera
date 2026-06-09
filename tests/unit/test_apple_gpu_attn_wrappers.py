@@ -103,6 +103,22 @@ def test_mha_jit_metal_runtime():
 
 
 @gpu
+@pytest.mark.parametrize("causal", [False, True])
+def test_mla_decode_fused(causal):
+    B, S, Dx, Dc, Dm = 2, 12, 16, 8, 16
+    rng = np.random.default_rng(1 if causal else 2)
+    x = rng.standard_normal((B, S, Dx)).astype(np.float32)
+    w_dkv = rng.standard_normal((Dx, Dc)).astype(np.float32)
+    w_uk = rng.standard_normal((Dc, Dm)).astype(np.float32)
+    w_uv = rng.standard_normal((Dc, Dm)).astype(np.float32)
+    q = rng.standard_normal((B, S, Dm)).astype(np.float32)
+    out = R._apple_gpu_dispatch_attn_wrapper(
+        "tessera.mla_decode_fused", [x, w_dkv, w_uk, w_uv, q], {"causal": causal}, np)
+    ref = ts.ops.mla_decode_fused(x, w_dkv, w_uk, w_uv, q, causal=causal)
+    np.testing.assert_allclose(np.asarray(out), np.asarray(ref), atol=1e-3)
+
+
+@gpu
 def test_mla_decode_jit_metal_runtime():
     B, H, S, D = 2, 4, 16, 32
     Q, K, V = _r(B, H, S, D, seed=1), _r(B, H, S, D, seed=2), _r(B, H, S, D, seed=3)

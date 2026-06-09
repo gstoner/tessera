@@ -554,7 +554,8 @@ _APPLE_GPU_NORM_COMPOSE_OPS: frozenset[str] = frozenset({
 # Standard attention family (Sub-sprint A) routed through the proven GQA kernel.
 _APPLE_GPU_ATTN_WRAPPER_OPS: frozenset[str] = frozenset({
     "tessera.multi_head_attention", "tessera.gqa_attention",
-    "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
+    "tessera.mqa_attention", "tessera.mla_decode", "tessera.mla_decode_fused",
+    "tessera.gated_attention",
 })
 # Linear / recurrent attention family (Sub-sprint B) — quadratic-parallel form.
 _APPLE_GPU_LINEAR_ATTN_OPS: frozenset[str] = frozenset({
@@ -572,6 +573,11 @@ _APPLE_GPU_DELTA_ATTN_OPS: frozenset[str] = frozenset({
 })
 # hybrid_attention — policy wrapper over the now-proven delegates.
 _APPLE_GPU_HYBRID_ATTN_OPS: frozenset[str] = frozenset({"tessera.hybrid_attention"})
+# Data-dependent NSA attention (Sub-sprint E) — host select/gather + GPU attention.
+_APPLE_GPU_SPARSE_ATTN_OPS: frozenset[str] = frozenset({
+    "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
+    "tessera.attn_local_window_2d",
+})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
@@ -582,6 +588,7 @@ _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
     | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
+    | _APPLE_GPU_SPARSE_ATTN_OPS
 )
 
 

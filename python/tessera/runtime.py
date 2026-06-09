@@ -2268,7 +2268,8 @@ _APPLE_GPU_NORM_COMPOSE_OPS = frozenset({
 # flash-attention kernel (multi_head/gqa/mqa/mla_decode/gated_attention).
 _APPLE_GPU_ATTN_WRAPPER_OPS = frozenset({
     "tessera.multi_head_attention", "tessera.gqa_attention",
-    "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
+    "tessera.mqa_attention", "tessera.mla_decode", "tessera.mla_decode_fused",
+    "tessera.gated_attention",
 })
 # Linear / recurrent attention family (Sub-sprint B) via the quadratic-parallel
 # form (φ(Q)φ(K)ᵀ ⊙ causal[⊙decay]) @ V — two GPU bmms + a mask multiply.
@@ -2289,6 +2290,11 @@ _APPLE_GPU_DELTA_ATTN_OPS = frozenset({
 })
 # hybrid_attention — policy wrapper routing to the now-proven delegates.
 _APPLE_GPU_HYBRID_ATTN_OPS = frozenset({"tessera.hybrid_attention"})
+# Data-dependent NSA attention (Sub-sprint E) — host select/gather + GPU attention.
+_APPLE_GPU_SPARSE_ATTN_OPS = frozenset({
+    "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
+    "tessera.attn_local_window_2d",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2375,6 +2381,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
     | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
+    | _APPLE_GPU_SPARSE_ATTN_OPS
 )
 
 
@@ -2630,6 +2637,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_HYBRID_ATTN_OPS:
             values[str(result)] = _apple_gpu_dispatch_hybrid_attn(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_SPARSE_ATTN_OPS:
+            values[str(result)] = _apple_gpu_dispatch_sparse_attn(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -5934,6 +5948,34 @@ def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
         return _apple_gpu_dispatch_gqa(
             Q, K, V, int(Q.shape[1]), int(K.shape[1]), np, scale=scale, causal=causal)
 
+    if short == "tessera.mla_decode_fused":
+        # operands = [x, w_dkv, w_uk, w_uv, q]; c = x@w_dkv; K = c@w_uk;
+        # V = c@w_uv; O = softmax(qKᵀ)@V.  Projections via GPU bmm (broadcast
+        # weight), attention via the GQA kernel.
+        x = np.asarray(operands[0])
+        w_dkv = np.ascontiguousarray(np.asarray(operands[1], np.float32))
+        w_uk = np.ascontiguousarray(np.asarray(operands[2], np.float32))
+        w_uv = np.ascontiguousarray(np.asarray(operands[3], np.float32))
+        q = np.asarray(operands[4])
+        if x.ndim != 3 or q.ndim != 3:
+            return None
+        c = _apple_gpu_dispatch_bmm(np.ascontiguousarray(x.astype(np.float32)), w_dkv, np)
+        if c is None:
+            return None
+        c = np.ascontiguousarray(np.asarray(c, np.float32))
+        K = _apple_gpu_dispatch_bmm(c, w_uk, np)
+        V = _apple_gpu_dispatch_bmm(c, w_uv, np)
+        if K is None or V is None:
+            return None
+        out = _apple_gpu_dispatch_gqa(
+            np.ascontiguousarray(q.astype(np.float32)),
+            np.ascontiguousarray(np.asarray(K, np.float32)),
+            np.ascontiguousarray(np.asarray(V, np.float32)),
+            1, 1, np, scale=scale, causal=causal)
+        if out is None:
+            return None
+        return np.asarray(out).astype(np.result_type(x, q))
+
     if short == "tessera.gated_attention":
         K = np.asarray(operands[1])
         V = np.asarray(operands[2])
@@ -6173,6 +6215,184 @@ def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any],
                                 np.ascontiguousarray(np.broadcast_to(g, O.shape))], {}, np),
             np.float32)
     return O.astype(out_dtype)
+
+
+def _apple_gpu_gathered_attention(Qq: Any, K_sel: Any, V_sel: Any,
+                                  scale: float, np: Any) -> Any:
+    """Per-row dense attention over a host-gathered key/value set on the GPU.
+    Qq is [batch, D] (one query per row); K_sel / V_sel are [batch, T, D] —
+    the (data-dependent) gather already happened on the host.  Runs
+    softmax(Qq·K_selᵀ·scale)@V_sel via two GPU bmms + the GPU softmax lane.
+    Returns [batch, Dv] or None on an unsupported shape."""
+    batch, D = int(Qq.shape[0]), int(Qq.shape[1])
+    T = int(K_sel.shape[1])
+    Dv = int(V_sel.shape[2])
+    Qb = np.ascontiguousarray((Qq.astype(np.float32) * np.float32(scale)).reshape(batch, 1, D))
+    KsT = np.ascontiguousarray(np.swapaxes(K_sel.astype(np.float32), -1, -2))  # [batch,D,T]
+    A = _apple_gpu_dispatch_bmm(Qb, KsT, np)                                    # [batch,1,T]
+    if A is None:
+        return None
+    A = np.ascontiguousarray(np.asarray(A, np.float32).reshape(batch, T))
+    P = _apple_gpu_dispatch_softmax("tessera.softmax", [A], {}, np)
+    P = np.ascontiguousarray(np.asarray(P, np.float32).reshape(batch, 1, T))
+    O = _apple_gpu_dispatch_bmm(P, np.ascontiguousarray(V_sel.astype(np.float32)), np)  # [batch,1,Dv]
+    if O is None:
+        return None
+    return np.asarray(O, np.float32).reshape(batch, Dv)
+
+
+def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
+                                    kwargs: dict, np: Any) -> Any:
+    """Data-dependent NSA attention (Sub-sprint E).  The selection/gather is
+    data-dependent and runs on the host (consistent with how argmax/argmin fall
+    to host); the attention FLOPs run on the GPU.
+
+      * attn_top_k_blocks   — host argpartition top-k block select + gather →
+                              GPU per-query dense attention.
+      * deepseek_sparse_attention — weighted blend of the sliding-window (GPU),
+                              compressed-block (GPU), and top-k (GPU) branches.
+      * attn_local_window_2d — host im2col gather of the 2D neighbourhood →
+                              GPU per-position masked dense attention.
+    Returns None on unsupported shapes."""
+    import math as _math
+    short = str(op_name)
+
+    if short == "tessera.attn_top_k_blocks":
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        scores = np.asarray(operands[3] if len(operands) > 3 else kwargs["scores"])
+        top_k = int(kwargs["top_k"])
+        block_size = int(kwargs["block_size"])
+        causal = bool(kwargs.get("causal", True))
+        if Q.ndim != 4:
+            return None
+        B, H, S_q, D = Q.shape
+        S_k = int(K.shape[2])
+        if S_k % block_size != 0:
+            return None
+        num_blocks = S_k // block_size
+        scale = 1.0 / _math.sqrt(D)
+        # Host: causal block mask + top-k block selection (data-dependent).
+        scores_m = scores.astype(np.float64).copy()
+        if causal:
+            q_block = np.arange(S_q) // block_size
+            future = np.arange(num_blocks)[None, None, None, :] > q_block[None, None, :, None]
+            scores_m = np.where(future, -np.inf, scores_m)
+        topk_idx = np.sort(np.argpartition(-scores_m, top_k - 1, axis=-1)[..., :top_k], axis=-1)
+        # Host: gather the top_k blocks' tokens → [B,H,S_q, top_k*block_size, D].
+        TK = top_k * block_size
+        Dv = int(V.shape[-1])
+        K_sel = np.empty((B, H, S_q, TK, D), np.float32)
+        V_sel = np.empty((B, H, S_q, TK, Dv), np.float32)
+        for b in range(B):
+            for h in range(H):
+                for sq in range(S_q):
+                    cols = []
+                    vcols = []
+                    for blk in topk_idx[b, h, sq]:
+                        st = int(blk) * block_size
+                        cols.append(K[b, h, st:st + block_size, :])
+                        vcols.append(V[b, h, st:st + block_size, :])
+                    K_sel[b, h, sq] = np.concatenate(cols, axis=0)
+                    V_sel[b, h, sq] = np.concatenate(vcols, axis=0)
+        batch = B * H * S_q
+        O = _apple_gpu_gathered_attention(
+            Q.reshape(batch, D), K_sel.reshape(batch, TK, D),
+            V_sel.reshape(batch, TK, Dv), scale, np)
+        if O is None:
+            return None
+        return O.reshape(B, H, S_q, Dv).astype(np.result_type(Q, K, V))
+
+    if short == "tessera.deepseek_sparse_attention":
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        gate_logits = operands[3] if len(operands) > 3 else kwargs.get("gate_logits")
+        window_size = int(kwargs["window_size"])
+        block_size = int(kwargs["block_size"])
+        top_k = int(kwargs["top_k"])
+        causal = bool(kwargs.get("causal", True))
+        if Q.ndim != 4 or int(K.shape[2]) % block_size != 0:
+            return None
+        # Compressed-block summaries (mean pool — host, cheap data reduction).
+        B, H, S, D = K.shape
+        nb = S // block_size
+        K_c = K.astype(np.float32).reshape(B, H, nb, block_size, D).mean(axis=-2)
+        V_c = V.astype(np.float32).reshape(B, H, nb, block_size, V.shape[-1]).mean(axis=-2)
+        br_sliding = _apple_gpu_dispatch_masked_attn(
+            "tessera.attn_sliding_window", [Q, K, V],
+            {"window_size": window_size, "causal": causal}, np)
+        br_compressed = _apple_gpu_dispatch_masked_attn(
+            "tessera.attn_compressed_blocks", [Q, K_c, V_c], {}, np)
+        scores = np.matmul(Q.astype(np.float32), np.swapaxes(K_c, -1, -2))
+        br_topk = _apple_gpu_dispatch_sparse_attn(
+            "tessera.attn_top_k_blocks", [Q, K, V, scores],
+            {"top_k": top_k, "block_size": block_size, "causal": causal}, np)
+        if br_sliding is None or br_compressed is None or br_topk is None:
+            return None
+        br = [np.asarray(br_sliding, np.float64), np.asarray(br_compressed, np.float64),
+              np.asarray(br_topk, np.float64)]
+        if gate_logits is None:
+            w = np.full(br[0].shape[:-1] + (3,), 1.0 / 3.0, np.float64)
+        else:
+            lg = np.asarray(gate_logits, np.float64)
+            e = np.exp(lg - lg.max(axis=-1, keepdims=True))
+            w = e / e.sum(axis=-1, keepdims=True)
+        out = br[0] * w[..., 0:1] + br[1] * w[..., 1:2] + br[2] * w[..., 2:3]
+        return out.astype(np.result_type(Q, K, V))
+
+    if short == "tessera.attn_local_window_2d":
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        window = kwargs.get("window", (1, 1))
+        rh, rw = int(window[0]), int(window[1])
+        if Q.ndim != 5 or rh < 0 or rw < 0:
+            return None
+        B, H, Hq, Wq, D = Q.shape
+        scale = 1.0 / _math.sqrt(D)
+        rH, rW = 2 * rh + 1, 2 * rw + 1
+        # Host im2col gather of the 2D neighbourhood (structured, data-independent).
+        h_raw = np.arange(Hq)[:, None] + (np.arange(rH) - rh)[None, :]
+        w_raw = np.arange(Wq)[:, None] + (np.arange(rW) - rw)[None, :]
+        h_mask = (h_raw >= 0) & (h_raw < Hq)
+        w_mask = (w_raw >= 0) & (w_raw < Wq)
+        h_idx = np.clip(h_raw, 0, Hq - 1)
+        w_idx = np.clip(w_raw, 0, Wq - 1)
+        patch_mask = h_mask[:, None, :, None] & w_mask[None, :, None, :]   # [Hq,Wq,rH,rW]
+        K_idx = K[:, :, h_idx][:, :, :, :, w_idx]
+        K_patch = np.transpose(K_idx, (0, 1, 2, 4, 3, 5, 6))
+        V_idx = V[:, :, h_idx][:, :, :, :, w_idx]
+        V_patch = np.transpose(V_idx, (0, 1, 2, 4, 3, 5, 6))
+        T = rH * rW
+        K_flat = np.ascontiguousarray(K_patch.reshape(B, H, Hq, Wq, T, D))
+        V_flat = np.ascontiguousarray(V_patch.reshape(B, H, Hq, Wq, T, V.shape[-1]))
+        mask_flat = patch_mask.reshape(Hq, Wq, T)                          # bool
+        # GPU per-position attention with an additive out-of-bounds mask.
+        batch = B * H * Hq * Wq
+        Dv = int(V.shape[-1])
+        Qb = np.ascontiguousarray(
+            (Q.astype(np.float32) * np.float32(scale)).reshape(batch, 1, D))
+        KsT = np.ascontiguousarray(np.swapaxes(K_flat.astype(np.float32), -1, -2).reshape(batch, D, T))
+        A = _apple_gpu_dispatch_bmm(Qb, KsT, np)                           # [batch,1,T]
+        if A is None:
+            return None
+        A = np.asarray(A, np.float32).reshape(B, H, Hq, Wq, T)
+        bias = np.where(mask_flat[None, None], np.float32(0.0), np.float32(-1e30))
+        bias = np.ascontiguousarray(np.broadcast_to(bias, (B, H, Hq, Wq, T)))
+        A = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.add", [np.ascontiguousarray(A), bias], {}, np), np.float32)
+        P = _apple_gpu_dispatch_softmax(
+            "tessera.softmax", [np.ascontiguousarray(A.reshape(batch, T))], {}, np)
+        P = np.ascontiguousarray(np.asarray(P, np.float32).reshape(batch, 1, T))
+        O = _apple_gpu_dispatch_bmm(P, np.ascontiguousarray(V_flat.reshape(batch, T, Dv)), np)
+        if O is None:
+            return None
+        return np.asarray(O, np.float32).reshape(B, H, Hq, Wq, Dv).astype(np.result_type(Q, K, V))
+
+    return None
 
 
 def _apple_gpu_dispatch_masked_attn(op_name: str, operands: list[Any],

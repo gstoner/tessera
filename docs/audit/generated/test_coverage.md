@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **444** ops in `primitive_coverage` registry.
-- **2040** total Python-test references, **500** total lit-fixture references.
+- **2054** total Python-test references, **501** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
 - **206** ops have ≤1 reference ("thinly tested").
 - **42** ops have ≥10 references ("well tested").
@@ -25,8 +25,8 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `silu` |   63 |    2 |   65 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
-| `add` |   57 |    2 |   59 |   7 | `bf16`, `f16`, `f32`, `fp32` |
-| `attn_local_window_2d` |   31 |   25 |   56 |   1 | `fp32` |
+| `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
+| `add` |   57 |    1 |   58 |   7 | `bf16`, `f16`, `f32`, `fp32` |
 | `rmsnorm` |   41 |    9 |   50 |   1 | `bf16`, `fp32` |
 | `cholesky` |   14 |   30 |   44 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |

@@ -537,12 +537,21 @@ _APPLE_GPU_EBM_LOSS_OPS: frozenset[str] = frozenset({
     "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
     "tessera.loss.denoising_score_matching",
 })
+# Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
+# lanes (per-element recipe + reduce); routed by runtime._apple_gpu_dispatch_loss.
+_APPLE_GPU_LOSS_COMPOSE_OPS: frozenset[str] = frozenset({
+    "tessera.loss.mse", "tessera.loss.mae", "tessera.loss.huber",
+    "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
+    "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
+    "tessera.loss.cross_entropy",
+})
+
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
-    | _APPLE_GPU_EBM_LOSS_OPS
+    | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
 )
 
 

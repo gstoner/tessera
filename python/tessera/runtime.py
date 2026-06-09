@@ -2251,6 +2251,14 @@ _APPLE_GPU_ROWOP_KINDS = {
 # Batch 2 (2026-06-08) — composed on the GPU binary lane (no dedicated kernel):
 # clamp/clip = max(min(x,hi),lo); where = c*a + (1-c)*b.
 _APPLE_GPU_COMPOSE_OPS = frozenset({"tessera.clamp", "tessera.clip", "tessera.where"})
+# Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
+# lanes (per-element recipe + reduce). One dispatcher, no dedicated kernels.
+_APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
+    "tessera.loss.mse", "tessera.loss.mae", "tessera.loss.huber",
+    "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
+    "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
+    "tessera.loss.cross_entropy",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2333,7 +2341,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
-    | _APPLE_GPU_EBM_LOSS_OPS
+    | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
 )
 
 
@@ -2543,6 +2551,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         elif op_name == "tessera.where":
             values[str(result)] = _apple_gpu_dispatch_where(
                 [_as_numpy(values[name]) for name in operand_names],
+                np,
+            )
+        elif op_name in _APPLE_GPU_LOSS_COMPOSE_OPS:
+            values[str(result)] = _apple_gpu_dispatch_loss(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
                 np,
             )
         elif op_name in _APPLE_GPU_ROWOP_KINDS:
@@ -7521,6 +7536,80 @@ def _apple_gpu_dispatch_where(operands: list[Any], np: Any) -> Any:
     omc = bn("tessera.mul", [omc], {"scalar": -1.0}, np)                     # 1 − c
     cb = bn("tessera.mul", [omc, np.ascontiguousarray(b)], {}, np)
     return bn("tessera.add", [ca, cb], {}, np)
+
+
+def _apple_gpu_dispatch_loss(op_name: str, operands: list[Any], kwargs: dict,
+                             np: Any) -> Any:
+    """Regression / CE losses composed entirely from the GPU opcode lanes (no
+    dedicated kernel): each computes a per-element loss tensor via chained
+    unary/binary/where ops, then reduces (mean/sum/none) on the GPU reduce lane.
+    Falls back to the numpy reference for the integer-target cross-entropy gather
+    (no GPU gather)."""
+    import tessera.losses as _L
+    reduction = kwargs.get("reduction", "mean")
+
+    def u(op: str, x: Any) -> Any:
+        return _apple_gpu_dispatch_unary(f"tessera.{op}", [np.asarray(x, np.float32)], np)
+
+    def bb(op: str, x: Any, y: Any) -> Any:
+        return _apple_gpu_dispatch_mpsgraph_binary(
+            f"tessera.{op}", [np.asarray(x, np.float32), np.asarray(y, np.float32)], {}, np)
+
+    def bs(op: str, x: Any, s: float) -> Any:
+        return _apple_gpu_dispatch_mpsgraph_binary(
+            f"tessera.{op}", [np.asarray(x, np.float32)], {"scalar": float(s)}, np)
+
+    def reduce_all(loss: Any) -> Any:
+        if reduction == "none":
+            return np.asarray(loss, np.float32)
+        opn = "tessera.mean" if reduction == "mean" else "tessera.reduce"
+        return _apple_gpu_dispatch_reduce(opn, [np.asarray(loss, np.float32)], {"axis": None}, np)
+
+    short = str(op_name)
+    a = np.asarray(operands[0], np.float32)
+    c = np.asarray(operands[1], np.float32) if len(operands) > 1 else None
+    ln2 = float(np.log(2.0))
+
+    if short in ("tessera.loss.mse", "tessera.loss.ddpm_noise_pred"):
+        d = bb("sub", a, c)
+        return reduce_all(bb("mul", d, d))
+    if short == "tessera.loss.mae":
+        return reduce_all(u("abs", bb("sub", a, c)))
+    if short == "tessera.loss.vlb":
+        return reduce_all(a)
+    if short == "tessera.loss.log_cosh":
+        err = bb("sub", a, c)
+        l1 = u("log1p", u("exp", bs("mul", err, -2.0)))
+        return reduce_all(bs("add", bb("add", err, l1), -ln2))
+    if short == "tessera.loss.huber":
+        delta = float(kwargs.get("delta", 1.0))
+        err = bb("sub", a, c)
+        ae = u("abs", err)
+        quad = bs("mul", bb("mul", err, err), 0.5)
+        lin = bs("mul", bs("add", ae, -0.5 * delta), delta)
+        cond = bs("le", ae, delta)
+        return reduce_all(_apple_gpu_dispatch_where([cond, quad, lin], np))
+    if short == "tessera.loss.smooth_l1":
+        beta = float(kwargs.get("beta", 1.0))
+        err = u("abs", bb("sub", a, c))
+        quad = bs("mul", bb("mul", err, err), 0.5 / beta)
+        lin = bs("add", err, -0.5 * beta)
+        cond = bs("lt", err, beta)
+        return reduce_all(_apple_gpu_dispatch_where([cond, quad, lin], np))
+    if short == "tessera.loss.binary_cross_entropy":
+        relu_l = u("relu", a)
+        lt_ = bb("mul", a, c)
+        l1 = u("log1p", u("exp", bs("mul", u("abs", a), -1.0)))
+        return reduce_all(bb("add", bb("sub", relu_l, lt_), l1))
+    if short == "tessera.loss.cross_entropy":
+        targets = np.asarray(operands[1])
+        if targets.dtype.kind in "iu":
+            return _L.cross_entropy_loss(a, targets, reduction=reduction)  # gather → host
+        lp = _apple_gpu_dispatch_rowop("tessera.log_softmax", [a], {}, np)
+        prod = bb("mul", targets, lp)
+        s = _apple_gpu_dispatch_reduce("tessera.reduce", [np.asarray(prod, np.float32)], {"axis": -1}, np)
+        return reduce_all(u("neg", s))
+    raise ValueError(f"apple_gpu loss dispatcher has no recipe for {op_name!r}")
 
 
 def _apple_gpu_rowop_numpy(kind: int, x: Any, eps: float, np: Any) -> Any:

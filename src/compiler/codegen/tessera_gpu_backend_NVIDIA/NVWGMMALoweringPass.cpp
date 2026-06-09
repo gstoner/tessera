@@ -152,8 +152,14 @@ struct NVWGMMALoweringPass
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<LowerTileMMA>(ctx, smVersion);
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    // Disable whole-module operation folding: this pass only needs the
+    // tile.mma lowering pattern, and folding can recurse into the unregistered
+    // schedule.*/tile.* ops left by earlier Phase-3 passes (which segfaults in
+    // Operation::fold).  See AsyncCopyLoweringPass for the same fix.
+    GreedyRewriteConfig config;
+    config.enableFolding(false);
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                     config))) {
       signalPassFailure();
     }
   }

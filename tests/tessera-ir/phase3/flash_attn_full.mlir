@@ -2,6 +2,20 @@
 // Phase 3 end-to-end FlashAttention pipeline lit test.
 // Runs the full Phase 3 GPU lowering chain on a BF16 causal flash_attn.
 //
+// STATUS (2026-06): still XFAIL — the *individual* Phase-3 passes are
+// un-XFAIL'd and green (tile_ir_lowering / warp_specialization /
+// nvwgmma_lowering), but running the whole 8-pass NVIDIA chain end-to-end on
+// this Mac surfaces latent crashes that had never run since the MLIR-22 bump.
+// Two greedy-fold segfaults were fixed along the way (AsyncCopyLoweringPass and
+// NVWGMMALoweringPass now disable whole-module Operation::fold over the
+// unregistered schedule.*/tile.* ops); a remaining null-Value deref in
+// NVFlashAttnKernelEmitter::resolveScaleAttrs (op->getOperand(0).getType() on
+// an attn.scaled_dot_product whose operand was invalidated by an upstream pass)
+// — and likely more downstream in the emitter — block full-chain execution.
+// Closing the NVIDIA chain end-to-end is its own task (hardware-gated Phase G);
+// flash_attn input now carries the required head_dim attr so it is ready when
+// the chain is fixed.
+//
 // RUN: tessera-opt \
 // RUN:   --tessera-distribution-lowering='mesh-axes=tp mesh-sizes=1' \
 // RUN:   --tessera-effect-annotation \
@@ -57,6 +71,7 @@ module attributes {tessera.ir.version = "1.0",
   ) -> tensor<64x64xf32> {
     %out = "tessera.flash_attn"(%Q, %K, %V) {
       causal           = true,
+      head_dim         = 64 : i64,
       tessera.tile_q   = 64 : i32,
       tessera.tile_kv  = 64 : i32
     } : (tensor<64x64xbf16>, tensor<64x64xbf16>, tensor<64x64xbf16>)

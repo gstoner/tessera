@@ -183,8 +183,14 @@ struct AsyncCopyLoweringPass
     patterns.add<LowerAsyncCopyTMA>(ctx, smVersion);
     patterns.add<LowerWaitAsync>(ctx, smVersion);
 
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    // Disable the greedy driver's whole-module operation folding: this pass
+    // only needs its two lowering patterns, and folding can recurse into the
+    // unregistered schedule.*/tile.* ops left by earlier Phase-3 passes (which
+    // segfaults in Operation::fold).  We only want pattern application here.
+    GreedyRewriteConfig config;
+    config.enableFolding(false);
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
+                                     config))) {
       signalPassFailure();
     }
   }

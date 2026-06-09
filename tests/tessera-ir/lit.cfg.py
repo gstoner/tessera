@@ -77,7 +77,11 @@ _TESSERA_OPT = _resolve(
 _FILECHECK = _resolve("FILECHECK", "", "FileCheck")
 
 config.substitutions.append(
-    ('tessera-opt', f'"{_TESSERA_OPT}" -allow-unregistered-dialect')
+    # Word-boundary anchored so the tool token is substituted but the substring
+    # inside pass flags like `--tessera-optimizer-shard` (tessera-OPT-imizer) is
+    # left intact.  `(?![\w-])` stops the match before a following word char or
+    # hyphen so `--tessera-opt...` flags don't get mangled.
+    (r'\btessera-opt(?![\w-])', f'"{_TESSERA_OPT}" -allow-unregistered-dialect')
 )
 config.substitutions.append(('%tessera_strict_opt', f'"{_TESSERA_OPT}"'))
 config.substitutions.append(('FileCheck', f'"{_FILECHECK}"'))

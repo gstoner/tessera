@@ -516,3 +516,148 @@ def megamoe_layer(
     y = np.concatenate([res.y_local for res in results], axis=0)
     n_dropped = int(sum(res.n_dropped for res in results))
     return y, n_dropped
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Comm/compute overlap — micro-batch pipelined expert-parallel forward
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The production MoE comm/compute-overlap structure (Tutel / MegaBlocks /
+# DeepSpeed-MoE): split a rank's tokens into micro-batches and pipeline them so
+# micro-batch c+1's DISPATCH all-to-all overlaps micro-batch c's expert compute,
+# and chunk c's COMBINE all-to-all overlaps chunk c+1's compute. On real hardware
+# the comm runs on a copy/comm stream while the GEMM runs on the compute stream,
+# synchronized by events (the "dependent launch" abstraction — Apple
+# command-buffer events / CUDA streams / ROCm stream deps).
+#
+# HONEST SCOPE: the mock thread-group all_to_all is a cross-rank BARRIER, so this
+# harness cannot reduce wall-clock — it validates the *pipeline restructuring*
+# (micro-batch decomposition is numerically identical to the monolithic forward)
+# and emits the OVERLAP SCHEDULE a stream-backed runtime would execute. The
+# algorithmic restructuring is the portable part; the wall-clock win is gated on
+# the async-stream lane.
+
+
+class OverlapSchedule(NamedTuple):
+    """The comm/compute pipeline a stream-backed runtime would execute.
+
+    num_chunks    : number of token micro-batches
+    stages        : ordered ``(chunk, kind)`` events actually issued, kind ∈
+                    {"dispatch_a2a", "expert_compute", "combine_a2a"}
+    overlap_pairs : ``(compute_chunk, comm_chunk)`` pairs a stream runtime runs
+                    concurrently — compute of chunk c overlaps dispatch of c+1
+    """
+    num_chunks: int
+    stages: list
+    overlap_pairs: list
+
+
+def megamoe_forward_overlapped(
+    rank,
+    x_local: np.ndarray,
+    W_router: np.ndarray,
+    local_W_gate: np.ndarray,
+    local_W_up: np.ndarray,
+    local_W_down: np.ndarray,
+    *,
+    config: MoEConfig,
+    num_chunks: int = 2,
+    capacity: Optional[int] = None,
+    quant=None,
+) -> "tuple[MegaMoEResult, OverlapSchedule]":
+    """Micro-batch pipelined expert-parallel forward (comm/compute overlap).
+
+    Splits this rank's tokens into ``num_chunks`` micro-batches and runs the full
+    dispatch → expert FFN → combine per chunk, recording the :class:`OverlapSchedule`
+    a stream-backed runtime would pipeline (chunk c+1's dispatch overlapping chunk
+    c's compute). Numerically identical to :func:`megamoe_forward` when capacity
+    drops nothing — micro-batching is a pure decomposition (tokens are processed
+    independently; routing + combine are per-token).
+
+    Each micro-batch sizes its own capacity buffer (so an over-subscribed expert
+    in one chunk drops independently — the production per-chunk-capacity model).
+    Returns ``(MegaMoEResult, OverlapSchedule)``.
+    """
+    x_local = np.ascontiguousarray(x_local, dtype=np.float32)
+    Tl = int(x_local.shape[0])
+    nc = max(1, min(int(num_chunks), Tl))
+    chunks = [c for c in np.array_split(np.arange(Tl), nc) if c.size]
+    nc = len(chunks)
+
+    stages: list = []
+    pieces: list = []
+    n_dropped = 0
+    last_cap = 0
+    for c, idx in enumerate(chunks):
+        stages.append((c, "dispatch_a2a"))
+        stages.append((c, "expert_compute"))
+        stages.append((c, "combine_a2a"))
+        res = megamoe_forward(
+            rank, x_local[idx], W_router, local_W_gate, local_W_up, local_W_down,
+            config=config, capacity=capacity, quant=quant)
+        pieces.append(res.y_local)
+        n_dropped += res.n_dropped
+        last_cap = res.capacity
+
+    # A stream runtime overlaps compute of chunk c with dispatch of chunk c+1.
+    overlap_pairs = [(c, c + 1) for c in range(nc - 1)]
+    y_local = np.concatenate(pieces, axis=0) if pieces else x_local[:0]
+    result = MegaMoEResult(y_local=y_local, n_dropped=n_dropped, capacity=last_cap)
+    schedule = OverlapSchedule(num_chunks=nc, stages=stages, overlap_pairs=overlap_pairs)
+    return result, schedule
+
+
+def megamoe_layer_overlapped(
+    x,
+    W_router,
+    W_gate,
+    W_up,
+    W_down,
+    *,
+    world_size: int,
+    config: MoEConfig,
+    num_chunks: int = 2,
+    capacity: Optional[int] = None,
+    quant=None,
+):
+    """Overlap-pipelined :func:`megamoe_layer` — returns ``(y, n_dropped, schedule)``.
+
+    Same sharding/gather as :func:`megamoe_layer` but each rank runs the
+    micro-batch pipelined :func:`megamoe_forward_overlapped`. ``schedule`` is
+    rank 0's :class:`OverlapSchedule` (identical structure across ranks). When
+    capacity drops nothing the gathered output equals the non-overlapped
+    :func:`megamoe_layer` exactly — overlap is a scheduling transform, not a
+    numeric one.
+    """
+    from ..testing.mock_collective import MockRankGroup
+
+    x = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+    Wg = np.asarray(W_gate, dtype=np.float32)
+    Wu = np.asarray(W_up, dtype=np.float32)
+    Wd = np.asarray(W_down, dtype=np.float32)
+    T = x.shape[0]
+    E = config.num_experts
+    if T % world_size != 0:
+        raise ValueError(
+            f"megamoe_layer_overlapped: T={T} must be divisible by "
+            f"world_size={world_size}")
+    if E % world_size != 0:
+        raise ValueError(
+            f"megamoe_layer_overlapped: num_experts={E} must be divisible by "
+            f"world_size={world_size}")
+    Ep = E // world_size
+    Tl = T // world_size
+
+    def worker(rank):
+        r = rank.rank
+        return megamoe_forward_overlapped(
+            rank, x[r * Tl:(r + 1) * Tl], W_router,
+            Wg[r * Ep:(r + 1) * Ep], Wu[r * Ep:(r + 1) * Ep],
+            Wd[r * Ep:(r + 1) * Ep],
+            config=config, num_chunks=num_chunks, capacity=capacity, quant=quant)
+
+    results = MockRankGroup(n=world_size).run(worker)
+    y = np.concatenate([res.y_local for res, _ in results], axis=0)
+    n_dropped = int(sum(res.n_dropped for res, _ in results))
+    schedule = results[0][1]
+    return y, n_dropped, schedule

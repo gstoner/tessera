@@ -117,3 +117,60 @@ def test_two_all_to_all_round_trips_preserve_token_order():
     y = np.concatenate([res.y_local for res in results], axis=0)
     y_single = np.asarray(F.moe_layer(x, Wr, Wg, Wu, Wd, top_k=2))
     np.testing.assert_allclose(y, y_single, rtol=1e-4, atol=1e-4)
+
+
+# ── Rung 2: comm/compute overlap (micro-batch pipeline) ──────────────────────
+from tessera.distributed.moe import (  # noqa: E402
+    OverlapSchedule,
+    megamoe_layer_overlapped,
+)
+
+
+@pytest.mark.parametrize("num_chunks", [1, 2, 4])
+def test_overlap_matches_non_overlapped(num_chunks):
+    # Micro-batch pipelining is a pure decomposition — identical result.
+    x, Wr, Wg, Wu, Wd = _inputs(num_chunks + 40, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_plain, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg)
+    y_ov, dropped, sched = megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=num_chunks)
+    assert dropped == 0
+    np.testing.assert_allclose(y_ov, y_plain, rtol=1e-4, atol=1e-4)
+    assert isinstance(sched, OverlapSchedule)
+
+
+def test_overlap_schedule_structure():
+    x, Wr, Wg, Wu, Wd = _inputs(2, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    _, _, sched = megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=3)
+    assert sched.num_chunks == 3
+    # 3 stages per chunk (dispatch / compute / combine).
+    kinds = [k for _, k in sched.stages]
+    assert kinds.count("dispatch_a2a") == 3
+    assert kinds.count("expert_compute") == 3
+    assert kinds.count("combine_a2a") == 3
+    # compute of chunk c overlaps dispatch of chunk c+1.
+    assert sched.overlap_pairs == [(0, 1), (1, 2)]
+
+
+def test_single_chunk_has_no_overlap():
+    x, Wr, Wg, Wu, Wd = _inputs(3, T=16, E=4)
+    cfg = MoEConfig(num_experts=4, top_k=1, capacity_factor=8.0)
+    _, _, sched = megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=1)
+    assert sched.num_chunks == 1
+    assert sched.overlap_pairs == []
+
+
+def test_overlap_composes_with_fp8xfp4():
+    x, Wr, Wg, Wu, Wd = _inputs(8, T=32, K=64, E=8, Fdim=32, N=16)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_plain, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, quant="fp8xfp4")
+    y_ov, _, _ = megamoe_layer_overlapped(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=2, quant="fp8xfp4")
+    # Overlap composes with quant, but micro-batching changes the per-tensor
+    # quant SCALE (each chunk quantizes a smaller grouped input) — so the result
+    # is close, not bit-identical (a real, expected property of per-chunk quant).
+    rel = np.linalg.norm(y_ov - y_plain) / (np.linalg.norm(y_plain) + 1e-9)
+    assert rel < 0.05, f"overlap+fp8xfp4 vs monolithic rel {rel:.4f}"

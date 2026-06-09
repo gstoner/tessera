@@ -53,10 +53,16 @@ static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
 }
 
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
-                                    Value descriptor, int64_t mbarrierSlot) {
+                                    Value descriptor, int64_t mbarrierSlot,
+                                    Type resultType) {
   OperationState st(loc, "tessera.tma.copy_async");
   st.addOperands({descriptor});
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
+  // Produce the loaded tile so it can replace the original tile.async_copy
+  // result 1:1 (the copy lands the tile in shared memory).  Without a result
+  // the replaceOp below would be a result-count mismatch that corrupts the IR.
+  if (resultType)
+    st.addTypes(resultType);
   return b.create(st);
 }
 
@@ -106,10 +112,15 @@ struct LowerAsyncCopyTMA : public RewritePattern {
       // SM_90+ → TMA path
       Operation *desc = emitTMADescriptor(rewriter, loc, src, tileRows, tileCols);
       // mbarrier_slot is 0 for the first async copy; NVTMADescriptorPass
-      // will hoist the descriptor and assign unique slot indices.
+      // will hoist the descriptor and assign unique slot indices.  The copy
+      // carries the original tile result type so the replacement is 1:1.
+      Type tileTy = op->getNumResults() ? op->getResult(0).getType() : Type();
       Operation *copyOp = emitTMACopyAsync(rewriter, loc,
-                                            desc->getResult(0), /*slot=*/0);
-      rewriter.replaceOp(op, copyOp->getResults());
+                                           desc->getResult(0), /*slot=*/0, tileTy);
+      if (op->getNumResults())
+        rewriter.replaceOp(op, copyOp->getResults());
+      else
+        rewriter.eraseOp(op);
     } else {
       // SM < 90 → cp.async fallback
       emitCpAsyncFallback(rewriter, loc, src, tileRows, tileCols);
@@ -183,14 +194,8 @@ struct AsyncCopyLoweringPass
     patterns.add<LowerAsyncCopyTMA>(ctx, smVersion);
     patterns.add<LowerWaitAsync>(ctx, smVersion);
 
-    // Disable the greedy driver's whole-module operation folding: this pass
-    // only needs its two lowering patterns, and folding can recurse into the
-    // unregistered schedule.*/tile.* ops left by earlier Phase-3 passes (which
-    // segfaults in Operation::fold).  We only want pattern application here.
-    GreedyRewriteConfig config;
-    config.enableFolding(false);
-    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns),
-                                     config))) {
+    if (failed(applyPatternsAndFoldGreedily(getOperation(),
+                                            std::move(patterns)))) {
       signalPassFailure();
     }
   }

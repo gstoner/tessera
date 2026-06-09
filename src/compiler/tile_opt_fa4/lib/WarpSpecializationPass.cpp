@@ -34,6 +34,8 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -87,20 +89,23 @@ struct WarpSpecializationPass
     ModuleOp mod = getOperation();
     OpBuilder b(mod.getContext());
 
-    mod.walk([&](Operation *regionOp) {
-      // Only process schedule.mesh.region ops or functions containing tile IR.
-      if (regionOp->getName().getStringRef() != "schedule.mesh.region")
-        return;
+    SmallVector<Operation *> regionOps;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "schedule.mesh.region")
+        regionOps.push_back(op);
+    });
 
-      // Collect all ops in the region body.
-      auto &body = regionOp->getRegion(0);
+    for (Operation *regionOp : regionOps) {
+      Region &body = regionOp->getRegion(0);
       if (body.empty())
-        return;
-
+        continue;
       Block &entryBlock = body.front();
-      SmallVector<Operation *> producerOps, consumerOps, otherOps;
+      Location loc = regionOp->getLoc();
 
-      for (auto &op : llvm::make_early_inc_range(entryBlock)) {
+      SmallVector<Operation *> producerOps, consumerOps, otherOps;
+      for (Operation &op : entryBlock) {
+        if (op.hasTrait<OpTrait::IsTerminator>())
+          continue; // leave the region terminator in place
         if (isProducerOp(&op))
           producerOps.push_back(&op);
         else if (isConsumerOp(&op))
@@ -108,68 +113,93 @@ struct WarpSpecializationPass
         else
           otherOps.push_back(&op);
       }
-
-      // Nothing to specialise if we have no separation.
       if (producerOps.empty() || consumerOps.empty())
-        return;
+        continue;
 
-      // Build producer warp region.
+      DenseSet<Operation *> prodSet(producerOps.begin(), producerOps.end());
+      DenseSet<Operation *> consSet(consumerOps.begin(), consumerOps.end());
+
+      // ── Cross-boundary value flow ─────────────────────────────────────────
+      // producer→consumer: producer results that consumer ops read.  These must
+      // become parent-level SSA values (the producer warp region's results) so
+      // they dominate the sibling consumer region.
+      SmallVector<Value> prodCross;
+      DenseSet<Value> prodSeen;
+      for (Operation *c : consumerOps)
+        for (Value v : c->getOperands())
+          if (Operation *def = v.getDefiningOp())
+            if (prodSet.contains(def) && prodSeen.insert(v).second)
+              prodCross.push_back(v);
+
+      // consumer→outside: consumer results used outside the consumer set (e.g.
+      // the region terminator).  These become the consumer warp's results.
+      SmallVector<Value> consCross;
+      DenseSet<Value> consSeen;
+      for (Operation *c : consumerOps)
+        for (Value res : c->getResults())
+          for (Operation *user : res.getUsers())
+            if (!consSet.contains(user) && consSeen.insert(res).second)
+              consCross.push_back(res);
+
+      // ── Producer warp region (yields prodCross) ───────────────────────────
       b.setInsertionPointToStart(&entryBlock);
-      Location loc = regionOp->getLoc();
+      OperationState prodSt(loc, "schedule.warp");
+      prodSt.addAttribute("role", b.getStringAttr("producer"));
+      prodSt.addRegion();
+      for (Value v : prodCross)
+        prodSt.addTypes(v.getType());
+      Operation *prodWarp = b.create(prodSt);
 
-      Operation *prodWarp = createWarpRegion(b, loc, "producer");
+      // Hoist the consumer-needed "other" ops (e.g. constants) above the warp
+      // regions so they dominate both — they only depend on region-external
+      // values, so they are safe to move to the top.
+      for (Operation *o : otherOps) {
+        bool dependsOnSplit = llvm::any_of(o->getOperands(), [&](Value v) {
+          Operation *def = v.getDefiningOp();
+          return def && (prodSet.contains(def) || consSet.contains(def));
+        });
+        if (!dependsOnSplit)
+          o->moveBefore(prodWarp);
+      }
+
       Block *prodBody = b.createBlock(&prodWarp->getRegion(0));
       b.setInsertionPointToEnd(prodBody);
+      for (Operation *p : producerOps)
+        p->moveBefore(prodBody, prodBody->end());
+      OperationState prodYield(loc, "schedule.yield");
+      prodYield.addOperands(prodCross);
+      b.create(prodYield);
 
-      // Create a queue for handoff between producer and consumer.
-      OperationState qState(loc, "tessera.queue.create");
-      qState.addTypes(b.getType<NoneType>()); // opaque queue type placeholder
-      Operation *qCreate = b.create(qState);
-      Value q = qCreate->getResult(0);
+      // Rewire consumer uses of producer results to the producer warp results.
+      for (auto [i, v] : llvm::enumerate(prodCross))
+        v.replaceUsesWithIf(prodWarp->getResult(i), [&](OpOperand &use) {
+          return consSet.contains(use.getOwner());
+        });
 
-      // Move producer ops into the producer warp region.
-      for (Operation *pop : producerOps) {
-        pop->moveBefore(b.getBlock(), b.getInsertionPoint());
-      }
-
-      // Push the last async result into the queue.
-      if (!producerOps.empty()) {
-        Operation *lastProd = producerOps.back();
-        if (!lastProd->getResults().empty()) {
-          OperationState pushState(loc, "tessera.queue.push");
-          pushState.addOperands({q, lastProd->getResult(0)});
-          pushState.addTypes(b.getType<NoneType>()); // TokenType placeholder
-          b.create(pushState);
-        }
-      }
-      // Terminate producer region.
-      OperationState yieldP(loc, "schedule.yield");
-      b.create(yieldP);
-
-      // Build consumer warp region.
+      // ── Consumer warp region (yields consCross) ───────────────────────────
       b.setInsertionPointAfter(prodWarp);
-      Operation *consWarp = createWarpRegion(b, loc, "consumer");
+      OperationState consSt(loc, "schedule.warp");
+      consSt.addAttribute("role", b.getStringAttr("consumer"));
+      consSt.addRegion();
+      for (Value v : consCross)
+        consSt.addTypes(v.getType());
+      Operation *consWarp = b.create(consSt);
+
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);
+      for (Operation *c : consumerOps)
+        c->moveBefore(consBody, consBody->end());
+      OperationState consYield(loc, "schedule.yield");
+      consYield.addOperands(consCross);
+      b.create(consYield);
 
-      // Pop from the queue before compute ops.
-      if (!producerOps.empty()) {
-        Value sentinel = b.create<arith::ConstantIndexOp>(loc, 0)->getResult(0);
-        OperationState popState(loc, "tessera.queue.pop");
-        popState.addOperands({q, sentinel});
-        if (!producerOps.back()->getResults().empty())
-          popState.addTypes(producerOps.back()->getResult(0).getType());
-        b.create(popState);
-      }
-
-      // Move consumer ops into the consumer warp region.
-      for (Operation *cop : consumerOps)
-        cop->moveBefore(b.getBlock(), b.getInsertionPoint());
-
-      // Terminate consumer region.
-      OperationState yieldC(loc, "schedule.yield");
-      b.create(yieldC);
-    });
+      // Rewire external uses of consumer results to the consumer warp results.
+      for (auto [i, v] : llvm::enumerate(consCross))
+        v.replaceUsesWithIf(consWarp->getResult(i), [&](OpOperand &use) {
+          Operation *owner = use.getOwner();
+          return !consSet.contains(owner) && owner != consWarp;
+        });
+    }
   }
 };
 

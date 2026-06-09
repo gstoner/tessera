@@ -556,6 +556,11 @@ _APPLE_GPU_ATTN_WRAPPER_OPS: frozenset[str] = frozenset({
     "tessera.multi_head_attention", "tessera.gqa_attention",
     "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
 })
+# Linear / recurrent attention family (Sub-sprint B) — quadratic-parallel form.
+_APPLE_GPU_LINEAR_ATTN_OPS: frozenset[str] = frozenset({
+    "tessera.linear_attn", "tessera.linear_attn_state",
+    "tessera.lightning_attention", "tessera.power_attn", "tessera.retention",
+})
 
 _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
@@ -564,6 +569,7 @@ _APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
+    | _APPLE_GPU_LINEAR_ATTN_OPS
 )
 
 

@@ -2270,6 +2270,12 @@ _APPLE_GPU_ATTN_WRAPPER_OPS = frozenset({
     "tessera.multi_head_attention", "tessera.gqa_attention",
     "tessera.mqa_attention", "tessera.mla_decode", "tessera.gated_attention",
 })
+# Linear / recurrent attention family (Sub-sprint B) via the quadratic-parallel
+# form (φ(Q)φ(K)ᵀ ⊙ causal[⊙decay]) @ V — two GPU bmms + a mask multiply.
+_APPLE_GPU_LINEAR_ATTN_OPS = frozenset({
+    "tessera.linear_attn", "tessera.linear_attn_state",
+    "tessera.lightning_attention", "tessera.power_attn", "tessera.retention",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2354,6 +2360,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
+    | _APPLE_GPU_LINEAR_ATTN_OPS
 )
 
 
@@ -2581,6 +2588,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_ATTN_WRAPPER_OPS:
             values[str(result)] = _apple_gpu_dispatch_attn_wrapper(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_LINEAR_ATTN_OPS:
+            values[str(result)] = _apple_gpu_dispatch_linear_attn(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -5904,6 +5918,104 @@ def _apple_gpu_dispatch_attn_wrapper(op_name: str, operands: list[Any],
         return attn * np.broadcast_to(np.asarray(gate, attn.dtype), attn.shape)
 
     return None
+
+
+def _apple_gpu_linear_attn_fmap(x: Any, name: str, np: Any) -> Any:
+    """Linear-attention feature map on the GPU lanes where a direct opcode
+    exists (relu / polynomial_2); identity is a no-op; elu (= elu(x)+1, the
+    always-positive kernel feature) is the one cheap host fallback."""
+    if name == "identity":
+        return np.ascontiguousarray(x.astype(np.float32))
+    xf = np.ascontiguousarray(x.astype(np.float32))
+    if name == "relu":
+        return np.asarray(_apple_gpu_dispatch_unary("tessera.relu", [xf], np), np.float32)
+    if name == "polynomial_2":
+        return np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary("tessera.mul", [xf, xf], {}, np),
+            np.float32)
+    if name == "elu":  # elu(x) + 1 = where(x > 0, x + 1, exp(x))
+        return np.where(xf > 0, xf + 1.0, np.exp(xf)).astype(np.float32)
+    raise ValueError(f"unknown linear-attn feature_map {name!r}")
+
+
+def _apple_gpu_dispatch_linear_attn(op_name: str, operands: list[Any],
+                                    kwargs: dict, np: Any) -> Any:
+    """Linear / recurrent attention family (Sub-sprint B) via the quadratic-
+    parallel form ``O = (φ(Q)φ(K)ᵀ ⊙ causal[⊙decay]) @ V`` — two GPU batched
+    matmuls plus an elementwise mask multiply.  Covers linear_attn (+_state),
+    lightning_attention, power_attn, retention.  The causal/decay mask is a
+    structured host-side constant (tril ⊙ cumprod-decay ratio); the QKᵀ and
+    PV matmuls and the feature map run on the GPU.  Returns None on
+    unsupported shapes so the op-loop falls back to the numpy reference."""
+    short = str(op_name)
+    Q = np.asarray(operands[0])
+    K = np.asarray(operands[1])
+    V = np.asarray(operands[2])
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        return None
+    B, H, S, _Dq = Q.shape
+    out_dtype = np.result_type(Q, K, V)
+    causal = bool(kwargs.get("causal", True))
+    decay = kwargs.get("decay")
+    fm = kwargs.get("feature_map", "identity")
+    want_state = (short == "tessera.linear_attn_state")
+    deg = None
+
+    if short == "tessera.lightning_attention":
+        fm = "identity"
+    elif short == "tessera.power_attn":
+        deg = int(kwargs.get("deg", 2))
+        fm = "polynomial_2" if deg == 2 else "identity"
+    elif short == "tessera.retention":
+        deg = int(kwargs.get("deg", 2))
+        fm = "polynomial_2" if deg == 2 else "identity"
+        log_g = kwargs.get("log_g")
+        if log_g is not None:
+            decay = np.exp(np.asarray(log_g, np.float64))
+
+    # deg != 2 pre-powers Q/K then uses the identity map (matches the references).
+    Qf = Q.astype(np.float64)
+    Kf = K.astype(np.float64)
+    if deg is not None and deg != 2:
+        Qf = Qf ** deg
+        Kf = Kf ** deg
+
+    phiQ = _apple_gpu_linear_attn_fmap(Qf, fm, np)              # [B,H,S,Dq]
+    phiK = _apple_gpu_linear_attn_fmap(Kf, fm, np)              # [B,H,S,Dq]
+    Vf = np.ascontiguousarray(V.astype(np.float32))            # [B,H,S,Dv]
+    phiK_T = np.ascontiguousarray(np.swapaxes(phiK, -1, -2))   # [B,H,Dq,S]
+
+    if want_state:
+        if decay is not None:
+            dc = np.cumprod(np.asarray(decay, np.float64), axis=2)         # [B,H,S]
+            tail = (dc[:, :, -1:] / dc).astype(np.float32)                 # Π_{s>t} decay
+            Vw = np.ascontiguousarray(Vf * tail[:, :, :, None])
+        else:
+            Vw = Vf
+        state = _apple_gpu_dispatch_bmm(phiK_T, Vw, np)        # [B,H,Dq,Dv]
+        if state is None:
+            return None
+        return np.asarray(state).astype(out_dtype)
+
+    A = _apple_gpu_dispatch_bmm(phiQ, phiK_T, np)             # [B,H,S,S]
+    if A is None:
+        return None
+    A = np.ascontiguousarray(np.asarray(A, np.float32))
+    if causal:
+        tril = np.tril(np.ones((S, S), np.float32))
+        if decay is not None:
+            dc = np.cumprod(np.asarray(decay, np.float64), axis=2)         # [B,H,S]
+            ratio = (dc[:, :, :, None] / dc[:, :, None, :]).astype(np.float32)
+            mask = np.ascontiguousarray(tril[None, None] * ratio)          # [B,H,S,S]
+        else:
+            mask = np.ascontiguousarray(np.broadcast_to(tril, (B, H, S, S)))
+        A = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary("tessera.mul", [A, mask], {}, np),
+            np.float32)
+    O = _apple_gpu_dispatch_bmm(np.ascontiguousarray(A), Vf, np)   # [B,H,S,Dv]
+    if O is None:
+        return None
+    return np.asarray(O).astype(out_dtype)
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

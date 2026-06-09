@@ -204,15 +204,24 @@ struct TileMatmul : public RewritePattern {
         Value j    = innerFor.getInductionVar();
         Value acc1 = innerFor.getRegionIterArg(0);
 
+        // Slice sizes/strides are compile-time constants, so pass them as
+        // STATIC OpFoldResult attributes — passing them as dynamic SSA Values
+        // makes ExtractSliceOp infer a fully-dynamic tensor<?x?> result that
+        // mismatches the static tile result type (MLIR-22 verifier).  Only the
+        // tile offsets (the loop induction vars) are dynamic.
+        OpFoldResult zeroOfr = rewriter.getIndexAttr(0);
+        OpFoldResult oneOfr  = rewriter.getIndexAttr(1);
+
         // Extract A tile: A[i:i+tm, 0:K]
         auto aTileType =
             RankedTensorType::get({tm, K}, lhsTy.getElementType());
         Value aSlice = tensor::ExtractSliceOp::create(
             rewriter,
             loc, aTileType, lhs,
-            ValueRange{i, zero},          // offsets
-            ValueRange{tmVal, Kval},       // sizes
-            ValueRange{one, one});         // strides
+            SmallVector<OpFoldResult>{i, zeroOfr},                       // offsets
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
+                                      rewriter.getIndexAttr(K)},          // sizes
+            SmallVector<OpFoldResult>{oneOfr, oneOfr});                  // strides
 
         // Extract B tile: B[0:K, j:j+tn]
         auto bTileType =
@@ -220,9 +229,10 @@ struct TileMatmul : public RewritePattern {
         Value bSlice = tensor::ExtractSliceOp::create(
             rewriter,
             loc, bTileType, rhs,
-            ValueRange{zero, j},
-            ValueRange{Kval, tnVal},
-            ValueRange{one, one});
+            SmallVector<OpFoldResult>{zeroOfr, j},
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(K),
+                                      rewriter.getIndexAttr(tn)},
+            SmallVector<OpFoldResult>{oneOfr, oneOfr});
 
         // Inner tessera.matmul on the tile.
         auto cTileType = RankedTensorType::get({tm, tn}, elemTy);
@@ -235,13 +245,14 @@ struct TileMatmul : public RewritePattern {
         Operation *innerMM = rewriter.create(innerSt);
         Value cTile = innerMM->getResult(0);
 
-        // Insert tile result back into accumulator.
+        // Insert tile result back into accumulator (static sizes/strides).
         Value acc2 = tensor::InsertSliceOp::create(
             rewriter,
             loc, cTile, acc1,
-            ValueRange{i, j},             // offsets
-            ValueRange{tmVal, tnVal},      // sizes
-            ValueRange{one, one});         // strides
+            SmallVector<OpFoldResult>{i, j},                            // offsets
+            SmallVector<OpFoldResult>{rewriter.getIndexAttr(tm),
+                                      rewriter.getIndexAttr(tn)},        // sizes
+            SmallVector<OpFoldResult>{oneOfr, oneOfr});                 // strides
 
         scf::YieldOp::create(rewriter, loc, ValueRange{acc2});
       }

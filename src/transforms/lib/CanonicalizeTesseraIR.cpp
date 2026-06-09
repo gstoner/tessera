@@ -89,6 +89,20 @@ struct TransposeIntoMatmul : public RewritePattern {
     return success();
   }
 };
+// Erase an identity tessera.cast (input type == output type) by forwarding its
+// operand to all users.  A no-op cast carries no numeric conversion, so it is
+// pure dead weight after migration/promotion.
+struct EraseIdentityCast : public RewritePattern {
+  EraseIdentityCast(MLIRContext *ctx) : RewritePattern("tessera.cast", 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *cast, PatternRewriter &rewriter) const override {
+    if (cast->getNumOperands() != 1 || cast->getNumResults() != 1)
+      return failure();
+    if (cast->getOperand(0).getType() != cast->getResult(0).getType())
+      return failure();
+    rewriter.replaceOp(cast, cast->getOperand(0));
+    return success();
+  }
+};
 struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Canon)
   StringRef getArgument() const override { return "tessera-canonicalize"; }
@@ -97,7 +111,8 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
   }
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-    patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul>(&getContext());
+    patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
+                 EraseIdentityCast>(&getContext());
     (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
   }
 };

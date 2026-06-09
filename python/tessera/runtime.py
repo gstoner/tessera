@@ -4273,18 +4273,61 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
 
 
 def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) -> Any:
-    """Local SwiGLU-fused MoE expert FFN on Apple GPU, composed from the proven
-    grouped-GEMM + silu_mul lanes:
+    """Local SwiGLU-fused MoE expert FFN on Apple GPU.
+
+    Fast path (no quant; H,Kout ≤ 256): ONE fused MSL dispatch over the whole
+    (T, Kout) output via ``gpu_moe_swiglu_block`` — the grouped analog of the
+    dense ``swiglu_f32`` kernel, folding routing in and collapsing the 3
+    grouped-GEMM + silu_mul dispatches into a single kernel.
+
+    Composed path (quantized blocks, large dims, or a fused-kernel miss): the
+    proven lanes —
         gate = grouped_gemm(x, W_gate) ; up = grouped_gemm(x, W_up)
         hidden = silu_mul(gate, up)    ; y = grouped_gemm(hidden, W_down)
+    where the grouped_layout ``quant`` applies to every grouped GEMM (exact
+    per-GEMM quant semantics the single fused kernel can't express).
+
     ``operands`` = (x, w_gate, w_up, w_down, group_sizes).  The grouped_layout
-    contract (kind / alignment) + optional quant in ``kwargs`` apply to every
-    grouped GEMM (so masked / k_grouped are rejected here too)."""
+    contract (kind / alignment) is enforced on both paths, so masked / k_grouped
+    are rejected here too (Decision #21)."""
+    from . import _apple_gpu_backend as agb
+    from .compiler import grouped_layout as gl
+
     x, w_gate, w_up, w_down, gs = (operands[0], operands[1], operands[2],
                                    operands[3], operands[4])
+    kw = dict(kwargs or {})
+    kind = str(kw.get("grouped_kind") or kw.get("kind") or "contiguous")
+    if kind not in gl.GROUPED_KINDS:
+        raise ValueError(
+            f"moe_swiglu_block: unknown grouped_layout kind {kind!r}; "
+            f"expected one of {gl.GROUPED_KINDS}")
+    if kind not in gl.APPLE_SUPPORTED_GROUPED_KINDS:
+        raise ValueError(gl.grouped_kind_unsupported_message(kind, target="apple_gpu"))
 
+    g = np.asarray(gs).astype(np.int64).reshape(-1)
+    alignment = kw.get("grouped_alignment") or kw.get("alignment")
+    if alignment is not None:
+        gl.validate_grouped_alignment(g, int(alignment))
+
+    # Fused fast path — one dispatch for the whole expert FFN (f32, no quant).
+    if kw.get("quant") is None:
+        xa = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+        wg = np.ascontiguousarray(np.asarray(w_gate, dtype=np.float32))
+        wu = np.ascontiguousarray(np.asarray(w_up, dtype=np.float32))
+        wd = np.ascontiguousarray(np.asarray(w_down, dtype=np.float32))
+        T = int(xa.shape[0])
+        H, Kout = int(wg.shape[2]), int(wd.shape[2])
+        if int(g.sum()) == T and H <= 256 and Kout <= 256:
+            expert_ids = np.repeat(np.arange(wg.shape[0], dtype=np.int32), g)
+            try:
+                return np.ascontiguousarray(
+                    agb.gpu_moe_swiglu_block(xa, wg, wu, wd, expert_ids))
+            except Exception:                       # noqa: BLE001 — fall to composed
+                pass
+
+    # Composed path — proven grouped-GEMM + silu_mul lanes (and the quant path).
     def gg(a: Any, b: Any) -> Any:
-        return np.asarray(_apple_gpu_dispatch_grouped_gemm([a, b, gs], kwargs, np),
+        return np.asarray(_apple_gpu_dispatch_grouped_gemm([a, b, g], kwargs, np),
                           dtype=np.float32)
 
     gate = gg(x, w_gate)

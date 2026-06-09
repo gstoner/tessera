@@ -117,3 +117,44 @@ def test_jit_metal_runtime():
     got = np.asarray(f(x, wg, wu, wd, gs))
     np.testing.assert_allclose(got, _ref(x, wg, wu, wd, gs), rtol=1e-3, atol=1e-3)
     assert f.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
+
+
+# ── Fused-kernel perf rung: one MSL dispatch for the whole expert FFN ────────
+
+
+@gpu
+def test_fused_kernel_abi_symbol_present():
+    from tessera import _apple_gpu_backend as _agb
+    lib = _agb._load()
+    assert hasattr(lib, "tessera_apple_gpu_moe_swiglu_f32")
+
+
+@gpu
+@pytest.mark.parametrize("gs", [[8, 5, 7], [16, 16, 32], [10]])
+def test_fused_kernel_matches_reference(gs):
+    from tessera import _apple_gpu_backend as _agb
+    x, wg, wu, wd, g = _inputs(hash(tuple(gs)) % 71, gs, K=24, F=40, N=18)
+    eids = np.repeat(np.arange(len(g), dtype=np.int32), g)
+    got = np.asarray(_agb.gpu_moe_swiglu_block(x, wg, wu, wd, eids))
+    np.testing.assert_allclose(got, _ref(x, wg, wu, wd, g), rtol=1e-4, atol=1e-4)
+
+
+@gpu
+def test_fused_fast_path_matches_composed():
+    # The dispatcher's fused fast path (no quant, H,Kout ≤ 256) must agree with
+    # the composed grouped-GEMM + silu_mul lanes it replaces.
+    x, wg, wu, wd, gs = _inputs(23, [16, 16, 32], K=64, F=64, N=48)
+    fused = np.asarray(R._apple_gpu_dispatch_moe_swiglu_block([x, wg, wu, wd, gs], {}, np))
+    ref = _ref(x, wg, wu, wd, gs)
+    rel = np.linalg.norm(fused - ref) / (np.linalg.norm(ref) + 1e-9)
+    assert rel < 1e-5, f"fused fast-path rel {rel:.2e}"  # f32, scale-robust
+
+
+@gpu
+def test_large_hidden_dim_falls_back_to_composed():
+    # H > 256 exceeds the per-row stack buffers; the fused kernel early-returns
+    # so the dispatcher must still produce the correct result via the composed
+    # path (or the C symbol's CPU reference).
+    x, wg, wu, wd, gs = _inputs(29, [12, 12], K=32, F=300, N=16)
+    got = np.asarray(R._apple_gpu_dispatch_moe_swiglu_block([x, wg, wu, wd, gs], {}, np))
+    np.testing.assert_allclose(got, _ref(x, wg, wu, wd, gs), rtol=1e-3, atol=1e-3)

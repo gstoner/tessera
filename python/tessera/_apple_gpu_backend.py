@@ -96,6 +96,9 @@ def _load():
         ("tessera_apple_gpu_layer_norm_bf16", [u16, u16, u16, u16, i32, i32, flt]),
         # Thrust #3a — fused ragged grouped-GEMM (X, W, expert_ids, O, T, K, N, E).
         ("tessera_apple_gpu_grouped_gemm_f32", [fp, fp, ip, fp, i32, i32, i32, i32]),
+        # Fused ragged SwiGLU MoE block (X, Wg, Wu, Wd, expert_ids, O, T, K, H, Kout, E).
+        ("tessera_apple_gpu_moe_swiglu_f32",
+         [fp, fp, fp, fp, ip, fp, i32, i32, i32, i32, i32]),
         # LDT candidate-axis ops on Metal.
         ("tessera_apple_gpu_popcount_i32", [ip, ip, i32]),
         ("tessera_apple_gpu_count_nonzero_lastaxis_f32", [fp, ip, i32, i32]),
@@ -212,6 +215,49 @@ def gpu_grouped_gemm(x: np.ndarray, w: np.ndarray,
     _load().tessera_apple_gpu_grouped_gemm_f32(
         _ptr(x), _ptr(w), e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, N, E)
+    return out
+
+
+def gpu_moe_swiglu_block(x: np.ndarray, wg: np.ndarray, wu: np.ndarray,
+                         wd: np.ndarray, expert_ids: np.ndarray) -> np.ndarray:
+    """Fused ragged SwiGLU MoE expert-FFN block on the Apple GPU — ONE dispatch.
+
+    For token ``t`` with expert ``e = expert_ids[t]``:
+        hidden = silu(x[t] @ wg[e]) * (x[t] @ wu[e]) ; out[t] = hidden @ wd[e]
+
+    x: (T, K) f32; wg/wu: (E, K, H) f32; wd: (E, H, Kout) f32;
+    expert_ids: (T,) int (e.g. ``np.repeat(arange(E), group_sizes)``).
+    Returns (T, Kout) f32. Collapses the 3 grouped-GEMM + silu_mul dispatches of
+    the composed path into a single kernel (per-row stack buffers cap H,Kout≤256;
+    the C symbol falls back to its CPU reference past that)."""
+    x = _arr(x, "x").astype(np.float32, copy=False)
+    wg = np.ascontiguousarray(wg, dtype=np.float32)
+    wu = np.ascontiguousarray(wu, dtype=np.float32)
+    wd = np.ascontiguousarray(wd, dtype=np.float32)
+    e = np.ascontiguousarray(expert_ids, dtype=np.int32)
+    if x.ndim != 2 or wg.ndim != 3 or wu.ndim != 3 or wd.ndim != 3:
+        raise AppleGpuError(
+            f"gpu_moe_swiglu_block expects x (T,K) + wg/wu (E,K,H) + wd (E,H,Kout); "
+            f"got {x.shape}, {wg.shape}, {wu.shape}, {wd.shape}")
+    T, K = int(x.shape[0]), int(x.shape[1])
+    E, wk, H = int(wg.shape[0]), int(wg.shape[1]), int(wg.shape[2])
+    Kout = int(wd.shape[2])
+    if wk != K:
+        raise AppleGpuError(f"gpu_moe_swiglu_block K mismatch: x K={K}, wg K={wk}")
+    if wu.shape != wg.shape:
+        raise AppleGpuError(
+            f"gpu_moe_swiglu_block wu {wu.shape} must match wg {wg.shape}")
+    if wd.shape[0] != E or wd.shape[1] != H:
+        raise AppleGpuError(
+            f"gpu_moe_swiglu_block wd {wd.shape} must be (E={E}, H={H}, Kout)")
+    if e.shape != (T,):
+        raise AppleGpuError(
+            f"gpu_moe_swiglu_block expert_ids must be (T={T},); got {e.shape}")
+    out = np.zeros((T, Kout), np.float32)
+    _load().tessera_apple_gpu_moe_swiglu_f32(
+        _ptr(x), _ptr(wg), _ptr(wu), _ptr(wd),
+        e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
+        _ptr(out), T, K, H, Kout, E)
     return out
 
 

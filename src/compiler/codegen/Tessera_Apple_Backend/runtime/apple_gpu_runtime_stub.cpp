@@ -2071,6 +2071,41 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
   }
 }
 
+// Fused ragged SwiGLU MoE expert-FFN block (non-Darwin reference parity).
+extern "C" void tessera_apple_gpu_moe_swiglu_f32(
+    const float* X, const float* Wg, const float* Wu, const float* Wd,
+    const int32_t* Eids, float* O, int32_t T, int32_t K, int32_t H,
+    int32_t Kout, int32_t Ecount) {
+  (void)Ecount;
+  std::vector<float> gate(static_cast<std::size_t>(H));
+  std::vector<float> up(static_cast<std::size_t>(H));
+  for (int32_t t = 0; t < T; ++t) {
+    int32_t e = Eids[t];
+    std::size_t w_base = (static_cast<std::size_t>(e) * K) * H;
+    for (int32_t h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    for (int32_t k = 0; k < K; ++k) {
+      float xv = X[static_cast<std::size_t>(t) * K + k];
+      std::size_t wg_off = w_base + static_cast<std::size_t>(k) * H;
+      for (int32_t h = 0; h < H; ++h) {
+        gate[h] += xv * Wg[wg_off + h];
+        up[h] += xv * Wu[wg_off + h];
+      }
+    }
+    for (int32_t h = 0; h < H; ++h) {
+      float g = gate[h];
+      gate[h] = (g / (1.0f + std::exp(-g))) * up[h];
+    }
+    std::size_t wd_base = (static_cast<std::size_t>(e) * H) * Kout;
+    std::size_t o_off = static_cast<std::size_t>(t) * Kout;
+    for (int32_t ko = 0; ko < Kout; ++ko) O[o_off + ko] = 0.0f;
+    for (int32_t h = 0; h < H; ++h) {
+      float hv = gate[h];
+      std::size_t wd_off = wd_base + static_cast<std::size_t>(h) * Kout;
+      for (int32_t ko = 0; ko < Kout; ++ko) O[o_off + ko] += hv * Wd[wd_off + ko];
+    }
+  }
+}
+
 // LDT candidate-axis ops (non-Darwin reference parity).
 extern "C" void tessera_apple_gpu_popcount_i32(const int32_t* X, int32_t* O,
                                                int32_t n) {

@@ -16027,6 +16027,179 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
 }
 
 //===---------------------------------------------------------------------===//
+// Fused ragged SwiGLU MoE expert-FFN block — the grouped analog of swiglu_f32.
+//
+// ONE Metal dispatch over the whole (T, Kout) output for the entire MoE expert
+// feed-forward: per token `t` with expert `e = Eids[t]`,
+//     gate   = X[t] @ Wg[e]                      (K → H)
+//     up     = X[t] @ Wu[e]                      (K → H)
+//     hidden = silu(gate) * up                   (H)
+//     O[t]   = hidden @ Wd[e]                     (H → Kout)
+// folding the routing in and collapsing the 3 grouped-GEMM + silu_mul dispatches
+// of the composed path into a single kernel (one thread per token). Wg/Wu are
+// (E,K,H); Wd is (E,H,Kout). f32; per-row stack buffers cap H,Kout ≤ 256 (the
+// kernel early-returns past that so the caller falls back to the composed path).
+//===---------------------------------------------------------------------===//
+namespace {
+
+bool dispatch_moe_swiglu_msl(MetalDeviceContext &ctx, const float *X,
+                             const float *Wg, const float *Wu, const float *Wd,
+                             const int32_t *Eids, float *O, int32_t T, int32_t K,
+                             int32_t H, int32_t Kout, int32_t Ecount) {
+  static NSString *const kMoeSwigluSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H    256
+#define TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT 256
+
+kernel void moe_swiglu_f32(
+    device const float* X    [[buffer(0)]],
+    device const float* Wg   [[buffer(1)]],   // (E, K, H)
+    device const float* Wu   [[buffer(2)]],   // (E, K, H)
+    device const float* Wd   [[buffer(3)]],   // (E, H, Kout)
+    device const int*   E    [[buffer(4)]],   // per-token expert id
+    device float*       O    [[buffer(5)]],
+    constant int&       T    [[buffer(6)]],
+    constant int&       K    [[buffer(7)]],
+    constant int&       H    [[buffer(8)]],
+    constant int&       Kout [[buffer(9)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)T) return;
+    if (H > TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H) return;
+    if (Kout > TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT) return;
+    int t = (int)gid;
+    int e = E[t];
+
+    float gate[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H];
+    float up[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_H];
+    float out_row[TESSERA_APPLE_GPU_MOE_SWIGLU_MAX_KOUT];
+
+    for (int h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    int x_off = t * K;
+    int w_base = (e * K) * H;                    // Wg[e,0,0] / Wu[e,0,0]
+    for (int k = 0; k < K; ++k) {
+        float xv = X[x_off + k];
+        int wg_off = w_base + k * H;
+        for (int h = 0; h < H; ++h) {
+            gate[h] += xv * Wg[wg_off + h];
+            up[h]   += xv * Wu[wg_off + h];
+        }
+    }
+    // hidden[h] = silu(gate[h]) * up[h]; reuse `gate` as the hidden buffer.
+    for (int h = 0; h < H; ++h) {
+        float g = gate[h];
+        float s = g / (1.0f + exp(-g));
+        gate[h] = s * up[h];
+    }
+    for (int ko = 0; ko < Kout; ++ko) out_row[ko] = 0.0f;
+    int wd_base = (e * H) * Kout;                // Wd[e,0,0]
+    for (int h = 0; h < H; ++h) {
+        float hv = gate[h];
+        int wd_off = wd_base + h * Kout;
+        for (int ko = 0; ko < Kout; ++ko) out_row[ko] += hv * Wd[wd_off + ko];
+    }
+    int o_off = t * Kout;
+    for (int ko = 0; ko < Kout; ++ko) O[o_off + ko] = out_row[ko];
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMoeSwigluSource, @"moe_swiglu_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes  = sizeof(float) * (NSUInteger)T * (NSUInteger)K;
+    NSUInteger wgBytes =
+        sizeof(float) * (NSUInteger)Ecount * (NSUInteger)K * (NSUInteger)H;
+    NSUInteger wdBytes =
+        sizeof(float) * (NSUInteger)Ecount * (NSUInteger)H * (NSUInteger)Kout;
+    NSUInteger eBytes  = sizeof(int32_t) * (NSUInteger)T;
+    NSUInteger oBytes  = sizeof(float) * (NSUInteger)T * (NSUInteger)Kout;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWg, ctx, Wg, wgBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWu, ctx, Wu, wgBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWd, ctx, Wd, wdBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufE, ctx, Eids, eBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufWg || !bufWu || !bufWd || !bufE || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX  offset:0 atIndex:0];
+    [enc setBuffer:bufWg offset:0 atIndex:1];
+    [enc setBuffer:bufWu offset:0 atIndex:2];
+    [enc setBuffer:bufWd offset:0 atIndex:3];
+    [enc setBuffer:bufE  offset:0 atIndex:4];
+    [enc setBuffer:bufO  offset:0 atIndex:5];
+    [enc setBytes:&T    length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&K    length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&H    length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&Kout length:sizeof(int32_t) atIndex:9];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)T, 1, 1);
+    NSUInteger tg_x =
+        std::min<NSUInteger>((NSUInteger)T, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "moe_swiglu_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_moe_swiglu_f32(const float *X, const float *Wg,
+                                     const float *Wu, const float *Wd,
+                                     const int32_t *Eids, float *O, int32_t T,
+                                     int32_t K, int32_t H, int32_t Kout) {
+  std::vector<float> gate((std::size_t)H), up((std::size_t)H);
+  for (int32_t t = 0; t < T; ++t) {
+    int32_t e = Eids[t];
+    std::size_t w_base = ((std::size_t)e * K) * H;
+    for (int32_t h = 0; h < H; ++h) { gate[h] = 0.0f; up[h] = 0.0f; }
+    for (int32_t k = 0; k < K; ++k) {
+      float xv = X[(std::size_t)t * K + k];
+      std::size_t wg_off = w_base + (std::size_t)k * H;
+      for (int32_t h = 0; h < H; ++h) {
+        gate[h] += xv * Wg[wg_off + h];
+        up[h] += xv * Wu[wg_off + h];
+      }
+    }
+    for (int32_t h = 0; h < H; ++h) {
+      float g = gate[h];
+      gate[h] = (g / (1.0f + std::exp(-g))) * up[h];
+    }
+    std::size_t wd_base = ((std::size_t)e * H) * Kout;
+    std::size_t o_off = (std::size_t)t * Kout;
+    for (int32_t ko = 0; ko < Kout; ++ko) O[o_off + ko] = 0.0f;
+    for (int32_t h = 0; h < H; ++h) {
+      float hv = gate[h];
+      std::size_t wd_off = wd_base + (std::size_t)h * Kout;
+      for (int32_t ko = 0; ko < Kout; ++ko) O[o_off + ko] += hv * Wd[wd_off + ko];
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_moe_swiglu_f32(
+    const float *X, const float *Wg, const float *Wu, const float *Wd,
+    const int32_t *Eids, float *O, int32_t T, int32_t K, int32_t H,
+    int32_t Kout, int32_t Ecount) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && T > 0 && H > 0 && Kout > 0 && H <= 256 && Kout <= 256 &&
+      dispatch_moe_swiglu_msl(ctx, X, Wg, Wu, Wd, Eids, O, T, K, H, Kout, Ecount))
+    return;
+  reference_moe_swiglu_f32(X, Wg, Wu, Wd, Eids, O, T, K, H, Kout);
+}
+
+//===---------------------------------------------------------------------===//
 // LDT / lattice candidate-axis ops on Metal.
 //
 //  * popcount        — per-element set-bit count of an int tensor (the MSL

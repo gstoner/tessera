@@ -1342,7 +1342,8 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `batched_gemm(A, B)` | `(array, array) → array` | `pure` | Batched `np.matmul` reference |
 | `einsum(spec, *tensors)` | `(str, arrays...) → array` | `pure` | `np.einsum` reference |
 | `factorized_matmul(A, B, rank)` | `(array, array) → array` | `pure` | Low-rank SVD reference over `A @ B` |
-| `grouped_gemm(x, weights, group_sizes)` | `(array, array, array) → array` | `pure` | Ragged grouped matmul (MoE expert-FFN core): each contiguous token group `e` is multiplied by `weights[e]`; Graph IR op `tessera.grouped_gemm`. Apple GPU per-group MPS matmul |
+| `grouped_gemm(x, weights, group_sizes, *, kind="contiguous", alignment=None, quant=None)` | `(array, array, array) → array` | `pure` | Ragged grouped matmul (MoE expert-FFN core): each contiguous token group `e` is multiplied by `weights[e]`; Graph IR op `tessera.grouped_gemm`. `kind` selects the grouped-layout family (masked/k_grouped rejected); `quant` runs a dequant-on-host FP8/NVFP4 path. Apple GPU fused MSL / per-group MPS matmul |
+| `moe_swiglu_block(x, w_gate, w_up, w_down, group_sizes, *, kind="contiguous", alignment=None, quant=None)` | `(array, array, array, array, array) → array` | `pure` | Local SwiGLU-fused MoE expert FFN: `grouped_gemm(x,W_gate)`/`grouped_gemm(x,W_up)` → `silu_mul` → `grouped_gemm(·,W_down)`; Graph IR op `tessera.moe_swiglu_block`. Honors the grouped-layout contract + `quant`; metal_runtime on Apple GPU. MegaMoE precursor (no dispatch/combine) |
 | `tri_solve(A, b, lower=True)` | `(array, array) → array` | `pure` | Triangular `np.linalg.solve` reference |
 | `cholesky(A)` | `(array) → array` | `pure` | `np.linalg.cholesky` reference |
 | `cholesky_solve(L, b)` | `(array, array) → array` | `pure` | Solve `(L Lᵀ) x = b` from the Cholesky factor (LAPACK `potrs` analogue) |

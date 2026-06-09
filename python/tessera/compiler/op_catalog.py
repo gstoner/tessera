@@ -31,6 +31,7 @@ _SPECS = [
     OpSpec("einsum", "tessera.einsum", 1, 99, lowering="contraction"),
     OpSpec("factorized_matmul", "tessera.factorized_matmul", 2, 2, lowering="loop_nest"),
     OpSpec("grouped_gemm", "tessera.grouped_gemm", 3, 3, lowering="loop_nest"),
+    OpSpec("moe_swiglu_block", "tessera.moe_swiglu_block", 5, 5, lowering="loop_nest"),
     OpSpec("tri_solve", "tessera.tri_solve", 2, 2, lowering="linalg_solver"),
     OpSpec("cholesky_solve", "tessera.cholesky_solve", 2, 2, lowering="linalg_solver"),
     OpSpec("cholesky", "tessera.cholesky", 1, 1, lowering="linalg_decomposition"),

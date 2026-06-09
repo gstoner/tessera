@@ -462,6 +462,32 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         hidden = ops.silu_mul(gate, up)
         return ops.gemm(hidden, W_down)
 
+    def moe_swiglu_block(x, w_gate, w_up, w_down, group_sizes, *,
+                         kind="contiguous", alignment=None, quant=None):
+        """Local SwiGLU-fused MoE expert-FFN block over grouped tokens.
+
+        The MoE expert feed-forward core: each contiguous token group runs its
+        own expert's gate/up/down projections through SwiGLU —
+        ``grouped_gemm(x, W_gate)`` and ``grouped_gemm(x, W_up)`` →
+        ``silu_mul`` → ``grouped_gemm(·, W_down)``.
+
+        Shapes: ``x`` ``(T, K)``; ``w_gate`` / ``w_up`` ``(E, K, F)``;
+        ``w_down`` ``(E, F, N)``; ``group_sizes`` ``(E,)``.  Returns ``(T, N)``.
+        Honors the grouped-layout contract (``kind`` / ``alignment``) and an
+        optional ``quant`` dtype on *every* grouped GEMM (Rungs A/B).
+
+        This is the **local** MegaMoE precursor — the expert FFN fused as one
+        block, with no token dispatch/combine and no comm/compute overlap (the
+        distributed MegaMoE remains the deferred north star).
+        """
+        def gg(a, b):
+            return grouped_gemm(a, b, group_sizes, kind=kind,
+                                alignment=alignment, quant=quant)
+        gate = gg(x, w_gate)
+        up = gg(x, w_up)
+        hidden = silu_mul(gate, up)
+        return gg(hidden, w_down)
+
     # ── Theme 9 utility tensor ops (Tier 3 #8) ──────────────────────────────
     # Small numpy-reference primitives that several advanced examples want
     # for shape munging / masking / range generation. Each ships with a VJP
@@ -3288,6 +3314,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "einsum": einsum,
         "factorized_matmul": factorized_matmul,
         "grouped_gemm": grouped_gemm,
+        "moe_swiglu_block": moe_swiglu_block,
         "tri_solve": tri_solve,
         "cholesky": cholesky,
         "cholesky_solve": cholesky_solve,
@@ -3637,6 +3664,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         einsum=einsum,
         factorized_matmul=factorized_matmul,
         grouped_gemm=grouped_gemm,
+        moe_swiglu_block=moe_swiglu_block,
         tri_solve=tri_solve,
         cholesky=cholesky,
         cholesky_solve=cholesky_solve,

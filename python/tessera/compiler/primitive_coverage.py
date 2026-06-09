@@ -1753,6 +1753,7 @@ def _grouped_layout_for_name(name: str) -> "Any | None":
         # Tessera's existing grouped_gemm is the M-grouped *contiguous* family
         # (experts laid out back-to-back along the token axis).
         "grouped_gemm":            contiguous_layout,
+        "moe_swiglu_block":        contiguous_layout,
         "grouped_gemm_contiguous": contiguous_layout,
         "grouped_gemm_masked":     masked_layout,
         "k_grouped_gemm":          k_grouped_layout,

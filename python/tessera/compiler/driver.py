@@ -502,7 +502,8 @@ _APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
 
 # Ragged grouped matmul — the MoE expert-FFN compute core. Each contiguous token
 # group runs as a per-expert MPS matmul on the Metal lane.
-_APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({"tessera.grouped_gemm"})
+_APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({
+    "tessera.grouped_gemm", "tessera.moe_swiglu_block"})
 
 # LDT candidate-axis ops with dedicated Metal kernels.
 _APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})

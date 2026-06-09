@@ -2339,7 +2339,7 @@ _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 # contractions on the Metal bmm lane (scalar-state A; (D,N) A falls back).
 _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 # Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
-_APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm"})
+_APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm", "tessera.moe_swiglu_block"})
 # LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
 # innermost-axis nonzero count).
 _APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
@@ -2700,6 +2700,12 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_SSM_OPS:
             values[str(result)] = _apple_gpu_dispatch_selective_ssm(
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name == "tessera.moe_swiglu_block":
+            values[str(result)] = _apple_gpu_dispatch_moe_swiglu_block(
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
                 np,
@@ -4264,6 +4270,27 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
             out[off:off + n] = r if r is not None else blk @ we
         off += n
     return out
+
+
+def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) -> Any:
+    """Local SwiGLU-fused MoE expert FFN on Apple GPU, composed from the proven
+    grouped-GEMM + silu_mul lanes:
+        gate = grouped_gemm(x, W_gate) ; up = grouped_gemm(x, W_up)
+        hidden = silu_mul(gate, up)    ; y = grouped_gemm(hidden, W_down)
+    ``operands`` = (x, w_gate, w_up, w_down, group_sizes).  The grouped_layout
+    contract (kind / alignment) + optional quant in ``kwargs`` apply to every
+    grouped GEMM (so masked / k_grouped are rejected here too)."""
+    x, w_gate, w_up, w_down, gs = (operands[0], operands[1], operands[2],
+                                   operands[3], operands[4])
+
+    def gg(a: Any, b: Any) -> Any:
+        return np.asarray(_apple_gpu_dispatch_grouped_gemm([a, b, gs], kwargs, np),
+                          dtype=np.float32)
+
+    gate = gg(x, w_gate)
+    up = gg(x, w_up)
+    hidden = np.asarray(_apple_gpu_dispatch_silu_mul([gate, up], np), dtype=np.float32)
+    return gg(hidden, w_down)
 
 
 def _apple_gpu_dispatch_clifford(op_name: Any, operands: Any, kwargs: Any, np: Any) -> Any:

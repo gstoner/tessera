@@ -189,6 +189,7 @@ modified_delta_attention,state,,1,1,1
 moe,collective,,1,0,0
 moe_combine,collective,collective,1,0,0
 moe_dispatch,collective,collective,1,0,0
+moe_swiglu_block,pure,,1,0,0
 momentum,pure,,1,0,0
 mor_partition,pure,,1,0,0
 mor_router,pure,,1,0,0

@@ -2276,6 +2276,11 @@ _APPLE_GPU_LINEAR_ATTN_OPS = frozenset({
     "tessera.linear_attn", "tessera.linear_attn_state",
     "tessera.lightning_attention", "tessera.power_attn", "tessera.retention",
 })
+# NSA masked-softmax attention (Sub-sprint C) — compressed-block (plain) +
+# sliding-window (structured causal/window mask) via bmm→+mask→softmax→bmm.
+_APPLE_GPU_MASKED_ATTN_OPS = frozenset({
+    "tessera.attn_compressed_blocks", "tessera.attn_sliding_window",
+})
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)
     | frozenset(_APPLE_GPU_BINARY_OPCODES)
@@ -2360,7 +2365,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
-    | _APPLE_GPU_LINEAR_ATTN_OPS
+    | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
 )
 
 
@@ -2595,6 +2600,13 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             )
         elif op_name in _APPLE_GPU_LINEAR_ATTN_OPS:
             values[str(result)] = _apple_gpu_dispatch_linear_attn(
+                op_name,
+                [_as_numpy(values[name]) for name in operand_names],
+                kwargs,
+                np,
+            )
+        elif op_name in _APPLE_GPU_MASKED_ATTN_OPS:
+            values[str(result)] = _apple_gpu_dispatch_masked_attn(
                 op_name,
                 [_as_numpy(values[name]) for name in operand_names],
                 kwargs,
@@ -6016,6 +6028,62 @@ def _apple_gpu_dispatch_linear_attn(op_name: str, operands: list[Any],
     if O is None:
         return None
     return np.asarray(O).astype(out_dtype)
+
+
+def _apple_gpu_dispatch_masked_attn(op_name: str, operands: list[Any],
+                                    kwargs: dict, np: Any) -> Any:
+    """NSA masked-softmax attention (Sub-sprint C).  attn_compressed_blocks is
+    plain softmax(QK_cᵀ·scale)@V_c (the proven batched-attention kernel);
+    attn_sliding_window adds a structured causal/window additive mask before the
+    softmax.  Both run QKᵀ / softmax / PV on the GPU; the window mask is a
+    host-side structured constant.  Returns None on unsupported shapes."""
+    import math as _math
+    short = str(op_name)
+    Q = np.asarray(operands[0])
+    K = np.asarray(operands[1])
+    V = np.asarray(operands[2])
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        return None
+    D = int(Q.shape[-1])
+    scale = 1.0 / _math.sqrt(D)
+
+    if short == "tessera.attn_compressed_blocks":
+        return _apple_gpu_dispatch_batched_attention(Q, K, V, np, scale=scale)
+
+    if short == "tessera.attn_sliding_window":
+        window_size = int(kwargs["window_size"])
+        causal = bool(kwargs.get("causal", True))
+        if window_size <= 0:
+            return None
+        B, H, S, _ = Q.shape
+        Sk = int(K.shape[2])
+        out_dtype = np.result_type(Q, K, V)
+        Qs = np.ascontiguousarray((Q.astype(np.float32)) * np.float32(scale))
+        Kt = np.ascontiguousarray(np.swapaxes(K.astype(np.float32), -1, -2))
+        A = _apple_gpu_dispatch_bmm(Qs, Kt, np)                      # [B,H,S,Sk]
+        if A is None:
+            return None
+        A = np.ascontiguousarray(np.asarray(A, np.float32))
+        i = np.arange(S)[:, None]
+        j = np.arange(Sk)[None, :]
+        if causal:
+            outside = (j > i) | (j < i - window_size + 1)
+        else:
+            outside = (j > i + window_size // 2) | (j < i - window_size // 2)
+        bias = np.where(outside, np.float32(-1e30), np.float32(0.0))  # [S,Sk]
+        bias = np.ascontiguousarray(np.broadcast_to(bias, (B, H, S, Sk)))
+        A = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary("tessera.add", [A, bias], {}, np),
+            np.float32)
+        P2 = _apple_gpu_dispatch_softmax(
+            "tessera.softmax", [np.ascontiguousarray(A.reshape(B * H * S, Sk))], {}, np)
+        P = np.ascontiguousarray(np.asarray(P2, np.float32).reshape(B, H, S, Sk))
+        O = _apple_gpu_dispatch_bmm(P, np.ascontiguousarray(V.astype(np.float32)), np)
+        if O is None:
+            return None
+        return np.asarray(O).astype(out_dtype)
+
+    return None
 
 
 def _apple_gpu_mps_matmul_f32() -> Any:

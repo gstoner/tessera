@@ -11105,6 +11105,23 @@ static MPSGraphTensor *mpsg_unary_node(MPSGraph *g, MPSGraphTensor *x, int op) {
     case 27: return [g ceilWithTensor:x name:nil];
     case 28: return [g roundWithTensor:x name:nil];
     case 29: return [g truncateWithTensor:x name:nil];
+    // Batch 2 (2026-06-08) — unary predicates / logical / bitwise (→ f32 mask).
+    case 30: return [g castTensor:[g isFiniteWithTensor:x name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 31: return [g castTensor:[g isInfiniteWithTensor:x name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 32: return [g castTensor:[g isNaNWithTensor:x name:nil]
+                            toType:MPSDataTypeFloat32 name:nil];
+    case 33: {  // logical_not = (x == 0)
+      MPSGraphTensor *z = [g constantWithScalar:0.0 dataType:MPSDataTypeFloat32];
+      return [g castTensor:[g equalWithPrimaryTensor:x secondaryTensor:z name:nil]
+                      toType:MPSDataTypeFloat32 name:nil];
+    }
+    case 34: {  // bitwise_not on integer-valued f32 (cast → int32 → NOT → f32)
+      MPSGraphTensor *xi = [g castTensor:x toType:MPSDataTypeInt32 name:nil];
+      return [g castTensor:[g bitwiseNOTWithTensor:xi name:nil]
+                      toType:MPSDataTypeFloat32 name:nil];
+    }
     default: return nil;
   }
 }
@@ -11148,6 +11165,28 @@ static MPSGraphTensor *mpsg_binary_node(MPSGraph *g, MPSGraphTensor *a,
                             toType:MPSDataTypeFloat32 name:nil];
     case 16: return [g castTensor:[g greaterThanOrEqualToWithPrimaryTensor:a secondaryTensor:b name:nil]
                             toType:MPSDataTypeFloat32 name:nil];
+    // Batch 2 (2026-06-08) — logical (bool → f32 mask) + bitwise (int32) binary.
+    case 17:
+    case 18:
+    case 19: {  // logical and/or/xor on (a!=0, b!=0)
+      MPSGraphTensor *z = [g constantWithScalar:0.0 dataType:MPSDataTypeFloat32];
+      MPSGraphTensor *ab = [g notEqualWithPrimaryTensor:a secondaryTensor:z name:nil];
+      MPSGraphTensor *bb = [g notEqualWithPrimaryTensor:b secondaryTensor:z name:nil];
+      MPSGraphTensor *r = op == 17 ? [g logicalANDWithPrimaryTensor:ab secondaryTensor:bb name:nil]
+                        : op == 18 ? [g logicalORWithPrimaryTensor:ab secondaryTensor:bb name:nil]
+                                   : [g logicalXORWithPrimaryTensor:ab secondaryTensor:bb name:nil];
+      return [g castTensor:r toType:MPSDataTypeFloat32 name:nil];
+    }
+    case 20:
+    case 21:
+    case 22: {  // bitwise and/or/xor on integer-valued f32
+      MPSGraphTensor *ai = [g castTensor:a toType:MPSDataTypeInt32 name:nil];
+      MPSGraphTensor *bi = [g castTensor:b toType:MPSDataTypeInt32 name:nil];
+      MPSGraphTensor *r = op == 20 ? [g bitwiseANDWithPrimaryTensor:ai secondaryTensor:bi name:nil]
+                        : op == 21 ? [g bitwiseORWithPrimaryTensor:ai secondaryTensor:bi name:nil]
+                                   : [g bitwiseXORWithPrimaryTensor:ai secondaryTensor:bi name:nil];
+      return [g castTensor:r toType:MPSDataTypeFloat32 name:nil];
+    }
     default: return nil;
   }
 }
@@ -12748,6 +12787,11 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float *x,
       case 27: out[i] = std::ceil(v); break;
       case 28: out[i] = std::round(v); break;
       case 29: out[i] = std::trunc(v); break;
+      case 30: out[i] = std::isfinite(v) ? 1.0f : 0.0f; break;
+      case 31: out[i] = std::isinf(v) ? 1.0f : 0.0f; break;
+      case 32: out[i] = std::isnan(v) ? 1.0f : 0.0f; break;
+      case 33: out[i] = (v == 0.0f) ? 1.0f : 0.0f; break;
+      case 34: out[i] = (float)(~(int32_t)v); break;
       default: out[i] = v; break;
     }
   }
@@ -12788,6 +12832,12 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a
       case 14: out[i] = (x <= y) ? 1.0f : 0.0f; break;
       case 15: out[i] = (x > y) ? 1.0f : 0.0f; break;
       case 16: out[i] = (x >= y) ? 1.0f : 0.0f; break;
+      case 17: out[i] = (x != 0.0f && y != 0.0f) ? 1.0f : 0.0f; break;
+      case 18: out[i] = (x != 0.0f || y != 0.0f) ? 1.0f : 0.0f; break;
+      case 19: out[i] = ((x != 0.0f) != (y != 0.0f)) ? 1.0f : 0.0f; break;
+      case 20: out[i] = (float)(((int32_t)x) & ((int32_t)y)); break;
+      case 21: out[i] = (float)(((int32_t)x) | ((int32_t)y)); break;
+      case 22: out[i] = (float)(((int32_t)x) ^ ((int32_t)y)); break;
       default: out[i] = x; break;
     }
   }

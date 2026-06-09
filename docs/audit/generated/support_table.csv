@@ -228,7 +228,9 @@ cummax,reduction,public,public,registered,complete,partial,reference,ready,none
 cummin,reduction,public,public,registered,complete,partial,reference,ready,none
 cumprod,reduction,public,public,registered,complete,partial,reference,ready,none
 cumsum,reduction,public,public,registered,complete,partial,reference,ready,none
+max,reduction,public,public,registered,complete,partial,reference,ready,none
 mean,reduction,public,public,registered,complete,partial,reference,ready,none
+min,reduction,public,public,registered,complete,partial,reference,ready,none
 prod,reduction,public,public,registered,complete,partial,reference,ready,none
 std,reduction,public,public,registered,complete,partial,reference,ready,none
 var,reduction,public,public,registered,complete,partial,reference,ready,none

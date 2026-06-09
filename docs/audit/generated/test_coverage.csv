@@ -38,7 +38,7 @@ batched_gemm,12,4,0,16,0,bf16 f16 f32 fp16 fp32,structural_only,unclassified —
 bidirectional_scan,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
 binary_cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 bitwise_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-bitwise_not,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+bitwise_not,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 bitwise_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 bitwise_xor,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 broadcast,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -56,7 +56,7 @@ cholesky,14,30,0,44,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default 
 cholesky_solve,1,1,0,2,0,bf16 f16 f32 fp16 fp32,structural_only,unclassified — defaults to structural_only
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 cispo_policy_loss,2,2,0,4,0,,needs_direct_test,category default for 'rl_loss'
-clamp,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+clamp,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_exp,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
@@ -75,7 +75,7 @@ clifford_reverse,1,0,0,1,1,,covered_by_family,category default for 'geometric_al
 clifford_rotor_sandwich,2,0,0,2,0,,covered_by_family,category default for 'geometric_algebra'
 clifford_vec_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_wedge,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clip,5,0,0,5,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,covered_by_family,category default for 'elementwise'
+clip,6,0,0,6,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,covered_by_family,category default for 'elementwise'
 clip_grad_norm,3,0,0,3,0,,structural_only,category default for 'grad_transform'
 clip_grad_value,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 collective_permute,2,0,0,2,0,,needs_direct_test,category default for 'collective'
@@ -207,7 +207,7 @@ irfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 isfinite,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 isinf,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-isnan,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+isnan,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 istft,2,0,0,2,0,,needs_direct_test,category default for 'spectral'
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,6,0,0,6,0,,covered_by_family,category default for 'loss'
@@ -240,7 +240,7 @@ log1p,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 log_softmax,5,5,0,10,0,,needs_direct_test,category default for 'stable_reduction'
 logical_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-logical_not,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+logical_not,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 logical_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logical_xor,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logsumexp,4,3,0,7,0,,needs_direct_test,category default for 'stable_reduction'
@@ -440,6 +440,6 @@ vlb_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'
 wasserstein_distance,6,0,0,6,0,,covered_by_family,category default for 'loss'
 weight_norm,4,0,0,4,0,,needs_direct_test,category default for 'normalization'
-where,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+where,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 while_loop,4,0,1,4,0,,structural_only,category default for 'control_flow'
 z_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'

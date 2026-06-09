@@ -182,6 +182,8 @@ _SPECS = [
     OpSpec("cumprod", "tessera.cumprod", 1, 1, lowering="reduction"),
     OpSpec("cummax", "tessera.cummax", 1, 1, lowering="reduction"),
     OpSpec("cummin", "tessera.cummin", 1, 1, lowering="reduction"),
+    OpSpec("max", "tessera.max", 1, 1, lowering="reduction"),
+    OpSpec("min", "tessera.min", 1, 1, lowering="reduction"),
     # S2 — numerical-stability primitives.
     OpSpec("logsumexp", "tessera.logsumexp", 1, 1, lowering="stable_reduction"),
     OpSpec("log_softmax", "tessera.log_softmax", 1, 1, lowering="stable_reduction"),

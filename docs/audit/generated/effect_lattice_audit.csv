@@ -171,8 +171,10 @@ mae_loss,pure,,1,0,0
 masked_categorical,random,,1,0,0
 masked_fill,pure,,1,0,0
 matmul,pure,pure,1,1,0
+max,pure,,1,0,0
 maximum,pure,,1,0,0
 mean,pure,,1,0,0
+min,pure,,1,0,0
 minimum,pure,,1,0,0
 mla_decode,state,,1,1,1
 mla_decode_fused,state,,1,1,1

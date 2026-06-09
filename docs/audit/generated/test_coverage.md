@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **444** ops in `primitive_coverage` registry.
-- **1960** total Python-test references, **500** total lit-fixture references.
+- **1966** total Python-test references, **500** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
-- **214** ops have ≤1 reference ("thinly tested").
+- **209** ops have ≤1 reference ("thinly tested").
 - **39** ops have ≥10 references ("well tested").
 - **52** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **214** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **209** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -59,7 +59,6 @@ These **214** ops have at most one test reference across the whole test surface.
 | `axis_size` |    0 |    0 |    0 |
 | `binary_cross_entropy_loss` |    1 |    0 |    1 |
 | `bitwise_and` |    1 |    0 |    1 |
-| `bitwise_not` |    1 |    0 |    1 |
 | `bitwise_or` |    1 |    0 |    1 |
 | `bitwise_xor` |    1 |    0 |    1 |
 | `broadcast` |    1 |    0 |    1 |
@@ -70,7 +69,6 @@ These **214** ops have at most one test reference across the whole test surface.
 | `check_cauchy_riemann` |    0 |    0 |    0 |
 | `checkpoint` |    0 |    0 |    0 |
 | `chunk` |    1 |    0 |    1 |
-| `clamp` |    1 |    0 |    1 |
 | `clifford_codiff` |    0 |    0 |    0 |
 | `clifford_conjugate` |    1 |    0 |    1 |
 | `clifford_exp` |    0 |    0 |    0 |
@@ -104,8 +102,10 @@ These **214** ops have at most one test reference across the whole test surface.
 | `cyclical_lr` |    1 |    0 |    1 |
 | `dataset_batch` |    0 |    0 |    0 |
 | `dataset_checkpoint` |    0 |    0 |    0 |
+| `dataset_filter` |    0 |    0 |    0 |
+| `dataset_interleave` |    0 |    0 |    0 |
 
-_(154 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(149 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**214** ops have ≤1 direct test reference.  They break down as:
+**209** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   85 | Tested via a parent op or family wrapper |
-| `structural_only`        |  125 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |  120 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -184,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(55 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 125 ops
+## `structural_only` — 120 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -200,7 +200,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `axis_name` | category default for 'transform' |
 | `axis_size` | category default for 'transform' |
 | `bitwise_and` | unclassified — defaults to structural_only |
-| `bitwise_not` | unclassified — defaults to structural_only |
 | `bitwise_or` | unclassified — defaults to structural_only |
 | `bitwise_xor` | unclassified — defaults to structural_only |
 | `broadcast` | unclassified — defaults to structural_only |
@@ -210,7 +209,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `chained_schedule` | category default for 'schedule' |
 | `checkpoint` | category default for 'transform' |
 | `chunk` | unclassified — defaults to structural_only |
-| `clamp` | unclassified — defaults to structural_only |
 | `clifford_norm_squared` | unclassified — defaults to structural_only |
 | `cosine_warmup_lr` | category default for 'schedule' |
 | `custom_batching` | category default for 'extension' |
@@ -220,5 +218,7 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `custom_primitive` | category default for 'extension' |
 | `custom_vjp` | category default for 'extension' |
 | `cyclical_lr` | category default for 'schedule' |
+| `dataset_batch` | category default for 'data' |
+| `dataset_checkpoint` | category default for 'data' |
 
-_(95 additional structural ops omitted.)_
+_(90 additional structural ops omitted.)_

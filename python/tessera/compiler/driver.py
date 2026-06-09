@@ -454,6 +454,12 @@ _APPLE_GPU_MPSGRAPH_OPS: frozenset[str] = frozenset({
     "tessera.pow", "tessera.atan2", "tessera.mod", "tessera.floor_div",
     "tessera.eq", "tessera.ne", "tessera.lt", "tessera.le",
     "tessera.gt", "tessera.ge",
+    # Batch 2 (2026-06-08) — predicates / logical / bitwise + compose ops.
+    "tessera.isfinite", "tessera.isinf", "tessera.isnan",
+    "tessera.logical_not", "tessera.bitwise_not",
+    "tessera.logical_and", "tessera.logical_or", "tessera.logical_xor",
+    "tessera.bitwise_and", "tessera.bitwise_or", "tessera.bitwise_xor",
+    "tessera.clamp", "tessera.clip", "tessera.where",
     "tessera.layer_norm",
     "tessera.rmsnorm",
     "tessera.rmsnorm_safe",
@@ -476,6 +482,7 @@ _APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
     "tessera.argmin", "tessera.cumsum", "tessera.cumprod",
     # Batch 2 (2026-06-08) — reduce/scan opcode completions.
     "tessera.logsumexp", "tessera.cummax", "tessera.cummin",
+    "tessera.max", "tessera.min",
 })
 
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node

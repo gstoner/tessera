@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 101 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 102 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 1 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 46 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 148 | |
+| **Total** | 149 | |
 
 ## Per-dialect details
 
@@ -102,6 +102,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `ModifiedDeltaAttentionOp` | `real` |
 | `MoeCombineOp` | `real` |
 | `MoeDispatchOp` | `real` |
+| `MoeSwigluBlockOp` | `real` |
 | `MomentumOp` | `no_verifier` |
 | `MorPartitionOp` | `real` |
 | `MorRouterOp` | `real` |

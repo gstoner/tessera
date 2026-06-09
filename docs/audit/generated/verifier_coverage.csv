@@ -83,6 +83,7 @@ src/compiler/ir/TesseraOps.td,MatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,ModifiedDeltaAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeDispatchOp,1,1,real
+src/compiler/ir/TesseraOps.td,MoeSwigluBlockOp,1,1,real
 src/compiler/ir/TesseraOps.td,MomentumOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,MorPartitionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorRouterOp,1,1,real

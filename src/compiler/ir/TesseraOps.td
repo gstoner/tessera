@@ -220,6 +220,29 @@ def Tessera_GroupedGemmOp : Op<
   let hasVerifier = 1;
 }
 
+// Local SwiGLU-fused MoE expert-FFN block (MegaMoE precursor, 2026-06).  Fuses
+// the expert feed-forward core into one Graph-IR op: gate/up grouped GEMMs ->
+// silu_mul -> down grouped GEMM, carrying the same grouped-layout contract as
+// GroupedGemmOp.  x (T,K); w_gate/w_up (E,K,F); w_down (E,F,N); group_sizes
+// (E,) -> result (T,N).
+def Tessera_MoeSwigluBlockOp : Op<
+  Tessera_Dialect, "moe_swiglu_block",
+  [Pure]
+> {
+  let summary = "Local SwiGLU-fused MoE expert FFN over grouped tokens";
+  let arguments = (ins TensorType:$x,
+                        TensorType:$w_gate,
+                        TensorType:$w_up,
+                        TensorType:$w_down,
+                        TensorType:$group_sizes,
+                        DefaultValuedAttr<StrAttr, "\"contiguous\"">:$grouped_kind,
+                        OptionalAttr<I64Attr>:$grouped_alignment,
+                        OptionalAttr<StrAttr>:$quant);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Stage 13 — RL post-training loss Graph IR surface. These ops make PPO/GRPO/
 // CISPO compiler-visible at the Graph layer. Only PPO's strict fp32 mean
 // envelope is promoted to Apple GPU value execution in this stage; GRPO/CISPO

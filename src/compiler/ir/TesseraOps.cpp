@@ -125,6 +125,52 @@ LogicalResult GroupedGemmOp::verify() {
   return success();
 }
 
+LogicalResult MoeSwigluBlockOp::verify() {
+  StringRef kind = getGroupedKind();
+  if (kind != "dense" && kind != "contiguous" && kind != "masked" &&
+      kind != "k_grouped")
+    return emitOpError("grouped_kind must be one of "
+                       "{dense, contiguous, masked, k_grouped}; got ")
+           << kind;
+  if (auto a = getGroupedAlignment()) {
+    int64_t v = *a;
+    if (v <= 0 || (v & (v - 1)) != 0)
+      return emitOpError("grouped_alignment must be a positive power of two; got ")
+             << v;
+  }
+
+  auto xType = dyn_cast<RankedTensorType>(getX().getType());
+  auto wgType = dyn_cast<RankedTensorType>(getWGate().getType());
+  auto wuType = dyn_cast<RankedTensorType>(getWUp().getType());
+  auto wdType = dyn_cast<RankedTensorType>(getWDown().getType());
+  auto rType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!xType || !wgType || !wuType || !wdType || !rType)
+    return success();
+  if (xType.getRank() != 2)
+    return emitOpError("x must be a rank-2 (T, K) tensor");
+  if (wgType.getRank() != 3 || wuType.getRank() != 3 || wdType.getRank() != 3)
+    return emitOpError("w_gate / w_up (E,K,F) and w_down (E,F,N) must be rank-3");
+  if (rType.getRank() != 2)
+    return emitOpError("result must be a rank-2 (T, N) tensor");
+
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  // x K == w_gate K == w_up K (the projection contracting dim)
+  if (!agree(xType.getDimSize(1), wgType.getDimSize(1)) ||
+      !agree(xType.getDimSize(1), wuType.getDimSize(1)))
+    return emitOpError("contracting dim mismatch: x K vs w_gate/w_up K");
+  // w_gate F == w_up F == w_down K (the SwiGLU hidden dim)
+  if (!agree(wgType.getDimSize(2), wuType.getDimSize(2)) ||
+      !agree(wgType.getDimSize(2), wdType.getDimSize(1)))
+    return emitOpError("hidden-dim mismatch: w_gate F / w_up F / w_down K");
+  if (!agree(rType.getDimSize(0), xType.getDimSize(0)))
+    return emitOpError("result T must equal x T");
+  if (!agree(rType.getDimSize(1), wdType.getDimSize(2)))
+    return emitOpError("result N must equal w_down N");
+  return success();
+}
+
 namespace {
 bool isFloatTensor(RankedTensorType ty) {
   Type elem = ty.getElementType();

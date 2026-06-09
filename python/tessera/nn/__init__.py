@@ -43,6 +43,7 @@ from .functional import (
     max_pool,
     min_pool,
     mla_decode,
+    moe_layer,
     mqa_attention,
     ntk_rope,
     rms_norm,
@@ -143,7 +144,7 @@ __all__ = [
     "max_pool", "avg_pool", "min_pool", "adaptive_pool",
     "simple_rnn_cell", "gru_cell", "bidirectional_scan", "lora_linear",
     "alibi", "ntk_rope", "gqa_attention", "mqa_attention", "mla_decode",
-    "rms_norm", "swiglu", "multi_head_attention",
+    "rms_norm", "swiglu", "moe_layer", "multi_head_attention",
     "flash_attention", "functional",
     # Stateful API (Tier 1)
     "Module", "Parameter", "Buffer", "Sequential", "ModuleList", "ModuleDict",

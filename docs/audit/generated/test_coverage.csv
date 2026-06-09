@@ -272,7 +272,7 @@ module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 moe,8,0,0,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 moe_combine,4,0,0,4,0,,needs_direct_test,category default for 'moe_transport'
 moe_dispatch,1,3,0,4,0,,needs_direct_test,category default for 'moe_transport'
-moe_swiglu_block,8,6,1,14,0,fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+moe_swiglu_block,9,6,1,15,0,fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 momentum,3,0,0,3,0,,needs_direct_test,category default for 'functional_optimizer_step'
 mor_partition,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
 mor_router,5,3,1,8,0,,needs_direct_test,category default for 'layout_transform'

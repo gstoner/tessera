@@ -364,6 +364,96 @@ def swiglu(x, W_gate, W_up, W_down):
     return ops.gemm(hidden, W_down)
 
 
+def moe_layer(
+    x,
+    W_router,
+    W_gate,
+    W_up,
+    W_down,
+    *,
+    top_k: int = 1,
+    normalize_weights: bool = True,
+    capacity_factor: float = 0.0,
+    kind: str = "contiguous",
+    alignment=None,
+    quant=None,
+):
+    """Single-device top-k SwiGLU MoE layer: router → permute → expert FFN → combine.
+
+    The full local MoE forward, one step short of distributed MegaMoE (no
+    token all-to-all, no comm/compute overlap):
+
+        scores   = x @ W_router                    # (T, E) gate logits
+        route    = top-k(softmax(scores))          # per-token expert + weight
+        x_perm   = gather tokens into expert order # contiguous grouped layout
+        y_perm   = moe_swiglu_block(x_perm, ...)   # GPU expert FFN (grouped GEMM)
+        out      = scatter-add weighted y_perm      # combine k expert outputs
+
+    The heavy expert compute flows through ``ops.moe_swiglu_block`` (which routes
+    to Apple-GPU ``metal_runtime`` by composing the grouped-GEMM + silu_mul lanes);
+    the data-dependent routing / permute / combine are host-side index math — the
+    same host-falls-back-for-data-dependent-indexing policy ``argmax`` already uses.
+
+    Shapes
+    ------
+    x        : (T, K)        input tokens
+    W_router : (K, E)        router / gate projection
+    W_gate   : (E, K, F)     per-expert SwiGLU gate weight
+    W_up     : (E, K, F)     per-expert SwiGLU up weight
+    W_down   : (E, F, N)     per-expert down projection
+    returns  : (T, N)        combined expert outputs
+
+    Capacity drops (``route_tokens`` overflow → slot weight 0) contribute nothing
+    to the combine, so over-capacity tokens are simply not routed.
+    """
+    from ..distributed.moe import MoEConfig, route_tokens
+
+    xa = _asarray(x)
+    Wr = _asarray(W_router)
+    T, _K = xa.shape
+    E = Wr.shape[1]
+    N = _asarray(W_down).shape[2]
+
+    # 1. Router — gate logits on GPU, top-k selection on host (data-dependent).
+    scores = np.asarray(ops.gemm(xa, Wr))
+    cfg = MoEConfig(
+        num_experts=E,
+        top_k=top_k,
+        normalize_weights=normalize_weights,
+        capacity_factor=capacity_factor if capacity_factor > 0 else 1e9,
+    )
+    route = route_tokens(scores.astype(np.float32), cfg)
+
+    # 2. Expand each token to its top_k slots and sort slots into expert order.
+    slot_token = np.repeat(np.arange(T, dtype=np.int64), top_k)
+    slot_expert = route.assignment.reshape(-1)
+    slot_weight = route.weights.reshape(-1).astype(np.float32)
+    keep = slot_expert >= 0                       # drop capacity-overflow slots
+    slot_token, slot_expert, slot_weight = (
+        slot_token[keep],
+        slot_expert[keep],
+        slot_weight[keep],
+    )
+    order = np.argsort(slot_expert, kind="stable")
+    perm_token = slot_token[order]
+    perm_weight = slot_weight[order]
+    group_sizes = np.bincount(slot_expert[order], minlength=E).astype(np.int64)
+    x_perm = xa[perm_token]                        # (S, K) tokens in expert order
+
+    # 3. Expert FFN over the contiguous grouped layout (GPU grouped-GEMM lanes).
+    y_perm = np.asarray(
+        ops.moe_swiglu_block(
+            x_perm, W_gate, W_up, W_down, group_sizes,
+            kind=kind, alignment=alignment, quant=quant,
+        )
+    )
+
+    # 4. Combine — weight each slot by its gate, scatter-add back per token.
+    out = np.zeros((T, N), dtype=y_perm.dtype)
+    np.add.at(out, perm_token, y_perm * perm_weight[:, None])
+    return out
+
+
 def multi_head_attention(
     Q,
     K,
@@ -447,6 +537,7 @@ __all__ = [
     "mqa_attention",
     "ntk_rope",
     "rms_norm",
+    "moe_layer",
     "simple_rnn_cell",
     "spectral_norm",
     "swiglu",

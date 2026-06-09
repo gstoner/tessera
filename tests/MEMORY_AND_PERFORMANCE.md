@@ -14,17 +14,17 @@ will vary by ~25% across machines but the orders of magnitude hold.
 
 ## Suite-by-suite footprint
 
-Measured 2026-06-02 against the current test tree (~6,900 fast / 777
-deselected / ~7,680 total collected via `pytest --collect-only`).
+Measured 2026-06-09 against the current test tree (~8,150 fast / 777
+deselected / ~8,920 total collected via `pytest --collect-only`).
 Counts grew from earlier baselines as Apple GPU encode/conv2d,
-MTL4 routing, optimizer-batching, descriptor, and feature-limit
-suites landed:
+MTL4 routing, optimizer-batching, descriptor, feature-limit, and the
+Phase-G attention-family / accelerator-proof composition suites landed:
 
 | Suite | Tests | Wall clock | Peak RSS | Source of pressure |
 |---|---:|---:|---:|---|
-| **`-m "not slow"`** (default) | ~6,900 | ~4 min | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple GPU encode-session / MTL4 / descriptor / feature-limit coverage |
+| **`-m "not slow"`** (default) | ~8,150 | ~4 min | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple GPU encode-session / MTL4 / descriptor / feature-limit coverage |
 | **`-m slow`** (heavy benchmarks) | 777 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
-| **Full suite** (`-m ""`) | ~7,680 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
+| **Full suite** (`-m ""`) | ~8,920 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
 
 The measured fast-suite numbers (~125 MB peak, ~4 min) leave a
 comfortable margin on any modern machine.  Peak RSS dropped from the

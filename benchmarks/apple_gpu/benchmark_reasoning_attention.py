@@ -74,18 +74,30 @@ EXECUTABLE_ENVELOPE = {
                    "output projection)",
 }
 
-COMPILER_VISIBLE_ONLY = [
-    {"name": "mla_decode_fused", "graph_op": "tessera.mla_decode_fused",
-     "description": "DeepSeek MLA decode chain fused by -tessera-mla-fusion"},
+# Phase-G attention sprint (2026-06) promoted the whole reasoning-attention
+# family onto the Apple GPU runtime envelope, so these are no longer
+# compiler-visible-only — they EXECUTE (linear/delta via the quadratic-parallel
+# bmm form, mla_decode_fused via projection bmms + the GQA flash kernel, hybrid
+# as a policy router over the now-proven delegates).  They are measured here
+# like the MLA-style block: real correctness vs the ts.ops reference + timing.
+REASONING_EXECUTABLE = [
     {"name": "lightning_attention", "graph_op": "tessera.lightning_attention",
-     "description": "MiniMax-M1 Lightning linear attention"},
+     "kind": "qkv", "description": "MiniMax-M1 Lightning linear attention"},
     {"name": "gated_deltanet", "graph_op": "tessera.gated_deltanet",
-     "description": "Gated DeltaNet recurrence"},
+     "kind": "qkv", "description": "Gated DeltaNet recurrence"},
     {"name": "kimi_delta_attention", "graph_op": "tessera.kimi_delta_attention",
-     "description": "Kimi-Dev delta attention"},
+     "kind": "qkv", "description": "Kimi-Dev delta attention"},
     {"name": "hybrid_attention", "graph_op": "tessera.hybrid_attention",
-     "description": "Ling/Kimi named hybrid attention policy"},
+     "kind": "hybrid", "description": "Ling/Kimi named hybrid attention policy"},
+    {"name": "mla_decode_fused", "graph_op": "tessera.mla_decode_fused",
+     "kind": "mla_fused",
+     "description": "DeepSeek MLA decode chain (projection bmms + GQA flash)"},
 ]
+
+# No reasoning-attention op remains compiler-visible-only after the Phase-G
+# sprint; the honesty harness keeps the (now-empty) category so a future
+# not-yet-executable variant can be added without re-plumbing.
+COMPILER_VISIBLE_ONLY: list[dict[str, str]] = []
 
 
 def _executor_for(graph_op: str) -> str | None:
@@ -315,6 +327,91 @@ def _measure_native_sparse_envelope(shapes, reps):
     return rows
 
 
+def _reasoning_inputs(kind, T, D, H, rng):
+    """Build (jit_callable, args, numpy_reference) for one reasoning op."""
+    f = lambda *s: (rng.randn(*s) * 0.1).astype(np.float32)
+    Dh = max(1, D // H)
+    if kind in ("qkv", "hybrid"):
+        Q, K, V = f(1, H, T, Dh), f(1, H, T, Dh), f(1, H, T, Dh)
+        return (Q, K, V)
+    if kind == "mla_fused":
+        Dc = max(1, D // 2)
+        x, q = f(1, T, D), f(1, T, D)
+        w_dkv, w_uk, w_uv = f(D, Dc), f(Dc, D), f(Dc, D)
+        return (x, w_dkv, w_uk, w_uv, q)
+    raise ValueError(kind)
+
+
+def _measure_reasoning_envelope(shapes, reps):
+    """Phase-G sprint: the reasoning-attention family now EXECUTES on apple_gpu.
+    Each op runs through its @jit(target='apple_gpu') path; correctness is the
+    max rel err vs the ts.ops reference, timing is the median wall time.  When
+    Metal is inactive the numbers are None with an explicit skip_reason — the
+    route/target/executor fields are always reported."""
+    rows = []
+    active = _metal_active()
+    for spec in REASONING_EXECUTABLE:
+        graph_op = spec["graph_op"]
+        executor = _executor_for(graph_op)
+        executable = _is_executable(graph_op)
+        kind = spec["kind"]
+        for (T, D, H) in shapes:
+            row: dict[str, Any] = {
+                "name": spec["name"],
+                "variant_kind": "executable_envelope",
+                "shape": f"T{T}_D{D}_H{H}",
+                "route": f"apple_gpu runtime ({executor})",
+                "target": "apple_gpu",
+                "executor": executor,
+                "executable": executable,
+                "correctness_max_rel_err": None,
+                "timing_ms": None,
+                "skip_reason": None,
+            }
+            if not active:
+                row["skip_reason"] = "metal runtime inactive (non-Darwin or no GPU)"
+                rows.append(row)
+                continue
+
+            rng = np.random.RandomState(2026_06_20 + T + hash(spec["name"]) % 1000)
+            args = _reasoning_inputs(kind, T, D, H, rng)
+
+            if kind == "qkv":
+                op = getattr(ts.ops, spec["name"])
+
+                @ts.jit(target="apple_gpu")
+                def jf(q, k, v, _op=op):
+                    return _op(q, k, v, causal=True)
+
+                got = np.asarray(jf(*args))
+                ref = np.asarray(op(*args, causal=True))
+            elif kind == "hybrid":
+                @ts.jit(target="apple_gpu")
+                def jf(q, k, v):
+                    return ts.ops.hybrid_attention(q, k, v, pattern="auto", causal=True)
+
+                got = np.asarray(jf(*args))
+                ref = np.asarray(ts.ops.hybrid_attention(*args, pattern="auto", causal=True))
+            else:  # mla_fused
+                @ts.jit(target="apple_gpu")
+                def jf(x, w_dkv, w_uk, w_uv, q):
+                    return ts.ops.mla_decode_fused(x, w_dkv, w_uk, w_uv, q, causal=True)
+
+                got = np.asarray(jf(*args))
+                ref = np.asarray(ts.ops.mla_decode_fused(*args, causal=True))
+
+            denom = float(np.abs(ref).max()) + 1e-9
+            row["correctness_max_rel_err"] = float(np.abs(got - ref).max() / denom)
+            times = []
+            for _ in range(max(1, reps)):
+                t0 = time.perf_counter()
+                jf(*args)
+                times.append((time.perf_counter() - t0) * 1e3)
+            row["timing_ms"] = float(statistics.median(times))
+            rows.append(row)
+    return rows
+
+
 def _compiler_visible_rows():
     """One row per compiler-visible-only reasoning variant. These are NOT
     executed — executor/correctness/timing are all None by construction."""
@@ -341,6 +438,7 @@ def _compiler_visible_rows():
 def build_report(shapes, reps) -> dict[str, Any]:
     rows = (_measure_executable_envelope(shapes, reps)
             + _measure_native_sparse_envelope(shapes, reps)
+            + _measure_reasoning_envelope(shapes, reps)
             + _compiler_visible_rows())
     return {
         "benchmark": "apple_gpu_reasoning_attention",

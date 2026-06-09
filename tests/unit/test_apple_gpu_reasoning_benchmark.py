@@ -63,13 +63,20 @@ def test_executable_split_is_grounded_in_driver_envelope(bench):
     # The MLA-style block is built from matmul → executable.
     assert bench._is_executable("tessera.matmul") is True
     assert "tessera.matmul" in d._APPLE_GPU_RUNTIME_OPS
-    # Every compiler-visible-only reasoning op must be ABSENT from the runtime
-    # envelope (honestly not executable).
+    # Phase-G sprint: the whole reasoning-attention family now executes on the
+    # apple_gpu runtime envelope, so every REASONING_EXECUTABLE op must be
+    # PRESENT in the envelope with a resolved executor (honestly executable).
+    for v in bench.REASONING_EXECUTABLE:
+        op = v["graph_op"]
+        assert op in d._APPLE_GPU_RUNTIME_OPS, (
+            f"{op} missing from runtime envelope — benchmark would "
+            f"under-claim a now-executable op")
+        assert bench._is_executable(op) is True
+        assert bench._executor_for(op) is not None
+    # Any op still parked as compiler-visible-only must be honestly absent.
     for v in bench.COMPILER_VISIBLE_ONLY:
         op = v["graph_op"]
-        assert op not in d._APPLE_GPU_RUNTIME_OPS, (
-            f"{op} unexpectedly in runtime envelope — benchmark would "
-            f"over-claim it as executable")
+        assert op not in d._APPLE_GPU_RUNTIME_OPS
         assert bench._is_executable(op) is False
         assert bench._executor_for(op) is None
 
@@ -84,15 +91,38 @@ def test_native_sparse_claim_is_grounded_in_value_runtime_probe(bench):
 
 
 def test_compiler_visible_rows_never_fabricate_numbers(report):
+    # The reasoning family is fully executable after the Phase-G sprint, so
+    # there are normally no compiler-visible-only rows; the honesty principle
+    # still holds for any that remain — never a fabricated number.
     cv = [r for r in report["rows"]
           if r["variant_kind"] == "compiler_visible_only"]
-    assert cv, "expected compiler-visible-only rows"
     for r in cv:
         assert r["executable"] is False
         assert r["executor"] is None
         assert r["correctness_max_rel_err"] is None
         assert r["timing_ms"] is None
         assert r["skip_reason"]  # must say why it wasn't executed
+
+
+def test_reasoning_rows_are_honestly_classified(report):
+    """The promoted reasoning-attention rows are executable + grounded in the
+    envelope; when Metal ran they carry measured numbers, otherwise None with
+    a skip_reason — never fabricated."""
+    reasoning = [r for r in report["rows"]
+                 if r["name"] in {"lightning_attention", "gated_deltanet",
+                                  "kimi_delta_attention", "hybrid_attention",
+                                  "mla_decode_fused"}]
+    assert reasoning, "expected promoted reasoning-attention rows"
+    for r in reasoning:
+        assert r["variant_kind"] == "executable_envelope"
+        assert r["executable"] is True
+        assert r["executor"] is not None
+        if r["skip_reason"] is None:        # Metal ran → measured
+            assert r["correctness_max_rel_err"] is not None
+            assert r["timing_ms"] is not None and r["timing_ms"] > 0.0
+        else:                               # inactive → no fabricated numbers
+            assert r["correctness_max_rel_err"] is None
+            assert r["timing_ms"] is None
 
 
 def test_executable_envelope_rows_classification(report):

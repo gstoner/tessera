@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 import tessera as ts
+from tessera import runtime as _runtime
 from tessera.compiler import grouped_layout as gl
 from tessera.compiler import primitive_coverage as pc
 
@@ -166,3 +167,104 @@ def test_nvfp4_block_dequant_grouped_gemm_oracle(group_sizes):
     got = gl.reference_grouped_gemm(x_q, w_q, gs)
     rel = np.linalg.norm(got - ref) / (np.linalg.norm(ref) + 1e-9)
     assert rel < 0.20, f"nvfp4 grouped-GEMM rel error {rel:.4f} too high"
+
+
+# ── Rung A: the grouped_layout contract is a runtime gate, not a sticker ─────
+def test_validate_grouped_alignment():
+    gl.validate_grouped_alignment([128, 256, 128], 128)  # ok
+    gl.validate_grouped_alignment([5, 3, 4], 1)          # alignment<=1 is a no-op
+    gl.validate_grouped_alignment([5, 3, 4], None)       # None is a no-op
+    with pytest.raises(ValueError):
+        gl.validate_grouped_alignment([5, 3, 4], 128)    # not aligned
+
+
+def _gg_inputs(seed=0):
+    rng = np.random.default_rng(seed)
+    return (rng.standard_normal((12, 8)).astype(np.float32),
+            rng.standard_normal((3, 8, 6)).astype(np.float32),
+            np.array([5, 3, 4], np.int64))
+
+
+@pytest.mark.parametrize("kind", ["masked", "k_grouped"])
+def test_eager_grouped_gemm_rejects_unsupported_kinds(kind):
+    x, w, gs = _gg_inputs()
+    with pytest.raises(NotImplementedError):
+        ts.ops.grouped_gemm(x, w, gs, kind=kind)
+
+
+def test_eager_grouped_gemm_rejects_unknown_kind():
+    x, w, gs = _gg_inputs()
+    with pytest.raises(ValueError):
+        ts.ops.grouped_gemm(x, w, gs, kind="bogus")
+
+
+def test_eager_grouped_gemm_enforces_alignment():
+    x, w, gs = _gg_inputs()
+    with pytest.raises(ValueError):
+        ts.ops.grouped_gemm(x, w, gs, alignment=128)  # [5,3,4] not 128-aligned
+    # aligned groups pass + match the reference
+    rng = np.random.default_rng(1)
+    xa = rng.standard_normal((256, 8)).astype(np.float32)
+    wa = rng.standard_normal((2, 8, 6)).astype(np.float32)
+    gsa = np.array([128, 128], np.int64)
+    got = ts.ops.grouped_gemm(xa, wa, gsa, alignment=128)
+    np.testing.assert_allclose(got, gl.reference_grouped_gemm(xa, wa, gsa), rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("kind", ["masked", "k_grouped"])
+def test_runtime_dispatch_rejects_unsupported_kinds(kind):
+    x, w, gs = _gg_inputs()
+    with pytest.raises(ValueError) as ei:
+        _runtime._apple_gpu_dispatch_grouped_gemm([x, w, gs], {"kind": kind}, np)
+    msg = str(ei.value)
+    assert "apple_gpu" in msg and kind in msg  # Decision #21: names target + kind
+
+
+def test_runtime_dispatch_contiguous_matches_reference():
+    x, w, gs = _gg_inputs(2)
+    for kw in ({}, {"kind": "contiguous"}, {"kind": "dense"}):
+        got = np.asarray(_runtime._apple_gpu_dispatch_grouped_gemm([x, w, gs], kw, np))
+        np.testing.assert_allclose(got, gl.reference_grouped_gemm(x, w, gs), rtol=1e-4, atol=1e-4)
+
+
+def test_runtime_dispatch_enforces_alignment():
+    x, w, gs = _gg_inputs(3)
+    with pytest.raises(ValueError):
+        _runtime._apple_gpu_dispatch_grouped_gemm([x, w, gs], {"alignment": 128}, np)
+
+
+# ── Rung B: scale_layout drives a quantized grouped-GEMM runtime path ────────
+@pytest.mark.parametrize("quant,bound", [("fp8_e4m3", 0.06), ("fp8_e5m2", 0.30), ("nvfp4", 0.20)])
+def test_eager_quantized_grouped_gemm(quant, bound):
+    x, w, gs = _grouped_inputs(11, [16, 16, 32], K=64, N=16)
+    ref = gl.reference_grouped_gemm(x, w, gs)
+    got = ts.ops.grouped_gemm(x, w, gs, quant=quant)
+    rel = np.linalg.norm(got - ref) / (np.linalg.norm(ref) + 1e-9)
+    assert rel < bound, f"{quant} quantized grouped GEMM rel {rel:.4f} > {bound}"
+
+
+def test_runtime_quantized_grouped_gemm_matches_eager():
+    x, w, gs = _grouped_inputs(13, [16, 16, 32], K=64, N=16)
+    for quant in ("fp8_e4m3", "nvfp4"):
+        eager = np.asarray(ts.ops.grouped_gemm(x, w, gs, quant=quant))
+        rt = np.asarray(_runtime._apple_gpu_dispatch_grouped_gemm([x, w, gs], {"quant": quant}, np))
+        # same host-dequant path → identical (modulo the fused-kernel f32 GEMM)
+        np.testing.assert_allclose(rt, eager, rtol=1e-4, atol=1e-4)
+
+
+def test_quantized_grouped_gemm_rejects_unsupported_dtype():
+    x, w, gs = _grouped_inputs(15, [5, 3, 4], K=8, N=6)
+    with pytest.raises(ValueError):
+        ts.ops.grouped_gemm(x, w, gs, quant="int8")  # no dequant-on-host path
+    with pytest.raises(ValueError):
+        gl.apply_quant_for_grouped(
+            x, w, "bogus",
+            quantize_fp8=ts.ops.quantize_fp8, quantize_nvfp4=ts.ops.quantize_nvfp4,
+            dequantize_nvfp4=ts.ops.dequantize_nvfp4)
+
+
+def test_quant_grouped_gemm_preserves_shape_and_dtype():
+    x, w, gs = _grouped_inputs(17, [5, 3, 4], K=8, N=6)
+    got = ts.ops.grouped_gemm(x, w, gs, quant="fp8_e4m3")
+    assert got.shape == (int(gs.sum()), w.shape[2])
+    assert got.dtype == x.dtype

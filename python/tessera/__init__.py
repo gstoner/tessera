@@ -248,7 +248,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         r = max(1, min(int(rank), s.shape[-1]))
         return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
 
-    def grouped_gemm(x, weights, group_sizes):
+    def grouped_gemm(x, weights, group_sizes, *, kind="contiguous", alignment=None,
+                     quant=None):
         """Ragged grouped matmul — the MoE expert-FFN compute core.
 
         ``x`` shape ``(T, K)`` holds tokens **sorted by expert assignment**;
@@ -258,10 +259,28 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         i.e. each contiguous group is multiplied by *its own* expert weight.
         Returns ``(T, N)``. Distinct from ``batched_gemm`` (equal-size batches):
         groups are ragged, so the per-expert blocks vary in length.
+
+        ``kind`` is the grouped-layout family (``compiler.grouped_layout``):
+        ``contiguous`` (default) / ``dense`` are implemented; ``masked`` /
+        ``k_grouped`` are rejected with a clear diagnostic rather than silently
+        computing contiguous.  ``alignment`` (when given) enforces that every
+        group's row count is a multiple of it (the tiled-kernel contract).
         """
+        from .compiler import grouped_layout as _gl
+        if kind not in _gl.GROUPED_KINDS:
+            raise ValueError(
+                f"grouped_gemm: unknown kind {kind!r}; expected one of {_gl.GROUPED_KINDS}")
+        if kind not in _gl.APPLE_SUPPORTED_GROUPED_KINDS:
+            raise NotImplementedError(
+                f"grouped_gemm: kind={kind!r} is not implemented yet — the "
+                f"reference + Apple backend support only "
+                f"{', '.join(_gl.APPLE_SUPPORTED_GROUPED_KINDS)} (masked / "
+                f"k_grouped need a per-group tiled kernel; planned for Phase G).")
         xa = np.asarray(x._data if hasattr(x, "_data") else x)
         w = np.asarray(weights._data if hasattr(weights, "_data") else weights)
         gs = np.asarray(group_sizes).astype(np.int64).reshape(-1)
+        if alignment is not None:
+            _gl.validate_grouped_alignment(gs, int(alignment))
         if xa.ndim != 2:
             raise ValueError(f"grouped_gemm: x must be (T, K); got {xa.shape}")
         if w.ndim != 3 or w.shape[0] != gs.shape[0]:
@@ -275,12 +294,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if int(gs.sum()) != T:
             raise ValueError(
                 f"grouped_gemm: group_sizes sum {int(gs.sum())} != T={T}")
-        out = np.zeros((T, w.shape[2]), dtype=xa.dtype)
+        # Rung B — quantized grouped GEMM: quantize x + per-expert w per the
+        # canonical scale layout for `quant`, dequant-compute, run the f32 GEMM.
+        out_dtype = xa.dtype
+        if quant is not None:
+            xa, w = _gl.apply_quant_for_grouped(
+                xa, w, quant, quantize_fp8=quantize_fp8,
+                quantize_nvfp4=quantize_nvfp4, dequantize_nvfp4=dequantize_nvfp4)
+        out = np.zeros((T, w.shape[2]), dtype=out_dtype)
         off = 0
         for e in range(w.shape[0]):
             n = int(gs[e])
             if n:
-                out[off:off + n] = xa[off:off + n] @ w[e]
+                out[off:off + n] = (xa[off:off + n] @ w[e]).astype(out_dtype)
             off += n
         return out
 

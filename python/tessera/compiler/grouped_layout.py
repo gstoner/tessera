@@ -183,6 +183,89 @@ def scale_layout_for(dtype: str) -> ScaleLayout | None:
     return None
 
 
+# ── Runtime enforcement (Rung A) ────────────────────────────────────────────
+# Grouped-GEMM families the Apple GPU backend can actually express today.  The
+# fused MSL grouped_gemm kernel folds per-token routing over a contiguous token
+# layout (dense = the degenerate single-group case).  masked / k_grouped need a
+# per-group *tiled* kernel that does not exist on Apple — they are rejected with
+# a stable diagnostic (Decision #21) rather than silently computing contiguous.
+APPLE_SUPPORTED_GROUPED_KINDS = ("dense", "contiguous")
+
+
+def grouped_kind_unsupported_message(kind: str, *, target: str,
+                                     op: str = "grouped_gemm") -> str:
+    """Decision #21 message: names the op, the target, the rejected kind, and
+    why — never a silent fall-through to a different family."""
+    return (
+        f"{op}: grouped_layout kind={kind!r} is not supported on target "
+        f"{target!r}. The {target} backend implements only "
+        f"{', '.join(APPLE_SUPPORTED_GROUPED_KINDS)} (masked / k_grouped require a "
+        f"per-group tiled kernel — tracked for Phase G). Refusing to silently "
+        f"compute a contiguous result for a different grouped family.")
+
+
+def validate_grouped_alignment(group_sizes: Any, alignment: int,
+                               *, op: str = "grouped_gemm") -> None:
+    """Raise if any group's row count is not a multiple of ``alignment``.
+
+    The contiguous/tiled grouped GEMM requires each group's M extent to be
+    aligned to the kernel tile boundary so groups tile cleanly.  Only enforced
+    when a caller explicitly declares ``alignment`` (the default per-token fused
+    kernel is alignment-agnostic), so a plain ``grouped_gemm`` with ragged group
+    sizes is unaffected.
+    """
+    if alignment is None or alignment <= 1:
+        return
+    gs = np.asarray(group_sizes).astype(np.int64).reshape(-1)
+    bad = [(int(i), int(n)) for i, n in enumerate(gs) if int(n) % alignment != 0]
+    if bad:
+        raise ValueError(
+            f"{op}: grouped_layout alignment={alignment} requires every group's "
+            f"row count to be a multiple of {alignment}; offending (group, size) "
+            f"pairs: {bad}. Pad the groups to the alignment, or omit alignment "
+            f"to use the alignment-agnostic per-token path.")
+
+
+# ── Quantized grouped GEMM (Rung B) ─────────────────────────────────────────
+# Low-precision dtypes that have a runtime dequant-on-host grouped-GEMM path.
+QUANT_GROUPED_DTYPES = ("fp8_e4m3", "fp8_e5m2", "fp8", "nvfp4")
+
+
+def apply_quant_for_grouped(xa: Any, w: Any, quant: str, *,
+                            quantize_fp8: Any, quantize_nvfp4: Any,
+                            dequantize_nvfp4: Any) -> "tuple[np.ndarray, np.ndarray]":
+    """Quantize-then-dequantize x ``(T,K)`` and per-expert w ``(E,K,N)`` per the
+    canonical scale layout for ``quant``, returning fp32 arrays ready for the
+    f32 grouped GEMM (the dequant-on-host quantized grouped-GEMM capability).
+
+    The quantizers are dependency-injected so this stays a leaf module (no
+    import of the ``tessera.ops`` namespace).
+    """
+    d = str(quant).lower()
+    if d not in QUANT_GROUPED_DTYPES:
+        raise ValueError(
+            f"grouped_gemm: quant dtype {quant!r} has no dequant-on-host grouped "
+            f"path; expected one of {QUANT_GROUPED_DTYPES}")
+    xa = np.asarray(xa, dtype=np.float32)
+    w = np.asarray(w, dtype=np.float32)
+    E = int(w.shape[0])
+    if d in ("fp8_e4m3", "fp8", "fp8_e5m2"):
+        fmt = "e5m2" if d == "fp8_e5m2" else "e4m3"
+        xa = np.asarray(quantize_fp8(xa, format=fmt)[0], dtype=np.float32)
+        w = np.stack([np.asarray(quantize_fp8(w[e], format=fmt)[0], dtype=np.float32)
+                      for e in range(E)])
+    elif d == "nvfp4":
+        bs = 16
+        xa = np.asarray(dequantize_nvfp4(*quantize_nvfp4(xa, block_size=bs), block_size=bs),
+                        dtype=np.float32)
+        w = np.stack([
+            np.asarray(dequantize_nvfp4(*quantize_nvfp4(w[e], block_size=bs), block_size=bs),
+                       dtype=np.float32) for e in range(E)])
+    else:  # pragma: no cover — guarded by scale_layout_for above
+        raise ValueError(f"grouped_gemm: quant={quant!r} has no runtime dequant path")
+    return xa, w
+
+
 # ── Oracle reference (step 4) ───────────────────────────────────────────────
 def reference_grouped_gemm(x: Any, w: Any, group_sizes: Any) -> "np.ndarray":
     """fp32 reference for an M-grouped contiguous GEMM.

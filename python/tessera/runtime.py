@@ -4200,13 +4200,45 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
     multiplied by its expert weight via a per-group MPS matmul on the Metal
     `bmm`/matmul lane (numpy fallback per group when a shape isn't supported).
     ``operands`` = (x, weights, group_sizes); group_sizes is integer routing
-    metadata resolved as the third graph operand."""
+    metadata resolved as the third graph operand.
+
+    Rung A — the grouped_layout contract is a *runtime gate*, not a sticker: the
+    declared ``kind`` selects/validates the family, masked / k_grouped are
+    rejected with a Decision-#21 diagnostic (the Apple backend can't express
+    them), and a declared per-group ``alignment`` is enforced."""
     from . import _apple_gpu_backend as agb
+    from .compiler import grouped_layout as gl
+
+    kw = dict(kwargs or {})
+    kind = str(kw.get("grouped_kind") or kw.get("kind") or "contiguous")
+    if kind not in gl.GROUPED_KINDS:
+        raise ValueError(
+            f"grouped_gemm: unknown grouped_layout kind {kind!r}; "
+            f"expected one of {gl.GROUPED_KINDS}")
+    if kind not in gl.APPLE_SUPPORTED_GROUPED_KINDS:
+        raise ValueError(
+            gl.grouped_kind_unsupported_message(kind, target="apple_gpu"))
 
     x = np.asarray(operands[0], dtype=np.float32)
     w = np.asarray(operands[1], dtype=np.float32)
     gs = np.asarray(operands[2]).astype(np.int64).reshape(-1)
     T = int(x.shape[0])
+
+    alignment = kw.get("grouped_alignment") or kw.get("alignment")
+    if alignment is not None:
+        gl.validate_grouped_alignment(gs, int(alignment))
+
+    # Rung B — quantized grouped GEMM: dequant-on-host per the scale layout for
+    # `quant`, then run the f32 fused kernel on the dequantized operands.
+    quant = kw.get("quant")
+    if quant is not None:
+        import tessera as _ts
+        x, w = gl.apply_quant_for_grouped(
+            x, w, quant, quantize_fp8=_ts.ops.quantize_fp8,
+            quantize_nvfp4=_ts.ops.quantize_nvfp4,
+            dequantize_nvfp4=_ts.ops.dequantize_nvfp4)
+        x = np.ascontiguousarray(x, dtype=np.float32)
+        w = np.ascontiguousarray(w, dtype=np.float32)
 
     # Fast path: ONE fused dispatch over the whole (T, N) output via the
     # grouped_gemm MSL kernel (folds routing in, no per-expert dispatch).

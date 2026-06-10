@@ -140,109 +140,73 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 
 ## Still Open
 
-- **Binding specs / descriptors — unified surface landed (2026-06-02);
-  runtime still pattern-driven.** `compiler/apple_kernel_descriptor.py`
-  synthesizes a declarative `AppleKernelDescriptor` (family / status / dtypes /
-  runtime_symbol / shape_envelope / encode-eligibility / packaged binding spec)
-  for **every** Apple GPU kernel family — mps, msl, mpsgraph, conv, reduction,
-  projection, linalg, encode_session, packaged — from the manifest + driver
-  envelope + encode registry (no duplicated truth). Locked by
-  `tests/unit/test_apple_kernel_descriptor.py`. Residual: Target IR / runtime
-  dispatch don't *consume* the descriptor yet (they still pattern-match); the
-  packaged reflection-level binding spec remains packaged-only by nature
-  (other families expose no buffer-index reflection).
-- **Feature limits — first wire-up landed (2026-06-02); broader use open.**
-  The threadgroup-tiled matmul→softmax N ceiling is now derived from the
-  per-arch threadgroup-memory budget
-  (`apple_target.apple_threadgroup_tiled_softmax_n_cap`) instead of a magic
-  `8192`, consulted by the runtime dispatcher and self-scaling on a
-  higher-memory SKU. Locked by `tests/unit/test_apple_feature_limit_lowering.py`.
-  Residual: other selection decisions (bf16 gating, head_dim ceilings,
-  threadgroup sizing) still use ad-hoc constants rather than the feature table.
-- **One-CB path — canonical route landed (2026-06-02); residual polish.**
-  `@jit(target="apple_gpu", auto_batch=True)` now runs a decode body written
-  with the canonical `tessera.ops.*` surface on one command buffer per encode
-  segment (the global interception shim forwards to the encode session under
-  an active trace), and `max_ops_per_cb` threads the chunking budget through
-  the decorator. Locked by `tests/unit/test_apple_gpu_jit_auto_batch_canonical.py`.
-  Residual: it is **opt-in** (`auto_batch=True`), not auto-detected; and an
-  auto_batch body still pays Graph-IR-emission overhead it never uses, and
-  must keep shape kwargs as literals/args (a general `@jit` AST-lowering
-  constraint, not auto_batch-specific).
-- **Production packaged kernels are empty — but the authoring path is
-  on-host and NOT blocked (corrected 2026-06-02, third revision).** PK1-PK7
-  prove the full load → reflect → validate → dispatch lifecycle against
-  Apple's licensed **sample** `matrix-multiplication.mtlpackage`, but there
-  are **0** live `status="packaged"` manifest rows. **Two earlier "blocked /
-  no authoring path" claims were both wrong — reached from memory without
-  consulting the SDK (exactly the Decision #27 anti-pattern, three
-  recurrences now).** The verified reality:
-  - **`metal-package-builder` ships on this host** at
-    `/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/metal-package-builder`
-    — `metal-package-builder [-ml] -o out.mtlpackage <coremlpackage>` authors
-    a `.mtlpackage` from a CoreML package.
-  - **The sample `.mtlpackage` is just** `manifest.json`
-    (`"pkgtype":"MLLibrary"`, `"content":{"mpspkgname":"library.mpsgraphpackage"}`)
-    **wrapping a serialized MPSGraph** —
-    `library.mpsgraphpackage/{model_0.mpsgraph, reflection.fb, manifest.plist}`.
-  - **MPSGraph serializes to exactly that package format on this host:**
-    `MPSGraphExecutable serializeToMPSGraphPackageAtURL:descriptor:`
-    (`MPSGraphExecutable.h:205`, Swift `serialize(package:descriptor:)`,
-    macOS 14+), with `initWithMPSGraphPackageAtURL:` /
-    `initWithCoreMLPackageAtURL:` to reload.
+The 2026-06-02 sprint closed most of this section (see Finished). What remains is
+**three open themes + one optional polish**. Each is stated as *the open residual*
++ *the next action* — the "X landed; residual Y" prose has been compressed to Y.
 
-  **This aligns with Tessera's *existing* MPSGraph lane.** The Tessera-native
-  authoring chain needs no coremltools and no DXIL: (1) build the `MPSGraph`
-  Tessera already builds in `apple_gpu_runtime.mm` for its MPSGraph-lane ops;
-  (2) compile → `MPSGraphExecutable`; (3) `serializeToMPSGraphPackageAtURL:`;
-  (4) wrap into a `.mtlpackage` — either via `metal-package-builder -ml`, or
-  by writing the trivial 11-line `manifest.json` + dropping the
-  `.mpsgraphpackage` dir beside it; (5) PK1-PK7 already load/reflect/dispatch
-  it (and the package's `reflection.fb` is what PK6's reflection-validation
-  gate checks). **So Lane 3 is achievable end-to-end on this Mac.** The
-  remaining work is real engineering (wire the serialize call into the
-  MPSGraph runtime, emit the package, add a numerical-compare fixture, declare
-  the `status="packaged"` row) — not a toolchain block. Tracked as the
-  next-work item below.
+### P1 — Descriptor-driven dispatch (architectural; the one substantial item)
 
-  **Parallel AOT lane (also verified, also not blocked) — runtime dynamic
-  library for the MSL-source kernels:** (1) `MTLDevice
-  newLibraryWithSource:options:error:` (`MTLDevice.h:786`); (2) `MTL4Compiler
-  newDynamicLibrary:error:` (`MTL4Compiler.h:117`, Swift
-  `makeDynamicLibrary(library:)`); (3) `MTLDynamicLibrary serializeToURL:error:`
-  (`MTLDynamicLibrary.h:77`); (4) reload via `newDynamicLibraryWithURL:`
-  (`MTL4Compiler.h:126`). (`MTLBinaryArchive.serialize(to:)` +
-  `MTL4Compiler.pipelineDataSetSerializer` / `lookupArchives` give a parallel
-  pipeline-state cache route.)
+**Open:** `compiler/apple_kernel_descriptor.py` already synthesizes a declarative
+`AppleKernelDescriptor` per family (tested by `test_apple_kernel_descriptor.py`),
+but **nothing consumes it** — `runtime.py` and `compiler/driver.py` still
+pattern-match op-name strings, and Tile→Apple Target IR re-derives fusion identity
+independently. (Verified: neither module imports `apple_kernel_descriptor`.) The
+old separate bullet "Target IR does too much" is the *same* root issue.
 
-  **Three distinct compiled-artifact lanes (grounded 2026-06-02 in SDK
-  headers + the Metal Shader Converter doc):**
-  - **Lane 1 — runtime dynamic library (usable today):** the
-    `newLibraryWithSource:` → `newDynamicLibrary:` → `serializeToURL:` →
-    `newDynamicLibraryWithURL:` chain above. Tessera already emits MSL, so
-    this is the directly-actionable AOT/precompiled-kernel path; no external
-    toolchain.
-  - **Lane 2 — Metal Shader Converter (OUT OF SCOPE — decided
-    2026-06-02):** `libmetalirconverter` / `metal-shaderconverter` convert
-    **DXIL** (DirectX LLVM-IR bytecode) → `.metallib` (`IRObjectCreateFromDXIL`
-    → `IRCompilerAllocCompileAndLink` → `IRObjectGetMetalLibBinary`), and
-    `metal-tt` finalizes → `.gpubin`. This is Apple's **DirectX-port** path
-    (root signatures, top-level Argument Buffers, graphics/RT stages). **We do
-    not need DXIL support** — Tessera emits MSL and Lane 1 covers AOT, so this
-    lane is deliberately not pursued. (Toolchain is also not installed on this
-    host: `/opt/metal-shaderconverter` absent. Download from
-    developer.apple.com/metal only if this decision is ever reversed.)
-  - **Lane 3 — `.mtlpackage` ML package (ACHIEVABLE on this host; rides the
-    MPSGraph lane):** PK1–PK7 already consume/dispatch. Authoring is on-host:
-    `MPSGraphExecutable serializeToMPSGraphPackageAtURL:` → wrap into
-    `.mtlpackage` (trivial `manifest.json` + dir, or `metal-package-builder
-    -ml`). Built from the same MPSGraph Tessera already constructs for its
-    MPSGraph-lane ops. Remaining work is engineering, not a toolchain block —
-    see next-work item 5.
-- **Target IR does too much.** Apple source strings, fusion recognition, and
-  runtime dispatch decisions need a descriptor-backed backend registry.
-- **Performance gates are uneven.** Benchmarks exist, but manifest-attached
-  benchmark metadata and ratchets are not systematic.
+**Next action:** route runtime dispatch + the Target IR fusion recognizer through
+the descriptor registry and delete the duplicated op-name pattern tables — one
+source of dispatch truth. Start with the runtime dispatcher (smaller blast radius
+than the C++ Target IR pass), oracle it against the current pattern path.
+
+### P2 — Feature-table-driven selection (incremental; data already exists)
+
+**Open:** `apple_target` already exposes the full feature table — `supports_bfloat`,
+`threadgroup_memory_capacity_bytes`, `max_threads_per_threadgroup`,
+`simdgroup_size`, `max_argument_buffer_bindings` — but only the tiled
+matmul→softmax N-cap consumes it. bf16 gating, flash-attn `head_dim` ceilings, and
+threadgroup sizing still use ad-hoc constants.
+
+**Next action:** point those three decisions at the existing `apple_target`
+helpers (no new data needed). Low-risk, one decision at a time, each lockable like
+`test_apple_feature_limit_lowering.py`.
+
+### P2 — Systematic performance ratchets (infra)
+
+**Open:** benchmarks exist for the hot paths (matmul, epilogues, conv2d, decode
+chain, package lane) but are not manifest-attached and have no CI ratchet.
+
+**Next action:** attach benchmark metadata to the manifest entries + a perf-gate
+ratchet for the named hot paths (this is the live Next-Work #6).
+
+### P3 — auto_batch polish (optimization, not blocking)
+
+**Open:** the canonical one-command-buffer route works (`@jit(..., auto_batch=True)`,
+locked by `test_apple_gpu_jit_auto_batch_canonical.py`) but is **opt-in**, not
+auto-detected, and a body still pays Graph-IR-emission overhead it never uses.
+
+**Next action (optional):** auto-detect recognized decode loops so the route is on
+by default; skip Graph-IR emission on the auto_batch path.
+
+---
+
+> **Corrected — packaged kernels are NOT open work.** The earlier
+> "Production packaged kernels are empty / 0 `status=packaged` rows" bullet is
+> **stale**: `PACKAGED_PRODUCTION_KERNELS` has **7 rows** backed by 7 committed,
+> dispatch-validated fixtures under `tests/fixtures/apple_gpu/production/` (PK8c).
+> The whole author → recognize → wire → auto-emit → execute → benchmark →
+> auto-route arc closed 2026-06-02 (PK8–PK8h, see Finished). The ~60 lines of SDK
+> lane-grounding (`metal-package-builder`, `serializeToMPSGraphPackageAtURL:`,
+> Lanes 1/2/3) were the justification for that *now-completed* work and have been
+> moved out of Still Open. Two standing items survive as **constraints/decisions,
+> not open tasks**:
+> - **Auto-route is opt-in by design.** Making the package lane the unconditional
+>   apple_gpu default SIGABRTs the Metal runtime under suite volume (hundreds of
+>   ML-pipeline compiles → `newMachineLearningPipelineState` abort ceiling).
+>   Exposed safely per-fn (`dispatch_via_package="auto"`) and globally
+>   (`TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1`).
+> - **Metal Shader Converter / DXIL (Lane 2) is out of scope.** Tessera emits MSL;
+>   the dylib AOT lane (`apple_dylib`, Lane 1/c) + MPSGraph packages (Lane 3)
+>   cover the need. Revisit only if a DXIL-import requirement ever appears.
 
 ## Next Work
 

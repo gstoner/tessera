@@ -161,12 +161,12 @@ logical_xor,logical,public,public,registered,complete,partial,reference,ready,no
 batched_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
 factorized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none
 gemm,loop_nest,public,public,registered,complete,partial,fused,ready,none
-grouped_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
+grouped_gemm,loop_nest,public,public,registered,complete,partial,fused,ready,none
 latent_kv_compress,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,reference,ready,none
 latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference,ready,none
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
-moe_swiglu_block,loop_nest,public,public,registered,complete,partial,reference,ready,none
+moe_swiglu_block,loop_nest,public,public,registered,complete,partial,fused,ready,none
 asymmetric_bce,loss,public,public,registered,complete,partial,reference,ready,none
 binary_cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 contrastive_divergence_loss,loss,public,public,registered,complete,partial,reference,ready,none

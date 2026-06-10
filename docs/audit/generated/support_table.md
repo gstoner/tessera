@@ -177,12 +177,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `batched_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `factorized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `grouped_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
@@ -330,7 +330,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| loop_nest | 9 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· |
+| loop_nest | 9 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· |
 | loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |

@@ -163,6 +163,9 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     # Project 2.1c / 3 (2026-06-01) — encode-session ops dispatch via
     # the driver's encode lane (MPSGraph bmm / rowop / unary opcode).
     "bmm", "layer_norm", "silu",
+    # Followup (2026-06-10) — MoE expert-FFN fused kernels dispatch via the
+    # runtime's lane→handler table (the driver path), like matmul.
+    "grouped_gemm", "moe_swiglu_block",
 })
 
 
@@ -274,6 +277,11 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     "bmm":          "tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc",
     "layer_norm":   "tessera_apple_gpu_layer_norm_dev_{f32,f16,bf16}_enc",
     "silu":         "tessera_apple_gpu_unary_dev_{f32,f16,bf16}_enc",  # opcode 4
+    # Followup (2026-06-10) — MoE expert-FFN fused MSL kernels (f32). Both are
+    # bespoke fused kernels (not encode-session), dispatched via the runtime's
+    # grouped_gemm / moe_swiglu_block lanes.
+    "grouped_gemm":     "tessera_apple_gpu_grouped_gemm_f32",
+    "moe_swiglu_block": "tessera_apple_gpu_moe_swiglu_f32",
 }
 
 

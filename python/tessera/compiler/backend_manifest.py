@@ -593,6 +593,41 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "for fp32/fp16/bf16 cache pages"
         ),
     },
+    # Audit follow-up (2026-06-10) — MoE expert-FFN ops. Both are runtime
+    # envelope ops (apple_gpu_envelope.APPLE_GPU_LANE_BY_OP: lanes grouped_gemm
+    # / moe_swiglu_block) with dedicated fused MSL kernels + execute-compare
+    # fixtures, but had no manifest row — surfaced as a blind spot by the
+    # DEEP_COMPILER_AUDIT_2026_06_10 benchmark/manifest coverage pass.
+    "grouped_gemm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (
+            "Fused ragged grouped-GEMM MSL kernel "
+            "(tessera_apple_gpu_grouped_gemm_f32, one dispatch over the whole "
+            "(T,N) output, folds the per-token expert id in); f16/bf16 inputs "
+            "route through the composed per-group bmm lane (f32 compute)."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_grouped_gemm_f32",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+        "shape_envelope": "x (T,K) + w (E,K,N) + group_sizes (E,); sum(gs)==T",
+    },
+    "moe_swiglu_block": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (
+            "Fused ragged SwiGLU MoE expert-FFN MSL kernel "
+            "(tessera_apple_gpu_moe_swiglu_f32 — gate/up/silu_mul/down in one "
+            "dispatch, the grouped analog of swiglu_f32); H,Kout<=256 fast path, "
+            "else the composed grouped-GEMM + silu_mul lanes. The local MegaMoE "
+            "expert-FFN core (see docs/distributed_megamoe.md)."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_moe_swiglu_f32",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+        "shape_envelope": (
+            "x (T,K) + Wg/Wu (E,K,H) + Wd (E,H,Kout) + group_sizes (E,); "
+            "fused kernel H,Kout<=256"
+        ),
+    },
 }
 
 
@@ -656,6 +691,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_apple_gpu_full_decoder_layer.py",
     ("bmm", "apple_gpu"):
         "tests/unit/test_apple_gpu_f16_encode_session.py",
+    # Fused ragged SwiGLU MoE expert-FFN block: the fused MSL kernel +
+    # composed-lane fast paths vs a numpy f64 reference (incl. E=1 reduces to
+    # dense swiglu, large-H fallback).
+    ("moe_swiglu_block", "apple_gpu"): "tests/unit/test_moe_swiglu_block.py",
 }
 
 

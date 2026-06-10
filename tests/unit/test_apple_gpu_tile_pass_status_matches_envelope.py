@@ -39,20 +39,12 @@ pytestmark = pytest.mark.skipif(
 
 
 def _runtime_envelope() -> set[str]:
-    # Task C (2026-06-01) — added _APPLE_GPU_CONV_OPS so conv2d / conv3d
-    # are part of the drift gate. The C++ ``kRuntimeOps`` list in
-    # ``TileToApple.cpp`` now includes conv2d + conv3d to match.
-    # L-series linalg family (2026-06-02) — cholesky + tri_solve are wired
-    # through the C++ Tile→Apple GPU pass (isAppleGpuRuntimeOp) with real MSL
-    # kernels, so the full `_APPLE_GPU_LINALG_OPS` set joins the drift gate.
-    # The other family members (cholesky_solve/lu/qr/svd) lower GPU-side as
-    # artifacts (CPU LAPACK path is real); they join here when their GPU runtime
-    # wiring lands.  _APPLE_GPU_PROJECTION_OPS / _APPLE_GPU_REDUCTION_OPS still
-    # need their own C++ entries (glass-jaw #10).
-    return (set(driver._APPLE_GPU_MPS_OPS) | set(driver._APPLE_GPU_MSL_OPS)
-            | set(driver._APPLE_GPU_MPSGRAPH_OPS)
-            | set(driver._APPLE_GPU_CONV_OPS)
-            | set(driver._APPLE_GPU_LINALG_OPS))
+    # P1 (2026-06-09) — the C++ ``kRuntimeOps`` list is now GENERATED from
+    # the envelope registry (`apple_gpu_envelope.py`) via
+    # `scripts/generate_apple_runtime_ops_table.py`, so the drift gate covers
+    # the FULL runtime envelope (this also closed glass-jaw #10 — projection
+    # and reduction ops previously lacked C++ entries).
+    return set(driver._APPLE_GPU_RUNTIME_OPS)
 
 
 def _lower_and_parse(sources: list[str]) -> dict[str, str]:

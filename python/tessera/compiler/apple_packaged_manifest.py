@@ -168,6 +168,7 @@ _TESSERA_MATMUL_ENTRY = BackendKernelEntry(
     ),
     packaged_pipeline_path=_TESSERA_MATMUL_REL,
     apple_binding_spec=None,  # MPSGraph packages are positionally bound
+    benchmark_json="benchmarks/apple_gpu/sample_package_lane_report.json",
 )
 
 _TESSERA_MATMUL_SOFTMAX_ENTRY = BackendKernelEntry(
@@ -184,6 +185,7 @@ _TESSERA_MATMUL_SOFTMAX_ENTRY = BackendKernelEntry(
     ),
     packaged_pipeline_path=_TESSERA_MATMUL_SOFTMAX_REL,
     apple_binding_spec=None,
+    benchmark_json="benchmarks/apple_gpu/sample_package_lane_report.json",
 )
 
 
@@ -193,6 +195,11 @@ _TESSERA_MATMUL_SOFTMAX_ENTRY = BackendKernelEntry(
 # Tessera-authored from the MPSGraph lane, positionally bound, regenerable via
 # scripts/author_apple_packages.py, numerically validated in
 # test_apple_mlpkg_pk8c.py.
+# P2 (2026-06-09) — packaged-lane benchmark evidence (PK8f harness output:
+# package vs live MPS/MSL latency per kernel) attached to every production row.
+_PACKAGE_LANE_BENCHMARK = "benchmarks/apple_gpu/sample_package_lane_report.json"
+
+
 def _authored_row(rel: str, notes: str,
                   *flags: str) -> BackendKernelEntry:
     return BackendKernelEntry(
@@ -203,6 +210,7 @@ def _authored_row(rel: str, notes: str,
         notes=notes,
         packaged_pipeline_path=rel,
         apple_binding_spec=None,  # MPSGraph packages are positionally bound
+        benchmark_json=_PACKAGE_LANE_BENCHMARK,
     )
 
 

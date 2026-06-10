@@ -1,0 +1,62 @@
+{
+  "schema": "tessera.benchmark.ratchet.v1",
+  "margin": 2.0,
+  "rows": [
+    {
+      "op": "matmul",
+      "shape": "512x512x512",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 0.5005,
+      "max_latency_ms": 1.0011
+    },
+    {
+      "op": "matmul_softmax",
+      "shape": "64x64x256",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 3.6864,
+      "max_latency_ms": 7.3728
+    },
+    {
+      "op": "matmul_gelu",
+      "shape": "64x64x256",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 3.6271,
+      "max_latency_ms": 7.2543
+    },
+    {
+      "op": "matmul_rmsnorm",
+      "shape": "64x64x256",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 3.6388,
+      "max_latency_ms": 7.2776
+    },
+    {
+      "op": "matmul_softmax_matmul",
+      "shape": "64x64x256x64",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 7.0285,
+      "max_latency_ms": 14.057
+    },
+    {
+      "op": "swiglu",
+      "shape": "64x128x256",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 15.052,
+      "max_latency_ms": 30.1039
+    },
+    {
+      "op": "conv2d",
+      "shape": "1x32x32x16_3x3x16x32",
+      "dtype": "f32",
+      "mode": "fused",
+      "median_ms": 0.4135,
+      "max_latency_ms": 0.827
+    }
+  ]
+}

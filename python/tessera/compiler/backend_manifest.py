@@ -462,6 +462,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "MPSMatrixMultiplication + bf16 conversion path",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
     },
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
     # ``hardware_verified``. Each carries:
@@ -477,6 +478,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Custom MSL softmax kernel (Phase 8.4.2)",
         "runtime_symbol": "tessera_apple_gpu_softmax_dev_f32_enc",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "softmax_safe": {
@@ -512,6 +514,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "(2026-06-01) adds f16/bf16 via MPSGraph rowop encode-session"
         ),
         "runtime_symbol": "tessera_apple_gpu_rmsnorm_dev_f32_enc",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": "rows*cols, no per-row limit (MPSGraph rowop)",
     },
     "flash_attn": {
@@ -519,6 +522,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": _APPLE_GPU_FUSED,
         "notes": "Online-softmax MSL kernel; head_dim ≤ 256 (Phase 8.4.1)",
         "runtime_symbol": "tessera_apple_gpu_flash_attn_dev_f32_enc",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": "head_dim <= 256 (MSL stack array, Phase 8.4.1)",
     },
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops with full dtype
@@ -552,6 +556,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "and b_broadcast for K/V reuse across heads in attention."
         ),
         "runtime_symbol": "tessera_apple_gpu_bmm_dev_f32_enc",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": "batch*M*N*K (MPSGraph batched matmul)",
     },
     # Audit follow-up (2026-05-31): these three ops are dispatched by the
@@ -574,6 +579,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "3-dtype matrix via `_dev_f16_enc` + `_dev_bf16_enc` siblings."
         ),
         "runtime_symbol": "tessera_apple_gpu_conv2d_dev_f32_enc",
+        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": (
             "NHWC source + HWIO weights; bias optional; honors stride/"
             "pad/dilation/groups (depthwise covered); {f32, f16, bf16}"
@@ -1802,6 +1808,8 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             runtime_symbol=_ag_runtime_symbol,
             shape_envelope=_ag_shape_envelope,
             execute_compare_fixture=_ag_fixture,
+            # P2 (2026-06-09) — hot-path rows carry their ratchet baseline.
+            benchmark_json=apple_gpu.get("benchmark_json"),
         ))
     else:
         cap = _capability_status("apple_gpu", op_name)

@@ -401,6 +401,63 @@ def apple_threadgroup_tiled_softmax_n_cap(
     return budget // max(1, int(elem_bytes))
 
 
+# Per-thread stack budget the hand-written fused MSL kernels are compiled
+# with (`float scores[...]` / `float out[...]` arrays). 1 KiB of fp32 per
+# array — the source of the historical "N <= 256" / "head_dim <= 256" caps.
+_FUSED_KERNEL_STACK_BUDGET_BYTES = 1024
+
+
+def apple_fused_chain_score_cap(
+    arch: AppleGPUArch = AppleGPUArch.APPLE10,
+    *,
+    elem_bytes: int = 4,
+) -> int:
+    """P2 (2026-06-09) — feature-table-derived per-thread cap for the
+    fused matmul→softmax(→matmul) / matmul→gelu / matmul→rmsnorm /
+    moe_swiglu stack-array kernels.
+
+    These kernels hold one row of scores in a per-thread stack array, so
+    the cap is the per-thread stack budget over the accumulator width —
+    1 KiB / 4 B = 256 on every current arch, exactly the constant the
+    runtime used to hardcode. Deriving it here makes the cap
+    self-documenting and single-sourced; arch is accepted so a future
+    family with a different stack budget plugs in per-arch values."""
+    del arch  # uniform budget on apple7–apple11; per-arch knob reserved
+    return _FUSED_KERNEL_STACK_BUDGET_BYTES // max(1, int(elem_bytes))
+
+
+def apple_flash_attn_head_dim_cap(
+    arch: AppleGPUArch = AppleGPUArch.APPLE10,
+) -> int:
+    """Max head_dim the single-kernel online-softmax flash-attention MSL
+    serves — same per-thread fp32 stack budget as the fused chains."""
+    return apple_fused_chain_score_cap(arch)
+
+
+def apple_threadgroup_threads_per_row(
+    arch: AppleGPUArch = AppleGPUArch.APPLE10,
+) -> int:
+    """Cooperating threads per row for threadgroup-tiled row kernels
+    (tiled matmul→softmax) — one SIMD-group wide on every Apple arch."""
+    return _APPLE_ARCH_DEFAULTS[arch].simdgroup_size
+
+
+def apple_supports_native_bf16(
+    arch: AppleGPUArch = AppleGPUArch.APPLE10,
+    *,
+    runtime_limits: "Optional[AppleRuntimeLimits]" = None,
+) -> bool:
+    """P2 (2026-06-09) — bf16 native-vs-host-upcast gate from the feature
+    table (``bfloat`` is ready on apple8+; apple7/M1 host-upcasts).
+
+    When ``runtime_limits`` carries a positive ``MTLGPUFamilyApple*``
+    raw value the live family wins (e.g. 1007 = apple7 ⇒ False); the
+    static arch default is the off-Metal floor."""
+    if runtime_limits is not None and runtime_limits.apple_gpu_family > 0:
+        return runtime_limits.apple_gpu_family >= 1008
+    return apple_feature_status(arch, "bfloat") == "ready"
+
+
 # ---- Runtime probe ------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -495,5 +552,9 @@ __all__ = [
     "apple_feature_set",
     "apple_feature_status",
     "apple_threadgroup_tiled_softmax_n_cap",
+    "apple_fused_chain_score_cap",
+    "apple_flash_attn_head_dim_cap",
+    "apple_threadgroup_threads_per_row",
+    "apple_supports_native_bf16",
     "probe_apple_runtime_limits",
 ]

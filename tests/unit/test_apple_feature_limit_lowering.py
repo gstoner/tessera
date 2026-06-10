@@ -80,3 +80,50 @@ def test_runtime_helper_is_cached():
     a = rt._apple_threadgroup_tiled_softmax_n_cap()
     b = rt._apple_threadgroup_tiled_softmax_n_cap()
     assert a == b
+
+
+# ── P2 (2026-06-09) — fused-chain caps + bf16 gate + threads-per-row ──
+# APPLE_AUDIT "Still Open" feature-table-driven selection: bf16 gating,
+# head_dim ceilings, threadgroup sizing now consult the feature table.
+
+def test_fused_chain_score_cap_is_stack_budget_over_elem_bytes():
+    for arch in at.AppleGPUArch:
+        assert at.apple_fused_chain_score_cap(arch) == 1024 // 4 == 256
+        assert at.apple_fused_chain_score_cap(arch, elem_bytes=8) == 128
+
+
+def test_flash_attn_head_dim_cap_matches_score_cap():
+    for arch in at.AppleGPUArch:
+        assert (at.apple_flash_attn_head_dim_cap(arch)
+                == at.apple_fused_chain_score_cap(arch))
+
+
+def test_threads_per_row_is_simdgroup_size():
+    for arch in at.AppleGPUArch:
+        assert (at.apple_threadgroup_threads_per_row(arch)
+                == at.apple_arch_defaults(arch).simdgroup_size == 32)
+
+
+def test_supports_native_bf16_static_arch_defaults():
+    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7)
+    for arch in (at.AppleGPUArch.APPLE8, at.AppleGPUArch.APPLE9,
+                 at.AppleGPUArch.APPLE10, at.AppleGPUArch.APPLE11):
+        assert at.apple_supports_native_bf16(arch)
+
+
+def test_supports_native_bf16_live_family_wins():
+    m1 = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1007)
+    m2 = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1008)
+    unknown = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=-1)
+    # Live family overrides the static arch in both directions.
+    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE10, runtime_limits=m1)
+    assert at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=m2)
+    # Unknown family falls back to the static arch default.
+    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=unknown)
+
+
+def test_runtime_consumes_fused_score_cap_and_bf16_gate():
+    from tessera import runtime as rt
+    assert rt._apple_fused_score_cap() == at.apple_fused_chain_score_cap()
+    assert rt._apple_fused_score_cap() is rt._apple_fused_score_cap()  # cached
+    assert isinstance(rt._apple_gpu_supports_native_bf16(), bool)

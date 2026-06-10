@@ -54,13 +54,57 @@ def evaluate(events: list[Mapping[str, Any]], baseline: Mapping[str, Any]) -> li
     return failures
 
 
+def evaluate_ratchet(rows: list[Mapping[str, Any]],
+                     baseline: Mapping[str, Any]) -> list[str]:
+    """P2 (2026-06-09) — per-op latency ratchet for benchmark-row reports
+    (``tessera.benchmark.ratchet.v1`` baselines, e.g.
+    ``benchmarks/baselines/apple_gpu_hot_paths.json``).
+
+    Baseline rows are keyed by (op, shape, dtype, mode) and carry
+    ``max_latency_ms`` (= recorded median × margin). Failures: a measured
+    row above its cap, or a baseline row with no measurement (coverage —
+    silently dropping a hot path must not pass the gate)."""
+    failures: list[str] = []
+    want_schema = baseline.get("schema", "tessera.benchmark.ratchet.v1")
+    if want_schema != "tessera.benchmark.ratchet.v1":
+        return [f"unsupported ratchet baseline schema {want_schema!r}"]
+
+    def key(r: Mapping[str, Any]) -> tuple:
+        return (r.get("op"), r.get("shape"), r.get("dtype"), r.get("mode"))
+
+    caps = {key(r): float(r["max_latency_ms"]) for r in baseline.get("rows", [])}
+    seen: set[tuple] = set()
+    for row in rows:
+        k = key(row)
+        cap = caps.get(k)
+        if cap is None:
+            continue  # unknown row — not ratcheted
+        seen.add(k)
+        latency = float(row.get("latency_ms", float("inf")))
+        if latency > cap:
+            failures.append(
+                f"{k[0]} {k[1]} {k[2]} {k[3]}: latency_ms={latency:.4f} "
+                f"exceeds ratchet cap {cap:.4f}")
+    for k in sorted(caps.keys() - seen, key=str):
+        failures.append(f"{k[0]} {k[1]} {k[2]} {k[3]}: no measurement (ratchet coverage)")
+    return failures
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate telemetry against a performance baseline.")
     parser.add_argument("report", help="Benchmark/profiler/runtime JSON report")
     parser.add_argument("--baseline", required=True, help="Baseline JSON")
+    parser.add_argument("--ratchet", action="store_true",
+                        help="treat report rows + baseline as the per-op latency ratchet")
     args = parser.parse_args(argv)
 
-    failures = evaluate(load_events(args.report), load_baseline(args.baseline))
+    if args.ratchet:
+        rows = json.loads(Path(args.report).read_text(encoding="utf-8"))
+        if isinstance(rows, Mapping):
+            rows = list(rows.get("rows", []))
+        failures = evaluate_ratchet(rows, load_baseline(args.baseline))
+    else:
+        failures = evaluate(load_events(args.report), load_baseline(args.baseline))
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)

@@ -137,46 +137,48 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   `tests/unit/test_apple_mlpkg_pk8c.py` + `test_apple_packaged_manifest.py`.
 - **GA/EBM Apple specialization:** fused Apple kernels and benchmarks exist for
   important GA/EBM paths.
+- **Descriptor-driven dispatch — single-source envelope (P1, 2026-06-09):**
+  the Apple GPU envelope tables (21 lane sets + opcode dicts, 166 runtime ops)
+  are single-sourced in `compiler/apple_gpu_envelope.py`; `driver.py` and
+  `runtime.py` import them (their literal duplicate tables deleted), the
+  runtime per-op dispatcher is a lane→handler table built from
+  `APPLE_GPU_LANE_BY_OP` (the 200-line elif chain is gone), and
+  `AppleKernelDescriptor` carries the new `lane` field. The C++ Tile→Apple
+  recognizer's hand-maintained `kRuntimeOps` is now **generated** from the same
+  registry (`scripts/generate_apple_runtime_ops_table.py` →
+  `apple_runtime_ops.inc`), which also closed glass-jaw #10 (projection +
+  reduction ops now tag `metal_runtime`); the drift gate covers the full
+  envelope. Oracles: `test_apple_gpu_envelope_dispatch.py` (lane-table vs the
+  legacy elif routing, hard-pinned per lane),
+  `test_apple_runtime_ops_table_in_sync.py` (table),
+  `test_apple_gpu_tile_pass_status_matches_envelope.py` (real tessera-opt over
+  all 166 ops), phase8 lit 57/57 non-skipped, full apple_gpu behavior suite
+  green.
+- **Feature-table-driven selection (P2, 2026-06-09):** the three remaining
+  hard-coded decisions now consult `apple_target`: bf16 native-vs-host-upcast
+  (`apple_supports_native_bf16` — live `MTLGPUFamily` probe wins, static arch
+  default off Metal; consumed by GEMM + conv2d dispatch), fused-chain /
+  flash-attn head_dim ceilings (`apple_fused_chain_score_cap` derives 256 from
+  the 1 KiB per-thread fp32 stack budget; all 12 runtime cap checks point at
+  it), and threads-per-row (`apple_threadgroup_threads_per_row` =
+  `simdgroup_size`, ready for the next .mm change). Locked by 7 new tests in
+  `test_apple_feature_limit_lowering.py`.
+- **Perf ratchets — manifest-attached benchmarks + CI gate (P2, 2026-06-09):**
+  Apple GPU hot-path manifest rows (matmul / softmax / rmsnorm / flash_attn /
+  bmm / conv2d) carry `benchmark_json` →
+  `benchmarks/baselines/apple_gpu_hot_paths.json` (recorded live on this
+  M-series machine via `benchmarks/apple_gpu/record_hot_path_baseline.py`;
+  caps = median × 2.0); all 7 `PACKAGED_PRODUCTION_KERNELS` rows carry the
+  PK8f package-lane report. `benchmarks/perf_gate.py` gained `--ratchet`
+  (`evaluate_ratchet`: regression + coverage failure). Locked by
+  `test_apple_gpu_perf_ratchet.py` (manifest linkage + evaluator + slow live
+  re-time gate).
 
 ## Still Open
 
-The 2026-06-02 sprint closed most of this section (see Finished). What remains is
-**three open themes + one optional polish**. Each is stated as *the open residual*
-+ *the next action* — the "X landed; residual Y" prose has been compressed to Y.
-
-### P1 — Descriptor-driven dispatch (architectural; the one substantial item)
-
-**Open:** `compiler/apple_kernel_descriptor.py` already synthesizes a declarative
-`AppleKernelDescriptor` per family (tested by `test_apple_kernel_descriptor.py`),
-but **nothing consumes it** — `runtime.py` and `compiler/driver.py` still
-pattern-match op-name strings, and Tile→Apple Target IR re-derives fusion identity
-independently. (Verified: neither module imports `apple_kernel_descriptor`.) The
-old separate bullet "Target IR does too much" is the *same* root issue.
-
-**Next action:** route runtime dispatch + the Target IR fusion recognizer through
-the descriptor registry and delete the duplicated op-name pattern tables — one
-source of dispatch truth. Start with the runtime dispatcher (smaller blast radius
-than the C++ Target IR pass), oracle it against the current pattern path.
-
-### P2 — Feature-table-driven selection (incremental; data already exists)
-
-**Open:** `apple_target` already exposes the full feature table — `supports_bfloat`,
-`threadgroup_memory_capacity_bytes`, `max_threads_per_threadgroup`,
-`simdgroup_size`, `max_argument_buffer_bindings` — but only the tiled
-matmul→softmax N-cap consumes it. bf16 gating, flash-attn `head_dim` ceilings, and
-threadgroup sizing still use ad-hoc constants.
-
-**Next action:** point those three decisions at the existing `apple_target`
-helpers (no new data needed). Low-risk, one decision at a time, each lockable like
-`test_apple_feature_limit_lowering.py`.
-
-### P2 — Systematic performance ratchets (infra)
-
-**Open:** benchmarks exist for the hot paths (matmul, epilogues, conv2d, decode
-chain, package lane) but are not manifest-attached and have no CI ratchet.
-
-**Next action:** attach benchmark metadata to the manifest entries + a perf-gate
-ratchet for the named hot paths (this is the live Next-Work #6).
+The 2026-06-09 sprint closed the three remaining themes (descriptor-driven
+dispatch, feature-table-driven selection, perf ratchets — see Finished). What
+remains is **one optional polish**.
 
 ### P3 — auto_batch polish (optimization, not blocking)
 
@@ -212,14 +214,18 @@ by default; skip Graph-IR emission on the auto_batch path.
 
 1. ~~Promote binding specs / descriptors to all Apple kernel families.~~
    **Landed 2026-06-02** — `AppleKernelDescriptor` unifies the dispatch
-   contract across every family. Follow-on: have runtime dispatch *consume*
-   the descriptor instead of pattern-matching op names.
+   contract across every family. ~~Follow-on: have runtime dispatch *consume*
+   the descriptor instead of pattern-matching op names.~~ **Landed 2026-06-09**
+   — envelope single-sourced in `apple_gpu_envelope.py`; runtime dispatch is
+   lane-table-driven; C++ `kRuntimeOps` generated from the registry.
 2. ~~Add Apple kernel descriptors for MPSGraph, MSL, Metal 4, packaged, and
    encode-session paths.~~ **Landed 2026-06-02** (same descriptor surface).
 3. ~~Wire Apple feature limits into schedule/tile/kernel selection.~~
    **First wire-up landed 2026-06-02** (tiled matmul→softmax N cap derived
-   from threadgroup-memory budget). Follow-on: drive bf16 gating / head_dim
-   ceilings / threadgroup sizing from the same feature table.
+   from threadgroup-memory budget). ~~Follow-on: drive bf16 gating / head_dim
+   ceilings / threadgroup sizing from the same feature table.~~ **Landed
+   2026-06-09** (`apple_supports_native_bf16`, `apple_fused_chain_score_cap`,
+   `apple_threadgroup_threads_per_row`).
 4. ~~Finish `@jit(target="apple_gpu", auto_batch=True)` canonical
    one-command-buffer route.~~ **Landed 2026-06-02** — canonical
    `tessera.ops.*` decode through `@jit` runs on one cb, with
@@ -258,8 +264,10 @@ by default; skip Graph-IR emission on the auto_batch path.
    single matmul / unary ops on the live lane, exactly the measured-optimal
    split.** The author → recognize → wire → auto-emit → execute → benchmark →
    auto-route arc is fully closed.
-6. Attach benchmark metadata for Apple hot paths such as matmul, matmul
-   epilogues, conv2d, decode chain, and packaged kernels.
+6. ~~Attach benchmark metadata for Apple hot paths such as matmul, matmul
+   epilogues, conv2d, decode chain, and packaged kernels.~~ **Landed
+   2026-06-09** — manifest rows carry `benchmark_json`; recorded ratchet
+   baseline + `perf_gate --ratchet` + `test_apple_gpu_perf_ratchet.py`.
 
 ## Source Material Consolidated
 

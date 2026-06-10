@@ -74,7 +74,9 @@ def test_binary_logical_bitwise(name, ref):
 @pytest.mark.parametrize("name,fn", [("max", np.max), ("min", np.min)])
 @pytest.mark.parametrize("axis", [-1, 0])
 def test_reduce_max_min(name, fn, axis):
-    x = np.random.default_rng(hash(name) % 9 + axis).standard_normal((4, 6)).astype(np.float32)
+    # hash() is per-process randomized and axis can be -1 — keep the seed
+    # deterministic and non-negative.
+    x = np.random.default_rng(len(name) + axis + 1).standard_normal((4, 6)).astype(np.float32)
     out = R._apple_gpu_dispatch_reduce(f"tessera.{name}", [x], {"axis": axis}, np)
     np.testing.assert_allclose(np.asarray(out).ravel(), fn(x, axis=axis).ravel(), atol=1e-5)
 

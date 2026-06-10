@@ -39,8 +39,8 @@ themselves — the renderer can't catch a stale model.
 | 1 | Benchmark coverage | Support-table `bench` axis was a hard-coded GA/EBM-only frozenset; ignored every other runnable benchmark surface (GEMM, attention, fusion, collectives, Apple hot paths, MegaMoE) despite ≥7 ops carrying a first-class `benchmark_json`. | `audit.py::_BENCH_INVENTORY` | `benchmarks_manifest._ENTRIES` (18 surfaces); `backend_manifest.benchmark_json` | **FIXED** — `benchmark_coverage.py` reads live coverage; bench set 26→39. |
 | 2 | Backend manifest | `grouped_gemm` / `moe_swiglu_block` are runtime-envelope ops (lanes exist) with fused MSL kernels + execute-compare fixtures, but had **no `_APPLE_GPU_KERNELS` manifest row**. | `backend_manifest._APPLE_GPU_KERNELS` | `apple_gpu_envelope.APPLE_GPU_LANE_BY_OP`; `_NUMERICAL_FIXTURES` | **FIXED** — both rows added (`fused`, fp32), + target-map symbol/dispatch. |
 | 3 | Fused-chain naming | `matmul_softmax` / `matmul_gelu` / `matmul_rmsnorm` / `matmul_softmax_matmul` / `swiglu` are benchmarked but are **not callable ops** (absent from `OP_SPECS`, no standalone symbol). Ambiguous whether they should be manifest rows. | `op_catalog.OP_SPECS` | benchmark harnesses | **DECIDED** — benchmark-only aliases; never support-table rows; their constituents carry coverage. Enforced by `test_benchmark_coverage.py`. |
-| 4 | Benchmark schema | Row schema is split across `compiler/benchmark_row.py` (canonical), `benchmarks/common/artifact_schema.py`, and Apple-specific ad-hoc JSON; no single extensibility field for hot-path metadata. | `benchmark_row.py` | `artifact_schema.py`; Apple bench JSON | **OPEN (P1)** — add `hot_path_metadata` to `BenchmarkRow` + `benchmark_metadata` to `BackendKernelEntry`/`AppleKernelDescriptor`. |
-| 5 | Apple hot-path metadata | Perf ratchets exist (`perf_gate.py --ratchet`, `apple_gpu_hot_paths.json`) but `benchmark_json` is attached unevenly across manifest rows, descriptors, fused chains, decode-chain paths, and MegaMoE. | `backend_manifest.benchmark_json` | `benchmarks/baselines/apple_gpu_hot_paths.json` | **PARTIAL** — MoE rows now attached; decode-chain / fused-epilogue rows still uneven. |
+| 4 | Benchmark schema | Row schema is split across `compiler/benchmark_row.py` (canonical), `benchmarks/common/artifact_schema.py`, and Apple-specific ad-hoc JSON; no single extensibility field for hot-path metadata. | `benchmark_row.py` | `artifact_schema.py`; Apple bench JSON | **FIXED (P1)** — `hot_path_metadata` on `BenchmarkRow` + structured `BenchmarkMetadata` on `BackendKernelEntry`/`AppleKernelDescriptor`. |
+| 5 | Apple hot-path metadata | Perf ratchets exist (`perf_gate.py --ratchet`, `apple_gpu_hot_paths.json`) but `benchmark_json` was attached unevenly, and pointed at a baseline that doesn't contain several ops' rows (softmax/rmsnorm/flash_attn/bmm). | `backend_manifest.benchmark_json` | `benchmarks/baselines/apple_gpu_hot_paths.json` | **FIXED (P1, metadata even)** — every benchmark_json row now carries structured `BenchmarkMetadata` (group/harness/`ratcheted` truth); MoE rows repointed to their real harness. Recording standalone baseline rows for the not-yet-ratcheted kernels is the remaining environment-aware follow-on. |
 | 6 | Descriptor consumption | `AppleKernelDescriptor` + `apple_gpu_envelope` are now consumed by runtime dispatch (closed by #61), but Target IR fusion recognition / runtime decisions still don't read a descriptor-backed *benchmark* contract. | `apple_kernel_descriptor.py` | `runtime.py` (lane table) | **OPEN (P2)** — extend descriptor with benchmark metadata; have perf gate read it. |
 | 7 | Prose vs metadata | Some prose docs claim "done" beyond what compiler metadata proves (e.g. blanket "all hot paths ratcheted"). | `docs/apple_backend.md`, `distributed_megamoe.md`, bench README | generated dashboards | **OPEN (P2)** — soften prose to link dashboards. |
 
@@ -58,21 +58,30 @@ themselves — the renderer can't catch a stale model.
    symbol + driver-dispatch entries. Status decision: `fused` (not
    `hardware_verified`, which is reserved for encode-session ops).
 
+## Closed since the initial report (P1, 2026-06-10)
+
+- **Schema extensibility (finding #4) — DONE.** `BenchmarkRow.hot_path_metadata`
+  (the single open extensibility slot) + structured `BenchmarkMetadata`
+  (`hot_path_group` / `harness` / `ratcheted` / `ratchet_key`) on
+  `BackendKernelEntry` and mirrored on `AppleKernelDescriptor`.
+- **Even hot-path metadata (finding #5) — DONE (metadata even).** Every Apple
+  GPU row with a `benchmark_json` now also carries `BenchmarkMetadata`, recording
+  the honest per-row truth — `ratcheted=True` only for ops with a real baseline
+  row (matmul, conv2d); the rest are benchmarked-but-not-yet-ratcheted. The
+  misleading MoE `benchmark_json` (pointed at a baseline lacking their rows) was
+  repointed to the MegaMoE overlap harness. Locked by three new invariants in
+  `test_apple_gpu_perf_ratchet.py` (structured metadata present; every
+  benchmark_json row is metadata-attached; `ratcheted` keys exist in the baseline).
+
 ## Still open (prioritized)
 
-### P1 — Benchmark schema extensibility (finding #4)
-Add a single `hot_path_metadata: Mapping` field to `BenchmarkRow` and a parallel
-`benchmark_metadata` to `BackendKernelEntry` + `AppleKernelDescriptor`, so
-hot-path group / expected-latency / ratchet-bound ride one open slot instead of
-ad-hoc JSON. **Risk:** low (optional fields, default None; thread through
-`as_dict` only when present). **Proof:** `test_benchmark_row.py`,
-`test_backend_capability_extension.py`, `test_apple_kernel_descriptor.py`.
-
-### P1 — Even hot-path metadata (finding #5)
-Attach `benchmark_json` (or the new `benchmark_metadata`) to the remaining hot
-paths: fused matmul epilogues (matmul→gelu/rmsnorm/softmax), the decode chain,
-and the MegaMoE overlap path. **Risk:** low. **Proof:** `perf_gate.py --ratchet`
-coverage assertion + `test_apple_gpu_perf_ratchet.py`.
+### P1 (residual) — record standalone baseline rows (finding #5)
+The metadata now states truthfully that softmax / rmsnorm / flash_attn / bmm /
+grouped_gemm / moe_swiglu_block are benchmarked-but-not-ratcheted. Closing it
+means recording standalone latency rows for them in `apple_gpu_hot_paths.json`
+(via `record_hot_path_baseline.py`) so `perf_gate --ratchet` gates them too.
+**Environment-aware:** the medians are host-specific and need a live Metal host;
+CI should assert the *names/metadata*, not fixed totals.
 
 ### P2 — Canonical benchmark rows for MegaMoE + an Apple hot-path smoke (finding #5)
 Bring `benchmark_megamoe_overlap.py` into `BenchmarkRow` shape (it currently

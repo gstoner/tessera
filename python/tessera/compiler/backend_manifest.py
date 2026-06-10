@@ -89,6 +89,64 @@ _VALID_STATUSES = frozenset({
 })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Benchmark metadata (P1, 2026-06-10 — DEEP_COMPILER_AUDIT follow-on).
+#
+# A structured, uniform descriptor attached to every benchmarked manifest row.
+# Before this, hot-path benchmark linkage was just a loose ``benchmark_json``
+# pointer — it could point at a baseline that doesn't even contain the op's row
+# (softmax / rmsnorm / flash_attn / bmm all pointed at apple_gpu_hot_paths.json
+# but have no row there). ``benchmark_metadata`` makes the truth explicit and
+# even: which hot-path group, which harness exercises the op, and whether it is
+# *actually* ratcheted (has a recorded baseline row) vs merely benchmarked.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Hot-path groups a benchmarked kernel can belong to.
+BENCHMARK_HOT_PATH_GROUPS: frozenset[str] = frozenset({
+    "gemm", "norm", "activation", "attention", "conv", "moe",
+    "fused_epilogue", "packaged", "ga_ebm",
+})
+
+
+@dataclass(frozen=True)
+class BenchmarkMetadata:
+    """Structured hot-path benchmark descriptor for a manifest row.
+
+    hot_path_group : coarse group the kernel belongs to (BENCHMARK_HOT_PATH_GROUPS)
+    harness        : repo-relative benchmark file that exercises the op
+    ratcheted      : True iff a recorded baseline row gates this op's latency
+    ratchet_key    : the ``op`` key in the baseline (required when ratcheted)
+    notes          : free-form provenance
+    """
+    hot_path_group: str
+    harness: str
+    ratcheted: bool = False
+    ratchet_key: Optional[str] = None
+    notes: str = ""
+
+    def __post_init__(self) -> None:
+        if self.hot_path_group not in BENCHMARK_HOT_PATH_GROUPS:
+            raise ValueError(
+                f"BenchmarkMetadata.hot_path_group must be one of "
+                f"{sorted(BENCHMARK_HOT_PATH_GROUPS)}, got {self.hot_path_group!r}")
+        if self.ratcheted and not self.ratchet_key:
+            raise ValueError(
+                "BenchmarkMetadata.ratcheted=True requires a ratchet_key "
+                "(the op's row key in the ratchet baseline)")
+
+    def to_dict(self) -> dict[str, object]:
+        out: dict[str, object] = {
+            "hot_path_group": self.hot_path_group,
+            "harness": self.harness,
+            "ratcheted": self.ratcheted,
+        }
+        if self.ratchet_key is not None:
+            out["ratchet_key"] = self.ratchet_key
+        if self.notes:
+            out["notes"] = self.notes
+        return out
+
+
 @dataclass(frozen=True)
 class BackendKernelEntry:
     """One row of the per-op × per-target × per-dtype matrix.
@@ -215,6 +273,12 @@ class BackendKernelEntry:
     ``benchmarks/...`` tree that records latency / MFU for this
     kernel.  ``None`` until benchmarked.  Recommended for
     ``hardware_verified`` entries but not strictly required."""
+    benchmark_metadata: Optional[object] = None
+    """P1 (2026-06-10) — structured :class:`BenchmarkMetadata` for the row
+    (hot-path group / harness / ratchet status). Erased to ``object`` to keep
+    the field annotation simple; validated in ``__post_init__`` to be a
+    ``BenchmarkMetadata`` when set. Carries the honest per-row truth that the
+    loose ``benchmark_json`` pointer can't (e.g. benchmarked-but-not-ratcheted)."""
     packaged_pipeline_path: Optional_str = None
     """PK5 (2026-05-31) — Apple Metal ``.mtlpackage`` path for entries
     with ``status == "packaged"``. Repo-relative or absolute path to
@@ -251,6 +315,14 @@ class BackendKernelEntry:
         normalized = tuple(seen)
         if normalized != tuple(self.dtypes):
             object.__setattr__(self, "dtypes", normalized)
+
+        # P1 validation: benchmark_metadata, when set, must be a BenchmarkMetadata.
+        if self.benchmark_metadata is not None and not isinstance(
+            self.benchmark_metadata, BenchmarkMetadata
+        ):
+            raise ValueError(
+                "BackendKernelEntry.benchmark_metadata must be a "
+                f"BenchmarkMetadata, got {type(self.benchmark_metadata).__name__}")
 
         # Sprint G-3 validation: WGMMA shape only on NVIDIA targets.
         if self.wgmma_shape is not None:
@@ -407,6 +479,8 @@ class BackendKernelEntry:
             out["execute_compare_fixture"] = self.execute_compare_fixture
         if self.benchmark_json is not None:
             out["benchmark_json"] = self.benchmark_json
+        if isinstance(self.benchmark_metadata, BenchmarkMetadata):
+            out["benchmark_metadata"] = self.benchmark_metadata.to_dict()
         # PK5 (2026-05-31) — packaged-kernel path.
         if self.packaged_pipeline_path is not None:
             out["packaged_pipeline_path"] = self.packaged_pipeline_path
@@ -608,7 +682,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "route through the composed per-group bmm lane (f32 compute)."
         ),
         "runtime_symbol": "tessera_apple_gpu_grouped_gemm_f32",
-        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+        "benchmark_json": "benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
         "shape_envelope": "x (T,K) + w (E,K,N) + group_sizes (E,); sum(gs)==T",
     },
     "moe_swiglu_block": {
@@ -622,7 +696,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "expert-FFN core (see docs/distributed_megamoe.md)."
         ),
         "runtime_symbol": "tessera_apple_gpu_moe_swiglu_f32",
-        "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
+        "benchmark_json": "benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
         "shape_envelope": (
             "x (T,K) + Wg/Wu (E,K,H) + Wd (E,H,Kout) + group_sizes (E,); "
             "fused kernel H,Kout<=256"
@@ -695,6 +769,53 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # composed-lane fast paths vs a numpy f64 reference (incl. E=1 reduces to
     # dense swiglu, large-H fallback).
     ("moe_swiglu_block", "apple_gpu"): "tests/unit/test_moe_swiglu_block.py",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P1 (2026-06-10) — uniform hot-path benchmark metadata for Apple GPU rows.
+#
+# Attached to the BackendKernelEntry at construction (parallel to
+# _NUMERICAL_FIXTURES). ``ratcheted`` is the HONEST per-row truth: only ops with
+# a recorded standalone row in benchmarks/baselines/apple_gpu_hot_paths.json are
+# True (matmul, conv2d). softmax/rmsnorm/flash_attn/bmm/grouped_gemm/
+# moe_swiglu_block are benchmarked by their harness but have no standalone
+# baseline row yet — recording those is an environment-aware follow-on (needs a
+# live Metal host). The fused-epilogue chains (matmul_softmax/gelu/rmsnorm/
+# softmax_matmul, swiglu) ARE ratcheted but are benchmark-only aliases with no
+# manifest row (see benchmark_coverage.FUSED_CHAIN_BENCH_ALIASES).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_HOT_PATHS_BASELINE = "benchmarks/baselines/apple_gpu_hot_paths.json"
+
+_APPLE_GPU_HOT_PATH_METADATA: dict[str, BenchmarkMetadata] = {
+    "matmul": BenchmarkMetadata(
+        hot_path_group="gemm", harness="benchmarks/benchmark_gemm.py",
+        ratcheted=True, ratchet_key="matmul"),
+    "conv2d": BenchmarkMetadata(
+        hot_path_group="conv",
+        harness="benchmarks/apple_gpu/record_hot_path_baseline.py",
+        ratcheted=True, ratchet_key="conv2d"),
+    "softmax": BenchmarkMetadata(
+        hot_path_group="norm", harness="benchmarks/apple_gpu/benchmark_fusion.py",
+        ratcheted=False, notes="fused matmul_softmax epilogue is ratcheted; standalone softmax pending baseline row"),
+    "rmsnorm": BenchmarkMetadata(
+        hot_path_group="norm", harness="benchmarks/apple_gpu/benchmark_fusion.py",
+        ratcheted=False, notes="fused matmul_rmsnorm epilogue is ratcheted; standalone rmsnorm pending baseline row"),
+    "flash_attn": BenchmarkMetadata(
+        hot_path_group="attention", harness="benchmarks/benchmark_attention.py",
+        ratcheted=False, notes="benchmarked; standalone baseline row pending"),
+    "bmm": BenchmarkMetadata(
+        hot_path_group="gemm", harness="benchmarks/benchmark_gemm.py",
+        ratcheted=False, notes="benchmarked; standalone baseline row pending"),
+    "grouped_gemm": BenchmarkMetadata(
+        hot_path_group="moe",
+        harness="benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
+        ratcheted=False, notes="MoE expert-FFN core; benchmarked via MegaMoE overlap harness"),
+    "moe_swiglu_block": BenchmarkMetadata(
+        hot_path_group="moe",
+        harness="benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
+        ratcheted=False, notes="MoE expert-FFN block; benchmarked via MegaMoE overlap harness"),
 }
 
 
@@ -1849,6 +1970,8 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             execute_compare_fixture=_ag_fixture,
             # P2 (2026-06-09) — hot-path rows carry their ratchet baseline.
             benchmark_json=apple_gpu.get("benchmark_json"),
+            # P1 (2026-06-10) — uniform structured hot-path benchmark metadata.
+            benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
         ))
     else:
         cap = _capability_status("apple_gpu", op_name)
@@ -2037,6 +2160,8 @@ def audit_backend_dtypes() -> dict[str, list[tuple[str, str, str]]]:
 
 __all__ = [
     "BackendKernelEntry",
+    "BenchmarkMetadata",
+    "BENCHMARK_HOT_PATH_GROUPS",
     "manifest_for",
     "clifford_manifest_for",
     "ebm_manifest_for",

@@ -64,6 +64,58 @@ def test_baseline_covers_named_hot_paths():
         assert r["max_latency_ms"] > r["median_ms"] > 0
 
 
+# ── 1b. Even benchmark-metadata attachment (P1, 2026-06-10) ───────────
+
+def _apple_gpu_entry(op):
+    from tessera.compiler import backend_manifest as bm
+    return next(e for e in bm.manifest_for(op) if e.target == "apple_gpu")
+
+
+@pytest.mark.parametrize("op", HOT_PATH_OPS + ("grouped_gemm", "moe_swiglu_block"))
+def test_hot_path_rows_carry_structured_benchmark_metadata(op):
+    # P1: every hot-path / MoE row carries a structured BenchmarkMetadata, not
+    # just the loose benchmark_json pointer.
+    from tessera.compiler.backend_manifest import (
+        BenchmarkMetadata, BENCHMARK_HOT_PATH_GROUPS,
+    )
+
+    md = _apple_gpu_entry(op).benchmark_metadata
+    assert isinstance(md, BenchmarkMetadata), f"{op}: missing benchmark_metadata"
+    assert md.hot_path_group in BENCHMARK_HOT_PATH_GROUPS
+    assert (REPO_ROOT / md.harness).is_file(), f"{op}: harness {md.harness} absent"
+
+
+def test_benchmark_json_rows_are_evenly_metadata_attached():
+    # The "even attachment" invariant: any Apple GPU row that carries a
+    # benchmark_json must ALSO carry structured benchmark_metadata.
+    from tessera.compiler import backend_manifest as bm
+    from tessera.compiler.backend_manifest import BenchmarkMetadata
+
+    offenders = []
+    for op, entries in bm.all_manifests().items():
+        for e in entries:
+            if e.target == "apple_gpu" and e.benchmark_json and not isinstance(
+                e.benchmark_metadata, BenchmarkMetadata
+            ):
+                offenders.append(op)
+    assert not offenders, f"benchmark_json rows without benchmark_metadata: {offenders}"
+
+
+def test_ratcheted_metadata_keys_exist_in_baseline():
+    # honesty gate: a row marked ratcheted MUST name a key that is a real row
+    # in the baseline (so "ratcheted=True" can never be aspirational).
+    from tessera.compiler import backend_manifest as bm
+
+    baseline_ops = {r["op"] for r in json.loads(BASELINE.read_text())["rows"]}
+    for op, entries in bm.all_manifests().items():
+        for e in entries:
+            md = e.benchmark_metadata
+            if md is not None and getattr(md, "ratcheted", False):
+                assert md.ratchet_key in baseline_ops, (
+                    f"{op}: ratcheted but ratchet_key {md.ratchet_key!r} "
+                    "is not a baseline row")
+
+
 # ── 2. Evaluator semantics ────────────────────────────────────────────
 
 _BASE = {"schema": "tessera.benchmark.ratchet.v1",

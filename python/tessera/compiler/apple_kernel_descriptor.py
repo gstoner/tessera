@@ -86,6 +86,10 @@ class AppleKernelDescriptor:
     #: Fine-grained runtime dispatch lane (``apple_gpu_envelope.lane_for``);
     #: None for ops outside the runtime envelope (packaged / artifact-only).
     lane: Optional[str] = None
+    #: P1 (2026-06-10) — structured hot-path benchmark metadata mirrored from
+    #: the backend_manifest row (``BenchmarkMetadata``); None when the op is not
+    #: a benchmarked hot path.
+    benchmark_metadata: Optional[object] = None
 
     def __post_init__(self) -> None:
         if self.family not in APPLE_KERNEL_FAMILIES:
@@ -179,6 +183,7 @@ def apple_kernel_descriptor(op_name: str) -> Optional[AppleKernelDescriptor]:
         encode_eligible=enc,
         binding_spec=entry.apple_binding_spec,
         lane=lane_for(bare),
+        benchmark_metadata=entry.benchmark_metadata,
     )
 
 

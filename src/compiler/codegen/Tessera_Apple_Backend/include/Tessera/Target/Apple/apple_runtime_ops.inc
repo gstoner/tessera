@@ -210,6 +210,17 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.attn_local_window_2d")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.attn_top_k_blocks")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.deepseek_sparse_attention")
 
+// lane: spectral (9 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.dct")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.fft")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.ifft")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.irfft")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.istft")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.rfft")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.spectral_conv")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.spectral_filter")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.stft")
+
 // lane: ssm (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.selective_ssm")
 
@@ -258,5 +269,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 166
+// Total runtime-executable ops: 175
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

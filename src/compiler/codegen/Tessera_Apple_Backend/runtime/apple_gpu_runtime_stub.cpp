@@ -2106,6 +2106,62 @@ extern "C" void tessera_apple_gpu_moe_swiglu_f32(
   }
 }
 
+// Spectral / FFT lane (non-Darwin reference parity — naive O(n^2) DFT).
+// mode: 0=fft 1=ifft 2=rfft 3=irfft. Complex I/O interleaved real/imag f32.
+extern "C" void tessera_apple_gpu_fft_f32(int32_t mode, const float* in,
+                                          float* out, int32_t batch, int32_t n) {
+  const double TWO_PI = 6.283185307179586476925286766559;
+  int32_t freq = n / 2 + 1;
+  for (int32_t b = 0; b < batch; ++b) {
+    if (mode == 0 || mode == 1) {
+      const float* ib = in + static_cast<size_t>(b) * n * 2;
+      float* ob = out + static_cast<size_t>(b) * n * 2;
+      double sign = (mode == 1) ? +1.0 : -1.0;
+      double scale = (mode == 1) ? 1.0 / n : 1.0;
+      for (int32_t k = 0; k < n; ++k) {
+        double re = 0.0, im = 0.0;
+        for (int32_t j = 0; j < n; ++j) {
+          double ang = sign * TWO_PI * k * j / n;
+          double c = std::cos(ang), s = std::sin(ang);
+          double xr = ib[2 * j], xi = ib[2 * j + 1];
+          re += xr * c - xi * s;
+          im += xr * s + xi * c;
+        }
+        ob[2 * k] = static_cast<float>(re * scale);
+        ob[2 * k + 1] = static_cast<float>(im * scale);
+      }
+    } else if (mode == 2) {
+      const float* ib = in + static_cast<size_t>(b) * n;
+      float* ob = out + static_cast<size_t>(b) * freq * 2;
+      for (int32_t k = 0; k < freq; ++k) {
+        double re = 0.0, im = 0.0;
+        for (int32_t j = 0; j < n; ++j) {
+          double ang = -TWO_PI * k * j / n;
+          re += ib[j] * std::cos(ang);
+          im += ib[j] * std::sin(ang);
+        }
+        ob[2 * k] = static_cast<float>(re);
+        ob[2 * k + 1] = static_cast<float>(im);
+      }
+    } else {
+      const float* ib = in + static_cast<size_t>(b) * freq * 2;
+      float* ob = out + static_cast<size_t>(b) * n;
+      for (int32_t j = 0; j < n; ++j) {
+        double acc = 0.0;
+        for (int32_t k = 0; k < n; ++k) {
+          int32_t kk = (k < freq) ? k : (n - k);
+          double xr = ib[2 * kk];
+          double xi = ib[2 * kk + 1];
+          if (k >= freq) xi = -xi;
+          double ang = TWO_PI * k * j / n;
+          acc += xr * std::cos(ang) - xi * std::sin(ang);
+        }
+        ob[j] = static_cast<float>(acc / n);
+      }
+    }
+  }
+}
+
 // LDT candidate-axis ops (non-Darwin reference parity).
 extern "C" void tessera_apple_gpu_popcount_i32(const int32_t* X, int32_t* O,
                                                int32_t n) {

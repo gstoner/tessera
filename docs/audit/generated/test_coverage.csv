@@ -129,7 +129,7 @@ dataset_repeat,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_shuffle,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
-dct,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
+dct,5,0,0,5,0,fp32,needs_direct_test,category default for 'spectral'
 ddpm_noise_pred_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 deepseek_sparse_attention,10,0,0,10,0,,needs_direct_test,category default for 'attention'
 denoising_score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
@@ -171,7 +171,7 @@ expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 fake_quantize,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-fft,8,2,0,10,0,f32 fp32,needs_direct_test,category default for 'spectral'
+fft,11,2,0,13,0,f32 fp32,needs_direct_test,category default for 'spectral'
 flash_attn,79,40,4,119,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'attention'
 flatten,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -196,19 +196,19 @@ gru_cell,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
 gt,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 huber_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
 hybrid_attention,11,2,0,13,0,,needs_direct_test,category default for 'attention'
-ifft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
+ifft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
 implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 index_update,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 info_nce_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'
 instance_norm,6,0,0,6,0,,needs_direct_test,category default for 'normalization'
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-irfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
+irfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 isfinite,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 isinf,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 isnan,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-istft,2,0,0,2,0,,needs_direct_test,category default for 'spectral'
+istft,4,0,0,4,0,,needs_direct_test,category default for 'spectral'
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,6,0,0,6,0,,covered_by_family,category default for 'loss'
 jvp,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -327,7 +327,7 @@ remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
-rfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
+rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
 rmsnorm,48,9,1,57,0,bf16 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,3,5,0,8,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -386,7 +386,7 @@ softmax,67,35,3,102,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,ne
 softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
 softplus,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
-spectral_conv,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
+spectral_conv,5,0,0,5,0,fp32,needs_direct_test,category default for 'spectral'
 spectral_filter,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
 spectral_norm,2,0,0,2,0,,needs_direct_test,category default for 'normalization'
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -402,7 +402,7 @@ state_migration,1,0,1,1,1,,structural_only,category default for 'serialization'
 state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-stft,3,0,0,3,0,,needs_direct_test,category default for 'spectral'
+stft,5,0,0,5,0,,needs_direct_test,category default for 'spectral'
 sub,6,0,0,6,0,,covered_by_family,category default for 'elementwise'
 sum,3,0,0,3,0,f32,needs_direct_test,category default for 'stable_reduction'
 svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'

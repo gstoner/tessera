@@ -12843,6 +12843,154 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a
   }
 }
 
+//===---------------------------------------------------------------------===//
+// Spectral / FFT lane (2026-06-10) — the "special" kernel class from
+// s_series_accelerator_proof.md. 1-D transform over the last axis, batched.
+//
+// MPSGraph ships native FFT (MPSGraphFourierTransformOps.h, macOS 14+):
+//   * fastFourierTransform        — complex -> complex   (fft / ifft, mode 0/1)
+//   * realToHermiteanFFT          — real    -> complex    (rfft,       mode 2)
+//   * HermiteanToRealFFT          — complex -> real       (irfft,      mode 3)
+// Complex data crosses the C ABI as INTERLEAVED real/imag float32 — the exact
+// memory layout of MPSDataTypeComplexFloat32 AND numpy complex64, so the
+// boundary is a plain reinterpret on both sides.
+//
+// Normalization matches numpy: forward transforms are unscaled; inverse
+// transforms scale by 1/n (MPSGraphFFTScalingModeSize). `roundToOddHermitean`
+// recovers an odd output length for irfft.
+//===---------------------------------------------------------------------===//
+namespace {
+
+// Naive O(n^2) DFT reference — the non-Metal fallback (ctx not ok / macOS < 14).
+// Tiny shapes only (CI / portability); the GPU path handles real sizes.
+inline void reference_fft_f32(int mode, const float *in, float *out,
+                              int32_t batch, int32_t n) {
+  const double TWO_PI = 6.283185307179586476925286766559;
+  int32_t freq = n / 2 + 1;
+  for (int32_t b = 0; b < batch; ++b) {
+    if (mode == 0 || mode == 1) {            // complex -> complex
+      const float *ib = in + (size_t)b * n * 2;
+      float *ob = out + (size_t)b * n * 2;
+      double sign = (mode == 1) ? +1.0 : -1.0;
+      double scale = (mode == 1) ? 1.0 / n : 1.0;
+      for (int32_t k = 0; k < n; ++k) {
+        double re = 0.0, im = 0.0;
+        for (int32_t j = 0; j < n; ++j) {
+          double ang = sign * TWO_PI * k * j / n;
+          double c = std::cos(ang), s = std::sin(ang);
+          double xr = ib[2 * j], xi = ib[2 * j + 1];
+          re += xr * c - xi * s;
+          im += xr * s + xi * c;
+        }
+        ob[2 * k] = (float)(re * scale);
+        ob[2 * k + 1] = (float)(im * scale);
+      }
+    } else if (mode == 2) {                   // real -> complex (rfft)
+      const float *ib = in + (size_t)b * n;
+      float *ob = out + (size_t)b * freq * 2;
+      for (int32_t k = 0; k < freq; ++k) {
+        double re = 0.0, im = 0.0;
+        for (int32_t j = 0; j < n; ++j) {
+          double ang = -TWO_PI * k * j / n;
+          re += ib[j] * std::cos(ang);
+          im += ib[j] * std::sin(ang);
+        }
+        ob[2 * k] = (float)re;
+        ob[2 * k + 1] = (float)im;
+      }
+    } else {                                  // complex(Hermitean) -> real (irfft)
+      const float *ib = in + (size_t)b * freq * 2;
+      float *ob = out + (size_t)b * n;
+      for (int32_t j = 0; j < n; ++j) {
+        double acc = 0.0;
+        for (int32_t k = 0; k < n; ++k) {
+          int32_t kk = (k < freq) ? k : (n - k);   // Hermitean symmetry
+          double xr = ib[2 * kk];
+          double xi = ib[2 * kk + 1];
+          if (k >= freq) xi = -xi;                  // conjugate mirror
+          double ang = TWO_PI * k * j / n;
+          acc += xr * std::cos(ang) - xi * std::sin(ang);
+        }
+        ob[j] = (float)(acc / n);
+      }
+    }
+  }
+}
+
+bool dispatch_fft_msl(MetalDeviceContext &ctx, int mode, const float *in,
+                      float *out, int32_t batch, int32_t n) {
+  if (@available(macOS 14.0, iOS 17.0, *)) {
+  } else {
+    return false;   // MPSGraph FFT requires macOS 14+
+  }
+  if (n <= 0 || batch <= 0) return true;
+  @autoreleasepool {
+    int32_t freq = n / 2 + 1;
+    bool inComplex = (mode != 2);
+    bool outComplex = (mode == 0 || mode == 1);
+    int32_t inLast = (mode == 3) ? freq : n;
+    int32_t outLast = (mode == 2) ? freq : n;
+    size_t inBytes = (size_t)batch * inLast * (inComplex ? 2 : 1) * sizeof(float);
+    size_t outBytes = (size_t)batch * outLast * (outComplex ? 2 : 1) * sizeof(float);
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, in, inBytes);
+    if (!bufX) return false;
+
+    MPSDataType inType = inComplex ? MPSDataTypeComplexFloat32 : MPSDataTypeFloat32;
+    NSArray<NSNumber *> *inShape = @[ @(batch), @(inLast) ];
+    NSString *key = [NSString stringWithFormat:@"fft:%d:%d:%d", mode, batch, n];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *ph;
+    MPSGraphTensor *y;
+    if (entry) {
+      g = entry[0];
+      ph = ((NSArray *)entry[1])[0];
+      y = entry[2];
+    } else {
+      g = [MPSGraph new];
+      ph = [g placeholderWithShape:inShape dataType:inType name:nil];
+      MPSGraphFFTDescriptor *desc = [MPSGraphFFTDescriptor descriptor];
+      bool inverse = (mode == 1 || mode == 3);
+      desc.inverse = inverse;
+      desc.scalingMode =
+          inverse ? MPSGraphFFTScalingModeSize : MPSGraphFFTScalingModeNone;
+      NSArray<NSNumber *> *axes = @[ @1 ];
+      if (mode == 0 || mode == 1) {
+        y = [g fastFourierTransformWithTensor:ph axes:axes descriptor:desc name:nil];
+      } else if (mode == 2) {
+        y = [g realToHermiteanFFTWithTensor:ph axes:axes descriptor:desc name:nil];
+      } else {
+        desc.roundToOddHermitean = (n & 1) ? YES : NO;
+        y = [g HermiteanToRealFFTWithTensor:ph axes:axes descriptor:desc name:nil];
+      }
+      if (!y) return false;
+      mpsg_cache_put(key, @[ g, @[ ph ], y ]);
+    }
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:inShape dataType:inType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{ph : xd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    (void)outBytes;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+}  // namespace
+
+// mode: 0=fft 1=ifft 2=rfft 3=irfft. Complex I/O is interleaved real/imag f32.
+extern "C" void tessera_apple_gpu_fft_f32(int32_t mode, const float *in,
+                                          float *out, int32_t batch, int32_t n) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_fft_msl(ctx, mode, in, out, batch, n)) return;
+  reference_fft_f32(mode, in, out, batch, n);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f16(int32_t op,
                                                       const uint16_t *a,
                                                       const uint16_t *b,

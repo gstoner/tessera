@@ -97,8 +97,12 @@ _ACCEL_CLASS_BY_CATEGORY: dict[str, str] = {
     "sharding": "host",              # partition specs (planning, not execution)
     # ── multi_device: needs real multi-accelerator hardware ──────────────────
     "collective": "multi_device",
+    # ── eligible: a Metal kernel class exists / is route-able ─────────────────
+    # spectral FFT lane landed 2026-06-10 (MPSGraph FourierTransform) — all 9
+    # spectral ops are now in the envelope (per-primitive `proven`); the category
+    # default is `eligible` (a future spectral op routes to the FFT lane).
+    "spectral": "eligible",
     # ── special: needs a dedicated kernel class not yet on Apple GPU ──────────
-    "spectral": "special",           # FFT — Apple has MPS/vDSP FFT, not yet wired
     "rng": "special",                # device-side Philox not yet wired
     "random_source": "special",
 }
@@ -107,7 +111,7 @@ _CLASS_ORDER = ("proven", "eligible", "special", "multi_device", "host")
 _CLASS_BLURB = {
     "proven": "executes on Apple GPU today (`metal_runtime`)",
     "eligible": "numeric — route-able to a Metal kernel (the actionable gap)",
-    "special": "needs a dedicated Apple-GPU kernel class (FFT / device RNG)",
+    "special": "needs a dedicated Apple-GPU kernel class (device RNG)",
     "multi_device": "needs real multi-accelerator hardware (NVIDIA/AMD)",
     "host": "structural / orchestration / shape — accelerator not-applicable",
 }

@@ -2445,6 +2445,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "ssm": lambda op, a, k, np: _apple_gpu_dispatch_selective_ssm(a, k, np),
         "moe_swiglu_block": lambda op, a, k, np: _apple_gpu_dispatch_moe_swiglu_block(a, k, np),
         "grouped_gemm": lambda op, a, k, np: _apple_gpu_dispatch_grouped_gemm(a, k, np),
+        "spectral": _apple_gpu_dispatch_spectral,
         "popcount": lambda op, a, k, np: _apple_gpu_dispatch_popcount(a, k, np),
         "count_nonzero": lambda op, a, k, np: _apple_gpu_dispatch_count_nonzero(a, k, np),
         "z_loss": lambda op, a, k, np: _apple_gpu_dispatch_z_loss(a, k, np),
@@ -3977,6 +3978,88 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
             out[off:off + n] = r if r is not None else blk @ we
         off += n
     return out
+
+
+def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: Any) -> Any:
+    """Spectral / FFT lane on Apple GPU (MPSGraph FourierTransform).
+
+    The 4 core transforms (fft / ifft / rfft / irfft) run on the GPU via
+    ``gpu_fft1d`` (1-D over the last axis; off-last axes are moved via
+    ``moveaxis``). The composites compose over them with host-side glue
+    (framing / windowing / concat / overlap-add — the same heavy-FLOPs-on-GPU,
+    cheap-glue-on-host pattern the MoE/attention lanes use):
+      dct → fft of the even extension; spectral_conv → irfft(rfft·rfft);
+      stft → per-frame rfft; istft → per-frame irfft + overlap-add;
+      spectral_filter → elementwise (not an FFT kernel — complex multiply).
+    Matches the numpy reference at fp32 tolerance."""
+    from . import _apple_gpu_backend as agb
+
+    kw = dict(kwargs or {})
+    bare = str(op_name).split(".")[-1]
+    x = np.asarray(operands[0])
+
+    def _g(arr: Any, mode: str, n: Any = None, axis: int = -1) -> Any:
+        arr = np.asarray(arr)
+        if axis not in (-1, arr.ndim - 1):
+            arr = np.moveaxis(arr, axis, -1)
+            res = agb.gpu_fft1d(arr, mode, n=n)
+            return np.moveaxis(res, -1, axis)
+        return agb.gpu_fft1d(arr, mode, n=n)
+
+    if bare in ("fft", "ifft", "rfft"):
+        return _g(x, bare, axis=int(kw.get("axis", -1)))
+    if bare == "irfft":
+        n = kw.get("n")
+        return _g(x, "irfft", n=(int(n) if n is not None else None),
+                  axis=int(kw.get("axis", -1)))
+    if bare == "dct":
+        axis = int(kw.get("axis", -1))
+        n = x.shape[axis]
+        y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)
+        spec = _g(y, "fft", axis=axis)
+        sl = [slice(None)] * spec.ndim
+        sl[axis] = slice(0, n)
+        return np.ascontiguousarray(np.real(spec[tuple(sl)]))
+    if bare == "spectral_conv":
+        w = np.asarray(operands[1])
+        n = x.shape[-1] + w.shape[-1] - 1
+        nfft = 1 << int(np.ceil(np.log2(n)))
+
+        def _pad(a: Any) -> Any:
+            pad = [(0, 0)] * a.ndim
+            pad[-1] = (0, nfft - a.shape[-1])
+            return np.pad(a, pad)
+
+        prod = _g(_pad(x), "rfft") * _g(_pad(w), "rfft")
+        y = _g(prod, "irfft", n=nfft)
+        return np.ascontiguousarray(y[..., :n])
+    if bare == "stft":
+        win = np.asarray(operands[1])
+        _hop = kw.get("hop")
+        hop = int(_hop if _hop is not None else operands[2])
+        wlen = win.shape[-1]
+        frames = [
+            _g(x[..., s:s + wlen] * win, "rfft")
+            for s in range(0, max(1, x.shape[-1] - wlen + 1), hop)
+        ]
+        return np.ascontiguousarray(np.stack(frames, axis=-2))
+    if bare == "istft":
+        win = np.asarray(operands[1])
+        _hop = kw.get("hop")
+        hop = int(_hop if _hop is not None else operands[2])
+        frame_count = x.shape[-2]
+        flen = win.shape[-1]
+        out = np.zeros(x.shape[:-2] + ((frame_count - 1) * hop + flen,), np.float64)
+        weight = np.zeros_like(out)
+        for idx in range(frame_count):
+            frame = _g(x[..., idx, :], "irfft", n=flen) * win
+            s = idx * hop
+            out[..., s:s + flen] += frame
+            weight[..., s:s + flen] += win * win
+        return np.ascontiguousarray(out / np.maximum(weight, 1e-12))
+    if bare == "spectral_filter":
+        return np.ascontiguousarray(x * np.asarray(operands[1]))
+    raise ValueError(f"apple_gpu spectral lane: unsupported op {op_name!r}")
 
 
 def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) -> Any:

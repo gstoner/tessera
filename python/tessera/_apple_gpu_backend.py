@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -99,6 +99,9 @@ def _load():
         # Fused ragged SwiGLU MoE block (X, Wg, Wu, Wd, expert_ids, O, T, K, H, Kout, E).
         ("tessera_apple_gpu_moe_swiglu_f32",
          [fp, fp, fp, fp, ip, fp, i32, i32, i32, i32, i32]),
+        # Spectral / FFT lane (mode, in, out, batch, n). mode 0=fft 1=ifft
+        # 2=rfft 3=irfft; complex I/O is interleaved real/imag f32.
+        ("tessera_apple_gpu_fft_f32", [i32, fp, fp, i32, i32]),
         # LDT candidate-axis ops on Metal.
         ("tessera_apple_gpu_popcount_i32", [ip, ip, i32]),
         ("tessera_apple_gpu_count_nonzero_lastaxis_f32", [fp, ip, i32, i32]),
@@ -259,6 +262,56 @@ def gpu_moe_swiglu_block(x: np.ndarray, wg: np.ndarray, wu: np.ndarray,
         e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, H, Kout, E)
     return out
+
+
+def gpu_fft1d(x: np.ndarray, mode: str, n: Optional[int] = None) -> np.ndarray:
+    """1-D FFT over the last axis on the Apple GPU (MPSGraph FourierTransform).
+
+    ``mode`` ∈ {"fft", "ifft", "rfft", "irfft"}. Complex values cross the C ABI
+    as interleaved real/imag float32 — identical to numpy ``complex64`` memory —
+    so the boundary is a plain ``.view``. Leading dims fold to a batch; the
+    transform runs over the last axis. Matches ``np.fft.*`` at fp32 tolerance.
+
+    Shapes (last axis):
+      fft/ifft : complex (.., N)        → complex (.., N)
+      rfft     : real    (.., N)        → complex (.., N//2+1)
+      irfft    : complex (.., N//2+1)   → real    (.., n)   [n defaults to 2*(F-1)]
+    """
+    _MODE = {"fft": 0, "ifft": 1, "rfft": 2, "irfft": 3}
+    if mode not in _MODE:
+        raise AppleGpuError(f"gpu_fft1d: unknown mode {mode!r}")
+    m = _MODE[mode]
+    res: np.ndarray
+    xa = np.asarray(x)
+    if xa.ndim == 0:
+        raise AppleGpuError("gpu_fft1d: input must have >= 1 dim")
+    last = xa.shape[-1]
+    batch = int(np.prod(xa.shape[:-1])) if xa.ndim > 1 else 1
+    lib = _load()
+
+    if m in (0, 1):                              # complex -> complex
+        n_t = int(last)
+        xc = np.ascontiguousarray(xa, dtype=np.complex64)
+        xin = xc.reshape(batch, n_t).view(np.float32)
+        out = np.zeros((batch, n_t * 2), np.float32)
+        lib.tessera_apple_gpu_fft_f32(m, _ptr(xin), _ptr(out), batch, n_t)
+        res = out.view(np.complex64).reshape(xa.shape)
+    elif m == 2:                                 # real -> complex (rfft)
+        n_t = int(last)
+        freq = n_t // 2 + 1
+        xin = np.ascontiguousarray(xa, dtype=np.float32).reshape(batch, n_t)
+        out = np.zeros((batch, freq * 2), np.float32)
+        lib.tessera_apple_gpu_fft_f32(m, _ptr(xin), _ptr(out), batch, n_t)
+        res = out.view(np.complex64).reshape(xa.shape[:-1] + (freq,))
+    else:                                        # complex -> real (irfft)
+        freq = int(last)
+        n_t = int(n) if n is not None else 2 * (freq - 1)
+        xc = np.ascontiguousarray(xa, dtype=np.complex64)
+        xin = xc.reshape(batch, freq).view(np.float32)
+        out = np.zeros((batch, n_t), np.float32)
+        lib.tessera_apple_gpu_fft_f32(m, _ptr(xin), _ptr(out), batch, n_t)
+        res = out.reshape(xa.shape[:-1] + (n_t,))
+    return np.ascontiguousarray(res)
 
 
 def _i32ptr(a: np.ndarray):

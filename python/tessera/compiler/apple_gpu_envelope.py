@@ -178,6 +178,14 @@ _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 # Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
 _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm", "tessera.moe_swiglu_block"})
+# Spectral / FFT lane (2026-06-10) — the "special" kernel class. fft/ifft/rfft/
+# irfft run on MPSGraph FourierTransform (macOS 14+); dct/stft/istft/
+# spectral_conv compose over them; spectral_filter is elementwise.
+_APPLE_GPU_SPECTRAL_OPS = frozenset({
+    "tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft",
+    "tessera.dct", "tessera.stft", "tessera.istft",
+    "tessera.spectral_conv", "tessera.spectral_filter",
+})
 # LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
 # innermost-axis nonzero count).
 _APPLE_GPU_LDT_OPS = frozenset({
@@ -218,6 +226,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
+    | _APPLE_GPU_SPECTRAL_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
@@ -264,6 +273,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_SSM_OPS, "ssm")
     put({"tessera.moe_swiglu_block"}, "moe_swiglu_block")
     put({"tessera.grouped_gemm"}, "grouped_gemm")
+    put(_APPLE_GPU_SPECTRAL_OPS, "spectral")
     put({"tessera.popcount"}, "popcount")
     put({"tessera.count_nonzero"}, "count_nonzero")
     put({"tessera.loss.z_loss"}, "z_loss")

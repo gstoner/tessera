@@ -31,12 +31,13 @@ _ROWS, _COLS, _EPS = 4, 16, 1e-5
 
 # ── Canonical decode functions (tessera.ops.* surface, module-level) ──
 #
-# Shape kwargs are literals (not module globals): @jit AST-lowering still
-# emits Graph IR for the body — even under auto_batch — and the Graph IR
-# operand resolver binds literals + call args, not module-level globals.
-# That is a general @jit constraint, not auto_batch-specific. A real
-# decode function naturally passes shapes as literals or args, so this is
-# the canonical style; _ROWS/_COLS stay in the numpy reference below.
+# Shape kwargs are literals (not module globals): a real decode function
+# naturally passes shapes as literals or args, so this is the canonical
+# style; _ROWS/_COLS stay in the numpy reference below. (P3 2026-06-09 —
+# under auto_batch the AST Graph IR is no longer emitted at all: the tracer
+# runs the body directly, so there's no Graph IR operand resolver in play.
+# Auto-detection + emission-skip are covered by
+# test_apple_gpu_jit_auto_batch_autodetect.py.)
 
 @ts.jit(target="apple_gpu", auto_batch=True)
 def _decode_default(x, g):

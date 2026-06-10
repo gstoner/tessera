@@ -328,7 +328,7 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 rfft,2,0,0,2,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,41,9,1,50,0,bf16 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm,48,9,1,57,0,bf16 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,3,5,0,8,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -375,7 +375,7 @@ sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
 sigmoid,3,0,0,3,0,f32 fp32,covered_by_family,category default for 'elementwise'
 sigmoid_safe,4,0,0,4,0,,needs_direct_test,category default for 'stable_reduction'
 sign,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-silu,63,2,4,65,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+silu,71,2,4,73,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 silu_mul,7,10,0,17,0,fp32,covered_by_family,category default for 'elementwise'
 simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'

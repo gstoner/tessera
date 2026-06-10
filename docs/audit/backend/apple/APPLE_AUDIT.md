@@ -173,21 +173,26 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   (`evaluate_ratchet`: regression + coverage failure). Locked by
   `test_apple_gpu_perf_ratchet.py` (manifest linkage + evaluator + slow live
   re-time gate).
+- **auto_batch polish — auto-detection + emission skip (P3, 2026-06-09):**
+  `@jit(target="apple_gpu")` `auto_batch` now defaults to `None` (auto-detect).
+  A recognized decode chain — a body of ≥2 encode-eligible ops and nothing else,
+  detected by a conservative AST whitelist scan (`_recognized_decode_chain`:
+  rejects arithmetic on op results, subscripts, control flow, non-op calls) —
+  turns the one-command-buffer route on by default. When the route is on, the
+  AST Graph IR that the tracer never reads is no longer emitted (an
+  `_AutoBatchSkipEmission` sentinel installs the deferred state; emission still
+  runs when `emit_package` needs the recognized region). Explicit
+  `auto_batch=True`/`False` override detection. Locked by
+  `test_apple_gpu_jit_auto_batch_autodetect.py` (19 tests: detection
+  truth-table, emission-skip introspection, encode-name-vs-registry drift gate,
+  misuse guards).
 
 ## Still Open
 
-The 2026-06-09 sprint closed the three remaining themes (descriptor-driven
-dispatch, feature-table-driven selection, perf ratchets — see Finished). What
-remains is **one optional polish**.
-
-### P3 — auto_batch polish (optimization, not blocking)
-
-**Open:** the canonical one-command-buffer route works (`@jit(..., auto_batch=True)`,
-locked by `test_apple_gpu_jit_auto_batch_canonical.py`) but is **opt-in**, not
-auto-detected, and a body still pays Graph-IR-emission overhead it never uses.
-
-**Next action (optional):** auto-detect recognized decode loops so the route is on
-by default; skip Graph-IR emission on the auto_batch path.
+The 2026-06-09 sprint closed the four remaining themes — descriptor-driven
+dispatch, feature-table-driven selection, perf ratchets, and the auto_batch
+polish (all in Finished). **No Apple-compiler items remain open;** the standing
+constraints/decisions below are by design, not tasks.
 
 ---
 
@@ -229,9 +234,17 @@ by default; skip Graph-IR emission on the auto_batch path.
 4. ~~Finish `@jit(target="apple_gpu", auto_batch=True)` canonical
    one-command-buffer route.~~ **Landed 2026-06-02** — canonical
    `tessera.ops.*` decode through `@jit` runs on one cb, with
-   `max_ops_per_cb` chunking threaded through the decorator. Follow-on
+   `max_ops_per_cb` chunking threaded through the decorator. ~~Follow-on
    (optional): make auto_batch bypass unused Graph-IR emission; consider
-   auto-detection so the route is on by default for recognized decode loops.
+   auto-detection so the route is on by default for recognized decode loops.~~
+   **Landed 2026-06-09** — `auto_batch` defaults to `None` (auto-detect): a
+   recognized decode chain (≥2 encode-eligible ops and nothing else, via the
+   `_recognized_decode_chain` AST scan) turns the route on by default, and the
+   unused AST Graph IR emission is skipped (an `_AutoBatchSkipEmission` sentinel
+   lands the deferred state; `JIT_APPLE_GPU_AUTO_BATCH` diagnostic). Explicit
+   `True`/`False` override detection. Locked by
+   `test_apple_gpu_jit_auto_batch_autodetect.py` (detection truth-table +
+   emission-skip + registry drift gate).
 5. ~~Author production packaged kernels from the MPSGraph lane.~~ **Landed
    2026-06-02 (PK8)** — `author_matmul_package` builds → compiles →
    `serializeToMPSGraphPackageAtURL:` → wraps `manifest.json`, and the

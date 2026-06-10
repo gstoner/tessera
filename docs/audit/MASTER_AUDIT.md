@@ -93,8 +93,8 @@ Finished:
 
 Still needs work:
 
-- auto_batch polish (optional): auto-detect recognized decode loops; skip
-  unused Graph-IR emission on the auto_batch path.
+- Nothing open on the Apple compiler track. (Real-hardware NVIDIA/ROCm/
+  Metalium execution proof remains the cross-backend gate — see those tracks.)
 
 Closed 2026-06-02 → 2026-06-09: binding specs/descriptors for all kernel
 families; descriptor-driven dispatch (single-source envelope in
@@ -102,7 +102,8 @@ families; descriptor-driven dispatch (single-source envelope in
 `kRuntimeOps`); feature-limit-driven selection (tiled softmax N-cap, bf16
 gate, fused-chain/head_dim caps, threads-per-row); canonical one-command-
 buffer decode; production packaged-kernel rows; manifest-attached benchmarks
-+ perf ratchet (`perf_gate --ratchet` + recorded `apple_gpu_hot_paths.json`).
++ perf ratchet (`perf_gate --ratchet` + recorded `apple_gpu_hot_paths.json`);
+auto_batch auto-detection + Graph-IR-emission skip.
 
 Primary detail: [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md).
 

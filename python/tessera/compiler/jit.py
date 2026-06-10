@@ -1226,6 +1226,99 @@ class JitFn:
 # @jit decorator
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Encode-eligible op base names for the apple_gpu one-command-buffer route.
+# Mirrors the keys of ``apple_gpu_chain.ENCODE_OP_REGISTRY`` but kept as a plain
+# literal so decoration-time auto-detection needs no GPU / runtime import. Drift
+# vs the registry is gated by
+# ``tests/unit/test_apple_gpu_jit_auto_batch_autodetect.py``.
+_APPLE_GPU_ENCODE_OP_NAMES = frozenset({
+    "bmm", "layer_norm", "rmsnorm", "softmax", "rope",
+    "silu", "gelu", "flash_attn", "conv2d",
+})
+
+
+class _AutoBatchSkipEmission(Exception):
+    """Internal control-flow sentinel — raised at the top of the Step 6 try
+    block to skip Graph IR emission for the auto_batch route (caught by a
+    dedicated handler that installs the deferred state)."""
+
+
+# Expression / statement AST node types allowed inside a recognized decode
+# chain body. The body must be *only* a sequence of op-call assignments and a
+# return — no arithmetic (BinOp), subscripts, comparisons, control flow,
+# tuples, etc. Anything outside this set means the op results flow into
+# non-op computation the one-command-buffer route can't reproduce, so the
+# body is conservatively NOT auto-batched.
+_DECODE_CHAIN_ALLOWED_NODES = (
+    ast.FunctionDef, ast.AsyncFunctionDef, ast.arguments, ast.arg,
+    ast.Assign, ast.Return, ast.Expr, ast.Pass,
+    ast.Call, ast.Attribute, ast.Name, ast.Constant, ast.keyword,
+    ast.Load, ast.Store,
+)
+
+
+def _recognized_decode_chain(source_text: Optional[str]) -> bool:
+    """True when a function body is a pure chain of ≥2 encode-eligible
+    apple_gpu ops and *nothing else* — the exact shape the one-command-buffer
+    route batches.
+
+    This is the auto-detection signal for ``@jit(target="apple_gpu")`` with
+    the default ``auto_batch=None``: a recognized decode chain runs on one
+    command buffer per encode segment (strictly fewer commits, numerically
+    identical — see ``test_apple_gpu_jit_auto_batch_canonical``).
+
+    Deliberately conservative. Two gates, both must hold:
+
+    1. Every ``Call`` resolves to an encode-eligible op name — a non-encode
+       call (``range``, ``np.exp``, ``tessera.control.*``, a helper) is out.
+    2. The body contains *only* whitelisted nodes (op-call assignments + a
+       return) — so arithmetic on an op result (``silu(x) * 2``), subscripts,
+       comparisons, control flow, or tuple returns all disqualify it, because
+       the tracer hands back a ``TraceRef`` the surrounding computation
+       couldn't consume the way eager execution would.
+
+    Explicit ``auto_batch=True``/``False`` always overrides detection."""
+    if not source_text:
+        return False
+    try:
+        tree = ast.parse(textwrap.dedent(source_text))
+    except SyntaxError:
+        return False
+    funcs = [n for n in tree.body
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    if len(funcs) != 1:
+        return False
+    op_calls = 0
+    for node in ast.walk(funcs[0]):
+        if not isinstance(node, _DECODE_CHAIN_ALLOWED_NODES):
+            return False  # non-chain construct (arithmetic, control flow, ...)
+        if isinstance(node, ast.Call):
+            func = node.func
+            base = (func.attr if isinstance(func, ast.Attribute)
+                    else func.id if isinstance(func, ast.Name)
+                    else None)
+            if base not in _APPLE_GPU_ENCODE_OP_NAMES:
+                return False  # a non-encode call disqualifies the chain
+            op_calls += 1
+    return op_calls >= 2
+
+
+def _resolve_auto_batch(
+    auto_batch: "bool | None",
+    target_kind: Optional[str],
+    source_text: Optional[str],
+) -> bool:
+    """Resolve the effective one-command-buffer route flag.
+
+    * ``True`` / ``False`` — explicit; honored verbatim (the non-apple guard
+      below still fires for an explicit ``True`` on the wrong target).
+    * ``None`` (the default) — auto-detect: on for an apple_gpu body that is a
+      recognized decode chain, off otherwise."""
+    if auto_batch is not None:
+        return bool(auto_batch)
+    return target_kind == "apple_gpu" and _recognized_decode_chain(source_text)
+
+
 def jit(
     fn: Optional[Callable] = None,
     *,
@@ -1238,7 +1331,7 @@ def jit(
     source: Optional[str] = None,
     source_path: Optional[str] = None,
     native_required: bool = False,
-    auto_batch: bool = False,
+    auto_batch: "bool | None" = None,
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
     dispatch_via_package: "bool | str | None" = None,
@@ -1279,6 +1372,14 @@ def jit(
                        stdin/exec where inspect.getsource() cannot recover the
                        function body.
         source_path  : optional path to Python source text for AST lowering.
+        auto_batch   : apple_gpu one-command-buffer route. ``None`` (default)
+                       auto-detects — a recognized decode chain (a body of ≥2
+                       encode-eligible ops and nothing else) runs on one
+                       command buffer per encode segment, and its unused Graph
+                       IR emission is skipped. ``True`` forces the route on,
+                       ``False`` forces it off.
+        max_ops_per_cb: chunking budget for the auto_batch route — caps
+                       encode-eligible ops per command buffer.
 
     Returns:
         JitFn wrapper around the decorated function.
@@ -1347,12 +1448,29 @@ def jit(
         if isinstance(target, GPUTargetProfile) and target.supports_wgmma and resolved_attn is None:
             resolved_attn = SM90_DEFAULT
 
+        # P3 (2026-06-09) — resolve the effective one-command-buffer route.
+        # ``auto_batch=None`` (default) auto-detects a recognized decode chain;
+        # the auto_batch path traces+runs the body and never reads the emitted
+        # Graph IR, so when the route is on we skip Graph IR emission entirely
+        # (unless ``emit_package`` needs the recognized region). Explicit
+        # ``True``/``False`` always override detection.
+        _auto_batch = _resolve_auto_batch(auto_batch, target_kind, source_text)
+        _skip_graph_ir = (
+            _auto_batch and target_kind == "apple_gpu" and not emit_package)
+
         # ── Step 6: emit Graph IR ────────────────────────────────────────────
         # Phase-F follow-on: when set, AST emission failed for an apple_gpu
         # function and we deferred to the tracer (which runs the function rather
         # than reading the AST graph_ir). ``_needs_trace`` is forced on below.
         _trace_deferred = False
         try:
+            if _skip_graph_ir:
+                # The auto_batch tracer runs the body directly — the AST Graph
+                # IR it would emit here is never consulted, so don't pay to
+                # build it. Jump to the shared deferred tail (empty module,
+                # no plan/bundle), the same state an AST emission failure lands
+                # in, but flagged with its own diagnostic.
+                raise _AutoBatchSkipEmission
             effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
             # Attach GPU target attrs to the module when target is provided.
             if isinstance(target, GPUTargetProfile):
@@ -1447,6 +1565,22 @@ def jit(
             # over the bundle's request.target + the module's primary op.
             compile_result = compile_result_from_bundle(
                 compile_bundle, module=module)
+        except _AutoBatchSkipEmission:
+            # P3 (2026-06-09) — auto_batch route is on; emission was skipped on
+            # purpose. Empty module + no plan/bundle makes __call__ fall through
+            # to ``self._fn`` (the auto_batch wrapper, set below). NOTE: unlike
+            # the Phase-F emission-*failure* path, we leave ``_trace_deferred``
+            # False — the auto_batch wrapper is the execution path here, NOT the
+            # surgical ``run_jit_traced`` tracer (which ``_needs_trace=True``
+            # would route to, bypassing auto_batch).
+            module = GraphIRModule()
+            cpu_plan = None
+            compile_bundle = None
+            compile_result = None
+            diagnostics = [JitDiagnostic(
+                "info", "JIT_APPLE_GPU_AUTO_BATCH",
+                "auto_batch one-command-buffer route active; skipped unused "
+                "Graph IR emission (the tracer runs the body directly)")]
         except Exception as exc:
             # Phase-F follow-on — an AST Graph-IR emission failure does NOT
             # hard-fail apple_gpu decoration. The tracer executes the function by
@@ -1531,12 +1665,13 @@ def jit(
         # decode chain splits into K cbs transparently instead of
         # hitting the MPSGraph shape × op-count cliff. None = the
         # substrate default (DEFAULT_OPS_PER_CB).
-        if max_ops_per_cb is not None and not auto_batch:
+        if max_ops_per_cb is not None and not _auto_batch:
             raise TesseraJitError(
-                "@jit(max_ops_per_cb=...) is only meaningful with "
-                "auto_batch=True (the one-command-buffer route); "
-                f"got auto_batch=False for {getattr(fn, '__name__', '<fn>')!r}.")
-        if auto_batch:
+                "@jit(max_ops_per_cb=...) is only meaningful with the "
+                "auto_batch one-command-buffer route; got an effective "
+                f"auto_batch=False for {getattr(fn, '__name__', '<fn>')!r} "
+                f"(auto_batch={auto_batch!r}, target={target_kind!r}).")
+        if _auto_batch:
             if target_kind != "apple_gpu":
                 raise TesseraJitError(
                     f"@jit(auto_batch=True) currently only supports "

@@ -514,6 +514,28 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
         status="implemented",
     ),
+    DiagnosticCode(
+        code="JIT_APPLE_GPU_AUTO_BATCH",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        # Registry severity is warning per the registry's accepted set; the
+        # actual JitDiagnostic is emitted at "info" (matching JIT_SOURCE_PROVIDED).
+        severity="warning",
+        summary=(
+            "The apple_gpu one-command-buffer route (auto_batch) is active for "
+            "this function — either requested explicitly or auto-detected as a "
+            "recognized decode chain. The tracer runs the body directly, so the "
+            "AST Graph IR emission it would otherwise do is skipped as unused."
+        ),
+        fix_hint=(
+            "Informational; no action required. Pass @jit(auto_batch=False) to "
+            "force the per-op eager path, or auto_batch=True to force the route "
+            "on for a body auto-detection did not recognize."
+        ),
+        spec=None,
+        sprint="p3-auto-batch-polish",
+        language="python",
+        status="implemented",
+    ),
 
     # ── LayoutLegalityPass (V2 + V4a) ────────────────────────────────────
     DiagnosticCode(

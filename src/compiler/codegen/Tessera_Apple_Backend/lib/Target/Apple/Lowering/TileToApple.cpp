@@ -232,60 +232,19 @@ bool isKVCache(llvm::StringRef name) {
   return name.starts_with("tessera.kv_cache.");
 }
 
-// G3 — the full set of Graph IR ops the Apple GPU runtime executes natively.
-// This MIRRORS the Python runtime envelope
-// driver._APPLE_GPU_{MPS,MSL,MPSGRAPH}_OPS (the single source of truth): MPS
-// (matmul/gemm/batched_gemm), custom MSL (rope/flash_attn/softmax[_safe]/gelu),
-// and the MPSGraph Tier-1 activations/norms. The drift test
-// `test_apple_gpu_tile_pass_status_matches_envelope` runs this pass over every
-// envelope op and fails if the two ever diverge — so adding a runtime op in
-// driver.py forces a matching update here.
+// G3 + P1 (2026-06-09) — the full set of Graph IR ops the Apple GPU runtime
+// executes natively.  GENERATED from the Python envelope registry
+// (`python/tessera/compiler/apple_gpu_envelope.py`, the single source of
+// truth shared by driver gating, runtime lane dispatch, and the kernel
+// descriptor registry) via `scripts/generate_apple_runtime_ops_table.py` —
+// do not hand-edit the list; regenerate when the envelope changes.  Drift
+// gates: `test_apple_runtime_ops_table_in_sync` (table) and
+// `test_apple_gpu_tile_pass_status_matches_envelope` (pass behavior).
 bool isAppleGpuRuntimeOp(llvm::StringRef n) {
   static constexpr llvm::StringLiteral kRuntimeOps[] = {
-      // MPS
-      "tessera.matmul", "tessera.gemm", "tessera.batched_gemm",
-      // custom MSL
-      "tessera.rope", "tessera.flash_attn", "tessera.softmax",
-      "tessera.softmax_safe", "tessera.gelu",
-      // MPSGraph Tier-1 activations / norms
-      "tessera.abs", "tessera.absolute", "tessera.exp", "tessera.layer_norm",
-      "tessera.log", "tessera.log_softmax", "tessera.neg", "tessera.negative",
-      "tessera.relu", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.rsqrt",
-      "tessera.sigmoid", "tessera.sigmoid_safe", "tessera.silu",
-      "tessera.silu_mul", "tessera.softplus", "tessera.sqrt", "tessera.tanh",
-      // Batch 1 (2026-06-08) — float-output elementwise math + comparison on the
-      // MPSGraph unary/binary opcode lane (driver._APPLE_GPU_MPSGRAPH_OPS).
-      "tessera.sin", "tessera.cos", "tessera.tan", "tessera.asin", "tessera.acos",
-      "tessera.atan", "tessera.sinh", "tessera.cosh", "tessera.erf", "tessera.erfc",
-      "tessera.expm1", "tessera.log1p", "tessera.reciprocal", "tessera.sign",
-      "tessera.floor", "tessera.ceil", "tessera.round", "tessera.trunc",
-      "tessera.add", "tessera.sub", "tessera.mul", "tessera.div",
-      "tessera.maximum", "tessera.minimum", "tessera.pow", "tessera.atan2",
-      "tessera.mod", "tessera.floor_div", "tessera.eq", "tessera.ne",
-      "tessera.lt", "tessera.le", "tessera.gt", "tessera.ge",
-      // Batch 2 (2026-06-08) — reduce/scan opcode completions + predicates /
-      // logical / bitwise / compose (clamp/clip/where) / reduce-max/min.
-      "tessera.logsumexp", "tessera.cummax", "tessera.cummin",
-      "tessera.max", "tessera.min",
-      "tessera.isfinite", "tessera.isinf", "tessera.isnan",
-      "tessera.logical_not", "tessera.bitwise_not",
-      "tessera.logical_and", "tessera.logical_or", "tessera.logical_xor",
-      "tessera.bitwise_and", "tessera.bitwise_or", "tessera.bitwise_xor",
-      "tessera.clamp", "tessera.clip", "tessera.where",
-      // Task C (2026-06-01) — conv2d / conv3d. Project 5 wired the
-      // encode-session lane for conv2d (`tessera_apple_gpu_conv2d_dev_f32_enc`);
-      // Sprint A extended it to {f16, bf16}. conv3d uses an im2col + GPU
-      // batched matmul decomposition. Both belong on the metal_runtime
-      // rung — without them, the C++ pass silently demoted conv to
-      // artifact_only even though the runtime executes it.
-      "tessera.conv2d", "tessera.conv3d",
-      // L-series linalg family (2026-06-02) — cholesky + tri_solve execute on
-      // the GPU via real MSL kernels (driver._APPLE_GPU_LINALG_OPS).  The other
-      // family members (cholesky_solve/lu/qr/svd) lower GPU-side as inspection
-      // artifacts for now (their CPU LAPACK path is real + tested); their GPU
-      // runtime wiring is a follow-on, at which point each joins this list, the
-      // driver envelope, and the drift gate together.
-      "tessera.cholesky", "tessera.tri_solve"};
+#define TESSERA_APPLE_GPU_RUNTIME_OP(name) name,
+#include "Tessera/Target/Apple/apple_runtime_ops.inc"
+  };
   for (const auto &r : kRuntimeOps)
     if (n == r)
       return true;

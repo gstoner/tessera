@@ -111,6 +111,11 @@ class JitDiagnosticCode(str, Enum):
     #: via the tracer at call time. Non-apple_gpu targets still raise.
     APPLE_GPU_TRACE_DEFERRED = "JIT_APPLE_GPU_TRACE_DEFERRED"
 
+    #: P3 (2026-06-09) — the apple_gpu one-command-buffer route (auto_batch)
+    #: is active (explicit or auto-detected as a recognized decode chain), so
+    #: the unused AST Graph IR emission was skipped (the tracer runs the body).
+    APPLE_GPU_AUTO_BATCH = "JIT_APPLE_GPU_AUTO_BATCH"
+
 
 class FrontendDiagnosticCode(str, Enum):
     """Textual-DSL frontend (``tessera.compiler.frontend.parser``).

@@ -83,6 +83,9 @@ class AppleKernelDescriptor:
     shape_envelope: Optional[str]
     encode_eligible: bool
     binding_spec: Optional[object] = None
+    #: Fine-grained runtime dispatch lane (``apple_gpu_envelope.lane_for``);
+    #: None for ops outside the runtime envelope (packaged / artifact-only).
+    lane: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.family not in APPLE_KERNEL_FAMILIES:
@@ -107,18 +110,20 @@ def _classify_family(op_name: str, status: str,
                      encode_eligible: bool) -> str:
     """Resolve the kernel family for a bare op name, most-specific-first.
 
-    Reads the driver envelope sets so the classification stays in lock-
-    step with what actually dispatches at runtime (no second truth). An
-    op that is not in any per-op envelope but has an encode-session lane
-    (e.g. ``bmm``) classifies as ``encode_session``; a manifest-only op
-    with neither (e.g. ``kv_cache_read``) is ``other``."""
-    from . import driver as _drv
+    Reads the canonical envelope module (``apple_gpu_envelope`` — the same
+    tables driver gating, runtime lane dispatch, and the generated C++
+    kRuntimeOps consume) so the classification stays in lock-step with what
+    actually dispatches at runtime (no second truth). An op that is not in
+    any per-op envelope but has an encode-session lane (e.g. ``bmm``)
+    classifies as ``encode_session``; a manifest-only op with neither
+    (e.g. ``kv_cache_read``) is ``other``."""
+    from . import apple_gpu_envelope as _env
 
     if status == "packaged":
         return "packaged"
 
     def _has(attr: str) -> bool:
-        env: frozenset[str] = getattr(_drv, attr, frozenset())
+        env: frozenset[str] = getattr(_env, attr, frozenset())
         return f"tessera.{op_name}" in env or op_name in env
 
     if _has("_APPLE_GPU_MSL_OPS"):
@@ -163,6 +168,7 @@ def apple_kernel_descriptor(op_name: str) -> Optional[AppleKernelDescriptor]:
     if entry is None:
         return None
     enc = _encode_eligible(bare)
+    from .apple_gpu_envelope import lane_for
     return AppleKernelDescriptor(
         op_name=bare,
         family=_classify_family(bare, entry.status, enc),
@@ -172,6 +178,7 @@ def apple_kernel_descriptor(op_name: str) -> Optional[AppleKernelDescriptor]:
         shape_envelope=entry.shape_envelope,
         encode_eligible=enc,
         binding_spec=entry.apple_binding_spec,
+        lane=lane_for(bare),
     )
 
 

@@ -2187,201 +2187,41 @@ def _load_apple_cpu_runtime() -> ctypes.CDLL:
     return _apple_cpu_runtime
 
 
-_APPLE_GPU_MPS_OPS = frozenset(
-    {"tessera.matmul", "tessera.gemm", "tessera.batched_gemm"}
-)
-_APPLE_GPU_MSL_OPS = frozenset({
-    "tessera.rope",
-    "tessera.flash_attn",
-    "tessera.softmax",
-    "tessera.softmax_safe",
-    "tessera.gelu",
-})
-
-# 2026-05-29 — MetalPerformanceShadersGraph-backed Tier-1 / long-tail lane.
-# op_name -> unary opcode (must match apple_gpu_runtime.mm mpsg_unary_node).
-_APPLE_GPU_UNARY_OPCODES = {
-    "tessera.relu": 0,
-    "tessera.sigmoid": 1,
-    "tessera.sigmoid_safe": 1,
-    "tessera.tanh": 2,
-    "tessera.softplus": 3,
-    "tessera.silu": 4,
-    "tessera.exp": 6,
-    "tessera.log": 7,
-    "tessera.sqrt": 8,
-    "tessera.rsqrt": 9,
-    "tessera.neg": 10,
-    "tessera.negative": 10,
-    "tessera.abs": 11,
-    "tessera.absolute": 11,
-    # Batch 1 (2026-06-08) — float-output elementwise math (MPSGraph nodes).
-    "tessera.sin": 12, "tessera.cos": 13, "tessera.tan": 14,
-    "tessera.asin": 15, "tessera.acos": 16, "tessera.atan": 17,
-    "tessera.sinh": 18, "tessera.cosh": 19, "tessera.erf": 20, "tessera.erfc": 21,
-    "tessera.expm1": 22, "tessera.log1p": 23, "tessera.reciprocal": 24,
-    "tessera.sign": 25, "tessera.floor": 26, "tessera.ceil": 27,
-    "tessera.round": 28, "tessera.trunc": 29,
-    # Batch 2 (2026-06-08) — unary predicates / logical / bitwise → f32 mask.
-    "tessera.isfinite": 30, "tessera.isinf": 31, "tessera.isnan": 32,
-    "tessera.logical_not": 33, "tessera.bitwise_not": 34,
-}
-# Batch 1 (2026-06-08) — binary float math + comparison → f32 mask. op_name ->
-# opcode in apple_gpu_runtime.mm mpsg_binary_node. add/sub/mul/div/maximum/minimum
-# reuse the existing C nodes (0-5); 7-10 math; 11-16 comparison.
-_APPLE_GPU_BINARY_OPCODES = {
-    "tessera.add": 0, "tessera.sub": 1, "tessera.mul": 2, "tessera.div": 3,
-    "tessera.maximum": 4, "tessera.minimum": 5,
-    "tessera.pow": 7, "tessera.atan2": 8, "tessera.mod": 9, "tessera.floor_div": 10,
-    "tessera.eq": 11, "tessera.ne": 12, "tessera.lt": 13, "tessera.le": 14,
-    "tessera.gt": 15, "tessera.ge": 16,
-    # Batch 2 (2026-06-08) — logical (→ f32 mask) + bitwise (int32) binary.
-    "tessera.logical_and": 17, "tessera.logical_or": 18, "tessera.logical_xor": 19,
-    "tessera.bitwise_and": 20, "tessera.bitwise_or": 21, "tessera.bitwise_xor": 22,
-}
-# op_name -> rowop kind (0 layer_norm, 1 rmsnorm, 3 log_softmax). Softmax stays
-# on its dedicated MSL path for single-op; the MPSGraph softmax symbol is used
-# by the f16/bf16 fused-chain completion below.
-_APPLE_GPU_ROWOP_KINDS = {
-    "tessera.layer_norm": 0,
-    "tessera.rmsnorm": 1,
-    "tessera.rmsnorm_safe": 1,
-    "tessera.log_softmax": 3,
-}
-# Batch 2 (2026-06-08) — composed on the GPU binary lane (no dedicated kernel):
-# clamp/clip = max(min(x,hi),lo); where = c*a + (1-c)*b.
-_APPLE_GPU_COMPOSE_OPS = frozenset({"tessera.clamp", "tessera.clip", "tessera.where"})
-# Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
-# lanes (per-element recipe + reduce). One dispatcher, no dedicated kernels.
-_APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
-    "tessera.loss.mse", "tessera.loss.mae", "tessera.loss.huber",
-    "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
-    "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
-    "tessera.loss.cross_entropy",
-    "tessera.loss.kl_divergence", "tessera.loss.js_divergence",
-})
-# Group/instance/weight norm composed from the rowop (layer_norm) + reduce lanes.
-_APPLE_GPU_NORM_COMPOSE_OPS = frozenset({
-    "tessera.group_norm", "tessera.instance_norm", "tessera.weight_norm",
-})
-# Standard attention family (Sub-sprint A) — thin wrappers over the proven GQA
-# flash-attention kernel (multi_head/gqa/mqa/mla_decode/gated_attention).
-_APPLE_GPU_ATTN_WRAPPER_OPS = frozenset({
-    "tessera.multi_head_attention", "tessera.gqa_attention",
-    "tessera.mqa_attention", "tessera.mla_decode", "tessera.mla_decode_fused",
-    "tessera.gated_attention",
-})
-# Linear / recurrent attention family (Sub-sprint B) via the quadratic-parallel
-# form (φ(Q)φ(K)ᵀ ⊙ causal[⊙decay]) @ V — two GPU bmms + a mask multiply.
-_APPLE_GPU_LINEAR_ATTN_OPS = frozenset({
-    "tessera.linear_attn", "tessera.linear_attn_state",
-    "tessera.lightning_attention", "tessera.power_attn", "tessera.retention",
-})
-# NSA masked-softmax attention (Sub-sprint C) — compressed-block (plain) +
-# sliding-window (structured causal/window mask) via bmm→+mask→softmax→bmm.
-_APPLE_GPU_MASKED_ATTN_OPS = frozenset({
-    "tessera.attn_compressed_blocks", "tessera.attn_sliding_window",
-})
-# Delta-rule attention family (Sub-sprint D) — gated_deltanet / kimi_delta /
-# modified_delta as the quadratic form with a per-token column-weight mask.
-_APPLE_GPU_DELTA_ATTN_OPS = frozenset({
-    "tessera.gated_deltanet", "tessera.kimi_delta_attention",
-    "tessera.modified_delta_attention",
-})
-# hybrid_attention — policy wrapper routing to the now-proven delegates.
-_APPLE_GPU_HYBRID_ATTN_OPS = frozenset({"tessera.hybrid_attention"})
-# Data-dependent NSA attention (Sub-sprint E) — host select/gather + GPU attention.
-_APPLE_GPU_SPARSE_ATTN_OPS = frozenset({
-    "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
-    "tessera.attn_local_window_2d",
-})
-_APPLE_GPU_MPSGRAPH_OPS = (
-    frozenset(_APPLE_GPU_UNARY_OPCODES)
-    | frozenset(_APPLE_GPU_BINARY_OPCODES)
-    | frozenset(_APPLE_GPU_ROWOP_KINDS)
-    | _APPLE_GPU_COMPOSE_OPS
-    | frozenset({"tessera.silu_mul"})
-)
-# 2026-05-29 — Tier-2 projections routed through the matmul / bmm lane.
-_APPLE_GPU_PROJECTION_OPS = frozenset(
-    {"tessera.linear_general", "tessera.qkv_projection"}
-)
-# 2026-05-29 — Tier-3 reductions / scans via the MPSGraph reduce lane.
-# op_name -> (kind, op_code); kinds: "reduce" (scalar per row), "arg" (int
-# index), "scan" (cumulative, same shape).
-_APPLE_GPU_REDUCE_OPS = {
-    "tessera.reduce": ("reduce", 0),   # sum
-    "tessera.mean": ("reduce", 1),
-    "tessera.amax": ("reduce", 2),
-    "tessera.amin": ("reduce", 3),
-    "tessera.prod": ("reduce", 4),
-    "tessera.var": ("reduce", 5),
-    "tessera.std": ("reduce", 6),
-    "tessera.argmax": ("arg", 0),
-    "tessera.argmin": ("arg", 1),
-    "tessera.cumsum": ("scan", 0),
-    "tessera.cumprod": ("scan", 1),
-    # Batch 2 (2026-06-08) — reduce/scan opcode completions.
-    "tessera.logsumexp": ("reduce", 7),
-    "tessera.cummax": ("scan", 2),
-    "tessera.cummin": ("scan", 3),
-    "tessera.max": ("reduce", 2),   # reduce-max (alias of amax over an axis)
-    "tessera.min": ("reduce", 3),   # reduce-min (alias of amin)
-}
-_APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
-# 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
-# (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
-_APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
-# GPU linear-algebra lane (MPSMatrix) — only the registered Graph IR ops:
-# tessera.cholesky (1 operand) + tessera.tri_solve (2 operands, `lower` kwarg).
-_APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
-# Mamba-2 selective state-space scan — chunked-parallel SSD with its batched
-# contractions on the Metal bmm lane (scalar-state A; (D,N) A falls back).
-_APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
-# Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
-_APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm", "tessera.moe_swiglu_block"})
-# LDT candidate-axis ops with dedicated Metal kernels (popcount intrinsic,
-# innermost-axis nonzero count).
-_APPLE_GPU_LDT_OPS = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
-# Geometric-algebra (Clifford Cl(3,0)) flat-coefficient lane — the canonical
-# tessera.ops projection of the tessera.ga.* Multivector surface. The dispatcher
-# calls the GA lane, which internally routes Cl(3,0) f32 to the cl30 MSL kernels.
-_APPLE_GPU_CLIFFORD_OPS = frozenset({
-    "tessera.clifford_geometric_product", "tessera.clifford_wedge",
-    "tessera.clifford_left_contraction", "tessera.clifford_inner",
-    "tessera.clifford_rotor_sandwich",
-    "tessera.clifford_reverse", "tessera.clifford_grade_involution",
-    "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
-    "tessera.clifford_hodge_star",
-    "tessera.clifford_ext_deriv", "tessera.clifford_vec_deriv",
-    "tessera.clifford_codiff",
-    "tessera.clifford_exp", "tessera.clifford_log",
-    "tessera.clifford_norm", "tessera.clifford_norm_squared",
-})
-# Energy-based-model flat-array lane — canonical tessera.ops projection of the
-# tensor-clean tessera.ebm.* subset; the dispatcher calls the EBM lane, which
-# internally routes f32 inputs to the dedicated EBM MSL kernels.
-_APPLE_GPU_EBM_OPS = frozenset({
-    "tessera.ebm_energy_quadratic", "tessera.ebm_self_verify",
-    "tessera.ebm_refinement", "tessera.ebm_inner_step",
-})
-# EBM training losses (CD / PCD / score-matching / ISM / DSM) — MPSGraph
-# reductions over energy/score tensors. reduction="mean" runs on GPU.
-_APPLE_GPU_EBM_LOSS_OPS = frozenset({
-    "tessera.loss.contrastive_divergence", "tessera.loss.persistent_cd",
-    "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
-    "tessera.loss.denoising_score_matching",
-})
-_APPLE_GPU_RUNTIME_OPS = (
-    _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
-    | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
-    | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
-    | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
-    | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
-    | _APPLE_GPU_SPARSE_ATTN_OPS
+# P1 (2026-06-09) — the Apple GPU runtime envelope (lane sets + opcode
+# tables) is single-sourced in compiler/apple_gpu_envelope.py; this module
+# imports it and dispatches per-op via APPLE_GPU_LANE_BY_OP (see
+# _apple_gpu_lane_handlers below). The driver gate, the generated C++
+# kRuntimeOps table, and the kernel descriptor registry read the same tables.
+from .compiler.apple_gpu_envelope import (  # noqa: F401
+    _APPLE_GPU_MPS_OPS,
+    _APPLE_GPU_MSL_OPS,
+    _APPLE_GPU_UNARY_OPCODES,
+    _APPLE_GPU_BINARY_OPCODES,
+    _APPLE_GPU_ROWOP_KINDS,
+    _APPLE_GPU_COMPOSE_OPS,
+    _APPLE_GPU_LOSS_COMPOSE_OPS,
+    _APPLE_GPU_NORM_COMPOSE_OPS,
+    _APPLE_GPU_ATTN_WRAPPER_OPS,
+    _APPLE_GPU_LINEAR_ATTN_OPS,
+    _APPLE_GPU_MASKED_ATTN_OPS,
+    _APPLE_GPU_DELTA_ATTN_OPS,
+    _APPLE_GPU_HYBRID_ATTN_OPS,
+    _APPLE_GPU_SPARSE_ATTN_OPS,
+    _APPLE_GPU_MPSGRAPH_OPS,
+    _APPLE_GPU_PROJECTION_OPS,
+    _APPLE_GPU_REDUCE_OPS,
+    _APPLE_GPU_REDUCTION_OPS,
+    _APPLE_GPU_CONV_OPS,
+    _APPLE_GPU_LINALG_OPS,
+    _APPLE_GPU_SSM_OPS,
+    _APPLE_GPU_MOE_OPS,
+    _APPLE_GPU_LDT_OPS,
+    _APPLE_GPU_CLIFFORD_OPS,
+    _APPLE_GPU_EBM_OPS,
+    _APPLE_GPU_EBM_LOSS_OPS,
+    _APPLE_GPU_RUNTIME_OPS,
+    APPLE_GPU_LANE_BY_OP,
+    APPLE_GPU_LANES,
 )
 
 
@@ -2540,224 +2380,86 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         if not result:
             raise ValueError(f"artifact op {op_name!r} has no result")
 
-        if op_name in _APPLE_GPU_MPS_OPS:
-            values[str(result)] = _apple_gpu_dispatch_matmul(
-                op_name, [_as_numpy(values[name]) for name in operand_names], np
-            )
-        elif op_name == "tessera.rope":
-            values[str(result)] = _apple_gpu_dispatch_rope(
-                op_name, [_as_numpy(values[name]) for name in operand_names], np
-            )
-        elif op_name == "tessera.flash_attn":
-            values[str(result)] = _apple_gpu_dispatch_flash_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in {"tessera.softmax", "tessera.softmax_safe"}:
-            values[str(result)] = _apple_gpu_dispatch_softmax(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.gelu":
-            values[str(result)] = _apple_gpu_dispatch_gelu(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                np,
-            )
-        elif op_name in _APPLE_GPU_UNARY_OPCODES:
-            values[str(result)] = _apple_gpu_dispatch_unary(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                np,
-            )
-        elif op_name in _APPLE_GPU_BINARY_OPCODES:
-            values[str(result)] = _apple_gpu_dispatch_mpsgraph_binary(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in ("tessera.clamp", "tessera.clip"):
-            values[str(result)] = _apple_gpu_dispatch_clamp(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.where":
-            values[str(result)] = _apple_gpu_dispatch_where(
-                [_as_numpy(values[name]) for name in operand_names],
-                np,
-            )
-        elif op_name in _APPLE_GPU_LOSS_COMPOSE_OPS:
-            values[str(result)] = _apple_gpu_dispatch_loss(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_NORM_COMPOSE_OPS:
-            values[str(result)] = _apple_gpu_dispatch_norm(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_ATTN_WRAPPER_OPS:
-            values[str(result)] = _apple_gpu_dispatch_attn_wrapper(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_LINEAR_ATTN_OPS:
-            values[str(result)] = _apple_gpu_dispatch_linear_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_MASKED_ATTN_OPS:
-            values[str(result)] = _apple_gpu_dispatch_masked_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_DELTA_ATTN_OPS:
-            values[str(result)] = _apple_gpu_dispatch_delta_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_HYBRID_ATTN_OPS:
-            values[str(result)] = _apple_gpu_dispatch_hybrid_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_SPARSE_ATTN_OPS:
-            values[str(result)] = _apple_gpu_dispatch_sparse_attn(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_ROWOP_KINDS:
-            values[str(result)] = _apple_gpu_dispatch_rowop(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.silu_mul":
-            values[str(result)] = _apple_gpu_dispatch_silu_mul(
-                [_as_numpy(values[name]) for name in operand_names],
-                np,
-            )
-        elif op_name == "tessera.linear_general":
-            values[str(result)] = _apple_gpu_dispatch_linear_general(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.qkv_projection":
-            values[str(result)] = _apple_gpu_dispatch_qkv_projection(
-                [_as_numpy(values[name]) for name in operand_names],
-                np,
-            )
-        elif op_name in _APPLE_GPU_REDUCE_OPS:
-            values[str(result)] = _apple_gpu_dispatch_reduce(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.conv2d":
-            values[str(result)] = _apple_gpu_dispatch_conv2d(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.conv3d":
-            values[str(result)] = _apple_gpu_dispatch_conv3d(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_LINALG_OPS:
-            values[str(result)] = _apple_gpu_dispatch_linalg(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_SSM_OPS:
-            values[str(result)] = _apple_gpu_dispatch_selective_ssm(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.moe_swiglu_block":
-            values[str(result)] = _apple_gpu_dispatch_moe_swiglu_block(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name in _APPLE_GPU_MOE_OPS:
-            values[str(result)] = _apple_gpu_dispatch_grouped_gemm(
-                [_as_numpy(values[name]) for name in operand_names],
-                kwargs,
-                np,
-            )
-        elif op_name == "tessera.popcount":
-            values[str(result)] = _apple_gpu_dispatch_popcount(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name == "tessera.count_nonzero":
-            values[str(result)] = _apple_gpu_dispatch_count_nonzero(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name == "tessera.loss.z_loss":
-            values[str(result)] = _apple_gpu_dispatch_z_loss(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name == "tessera.loss.asymmetric_bce":
-            values[str(result)] = _apple_gpu_dispatch_asymmetric_bce(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name == "tessera.loss.load_balance_loss":
-            values[str(result)] = _apple_gpu_dispatch_load_balance_loss(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name == "tessera.masked_categorical":
-            values[str(result)] = _apple_gpu_dispatch_masked_categorical(
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name in _APPLE_GPU_CLIFFORD_OPS:
-            values[str(result)] = _apple_gpu_dispatch_clifford(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name in _APPLE_GPU_EBM_OPS:
-            values[str(result)] = _apple_gpu_dispatch_ebm(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        elif op_name in _APPLE_GPU_EBM_LOSS_OPS:
-            values[str(result)] = _apple_gpu_dispatch_ebm_loss(
-                op_name,
-                [_as_numpy(values[name]) for name in operand_names], kwargs, np)
-        else:
-            # Phase 8.4.x will broaden further; today single-op gating in
-            # driver.py is the authoritative envelope. A non-MPS, non-MSL op
-            # here means the gating + dispatcher are out of sync.
+        handler = _apple_gpu_lane_handlers().get(APPLE_GPU_LANE_BY_OP.get(op_name, ""))
+        if handler is None:
+            # The envelope module owns the op set; driver.py gates on the same
+            # tables at compile time, so a miss here means gating drift.
             raise ValueError(
                 f"apple_gpu runtime path does not support op {op_name!r} "
                 f"(envelope: {sorted(_APPLE_GPU_RUNTIME_OPS)})"
             )
+        values[str(result)] = handler(
+            op_name,
+            [_as_numpy(values[name]) for name in operand_names],
+            kwargs,
+            np,
+        )
 
     if output_name not in values:
         raise ValueError(f"artifact did not produce output {output_name!r}")
     return values[output_name]
+
+
+_APPLE_GPU_LANE_HANDLERS: dict[str, Any] | None = None
+
+
+def _apple_gpu_lane_handlers() -> dict[str, Any]:
+    """P1 (2026-06-09) — lane → handler adapter table for the per-op
+    dispatcher above. Lanes come from ``apple_gpu_envelope.APPLE_GPU_LANE_BY_OP``
+    (the single source the driver gate, the kernel-descriptor registry, and
+    the generated C++ kRuntimeOps table also read). Every adapter takes the
+    uniform ``(op_name, arrays, kwargs, np)`` signature and forwards the
+    arguments its lane dispatcher actually uses. Built lazily so the lane
+    dispatchers (defined later in this module) resolve at first call. The
+    drift gate is ``tests/unit/test_apple_gpu_envelope_dispatch.py``."""
+
+    global _APPLE_GPU_LANE_HANDLERS
+    if _APPLE_GPU_LANE_HANDLERS is not None:
+        return _APPLE_GPU_LANE_HANDLERS
+    table: dict[str, Any] = {
+        "mps": lambda op, a, k, np: _apple_gpu_dispatch_matmul(op, a, np),
+        "rope": lambda op, a, k, np: _apple_gpu_dispatch_rope(op, a, np),
+        "flash_attn": _apple_gpu_dispatch_flash_attn,
+        "softmax": _apple_gpu_dispatch_softmax,
+        "gelu": lambda op, a, k, np: _apple_gpu_dispatch_gelu(op, a, np),
+        "unary": lambda op, a, k, np: _apple_gpu_dispatch_unary(op, a, np),
+        "binary": _apple_gpu_dispatch_mpsgraph_binary,
+        "clamp": _apple_gpu_dispatch_clamp,
+        "where": lambda op, a, k, np: _apple_gpu_dispatch_where(a, np),
+        "loss_compose": _apple_gpu_dispatch_loss,
+        "norm_compose": _apple_gpu_dispatch_norm,
+        "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
+        "linear_attn": _apple_gpu_dispatch_linear_attn,
+        "masked_attn": _apple_gpu_dispatch_masked_attn,
+        "delta_attn": _apple_gpu_dispatch_delta_attn,
+        "hybrid_attn": _apple_gpu_dispatch_hybrid_attn,
+        "sparse_attn": _apple_gpu_dispatch_sparse_attn,
+        "rowop": _apple_gpu_dispatch_rowop,
+        "silu_mul": lambda op, a, k, np: _apple_gpu_dispatch_silu_mul(a, np),
+        "linear_general": lambda op, a, k, np: _apple_gpu_dispatch_linear_general(a, k, np),
+        "qkv_projection": lambda op, a, k, np: _apple_gpu_dispatch_qkv_projection(a, np),
+        "reduce": _apple_gpu_dispatch_reduce,
+        "conv2d": lambda op, a, k, np: _apple_gpu_dispatch_conv2d(a, k, np),
+        "conv3d": lambda op, a, k, np: _apple_gpu_dispatch_conv3d(a, k, np),
+        "linalg": _apple_gpu_dispatch_linalg,
+        "ssm": lambda op, a, k, np: _apple_gpu_dispatch_selective_ssm(a, k, np),
+        "moe_swiglu_block": lambda op, a, k, np: _apple_gpu_dispatch_moe_swiglu_block(a, k, np),
+        "grouped_gemm": lambda op, a, k, np: _apple_gpu_dispatch_grouped_gemm(a, k, np),
+        "popcount": lambda op, a, k, np: _apple_gpu_dispatch_popcount(a, k, np),
+        "count_nonzero": lambda op, a, k, np: _apple_gpu_dispatch_count_nonzero(a, k, np),
+        "z_loss": lambda op, a, k, np: _apple_gpu_dispatch_z_loss(a, k, np),
+        "asymmetric_bce": lambda op, a, k, np: _apple_gpu_dispatch_asymmetric_bce(a, k, np),
+        "load_balance_loss": lambda op, a, k, np: _apple_gpu_dispatch_load_balance_loss(a, k, np),
+        "masked_categorical": lambda op, a, k, np: _apple_gpu_dispatch_masked_categorical(a, k, np),
+        "clifford": _apple_gpu_dispatch_clifford,
+        "ebm": _apple_gpu_dispatch_ebm,
+        "ebm_loss": _apple_gpu_dispatch_ebm_loss,
+    }
+    missing = APPLE_GPU_LANES - set(table)
+    if missing:
+        raise AssertionError(f"apple_gpu lanes without a handler: {sorted(missing)}")
+    _APPLE_GPU_LANE_HANDLERS = table
+    return table
 
 
 def _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops: list[dict]) -> bool:
@@ -3022,6 +2724,11 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
 
     bf16_dtype = _bfloat16_dtype()
     if bf16_dtype is not None and a.dtype == bf16_dtype:
+        # P2 (2026-06-09): native-vs-host-upcast is a feature-table decision
+        # (`bfloat` ready on apple8+; apple7/M1 host-upcasts) — don't probe
+        # native bf16 symbols on an arch that can't have them.
+        if not _apple_gpu_supports_native_bf16():
+            return (a.astype(np.float32) @ b.astype(np.float32)).astype(bf16_dtype)
         if not a.flags.c_contiguous:
             a = np.ascontiguousarray(a, dtype=bf16_dtype)
         if not b.flags.c_contiguous:
@@ -4317,7 +4024,7 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
         wd = np.ascontiguousarray(np.asarray(w_down, dtype=np.float32))
         T = int(xa.shape[0])
         H, Kout = int(wg.shape[2]), int(wd.shape[2])
-        if int(g.sum()) == T and H <= 256 and Kout <= 256:
+        if int(g.sum()) == T and H <= _apple_fused_score_cap() and Kout <= _apple_fused_score_cap():
             expert_ids = np.repeat(np.arange(wg.shape[0], dtype=np.int32), g)
             try:
                 return np.ascontiguousarray(
@@ -4955,6 +4662,10 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
     act_code = _MTL4_EPILOGUE_ACT.get(act)
     if act_code is None:
         raise ValueError(f"act must be one of {sorted(_MTL4_EPILOGUE_ACT)}; got {act!r}")
+    # P2 (2026-06-09): bf16 conv is feature-table-gated — apple7/M1 has no
+    # native bf16. Skip the on-device symbol probe (it can't exist) and let
+    # the host im2col + epilogue fall back as usual.
+    bf16_native_ok = dtype != "bf16" or _apple_gpu_supports_native_bf16()
     in_dtype = _bfloat16_dtype() if dtype == "bf16" else np.float16
     if in_dtype is None:
         raise RuntimeError("bf16 conv requires the optional ml_dtypes package")
@@ -4963,7 +4674,7 @@ def apple_gpu_conv2d(X: Any, W: Any, np: Any, *, bias: Any = None, act: str = "n
     bias_f = np.ascontiguousarray(bias, np.float32).reshape(-1) if bias is not None else None
 
     # On-device path: GPU im2col → matmul2d epilogue (col stays on the GPU).
-    sym = _apple_gpu_mtl4_conv2d_sym(dtype)
+    sym = _apple_gpu_mtl4_conv2d_sym(dtype) if bf16_native_ok else None
     if sym is not None:
         u16 = ctypes.POINTER(ctypes.c_uint16)
         fp = ctypes.POINTER(ctypes.c_float)
@@ -5862,7 +5573,7 @@ def _apple_gpu_dispatch_gqa(Q: Any, K: Any, V: Any, num_q_heads: int,
         return None
     Sq, D = int(Q.shape[-2]), int(Q.shape[-1])
     Sk = int(K.shape[-2])
-    if D > 256 or K.shape[-1] != D or V.shape[-1] != D:
+    if D > _apple_fused_score_cap() or K.shape[-1] != D or V.shape[-1] != D:
         return None
     out_dtype = Q.dtype
     Bq = int(np.prod(Q.shape[:-2]))   # total query heads
@@ -6754,7 +6465,7 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
         and q.shape[0] == k.shape[0] == v.shape[0]
         and k.shape[1] == v.shape[1]
         and q.shape[2] == k.shape[2] == v.shape[2]
-        and q.shape[2] <= 256
+        and q.shape[2] <= _apple_fused_score_cap()
         and q.dtype == k.dtype == v.dtype
     ):
         return _runtime_flash_attn(np, q, k, v, kwargs)
@@ -8539,6 +8250,42 @@ def _apple_threadgroup_tiled_softmax_n_cap() -> int:
     return _TILED_SOFTMAX_N_CAP
 
 
+_FUSED_SCORE_CAP: Optional[int] = None
+_NATIVE_BF16_SUPPORTED: Optional[bool] = None
+
+
+def _apple_fused_score_cap() -> int:
+    """P2 (2026-06-09) — feature-table-derived per-thread cap for the
+    fused stack-array MSL kernels (matmul→softmax(→matmul) / gelu /
+    rmsnorm / moe_swiglu, flash_attn head_dim), cached. Replaces the
+    hard-coded 256s; the value still derives the same 256 today
+    (1 KiB fp32 stack budget — see apple_target.apple_fused_chain_score_cap)."""
+    global _FUSED_SCORE_CAP
+    if _FUSED_SCORE_CAP is None:
+        from .compiler.apple_target import apple_fused_chain_score_cap
+        _FUSED_SCORE_CAP = apple_fused_chain_score_cap()
+    return _FUSED_SCORE_CAP
+
+
+def _apple_gpu_supports_native_bf16() -> bool:
+    """P2 (2026-06-09) — bf16 native-vs-host-upcast gate via the feature
+    table (apple8+ ready; apple7/M1 upcasts), preferring the live
+    MTLGPUFamily probe. Cached. Used to decide whether to attempt the
+    native bf16 GEMM/conv symbols at all."""
+    global _NATIVE_BF16_SUPPORTED
+    if _NATIVE_BF16_SUPPORTED is None:
+        from .compiler.apple_target import (
+            apple_supports_native_bf16,
+            probe_apple_runtime_limits,
+        )
+        try:
+            limits = probe_apple_runtime_limits()
+        except Exception:
+            limits = None
+        _NATIVE_BF16_SUPPORTED = apple_supports_native_bf16(runtime_limits=limits)
+    return _NATIVE_BF16_SUPPORTED
+
+
 def _apple_gpu_dispatch_silu_mul(operands: list[Any], np: Any) -> Any:
     """silu_mul(a, b) = silu(a) * b, via the MPSGraph binary lane. The runtime
     opcode 6 computes a' * silu(b'), so we pass (a'=b, b'=a) to get silu(a)*b.
@@ -8623,11 +8370,11 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     if a.dtype == np.float32:
         n_max = tiled_n_cap
     elif a.dtype == np.float16:
-        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_f16() is not None else 256
+        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_f16() is not None else _apple_fused_score_cap()
     elif bf16_dtype is not None and a.dtype == bf16_dtype:
-        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_bf16() is not None else 256
+        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_bf16() is not None else _apple_fused_score_cap()
     else:
-        n_max = 256
+        n_max = _apple_fused_score_cap()
 
     if not (
         a.ndim == 2 and b.ndim == 2
@@ -8672,7 +8419,7 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         out = np.zeros((M, N), dtype=np.float16)
         # Per-thread kernel for N<=256 (no threadgroup sync, faster);
         # threadgroup-tiled native kernel for larger N.
-        fused_f16 = (_apple_gpu_matmul_softmax_f16() if N <= 256
+        fused_f16 = (_apple_gpu_matmul_softmax_f16() if N <= _apple_fused_score_cap()
                      else _apple_gpu_matmul_softmax_tiled_f16())
         if fused_f16 is not None:
             fused_f16(
@@ -8693,7 +8440,7 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         if not b.flags.c_contiguous:
             b = np.ascontiguousarray(b, dtype=bf16_dtype)
         out = np.zeros((M, N), dtype=bf16_dtype)
-        fused_bf16 = (_apple_gpu_matmul_softmax_bf16() if N <= 256
+        fused_bf16 = (_apple_gpu_matmul_softmax_bf16() if N <= _apple_fused_score_cap()
                       else _apple_gpu_matmul_softmax_tiled_bf16())
         if fused_bf16 is not None:
             fused_bf16(
@@ -8842,7 +8589,7 @@ def _apple_gpu_matmul_gelu_fused_half(a: Any, b: Any, np: Any) -> Any:
     caller can fall through to the compose path."""
     bf16_dtype = _bfloat16_dtype()
     if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
-            and b.shape[1] <= 256 and a.dtype == b.dtype):
+            and b.shape[1] <= _apple_fused_score_cap() and a.dtype == b.dtype):
         return None
     if a.dtype == np.float16:
         fused = _apple_gpu_matmul_gelu_f16()
@@ -8883,7 +8630,7 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
     if not (
         a.ndim == 2 and b.ndim == 2
         and a.shape[1] == b.shape[0]
-        and b.shape[1] <= 256
+        and b.shape[1] <= _apple_fused_score_cap()
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
         # f16/bf16 with N<=256: native single fused MSL kernel when present
@@ -8982,7 +8729,7 @@ def _apple_gpu_matmul_rmsnorm_fused_half(a: Any, b: Any, eps: float,
     fall through to the compose path."""
     bf16_dtype = _bfloat16_dtype()
     if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
-            and b.shape[1] <= 256 and a.dtype == b.dtype):
+            and b.shape[1] <= _apple_fused_score_cap() and a.dtype == b.dtype):
         return None
     if a.dtype == np.float16:
         fused = _apple_gpu_matmul_rmsnorm_f16()
@@ -9025,7 +8772,7 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
     if not (
         a.ndim == 2 and b.ndim == 2
         and a.shape[1] == b.shape[0]
-        and b.shape[1] <= 256
+        and b.shape[1] <= _apple_fused_score_cap()
         and a.dtype == np.float32 and b.dtype == np.float32
     ):
         # f16/bf16 with N<=256: native single fused MSL kernel when present
@@ -9127,7 +8874,7 @@ def _apple_gpu_dispatch_swiglu(x: Any, wg: Any, wu: Any, wd: Any, np: Any) -> An
         and x.shape[1] == wg.shape[0]
         and wd.shape[0] == wg.shape[1]
         and H is not None and Kout is not None
-        and H <= 256 and Kout <= 256
+        and H <= _apple_fused_score_cap() and Kout <= _apple_fused_score_cap()
         and x.dtype == np.float32 and wg.dtype == np.float32
         and wu.dtype == np.float32 and wd.dtype == np.float32
     ):
@@ -9192,8 +8939,8 @@ def _apple_gpu_dispatch_matmul_softmax_matmul(operands: list[Any], np: Any) -> A
         a.ndim == 2 and b.ndim == 2 and c.ndim == 2
         and a.shape[1] == b.shape[0]
         and b.shape[1] == c.shape[0]
-        and b.shape[1] <= 256
-        and c.shape[1] <= 256
+        and b.shape[1] <= _apple_fused_score_cap()
+        and c.shape[1] <= _apple_fused_score_cap()
         and a.dtype == b.dtype == c.dtype
     ):
         scores = a @ b

@@ -93,12 +93,17 @@ Finished:
 
 Still needs work:
 
-- Promote Apple tensor/kernel binding specs beyond packaged kernels.
-- Wire Apple feature limits into Schedule/Tile/Target choices.
-- Make one-command-buffer decode canonical through `tessera.ops` / `@jit`.
-- Populate production packaged-kernel manifest rows.
-- Move Apple kernel source/fusion/binding metadata into descriptors rather than broad Target IR/runtime pattern logic.
-- Attach stable benchmark/perf gates for Apple backend hot paths.
+- Nothing open on the Apple compiler track. (Real-hardware NVIDIA/ROCm/
+  Metalium execution proof remains the cross-backend gate — see those tracks.)
+
+Closed 2026-06-02 → 2026-06-09: binding specs/descriptors for all kernel
+families; descriptor-driven dispatch (single-source envelope in
+`apple_gpu_envelope.py`, runtime lane-table dispatch, generated C++
+`kRuntimeOps`); feature-limit-driven selection (tiled softmax N-cap, bf16
+gate, fused-chain/head_dim caps, threads-per-row); canonical one-command-
+buffer decode; production packaged-kernel rows; manifest-attached benchmarks
++ perf ratchet (`perf_gate --ratchet` + recorded `apple_gpu_hot_paths.json`);
+auto_batch auto-detection + Graph-IR-emission skip.
 
 Primary detail: [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md).
 
@@ -184,16 +189,16 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 ### P1
 
 - Multi-op compiler metadata and component-aware gates.
-- Apple binding/kernel descriptor unification.
-- Apple feature-limit-guided lowering.
-- Canonical Apple one-command-buffer decode through `tessera.ops` / `@jit`.
-- Production packaged-kernel rows with reflection, dispatch, and numerical proof.
+- ✅ Apple binding/kernel descriptor unification (2026-06-09 — descriptor-driven dispatch + generated C++ runtime-ops table).
+- ✅ Apple feature-limit-guided lowering (2026-06-09 — bf16 gate, fused-chain caps, threads-per-row).
+- ✅ Canonical Apple one-command-buffer decode through `tessera.ops` / `@jit` (2026-06-02).
+- ✅ Production packaged-kernel rows with reflection, dispatch, and numerical proof (2026-06-02; 7 rows).
 
 ### P2
 
 - Remaining batching/transpose/sharding long-tail closure.
 - Domain roadmap hygiene and stale-claim cleanup.
-- Benchmark/performance gates tied to backend manifest rows.
+- ✅ Benchmark/performance gates tied to backend manifest rows — done for Apple GPU (2026-06-09: `benchmark_json` on hot-path + packaged rows; `perf_gate --ratchet`); other backends follow with Phase G/H/I hardware.
 - Unify generated-doc regeneration + drift into one registry/`--write` contract (fold in `release_gate.py`, standardize generator CLIs, extend CSV-canonical to data-shaped dashboards). Detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) Next Work #6.
 
 ## Compiler-Completeness & Testing Program

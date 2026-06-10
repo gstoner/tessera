@@ -405,191 +405,34 @@ def _is_apple_cpu_accelerate_executable(cpu_plan: CPUPlan | None) -> bool:
     return len(cpu_plan.ops) > 0
 
 
-_APPLE_GPU_MPS_OPS: frozenset[str] = frozenset({
-    "tessera.matmul",
-    "tessera.gemm",
-    # 2026-05-29 — batched / rank-3 matmul via the MPSGraph bmm lane (Tier-2).
-    "tessera.batched_gemm",
-})
-
-_APPLE_GPU_MSL_OPS: frozenset[str] = frozenset({
-    "tessera.rope",
-    "tessera.flash_attn",
-    "tessera.softmax",
-    "tessera.softmax_safe",
-    "tessera.gelu",
-})
-
-# 2026-05-29 — Tier-1 activations / normalizations dispatched through the
-# MetalPerformanceShadersGraph lane (one parametrized runner per shape class,
-# fp32 compute, f16 native + bf16 host-upcast). These previously fell back to
-# the numpy reference path; they now execute on the GPU. `silu_mul` runs as a
-# standalone binary op here (silu(a)*b); the fused SwiGLU chain still wins via
-# the 4-op fusion check when the surrounding matmuls are present.
-_APPLE_GPU_MPSGRAPH_OPS: frozenset[str] = frozenset({
-    "tessera.relu",
-    "tessera.sigmoid",
-    "tessera.sigmoid_safe",
-    "tessera.tanh",
-    "tessera.softplus",
-    "tessera.silu",
-    "tessera.exp",
-    "tessera.log",
-    "tessera.sqrt",
-    "tessera.rsqrt",
-    "tessera.neg",
-    "tessera.negative",
-    "tessera.abs",
-    "tessera.absolute",
-    # Batch 1 (2026-06-08) — float-output elementwise math (unary + binary +
-    # comparison) on the MPSGraph opcode lane.
-    "tessera.sin", "tessera.cos", "tessera.tan",
-    "tessera.asin", "tessera.acos", "tessera.atan",
-    "tessera.sinh", "tessera.cosh", "tessera.erf", "tessera.erfc",
-    "tessera.expm1", "tessera.log1p", "tessera.reciprocal",
-    "tessera.sign", "tessera.floor", "tessera.ceil",
-    "tessera.round", "tessera.trunc",
-    "tessera.add", "tessera.sub", "tessera.mul", "tessera.div",
-    "tessera.maximum", "tessera.minimum",
-    "tessera.pow", "tessera.atan2", "tessera.mod", "tessera.floor_div",
-    "tessera.eq", "tessera.ne", "tessera.lt", "tessera.le",
-    "tessera.gt", "tessera.ge",
-    # Batch 2 (2026-06-08) — predicates / logical / bitwise + compose ops.
-    "tessera.isfinite", "tessera.isinf", "tessera.isnan",
-    "tessera.logical_not", "tessera.bitwise_not",
-    "tessera.logical_and", "tessera.logical_or", "tessera.logical_xor",
-    "tessera.bitwise_and", "tessera.bitwise_or", "tessera.bitwise_xor",
-    "tessera.clamp", "tessera.clip", "tessera.where",
-    "tessera.layer_norm",
-    "tessera.rmsnorm",
-    "tessera.rmsnorm_safe",
-    "tessera.log_softmax",
-    "tessera.silu_mul",
-})
-
-# 2026-05-29 — Tier-2 projection ops routed through the matmul / bmm lane:
-# linear_general (x @ W (+ bias), last-axis contraction) and qkv_projection
-# (x @ W_qkv then split-3).
-_APPLE_GPU_PROJECTION_OPS: frozenset[str] = frozenset({
-    "tessera.linear_general",
-    "tessera.qkv_projection",
-})
-
-# 2026-05-29 — Tier-3 reductions / scans via the MPSGraph reduce lane.
-_APPLE_GPU_REDUCTION_OPS: frozenset[str] = frozenset({
-    "tessera.reduce", "tessera.mean", "tessera.amax", "tessera.amin",
-    "tessera.prod", "tessera.var", "tessera.std", "tessera.argmax",
-    "tessera.argmin", "tessera.cumsum", "tessera.cumprod",
-    # Batch 2 (2026-06-08) — reduce/scan opcode completions.
-    "tessera.logsumexp", "tessera.cummax", "tessera.cummin",
-    "tessera.max", "tessera.min",
-})
-
-# 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
-# (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
-_APPLE_GPU_CONV_OPS: frozenset[str] = frozenset({"tessera.conv2d", "tessera.conv3d"})
-
-# 2026 — GPU linear-algebra lane (MPSMatrix decomposition/solve — the one
-# capability MPSGraph lacks). Only the registered Graph IR ops are wired here:
-# `tessera.cholesky` (factor) and `tessera.tri_solve` (triangular solve). Dense
-# f32; batched/non-f32 fall back to numpy inside the dispatcher.
-_APPLE_GPU_LINALG_OPS: frozenset[str] = frozenset({"tessera.cholesky", "tessera.tri_solve"})
-
-# Mamba-2 selective state-space scan. Executes via the chunked-parallel SSD form
-# whose batched contractions run on the Metal bmm lane (scalar-state A; general
-# (D,N) A falls back to the sequential numpy reference inside the dispatcher).
-_APPLE_GPU_SSM_OPS: frozenset[str] = frozenset({"tessera.selective_ssm"})
-
-# Ragged grouped matmul — the MoE expert-FFN compute core. Each contiguous token
-# group runs as a per-expert MPS matmul on the Metal lane.
-_APPLE_GPU_MOE_OPS: frozenset[str] = frozenset({
-    "tessera.grouped_gemm", "tessera.moe_swiglu_block"})
-
-# LDT candidate-axis ops with dedicated Metal kernels.
-_APPLE_GPU_LDT_OPS: frozenset[str] = frozenset({"tessera.popcount", "tessera.count_nonzero", "tessera.loss.z_loss", "tessera.loss.asymmetric_bce", "tessera.loss.load_balance_loss", "tessera.masked_categorical"})
-# Geometric-algebra (Clifford Cl(3,0)) flat-coefficient lane — canonical
-# tessera.ops projection of tessera.ga.*; routed to the cl30 MSL kernels by
-# runtime.py::_apple_gpu_dispatch_clifford.
-_APPLE_GPU_CLIFFORD_OPS: frozenset[str] = frozenset({
-    "tessera.clifford_geometric_product", "tessera.clifford_wedge",
-    "tessera.clifford_left_contraction", "tessera.clifford_inner",
-    "tessera.clifford_rotor_sandwich",
-    "tessera.clifford_reverse", "tessera.clifford_grade_involution",
-    "tessera.clifford_conjugate", "tessera.clifford_grade_projection",
-    "tessera.clifford_hodge_star",
-    "tessera.clifford_ext_deriv", "tessera.clifford_vec_deriv",
-    "tessera.clifford_codiff",
-    "tessera.clifford_exp", "tessera.clifford_log",
-    "tessera.clifford_norm", "tessera.clifford_norm_squared",
-})
-
-# Energy-based-model flat-array lane — canonical tessera.ops projection of the
-# tensor-clean tessera.ebm.* subset; routed to the EBM MSL kernels by
-# runtime.py::_apple_gpu_dispatch_ebm.
-_APPLE_GPU_EBM_OPS: frozenset[str] = frozenset({
-    "tessera.ebm_energy_quadratic", "tessera.ebm_self_verify",
-    "tessera.ebm_refinement", "tessera.ebm_inner_step",
-})
-
-# EBM training losses (CD / PCD / score-matching / ISM / DSM) — MPSGraph
-# reductions; routed to the EBM-loss kernels by runtime.py::_apple_gpu_dispatch_ebm_loss.
-_APPLE_GPU_EBM_LOSS_OPS: frozenset[str] = frozenset({
-    "tessera.loss.contrastive_divergence", "tessera.loss.persistent_cd",
-    "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
-    "tessera.loss.denoising_score_matching",
-})
-# Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
-# lanes (per-element recipe + reduce); routed by runtime._apple_gpu_dispatch_loss.
-_APPLE_GPU_LOSS_COMPOSE_OPS: frozenset[str] = frozenset({
-    "tessera.loss.mse", "tessera.loss.mae", "tessera.loss.huber",
-    "tessera.loss.smooth_l1", "tessera.loss.log_cosh", "tessera.loss.vlb",
-    "tessera.loss.ddpm_noise_pred", "tessera.loss.binary_cross_entropy",
-    "tessera.loss.cross_entropy",
-    "tessera.loss.kl_divergence", "tessera.loss.js_divergence",
-})
-
-# Group/instance/weight norm composed from the rowop (layer_norm) + reduce lanes.
-_APPLE_GPU_NORM_COMPOSE_OPS: frozenset[str] = frozenset({
-    "tessera.group_norm", "tessera.instance_norm", "tessera.weight_norm",
-})
-# Standard attention family (Sub-sprint A) routed through the proven GQA kernel.
-_APPLE_GPU_ATTN_WRAPPER_OPS: frozenset[str] = frozenset({
-    "tessera.multi_head_attention", "tessera.gqa_attention",
-    "tessera.mqa_attention", "tessera.mla_decode", "tessera.mla_decode_fused",
-    "tessera.gated_attention",
-})
-# Linear / recurrent attention family (Sub-sprint B) — quadratic-parallel form.
-_APPLE_GPU_LINEAR_ATTN_OPS: frozenset[str] = frozenset({
-    "tessera.linear_attn", "tessera.linear_attn_state",
-    "tessera.lightning_attention", "tessera.power_attn", "tessera.retention",
-})
-# NSA masked-softmax attention (Sub-sprint C) — compressed-block + sliding-window.
-_APPLE_GPU_MASKED_ATTN_OPS: frozenset[str] = frozenset({
-    "tessera.attn_compressed_blocks", "tessera.attn_sliding_window",
-})
-# Delta-rule attention family (Sub-sprint D) — quadratic form + column-weight mask.
-_APPLE_GPU_DELTA_ATTN_OPS: frozenset[str] = frozenset({
-    "tessera.gated_deltanet", "tessera.kimi_delta_attention",
-    "tessera.modified_delta_attention",
-})
-# hybrid_attention — policy wrapper over the now-proven delegates.
-_APPLE_GPU_HYBRID_ATTN_OPS: frozenset[str] = frozenset({"tessera.hybrid_attention"})
-# Data-dependent NSA attention (Sub-sprint E) — host select/gather + GPU attention.
-_APPLE_GPU_SPARSE_ATTN_OPS: frozenset[str] = frozenset({
-    "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
-    "tessera.attn_local_window_2d",
-})
-
-_APPLE_GPU_RUNTIME_OPS: frozenset[str] = (
-    _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
-    | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
-    | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
-    | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
-    | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
-    | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
-    | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
-    | _APPLE_GPU_SPARSE_ATTN_OPS
+# P1 (2026-06-09) — the Apple GPU runtime envelope is single-sourced in
+# apple_gpu_envelope.py (compile-time gating here, lane dispatch in
+# runtime.py, the generated C++ kRuntimeOps table, and the kernel
+# descriptor registry all read the same tables). Names are re-exported
+# unchanged so driver._APPLE_GPU_* consumers keep working.
+from .apple_gpu_envelope import (  # noqa: F401
+    _APPLE_GPU_MPS_OPS,
+    _APPLE_GPU_MSL_OPS,
+    _APPLE_GPU_MPSGRAPH_OPS,
+    _APPLE_GPU_PROJECTION_OPS,
+    _APPLE_GPU_REDUCTION_OPS,
+    _APPLE_GPU_CONV_OPS,
+    _APPLE_GPU_LINALG_OPS,
+    _APPLE_GPU_SSM_OPS,
+    _APPLE_GPU_MOE_OPS,
+    _APPLE_GPU_LDT_OPS,
+    _APPLE_GPU_CLIFFORD_OPS,
+    _APPLE_GPU_EBM_OPS,
+    _APPLE_GPU_EBM_LOSS_OPS,
+    _APPLE_GPU_LOSS_COMPOSE_OPS,
+    _APPLE_GPU_NORM_COMPOSE_OPS,
+    _APPLE_GPU_ATTN_WRAPPER_OPS,
+    _APPLE_GPU_LINEAR_ATTN_OPS,
+    _APPLE_GPU_MASKED_ATTN_OPS,
+    _APPLE_GPU_DELTA_ATTN_OPS,
+    _APPLE_GPU_HYBRID_ATTN_OPS,
+    _APPLE_GPU_SPARSE_ATTN_OPS,
+    _APPLE_GPU_RUNTIME_OPS,
 )
 
 

@@ -100,6 +100,39 @@ def test_bmm_lane_unavailable_raises_in_strict_mode(monkeypatch):
         rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
 
 
+def test_binary_symbol_missing_logs_and_raises(monkeypatch):
+    monkeypatch.setattr(rt, "_apple_gpu_mpsgraph_binary_f32", lambda: None)
+    a = np.array([1.0, 2.0], dtype=np.float32)
+    b = np.array([3.0, 4.0], dtype=np.float32)
+    out = rt._apple_gpu_dispatch_mpsgraph_binary("tessera.add", [a, b], {}, np)
+    np.testing.assert_allclose(out, a + b)
+    assert any(op == "tessera.add" for op, _ in rt.dispatch_fallback_log())
+    monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    with pytest.raises(rt.TesseraStrictDispatchError):
+        rt._apple_gpu_dispatch_mpsgraph_binary("tessera.add", [a, b], {}, np)
+
+
+def test_binary_empty_array_is_not_a_failure(monkeypatch):
+    # n == 0 is a degenerate shape, not a symbol failure — must not funnel
+    # even when the symbol is missing.
+    monkeypatch.setattr(rt, "_apple_gpu_mpsgraph_binary_f32", lambda: None)
+    a = np.zeros((0,), dtype=np.float32)
+    b = np.zeros((0,), dtype=np.float32)
+    rt._apple_gpu_dispatch_mpsgraph_binary("tessera.add", [a, b], {}, np)
+    assert rt.dispatch_fallback_log() == []
+
+
+def test_rowop_symbol_missing_logs_and_raises(monkeypatch):
+    monkeypatch.setattr(rt, "_apple_gpu_rmsnorm_gpu_f32", lambda: None)
+    x = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
+    out = rt._apple_gpu_dispatch_rowop("tessera.rmsnorm", [x], {}, np)
+    assert out.shape == x.shape
+    assert any(op == "tessera.rmsnorm" for op, _ in rt.dispatch_fallback_log())
+    monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    with pytest.raises(rt.TesseraStrictDispatchError):
+        rt._apple_gpu_dispatch_rowop("tessera.rmsnorm", [x], {}, np)
+
+
 def test_envelope_miss_is_not_a_failure_fallback():
     # Rank-2 shape mismatch is an envelope/shape condition handled by numpy —
     # it must NOT be recorded as a failure-class fallback.

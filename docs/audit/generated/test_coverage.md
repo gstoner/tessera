@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **445** ops in `primitive_coverage` registry.
-- **2179** total Python-test references, **567** total lit-fixture references.
+- **2202** total Python-test references, **567** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **206** ops have ≤1 reference ("thinly tested").
 - **46** ops have ≥10 references ("well tested").
@@ -17,19 +17,19 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  284 |  152 |  436 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
+| `matmul` |  293 |  152 |  445 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
 | `flash_attn` |   79 |   42 |  121 |   4 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |   68 |   35 |  103 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
+| `softmax` |   70 |   35 |  105 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   92 |    7 |   99 |   9 | `bf16`, `f16`, `f32`, `fp32` |
-| `silu` |   71 |    2 |   73 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
+| `silu` |   72 |    2 |   74 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
+| `add` |   62 |    6 |   68 |   8 | `bf16`, `f16`, `f32`, `fp32` |
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
-| `add` |   58 |    6 |   64 |   7 | `bf16`, `f16`, `f32`, `fp32` |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
+| `rmsnorm` |   53 |    9 |   62 |   2 | `bf16`, `fp32` |
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
-| `rmsnorm` |   48 |    9 |   57 |   1 | `bf16`, `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
-| `gelu` |   23 |   16 |   39 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
+| `gelu` |   24 |   16 |   40 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
 | `grouped_gemm` |   27 |   10 |   37 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `selective_ssm` |   36 |    0 |   36 |   2 |  |

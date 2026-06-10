@@ -8139,15 +8139,22 @@ def _apple_gpu_dispatch_mpsgraph_binary(op_name: str, operands: list[Any],
     af = np.ascontiguousarray(a).reshape(-1)
     bf = np.ascontiguousarray(b).reshape(-1)
     sym = _apple_gpu_mpsgraph_binary_f32()
-    if sym is not None and n > 0:
-        out = np.empty(n, dtype=np.float32)
-        sym(ctypes.c_int32(op),
-            af.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            bf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int64(n))
-        return out.reshape(shape)
-    return _apple_gpu_binary_numpy(op_name, a, b, np).reshape(shape)
+    if n == 0:
+        # Empty array — degenerate shape, not a failure. Compute on host.
+        return _apple_gpu_binary_numpy(op_name, a, b, np).reshape(shape)
+    if sym is None:
+        # Symbol-missing on a current build is a failure-class fallback
+        # (strict mode raises; otherwise logs). Audit 2026-06-10 finding #5.
+        _note_dispatch_fallback(
+            op_name, "MPSGraph binary symbol unavailable; computed with numpy")
+        return _apple_gpu_binary_numpy(op_name, a, b, np).reshape(shape)
+    out = np.empty(n, dtype=np.float32)
+    sym(ctypes.c_int32(op),
+        af.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        bf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int64(n))
+    return out.reshape(shape)
 
 
 def _apple_gpu_dispatch_clamp(op_name: str, operands: list[Any], kwargs: dict,
@@ -8383,6 +8390,9 @@ def _apple_gpu_dispatch_rowop(op_name: str, operands: list[Any], kwargs: dict,
         sym = _apple_gpu_log_softmax_f32()
 
     if sym is None:
+        # Symbol-missing failure-class fallback (audit 2026-06-10 finding #5).
+        _note_dispatch_fallback(
+            op_name, "MPSGraph rowop symbol unavailable; computed with numpy")
         return _apple_gpu_rowop_numpy(kind, x, eps, np).astype(out_dtype)
 
     out = np.empty((rows, cols), dtype=np.float32)

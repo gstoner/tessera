@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,5,0,0,5,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,58,1,7,59,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+add,58,6,7,64,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -179,12 +179,12 @@ floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_onl
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
 fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
-fused_epilogue,2,1,0,3,0,,structural_only,unclassified — defaults to structural_only
+fused_epilogue,2,6,0,8,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,7,2,0,9,0,,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,23,10,1,33,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
+gelu,23,16,1,39,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,69,2,6,71,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
@@ -251,7 +251,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,270,133,14,403,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,270,143,14,413,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -322,7 +322,7 @@ rearrange,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reduce,66,0,6,66,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 reduce_scatter,0,4,0,4,0,,needs_direct_test,category default for 'collective'
-relu,89,3,8,92,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+relu,89,7,8,96,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
@@ -422,7 +422,7 @@ tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for '
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 top_k,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-transpose,12,13,0,25,0,fp32,needs_direct_test,category default for 'layout_transform'
+transpose,12,18,0,30,0,fp32,needs_direct_test,category default for 'layout_transform'
 tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'

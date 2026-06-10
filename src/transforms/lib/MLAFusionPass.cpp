@@ -88,7 +88,10 @@ struct FuseMLADecodeChain : public RewritePattern {
     Value wDkv = compress->getOperand(1);
 
     // Carry the flash_attn's scale + causal attributes onto the fused
-    // op so backends can reproduce the same semantics.
+    // op so backends can reproduce the same semantics. Audit 2026-06-10:
+    // numeric_policy (storage/accum coupling, Decision #15a) is carried
+    // from the flash_attn — the attention step dominates the fused
+    // kernel's numerics; the compress/expand GEMMs inherit it.
     OperationState st(attn->getLoc(), "tessera.mla_decode_fused");
     st.addOperands({x, wDkv, wUk, wUv, q});
     st.addTypes(attn->getResultTypes());
@@ -96,6 +99,8 @@ struct FuseMLADecodeChain : public RewritePattern {
       st.addAttribute("scale", sc);
     if (auto causal = attn->getAttrOfType<BoolAttr>("causal"))
       st.addAttribute("causal", causal);
+    if (Attribute np = attn->getAttr("numeric_policy"))
+      st.addAttribute("numeric_policy", np);
     Operation *fused = rewriter.create(st);
     rewriter.replaceOp(attn, fused->getResults());
     // The greedy driver removes %K / %V / %c automatically once they

@@ -108,9 +108,27 @@ struct FuseSwiGLUChain : public RewritePattern {
     Value wUp = upMatmul->getOperand(1);
     Value wDown = downMatmul->getOperand(1);
 
+    // Audit 2026-06-10 — propagate numeric_policy (storage/accum coupling,
+    // Decision #15a) instead of dropping it. The constituent matmuls must
+    // agree; a conflicting-policy chain needs per-stage policies the single
+    // fused op cannot express, so decline to fuse.
+    Attribute numericPolicy;
+    for (Operation *mm : {gateMatmul, upMatmul, downMatmul}) {
+      if (Attribute np = mm->getAttr("numeric_policy")) {
+        if (numericPolicy && np != numericPolicy)
+          return rewriter.notifyMatchFailure(
+              downMatmul,
+              "SwiGLU fusion: constituent matmuls carry conflicting "
+              "numeric_policy attributes");
+        numericPolicy = np;
+      }
+    }
+
     OperationState st(downMatmul->getLoc(), "tessera.swiglu_fused");
     st.addOperands({x, wGate, wUp, wDown});
     st.addTypes(downMatmul->getResultTypes());
+    if (numericPolicy)
+      st.addAttribute("numeric_policy", numericPolicy);
     Operation *fused = rewriter.create(st);
     rewriter.replaceOp(downMatmul, fused->getResults());
     // The greedy driver removes %hidden / %gate / %up automatically once

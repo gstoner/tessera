@@ -67,3 +67,24 @@ func.func @k_with_extra_user(%x: tensor<8x16xf32>,
       : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>
   return %O, %K : tensor<1x8x16xf32>, tensor<1x8x16xf32>
 }
+
+// numeric_policy propagation (audit 2026-06-10, Decision #15a): the
+// flash_attn's numeric_policy must survive onto the fused op — the
+// attention step dominates the fused kernel's numerics.
+func.func @mla_propagates_numeric_policy(%x: tensor<8x16xf32>,
+                                          %Wdkv: tensor<16x32xf32>,
+                                          %Wuk: tensor<32x16xf32>,
+                                          %Wuv: tensor<32x16xf32>,
+                                          %Q: tensor<1x8x16xf32>) -> tensor<1x8x16xf32> {
+  // CHECK-LABEL: func.func @mla_propagates_numeric_policy
+  // CHECK:       tessera.mla_decode_fused
+  // CHECK-SAME:  numeric_policy = {accum = "fp32", storage = "bf16"}
+  %c = "tessera.latent_kv_compress"(%x, %Wdkv) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
+  %K = "tessera.latent_kv_expand_k"(%c, %Wuk) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
+  %V = "tessera.latent_kv_expand_v"(%c, %Wuv) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
+  %O = "tessera.flash_attn"(%Q, %K, %V)
+      {head_dim = 16 : i64, causal = false,
+       numeric_policy = {storage = "bf16", accum = "fp32"}}
+      : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>
+  return %O : tensor<1x8x16xf32>
+}

@@ -92,3 +92,47 @@ func.func @down_with_transpose_no_fusion(%x: tensor<8x16xf32>,
               : (tensor<8x32xf32>, tensor<16x32xf32>) -> tensor<8x16xf32>
   return %out : tensor<8x16xf32>
 }
+
+// ----------------------------------------------------------------------------
+// numeric_policy propagation (audit 2026-06-10, Decision #15a): a chain whose
+// matmuls agree on numeric_policy must carry it onto the fused op instead of
+// dropping it.
+// ----------------------------------------------------------------------------
+
+func.func @swiglu_propagates_numeric_policy(%x: tensor<8x16xf32>,
+                                            %Wg: tensor<16x32xf32>,
+                                            %Wu: tensor<16x32xf32>,
+                                            %Wd: tensor<32x16xf32>) -> tensor<8x16xf32> {
+  // CHECK-LABEL: func.func @swiglu_propagates_numeric_policy
+  // CHECK:       tessera.swiglu_fused
+  // CHECK-SAME:  numeric_policy = {accum = "fp32", storage = "bf16"}
+  %gate = "tessera.matmul"(%x, %Wg) {numeric_policy = {storage = "bf16", accum = "fp32"}}
+              : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
+  %up   = "tessera.matmul"(%x, %Wu) {numeric_policy = {storage = "bf16", accum = "fp32"}}
+              : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
+  %h    = "tessera.silu_mul"(%gate, %up) : (tensor<8x32xf32>, tensor<8x32xf32>) -> tensor<8x32xf32>
+  %out  = "tessera.matmul"(%h, %Wd) {numeric_policy = {storage = "bf16", accum = "fp32"}}
+              : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<8x16xf32>
+  return %out : tensor<8x16xf32>
+}
+
+// ----------------------------------------------------------------------------
+// Conflicting numeric_policy across the chain: one fused op cannot express
+// per-stage policies, so the pattern must decline to fuse.
+// ----------------------------------------------------------------------------
+
+func.func @swiglu_conflicting_policy_no_fusion(%x: tensor<8x16xf32>,
+                                               %Wg: tensor<16x32xf32>,
+                                               %Wu: tensor<16x32xf32>,
+                                               %Wd: tensor<32x16xf32>) -> tensor<8x16xf32> {
+  // CHECK-LABEL: func.func @swiglu_conflicting_policy_no_fusion
+  // CHECK:       tessera.silu_mul
+  // CHECK-NOT:   tessera.swiglu_fused
+  %gate = "tessera.matmul"(%x, %Wg) {numeric_policy = {storage = "bf16", accum = "fp32"}}
+              : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
+  %up   = "tessera.matmul"(%x, %Wu) {numeric_policy = {storage = "fp16", accum = "fp32"}}
+              : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
+  %h    = "tessera.silu_mul"(%gate, %up) : (tensor<8x32xf32>, tensor<8x32xf32>) -> tensor<8x32xf32>
+  %out  = "tessera.matmul"(%h, %Wd) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<8x16xf32>
+  return %out : tensor<8x16xf32>
+}

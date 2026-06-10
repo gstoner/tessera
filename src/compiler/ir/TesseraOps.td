@@ -1115,7 +1115,8 @@ def Tessera_SwigluFusedOp : Op<
   let arguments = (ins TensorType:$x,
                        TensorType:$w_gate,
                        TensorType:$w_up,
-                       TensorType:$w_down);
+                       TensorType:$w_down,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
@@ -1177,7 +1178,8 @@ def Tessera_MLADecodeFusedOp : Op<
                        TensorType:$w_uv,
                        TensorType:$q,
                        OptionalAttr<F64Attr>:$scale,
-                       DefaultValuedAttr<BoolAttr, "false">:$causal);
+                       DefaultValuedAttr<BoolAttr, "false">:$causal,
+                       OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

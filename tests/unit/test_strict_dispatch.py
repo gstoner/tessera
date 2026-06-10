@@ -125,6 +125,31 @@ def test_gpu_matmul_error_channel_funnels_and_recomputes(monkeypatch):
         rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
 
 
+def test_run_checked_funnels_on_error_and_recomputes(monkeypatch):
+    """The shared _apple_gpu_run_checked wrapper (unary/binary/rowop/bmm lanes):
+    on a reported GPU error it funnels (strict raises) and returns the host
+    fallback instead of the kernel result."""
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: "boom")
+    out = rt._apple_gpu_run_checked(
+        "tessera.silu", lambda: "GPU-RESULT", lambda: "HOST-RESULT")
+    assert out == "HOST-RESULT"
+    assert any(op == "tessera.silu" for op, _ in rt.dispatch_fallback_log())
+    monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    with pytest.raises(rt.TesseraStrictDispatchError):
+        rt._apple_gpu_run_checked(
+            "tessera.silu", lambda: "GPU-RESULT", lambda: "HOST-RESULT")
+
+
+def test_run_checked_passthrough_on_success(monkeypatch):
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error", lambda: None)
+    out = rt._apple_gpu_run_checked(
+        "tessera.silu", lambda: "GPU-RESULT", lambda: "HOST-RESULT")
+    assert out == "GPU-RESULT"
+    assert rt.dispatch_fallback_log() == []
+
+
 def test_gpu_error_channel_helpers_noop_without_symbols(monkeypatch):
     # Older runtime build / non-Darwin stub: consumer returns None (no error),
     # arm is a no-op. Must not raise even in strict mode.

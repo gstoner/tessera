@@ -19,6 +19,7 @@ from __future__ import annotations
 import functools
 import inspect
 from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from .explain import Explain
 
 from .constraints import Constraint, ConstraintSolver, TesseraConstraintError
-from .effects import Effect, EffectLattice, TesseraEffectError
+from .effects import Effect, EffectLattice
 from .graph_ir import GraphIRBuilder, GraphIRModule
 from .gpu_target import GPUTargetProfile, ISA  # noqa: F401 — re-exported for callers
 from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
@@ -1319,6 +1320,206 @@ def _resolve_auto_batch(
     return target_kind == "apple_gpu" and _recognized_decode_chain(source_text)
 
 
+# ── @jit decoration stages (extracted from the `jit()` closure, audit
+#    2026-06-10 §4) ──────────────────────────────────────────────────────────
+# These were inline numbered steps inside the ~325-line `_decorate` closure.
+# Hoisted to module-level helpers with explicit inputs/outputs so the closure
+# reads as an orchestration of named stages. Behavior is unchanged — this is a
+# faithful relocation, gated by the full @jit test surface.
+
+
+@dataclass
+class _FrontendAnalysis:
+    """Result of @jit Steps 1-4: constraint solving + effect inference."""
+    solver: "ConstraintSolver"
+    inferred_effect: Any
+
+
+@dataclass
+class _GraphIREmission:
+    """Result of @jit Step 6: AST → Graph IR emission + compile bundle.
+
+    On the auto_batch-skip and apple_gpu trace-defer paths the module is empty
+    and ``cpu_plan``/``compile_bundle``/``compile_result`` are None; the
+    ``trace_deferred`` flag distinguishes the emission-*failure* defer (which
+    forces the surgical tracer) from the auto_batch skip (which does not)."""
+    module: Any
+    cpu_plan: Any
+    compile_bundle: Any
+    compile_result: Any
+    diagnostics: List["JitDiagnostic"]
+    trace_deferred: bool
+
+
+def _jit_analyze_frontend(
+    fn: Callable,
+    *,
+    source_text: Optional[str],
+    bindings: Optional[Dict[str, int]],
+    deterministic: bool,
+    seed: Optional[int],
+) -> _FrontendAnalysis:
+    """@jit Steps 1-4: collect structural constraints + check them against any
+    known bindings, infer the effect, and validate the deterministic contract.
+    Raises TesseraConstraintError / TesseraEffectError on violation (unchanged
+    from the inline steps)."""
+    # Step 1: collect constraints from the function body.
+    solver = ConstraintSolver()
+    for c in _extract_constraints(fn, source_text=source_text):
+        solver.add(c)
+
+    # Step 2: check constraints against any known bindings.
+    solver.check(bindings or {})
+
+    # Step 3: infer effects.
+    lattice = EffectLattice()
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+
+    # Step 4: validate deterministic contract.
+    if deterministic:
+        lattice.check_deterministic(fn, seed=seed, source_text=source_text)
+
+    return _FrontendAnalysis(solver=solver, inferred_effect=inferred_effect)
+
+
+def _jit_emit_graph_ir(
+    fn: Callable,
+    *,
+    source_text: Optional[str],
+    source_origin: str,
+    target: Optional[Any],
+    target_kind: str,
+    deterministic: bool,
+    seed: Optional[int],
+    cpu_tile: Tuple[int, int, int],
+    inferred_effect: Any,
+    skip_graph_ir: bool,
+) -> _GraphIREmission:
+    """@jit Step 6: emit Graph IR (with the process-local cache), build the
+    compile bundle + canonical result, and handle the two non-emitting paths
+    (auto_batch skip, apple_gpu emission-failure trace-defer). A faithful
+    relocation of the inline try/except — same control flow and diagnostics."""
+    trace_deferred = False
+    try:
+        if skip_graph_ir:
+            # The auto_batch tracer runs the body directly — the AST Graph IR
+            # it would emit here is never consulted, so don't pay to build it.
+            raise _AutoBatchSkipEmission
+        effect_tag = (
+            inferred_effect.name
+            if deterministic or inferred_effect != Effect.pure
+            else None
+        )
+        # Attach GPU target attrs to the module when target is provided.
+        if isinstance(target, GPUTargetProfile):
+            target_attr = target.to_mlir_attr()
+        elif target is not None:
+            target_attr = f'{{name = "{target_kind}"}}'
+        else:
+            target_attr = None
+        # G4 memoization (2026-05-19) — process-local cache keyed on
+        # source_text + effect_tag + target_attr.
+        from . import graph_ir_cache as _gic
+        module = _gic.lookup(
+            source_text, effect_tag=effect_tag, target_attr=target_attr)
+        diagnostics: list[JitDiagnostic] = []
+        if module is None:
+            builder = GraphIRBuilder()
+            builder.lower(
+                fn, effect_tag=effect_tag,
+                target_attr=target_attr, source_text=source_text,
+            )
+            module = builder.module()
+            for frontend_diag in builder.diagnostics:
+                diagnostics.append(JitDiagnostic(
+                    frontend_diag.severity,
+                    frontend_diag.code,
+                    frontend_diag.format(),
+                ))
+            _gic.store(
+                source_text, module,
+                effect_tag=effect_tag, target_attr=target_attr,
+            )
+        if source_text is None:
+            diagnostics.append(JitDiagnostic(
+                "warning",
+                "JIT_SOURCE_UNAVAILABLE",
+                (
+                    "Python source could not be inspected; define the function in a file "
+                    "or pass @jit(source=...) / @jit(source_path=...) to enable AST lowering"
+                ),
+            ))
+        elif source_origin != "inspect":
+            diagnostics.append(JitDiagnostic(
+                "info",
+                "JIT_SOURCE_PROVIDED",
+                f"using {source_origin} source for AST lowering",
+            ))
+        compile_bundle = compile_graph_module(
+            module,
+            source_origin=source_origin,
+            target=target_kind,
+            cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
+            options={
+                "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
+                "deterministic": deterministic,
+                "seed": seed,
+            },
+        )
+        if diagnostics:
+            compile_bundle = CompileArtifactBundle(
+                request=compile_bundle.request,
+                graph=compile_bundle.graph,
+                schedule=compile_bundle.schedule,
+                tile=compile_bundle.tile,
+                target_ir=compile_bundle.target_ir,
+                backend=compile_bundle.backend,
+                executable=compile_bundle.executable,
+                runtime_status=compile_bundle.runtime_status,
+                execution_mode=compile_bundle.execution_mode,
+                execution_kind=compile_bundle.execution_kind,
+                diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
+                trace_events=compile_bundle.trace_events,
+                tool_invocations=compile_bundle.tool_invocations,
+                cpu_plan=compile_bundle.cpu_plan,
+            )
+        cpu_plan = compile_bundle.cpu_plan
+        diagnostics = list(compile_bundle.diagnostics)
+        compile_result = compile_result_from_bundle(compile_bundle, module=module)
+        return _GraphIREmission(
+            module=module, cpu_plan=cpu_plan, compile_bundle=compile_bundle,
+            compile_result=compile_result, diagnostics=diagnostics,
+            trace_deferred=False)
+    except _AutoBatchSkipEmission:
+        # auto_batch route is on; emission was skipped on purpose. Empty module
+        # + no plan/bundle makes __call__ fall through to ``self._fn`` (the
+        # auto_batch wrapper). trace_deferred stays False (the wrapper, not the
+        # surgical tracer, is the execution path).
+        return _GraphIREmission(
+            module=GraphIRModule(), cpu_plan=None, compile_bundle=None,
+            compile_result=None, trace_deferred=False,
+            diagnostics=[JitDiagnostic(
+                "info", "JIT_APPLE_GPU_AUTO_BATCH",
+                "auto_batch one-command-buffer route active; skipped unused "
+                "Graph IR emission (the tracer runs the body directly)")])
+    except Exception as exc:
+        # An AST Graph-IR emission failure does NOT hard-fail apple_gpu
+        # decoration: the tracer runs the function (never reads the AST
+        # graph_ir), so a body the AST can't emit still decorates and runs via
+        # the tracer at call time. Other targets depend on the IR → re-raise.
+        if target_kind != "apple_gpu":
+            raise TesseraJitError(
+                f"Graph IR emission failed for {fn.__name__!r}: {exc}"
+            ) from exc
+        return _GraphIREmission(
+            module=GraphIRModule(), cpu_plan=None, compile_bundle=None,
+            compile_result=None, trace_deferred=True,
+            diagnostics=[JitDiagnostic(
+                "warning", "JIT_APPLE_GPU_TRACE_DEFERRED",
+                f"AST Graph IR emission failed ({exc}); deferring to the "
+                "Phase-F tracer at call time")])
+
+
 def jit(
     fn: Optional[Callable] = None,
     *,
@@ -1419,28 +1620,16 @@ def jit(
                 f"@jit(target=..., source_path=<path>) to enable AST lowering."
             )
 
-        # ── Step 1: collect constraints from the function body ──────────────
-        solver = ConstraintSolver()
-        extracted = _extract_constraints(fn, source_text=source_text)
-        for c in extracted:
-            solver.add(c)
-
-        # ── Step 2: check constraints against any known bindings ────────────
-        try:
-            solver.check(bindings or {})
-        except TesseraConstraintError:
-            raise
-
-        # ── Step 3: infer effects ────────────────────────────────────────────
-        lattice = EffectLattice()
-        inferred_effect = lattice.infer(fn, source_text=source_text)
-
-        # ── Step 4: validate deterministic contract ──────────────────────────
-        if deterministic:
-            try:
-                lattice.check_deterministic(fn, seed=seed, source_text=source_text)
-            except TesseraEffectError:
-                raise
+        # ── Steps 1-4: frontend analysis (constraints + effects) ────────────
+        analysis = _jit_analyze_frontend(
+            fn,
+            source_text=source_text,
+            bindings=bindings,
+            deterministic=deterministic,
+            seed=seed,
+        )
+        solver = analysis.solver
+        inferred_effect = analysis.inferred_effect
 
         # ── Step 5: resolve attn config for GPU path ────────────────────────
         resolved_attn = attn_config
@@ -1458,149 +1647,25 @@ def jit(
         _skip_graph_ir = (
             _auto_batch and target_kind == "apple_gpu" and not emit_package)
 
-        # ── Step 6: emit Graph IR ────────────────────────────────────────────
-        # Phase-F follow-on: when set, AST emission failed for an apple_gpu
-        # function and we deferred to the tracer (which runs the function rather
-        # than reading the AST graph_ir). ``_needs_trace`` is forced on below.
-        _trace_deferred = False
-        try:
-            if _skip_graph_ir:
-                # The auto_batch tracer runs the body directly — the AST Graph
-                # IR it would emit here is never consulted, so don't pay to
-                # build it. Jump to the shared deferred tail (empty module,
-                # no plan/bundle), the same state an AST emission failure lands
-                # in, but flagged with its own diagnostic.
-                raise _AutoBatchSkipEmission
-            effect_tag = inferred_effect.name if deterministic or inferred_effect != Effect.pure else None
-            # Attach GPU target attrs to the module when target is provided.
-            if isinstance(target, GPUTargetProfile):
-                target_attr = target.to_mlir_attr()
-            elif target is not None:
-                target_attr = f'{{name = "{target_kind}"}}'
-            else:
-                target_attr = None
-            # G4 memoization (2026-05-19) — process-local cache keyed on
-            # source_text + effect_tag + target_attr.  Hits skip
-            # AST → Graph IR rebuild entirely; misses fall through to
-            # the normal builder path and stash the result.  See
-            # tessera.compiler.graph_ir_cache for the cache shape.
-            from . import graph_ir_cache as _gic
-            module = _gic.lookup(
-                source_text,
-                effect_tag=effect_tag,
-                target_attr=target_attr,
-            )
-            diagnostics: list[JitDiagnostic] = []
-            if module is not None:
-                # Cache hit — diagnostics were rebuilt above for source
-                # availability but we still need the SOURCE_PROVIDED
-                # signal when applicable.  Skip eager-fallback paths.
-                pass
-            else:
-                builder = GraphIRBuilder()
-                builder.lower(
-                    fn, effect_tag=effect_tag,
-                    target_attr=target_attr, source_text=source_text,
-                )
-                module = builder.module()
-                for frontend_diag in builder.diagnostics:
-                    diagnostics.append(JitDiagnostic(
-                        frontend_diag.severity,
-                        frontend_diag.code,
-                        frontend_diag.format(),
-                    ))
-                # Stash the fresh module — the next decoration with
-                # the same source/target will hit instead.
-                _gic.store(
-                    source_text, module,
-                    effect_tag=effect_tag, target_attr=target_attr,
-                )
-            if source_text is None:
-                diagnostics.append(JitDiagnostic(
-                    "warning",
-                    "JIT_SOURCE_UNAVAILABLE",
-                    (
-                        "Python source could not be inspected; define the function in a file "
-                        "or pass @jit(source=...) / @jit(source_path=...) to enable AST lowering"
-                    ),
-                ))
-            elif source_origin != "inspect":
-                diagnostics.append(JitDiagnostic(
-                    "info",
-                    "JIT_SOURCE_PROVIDED",
-                    f"using {source_origin} source for AST lowering",
-                ))
-            compile_bundle = compile_graph_module(
-                module,
-                source_origin=source_origin,
-                target=target_kind,
-                cpu_tile=(int(cpu_tile[0]), int(cpu_tile[1]), int(cpu_tile[2])),
-                options={
-                    "cpu_tile": list(tuple(int(v) for v in cpu_tile)),
-                    "deterministic": deterministic,
-                    "seed": seed,
-                },
-            )
-            if diagnostics:
-                compile_bundle = CompileArtifactBundle(
-                    request=compile_bundle.request,
-                    graph=compile_bundle.graph,
-                    schedule=compile_bundle.schedule,
-                    tile=compile_bundle.tile,
-                    target_ir=compile_bundle.target_ir,
-                    backend=compile_bundle.backend,
-                    executable=compile_bundle.executable,
-                    runtime_status=compile_bundle.runtime_status,
-                    execution_mode=compile_bundle.execution_mode,
-                    execution_kind=compile_bundle.execution_kind,
-                    diagnostics=tuple(diagnostics) + compile_bundle.diagnostics,
-                    trace_events=compile_bundle.trace_events,
-                    tool_invocations=compile_bundle.tool_invocations,
-                    cpu_plan=compile_bundle.cpu_plan,
-                )
-            cpu_plan = compile_bundle.cpu_plan
-            diagnostics = list(compile_bundle.diagnostics)
-            # C.3 — synthesize the canonical answer from the bundle we just
-            # built. No second compile; this only runs the gate evaluator
-            # over the bundle's request.target + the module's primary op.
-            compile_result = compile_result_from_bundle(
-                compile_bundle, module=module)
-        except _AutoBatchSkipEmission:
-            # P3 (2026-06-09) — auto_batch route is on; emission was skipped on
-            # purpose. Empty module + no plan/bundle makes __call__ fall through
-            # to ``self._fn`` (the auto_batch wrapper, set below). NOTE: unlike
-            # the Phase-F emission-*failure* path, we leave ``_trace_deferred``
-            # False — the auto_batch wrapper is the execution path here, NOT the
-            # surgical ``run_jit_traced`` tracer (which ``_needs_trace=True``
-            # would route to, bypassing auto_batch).
-            module = GraphIRModule()
-            cpu_plan = None
-            compile_bundle = None
-            compile_result = None
-            diagnostics = [JitDiagnostic(
-                "info", "JIT_APPLE_GPU_AUTO_BATCH",
-                "auto_batch one-command-buffer route active; skipped unused "
-                "Graph IR emission (the tracer runs the body directly)")]
-        except Exception as exc:
-            # Phase-F follow-on — an AST Graph-IR emission failure does NOT
-            # hard-fail apple_gpu decoration. The tracer executes the function by
-            # RUNNING it (it never reads the AST graph_ir), so a body the AST
-            # can't emit (e.g. surrounding straight-line code around a loop) still
-            # decorates and runs via the tracer at call time (forced below). Other
-            # targets still raise — they depend on the emitted IR.
-            if target_kind != "apple_gpu":
-                raise TesseraJitError(
-                    f"Graph IR emission failed for {fn.__name__!r}: {exc}"
-                ) from exc
-            module = GraphIRModule()
-            cpu_plan = None
-            compile_bundle = None
-            compile_result = None
-            diagnostics = [JitDiagnostic(
-                "warning", "JIT_APPLE_GPU_TRACE_DEFERRED",
-                f"AST Graph IR emission failed ({exc}); deferring to the Phase-F "
-                "tracer at call time")]
-            _trace_deferred = True
+        # ── Step 6: emit Graph IR (incl. auto_batch-skip + trace-defer) ─────
+        emission = _jit_emit_graph_ir(
+            fn,
+            source_text=source_text,
+            source_origin=source_origin,
+            target=target,
+            target_kind=target_kind,
+            deterministic=deterministic,
+            seed=seed,
+            cpu_tile=cpu_tile,
+            inferred_effect=inferred_effect,
+            skip_graph_ir=_skip_graph_ir,
+        )
+        module = emission.module
+        cpu_plan = emission.cpu_plan
+        compile_bundle = emission.compile_bundle
+        compile_result = emission.compile_result
+        diagnostics = emission.diagnostics
+        _trace_deferred = emission.trace_deferred
 
         # PK8a wiring (2026-06-02) — recognize whether this module's compute
         # region is an authorable Apple-GPU packaged kernel (matmul / a single

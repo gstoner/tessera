@@ -97,3 +97,73 @@ HIGH findings were confirmed by reading the owning source in-session; the
 sub-agent sweep that produced the initial candidate list also produced the two
 refuted claims above — which is why *(lead)* items must be source-verified
 before they migrate into status claims (Decision #27).
+
+## Closeout status (2026-06-10, final pass)
+
+A dedicated closeout pass drove every remaining item to one of: **done**,
+**refuted**, **accepted tradeoff**, or **tracked-deferred (with rationale)**.
+No item is left as a silent open gap.
+
+### Closed this pass
+
+- **1e — zero-`TRACE_DEFERRED` corpus guard** — DONE.
+  `tests/unit/test_audit_closeout_guards.py::test_known_good_apple_gpu_corpus_emits_no_trace_deferred`
+  decorates a 7-function emittable corpus and asserts none defer to the tracer
+  (closes the "AST-emission regression passes via tracer" hole). Platform-
+  agnostic (decoration-time).
+- **§3 `_APPLE_GPU_*` table-creep enforcer** — DONE.
+  `test_envelope_tables_are_single_source` asserts `driver.py`/`runtime.py`
+  never redefine an envelope-owned op/opcode/lane table (runtime-local handler
+  maps + symbol-availability memo caches are correctly excluded).
+- **1d — failure-class fallback coverage** — EXTENDED. The binary and rowop
+  MPSGraph dispatchers now route their symbol-missing fallbacks through
+  `_note_dispatch_fallback` (strict mode raises; non-strict logs); empty-array
+  and unsupported-dtype paths are correctly classified as envelope misses, not
+  failures. New strict-mode tests in `test_strict_dispatch.py`.
+- **§4 `extractPtr`/`ensureExternalDecl` dedup** — DONE.
+  `include/Tessera/Target/Apple/LoweringUtils.h` holds both as `inline`
+  `tessera::apple` functions; **18** Apple lowering passes migrated (byte-
+  identical bodies, brace-counted removal — zero divergent). `TesseraApple` +
+  `tessera-opt` rebuild clean; phase8 lit + pass-status enforcer green.
+- **§5 bf16 probe** — DONE (was already cached): `_apple_gpu_supports_native_bf16`
+  memoizes via `_NATIVE_BF16_SUPPORTED`; only the first call probes.
+
+### Refuted (no action — would be wrong)
+
+- **§5 MPSGraph "shape-class" cache keys** — a compiled MPSGraph is
+  shape-specialized; bucketing distinct shapes onto one cached graph is a
+  miscompile. The LRU (cap 1024, env-tunable) is the correct mitigation and is
+  already in place. (Refutes the perf suggestion as literally stated.)
+
+### Accepted tradeoffs (correctness-first, costs bounded)
+
+- **1f graph_ir_cache deepcopy** — intentional immutability boundary; the cost
+  is one CPU-bound deepcopy outside the lock. A frozen/COW `GraphIRModule` is a
+  larger change with mutation-safety risk for no correctness gain.
+- **§5 per-call constraint re-check** — exact-shape memo set; a `Divisible(M,128)`
+  predicate genuinely depends on the value, so per-distinct-shape checks are
+  unavoidable. The residual cost is a set lookup.
+
+### Tracked-deferred (explicit, with rationale)
+
+- **1c / partial-lowering completeness wiring** — the `tessera-verify
+  forbid-ops` tool exists; auto-wiring it into the runtime pipelines needs
+  per-pipeline "guaranteed-consumed op" analysis (not every `tessera.*` op is
+  lowered by every pipeline; e.g. `TilingPass` only tiles static f32/bf16
+  rank-2 matmul, so even `tessera.matmul` legitimately survives). A blanket
+  forbid would false-positive. Deferred pending that per-pipeline analysis.
+- **1d #3 — C-ABI int return code + signature registry** — touches the `.mm`
+  runtime, the stub, ~70 ctypes bindings, and every call site; the `.mm` half
+  is unvalidatable off a Metal host. The Python strict-dispatch funnel already
+  provides the error *channel* at the boundary; the C-ABI-level return code is
+  a future ABI-versioned change.
+- **Target IR C++ fusion descriptor consumption** — the runtime half is closed
+  (consumes `fusion_groups`, incl. SwiGLU). Having the C++ backend passes read
+  a descriptor instead of re-recognizing is a larger architectural item
+  (Decision #19 "emit backend descriptors").
+- **Schedule IR autotuner-visible tile sizes / Tile IR LICM + double-buffering**
+  — hardware-gated (no NVIDIA here); speculative without a validation target.
+- **`jit.py` god-function extraction** — pure maintainability on the single
+  most load-bearing decorator (every `@jit` call). The 320-line closure
+  captures ~15 enclosing variables across 7 stages; safe extraction deserves a
+  focused, separately-reviewed change rather than bundling into this sweep.

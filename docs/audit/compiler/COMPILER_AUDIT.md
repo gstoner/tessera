@@ -106,6 +106,15 @@ multiple root audit documents and compiler archive files.
   test-coverage pair; fold `operator_benchmarks_coverage` into benchmarks; fold
   the `e2e_op_coverage` + `s_series_status` rollups into their primaries) — each
   is now a localized registry edit + generator change.
+- **Code-level audit closeout (2026-06-10).** The
+  [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md) "Closeout status" section
+  drove every remaining code-level finding to done / refuted / accepted /
+  tracked-deferred. Done: 1e zero-`TRACE_DEFERRED` corpus guard, `_APPLE_GPU_*`
+  table-creep enforcer, binary/rowop strict-dispatch funnel coverage, the
+  `LoweringUtils.h` dedup across 18 Apple passes, bf16-probe (already cached).
+  Explicitly tracked-deferred (with rationale): C-ABI int return code, Target-IR
+  C++ fusion-descriptor consumption, Schedule/Tile IR autotuner/LICM (hardware-
+  gated), `forbid-ops` pipeline wiring, and the `jit.py` decorator extraction.
 
 ## Next Work
 

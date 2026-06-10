@@ -9,8 +9,9 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
 - **Apple GPU runtime:** Apple GPU artifacts execute through MPS, MPSGraph, and
   custom MSL runtime paths.
 - **Metal 4 surface:** Metal 4 probes and lanes exist for selected kernels.
-- **Runtime ABI breadth:** generated ABI inventory reports a large Apple symbol
-  surface and 84 Apple GPU families.
+- **Runtime ABI breadth:** the drift-gated `docs/audit/generated/runtime_abi.md`
+  is the count authority (currently a large Apple symbol surface across 109 Apple
+  GPU kernel families); do not hard-code the number here — read the dashboard.
 - **One-command-buffer substrate:** encode-session APIs and chain planning exist
   for resident decode-style chains.
 - **Auto-batch substrate:** Apple GPU chain planner and `apple_gpu_ops` tracing

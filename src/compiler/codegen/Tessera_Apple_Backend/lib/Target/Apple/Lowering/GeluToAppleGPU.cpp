@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
+#include "Tessera/Target/Apple/LoweringUtils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -38,23 +39,7 @@ constexpr llvm::StringLiteral kGeluF32Symbol = "tessera_apple_gpu_gelu_f32";
 constexpr llvm::StringLiteral kGeluF16Symbol = "tessera_apple_gpu_gelu_f16";
 constexpr llvm::StringLiteral kGeluBF16Symbol = "tessera_apple_gpu_gelu_bf16";
 
-static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
-                                       FunctionType fnTy) {
-  if (auto fn = mod.lookupSymbol<func::FuncOp>(name))
-    return fn;
-  OpBuilder b(mod.getBodyRegion());
-  b.setInsertionPointToStart(mod.getBody());
-  auto fn = b.create<func::FuncOp>(mod.getLoc(), name, fnTy);
-  fn.setPrivate();
-  return fn;
-}
 
-static Value extractPtr(OpBuilder &b, Location loc, Value tensor,
-                        MemRefType memTy) {
-  auto buf = b.create<bufferization::ToBufferOp>(loc, memTy, tensor);
-  auto ptrIdx = b.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buf);
-  return b.create<arith::IndexCastOp>(loc, b.getI64Type(), ptrIdx);
-}
 
 struct LowerGeluToAppleGPU : public RewritePattern {
   LowerGeluToAppleGPU(MLIRContext *ctx)

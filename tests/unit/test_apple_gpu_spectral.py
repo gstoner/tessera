@@ -41,6 +41,7 @@ def test_accelerator_proof_marks_spectral_proven():
 
 # ── numerical correctness vs numpy (direct dispatch) ─────────────────────────
 
+@gpu
 @pytest.mark.parametrize("n", [8, 16, 17, 32])
 def test_fft_ifft_match_numpy(n):
     rng = np.random.default_rng(n)
@@ -49,6 +50,7 @@ def test_fft_ifft_match_numpy(n):
     np.testing.assert_allclose(_D("tessera.ifft", [x]), np.fft.ifft(x, axis=-1), rtol=1e-4, atol=1e-4)
 
 
+@gpu
 @pytest.mark.parametrize("n", [8, 16, 15, 32])
 def test_rfft_irfft_match_numpy(n):
     rng = np.random.default_rng(n + 1)
@@ -58,12 +60,14 @@ def test_rfft_irfft_match_numpy(n):
     np.testing.assert_allclose(_D("tessera.irfft", [rc], n=n), np.fft.irfft(rc, n=n, axis=-1), rtol=1e-4, atol=1e-4)
 
 
+@gpu
 def test_fft_off_last_axis():
     rng = np.random.default_rng(5)
     x = (rng.standard_normal((4, 8)) + 1j * rng.standard_normal((4, 8))).astype(np.complex64)
     np.testing.assert_allclose(_D("tessera.fft", [x], axis=0), np.fft.fft(x, axis=0), rtol=1e-4, atol=1e-4)
 
 
+@gpu
 def test_composites_match_host_reference():
     rng = np.random.default_rng(7)
     r = rng.standard_normal((3, 16)).astype(np.float32)

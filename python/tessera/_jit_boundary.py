@@ -2132,6 +2132,19 @@ class GraphFn:
             if len(members) < 2:
                 continue
             anchor = members[0]
+            # A concatenated projection runs once, at the anchor. Every member's
+            # weight operand (ins[1]) must therefore be available there: produced
+            # strictly before the anchor, or an external graph input. Drop members
+            # whose weight is produced at/after the anchor — e.g. matmul(x, x@x),
+            # where the weight is the group's own output (a circular dependency
+            # that would reference an SSA name never bound in env).
+            members = [
+                mi for mi in members
+                if (lambda wp: wp is None or wp < anchor)(
+                    producer.get(ops[mi].ins[1].ssa))
+            ]
+            if len(members) < 2:
+                continue
             outs = [ops[mi].out for mi in members]
             weights = [ops[mi].ins[1] for mi in members]
             meta = {"splits": [int(o.shape[1]) for o in outs], "outs": outs}

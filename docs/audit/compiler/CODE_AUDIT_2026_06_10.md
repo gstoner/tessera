@@ -144,6 +144,38 @@ No item is left as a silent open gap.
   predicate genuinely depends on the value, so per-distinct-shape checks are
   unavoidable. The residual cost is a set lookup.
 
+### Closed in the follow-on focused passes (2026-06-10, later same day)
+
+- **`jit.py` god-function extraction — DONE.** The `_decorate` closure dropped
+  from ~325 to ~145 lines: Steps 1-4 (constraint solve + effect inference)
+  extracted to `_jit_analyze_frontend`, and Step 6 (the ~140-line Graph-IR
+  emission try/except, incl. the auto_batch-skip and apple_gpu trace-defer
+  paths) to `_jit_emit_graph_ir`, returning `_FrontendAnalysis` /
+  `_GraphIREmission` dataclasses. Faithful relocation — same control flow,
+  diagnostics, and order; gated by the full `@jit` test surface (85 jit-focused
+  tests + full sweep). The closure now reads as an orchestration of named
+  stages. (A dead no-op `except TesseraEffectError: raise` was dropped along
+  the way; the exception still propagates naturally.)
+- **1d #3 — GPU dispatch error channel — DONE (errno-style, better than the
+  literal "int return on 70 symbols").** Changing ~70 `void` symbol signatures
+  was rejected as a massive ABI break; instead the `.mm` runtime now sets a
+  **thread-local last-error at the shared command-buffer choke point**
+  (`commit_and_wait_with_timeout`, ~72 callers) on its two failure branches
+  (timeout/hang = kind 1, `cb.error` = kind 2), generalizing the existing
+  `g_mlpkg_last_error_kind` pattern. New C ABI:
+  `tessera_apple_gpu_last_error_kind` / `_message` / `_clear_last_error`
+  (+ non-Darwin stub parity). The Python matmul lane arms (clears) the channel
+  before each GEMM and consumes (reads+clears) it after — a silent internal
+  GPU failure (which left the output buffer untouched) now funnels through
+  `_note_dispatch_fallback` (strict raises) + recomputes on host instead of
+  returning garbage. Validated on a Metal host: real matmul succeeds with no
+  false-positive; new symbols present in both the test-helper dylib and the
+  canonical `libTesseraAppleRuntime.a`. Tests in `test_strict_dispatch.py`
+  (simulated GPU error funnels + raises; no-channel build is a safe no-op).
+  *Remaining follow-on:* other lanes (unary/binary/rowop/bmm) adopting the
+  same 3-line arm/consume pattern — mechanical, doesn't change the
+  architectural close.
+
 ### Tracked-deferred (explicit, with rationale)
 
 - **1c / partial-lowering completeness wiring** — the `tessera-verify
@@ -152,18 +184,9 @@ No item is left as a silent open gap.
   lowered by every pipeline; e.g. `TilingPass` only tiles static f32/bf16
   rank-2 matmul, so even `tessera.matmul` legitimately survives). A blanket
   forbid would false-positive. Deferred pending that per-pipeline analysis.
-- **1d #3 — C-ABI int return code + signature registry** — touches the `.mm`
-  runtime, the stub, ~70 ctypes bindings, and every call site; the `.mm` half
-  is unvalidatable off a Metal host. The Python strict-dispatch funnel already
-  provides the error *channel* at the boundary; the C-ABI-level return code is
-  a future ABI-versioned change.
 - **Target IR C++ fusion descriptor consumption** — the runtime half is closed
   (consumes `fusion_groups`, incl. SwiGLU). Having the C++ backend passes read
   a descriptor instead of re-recognizing is a larger architectural item
   (Decision #19 "emit backend descriptors").
 - **Schedule IR autotuner-visible tile sizes / Tile IR LICM + double-buffering**
   — hardware-gated (no NVIDIA here); speculative without a validation target.
-- **`jit.py` god-function extraction** — pure maintainability on the single
-  most load-bearing decorator (every `@jit` call). The 320-line closure
-  captures ~15 enclosing variables across 7 stages; safe extraction deserves a
-  focused, separately-reviewed change rather than bundling into this sweep.

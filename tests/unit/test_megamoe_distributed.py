@@ -264,3 +264,89 @@ def test_real_overlap_hides_dispatch_comm_under_gpu_compute():
     # The 4 dispatch comms (~48 ms) hide under compute → pipelined < seq-chunked.
     # Generous margin (0.92×) keeps it robust under scheduler noise.
     assert pll < seq * 0.92, f"pipelined {pll*1e3:.1f}ms vs seq-chunked {seq*1e3:.1f}ms"
+
+
+# ── Rung 5: 2-stage pipeline — also hides the COMBINE comm under compute ──────
+@pytest.mark.parametrize("stages", [1, 2])
+@pytest.mark.parametrize("num_chunks", [1, 2, 4])
+def test_both_pipeline_depths_match_non_overlapped(stages, num_chunks):
+    # Both pipeline depths are pure schedule transforms — identical result.
+    x, Wr, Wg, Wu, Wd = _inputs(stages * 100 + num_chunks, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    y_plain, _ = megamoe_layer(x, Wr, Wg, Wu, Wd, world_size=4, config=cfg)
+    y, dropped, _ = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg,
+        num_chunks=num_chunks, pipeline_stages=stages)
+    assert dropped == 0
+    np.testing.assert_allclose(y, y_plain, rtol=1e-4, atol=1e-4)
+
+
+def test_two_stage_defers_and_overlaps_every_combine():
+    # The structural proof: 2-stage runs nc-1 combines concurrently with a
+    # compute (deferred one iteration); 1-stage overlaps no combine.
+    x, Wr, Wg, Wu, Wd = _inputs(2, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    _, _, s1 = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=4, pipeline_stages=1)
+    _, _, s2 = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=4, pipeline_stages=2)
+    assert s1.pipeline_stages == 1 and s1.overlapped_combines == 0
+    assert s2.pipeline_stages == 2 and s2.overlapped_combines == 4 - 1
+    # default is the deeper pipeline
+    _, _, sd = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=4, config=cfg, num_chunks=3)
+    assert sd.pipeline_stages == 2 and sd.overlapped_combines == 3 - 1
+
+
+def test_invalid_pipeline_stages_raises():
+    x, Wr, Wg, Wu, Wd = _inputs(3, T=16, E=4)
+    cfg = MoEConfig(num_experts=4, top_k=1, capacity_factor=8.0)
+    with pytest.raises(ValueError, match="pipeline_stages"):
+        megamoe_layer_pipelined(
+            x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, pipeline_stages=3)
+
+
+def test_single_chunk_overlaps_no_combine():
+    # nc=1 has nothing to pipeline — no deferred combine even at depth 2.
+    x, Wr, Wg, Wu, Wd = _inputs(4, T=16, E=4)
+    cfg = MoEConfig(num_experts=4, top_k=1, capacity_factor=8.0)
+    _, _, s = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=1, pipeline_stages=2)
+    assert s.num_chunks == 1 and s.overlapped_combines == 0
+
+
+@gpu
+def test_two_stage_hides_more_comm_than_one_stage():
+    # The headline: in a compute-dominant regime the 2-stage pipeline hides the
+    # COMBINE comm too, so its EXPOSED comm (time-with-latency minus time-without)
+    # is well below the 1-stage's. Measured as the latency-attributable delta so
+    # it is robust to absolute GPU speed.
+    import time
+
+    rng = np.random.default_rng(0)
+    T, K, E, Fdim, N = 8192, 256, 8, 256, 256
+    x = rng.standard_normal((T, K)).astype(np.float32)
+    Wr = rng.standard_normal((K, E)).astype(np.float32)
+    Wg = rng.standard_normal((E, K, Fdim)).astype(np.float32)
+    Wu = rng.standard_normal((E, K, Fdim)).astype(np.float32)
+    Wd = rng.standard_normal((E, Fdim, N)).astype(np.float32)
+    cfg = MoEConfig(num_experts=E, top_k=2, capacity_factor=4.0)
+    NC, L = 4, 0.006
+
+    megamoe_layer_pipelined(x, Wr, Wg, Wu, Wd, world_size=2, config=cfg, num_chunks=NC)  # warm
+
+    def wall(stages, lat, reps=4):
+        best = 1e9
+        for _ in range(reps):
+            t0 = time.perf_counter()
+            megamoe_layer_pipelined(x, Wr, Wg, Wu, Wd, world_size=2, config=cfg,
+                                    num_chunks=NC, comm_latency_s=lat,
+                                    pipeline_stages=stages)
+            best = min(best, time.perf_counter() - t0)
+        return best
+
+    exposed1 = wall(1, L) - wall(1, 0.0)
+    exposed2 = wall(2, L) - wall(2, 0.0)
+    # 2-stage hides the combine comm too → markedly less exposed comm. Generous
+    # margin (0.7×) keeps it robust under scheduler noise.
+    assert exposed2 < exposed1 * 0.7, f"2-stage exposed {exposed2*1e3:.1f}ms vs 1-stage {exposed1*1e3:.1f}ms"

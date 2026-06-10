@@ -103,24 +103,30 @@ def main() -> int:
 
     rows = []
     print(f"shape={args.shape}  world_size={ws}  num_chunks={nc}  reps={args.reps}")
-    print(f"{'comm/a2a':>10} {'seq_chunked':>13} {'async_pipe':>12} {'speedup':>9}")
+    print(f"{'comm/a2a':>10} {'seq_chunked':>13} {'1-stage':>10} {'2-stage':>10} "
+          f"{'2-stage↑':>9}")
     for lat_ms in args.latencies:
         lat = lat_ms / 1e3
         seq = _wall(lambda lat=lat: megamoe_layer_overlapped(
             x, Wr, Wg, Wu, Wd, world_size=ws, config=cfg, num_chunks=nc,
             comm_latency_s=lat), args.reps)
-        pll = _wall(lambda lat=lat: megamoe_layer_pipelined(
+        p1 = _wall(lambda lat=lat: megamoe_layer_pipelined(
             x, Wr, Wg, Wu, Wd, world_size=ws, config=cfg, num_chunks=nc,
-            comm_latency_s=lat), args.reps)
-        speedup = seq / pll if pll else 0.0
-        print(f"{lat_ms:>9.0f}m {seq*1e3:>11.1f}m {pll*1e3:>10.1f}m {speedup:>8.2f}x")
-        for mode, lat_s in (("seq_chunked", seq), ("async_pipelined", pll)):
+            comm_latency_s=lat, pipeline_stages=1), args.reps)
+        p2 = _wall(lambda lat=lat: megamoe_layer_pipelined(
+            x, Wr, Wg, Wu, Wd, world_size=ws, config=cfg, num_chunks=nc,
+            comm_latency_s=lat, pipeline_stages=2), args.reps)
+        gain = p1 / p2 if p2 else 0.0
+        print(f"{lat_ms:>9.0f}m {seq*1e3:>11.1f}m {p1*1e3:>8.1f}m {p2*1e3:>8.1f}m "
+              f"{gain:>8.2f}x")
+        for mode, lat_s in (("seq_chunked", seq), ("pipelined_1stage", p1),
+                            ("pipelined_2stage", p2)):
             rows.append({
                 "backend": "apple_gpu", "op": "megamoe_overlap",
                 "shape": args.shape, "dtype": "f32", "mode": mode,
                 "num_chunks": nc, "world_size": ws, "comm_latency_ms": lat_ms,
                 "latency_ms": round(lat_s * 1e3, 3),
-                "speedup_vs_seq_chunked": round(speedup, 3) if mode == "async_pipelined" else 1.0,
+                "speedup_vs_seq_chunked": round(seq / lat_s, 3) if lat_s else 0.0,
                 "tessera_version": ver,
             })
 

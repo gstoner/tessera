@@ -116,26 +116,40 @@ all-to-all **concurrently** — the GPU command buffer *is* the async stream, an
 the worker-thread + GIL-release is how the CPU comm proceeds alongside it.
 
 `megamoe_forward_pipelined` decomposes each micro-batch into dispatch / compute /
-combine phases and pipelines them: chunk c's GPU compute runs async while chunk
-c+1's **dispatch** all-to-all issues → the dispatch comm is hidden under compute.
-(The combine comm is still exposed — a deeper 2-stage pipeline would hide that
-too.) `PipelineStats` reports per-chunk compute thread-ids + `all_offloaded`
-(proof the GPU work ran off the comm thread).
+combine phases and pipelines them. The overlap depth is set by `pipeline_stages`:
+
+- **1-stage** — chunk c+1's **dispatch** all-to-all issues while chunk c's GPU
+  compute is in flight; chunk c's **combine** runs after its compute completes
+  (exposed).
+- **2-stage** (default) — chunk c's combine is **deferred one iteration**, so
+  while chunk c's compute is in flight the CPU issues BOTH chunk c+1's dispatch
+  AND chunk c-1's combine. Both comms hide under compute, roughly doubling the
+  overlap window (the classic software-pipelined MoE schedule). The per-rank
+  all-to-all order stays fixed (`d0, d1, d2, c0, d3, c1, …, c_{n-2}, c_{n-1}`),
+  so the cross-rank barrier protocol remains in lockstep.
+
+`PipelineStats` reports per-chunk compute thread-ids, `all_offloaded` (proof the
+GPU work ran off the comm thread), `pipeline_stages`, and `overlapped_combines`
+(= `nc-1` for 2-stage, `0` for 1-stage — the combine comms that ran concurrently
+with a compute).
 
 `comm_latency_s` models per-all-to-all interconnect transfer latency — the
 single-machine mock collective has none; real multi-device comm does. It is the
 cost the pipeline hides.
 
-**Measured** (M-series, `4096×256×8×256`, world_size=2, num_chunks=4):
+**Measured** (M-series, `8192×256×8×256`, world_size=2, num_chunks=4):
 
-| modeled comm / a2a | sequential-chunked | async-pipelined | speedup |
-|---|---|---|---|
-| 0 ms | 121.9 ms | 114.2 ms | 1.07× |
-| 6 ms | 180.3 ms | 153.7 ms | 1.17× |
-| 12 ms | 242.6 ms | 198.7 ms | **1.22×** |
+| modeled comm / a2a | sequential-chunked | 1-stage | 2-stage | 2-stage vs 1-stage |
+|---|---|---|---|---|
+| 0 ms | 228.2 ms | 219.2 ms | 198.8 ms | 1.10× |
+| 6 ms | 285.2 ms | 254.3 ms | 210.9 ms | 1.21× |
+| 12 ms | 343.6 ms | 290.3 ms | 236.8 ms | **1.23×** |
 
-The four dispatch comms (~48 ms) are hidden under GPU compute. The pure
-GPU-vs-CPU-comm overlap measures **1.85×** on a heavy CPU comm proxy.
+In a compute-dominant regime the 2-stage's **exposed comm** (time-with-latency
+minus time-without) is ≈4× smaller than the 1-stage's (e.g. 10.6 ms vs 41.9 ms
+at 6 ms/a2a) — the combine comm is now hidden too; only the pipeline fill/drain
+(the first dispatch + last combine) stays exposed. The pure GPU-vs-CPU-comm
+overlap measures **1.85×** on a heavy CPU comm proxy.
 
 **Honest scope:** the wall-clock win *requires* real comm latency. On a single
 machine the mock all-to-all is a microsecond memcpy, so chunking alone is a wash
@@ -156,10 +170,11 @@ comm:compute ratio and reports the speedup curve.
 
 ## Open frontier
 
-- **2-stage pipeline** — currently only the dispatch comm overlaps compute; a
-  deeper pipeline would also hide the combine comm under the next chunk's
-  compute, roughly doubling the overlap window.
 - **Real multi-device comm** — the in-process mock collective has no wire
   latency; a native NCCL/RCCL (or Apple multi-GPU) lane is where the modeled
   `comm_latency_s` becomes the actual interconnect cost. Gated on the Phase G/H
   hardware lanes.
+- **Deeper pipelines** — the 2-stage schedule exposes only the pipeline
+  fill/drain (first dispatch + last combine). A prologue/epilogue-software-
+  pipelined variant could shave even those at the cost of more in-flight buffers,
+  but the win is marginal once comm is already hidden under compute.

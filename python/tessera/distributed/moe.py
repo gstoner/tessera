@@ -732,15 +732,21 @@ class _AsyncCompute:
 class PipelineStats(NamedTuple):
     """Telemetry from the async-pipelined forward.
 
-    num_chunks         : token micro-batches
-    compute_thread_ids : worker-thread id per chunk's expert FFN
-    main_thread_id     : the rank thread that issued the comm
-    all_offloaded      : every chunk's compute ran off the comm thread (real async)
+    num_chunks          : token micro-batches
+    compute_thread_ids  : worker-thread id per chunk's expert FFN
+    main_thread_id      : the rank thread that issued the comm
+    all_offloaded       : every chunk's compute ran off the comm thread (real async)
+    pipeline_stages     : 1 = only dispatch(c+1) overlaps compute(c);
+                          2 = dispatch(c+1) AND combine(c-1) overlap compute(c)
+    overlapped_combines : combines that ran concurrently with a compute (the
+                          2-stage win — 0 for 1-stage, nc-1 for 2-stage)
     """
     num_chunks: int
     compute_thread_ids: list
     main_thread_id: int
     all_offloaded: bool
+    pipeline_stages: int = 1
+    overlapped_combines: int = 0
 
 
 def megamoe_forward_pipelined(
@@ -756,22 +762,34 @@ def megamoe_forward_pipelined(
     capacity: Optional[int] = None,
     quant=None,
     comm_latency_s: float = 0.0,
+    pipeline_stages: int = 2,
 ) -> "tuple[MegaMoEResult, PipelineStats]":
     """Async-pipelined expert-parallel forward — REAL comm/compute overlap.
 
-    ``comm_latency_s`` models per-all-to-all interconnect transfer latency: the
-    DISPATCH latency of chunk c+1 is issued while chunk c's GPU expert FFN is in
-    flight, so it is hidden under compute (the combine latency is still exposed —
-    a deeper 2-stage pipeline would hide that too).
-
     Decomposes each micro-batch into dispatch (host route + scatter + dispatch
     all-to-all), compute (GPU expert FFN), and combine (combine all-to-all +
-    scatter) phases, then pipelines them: chunk c's GPU compute runs on a worker
-    thread (Metal command buffer in flight, GIL released) while chunk c+1's
-    DISPATCH all-to-all is issued on this thread. Returns ``(MegaMoEResult,
-    PipelineStats)``; numerically identical to :func:`megamoe_forward` when
-    nothing drops.
+    scatter) phases, then pipelines them so the CPU-side comm overlaps the GPU
+    expert FFN of another chunk (the Metal command buffer is in flight and the
+    ``ctypes`` call releases the GIL). Returns ``(MegaMoEResult, PipelineStats)``;
+    numerically identical to :func:`megamoe_forward` when nothing drops.
+
+    ``pipeline_stages`` sets the overlap depth:
+
+    - ``1`` — only chunk c+1's DISPATCH all-to-all overlaps chunk c's compute;
+      chunk c's COMBINE is issued after its compute completes (exposed).
+    - ``2`` (default) — chunk c's combine is **deferred one iteration** so that,
+      while chunk c's compute is in flight, the CPU issues BOTH chunk c+1's
+      dispatch AND chunk c-1's combine. Both comms hide under compute, roughly
+      doubling the overlap window (the classic software-pipelined MoE schedule).
+
+    ``comm_latency_s`` models per-all-to-all interconnect transfer latency (the
+    single-machine mock has none; real multi-device comm does) — the cost the
+    pipeline hides.
     """
+    if pipeline_stages not in (1, 2):
+        raise ValueError(
+            f"megamoe_forward_pipelined: pipeline_stages must be 1 or 2, "
+            f"got {pipeline_stages}")
     from .. import ops as _ops
 
     R = int(rank.world_size)
@@ -862,24 +880,42 @@ def megamoe_forward_pipelined(
     compute_ids: list = []
     total_drop = 0
     last_cap = 0
+    overlapped_combines = 0
+    defer = pipeline_stages >= 2
+    pending: Optional[tuple] = None      # (chunk_idx, frame, out) awaiting combine
 
     frames[0] = dispatch_phase(chunks[0])
     for c in range(nc):
         frame = frames[c]
         ac = _AsyncCompute(functools.partial(compute_phase, frame))   # GPU async
+        # --- CPU work issued while compute(c) is in flight on the GPU ---
         if c + 1 < nc:
-            frames[c + 1] = dispatch_phase(chunks[c + 1])        # comm ∥ compute(c)
+            frames[c + 1] = dispatch_phase(chunks[c + 1])        # dispatch(c+1) ∥ compute(c)
+        if defer and pending is not None:
+            pc, pf, po = pending                                 # combine(c-1) ∥ compute(c)
+            pieces[pc] = combine_phase(pf, po)
+            overlapped_combines += 1
+            pending = None
+        # --- synchronize compute(c) ---
         out_c = ac.wait()
         compute_ids.append(ac.thread_ident)
-        pieces[c] = combine_phase(frame, out_c)
         total_drop += frame["dropped"]
         last_cap = frame["C"]
+        if defer:
+            pending = (c, frame, out_c)                          # defer combine(c)
+        else:
+            pieces[c] = combine_phase(frame, out_c)              # combine(c) exposed (1-stage)
+
+    if defer and pending is not None:                            # drain the last combine
+        pc, pf, po = pending
+        pieces[pc] = combine_phase(pf, po)
 
     y_local = np.concatenate(pieces, axis=0) if pieces else x_local[:0]
     result = MegaMoEResult(y_local=y_local, n_dropped=total_drop, capacity=last_cap)
     stats = PipelineStats(
         num_chunks=nc, compute_thread_ids=compute_ids, main_thread_id=main_id,
-        all_offloaded=all(tid is not None and tid != main_id for tid in compute_ids))
+        all_offloaded=all(tid is not None and tid != main_id for tid in compute_ids),
+        pipeline_stages=pipeline_stages, overlapped_combines=overlapped_combines)
     return result, stats
 
 
@@ -896,11 +932,13 @@ def megamoe_layer_pipelined(
     capacity: Optional[int] = None,
     quant=None,
     comm_latency_s: float = 0.0,
+    pipeline_stages: int = 2,
 ):
     """Async-pipelined :func:`megamoe_layer` — returns ``(y, n_dropped, stats)``
-    with rank 0's :class:`PipelineStats`. Real wall-clock comm/compute overlap
-    (chunk c's GPU expert FFN runs while chunk c+1's dispatch all-to-all issues).
-    Numerically equals the non-overlapped :func:`megamoe_layer` when nothing drops.
+    with rank 0's :class:`PipelineStats`. Real wall-clock comm/compute overlap;
+    ``pipeline_stages=2`` (default) hides BOTH the dispatch and combine all-to-all
+    under GPU compute (see :func:`megamoe_forward_pipelined`). Numerically equals
+    the non-overlapped :func:`megamoe_layer` when nothing drops.
     """
     from ..testing.mock_collective import MockRankGroup
 
@@ -918,6 +956,10 @@ def megamoe_layer_pipelined(
         raise ValueError(
             f"megamoe_layer_pipelined: num_experts={E} must be divisible by "
             f"world_size={world_size}")
+    if pipeline_stages not in (1, 2):
+        raise ValueError(
+            f"megamoe_layer_pipelined: pipeline_stages must be 1 or 2, "
+            f"got {pipeline_stages}")
     Ep = E // world_size
     Tl = T // world_size
 
@@ -928,7 +970,7 @@ def megamoe_layer_pipelined(
             Wg[r * Ep:(r + 1) * Ep], Wu[r * Ep:(r + 1) * Ep],
             Wd[r * Ep:(r + 1) * Ep],
             config=config, num_chunks=num_chunks, capacity=capacity, quant=quant,
-            comm_latency_s=comm_latency_s)
+            comm_latency_s=comm_latency_s, pipeline_stages=pipeline_stages)
 
     results = MockRankGroup(n=world_size).run(worker)
     y = np.concatenate([res.y_local for res, _ in results], axis=0)

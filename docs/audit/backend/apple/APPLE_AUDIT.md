@@ -187,101 +187,46 @@ Metal 4, packaged kernels, command-buffer work, and Apple-specific performance.
   `test_apple_gpu_jit_auto_batch_autodetect.py` (19 tests: detection
   truth-table, emission-skip introspection, encode-name-vs-registry drift gate,
   misuse guards).
+- **GPU dispatch error channel (2026-06-10):** the Apple GPU runtime exposes a
+  thread-local last-error (`tessera_apple_gpu_last_error_kind` / `_message` /
+  `_clear_last_error`) set at the shared command-buffer choke point
+  (`commit_and_wait_with_timeout`, ~72 callers); the matmul / unary / binary /
+  rowop / bmm Python lanes arm + consume it (`_apple_gpu_run_checked`) so a
+  silent internal GPU failure funnels (`TESSERA_STRICT_DISPATCH` raises) +
+  recomputes on host instead of returning a garbage buffer. See
+  `../../compiler/CODE_AUDIT_2026_06_10.md`.
+- **Numerical-proof discipline for Apple GPU fused rows (2026-06-10):** 21
+  Apple GPU `fused` ops (GA/Clifford ×17, complex ×2, EBM ×2) that had genuine
+  dedicated GPU execute-compare tests but no wired fixture now carry their
+  `execute_compare_fixture` in the backend manifest (each verified to run the
+  op's kernel and `assert_allclose` vs a numpy/GA reference, re-run green on
+  this Metal host). Fixed a latent bug where `manifest_for`'s clifford/ebm/
+  complex early-returns bypassed `_attach_numerical_fixtures`, so those domains
+  could never have received a fixture. New manifest-level gate
+  `test_apple_gpu_numerical_proof_discipline.py` freezes the remaining
+  no-execute-compare allowlist (`ebm_self_verify` / `ebm_langevin_step` /
+  `kv_cache_read`) and locks `hardware_verified ⟹ fixture`.
 
-## Still Open
+## Open Work
 
-The 2026-06-09 sprint closed the four remaining themes — descriptor-driven
-dispatch, feature-table-driven selection, perf ratchets, and the auto_batch
-polish (all in Finished). **No Apple-compiler items remain open;** the standing
-constraints/decisions below are by design, not tasks.
+_No open Apple-compiler items._ The 2026-06-02 PK8–PK8h arc closed
+packaged-kernel authoring end to end, and the 2026-06-09 sprint closed the four
+remaining themes (descriptor-driven dispatch, feature-table-driven selection,
+perf ratchets, auto_batch polish). Everything previously tracked under "Still
+Open" / "Next Work" has landed and is summarized under **Finished** above. The
+only remaining frontier is cross-backend **real-hardware** proof for NVIDIA /
+ROCm / Metalium — tracked in the per-platform audits, not here.
 
----
+## Standing Decisions (by design, not tasks)
 
-> **Corrected — packaged kernels are NOT open work.** The earlier
-> "Production packaged kernels are empty / 0 `status=packaged` rows" bullet is
-> **stale**: `PACKAGED_PRODUCTION_KERNELS` has **7 rows** backed by 7 committed,
-> dispatch-validated fixtures under `tests/fixtures/apple_gpu/production/` (PK8c).
-> The whole author → recognize → wire → auto-emit → execute → benchmark →
-> auto-route arc closed 2026-06-02 (PK8–PK8h, see Finished). The ~60 lines of SDK
-> lane-grounding (`metal-package-builder`, `serializeToMPSGraphPackageAtURL:`,
-> Lanes 1/2/3) were the justification for that *now-completed* work and have been
-> moved out of Still Open. Two standing items survive as **constraints/decisions,
-> not open tasks**:
-> - **Auto-route is opt-in by design.** Making the package lane the unconditional
->   apple_gpu default SIGABRTs the Metal runtime under suite volume (hundreds of
->   ML-pipeline compiles → `newMachineLearningPipelineState` abort ceiling).
->   Exposed safely per-fn (`dispatch_via_package="auto"`) and globally
->   (`TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1`).
-> - **Metal Shader Converter / DXIL (Lane 2) is out of scope.** Tessera emits MSL;
->   the dylib AOT lane (`apple_dylib`, Lane 1/c) + MPSGraph packages (Lane 3)
->   cover the need. Revisit only if a DXIL-import requirement ever appears.
-
-## Next Work
-
-1. ~~Promote binding specs / descriptors to all Apple kernel families.~~
-   **Landed 2026-06-02** — `AppleKernelDescriptor` unifies the dispatch
-   contract across every family. ~~Follow-on: have runtime dispatch *consume*
-   the descriptor instead of pattern-matching op names.~~ **Landed 2026-06-09**
-   — envelope single-sourced in `apple_gpu_envelope.py`; runtime dispatch is
-   lane-table-driven; C++ `kRuntimeOps` generated from the registry.
-2. ~~Add Apple kernel descriptors for MPSGraph, MSL, Metal 4, packaged, and
-   encode-session paths.~~ **Landed 2026-06-02** (same descriptor surface).
-3. ~~Wire Apple feature limits into schedule/tile/kernel selection.~~
-   **First wire-up landed 2026-06-02** (tiled matmul→softmax N cap derived
-   from threadgroup-memory budget). ~~Follow-on: drive bf16 gating / head_dim
-   ceilings / threadgroup sizing from the same feature table.~~ **Landed
-   2026-06-09** (`apple_supports_native_bf16`, `apple_fused_chain_score_cap`,
-   `apple_threadgroup_threads_per_row`).
-4. ~~Finish `@jit(target="apple_gpu", auto_batch=True)` canonical
-   one-command-buffer route.~~ **Landed 2026-06-02** — canonical
-   `tessera.ops.*` decode through `@jit` runs on one cb, with
-   `max_ops_per_cb` chunking threaded through the decorator. ~~Follow-on
-   (optional): make auto_batch bypass unused Graph-IR emission; consider
-   auto-detection so the route is on by default for recognized decode loops.~~
-   **Landed 2026-06-09** — `auto_batch` defaults to `None` (auto-detect): a
-   recognized decode chain (≥2 encode-eligible ops and nothing else, via the
-   `_recognized_decode_chain` AST scan) turns the route on by default, and the
-   unused AST Graph IR emission is skipped (an `_AutoBatchSkipEmission` sentinel
-   lands the deferred state; `JIT_APPLE_GPU_AUTO_BATCH` diagnostic). Explicit
-   `True`/`False` override detection. Locked by
-   `test_apple_gpu_jit_auto_batch_autodetect.py` (detection truth-table +
-   emission-skip + registry drift gate).
-5. ~~Author production packaged kernels from the MPSGraph lane.~~ **Landed
-   2026-06-02 (PK8)** — `author_matmul_package` builds → compiles →
-   `serializeToMPSGraphPackageAtURL:` → wraps `manifest.json`, and the
-   authored package dispatches through PK1-PK7 bitwise-exact vs numpy.
-   See the "Finished" entry above; `tests/unit/test_apple_mlpkg_pk8.py`.
-   **Follow-ons:** (a) ~~generalize beyond matmul~~ **done — `author_op`
-   (unary/rowop/norm/binary) + `author_chain` (fused chains, PK8b)**;
-   ~~graph→package compiler hook~~ **done — `apple_package_author.recognize` /
-   `author_package_from_graph_ir` (PK8a)**. (b) ~~commit a real `.mtlpackage`
-   + `status="packaged"` row~~ **done — 2 Tessera-authored fixtures +
-   `PACKAGED_PRODUCTION_KERNELS` rows (PK8c)**. ~~wire the recognizer into the
-   actual `@jit` compile path~~ **done — `JitFn.recognized_package` +
-   `emit_package(example_args=...)` (PK8a wiring)**. ~~(c) MSL-source
-   dynamic-library AOT chain~~ **done — `apple_dylib` serialize/reload (Lane c)**.
-   ~~automatic emit during compile~~ **done — `@jit(emit_package=True)` +
-   static-annotation shape specialization (PK8d)**. ~~dispatch an authored
-   package as the live execution path~~ **done — `dispatch_via_package=True`
-   routes `__call__` through a per-shape package + pipeline cache (PK8e)**.
-   The full author → recognize → wire → auto-emit → execute arc is closed;
-   the package is a selectable execution lane, not just an AOT artifact.
-   ~~a benchmark comparing the package lane vs the live MPS/MSL lane~~
-   **done — `benchmarks/apple_gpu/benchmark_package_lane.py` (PK8f)**. Verdict:
-   **single matmul → live wins** (MPS optimal; package adds 1.3–2.8× ML-encoder
-   overhead); **fused chains like `matmul→softmax` → package wins**, ≈**14×
-   faster at 256×256×256** (MPSGraph fuses the whole graph; the live MSL
-   softmax over a materialized score matrix scales poorly). Cold authoring
-   ~11 ms/shape, amortized by the per-shape pipeline cache. ~~turn that rule
-   into an automatic heuristic~~ **done — `dispatch_via_package="auto"` (PK8g)
-   routes only fused chains (`kind=="chain"`) through the package and keeps
-   single matmul / unary ops on the live lane, exactly the measured-optimal
-   split.** The author → recognize → wire → auto-emit → execute → benchmark →
-   auto-route arc is fully closed.
-6. ~~Attach benchmark metadata for Apple hot paths such as matmul, matmul
-   epilogues, conv2d, decode chain, and packaged kernels.~~ **Landed
-   2026-06-09** — manifest rows carry `benchmark_json`; recorded ratchet
-   baseline + `perf_gate --ratchet` + `test_apple_gpu_perf_ratchet.py`.
+- **Auto-route is opt-in.** Making the package lane the unconditional apple_gpu
+  default SIGABRTs the Metal runtime under suite volume (hundreds of ML-pipeline
+  compiles → `newMachineLearningPipelineState` abort ceiling). Exposed safely
+  per-fn (`dispatch_via_package="auto"`) and globally
+  (`TESSERA_APPLE_GPU_PACKAGE_AUTOROUTE=1`).
+- **Metal Shader Converter / DXIL (Lane 2) is out of scope.** Tessera emits MSL;
+  the dylib AOT lane (`apple_dylib`, Lane 1/c) + MPSGraph packages (Lane 3)
+  cover the need. Revisit only if a DXIL-import requirement appears.
 
 ## Source Material Consolidated
 

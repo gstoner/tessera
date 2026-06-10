@@ -176,6 +176,48 @@ No item is left as a silent open gap.
   same 3-line arm/consume pattern — mechanical, doesn't change the
   architectural close.
 
+### GPU error channel extended to all funnel lanes (2026-06-10)
+
+The 1d #3 error channel (above) now wraps the **unary / binary / rowop / bmm**
+lanes too, not just matmul — via a shared `_apple_gpu_run_checked(op, kernel,
+host_fallback)` helper that arms the channel before the kernel call and consumes
+it after, funneling (strict raises) + recomputing on host on a reported GPU
+failure. Locked by `test_strict_dispatch.py` (the wrapper's funnel + passthrough
+paths). The 4 lanes' real-GPU execution suites confirm no false-positive.
+
+### Backend-kernel axis + numerical-proof discipline (investigation + close)
+
+Investigated the two standing observations; findings are source-backed:
+
+- **`backend_kernel` axis universally open is correct and by design.**
+  `s_series_status.md` shows 445 open / 0 complete because the axis requires a
+  real kernel on *every* declared target (NVIDIA / ROCm / Metalium). That is a
+  genuine Phase-G/H hardware gate — not closable on an Apple-only host. No
+  action; the framing is accurate.
+- **Conformance numerical-proof discipline is already enforced.** The curated
+  conformance set is **7 ops**; `test_conformance_complete_cells_proven.py`
+  ensures only a verified `execute_compare_fixture` (not the filename heuristic)
+  can take a cell to `complete`. Healthy.
+- **Closed: Apple GPU `fused` rows that had real GPU execute-compare tests but
+  no wired fixture.** 24 Apple `fused` rows lacked a fixture; 21 of them
+  (clifford ×17, complex ×2, ebm ×2) have dedicated parametrized GPU
+  execute-compare tests — each verified (Decision #27) to run the op's kernel
+  and `assert_allclose` against a numpy/GA reference, and re-run green on this
+  Metal host. Wired into `_NUMERICAL_FIXTURES`, so the manifest now records
+  their numerical proof. **Latent bug fixed along the way:** `manifest_for`'s
+  `clifford_*`/`ebm_*`/`complex_*` early-return paths bypassed
+  `_attach_numerical_fixtures`, so those domains could *never* have received a
+  fixture — the early returns now attach like the main path.
+- **New manifest-level discipline gate:**
+  `test_apple_gpu_numerical_proof_discipline.py` asserts every Apple GPU
+  `fused`/`hardware_verified` row either declares a fixture or is on an explicit
+  reasoned allowlist (`ebm_self_verify` — only an envelope-list reference, not
+  an assert; `ebm_langevin_step` — no standalone GPU symbol; `kv_cache_read` —
+  conformance op whose apple_gpu path executes but has no execute-compare yet),
+  plus a stale-allowlist guard and a suite-level lock that `hardware_verified`
+  always carries a fixture. The gap is now frozen and visible — a new fused
+  Apple op without proof fails the gate.
+
 ### Tracked-deferred (explicit, with rationale)
 
 - **1c / partial-lowering completeness wiring** — the `tessera-verify

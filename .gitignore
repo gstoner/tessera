@@ -49,6 +49,11 @@ temp/
 *.inc
 *.h.inc
 *.cpp.inc
+# ...except the Apple runtime-ops X-macro table: the Apple backend build
+# #includes it and CMake does NOT generate it, so it must be committed for a
+# fresh checkout to build. Drift-gated by
+# tests/unit/test_apple_runtime_ops_table_in_sync.py.
+!src/compiler/codegen/Tessera_Apple_Backend/include/Tessera/Target/Apple/apple_runtime_ops.inc
 
 # CUDA
 *.fatbin

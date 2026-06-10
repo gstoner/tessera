@@ -324,3 +324,41 @@ def pytest_collection_modifyitems(config, items):
         fspath = getattr(item, "fspath", None)
         if fspath is not None and fspath.basename in _APPLE_GPU_EXECUTION_TESTS:
             item.add_marker(_APPLE_GPU_SKIP)
+
+
+# ---------------------------------------------------------------------------
+# Strict-dispatch CI lanes (CODE_AUDIT_2026_06_10 finding #5). These suites
+# diff the real Metal path against a numpy oracle (differential generators) or
+# are manifest-declared execute-compare fixtures — exactly the places where a
+# silent failure-class GPU→numpy fallback would mask a miscompile, because the
+# fallback IS the oracle. On a Metal host, force those fallbacks to raise
+# (`tessera.runtime.TesseraStrictDispatchError`) instead. Envelope-limit
+# fallbacks (documented shape/dtype ranges) are unaffected. Non-Darwin hosts
+# are exempt: numpy is the legitimate executor there.
+# ---------------------------------------------------------------------------
+_STRICT_DISPATCH_LANES = frozenset({
+    # Differential generators — trace→Metal vs eager-numpy oracle.
+    "test_differential_generator.py",
+    "test_differential_generator_hypothesis.py",
+    # Manifest-declared execute-compare fixtures (backend_manifest
+    # `execute_compare_fixture` rows, Metal lanes).
+    "test_apple_backend_roadmap.py",
+    "test_apple_gpu_conv2d.py",
+    "test_apple_gpu_f16_encode_session.py",
+    "test_apple_gpu_full_decoder_layer.py",
+    "test_apple_gpu_fused_attention.py",
+    "test_apple_gpu_mpsgraph_lane.py",
+    "test_apple_gpu_ops_interception.py",
+    "test_grouped_gemm_gpu.py",
+    "test_moe_swiglu_block.py",
+    "test_production_jit_phase3_apple_gpu.py",
+})
+
+
+@pytest.fixture(autouse=True)
+def _strict_metal_dispatch(request, monkeypatch):
+    if sys.platform == "darwin":
+        fspath = getattr(request.node, "fspath", None)
+        if fspath is not None and fspath.basename in _STRICT_DISPATCH_LANES:
+            monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    yield

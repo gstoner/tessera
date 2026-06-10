@@ -2333,18 +2333,18 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
 
     # P1 (2026-06-10) — consume compiler fusion intent. canonical_compile
     # derives `fusion_groups` known_chain entries from this same op list at
-    # compile time; when one covers the whole program, dispatch the fused
-    # kernel directly instead of re-discovering the pattern per invoke. The
-    # structural re-matchers below stay as fallback for legacy artifacts whose
-    # metadata predates fusion_groups (2026-06-07). SwiGLU is a DAG, not a
-    # linear chain, so it is still structurally matched (follow-on: derive it).
+    # compile time (incl. the SwiGLU DAG via `_match_swiglu_at`); when one
+    # covers the whole program, dispatch the fused kernel directly instead of
+    # re-discovering the pattern per invoke. The structural re-matchers below
+    # stay as fallback for legacy artifacts whose metadata predates
+    # fusion_groups (2026-06-07).
     fused_kernel = _apple_gpu_known_chain_from_fusion_groups(metadata, len(ops))
 
     # Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — 4-op fusion dispatch.
     # The longest known fusion. Check before any shorter chain so the most-
     # specific match wins. Chain shape: gate matmul → up matmul → silu_mul
     # → down matmul, with both gate/up consuming the same %x.
-    if _apple_gpu_metadata_is_swiglu_chain(ops):
+    if fused_kernel == "swiglu" or _apple_gpu_metadata_is_swiglu_chain(ops):
         m_gate, m_up, _silu, m_down = ops[0], ops[1], ops[2], ops[3]
         x_name = m_gate.get("operands", [None])[0]
         if x_name is None:
@@ -2766,88 +2766,76 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     if a.dtype != b.dtype:
         return np.matmul(a, b)
 
-    if a.dtype == np.float32:
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=np.float32)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=np.float32)
-        # M4: capability-gated routing onto the Metal 4 lane (opt-in); falls
-        # through to the default MPS path when disabled / out of envelope.
-        routed = _mtl4_route_matmul_f32(a, b, np)
-        if routed is not None:
-            return routed
-        out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float32)
-        gemm = _apple_gpu_mps_matmul_f32()
-        gemm(
-            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(a.shape[0]),
-            ctypes.c_int32(b.shape[1]),
-            ctypes.c_int32(a.shape[1]),
-        )
-        return out
-
-    if a.dtype == np.float16:
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=np.float16)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=np.float16)
-        # P7 (2026-06-01): route the fp16 GEMV decode step (M==1) to the
-        # native MPP matmul2d tensor-op — measured 3.2-3.4x faster than
-        # MPS, which has a slow fp16 M==1 path. Strictly size-gated: at
-        # M>=2 / square sizes MPS wins, so only M==1 flips by default.
-        # See docs/apple_gpu_metal4_adoption.md (P7) + benchmarks/apple_gpu/
-        # benchmark_mtl4_matmul_routing.py for the measurement.
-        routed = _mtl4_route_matmul2d_f16(a, b, np)
-        if routed is not None:
-            return routed
-        out = np.zeros((a.shape[0], b.shape[1]), dtype=np.float16)
-        gemm_f16 = _apple_gpu_mps_matmul_f16()
-        if gemm_f16 is not None:
-            gemm_f16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(a.shape[0]),
-                ctypes.c_int32(b.shape[1]),
-                ctypes.c_int32(a.shape[1]),
-            )
-            return out
-        # Older runtime build without the f16 symbol — convert to f32 and back.
-        return (a.astype(np.float32) @ b.astype(np.float32)).astype(np.float16)
-
+    # P2 dispatch-table refactor (audit 2026-06-10). One lane per dtype:
+    #   (mtl4_router, mps_symbol_getter)
+    # The per-dtype routing decisions stay visible in the table —
+    #   f32:  MTL4 cooperative lane is opt-in (M4)
+    #   f16:  MTL4 matmul2d for the M==1 GEMV decode step (P7 — 3.2-3.4x MPS)
+    #   bf16: MTL4 matmul2d default (P5 — ~10x the fp32-conversion MPS path),
+    #         capability-gated below (`bfloat` ready on apple8+; M1 upcasts)
+    # while the ctypes call shape is shared via `_apple_gpu_gemm2d_call`.
+    lanes: dict[Any, tuple[Any, Any]] = {
+        np.float32: (_mtl4_route_matmul_f32, _apple_gpu_mps_matmul_f32),
+        np.float16: (_mtl4_route_matmul2d_f16, _apple_gpu_mps_matmul_f16),
+    }
     bf16_dtype = _bfloat16_dtype()
-    if bf16_dtype is not None and a.dtype == bf16_dtype:
-        # P2 (2026-06-09): native-vs-host-upcast is a feature-table decision
-        # (`bfloat` ready on apple8+; apple7/M1 host-upcasts) — don't probe
-        # native bf16 symbols on an arch that can't have them.
-        if not _apple_gpu_supports_native_bf16():
-            return (a.astype(np.float32) @ b.astype(np.float32)).astype(bf16_dtype)
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=bf16_dtype)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=bf16_dtype)
-        # P5: default to the native MPP matmul2d tensor-op (~10x the fp32-conversion
-        # MPS fallback). Falls through to the legacy path off Metal 4 / when disabled.
-        routed = _mtl4_route_matmul2d_bf16(a, b, np)
-        if routed is not None:
-            return routed
-        out = np.zeros((a.shape[0], b.shape[1]), dtype=bf16_dtype)
-        gemm_bf16 = _apple_gpu_mps_matmul_bf16()
-        if gemm_bf16 is not None:
-            gemm_bf16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(a.shape[0]),
-                ctypes.c_int32(b.shape[1]),
-                ctypes.c_int32(a.shape[1]),
-            )
-            return out
+    if bf16_dtype is not None:
+        lanes[bf16_dtype] = (_mtl4_route_matmul2d_bf16, _apple_gpu_mps_matmul_bf16)
+
+    lane = lanes.get(a.dtype.type)
+    if lane is None:
+        return np.matmul(a, b)
+
+    if bf16_dtype is not None and a.dtype.type is bf16_dtype \
+            and not _apple_gpu_supports_native_bf16():
+        # Feature-table decision (P2 2026-06-09), not a failure: this arch
+        # has no native bf16 lane, so host-upcast IS the documented path.
         return (a.astype(np.float32) @ b.astype(np.float32)).astype(bf16_dtype)
 
-    return np.matmul(a, b)
+    if not a.flags.c_contiguous:
+        a = np.ascontiguousarray(a)
+    if not b.flags.c_contiguous:
+        b = np.ascontiguousarray(b)
+
+    mtl4_router, mps_getter = lane
+    routed = mtl4_router(a, b, np)
+    if routed is not None:
+        return routed
+
+    gemm = mps_getter()
+    if gemm is not None:
+        out = np.zeros((a.shape[0], b.shape[1]), dtype=a.dtype)
+        _apple_gpu_gemm2d_call(gemm, a, b, out, np)
+        return out
+
+    # Missing MPS symbol (older runtime build). Failure-class on a current
+    # build, so route through the funnel (strict mode raises); non-strict
+    # keeps the legacy f32-upcast behavior.
+    _note_dispatch_fallback(
+        op_name,
+        f"MPS matmul symbol unavailable for dtype {np.dtype(a.dtype).name}; "
+        "computed with numpy")
+    if a.dtype == np.float32:
+        return np.matmul(a, b)
+    return (a.astype(np.float32) @ b.astype(np.float32)).astype(a.dtype)
+
+
+def _apple_gpu_gemm2d_call(sym: Any, a: Any, b: Any, out: Any, np: Any) -> None:
+    """One rank-2 GEMM call through the shared C ABI shape (three pointers +
+    M/N/K as i32 — the element type is encoded in the symbol name, see
+    MatmulToAppleGPU.cpp). f32 passes float pointers; f16/bf16 pass the raw
+    uint16 lanes."""
+    if a.dtype == np.float32:
+        def ptr(arr: Any) -> Any:
+            return arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    else:
+        def ptr(arr: Any) -> Any:
+            return arr.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16))
+    sym(ptr(a), ptr(b), ptr(out),
+        ctypes.c_int32(a.shape[0]),
+        ctypes.c_int32(b.shape[1]),
+        ctypes.c_int32(a.shape[1]))
 
 
 def _apple_gpu_bmm_f32() -> Any:
@@ -8049,60 +8037,57 @@ def _np_erf(v: Any) -> Any:
     return (s * y).astype(_np.float32)
 
 
+def _apple_gpu_mpsgraph_unary_call(sym: Any, opcode: int, xf: Any,
+                                   dtype: Any, np: Any) -> Any:
+    """One op-coded MPSGraph unary call over a flattened contiguous array.
+    f32 passes float pointers; f16 passes the raw uint16 lanes."""
+    n = int(xf.size)
+    out = np.empty(n, dtype=dtype)
+    if dtype == np.float16:
+        in_ptr = xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        out_ptr = out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    else:
+        in_ptr = xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        out_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(ctypes.c_int32(opcode), in_ptr, out_ptr, ctypes.c_int64(n))
+    return out
+
+
 def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any:
     """Elementwise unary via the MPSGraph lane. Shape-agnostic (flattened).
-    f32 + f16 run natively on the GPU; bf16 upcasts to f32, runs, downcasts."""
+    f32 + f16 run natively on the GPU; bf16 upcasts to f32, runs, downcasts.
+
+    P2 dispatch-table refactor (audit 2026-06-10): one lane per dtype —
+    (run_dtype, symbol_getter) — with bf16 expressed as the f32 lane plus a
+    downcast, replacing three copy-pasted ctypes branches."""
     if len(operands) < 1:
         raise ValueError(f"{op_name!r} requires one operand")
     op = _APPLE_GPU_UNARY_OPCODES[op_name]
     x = np.asarray(operands[0])
     shape = x.shape
-    n = int(x.size)
     bf16_dtype = _bfloat16_dtype()
 
-    if x.dtype == np.float32:
-        xf = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
-        sym = _apple_gpu_mpsgraph_unary_f32()
-        if sym is not None:
-            out = np.empty(n, dtype=np.float32)
-            sym(ctypes.c_int32(op),
-                xf.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                ctypes.c_int64(n))
-            return out.reshape(shape)
-        _note_dispatch_fallback(
-            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
-        return _apple_gpu_unary_numpy(op_name, x, np).reshape(shape)
-
-    if x.dtype == np.float16:
-        xf = np.ascontiguousarray(x, dtype=np.float16).reshape(-1)
-        sym = _apple_gpu_mpsgraph_unary_f16()
-        if sym is not None:
-            out = np.empty(n, dtype=np.float16)
-            sym(ctypes.c_int32(op),
-                xf.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int64(n))
-            return out.reshape(shape)
-        _note_dispatch_fallback(
-            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
-        return _apple_gpu_unary_numpy(op_name, x, np).astype(np.float16).reshape(shape)
-
-    if bf16_dtype is not None and x.dtype == bf16_dtype:
+    lanes: dict[Any, tuple[Any, Any]] = {
+        np.float32: (np.float32, _apple_gpu_mpsgraph_unary_f32),
+        np.float16: (np.float16, _apple_gpu_mpsgraph_unary_f16),
+    }
+    if bf16_dtype is not None:
         # Upcast -> GPU f32 -> downcast (mirrors the bf16 matmul path).
-        x32 = np.ascontiguousarray(x.astype(np.float32)).reshape(-1)
-        sym = _apple_gpu_mpsgraph_unary_f32()
-        if sym is not None:
-            out = np.empty(n, dtype=np.float32)
-            sym(ctypes.c_int32(op),
-                x32.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                ctypes.c_int64(n))
-            return out.reshape(shape).astype(bf16_dtype)
-        _note_dispatch_fallback(
-            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
-        return _apple_gpu_unary_numpy(op_name, x, np).astype(bf16_dtype).reshape(shape)
+        lanes[bf16_dtype] = (np.float32, _apple_gpu_mpsgraph_unary_f32)
 
+    lane = lanes.get(x.dtype.type)
+    if lane is None:
+        return _apple_gpu_unary_numpy(op_name, x, np).astype(x.dtype).reshape(shape)
+
+    run_dtype, sym_getter = lane
+    sym = sym_getter()
+    if sym is not None:
+        xf = np.ascontiguousarray(x, dtype=run_dtype).reshape(-1)
+        out = _apple_gpu_mpsgraph_unary_call(sym, op, xf, run_dtype, np)
+        return out.reshape(shape).astype(x.dtype, copy=False)
+
+    _note_dispatch_fallback(
+        op_name, "MPSGraph unary symbol unavailable; computed with numpy")
     return _apple_gpu_unary_numpy(op_name, x, np).astype(x.dtype).reshape(shape)
 
 

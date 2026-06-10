@@ -601,7 +601,8 @@ def _derive_layout_contracts(module: GraphIRModule) -> dict[str, Any]:
 # Linear fused chains the Apple GPU runtime collapses into a single kernel —
 # mirrors runtime.py's ``_apple_gpu_metadata_is_*_chain`` detectors. Ordered
 # longest-first so the attention block matches before its matmul→softmax prefix.
-# (SwiGLU is a DAG, not a linear chain, so it is matched separately.)
+# (SwiGLU is a DAG, not a linear chain — `_match_swiglu_at` handles it inside
+# the same scan, tried first because at 4 ops it is the longest fusion.)
 _KNOWN_FUSION_CHAINS: tuple[tuple[str, ...], ...] = (
     ("matmul", "softmax", "matmul"),   # attention block O = softmax(A@B)@C
     ("matmul", "softmax"),             # scores → softmax
@@ -627,6 +628,37 @@ def _ssa_connected(body, start: int, length: int) -> bool:
     return True
 
 
+def _match_swiglu_at(body, canon, i: int) -> bool:
+    """SwiGLU is a DAG, not a linear chain (audit 2026-06-10 follow-on):
+
+        gate = matmul(x, Wg); up = matmul(x, Wu)      # both consume the SAME x
+        h    = silu_mul(gate, up)
+        out  = matmul(h, Wd)
+
+    Mirrors runtime.py's ``_apple_gpu_metadata_is_swiglu_chain`` so the
+    executor can dispatch the fused kernel from this group alone."""
+    if i + 4 > len(body):
+        return False
+    if tuple(canon[i:i + 4]) != ("matmul", "matmul", "silu_mul", "matmul"):
+        return False
+    gate, up, sm, down = body[i], body[i + 1], body[i + 2], body[i + 3]
+    gate_operands = [_strip_percent(o) for o in gate.operands]
+    up_operands = [_strip_percent(o) for o in up.operands]
+    if len(gate_operands) < 2 or len(up_operands) < 2:
+        return False
+    if gate_operands[0] != up_operands[0]:
+        return False  # gate and up must share %x
+    if not (gate.result_names and up.result_names and sm.result_names):
+        return False
+    sm_operands = [_strip_percent(o) for o in sm.operands]
+    if len(sm_operands) != 2:
+        return False
+    if sm_operands[0] != gate.result_names[0] or sm_operands[1] != up.result_names[0]:
+        return False
+    down_operands = [_strip_percent(o) for o in down.operands]
+    return bool(down_operands) and down_operands[0] == sm.result_names[0]
+
+
 def _match_known_chains(fn) -> list[dict[str, Any]]:
     body = fn.body
     canon = [_chain_canon(op) for op in body]
@@ -635,18 +667,24 @@ def _match_known_chains(fn) -> list[dict[str, Any]]:
     i = 0
     while i < n:
         matched_len = 0
-        matched_chain: tuple[str, ...] = ()
-        for chain in _KNOWN_FUSION_CHAINS:                 # longest-first
-            L = len(chain)
-            if i + L <= n and tuple(canon[i:i + L]) == chain and _ssa_connected(body, i, L):
-                matched_len, matched_chain = L, chain
-                break
+        fused_name = ""
+        # SwiGLU first — at 4 ops it is the longest fusion, and its DAG shape
+        # needs its own connectivity check (gate/up share x; both feed
+        # silu_mul) rather than the linear _ssa_connected walk.
+        if _match_swiglu_at(body, canon, i):
+            matched_len, fused_name = 4, "swiglu"
+        else:
+            for chain in _KNOWN_FUSION_CHAINS:             # longest-first
+                L = len(chain)
+                if i + L <= n and tuple(canon[i:i + L]) == chain and _ssa_connected(body, i, L):
+                    matched_len, fused_name = L, "_".join(chain)
+                    break
         if matched_len:
             groups.append({
                 "function": fn.name,
                 "kind": "known_chain",
                 "status": "candidate",
-                "fused_kernel": "_".join(matched_chain),
+                "fused_kernel": fused_name,
                 "ops": [
                     {"index": i + k, "op": canon[i + k]}
                     for k in range(matched_len)

@@ -90,6 +90,32 @@ def test_fusion_groups_matmul_softmax_two_op():
     assert any(g.get("fused_kernel") == "matmul_softmax" for g in fg if g["kind"] == "known_chain")
 
 
+def test_fusion_groups_swiglu():
+    # Audit 2026-06-10 follow-on: SwiGLU is a DAG (gate/up share %x), matched
+    # by `_match_swiglu_at` inside the known-chain scan.
+    def fn(x, wg, wu, wd):
+        gate = ts.ops.matmul(x, wg)
+        up = ts.ops.matmul(x, wu)
+        h = ts.ops.silu_mul(gate, up)
+        return ts.ops.matmul(h, wd)
+    fg = _meta(fn, "apple_gpu")["canonical_fusion_groups"]
+    chains = [g for g in fg if g["kind"] == "known_chain"]
+    g = next(g for g in chains if g["fused_kernel"] == "swiglu")
+    assert [o["op"] for o in g["ops"]] == ["matmul", "matmul", "silu_mul", "matmul"]
+
+
+def test_no_swiglu_chain_when_inputs_differ():
+    # gate and up consume DIFFERENT inputs — not a SwiGLU block.
+    def fn(x1, x2, wg, wu, wd):
+        gate = ts.ops.matmul(x1, wg)
+        up = ts.ops.matmul(x2, wu)
+        h = ts.ops.silu_mul(gate, up)
+        return ts.ops.matmul(h, wd)
+    fg = _meta(fn, "cpu")["canonical_fusion_groups"]
+    assert not any(g.get("fused_kernel") == "swiglu"
+                   for g in fg if g["kind"] == "known_chain")
+
+
 def test_no_false_chain_for_unconnected_ops():
     # matmul then an independent softmax on a *different* arg — not a data-flow
     # chain, so no known_chain fusion group.

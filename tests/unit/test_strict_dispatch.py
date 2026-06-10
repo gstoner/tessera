@@ -183,6 +183,50 @@ def test_executor_without_fusion_groups_still_uses_rematcher(monkeypatch):
     np.testing.assert_array_equal(out, sentinel)
 
 
+def test_executor_dispatches_swiglu_from_fusion_groups(monkeypatch):
+    """SwiGLU follow-on (2026-06-10): the DAG chain is now derived by
+    canonical_compile._match_swiglu_at, and the executor consumes it —
+    with the structural re-matcher disabled, the fusion_groups entry alone
+    routes the 4-op program to the fused swiglu dispatcher."""
+    sentinel = np.full((2, 4), 9.0, dtype=np.float32)
+    monkeypatch.setattr(
+        rt, "_apple_gpu_metadata_is_swiglu_chain", lambda ops: False)
+    monkeypatch.setattr(
+        rt, "_apple_gpu_dispatch_swiglu",
+        lambda x, wg, wu, wd, np_: sentinel)
+    metadata = {
+        "arg_names": ["x", "wg", "wu", "wd"],
+        "output_name": "t3",
+        "ops": [
+            {"op_name": "tessera.matmul", "operands": ["x", "wg"],
+             "result": "t0", "kwargs": {}},
+            {"op_name": "tessera.matmul", "operands": ["x", "wu"],
+             "result": "t1", "kwargs": {}},
+            {"op_name": "tessera.silu_mul", "operands": ["%t0", "%t1"],
+             "result": "t2", "kwargs": {}},
+            {"op_name": "tessera.matmul", "operands": ["%t2", "wd"],
+             "result": "t3", "kwargs": {}},
+        ],
+        "fusion_groups": [{
+            "function": "f",
+            "kind": "known_chain",
+            "status": "candidate",
+            "fused_kernel": "swiglu",
+            "ops": [{"index": 0, "op": "matmul"},
+                    {"index": 1, "op": "matmul"},
+                    {"index": 2, "op": "silu_mul"},
+                    {"index": 3, "op": "matmul"}],
+        }],
+    }
+    x = np.zeros((2, 3), dtype=np.float32)
+    wg = np.zeros((3, 8), dtype=np.float32)
+    wu = np.zeros((3, 8), dtype=np.float32)
+    wd = np.zeros((8, 4), dtype=np.float32)
+    out = rt._execute_apple_gpu_mps_metadata(
+        metadata, {"x": x, "wg": wg, "wu": wu, "wd": wd})
+    np.testing.assert_array_equal(out, sentinel)
+
+
 def test_executor_fusion_groups_short_circuits_rematcher(monkeypatch):
     """When fusion_groups names the chain, the structural re-matcher is not
     even consulted (the `or` short-circuits)."""

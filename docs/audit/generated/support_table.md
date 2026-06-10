@@ -20,7 +20,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `attn_sliding_window` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `flash_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `flash_attn` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gqa_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -33,13 +33,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `mla_decode_fused` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `modified_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `mqa_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `multi_head_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `multi_head_attention` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `power_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `retention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `all_gather` | collective | public | public | registered | complete | partial | reference | ready | none |
-| `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | none |
-| `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | none |
-| `reduce_scatter` | collective | public | public | registered | complete | partial | reference | ready | none |
+| `all_gather` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `reduce_scatter` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `eq` | comparison | public | public | registered | complete | partial | reference | ready | none |
 | `ge` | comparison | public | public | registered | complete | partial | reference | ready | none |
 | `gt` | comparison | public | public | registered | complete | partial | reference | ready | none |
@@ -176,13 +176,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logical_xor` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `batched_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `factorized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
+| `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
+| `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `asymmetric_bce` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
@@ -209,7 +209,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `group_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `instance_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `rmsnorm` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `rmsnorm` | normalization | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `weight_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
@@ -282,14 +282,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logsumexp` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `softmax` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `softmax` | stable_reduction | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `softmax_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_read` | state_update | public | public | registered | complete | partial | fused | ready | none |
-| `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | none |
+| `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -316,8 +316,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| collective | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 21 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· |
+| collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
 | elementwise | 35 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
@@ -330,12 +330,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| loop_nest | 9 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· |
+| loop_nest | 9 | PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB |
 | loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | position_encoding | 2 | PPGCpRN· PPGCpRN· |
 | projection | 1 | PPGCpRN· |
@@ -349,10 +349,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· |
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
-| stencil | 2 | PPGCpRN· PPGCpRN· |
+| stencil | 2 | PPGCpRNB PPGCpRN· |
 | visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)

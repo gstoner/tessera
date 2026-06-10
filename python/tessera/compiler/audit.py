@@ -32,8 +32,9 @@ The taxonomy is eight axes — one column per row of the rendered table:
   ``runtime``    : best capability runtime status across all targets
                    (``ready`` / ``reference`` / ``artifact_only`` /
                    ``planned`` / ``unsupported``)
-  ``bench``      : present in any shipped benchmark inventory
-                   (today: Apple GPU GA/EBM benchmark only)
+  ``bench``      : present in any shipped benchmark inventory — sourced live
+                   from ``benchmark_coverage`` (manifest-attached benchmarks +
+                   GA/EBM harness + explicit collectives/GEMM/MHA map)
 
 Every row carries provenance (which source decided each axis) so the
 table is auditable without re-running the walk.
@@ -58,6 +59,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
 from . import backend_manifest as bm
+from . import benchmark_coverage as _benchmark_coverage
 from . import capabilities as cap
 from . import primitive_coverage as pc
 from .op_catalog import OP_SPECS
@@ -143,23 +145,13 @@ class OpSupportRow:
 # Axis walkers
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Ops that have benchmark inventory coverage today.  This is intentionally
-# small and explicit so the bench axis doesn't silently inflate.  Source
-# of truth: `benchmarks/apple_gpu/benchmark_ga_ebm.py` row catalog
-# (17 GA + 9 native EBM, post 2026-05-17 close-out).
-_BENCH_INVENTORY: frozenset[str] = frozenset({
-    # GA primitives
-    *[f"clifford_{n}" for n in (
-        "geometric_product", "wedge", "left_contraction", "inner",
-        "grade_projection", "reverse", "grade_involution", "conjugate",
-        "norm", "exp", "log", "rotor_sandwich", "hodge_star",
-        "ext_deriv", "vec_deriv", "codiff", "integral",
-    )],
-    # Native EBM primitives (9/9)
-    "ebm_inner_step", "ebm_refinement", "ebm_langevin_step",
-    "ebm_decode_init", "ebm_bivector_langevin", "ebm_sphere_langevin",
-    "ebm_self_verify", "ebm_energy", "ebm_partition_exact",
-})
+# Ops that have benchmark inventory coverage today.  Source of truth is now
+# the live :mod:`tessera.compiler.benchmark_coverage` module (manifest-attached
+# benchmarks via ``backend_manifest.benchmark_json`` + the GA/EBM harness
+# inventory + an explicit real-op map for collectives / GEMM / MHA).  This
+# replaced a hard-coded GA/EBM-only frozenset that silently ignored every other
+# runnable benchmark surface — see DEEP_COMPILER_AUDIT_2026_06_10.
+_BENCH_INVENTORY: frozenset[str] = _benchmark_coverage.benchmarked_ops()
 
 
 # M7 Visual Complex Analysis primitives — public via tessera.complex.*.
@@ -394,8 +386,9 @@ def _axis_runtime(op_name: str) -> AxisCell:
 
 
 def _axis_bench(op_name: str) -> AxisCell:
-    if op_name in _BENCH_INVENTORY:
-        return AxisCell("benchmarked", "benchmarks/apple_gpu/benchmark_ga_ebm.py")
+    source = _benchmark_coverage.benchmark_source_for(op_name)
+    if source is not None:
+        return AxisCell("benchmarked", source)
     return AxisCell("none", "no benchmark row")
 
 

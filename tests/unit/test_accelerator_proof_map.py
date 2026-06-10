@@ -81,3 +81,34 @@ def test_dashboard_in_sync():
     assert on_disk.rstrip("\n") == rendered.rstrip("\n"), (
         "s_series_accelerator_proof.md is stale — regenerate via "
         "`python -c 'from tessera.compiler.accelerator_proof import write_dashboard; write_dashboard()'`")
+
+
+def test_spectral_fft_lane_is_proven():
+    # A (2026-06-10): the 9 spectral ops moved special -> proven once the
+    # MPSGraph FFT lane landed and they joined the apple_gpu envelope.
+    rows = {r.name: r.accel_class for r in ap.all_rows()}
+    for op in ("fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
+               "spectral_conv", "spectral_filter"):
+        assert rows[op] == "proven", op
+
+
+def test_rng_non_kernel_ops_reclassified_host():
+    # B (2026-06-10): RNG key-management is host bookkeeping and the MCMC
+    # samplers are host orchestration — neither is a dedicated-kernel candidate,
+    # so they must NOT inflate the `special` (device-RNG kernel gap) count.
+    rows = {r.name: r.accel_class for r in ap.all_rows()}
+    for op in ("rng_key", "rng_split", "rng_fold_in", "rng_clone",
+               "rng_gibbs_sample", "rng_hmc_sample",
+               "rng_langevin_sample", "rng_mala_sample"):
+        assert rows[op] == "host", op
+
+
+def test_special_is_exactly_the_device_rng_sampler_kernels():
+    # After A + B, `special` is precisely the genuine device-RNG sampler kernels.
+    special = {r.name for r in ap.all_rows() if r.accel_class == "special"}
+    expected = {
+        "rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta", "rng_gamma",
+        "rng_poisson", "rng_dirichlet", "rng_categorical", "rng_multinomial",
+        "rng_truncated_normal", "rng_randint", "rng_permutation",
+    }
+    assert special == expected, sorted(special ^ expected)

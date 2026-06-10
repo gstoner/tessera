@@ -107,6 +107,26 @@ _ACCEL_CLASS_BY_CATEGORY: dict[str, str] = {
     "random_source": "special",
 }
 
+# Per-NAME overrides — consulted after the envelope check but before the
+# category default. Lets a few primitives that sit in an accelerator category
+# but are NOT kernel candidates be classified honestly, so `special` reflects
+# the REAL device-RNG kernel gap rather than orchestration / bookkeeping.
+_ACCEL_CLASS_BY_NAME: dict[str, str] = {
+    # RNG key management — host bookkeeping (Philox key/counter math, no FLOP
+    # kernel to build).
+    "rng_key": "host",
+    "rng_split": "host",
+    "rng_fold_in": "host",
+    "rng_clone": "host",
+    # MCMC samplers — host orchestration: they ITERATE an energy function + RNG
+    # (Gibbs / HMC / Langevin / MALA), so they accelerate by routing their inner
+    # ops (already covered), not via a single dedicated RNG kernel.
+    "rng_gibbs_sample": "host",
+    "rng_hmc_sample": "host",
+    "rng_langevin_sample": "host",
+    "rng_mala_sample": "host",
+}
+
 _CLASS_ORDER = ("proven", "eligible", "special", "multi_device", "host")
 _CLASS_BLURB = {
     "proven": "executes on Apple GPU today (`metal_runtime`)",
@@ -131,9 +151,14 @@ def _envelope() -> frozenset[str]:
 
 
 def classify(name: str, category: str, graph_name: str | None) -> str:
-    """Return the accelerator class for one primitive."""
+    """Return the accelerator class for one primitive.
+
+    Order: envelope membership (proven) → per-name override → category default.
+    """
     if graph_name is not None and graph_name in _envelope():
         return "proven"
+    if name in _ACCEL_CLASS_BY_NAME:
+        return _ACCEL_CLASS_BY_NAME[name]
     return _ACCEL_CLASS_BY_CATEGORY.get(category, "host")
 
 

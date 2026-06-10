@@ -184,9 +184,17 @@ def test_cpu_targets_carry_fp32_fp64(op_name: str) -> None:
 def test_manifest_for_dispatches_clifford_names() -> None:
     direct = bm.clifford_manifest_for("clifford_geometric_product")
     via_dispatch = bm.manifest_for("clifford_geometric_product")
-    # Same entries (compare by target+status+dtypes; the BackendKernelEntry
-    # dataclass is frozen so __eq__ is structural).
-    assert direct == via_dispatch
+    # manifest_for routes clifford_* to clifford_manifest_for AND applies
+    # _attach_numerical_fixtures (audit 2026-06-10: the early-return path used
+    # to bypass the attach, so a clifford op could never receive a numerical
+    # fixture). Compare against the attached form — same dispatch, plus the
+    # fixture the main path also applies.
+    expected = bm._attach_numerical_fixtures(
+        "clifford_geometric_product", direct)
+    assert expected == via_dispatch
+    # And the fixture genuinely lands on the apple_gpu entry.
+    apple = [e for e in via_dispatch if e.target == "apple_gpu"]
+    assert apple and apple[0].execute_compare_fixture
 
 
 def test_manifest_for_returns_empty_for_unknown_clifford_name() -> None:

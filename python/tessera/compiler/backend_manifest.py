@@ -769,6 +769,35 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # composed-lane fast paths vs a numpy f64 reference (incl. E=1 reduces to
     # dense swiglu, large-H fallback).
     ("moe_swiglu_block", "apple_gpu"): "tests/unit/test_moe_swiglu_block.py",
+    # ── Audit 2026-06-10 — record numerical proof for Apple GPU `fused`
+    #    rows that had a genuine dedicated execute-compare test but no wired
+    #    fixture (the "numerical-proof discipline" gap). Each fixture below was
+    #    confirmed (Decision #27) to run the op's GPU kernel and assert_allclose
+    #    it against a numpy / GA / reference. Geometric-algebra (Cl(3,0)) family:
+    ("clifford_reverse", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_grade_involution", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_conjugate", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_hodge_star", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_norm", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_wedge", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_left_contraction", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_inner", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_grade_projection", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
+    ("clifford_geometric_product", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_lane.py",
+    ("clifford_rotor_sandwich", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl.py",
+    # GA differential-operator family (GA(1,1) field ops):
+    ("clifford_codiff", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    ("clifford_exp", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    ("clifford_log", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    ("clifford_ext_deriv", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    ("clifford_vec_deriv", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    ("clifford_integral", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
+    # Complex-number kernels:
+    ("complex_mul", "apple_gpu"): "tests/unit/test_complex_runtime.py",
+    ("complex_exp", "apple_gpu"): "tests/unit/test_complex_runtime.py",
+    # EBM refinement / inner-step (Langevin descent), vs the numpy reference:
+    ("ebm_refinement", "apple_gpu"): "tests/unit/test_apple_gpu_ebm_lane.py",
+    ("ebm_inner_step", "apple_gpu"): "tests/unit/test_apple_gpu_ebm_lane.py",
 }
 
 
@@ -1894,10 +1923,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     the tensor `OP_SPECS` catalog.
     M7 follow-up (2026-05-18): same pattern for `complex_*`.
     """
+    # Domain manifests (clifford / ebm / complex) are built by parallel
+    # tables outside OP_SPECS. They must still honor _NUMERICAL_FIXTURES —
+    # audit 2026-06-10 found these early returns bypassed the attach on the
+    # main path below, so a domain op could never receive a numerical fixture.
     if op_name.startswith("clifford_"):
-        return clifford_manifest_for(op_name)
+        return _attach_numerical_fixtures(op_name, clifford_manifest_for(op_name))
     if op_name.startswith("ebm_"):
-        return ebm_manifest_for(op_name)
+        return _attach_numerical_fixtures(op_name, ebm_manifest_for(op_name))
     # E3 (2026-05-20): route every M7 Visual Complex op through
     # ``complex_manifest_for`` — the 9 non-prefixed names (mobius /
     # cross_ratio / dz / dbar / laplacian_2d / ...) need the same
@@ -1906,7 +1939,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if (op_name.startswith("complex_")
             or op_name in _COMPLEX_APPLE_GPU_FUSED
             or op_name in _M7_LONG_TAIL):
-        return complex_manifest_for(op_name)
+        return _attach_numerical_fixtures(op_name, complex_manifest_for(op_name))
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX

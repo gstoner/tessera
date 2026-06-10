@@ -75,9 +75,10 @@ multiple root audit documents and compiler archive files.
   apple_gpu executor now consults `fusion_groups` known_chain metadata before
   the structural re-matchers (which remain as legacy-artifact fallback);
   locked by `tests/unit/test_strict_dispatch.py` (short-circuit + legacy-path
-  tests). Still open: Target IR (C++ fusion passes) re-discovers the same
-  chains, and SwiGLU is not yet derived by `_derive_fusion_groups` (DAG, not a
-  linear chain).
+  tests). **SwiGLU is now derived too** (`_match_swiglu_at` handles the DAG —
+  gate/up share %x — inside the known-chain scan) and consumed by the
+  executor. Still open: Target IR (C++ fusion passes) re-discovers the same
+  chains.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
 - **Complete claims need fixtures.** A completed backend claim should resolve to

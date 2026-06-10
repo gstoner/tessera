@@ -479,6 +479,45 @@ inline void reference_gemm_f32(const float* A, const float* B, float* C,
   }
 }
 
+// ── GPU dispatch last-error channel (audit 2026-06-10, finding 1d #3) ───────
+// The kernel dispatchers are `void` C ABI symbols that signal internal GPU
+// failure (timeout / cb.error / device lost) by early `return;`, leaving the
+// caller's output buffer untouched (garbage/zeros). Without a channel, Python
+// reads that buffer as success and every numerical test still passes. Rather
+// than change ~70 symbol signatures to return int, we generalize the existing
+// `g_mlpkg_last_error_kind` errno-style pattern: a thread-local last-error set
+// at the shared command-buffer choke point (`commit_and_wait_with_timeout`,
+// ~72 callers) and read by the Python dispatch layer after a call. thread_local
+// is correct + lock-free here: a ctypes dispatch and its post-call error read
+// run on the same Python thread.
+//   kind: 0 = ok, 1 = timeout/hang, 2 = command-buffer error
+namespace {
+thread_local int32_t g_last_gpu_error_kind = 0;
+thread_local std::string g_last_gpu_error_msg;
+}  // namespace
+
+static void ts_set_last_gpu_error(int32_t kind, const char *op_name,
+                                  const char *detail) {
+  g_last_gpu_error_kind = kind;
+  std::string msg = op_name ? op_name : "<unknown>";
+  if (detail && *detail) {
+    msg += ": ";
+    msg += detail;
+  }
+  g_last_gpu_error_msg = std::move(msg);
+}
+
+extern "C" int32_t tessera_apple_gpu_last_error_kind(void) {
+  return g_last_gpu_error_kind;
+}
+extern "C" const char *tessera_apple_gpu_last_error_message(void) {
+  return g_last_gpu_error_msg.c_str();
+}
+extern "C" void tessera_apple_gpu_clear_last_error(void) {
+  g_last_gpu_error_kind = 0;
+  g_last_gpu_error_msg.clear();
+}
+
 // Apple-sample Pattern 4 (2026-05-31) — Shared-event timeout wrapper for
 // the legacy MPS / MPSGraph queue. Mirrors Apple's sample
 // (``MLMatrixMultiplier.m:241-255``):
@@ -539,6 +578,8 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
             (long)cb.status,
             cb.error ? [[cb.error localizedDescription] UTF8String]
                      : "<nil>");
+    ts_set_last_gpu_error(1, op_name, "GPU dispatch did not signal (hung/"
+                                      "timed out); outputs are invalid");
     return false;
   }
   // ``encodeSignalEvent`` is encoded AFTER all preceding work in the cb,
@@ -554,6 +595,8 @@ static bool commit_and_wait_with_timeout(MetalDeviceContext &ctx,
             "an error: %s\n",
             op_name ? op_name : "<unknown>",
             [[cb.error localizedDescription] UTF8String]);
+    ts_set_last_gpu_error(2, op_name,
+                          [[cb.error localizedDescription] UTF8String]);
     return false;
   }
   return true;

@@ -100,6 +100,42 @@ def test_bmm_lane_unavailable_raises_in_strict_mode(monkeypatch):
         rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
 
 
+def test_gpu_matmul_error_channel_funnels_and_recomputes(monkeypatch):
+    """1d #3 — when the GEMM C-ABI symbol exists and is called but the GPU
+    reports an internal failure (timeout/device-lost/cb.error) via the
+    last-error channel, the matmul lane funnels (strict raises) + recomputes
+    on host instead of returning the untouched (garbage) output buffer.
+
+    Simulated by stubbing the channel consumer to report an error; the GEMM
+    call itself is stubbed to a no-op so the path is host-independent."""
+    a = np.ones((4, 4), dtype=np.float32)
+    b = np.ones((4, 4), dtype=np.float32)
+    monkeypatch.setattr(rt, "_apple_gpu_mps_matmul_f32", lambda: (lambda *args: None))
+    monkeypatch.setattr(rt, "_mtl4_route_matmul_f32", lambda a_, b_, np_: None)
+    monkeypatch.setattr(rt, "_apple_gpu_gemm2d_call", lambda *a_, **k_: None)
+    monkeypatch.setattr(rt, "_apple_gpu_arm_gpu_error", lambda: None)
+    monkeypatch.setattr(rt, "_apple_gpu_consume_gpu_error",
+                        lambda: "tessera.matmul: GPU dispatch did not signal")
+    out = rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+    # host recompute, not the (stubbed no-op) zeros buffer
+    np.testing.assert_allclose(out, a @ b)
+    assert any(op == "tessera.matmul" for op, _ in rt.dispatch_fallback_log())
+    monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    with pytest.raises(rt.TesseraStrictDispatchError):
+        rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+
+
+def test_gpu_error_channel_helpers_noop_without_symbols(monkeypatch):
+    # Older runtime build / non-Darwin stub: consumer returns None (no error),
+    # arm is a no-op. Must not raise even in strict mode.
+    monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
+    class _Lib:  # a runtime image missing the channel symbols
+        pass
+    monkeypatch.setattr(rt, "_load_apple_gpu_runtime", lambda: _Lib())
+    rt._apple_gpu_arm_gpu_error()                      # no-op, no raise
+    assert rt._apple_gpu_consume_gpu_error() is None   # no channel → no error
+
+
 def test_binary_symbol_missing_logs_and_raises(monkeypatch):
     monkeypatch.setattr(rt, "_apple_gpu_mpsgraph_binary_f32", lambda: None)
     a = np.array([1.0, 2.0], dtype=np.float32)

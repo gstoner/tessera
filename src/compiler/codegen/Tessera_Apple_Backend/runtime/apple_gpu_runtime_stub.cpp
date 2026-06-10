@@ -1572,6 +1572,13 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile_with_dims(
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
 extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }
+// GPU dispatch last-error channel (audit 2026-06-10) — the non-Darwin stub
+// computes on the host and never hits the Metal command-buffer choke point,
+// so it never sets an error. Parity symbols so the Python getter binds on any
+// platform.
+extern "C" int32_t tessera_apple_gpu_last_error_kind(void) { return 0; }
+extern "C" const char *tessera_apple_gpu_last_error_message(void) { return ""; }
+extern "C" void tessera_apple_gpu_clear_last_error(void) {}
 // PK8 — package authoring needs a real Metal device + MPSGraph; unavailable
 // off-Darwin. Return the "OS unavailable" code so callers skip cleanly.
 extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(const char *, int32_t,

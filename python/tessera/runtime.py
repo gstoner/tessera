@@ -2271,6 +2271,59 @@ def _note_dispatch_fallback(op_name: str, reason: str,
             f"[STRICT_DISPATCH] {op_name}: {reason}") from exc
 
 
+# ── GPU dispatch last-error channel (audit 2026-06-10 finding 1d #3) ────────
+# The Apple GPU kernel C-ABI symbols are `void` and signal an internal failure
+# (timeout / device lost / command-buffer error) by leaving the output buffer
+# untouched. The .mm runtime sets a thread-local last-error at the shared
+# command-buffer choke point (`commit_and_wait_with_timeout`); these helpers
+# arm (clear) it before a dispatch and consume (read+clear) it after, so a
+# silent kernel failure becomes a funnel-routed fallback instead of garbage
+# output that every numerical test would still accept. On older runtime builds
+# (or the non-Darwin stub) the symbols are absent / always-ok → no-ops.
+
+def _apple_gpu_arm_gpu_error() -> None:
+    """Clear the GPU last-error channel before a dispatch (so a stale error
+    from a prior op can't false-positive)."""
+    try:
+        rt = _load_apple_gpu_runtime()
+    except Exception:
+        return
+    clear = getattr(rt, "tessera_apple_gpu_clear_last_error", None)
+    if clear is not None:
+        clear.argtypes = []
+        clear.restype = None
+        clear()
+
+
+def _apple_gpu_consume_gpu_error() -> "str | None":
+    """Read + clear the GPU last-error channel after a dispatch. Returns a
+    detail string when the kernel reported a failure (kind != 0), else None."""
+    try:
+        rt = _load_apple_gpu_runtime()
+    except Exception:
+        return None
+    kind_fn = getattr(rt, "tessera_apple_gpu_last_error_kind", None)
+    if kind_fn is None:
+        return None  # older runtime build without the channel
+    kind_fn.argtypes = []
+    kind_fn.restype = ctypes.c_int32
+    if int(kind_fn()) == 0:
+        return None
+    detail = ""
+    msg_fn = getattr(rt, "tessera_apple_gpu_last_error_message", None)
+    if msg_fn is not None:
+        msg_fn.argtypes = []
+        msg_fn.restype = ctypes.c_char_p
+        raw = msg_fn()
+        detail = raw.decode("utf-8", "replace") if raw else ""
+    clear = getattr(rt, "tessera_apple_gpu_clear_last_error", None)
+    if clear is not None:
+        clear.argtypes = []
+        clear.restype = None
+        clear()
+    return detail or "GPU dispatch reported an error"
+
+
 def _apple_gpu_known_chain_from_fusion_groups(
         metadata: Mapping[str, Any], n_ops: int) -> str | None:
     """P1 (2026-06-10) — read compiler fusion intent instead of re-matching.
@@ -2802,11 +2855,28 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     if routed is not None:
         return routed
 
+    def _host_matmul() -> Any:
+        if a.dtype == np.float32:
+            return np.matmul(a, b)
+        return (a.astype(np.float32) @ b.astype(np.float32)).astype(a.dtype)
+
     gemm = mps_getter()
     if gemm is not None:
         out = np.zeros((a.shape[0], b.shape[1]), dtype=a.dtype)
+        # Audit 2026-06-10 finding 1d #3 — the GEMM symbol is `void` and
+        # signals an internal GPU failure (timeout / device lost / cb.error)
+        # by leaving `out` untouched. Arm the C-ABI last-error channel before
+        # the call and consume it after: a silent kernel failure now funnels
+        # (strict mode raises) + recomputes on host instead of returning zeros.
+        _apple_gpu_arm_gpu_error()
         _apple_gpu_gemm2d_call(gemm, a, b, out, np)
-        return out
+        err = _apple_gpu_consume_gpu_error()
+        if err is None:
+            return out
+        _note_dispatch_fallback(
+            op_name, f"GPU matmul kernel reported failure ({err}); "
+                     "recomputed on host")
+        return _host_matmul()
 
     # Missing MPS symbol (older runtime build). Failure-class on a current
     # build, so route through the funnel (strict mode raises); non-strict
@@ -2815,9 +2885,7 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
         op_name,
         f"MPS matmul symbol unavailable for dtype {np.dtype(a.dtype).name}; "
         "computed with numpy")
-    if a.dtype == np.float32:
-        return np.matmul(a, b)
-    return (a.astype(np.float32) @ b.astype(np.float32)).astype(a.dtype)
+    return _host_matmul()
 
 
 def _apple_gpu_gemm2d_call(sym: Any, a: Any, b: Any, out: Any, np: Any) -> None:

@@ -8,6 +8,15 @@ multiple root audit documents and compiler archive files.
 > benchmark coverage. Records the "generated drift clean vs semantic gap open"
 > split, fixes the bench-axis staleness + the grouped_gemm/moe_swiglu_block
 > manifest blind spot, and carries a prioritized gap table for the rest.
+>
+> **Code-level companion:** [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md)
+> — refactoring / per-IR-level optimization correctness / glass jaws. Headline:
+> a verified `TransposeIntoMatmul` flag-composition miscompile (fixed, commit
+> `acb5c6f`), missing fusion use-guards (fixed), NSA gating-semantics hazard
+> (guarded), silent autodiff chain breaks (diagnosed), no upstream
+> canonicalizer/CSE in named pipelines (fixed), `TESSERA_STRICT_DISPATCH`
+> against silent numpy fallbacks, and runtime consumption of `fusion_groups`.
+> Two earlier agent claims refuted.
 
 ## Finished
 
@@ -60,10 +69,15 @@ multiple root audit documents and compiler archive files.
   (`matmul→softmax[→matmul]`, `matmul→gelu`, `matmul→rmsnorm`), not just
   same-family adjacency. Locked by `tests/unit/test_canonical_component_ops.py`
   + `tests/unit/test_canonical_metadata_jit.py`. Still open: graph outputs in
-  the canonical metadata, and making the runtime *consume* `fusion_groups`
-  instead of re-matching (the "fusion intent too late" item below).
-- **Fusion intent is too late.** Target IR and runtime still rediscover patterns
-  that should be represented by Schedule/Tile/Target metadata.
+  the canonical metadata. **Runtime consumption of `fusion_groups` landed
+  2026-06-10** (see next item).
+- **Fusion intent is too late — runtime half closed (2026-06-10).** The
+  apple_gpu executor now consults `fusion_groups` known_chain metadata before
+  the structural re-matchers (which remain as legacy-artifact fallback);
+  locked by `tests/unit/test_strict_dispatch.py` (short-circuit + legacy-path
+  tests). Still open: Target IR (C++ fusion passes) re-discovers the same
+  chains, and SwiGLU is not yet derived by `_derive_fusion_groups` (DAG, not a
+  linear chain).
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
 - **Complete claims need fixtures.** A completed backend claim should resolve to

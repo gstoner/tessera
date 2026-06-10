@@ -2,10 +2,32 @@
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/Passes.h"
 
 using namespace mlir;
 
 namespace tessera {
+
+// Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
+// sequence was copy-pasted into tessera-lower-to-x86, tessera-lower-to-gpu,
+// and the CUDA-13 pipeline builder — adding a fusion pass required three
+// edits. It also gains the standard upstream cleanup that no named pipeline
+// scheduled before: canonicalizer (folding + DCE of unused Pure ops) and CSE
+// (dedup of repeated pure computations), run AFTER the Tessera fusion passes
+// so lowering sees fused, deduplicated IR.
+static void addGraphIRPreLoweringPasses(OpPassManager &pm) {
+  pm.addPass(createEffectAnnotationPass());
+  pm.addPass(createCanonicalizeTesseraIRPass());
+  pm.addPass(createSwigluFusionPass());
+  pm.addPass(createMLAFusionPass());
+  pm.addPass(createNativeSparseAttnFusionPass());
+  pm.addPass(createHybridAttnExpandPass());
+  pm.addPass(createLightningAttnFusionPass());
+  pm.addPass(createDeltaAttnChunkingPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+}
+
 void registerTesseraPasses() {
   // ── Phase 1 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createCanonicalizeTesseraIRPass(); });
@@ -40,14 +62,7 @@ void registerTesseraPasses() {
     lowerToX86("tessera-lower-to-x86",
                "Full Phase 2 lowering chain to x86 AMX/AVX-512 backend",
       [](OpPassManager &pm) {
-        pm.addPass(createEffectAnnotationPass());
-        pm.addPass(createCanonicalizeTesseraIRPass());
-        pm.addPass(createSwigluFusionPass());
-        pm.addPass(createMLAFusionPass());
-        pm.addPass(createNativeSparseAttnFusionPass());
-        pm.addPass(createHybridAttnExpandPass());
-        pm.addPass(createLightningAttnFusionPass());
-        pm.addPass(createDeltaAttnChunkingPass());
+        addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
         // Sprint V6b (2026-05-22): re-check symbolic-dim equality
         // AFTER DistributionLoweringPass so a downstream pass that
@@ -153,14 +168,7 @@ void registerTesseraPasses() {
     lowerToGPU("tessera-lower-to-gpu",
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
       [](OpPassManager &pm) {
-        pm.addPass(createEffectAnnotationPass());
-        pm.addPass(createCanonicalizeTesseraIRPass());
-        pm.addPass(createSwigluFusionPass());
-        pm.addPass(createMLAFusionPass());
-        pm.addPass(createNativeSparseAttnFusionPass());
-        pm.addPass(createHybridAttnExpandPass());
-        pm.addPass(createLightningAttnFusionPass());
-        pm.addPass(createDeltaAttnChunkingPass());
+        addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
         // Sprint V6b (2026-05-22): symbolic-dim equality recheck
         // after distribution lowering (see lowerToX86 comment).
@@ -201,14 +209,7 @@ void registerTesseraPasses() {
   // here under the corresponding alias.
 
   auto buildCUDA13Pipeline = [](OpPassManager &pm) {
-    pm.addPass(createEffectAnnotationPass());
-    pm.addPass(createCanonicalizeTesseraIRPass());
-    pm.addPass(createSwigluFusionPass());
-    pm.addPass(createMLAFusionPass());
-    pm.addPass(createNativeSparseAttnFusionPass());
-    pm.addPass(createHybridAttnExpandPass());
-    pm.addPass(createLightningAttnFusionPass());
-    pm.addPass(createDeltaAttnChunkingPass());
+    addGraphIRPreLoweringPasses(pm);
     pm.addPass(createDistributionLoweringPass());
     // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
     pm.addPass(createSymbolicDimEqualityPass());

@@ -53,7 +53,7 @@ Still needs work:
 
 - Make compile metadata component-aware for real multi-op programs.
 - Carry fusion groups, layout contracts, shape envelopes, effects, and backend strategy through the compiler artifact.
-- Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch.
+- Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch. *(Runtime half closed 2026-06-10 — the apple_gpu executor consumes `fusion_groups` known_chain metadata; Target IR C++ fusion passes still re-match. See [compiler/CODE_AUDIT_2026_06_10.md](compiler/CODE_AUDIT_2026_06_10.md).)*
 - Tie complete compiler claims to direct compare fixtures or hardware/package validation.
 - Generated-doc registry landed (`tessera.compiler.generated_docs`): one source of truth consumed by both `check_generated_docs.sh` and `release_gate.py`, a fleet-wide `--write`/`--check`, an orphan-guard test, and 9 CSV-canonical dashboards. Remaining: optional further consolidation (target maps 3→1, fold e2e/s_series rollups into their primaries).
 

@@ -153,15 +153,6 @@ public:
     // implements AdjointInterface and lies on the gradient path.
     for (auto it = forwardOps.rbegin(); it != forwardOps.rend(); ++it) {
       mlir::Operation *op = *it;
-      auto adjointOp = mlir::dyn_cast<AdjointInterface>(op);
-      if (!adjointOp)
-        continue;
-      if (!adjointOp.isDifferentiable()) {
-        op->emitError() << "tessera-autodiff: op " << op->getName()
-                        << " declares AdjointInterface but isDifferentiable() "
-                           "returned false";
-        return signalPassFailure();
-      }
 
       // Gather cotangents for this op's results.
       llvm::SmallVector<mlir::Value> outCotans;
@@ -173,6 +164,30 @@ public:
       }
       if (!anyOutCotan)
         continue;  // Op is not on the gradient path.
+
+      auto adjointOp = mlir::dyn_cast<AdjointInterface>(op);
+      if (!adjointOp) {
+        // Decision #21 (documented in the pass header but previously not
+        // implemented): an op ON the gradient path that cannot propagate
+        // cotangents must fail loudly — silently skipping it drops the
+        // operand gradients and produces wrong results downstream.
+        // Zero-operand ops (constants) terminate the chain naturally.
+        if (op->getNumOperands() > 0) {
+          op->emitError()
+              << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op " << op->getName()
+              << " is on the gradient path but does not implement "
+                 "AdjointInterface; its operand cotangents would be "
+                 "silently dropped";
+          return signalPassFailure();
+        }
+        continue;
+      }
+      if (!adjointOp.isDifferentiable()) {
+        op->emitError() << "tessera-autodiff: op " << op->getName()
+                        << " declares AdjointInterface but isDifferentiable() "
+                           "returned false";
+        return signalPassFailure();
+      }
 
       // Position the builder right before the return — keeps the seed (which
       // we inserted there) in scope for every adjoint, and avoids dominance

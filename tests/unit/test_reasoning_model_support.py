@@ -111,13 +111,25 @@ def test_kv_cache_mutations_are_not_differentiable_contracts():
 
 
 def test_normal_lowering_pipelines_run_attention_fusions_before_backend_lowering():
+    # 2026-06-10: the fusion sequence lives in the shared helper
+    # addGraphIRPreLoweringPasses (one definition instead of three copies).
+    # The contract is unchanged: every attention fusion runs inside the
+    # helper, and each pipeline invokes the helper BEFORE backend lowering.
     text = (ROOT / "src/transforms/lib/Passes.cpp").read_text()
+    helper = text[
+        text.index("void addGraphIRPreLoweringPasses"):
+        text.index("void registerTesseraPasses")
+    ]
+    for fusion in [
+        "createSwigluFusionPass",
+        "createMLAFusionPass",
+        "createNativeSparseAttnFusionPass",
+    ]:
+        assert fusion in helper
     x86 = text[text.index('lowerToX86("tessera-lower-to-x86"'):text.index("// ── Phase 3 passes")]
     gpu = text[text.index('lowerToGPU("tessera-lower-to-gpu"'):]
     for block in [x86, gpu]:
-        assert block.index("createSwigluFusionPass") < block.index("createDistributionLoweringPass")
-        assert block.index("createMLAFusionPass") < block.index("createDistributionLoweringPass")
-        assert block.index("createNativeSparseAttnFusionPass") < block.index("createDistributionLoweringPass")
+        assert block.index("addGraphIRPreLoweringPasses") < block.index("createDistributionLoweringPass")
 
 
 def test_rl_api_losses_and_jvp_vjp_registry():

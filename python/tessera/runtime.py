@@ -22,6 +22,7 @@ Usage::
 
 from __future__ import annotations
 
+import collections
 import ctypes
 import ctypes.util
 import functools
@@ -2225,6 +2226,80 @@ from .compiler.apple_gpu_envelope import (  # noqa: F401
 )
 
 
+class TesseraStrictDispatchError(RuntimeError):
+    """Raised under ``TESSERA_STRICT_DISPATCH=1`` when a GPU dispatch falls
+    back to a host/numpy path for a *failure* reason (missing runtime symbol,
+    kernel exception) rather than a documented envelope limit.
+
+    Audit 2026-06-10 (CODE_AUDIT_2026_06_10.md finding #5): without this, a
+    regressed Metal kernel silently degrades to the numpy oracle and every
+    numerical test still passes — the fallback masks exactly the bugs the
+    tests exist to catch. Set the env var in Metal CI lanes (differential
+    generator, execute-compare suites); leave it unset on hosts where the
+    numpy path is the legitimate executor.
+    """
+
+
+# Bounded funnel of (op_name, reason) failure-class fallbacks — lets tests
+# assert "this suite took zero silent fallbacks" without strict mode.
+_DISPATCH_FALLBACK_LOG: "collections.deque[tuple[str, str]]" = collections.deque(
+    maxlen=1024)
+
+
+def _strict_dispatch_enabled() -> bool:
+    raw = os.environ.get("TESSERA_STRICT_DISPATCH", "").strip().lower()
+    return raw not in ("", "0", "false", "no")
+
+
+def dispatch_fallback_log() -> list[tuple[str, str]]:
+    """Failure-class dispatch fallbacks recorded this process (most recent
+    1024). Envelope-limit fallbacks (shape/dtype outside a kernel's documented
+    range) are not failures and are not recorded."""
+    return list(_DISPATCH_FALLBACK_LOG)
+
+
+def reset_dispatch_fallback_log() -> None:
+    _DISPATCH_FALLBACK_LOG.clear()
+
+
+def _note_dispatch_fallback(op_name: str, reason: str,
+                            exc: Exception | None = None) -> None:
+    """Record a failure-class fallback; raise instead under strict dispatch."""
+    _DISPATCH_FALLBACK_LOG.append((op_name, reason))
+    if _strict_dispatch_enabled():
+        raise TesseraStrictDispatchError(
+            f"[STRICT_DISPATCH] {op_name}: {reason}") from exc
+
+
+def _apple_gpu_known_chain_from_fusion_groups(
+        metadata: Mapping[str, Any], n_ops: int) -> str | None:
+    """P1 (2026-06-10) — read compiler fusion intent instead of re-matching.
+
+    Returns the ``fused_kernel`` name when the canonical-compile metadata
+    carries a ``known_chain`` fusion group covering the WHOLE program
+    (indices 0..n_ops-1). canonical_compile._match_known_chains derives these
+    from the same op list this executor receives, so a whole-program match is
+    exactly the precondition the structural re-matchers used to re-establish
+    per invoke."""
+    groups = metadata.get("fusion_groups") or ()
+    for group in groups:
+        if not isinstance(group, Mapping):
+            continue
+        if group.get("kind") != "known_chain":
+            continue
+        group_ops = group.get("ops") or []
+        if len(group_ops) != n_ops:
+            continue
+        indices = [
+            entry.get("index") for entry in group_ops
+            if isinstance(entry, Mapping)
+        ]
+        if indices == list(range(n_ops)):
+            kernel = group.get("fused_kernel")
+            return str(kernel) if kernel else None
+    return None
+
+
 def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     """Public entry: dispatch an apple_gpu MPS artifact. Delegates to the
     metadata dispatcher so the JIT hot-path can skip the artifact wrapper +
@@ -2255,6 +2330,15 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         raise ValueError("apple_gpu_mps artifact has no ops")
 
     values = _bind_launch_args(args, arg_names)
+
+    # P1 (2026-06-10) — consume compiler fusion intent. canonical_compile
+    # derives `fusion_groups` known_chain entries from this same op list at
+    # compile time; when one covers the whole program, dispatch the fused
+    # kernel directly instead of re-discovering the pattern per invoke. The
+    # structural re-matchers below stay as fallback for legacy artifacts whose
+    # metadata predates fusion_groups (2026-06-07). SwiGLU is a DAG, not a
+    # linear chain, so it is still structurally matched (follow-on: derive it).
+    fused_kernel = _apple_gpu_known_chain_from_fusion_groups(metadata, len(ops))
 
     # Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — 4-op fusion dispatch.
     # The longest known fusion. Check before any shorter chain so the most-
@@ -2287,7 +2371,8 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     # Phase 8.4.3 + 8.4.5 — fused chain dispatch. Longest match wins, so
     # check the 3-op pattern (matmul -> softmax -> matmul) before the 2-op
     # pattern (matmul -> softmax).
-    if _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops):
+    if (fused_kernel == "matmul_softmax_matmul"
+            or _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops)):
         first, _sm, third = ops[0], ops[1], ops[2]
         a_b = [_as_numpy(values[name]) for name in first.get("operands", [])]
         # The third op's second operand is C (the V tensor).
@@ -2306,7 +2391,8 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
-    if _apple_gpu_metadata_is_matmul_softmax_chain(ops):
+    if (fused_kernel == "matmul_softmax"
+            or _apple_gpu_metadata_is_matmul_softmax_chain(ops)):
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2320,7 +2406,8 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         return values[output_name]
 
     # Phase 8.4.7 — matmul -> gelu and matmul -> rmsnorm 2-op fusions.
-    if _apple_gpu_metadata_is_matmul_postlude_chain(ops, "tessera.gelu"):
+    if (fused_kernel == "matmul_gelu"
+            or _apple_gpu_metadata_is_matmul_postlude_chain(ops, "tessera.gelu")):
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2331,9 +2418,10 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
-    if _apple_gpu_metadata_is_matmul_postlude_chain(
-        ops, "tessera.rmsnorm", "tessera.rmsnorm_safe"
-    ):
+    if (fused_kernel == "matmul_rmsnorm"
+            or _apple_gpu_metadata_is_matmul_postlude_chain(
+                ops, "tessera.rmsnorm", "tessera.rmsnorm_safe"
+            )):
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2665,7 +2753,13 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     # batched_gemm and rank-3 matmul, incl. a shared (broadcast) B operand.
     if a.ndim >= 3 or b.ndim >= 3:
         res = _apple_gpu_dispatch_bmm(a, b, np)
-        return res if res is not None else np.matmul(a, b)
+        if res is None:
+            # bmm is in the metal_runtime envelope, so an unavailable lane is
+            # a failure, not an envelope miss (strict mode raises here).
+            _note_dispatch_fallback(
+                op_name, "Metal bmm lane unavailable; computed with numpy")
+            return np.matmul(a, b)
+        return res
 
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         return np.matmul(a, b)
@@ -3960,8 +4054,11 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
         expert_ids = np.repeat(np.arange(w.shape[0], dtype=np.int32), gs)
         try:
             return np.ascontiguousarray(agb.gpu_grouped_gemm(x, w, expert_ids))
-        except Exception:                           # noqa: BLE001 — fall to per-group
-            pass
+        except Exception as exc:                    # noqa: BLE001 — fall to per-group
+            _note_dispatch_fallback(
+                "tessera.grouped_gemm",
+                "fused grouped_gemm kernel raised; falling back to per-group",
+                exc)
 
     # Fallback: per-group MPS matmul (also covers a malformed group_sizes sum).
     out = np.zeros((T, w.shape[2]), dtype=np.float32)
@@ -3973,7 +4070,11 @@ def _apple_gpu_dispatch_grouped_gemm(operands: Any, kwargs: Any, np: Any) -> Any
             we = np.ascontiguousarray(w[e])
             try:
                 r = agb.gpu_matmul(blk, we)
-            except Exception:                       # noqa: BLE001 — per-group fallback
+            except Exception as exc:                # noqa: BLE001 — per-group fallback
+                _note_dispatch_fallback(
+                    "tessera.grouped_gemm",
+                    f"per-group MPS matmul raised for expert {e}; "
+                    "computed with numpy", exc)
                 r = None
             out[off:off + n] = r if r is not None else blk @ we
         off += n
@@ -7969,6 +8070,8 @@ def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any
                 out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
                 ctypes.c_int64(n))
             return out.reshape(shape)
+        _note_dispatch_fallback(
+            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
         return _apple_gpu_unary_numpy(op_name, x, np).reshape(shape)
 
     if x.dtype == np.float16:
@@ -7981,6 +8084,8 @@ def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any
                 out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
                 ctypes.c_int64(n))
             return out.reshape(shape)
+        _note_dispatch_fallback(
+            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
         return _apple_gpu_unary_numpy(op_name, x, np).astype(np.float16).reshape(shape)
 
     if bf16_dtype is not None and x.dtype == bf16_dtype:
@@ -7994,6 +8099,8 @@ def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any
                 out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
                 ctypes.c_int64(n))
             return out.reshape(shape).astype(bf16_dtype)
+        _note_dispatch_fallback(
+            op_name, "MPSGraph unary symbol unavailable; computed with numpy")
         return _apple_gpu_unary_numpy(op_name, x, np).astype(bf16_dtype).reshape(shape)
 
     return _apple_gpu_unary_numpy(op_name, x, np).astype(x.dtype).reshape(shape)

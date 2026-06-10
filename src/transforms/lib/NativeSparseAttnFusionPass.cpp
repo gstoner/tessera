@@ -78,6 +78,30 @@ struct FuseNSABranches : public RewritePattern {
       return rewriter.notifyMatchFailure(
           winOp, "NSA fusion: missing one of the three branches");
 
+    // Structural guards (audit 2026-06-10). The rewrite replaces all three
+    // branch results with the SAME fused value, so it is only sound when:
+    //   * every branch yields exactly one result of the identical type, and
+    //   * each branch result has exactly one use (the downstream gating
+    //     chain) — a branch output consumed elsewhere must keep its own
+    //     per-branch value and cannot be aliased to the fused output.
+    // Note the documented contract: the consumer-side gating multiply-add
+    // is expected to be subsumed by (or expanded from) the fused kernel;
+    // see the file header. These guards make the structural preconditions
+    // explicit instead of assumed.
+    if (winOp->getNumResults() != 1 || compOp->getNumResults() != 1 ||
+        topkOp->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(
+          winOp, "NSA fusion: branches must each have a single result");
+    if (winOp->getResult(0).getType() != compOp->getResult(0).getType() ||
+        winOp->getResult(0).getType() != topkOp->getResult(0).getType())
+      return rewriter.notifyMatchFailure(
+          winOp, "NSA fusion: branch result types differ");
+    if (!winOp->getResult(0).hasOneUse() ||
+        !compOp->getResult(0).hasOneUse() ||
+        !topkOp->getResult(0).hasOneUse())
+      return rewriter.notifyMatchFailure(
+          winOp, "NSA fusion: branch result has multiple uses");
+
     // Carry the attributes that the fused kernel needs.
     auto windowAttr = winOp->getAttrOfType<IntegerAttr>("window_size");
     auto topkAttr = topkOp->getAttrOfType<IntegerAttr>("top_k");

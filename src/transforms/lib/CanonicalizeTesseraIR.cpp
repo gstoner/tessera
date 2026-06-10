@@ -17,9 +17,14 @@ struct FuseMatmulBiasGELU : public RewritePattern {
     Operation *add = gelu->getOperand(0).getDefiningOp();
     if (!isOp(add, "tessera.add")) return failure();
     if (add->getNumOperands() != 2) return failure();
+    // Fusing rebuilds the matmul+add inside the fused op; if either
+    // intermediate has another consumer the original op survives and the
+    // work would be computed twice.
+    if (!add->getResult(0).hasOneUse()) return failure();
     Operation *mm = add->getOperand(0).getDefiningOp();
     Value bias = add->getOperand(1);
     if (!isOp(mm, "tessera.matmul")) return failure();
+    if (!mm->getResult(0).hasOneUse()) return failure();
     OperationState st(gelu->getLoc(), "tessera.fused_epilogue");
     st.addOperands({mm->getOperand(0), mm->getOperand(1), bias});
     st.addTypes(gelu->getResult(0).getType());
@@ -36,6 +41,9 @@ struct FuseConvRelu : public RewritePattern {
     if (relu->getNumOperands() != 1) return failure();
     Operation *conv = relu->getOperand(0).getDefiningOp();
     if (!isOp(conv, "tessera.conv2d_nhwc")) return failure();
+    // The conv result is folded into the epilogue'd replacement; another
+    // consumer would keep the original conv alive and duplicate the work.
+    if (!conv->getResult(0).hasOneUse()) return failure();
     OperationState st(conv->getLoc(), "tessera.conv2d_nhwc");
     st.addOperands(conv->getOperands());
     st.addTypes(relu->getResult(0).getType());
@@ -82,8 +90,10 @@ struct TransposeIntoMatmul : public RewritePattern {
     for (auto &na : mm->getAttrs())
       if (na.getName() != "transposeA" && na.getName() != "transposeB")
         st.addAttribute(na.getName(), na.getValue());
-    st.addAttribute("transposeA", rewriter.getBoolAttr(transA || getFlag("transposeA")));
-    st.addAttribute("transposeB", rewriter.getBoolAttr(transB || getFlag("transposeB")));
+    // A folded transpose composes with an existing flag: transpose(Aᵀ) = A,
+    // so the flags combine by XOR, not OR.
+    st.addAttribute("transposeA", rewriter.getBoolAttr(transA != getFlag("transposeA")));
+    st.addAttribute("transposeB", rewriter.getBoolAttr(transB != getFlag("transposeB")));
     Operation *n = rewriter.create(st);
     rewriter.replaceOp(mm, n->getResults());
     return success();
@@ -113,7 +123,10 @@ struct Canon : public PassWrapper<Canon, OperationPass<ModuleOp>> {
     RewritePatternSet patterns(&getContext());
     patterns.add<FuseMatmulBiasGELU, FuseConvRelu, DropoutZeroSimplify, TransposeIntoMatmul,
                  EraseIdentityCast>(&getContext());
-    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+      getOperation()->emitWarning()
+          << "tessera-canonicalize: greedy pattern application did not "
+             "converge within the iteration limit";
   }
 };
 } // namespace

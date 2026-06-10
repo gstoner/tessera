@@ -58,7 +58,10 @@ tessera/
 │       ├── __init__.py              # Public surface — re-exports core, jit, dist, ops, dtype …
 │       ├── core/                    # Tensor, Module, fundamental abstractions
 │       ├── compiler/                # JIT, constraints, effects, Graph IR, target maps, audit modules
-│       ├── distributed/             # Mesh, shard, domain, launch, region APIs
+│       ├── distributed/             # Mesh, shard, domain, launch, region APIs;
+│       │                            #   MoE router + distributed MegaMoE
+│       │                            #   (expert-parallel 2x all-to-all,
+│       │                            #   FP8xFP4, async comm/compute overlap)
 │       ├── nn/                      # Stateful nn surface — module, layers, functional, utils
 │       ├── autodiff/                # Tape-based reverse-mode (Tier 2) + vjps/jvps subpackages
 │       ├── cache/                   # KVCacheHandle + MemoryStateHandle persistent state ABI

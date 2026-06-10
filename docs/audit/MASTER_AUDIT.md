@@ -1,6 +1,6 @@
 # Tessera Audit Master
 
-**Last updated:** 2026-06-04
+**Last updated:** 2026-06-09
 
 This is the root audit document. It consolidates the current state, finished
 work, and remaining work across the compiler, runtime/backend, platform
@@ -12,7 +12,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Area | Current state | Still open |
 |---|---|---|
 | Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; remaining dashboard consolidation (target maps, e2e/s_series rollups) is optional cleanup. |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated. | NVIDIA and ROCm have no executable runtime rows yet. |
+| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU. | NVIDIA and ROCm have no executable runtime rows yet; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
 | ROCm | ROCm/gfx target map and execute-and-compare plan exist. | Real HIP/ROCm hardware proof and runtime launch bridge remain. |
@@ -68,6 +68,7 @@ Finished:
 - CPU native, CPU JIT numpy, Apple CPU, and Apple GPU executable rows are explicit.
 - Non-Apple hardware targets are recognized but honestly non-executable in `runtime.launch()`.
 - Toolchain pins for CUDA, NCCL, and ROCm agree in generated ABI/toolchain dashboards.
+- Distributed **MegaMoE** stack landed: single-device MoE layer, fused expert-FFN kernel, expert-parallel 2× all-to-all forward, FP8×FP4 mixed precision, and a real async comm/compute overlap engine (GPU command buffer ∥ CPU comm) with demonstrated wall-clock overlap on Apple. Multi-rank runs over in-process mock collectives (Decision #6); see [`../distributed_megamoe.md`](../distributed_megamoe.md).
 
 Still needs work:
 

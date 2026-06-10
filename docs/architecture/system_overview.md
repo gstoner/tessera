@@ -35,7 +35,7 @@ Target hardware: x86 AMX/AVX-512, Apple Silicon CPU/GPU, NVIDIA CUDA, and AMD RO
 | **NVIDIA GPU lowering** | Tile/Target artifact path implemented for supported kernels; runtime/native readiness is target- and op-gated. |
 | **Apple GPU native path** | Fused native kernels exist for the audited GA/EBM and selected Visual Complex surfaces. |
 | **ROCm** | MFMA/WMMA capability modeling is present, including `gfx1200`; native execution is still capability-gated. |
-| **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. |
+| **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. An expert-parallel **MegaMoE** forward (GShard 2× all-to-all dispatch/combine, FP8×FP4, async comm/compute overlap) runs over in-process mock collectives with the expert FFN on the Apple GPU — see [`docs/distributed_megamoe.md`](../distributed_megamoe.md). |
 | **Runtime ABI** | C ABI and Python wrapper exist, with runtime smoke and sanitizer coverage. |
 
 ---
@@ -136,7 +136,7 @@ The older `archive/docs/old_concepts/tessera_system_architecture.md` blueprint i
 | Kernel metadata bundles containing tile shape, resource use, launch bounds, and backend artifacts | scaffolded / production packaging planned |
 | Runtime traces, profiler events, and per-kernel metrics | implemented foundations / production diagnostics planned |
 | Repro packs containing IR snapshots, launch args, binaries, logs, and environment hashes | planned |
-| Distributed topology service, bucketizer, and overlap engine | scaffolded / hardware-runtime work planned |
+| Distributed topology service, bucketizer, and overlap engine | scaffolded; a real async comm/compute **overlap engine** now exists for the MegaMoE forward (GPU command buffer ∥ CPU comm via GIL-released `ctypes` calls), demonstrated wall-clock overlap on Apple — production multi-rank topology service still planned |
 | Runtime C ABI as the stable host/runtime contract | specified in `docs/spec/RUNTIME_ABI_SPEC.md`; Python wrapper is mock-runtime unless the C backend is built |
 
 These concepts should be referenced as roadmap items unless a later spec marks them implemented.

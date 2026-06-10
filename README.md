@@ -90,7 +90,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current high-level status (as of June 8, 2026):
+Current high-level status (as of June 9, 2026):
 
 | Area | Status |
 |------|--------|
@@ -98,33 +98,34 @@ Current high-level status (as of June 8, 2026):
 | Object-backed Graph / Schedule / Tile IR + per-target Target IR artifacts | implemented / lit-testable |
 | **x86 AMX BF16 + AVX512 lowering and execution** (Phase 2) | **implemented / hardware-runtime** |
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
-| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 255 Apple C ABI symbols across 108 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
+| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 256 Apple C ABI symbols across 109 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
+| **Distributed MoE / MegaMoE** — single-device `nn.functional.moe_layer`, fused `ops.moe_swiglu_block` (Graph-IR op + GPU kernel), expert-parallel `megamoe_forward` (GShard 2× all-to-all dispatch/combine), FP8×FP4 mixed precision, and **real wall-clock comm/compute overlap** (async GPU command buffer ∥ CPU comm) | implemented / hardware-runtime (Apple GPU expert FFN); multi-rank via in-process mock collectives — see [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) |
 | NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
-| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 444 entries × 12 contract axes tracked in `primitive_coverage.py` (count truth: [`docs/audit/standalone_primitive_coverage.md`](docs/audit/standalone_primitive_coverage.md)); backend-kernel proof remains the universal open Phase G/H gate |
+| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 445 entries × 12 contract axes tracked in `primitive_coverage.py` (count truth: [`docs/audit/standalone_primitive_coverage.md`](docs/audit/standalone_primitive_coverage.md)); backend-kernel proof remains the universal open Phase G/H gate |
 | **Reasoning-model attention family** — DeepSeek sparse attention, MiniMax Lightning, Kimi-Delta, gated/hybrid/MLA decode + RL post-training losses, all with VJP+JVP | implemented / lit-testable |
 | Clifford / geometric algebra Python surface, canonical `tessera.ops.clifford_*` shim, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; **all 17 canonical `tessera.ops.clifford_*` ops route through autodiff + Apple GPU metal_runtime — the GA autodiff surface is fully closed (16 vjp/jvp complete + 1 not_applicable `clifford_integral`, 0 planned), incl. rotor-sandwich, exp/log, hodge-star, and the ext_deriv/vec_deriv/codiff field operators; 17/17 Apple GPU GA primitives benchmarked** |
 | Energy-based model Python surface, canonical `tessera.ops.ebm_*` tensor-clean shim, samplers, losses, partition estimators, dialect, annotation passes, and Apple GPU kernels | implemented / lit-testable; **4 tensor-clean canonical ops (`energy_quadratic`/`self_verify`/`refinement`/`inner_step`) + 5 EBM training losses (CD/PCD/score-matching/ISM/DSM, MPSGraph kernels) route through autodiff + Apple GPU metal_runtime; the callable/RNG ops (energy, langevin, partition_*) are correctly not_applicable on the flat tape; 9/9 native Apple GPU EBM ops benchmarked** (incl. `ebm_partition_exact` via stable-logsumexp MSL kernel) |
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | **Audit-as-data infrastructure** — 5 manifest families + 17 generated audit dashboards (15 under `docs/audit/generated/` + 2 root: `op_target_conformance`, `standalone_primitive_coverage`), incl. the **S-series accelerator-proof map** (`s_series_accelerator_proof.md`), with CSV-canonical artifacts where applicable, drift-gated by `tests/unit/` | implemented |
 
-The ~6,850-test fast unit suite passes under `-m "not slow"` in ~4 minutes;
-the full Python suite collects ~7,630 tests including heavy benchmark contracts.
+The ~8,240-test fast unit suite passes under `-m "not slow"`; the full Python
+suite collects ~9,015 tests including heavy benchmark contracts.
 
 ### Current Source and Documentation Health
 
 This repository is moving quickly; prefer generated audits and executable tests
-over phase prose when they disagree. As of the June 8, 2026 source review:
+over phase prose when they disagree. As of the June 9, 2026 source review:
 
 | Surface | Health |
 |---------|--------|
 | Source and static checks | The `mypy` ratchet and generated-doc drift gates are part of the validation spine; rerun `scripts/validate.sh` or the focused generated-doc checks before treating a local checkout as green. |
-| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 261 unique `extern "C" tessera_*` C ABI symbols, 250 unique Apple symbols, and 103 Apple GPU kernel families. |
+| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 267 unique `extern "C" tessera_*` C ABI symbols, 256 unique Apple symbols, and 109 Apple GPU kernel families. |
 | Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_backend.md` (canonical CPU+GPU reference) and `docs/apple_gpu_metal4_adoption.md` (forward-looking ladder). |
 | Compiler gap focus | The frontend and IR artifact spine are broad, but production promotion still depends on executable codegen plus oracle/fixture comparison. Current open work is runtime consumption of `fusion_groups`, stronger dtype/layout/aliasing/buffer-binding contracts, graph outputs in canonical metadata, and fixture-backed numerical proof before backend cells become complete. |
-| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 443 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
+| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 445 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
 | Known Apple test gaps | Apple runtime claims require a capable Darwin host. Non-Darwin stubs are CI fallbacks, and hardware proof should come from fresh-process runtime checks or the backend-specific benchmark/test lanes before promoting a new Apple claim. |
 | Documentation | The freshness dashboard is healthy but date-sensitive (66 docs catalogued; current manifest summary: 62 dated, 25 within 30 days, 0 older than 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
 
@@ -298,6 +299,7 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md) | Hardware-gated frontier — what's blocked on real NVIDIA / ROCm |
 | [`docs/architecture/README.md`](docs/architecture/README.md) | Architecture guide index |
 | [`docs/guides/Tessera_Developer_Frontend_End_To_End.md`](docs/guides/Tessera_Developer_Frontend_End_To_End.md) | First executable frontend path and IR inspection |
+| [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) | **Distributed MegaMoE** — single-device MoE layer, fused expert-FFN kernel, expert-parallel 2× all-to-all forward, FP8×FP4 mixed precision, and real comm/compute overlap |
 | [`docs/apple_backend.md`](docs/apple_backend.md) | **Canonical Apple CPU + GPU reference** — architecture, kernel inventory, datatypes, and Metal 4 implementation state (consolidates the former overview / kernel-inventory / datatypes / integration-review docs) |
 | [`docs/apple_gpu_metal4_adoption.md`](docs/apple_gpu_metal4_adoption.md) | Current Metal 4 ladder and coexistence model (forward-looking plan) |
 
@@ -309,10 +311,10 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Daily edit-loop sanity check (~5,750 fast tests, ~4 min, < 512 MB RAM)
+# Daily edit-loop sanity check (~8,240 fast tests, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
-# Full Python suite including heavy benchmarks (~6,530 collected; ~30 min)
+# Full Python suite including heavy benchmarks (~9,015 collected)
 pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin
@@ -391,7 +393,9 @@ python/tessera/
   __init__.py            Public surface — re-exports core, jit, dist, ops, dtype, …
   core/                  Tensor, Module, fundamental abstractions
   compiler/              @jit, textual frontend, IR objects, target maps, audit modules
-  distributed/           Region, domain, dist, array, shard, index_launch, MoE helpers
+  distributed/           Region, domain, dist, array, shard, index_launch;
+                         MoE router + distributed MegaMoE (expert-parallel
+                         2x all-to-all, FP8xFP4, async comm/compute overlap)
   nn/                    Stateful module / layers / functional / utils
   autodiff/              Tape, VJPs, JVPs, mixed-precision, rematerialize (Tier 2)
   cache/                 KVCacheHandle + MemoryStateHandle persistent state ABI

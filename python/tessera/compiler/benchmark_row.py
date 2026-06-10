@@ -70,6 +70,10 @@ OPTIONAL_BENCHMARK_FIELDS: frozenset[str] = frozenset({
     "report_hash",
     "error",
     "plan_hash",
+    # The single open extensibility slot — hot-path group / expected-latency /
+    # ratchet-bound / fused-chain name ride here instead of proliferating
+    # schema fields or Apple-specific ad-hoc JSON (DEEP_COMPILER_AUDIT_2026_06_10).
+    "hot_path_metadata",
 })
 
 #: ``mode`` values that imply native execution on the named backend.
@@ -122,6 +126,9 @@ class BenchmarkRow:
     report_hash: Optional[str] = None
     plan_hash: Optional[str] = None
     error: Optional[str] = None
+    #: Single open extensibility slot for hot-path metadata (group name,
+    #: expected latency, ratchet bound, fused-chain alias). Preserved verbatim.
+    hot_path_metadata: Optional[Mapping[str, Any]] = None
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-friendly dict — preserves only fields that were set
@@ -164,6 +171,8 @@ class BenchmarkRow:
             ]
         if self.compiled_artifact is not None:
             d["compiled_artifact"] = dict(self.compiled_artifact)
+        if self.hot_path_metadata is not None:
+            d["hot_path_metadata"] = dict(self.hot_path_metadata)
         return d
 
     # ── Conversions ────────────────────────────────────────────────

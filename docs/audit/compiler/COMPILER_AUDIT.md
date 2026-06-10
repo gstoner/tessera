@@ -3,6 +3,12 @@
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
 
+> **Latest deep pass:** [DEEP_COMPILER_AUDIT_2026_06_10.md](DEEP_COMPILER_AUDIT_2026_06_10.md)
+> — source-backed audit of frontend/IR/manifest/runtime-ABI/Apple-envelope/
+> benchmark coverage. Records the "generated drift clean vs semantic gap open"
+> split, fixes the bench-axis staleness + the grouped_gemm/moe_swiglu_block
+> manifest blind spot, and carries a prioritized gap table for the rest.
+
 ## Finished
 
 - **Canonical driver:** `canonical_compile` and `CompileResult` are the common

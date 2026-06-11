@@ -746,6 +746,57 @@ def _derive_compile_metadata(module: GraphIRModule) -> dict[str, Any]:
     }
 
 
+# Linear fusion chains the Apple Target IR passes re-discover and now also
+# consume from a descriptor. (swiglu / mla / nsa lower a pre-fused op — the op
+# *is* the descriptor — so they don't need an intent stamp.)
+_INTENT_KERNELS: frozenset[str] = frozenset({
+    "matmul_softmax_matmul", "matmul_softmax", "matmul_gelu", "matmul_rmsnorm",
+})
+
+
+def stamp_fusion_intents(module: GraphIRModule) -> int:
+    """Decision #19 emit-half — stamp ``tessera.fusion.intent`` on the terminal
+    op of each recognized linear fusion chain so the Apple Target IR fusion
+    passes *consume* the compiler's fusion decision (the emitted call is tagged
+    ``source = "descriptor"``) instead of re-discovering the chain. Returns the
+    number of chains stamped. Idempotent.
+
+    The terminal op (the highest-index op of the chain — the tail matmul /
+    softmax / gelu / rmsnorm) is exactly where each C++ pass reads the intent.
+    """
+    groups = _derive_fusion_groups(module)
+    by_fn = {fn.name: fn for fn in module.functions}
+    stamped = 0
+    for group in groups:
+        if group.get("kind") != "known_chain":
+            continue
+        kernel = group.get("fused_kernel")
+        if kernel not in _INTENT_KERNELS:
+            continue
+        fn_name = group.get("function")
+        fn = by_fn.get(fn_name) if isinstance(fn_name, str) else None
+        if fn is None:
+            continue
+        indices = [int(e["index"]) for e in group.get("ops", ())
+                   if isinstance(e, Mapping) and isinstance(e.get("index"), int)]
+        if not indices:
+            continue
+        terminal = max(indices)
+        if 0 <= terminal < len(fn.body):
+            op = fn.body[terminal]
+            # Stamp into `attrs` (the MLIR-attribute-only field), NOT `kwargs`:
+            # kwargs are forwarded as the op's real call arguments in the
+            # reference/runtime execution path, so a descriptor placed there
+            # would leak into the numpy op call (e.g. gelu(**kwargs)).
+            intent_attr = f'tessera.fusion.intent = "{kernel}"'
+            if not op.attrs:
+                op.attrs = intent_attr
+            elif "tessera.fusion.intent" not in op.attrs:
+                op.attrs = f"{op.attrs}, {intent_attr}"
+            stamped += 1
+    return stamped
+
+
 # --- Synthesizers --------------------------------------------------------
 
 def _result_from_bundle(

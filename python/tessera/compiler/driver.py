@@ -239,6 +239,17 @@ def compile_graph_module(
     enable_tool_validation: bool = True,
 ) -> CompileArtifactBundle:
     target_kind = normalize_target_kind(target)
+    # Decision #19 — auto-emit fusion descriptors. Before the Graph IR is
+    # rendered, stamp `tessera.fusion.intent` on each recognized fusion chain's
+    # terminal op so the Apple Target IR fusion passes *consume* the compiler's
+    # intent (the fused call is tagged source="descriptor") instead of
+    # re-discovering the chain. Apple-gated (the only Target IR consumer today);
+    # the descriptor is backend-agnostic, so this extends to other backends when
+    # their Target IR consumes it. Lazy import avoids the canonical_compile ↔
+    # driver cycle.
+    if target_kind in ("apple_gpu", "apple_cpu"):
+        from .canonical_compile import stamp_fusion_intents
+        stamp_fusion_intents(module)
     graph_text = module.to_mlir()
     function_name = module.functions[0].name if module.functions else "<unknown>"
     request = CompileRequest(

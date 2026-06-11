@@ -133,10 +133,16 @@ struct LowerNSAFusionToAppleGPU : public RewritePattern {
               i32Ty, i32Ty, i32Ty, i32Ty}, {});
     ensureExternalDecl(mod, kNSASymbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, kNSASymbol, TypeRange{},
         ValueRange{qPtr, kPtr, vPtr, gPtr, oPtr,
                    Bv, Hv, Sv, Dv, Wv, Bkv, Tkv, Cv});
+    // Decision #19 — emit the fusion descriptor. NSA lowers a pre-fused
+    // tessera.native_sparse_attn_fused op (the op is the descriptor):
+    // source = "composite_op".
+    callOp->setAttr("tessera.fusion.kernel",
+                    rewriter.getStringAttr("native_sparse_attn"));
+    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
 
     auto outTensorTy = RankedTensorType::get({B, H, S, D}, elem);
     Value result =

@@ -1,0 +1,36 @@
+op_name,family,status,dtypes,arch_min,tile_shape,expected_mfu,roofline,notes
+gelu,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+online_softmax,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+silu,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+silu_mul,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+softmax,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+softmax_safe,activation,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+attn_compressed_blocks,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+attn_sliding_window,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+attn_top_k_blocks,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+deepseek_sparse_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",0.5000,gather-bound at top-k <= 32; compute-bound at top-k >= 64,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+flash_attn,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",0.7500,compute-bound at seq_len >= 1024 + head_dim >= 64; memory-bound otherwise,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+gated_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+gated_deltanet,attention,artifact_only,fp32,sm_90a,"(32, 32, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+gqa_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+hybrid_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+kimi_delta_attention,attention,artifact_only,fp32,sm_90a,"(32, 32, 16)",0.4000,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+lightning_attention,attention,artifact_only,fp32,sm_90a,"(32, 32, 16)",0.4000,recurrence-serial; memory-bound on the state update step,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+linear_attn,attention,artifact_only,fp32,sm_90a,"(32, 32, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+mla_decode,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",0.5500,KV-cache-memory-bound (compressed latent KV reduces bandwidth ~4x vs MHA),Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+mla_decode_fused,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+modified_delta_attention,attention,artifact_only,fp32,sm_90a,"(32, 32, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+mqa_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+multi_head_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+layer_norm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+rmsnorm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+rmsnorm_safe,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+alibi,position_encoding,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+rope,position_encoding,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+batched_gemm,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",0.7800,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+einsum,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+factorized_matmul,tensor,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+fused_epilogue,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+linear_general,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+matmul,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",0.8000,compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G
+qkv_projection,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",,,Target IR artifact ships under CUDA 13.2 U1; execution gated on Phase G

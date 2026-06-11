@@ -77,8 +77,27 @@ multiple root audit documents and compiler archive files.
   locked by `tests/unit/test_strict_dispatch.py` (short-circuit + legacy-path
   tests). **SwiGLU is now derived too** (`_match_swiglu_at` handles the DAG —
   gate/up share %x — inside the known-chain scan) and consumed by the
-  executor. Still open: Target IR (C++ fusion passes) re-discovers the same
-  chains.
+  executor. **Target IR descriptor consume/emit — landed 2026-06-11.** All 7
+  Apple fusion passes now *emit* a first-class fusion descriptor on the fused
+  call (`tessera.fusion.kernel` + `tessera.fusion.source`): the 4 chain passes
+  (matmul→softmax→matmul / matmul→softmax / matmul→gelu / matmul→rmsnorm) also
+  *consume* an upstream `tessera.fusion.intent` (source `"descriptor"` vs
+  `"rediscovered"`, with a Decision-#21 warning on descriptor/IR disagreement);
+  the 3 composite passes (swiglu / mla_decode / native_sparse_attn) emit
+  `source = "composite_op"` (the pre-fused op *is* the descriptor). The Python
+  emit-half `canonical_compile.stamp_fusion_intents(module)` stamps the intent on
+  each recognized chain's terminal op from the canonical `_KNOWN_FUSION_CHAINS`,
+  so the frontend produces descriptor-annotated IR. Lit:
+  `tests/tessera-ir/phase8/apple_gpu_fusion_descriptor.mlir`; Python:
+  `tests/unit/test_apple_fusion_descriptor.py` + `test_fusion_intent_emitter.py`
+  (incl. an emit↔consume contract guard). **Auto-wired 2026-06-11:**
+  `driver.compile_graph_module` calls `stamp_fusion_intents(module)` before
+  rendering the Graph IR for Apple targets (gated to `apple_gpu`/`apple_cpu`;
+  the descriptor is backend-agnostic so it extends when other backends consume
+  it), so every Apple compile now produces descriptor-annotated Graph IR that
+  the Target IR passes consume. The intent is stamped into the op's MLIR `attrs`
+  (not `kwargs`, which are the op's real call arguments in the reference/runtime
+  path). Loop closed end-to-end.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
   **Layout slice extended 2026-06-11:** `LayoutLegalityPass` was matmul-only; its
@@ -106,16 +125,21 @@ multiple root audit documents and compiler archive files.
   `tests/unit/test_generated_docs_registry.py` includes an orphan guard so a new
   dashboard must register. The registry immediately caught 3 silently-stale
   dashboards (`test_coverage_by_op`, `test_coverage_classification`,
-  `effect_lattice_audit`). **6 dashboards are now CSV-canonical** (`runtime_abi`,
-  `verifier_coverage`, `support_table`, `op_target_conformance`,
-  `runtime_execution_matrix`, `test_coverage_by_op`). *Still open:* CSV-canonical
-  for the remaining data-shaped docs (`test_coverage_classification`,
-  `tsol_coverage`, `effect_lattice_audit`, `apple_target_map`, the two
-  `*_target_map`s), and the **aggressive content consolidation** (collapse the 3
-  target maps → 1 multi-target doc; the 5 surface-status docs → 1; merge the
-  test-coverage pair; fold `operator_benchmarks_coverage` into benchmarks; fold
-  the `e2e_op_coverage` + `s_series_status` rollups into their primaries) — each
-  is now a localized registry edit + generator change.
+  `effect_lattice_audit`). **CSV-canonical data-shaped tail closed 2026-06-11 —
+  12 dashboards now CSV-canonical:** `runtime_abi`, `verifier_coverage`,
+  `support_table`, `op_target_conformance`, `runtime_execution_matrix`,
+  `test_coverage`, `tsol_coverage`, `effect_lattice_audit`, `surface_status`, and
+  the **3 target maps** (`apple_target_map` + `nvidia_sm90_target_map` +
+  `rocm_target_map`, added via `apple_target_map.render_csv` /
+  `gpu_target_map.render_csv(target)`, wired into the registry so the CSV is the
+  drift-gated artifact). The remaining markdown-only docs are narrative rollups
+  (`e2e_op_coverage`, `s_series_status`, `s_series_accelerator_proof`,
+  `docs_freshness`), not row tables. *Still open (deliberately deferred):* the
+  **aggressive content consolidation** (collapse the 3 target maps → 1
+  multi-target doc; the `e2e_op_coverage` + `s_series_status` rollups into their
+  primaries) — Next Work #6 reassessed these as low-value churn (per-platform
+  maps are cross-referenced by the per-platform audit docs; the rollups are
+  distinct MASTER_AUDIT truth views).
 - **Code-level audit closeout (2026-06-10).** The
   [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md) "Closeout status" section
   drove every remaining code-level finding to done / refuted / accepted /

@@ -73,6 +73,12 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
       return failure();
     Value softmaxIn = softmaxOp->getOperand(0);
 
+    // Decision #19 — consume the compiler's fusion descriptor when present.
+    StringRef intent;
+    if (auto a = softmaxOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
+      intent = a.getValue();
+    bool descriptorDriven = (intent == "matmul_softmax");
+
     // axis: defaults to -1. Anything else falls out of fusion.
     int64_t axis = -1;
     if (auto attr = softmaxOp->getAttrOfType<IntegerAttr>("axis"))
@@ -100,8 +106,13 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     Operation *defOp = softmaxIn.getDefiningOp();
     if (!defOp)
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: softmax operand has no defining op");
-    if (defOp->getName().getStringRef() != "tessera.matmul")
+    if (defOp->getName().getStringRef() != "tessera.matmul") {
+      if (descriptorDriven)  // Decision #21 — descriptor/IR disagreement.
+        softmaxOp->emitWarning(
+            "tessera.fusion.intent = \"matmul_softmax\" but softmax operand is "
+            "not from tessera.matmul — descriptor/IR mismatch; falling back");
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: defining op is not tessera.matmul");
+    }
     if (!softmaxIn.hasOneUse())
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul result has multiple uses");
 
@@ -163,9 +174,12 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
     ensureExternalDecl(mod, symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
+    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_softmax"));
+    callOp->setAttr("tessera.fusion.source",
+                    rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 
     auto outTensorTy = RankedTensorType::get({M, N}, smElem);
     Value result =

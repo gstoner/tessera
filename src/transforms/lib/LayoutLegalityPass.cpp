@@ -81,9 +81,10 @@ struct LayoutLegality
     return "tessera-layout-legality";
   }
   StringRef getDescription() const override {
-    return "Sprint V2 — layout legality pass (skeleton + first rule: "
-           "tessera.cast layout attribute must be in the canonical "
-           "accept-set).";
+    return "Layout legality pass — cast-layout accept-set + producer/consumer "
+           "accept-set rule for tessera.matmul (row_major/col_major), "
+           "tessera.conv2d_nhwc (nhwc, data operand), and tessera.flash_attn "
+           "(bhsd, Q/K/V).";
   }
 
   // First rule: tessera.cast with a `tessera.layout` attribute whose
@@ -153,6 +154,45 @@ struct LayoutLegality
     return failed ? failure() : success();
   }
 
+  // Extended producer/consumer accept-set rule (2026-06-11) — the same rule
+  // matmul gets above, generalized to more consumer ops with per-op accept-sets.
+  // Unlike matmul (whose data/weight operands share {row_major, col_major}),
+  // these ops carry the layout contract on *specific* operands:
+  //   tessera.conv2d_nhwc — only the data operand (#0) is NHWC (the filter is a
+  //                         separate weight layout, not checked here);
+  //   tessera.flash_attn  — Q/K/V (operands #0..2) are all (B,H,S,D) = bhsd.
+  // Adding a consumer is a small edit here; the rule is otherwise identical.
+  static LogicalResult checkOneOperand(Operation *op, unsigned idx,
+                                       const llvm::StringSet<> &accept,
+                                       StringRef human) {
+    if (idx >= op->getNumOperands()) return success();
+    Operation *prod = op->getOperand(idx).getDefiningOp();
+    if (!prod) return success();
+    auto attr = prod->getAttrOfType<StringAttr>("tessera.layout");
+    if (!attr) return success();  // no layout attr → no enforcement
+    StringRef layout = attr.getValue();
+    if (accept.contains(layout)) return success();
+    return op->emitOpError(
+        "LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH: ")
+        << op->getName().getStringRef() << " operand #" << idx
+        << " has layout \"" << layout << "\" but its accept-set is " << human
+        << ".  Insert a `tessera.cast` to convert.";
+  }
+
+  static LogicalResult checkTensorOpLayouts(Operation *op) {
+    StringRef opName = op->getName().getStringRef();
+    static const llvm::StringSet<> kConv = {"nhwc"};
+    static const llvm::StringSet<> kAttn = {"bhsd"};
+    bool anyFail = false;
+    if (opName == "tessera.conv2d_nhwc") {
+      if (failed(checkOneOperand(op, 0, kConv, "{nhwc}"))) anyFail = true;
+    } else if (opName == "tessera.flash_attn") {
+      for (unsigned i = 0; i < 3; ++i)
+        if (failed(checkOneOperand(op, i, kAttn, "{bhsd}"))) anyFail = true;
+    }
+    return anyFail ? failure() : success();
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     bool anyError = false;
@@ -160,6 +200,8 @@ struct LayoutLegality
       if (failed(checkCastLayout(op))) anyError = true;
       // Sprint V4a: producer/consumer accept-set rule for matmul.
       if (failed(checkMatmulOperandLayouts(op))) anyError = true;
+      // 2026-06-11: same rule for conv2d_nhwc (nhwc) + flash_attn (bhsd).
+      if (failed(checkTensorOpLayouts(op))) anyError = true;
     });
     if (anyError)
       signalPassFailure();

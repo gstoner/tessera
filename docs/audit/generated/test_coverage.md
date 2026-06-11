@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **449** ops in `primitive_coverage` registry.
-- **2268** total Python-test references, **590** total lit-fixture references.
+- **2275** total Python-test references, **590** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **201** ops have ≤1 reference ("thinly tested").
 - **48** ops have ≥10 references ("well tested").
@@ -17,13 +17,13 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  309 |  158 |  467 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
+| `matmul` |  313 |  158 |  471 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
 | `flash_attn` |   81 |   47 |  128 |   4 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   75 |   37 |  112 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   92 |    7 |   99 |   9 | `bf16`, `f16`, `f32`, `fp32` |
 | `silu` |   76 |    2 |   78 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
+| `add` |   65 |    6 |   71 |   8 | `bf16`, `f16`, `f32`, `fp32` |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
-| `add` |   62 |    6 |   68 |   8 | `bf16`, `f16`, `f32`, `fp32` |
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `rmsnorm` |   54 |   10 |   64 |   2 | `bf16`, `fp32` |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |

@@ -101,6 +101,21 @@ autodiff domain audit material.
   the adjoint identity `<op(x),g> == <x,adj(g)>` + JVP-vs-finite-difference.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
+- **Lookahead Sparse Attention (LSA, experimental, inference-only, 2026-06-11):**
+  two new primitives landed end-to-end — `memory_index_select` (sigmoid-threshold
+  block selector; deterministic, non-differentiable; the genuinely new piece,
+  distinct from the top-k+softmax `memory_read`) and `lookahead_sparse_attention`
+  (composite policy: causal local window ∪ selected historical blocks). NumPy
+  oracle in `python/tessera/lsa.py`; OP_SPECS + primitive_coverage rows (selector
+  `vjp/jvp=not_applicable`; composite `vjp/jvp=complete`, both
+  finite-difference-verified); Graph IR ODS op + verifier in `TesseraOps.td/.cpp`;
+  `LookaheadSparseAttnExpandPass` (4th attention-family compiler-visibility pass)
+  built + lit-verified; Apple-GPU runtime lane (host-mediated selection + GPU
+  masked footprint attention) matching the oracle to ~2e-7 and reporting
+  `execution_mode="metal_runtime"`. **Deferred (named, not done):** CPU cold-pool
+  ↔ GPU KV tiering, real `schedule.prefetch` overlap, indexer-key training, fused
+  GPU kernel — so no "FlashMemory" branding (D1). Scope lock + decisions:
+  `archive/lsa_scope.md`. `backend_kernel` stays `partial` (Phase G/H/I gate).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.
 - Sharding partial audit classified open buckets instead of leaving a vague
   "distributed is partial" label.
@@ -130,6 +145,7 @@ autodiff domain audit material.
 - `archive/ebm_scope_lock.md`
 - `archive/ga6_autodiff_plan.md`
 - `archive/attention_variants_plan.md`
+- `archive/lsa_scope.md`
 - `archive/corrdiff_compiler_split_evaluation.md`
 - `archive/sharding_partial_audit.md`
 - `archive/source_base_review_2026_05_17.md`

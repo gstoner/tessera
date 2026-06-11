@@ -205,10 +205,11 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.silu_mul")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.softmax")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.softmax_safe")
 
-// lane: sparse_attn (3 ops)
+// lane: sparse_attn (4 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.attn_local_window_2d")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.attn_top_k_blocks")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.deepseek_sparse_attention")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.lookahead_sparse_attention")
 
 // lane: spectral (9 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.dct")
@@ -269,5 +270,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 175
+// Total runtime-executable ops: 176
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

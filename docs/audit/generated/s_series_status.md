@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 441 |
-| `transpose_rule` | 0 | 445 |
-| `sharding_rule` | 34 | 411 |
-| `lowering_rule` | 0 | 445 |
-| `backend_kernel` | 445 | 0 |
+| `batching_rule` | 4 | 443 |
+| `transpose_rule` | 0 | 447 |
+| `sharding_rule` | 35 | 412 |
+| `lowering_rule` | 0 | 447 |
+| `backend_kernel` | 447 | 0 |
 
 ## Per-category breakdown
 
@@ -29,7 +29,7 @@
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
-| S7 | `attention` | 21 | — | — | 7 | — | 21 |
+| S7 | `attention` | 22 | — | — | 8 | — | 22 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
@@ -50,7 +50,7 @@
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
-| other | `indexing` | 10 | — | — | — | — | 10 |
+| other | `indexing` | 11 | — | — | — | — | 11 |
 | other | `layout_transform` | 14 | — | — | — | — | 14 |
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
@@ -88,12 +88,12 @@
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 56 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 50 | 0 | 0 | 7 | 50 |
+| S7 | 51 | 0 | 0 | 8 | 51 |
 | S10 | 18 | 0 | 0 | 0 | 18 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 251 | 4 | 0 | 21 | 251 |
+| other | 252 | 4 | 0 | 21 | 252 |
 
 ## Closure trajectory
 

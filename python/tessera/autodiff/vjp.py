@@ -1217,6 +1217,14 @@ def vjp_deepseek_sparse_attention(dout, Q, K, V, gate_logits=None, **kwargs):
     return _numeric_attention_family_vjp("deepseek_sparse_attention", dout, args, kwargs)
 
 
+@_vjp("lookahead_sparse_attention")
+def vjp_lookahead_sparse_attention(dout, Q, K, V, **kwargs):
+    # Selection (sigmoid-threshold over compressed block keys) is piecewise
+    # constant w.r.t. Q/K/V, so the numeric VJP over the attention compute is
+    # exact almost everywhere — identical posture to deepseek_sparse_attention.
+    return _numeric_attention_family_vjp("lookahead_sparse_attention", dout, (Q, K, V), kwargs)
+
+
 @_vjp("gated_deltanet")
 def vjp_gated_deltanet(dout, *args, **kwargs):
     kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}

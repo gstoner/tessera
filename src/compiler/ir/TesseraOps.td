@@ -1286,6 +1286,27 @@ def Tessera_DeepSeekSparseAttentionOp : Op<
   let hasVerifier = 1;
 }
 
+// Lookahead Sparse Attention (LSA) — experimental, inference-only composite
+// attention policy. Each query attends over the union of its causal local
+// window and the tokens of the sigmoid-threshold-selected historical blocks.
+// Pure per call (D2): tau is the caller-owned re-selection cadence and does not
+// change a single forward's math. See docs/audit/domain/archive/lsa_scope.md.
+def Tessera_LookaheadSparseAttentionOp : Op<
+  Tessera_Dialect, "lookahead_sparse_attention",
+  [Pure]
+> {
+  let summary = "Lookahead sparse attention — local window ∪ threshold-selected historical blocks";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$window_size,
+                        I64Attr:$block_size,
+                        DefaultValuedAttr<I64Attr, "64">:$tau,
+                        DefaultValuedAttr<F64Attr, "0.5">:$threshold,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // NSA-4 fusion target — collapses the three NSA branches + gating into
 // a single op for backends with a fused NSA kernel.
 def Tessera_NativeSparseAttnFusedOp : Op<

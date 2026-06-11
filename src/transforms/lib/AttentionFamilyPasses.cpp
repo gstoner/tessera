@@ -94,6 +94,35 @@ public:
   }
 };
 
+// Lookahead Sparse Attention (LSA) — experimental, inference-only composite
+// attention policy.  Like HybridAttnExpandPass this is a compiler-visibility
+// slot: it preserves the semantic op while marking it for the sparse-attention
+// backend lane (host-mediated block selection + GPU dense attention).  See
+// docs/audit/domain/archive/lsa_scope.md (D1-D5).
+class LookaheadSparseAttnExpandPass
+    : public PassWrapper<LookaheadSparseAttnExpandPass,
+                         OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LookaheadSparseAttnExpandPass)
+
+  StringRef getArgument() const override {
+    return "tessera-lookahead-sparse-attn-expand";
+  }
+  StringRef getDescription() const override {
+    return "Mark tessera.lookahead_sparse_attention for the sparse-attention "
+           "backend lane (local window ∪ selected historical blocks)";
+  }
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() != "tessera.lookahead_sparse_attention")
+        return;
+      markReasoningVisible(op, builder, "lookahead_sparse",
+                           "lookahead_sparse_attention");
+    });
+  }
+};
+
 } // namespace
 
 namespace tessera {
@@ -108,6 +137,10 @@ std::unique_ptr<Pass> createDeltaAttnChunkingPass() {
 
 std::unique_ptr<Pass> createHybridAttnExpandPass() {
   return std::make_unique<HybridAttnExpandPass>();
+}
+
+std::unique_ptr<Pass> createLookaheadSparseAttnExpandPass() {
+  return std::make_unique<LookaheadSparseAttnExpandPass>();
 }
 
 } // namespace tessera

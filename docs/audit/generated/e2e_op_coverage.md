@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 36 |
-| ``runnable_reference`` | 258 |
+| ``runnable_reference`` | 260 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **296** |
+| **total** | **298** |
 
 ## complete (36)
 
@@ -72,7 +72,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (258)
+## runnable_reference (260)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -90,6 +90,7 @@ each row into a single E2E tier.
 | ``lightning_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``linear_attn`` | attention | public | public | registered | partial | reference | ready | none |
 | ``linear_attn_state`` | attention | public | public | registered | partial | reference | ready | none |
+| ``lookahead_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``mla_decode`` | attention | public | public | registered | partial | reference | ready | none |
 | ``mla_decode_fused`` | attention | public | public | registered | partial | reference | ready | none |
 | ``modified_delta_attention`` | attention | public | public | registered | partial | reference | ready | none |
@@ -154,6 +155,7 @@ each row into a single E2E tier.
 | ``index_select`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``index_update`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``masked_categorical`` | indexing | public | public | registered | partial | reference | ready | none |
+| ``memory_index_select`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``nonzero`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``scatter`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``scatter_add`` | indexing | public | public | registered | partial | reference | ready | none |

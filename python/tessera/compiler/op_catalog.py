@@ -96,6 +96,14 @@ _SPECS = [
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("deepseek_sparse_attention", "tessera.deepseek_sparse_attention", 3, 4, effect="state", lowering="attention"),
+    # Lookahead Sparse Attention (LSA) — experimental, inference-only. See
+    # docs/audit/domain/archive/lsa_scope.md (D1-D5). `memory_index_select` is a
+    # sigmoid-threshold block selector (non-differentiable, deterministic);
+    # `lookahead_sparse_attention` is the composite policy op (local window ∪
+    # selected historical blocks) that composes through the existing sparse
+    # attention lane.
+    OpSpec("memory_index_select", "tessera.memory_index_select", 2, 2, lowering="indexing"),
+    OpSpec("lookahead_sparse_attention", "tessera.lookahead_sparse_attention", 3, 3, effect="state", lowering="attention"),
     OpSpec("gated_attention", "tessera.gated_attention", 4, 4, effect="state", lowering="attention"),
     OpSpec("hybrid_attention", "tessera.hybrid_attention", 3, 3, effect="state", lowering="attention"),
     OpSpec("lightning_attention", "tessera.lightning_attention", 3, 3, effect="state", lowering="attention"),

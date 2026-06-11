@@ -467,6 +467,13 @@ def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
     return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
 
 
+@_jvp("lookahead_sparse_attention")
+def jvp_lookahead_sparse_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.lookahead_sparse_attention, "__wrapped__", _ops.lookahead_sparse_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
 @_jvp("gated_deltanet")
 def jvp_gated_deltanet(primals, tangents, **kwargs):
     from tessera import ops as _ops

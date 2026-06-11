@@ -10,7 +10,7 @@ src/compiler/ir/TesseraOps.td,ArchGumbelSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchHardConcreteOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchMixedOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchParameterOp,1,1,real
-src/compiler/ir/TesseraOps.td,ArchSTEOneHotOp,1,1,trivial_stub
+src/compiler/ir/TesseraOps.td,ArchSTEOneHotOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,ArchSwitchOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchWeightedSumOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnCompressedBlocksOp,1,1,real

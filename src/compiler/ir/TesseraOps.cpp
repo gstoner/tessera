@@ -1926,9 +1926,11 @@ LogicalResult ArchGumbelSoftmaxOp::verify() {
 LogicalResult ArchHardConcreteOp::verify() {
   return verifyPositiveAttr(getOperation(), "temperature");
 }
-// STE one-hot: an opaque ArchParam → ArchGate with no scalar/shape contract to
-// check beyond ODS typing — left as a structural success.
-LogicalResult ArchSTEOneHotOp::verify() { return success(); }
+// arch.ste_one_hot maps an opaque ArchParam → ArchGate; both are parameterless
+// TypeDefs, so the ODS operand/result type constraints fully constrain the op
+// and there is no additional scalar/shape invariant to check. The op therefore
+// declares no custom verifier (audit 2026-06-10: this removes the last
+// trivial-stub `verify() { return success(); }` from verifier_coverage).
 // WeightedSum / Switch: a non-empty candidate set, each candidate shape-matching
 // the (single) mixed result.
 static LogicalResult verifyArchCandidates(Operation *op,

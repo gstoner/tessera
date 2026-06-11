@@ -1593,7 +1593,9 @@ def Tessera_ArchSTEOneHotOp : Op<Tessera_Dialect, "arch.ste_one_hot", []> {
   let arguments = (ins Tessera_ArchParamType:$alpha);
   let results = (outs Tessera_ArchGateType:$gate);
   let assemblyFormat = "$alpha attr-dict";
-  let hasVerifier = 1;
+  // No custom verifier: ArchParam/ArchGate are parameterless opaque types, so
+  // the ODS operand/result constraints fully constrain the op (no scalar/shape
+  // invariant to add). A `verify(){return success();}` would be a trivial stub.
 }
 
 def Tessera_ArchWeightedSumOp : Op<Tessera_Dialect, "arch.weighted_sum", []> {

@@ -49,9 +49,17 @@ Per Decision #21/#25 these are tracked gaps, not silent omissions:
   independent of `resident_capacity`. Guards: `tests/unit/test_lsa_tiered_kv_cache.py`
   (12). This is the piece that earns the "FlashMemory" tiering story; the op is
   no longer *just* lookahead-periodic sparse attention.
-- **Real `schedule.prefetch` overlap** — the op verifies but its lowering
-  (`src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`) is a no-op. v1 may *record*
-  prefetch intent as metadata but must not claim overlap semantics.
+- ~~**Real `schedule.prefetch` overlap**~~ — **LANDED 2026-06-11.** The
+  `tpp-async-prefetch` pass (`src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`) is no
+  longer a no-op: it software-pipelines `schedule.prefetch` ops — rotating
+  double-buffer stages + dependency-safe hoist of overlap-policy prefetches above
+  preceding compute. An `into="host"` / `overlap="none"` prefetch (how LSA's
+  cold-pool staging is *recorded*) is annotated but never overlapped/hoisted — no
+  overlap semantics claimed, per this gap's contract. Lit:
+  `src/solvers/tpp/test/TPP/async_prefetch_overlap.mlir`; Python:
+  `tests/unit/test_lsa_prefetch_overlap.py`. **Follow-on:** emitting
+  `schedule.prefetch` from the LSA op in IR needs LSA Graph→Schedule lowering
+  (not built); today the realized prefetch is the Gap-1 runtime staging.
 - **Indexer-key training** — v1 is inference-only; the indexer learning loop
   stays outside the compiler.
 - **Fused GPU LSA kernel** — revisit only if the host-select round-trip is a

@@ -117,8 +117,12 @@ autodiff domain audit material.
   with a host cold pool + bounded device-resident set + `stage`/`evict`/`gather`
   staging ABI; `lookahead_attention_tiered` drives staging from the selector and
   matches the oracle independent of resident capacity
-  (`tests/unit/test_lsa_tiered_kv_cache.py`). **Still deferred (named, not done):**
-  real `schedule.prefetch` overlap, indexer-key training, fused GPU kernel. Scope
+  (`tests/unit/test_lsa_tiered_kv_cache.py`). The `tpp-async-prefetch` pass is now
+  real (software-pipelined `schedule.prefetch`: double-buffer stages + dependency-
+  safe overlap hoist; `into="host"` recorded without an overlap claim) —
+  `src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`,
+  `tests/unit/test_lsa_prefetch_overlap.py`. **Still deferred (named, not done):**
+  indexer-key training, fused GPU kernel. Scope
   lock + decisions: `archive/lsa_scope.md`. `backend_kernel` stays `partial`
   (Phase G/H/I gate).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

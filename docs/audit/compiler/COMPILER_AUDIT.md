@@ -81,6 +81,16 @@ multiple root audit documents and compiler archive files.
   chains.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
+  **Layout slice extended 2026-06-11:** `LayoutLegalityPass` was matmul-only; its
+  producer/consumer accept-set rule now also covers `tessera.conv2d_nhwc` (nhwc
+  on the data operand #0; the filter is a separate weight layout) and
+  `tessera.flash_attn` (bhsd on Q/K/V #0..2), per-operand-scoped so it only
+  checks the operands that carry each contract. matmul stays verbatim (the V4a
+  diagnostic + `matmulAcceptSet()` are pinned by existing tests). Lit:
+  `tests/tessera-ir/phase2/layout_conv_flashattn_accept_set.mlir`; Python:
+  `tests/unit/test_layout_legality_extended.py`. Still open: dtype / aliasing /
+  buffer-binding contracts, and wiring `LayoutLegalityPass` into the named
+  pipelines (it's still registered standalone).
 - **Complete claims need fixtures.** A completed backend claim should resolve to
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the

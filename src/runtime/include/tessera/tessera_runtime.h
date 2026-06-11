@@ -65,7 +65,34 @@ TsrStatus tsrCompileArtifact(const char* module_ir,
 TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out);
 TsrStatus tsrDestroyArtifact(tsrArtifact artifact);
 TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out);
+// tsrLaunchKernel(args, nargs) convention:
+//   * CPU host kernel  : args[0] = const tsrLaunchParams* (required);
+//                        args[1] = void* user_payload (optional); nargs >= 1.
+//   * GPU artifact kernel (G7): args[0] = const tsrGpuLaunchParams* (required);
+//                        nargs >= 1. Routed to a registered GPU launcher (see
+//                        tsrRegisterGpuLauncher); if none is registered, or the
+//                        launcher does not recognize the kernel, returns
+//                        TSR_STATUS_UNIMPLEMENTED — never a silent success.
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs);
+
+// G7 — pluggable GPU launch bridge. A backend (Apple GPU today; CUDA/HIP when
+// hardware lights up) registers a launcher that maps a kernel NAME on a given
+// target to its native symbol and executes it over the params' buffers/dims.
+// This keeps the core runtime backend-agnostic: tsrLaunchKernel routes GPU
+// kernels to the registered launcher instead of hardcoding any backend.
+//
+// The launcher returns TSR_STATUS_SUCCESS on a real launch, or
+// TSR_STATUS_NOT_FOUND / TSR_STATUS_UNIMPLEMENTED when it does not handle this
+// (target, kernel_name) — the runtime surfaces that, so an unbridged kernel
+// still reports honestly. ``user`` is the opaque pointer passed at registration.
+typedef TsrStatus (*tsrGpuLauncherFn)(const char* target,
+                                      const char* kernel_name,
+                                      const tsrGpuLaunchParams* params,
+                                      void* user);
+
+// Register (or replace) the process-wide GPU launcher. Pass fn=NULL to clear.
+// Idempotent. Thread-safe.
+TsrStatus tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user);
 
 // Register a CPU host-kernel function under a name so `tsrCompileArtifact` can
 // bundle it. Idempotent for the same (name, fn); conflicting re-registration

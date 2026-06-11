@@ -56,6 +56,22 @@ typedef struct {
   const char* options_json;
 } tsrCompileOptions;
 
+// G7 — GPU kernel launch params for the C-ABI launch bridge.
+//
+// A GPU artifact carries kernel *names* (e.g. "tessera_apple_gpu_mps_matmul_f32")
+// rather than host fn-pointers. ``tsrLaunchKernel`` on such a kernel hands a
+// registered backend launcher (see ``tsrRegisterGpuLauncher``) the kernel name
+// plus ordered buffer pointers + scalar dims; the launcher maps the name to its
+// native symbol and executes it. The buffer/dim order is the kernel's own ABI
+// (a GEMM is buffers={A,B,C}, dims={M,N,K}). Keeping this generic lets the core
+// runtime stay backend-agnostic — no hardcoded dlopen, no Apple/CUDA dependency.
+typedef struct {
+  void** buffers;        // ordered I/O pointers, kernel-defined (e.g. A,B,C)
+  size_t num_buffers;
+  const int64_t* dims;   // ordered scalar dims, kernel-defined (e.g. M,N,K)
+  size_t num_dims;
+} tsrGpuLaunchParams;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

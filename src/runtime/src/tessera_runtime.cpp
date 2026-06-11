@@ -59,6 +59,13 @@ namespace {
 std::mutex g_host_kernel_mu;
 std::unordered_map<std::string, tsrHostKernelFn> g_host_kernels;
 
+// G7 — process-wide GPU launcher (pluggable bridge). The core runtime stays
+// backend-agnostic: a backend registers a launcher mapping (target, name) ->
+// its native symbol. tsrLaunchKernel routes GPU kernels here.
+std::mutex g_gpu_launcher_mu;
+tsrGpuLauncherFn g_gpu_launcher = nullptr;
+void* g_gpu_launcher_user = nullptr;
+
 constexpr const char *kArtifactMagicV1 = "TSRART1";
 constexpr const char *kArtifactMagicV2 = "TSRART2";
 
@@ -613,11 +620,41 @@ TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out) {
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
   if (!s || !kernel) { SetLastError("s/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
   if (kernel->kind == tsrKernelKind::kGpuUnbridged) {
+    // G7 — route to a registered GPU launcher if one exists. args[0] is a
+    // const tsrGpuLaunchParams* (ordered buffers + scalar dims).
+    tsrGpuLauncherFn launcher;
+    void* user;
+    {
+      std::lock_guard<std::mutex> lk(g_gpu_launcher_mu);
+      launcher = g_gpu_launcher;
+      user = g_gpu_launcher_user;
+    }
+    if (launcher) {
+      if (!args || nargs < 1) {
+        SetLastError("tsrLaunchKernel(gpu): args[0] must be a "
+                     "const tsrGpuLaunchParams*");
+        return TSR_STATUS_INVALID_ARGUMENT;
+      }
+      const tsrGpuLaunchParams* params =
+          static_cast<const tsrGpuLaunchParams*>(args[0]);
+      TsrStatus st = launcher(kernel->artifact->target.c_str(),
+                              kernel->name.c_str(), params, user);
+      if (st == TSR_STATUS_NOT_FOUND || st == TSR_STATUS_UNIMPLEMENTED) {
+        // The registered launcher doesn't handle this kernel — surface the
+        // honest unbridged status rather than a misleading success.
+        std::string msg = "tsrLaunchKernel: registered GPU launcher does not "
+            "handle target='" + kernel->artifact->target +
+            "' kernel='" + kernel->name + "'";
+        SetLastError(msg.c_str());
+        return TSR_STATUS_UNIMPLEMENTED;
+      }
+      return st;
+    }
     std::string msg = "tsrLaunchKernel: no native C-ABI launch bridge for ";
     msg += "target='" + kernel->artifact->target +
-           "' kernel='" + kernel->name + "'. The Python runtime executes this "
-           "artifact via execution_matrix dispatch; the C ABI launch bridge is "
-           "a separate gap.";
+           "' kernel='" + kernel->name + "'. Register a GPU launcher via "
+           "tsrRegisterGpuLauncher, or run via the Python execution_matrix "
+           "dispatch.";
     SetLastError(msg.c_str());
     return TSR_STATUS_UNIMPLEMENTED;
   }
@@ -646,6 +683,15 @@ TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn) {
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   g_host_kernels[name] = fn;
+  return TSR_STATUS_SUCCESS;
+}
+
+// G7 — register (or clear) the process-wide GPU launcher used by
+// tsrLaunchKernel for GPU artifact kernels. fn=NULL clears it.
+TsrStatus tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user) {
+  std::lock_guard<std::mutex> lk(g_gpu_launcher_mu);
+  g_gpu_launcher = fn;
+  g_gpu_launcher_user = fn ? user : nullptr;
   return TSR_STATUS_SUCCESS;
 }
 

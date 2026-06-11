@@ -39,9 +39,16 @@ data-dependent selection + GPU dense attention); LSA reuses that lane shape.
 
 Per Decision #21/#25 these are tracked gaps, not silent omissions:
 
-- **CPU cold-pool ↔ GPU-resident KV tiering** — the part that would earn a
-  "FlashMemory" name. Needs Phase E KVCache paging (`page_size` is a recorded but
-  unused skeleton today) + a host↔device KV staging ABI.
+- ~~**CPU cold-pool ↔ GPU-resident KV tiering**~~ — **LANDED 2026-06-11**
+  (`python/tessera/cache/tiered.py`). `TieredKVCache` holds every KV page in a
+  host cold pool and a bounded set of pages in device-resident `DeviceTensor`
+  buffers; `stage`/`evict`/`gather` are the host↔device staging ABI (real
+  cold→resident copies, LRU eviction, byte accounting).
+  `lookahead_attention_tiered` drives staging from the `memory_index_select`
+  output and is numerically identical to the non-tiered oracle while being
+  independent of `resident_capacity`. Guards: `tests/unit/test_lsa_tiered_kv_cache.py`
+  (12). This is the piece that earns the "FlashMemory" tiering story; the op is
+  no longer *just* lookahead-periodic sparse attention.
 - **Real `schedule.prefetch` overlap** — the op verifies but its lowering
   (`src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`) is a no-op. v1 may *record*
   prefetch intent as metadata but must not claim overlap semantics.

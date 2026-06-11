@@ -112,10 +112,15 @@ autodiff domain audit material.
   `LookaheadSparseAttnExpandPass` (4th attention-family compiler-visibility pass)
   built + lit-verified; Apple-GPU runtime lane (host-mediated selection + GPU
   masked footprint attention) matching the oracle to ~2e-7 and reporting
-  `execution_mode="metal_runtime"`. **Deferred (named, not done):** CPU cold-pool
-  ↔ GPU KV tiering, real `schedule.prefetch` overlap, indexer-key training, fused
-  GPU kernel — so no "FlashMemory" branding (D1). Scope lock + decisions:
-  `archive/lsa_scope.md`. `backend_kernel` stays `partial` (Phase G/H/I gate).
+  `execution_mode="metal_runtime"`. **Gap closure (2026-06-11):** CPU cold-pool ↔
+  GPU-resident KV tiering landed — `TieredKVCache` (`python/tessera/cache/tiered.py`)
+  with a host cold pool + bounded device-resident set + `stage`/`evict`/`gather`
+  staging ABI; `lookahead_attention_tiered` drives staging from the selector and
+  matches the oracle independent of resident capacity
+  (`tests/unit/test_lsa_tiered_kv_cache.py`). **Still deferred (named, not done):**
+  real `schedule.prefetch` overlap, indexer-key training, fused GPU kernel. Scope
+  lock + decisions: `archive/lsa_scope.md`. `backend_kernel` stays `partial`
+  (Phase G/H/I gate).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.
 - Sharding partial audit classified open buckets instead of leaving a vague
   "distributed is partial" label.

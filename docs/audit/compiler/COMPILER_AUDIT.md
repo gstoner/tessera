@@ -68,8 +68,9 @@ multiple root audit documents and compiler archive files.
   the cross-family chains the Apple GPU runtime actually fuses
   (`matmul→softmax[→matmul]`, `matmul→gelu`, `matmul→rmsnorm`), not just
   same-family adjacency. Locked by `tests/unit/test_canonical_component_ops.py`
-  + `tests/unit/test_canonical_metadata_jit.py`. Still open: graph outputs in
-  the canonical metadata. **Runtime consumption of `fusion_groups` landed
+  + `tests/unit/test_canonical_metadata_jit.py`. **Graph outputs landed
+  2026-06-11** (`canonical_outputs` + populated `return_values`/`result_types`;
+  see Next Work #1). **Runtime consumption of `fusion_groups` landed
   2026-06-10** (see next item).
 - **Fusion intent is too late — runtime half closed (2026-06-10).** The
   apple_gpu executor now consults `fusion_groups` known_chain metadata before
@@ -122,9 +123,15 @@ multiple root audit documents and compiler archive files.
    `layout_contracts` to canonical compile metadata.~~ **Landed** —
    `component_ops` (2026-06-02) + `effects` / `shape_envelope` /
    `layout_contracts` / `fusion_groups` (2026-06-07), all reaching the
-   user-facing `fn.runtime_artifact().metadata`. Remaining: graph outputs in the
-   canonical metadata, and runtime *consumption* of `fusion_groups` (Next Work
-   #3 / "fusion intent too late").
+   user-facing `fn.runtime_artifact().metadata`. **Graph outputs landed
+   2026-06-11** — `CompileResult.outputs` / `canonical_outputs`
+   (`tessera.compile.outputs.v1`: each returned value + producer op + type /
+   shape / dtype / layout), backed by populating `GraphIRFunction.return_values`
+   + `result_types` from the jit AST `return` (the AST path previously emitted a
+   value-less `return`, so outputs/`shape_envelope.returns` were empty). Locked
+   by `tests/unit/test_canonical_outputs.py`; full IR/lit/canonical sweep green.
+   Remaining: runtime *consumption* of `fusion_groups` (Next Work #3 / "fusion
+   intent too late").
 2. ~~Gate whole programs and component ops separately.~~ **Landed 2026-06-02**
    — `program_executable` + `component_blockers` gate the whole program
    component-by-component alongside the primary-op `executable` answer.

@@ -928,6 +928,10 @@ class _OpExtractor(ast.NodeVisitor):
         # 1`` for arg ``a``) immediately versions.
         self._taken_ssa_names: set[str] = set(arg_names)
         self._name_alias: Dict[str, str] = {name: name for name in arg_names}
+        # The function's returned SSA values + their IR types, captured at the
+        # `return` statement so the built GraphIRFunction declares real outputs.
+        self.return_values: List[str] = []
+        self.return_result_types: List[IRType] = []
 
     def _fresh(self) -> str:
         name = f"v{self._counter}"
@@ -1021,9 +1025,27 @@ class _OpExtractor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Return(self, node: ast.Return) -> None:
-        if node.value and self._emit_expr(node.value) is not None:
+        if node.value is None:
             return
-        self.generic_visit(node)
+        # Capture the returned SSA value(s) + type(s) so the function declares
+        # real outputs (tuple returns → multiple values). If any element can't
+        # be lowered to an SSA value, leave returns unset (the function emits a
+        # value-less `return`, as before) rather than declare a partial result.
+        elts = (node.value.elts if isinstance(node.value, ast.Tuple)
+                else [node.value])
+        names: List[str] = []
+        types: List[IRType] = []
+        for elt in elts:
+            ssa = self._emit_expr(elt)
+            if ssa is None:
+                self.return_values = []
+                self.return_result_types = []
+                self.generic_visit(node)
+                return
+            names.append(ssa)
+            types.append(self._value_types.get(ssa, TENSOR_OPAQUE))
+        self.return_values = names
+        self.return_result_types = types
 
     def visit_If(self, node: ast.If) -> None:
         """Lower Python `if/else` to `tessera.scf.if.*` markers.
@@ -1669,6 +1691,8 @@ class GraphIRBuilder:
             args=args,
             body=ops,
             fn_attrs=fn_attrs,
+            return_values=getattr(self, "_last_return_values", []),
+            result_types=getattr(self, "_last_return_types", []),
         )
         self.context.add_function(fn_ir)
         return fn_ir
@@ -1698,6 +1722,8 @@ class GraphIRBuilder:
                     break
 
         self.diagnostics.extend(extractor.diagnostics)
+        self._last_return_values = list(extractor.return_values)
+        self._last_return_types = list(extractor.return_result_types)
         return extractor.ops
 
     def module(self) -> GraphIRModule:

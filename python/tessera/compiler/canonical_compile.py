@@ -783,7 +783,16 @@ def stamp_fusion_intents(module: GraphIRModule) -> int:
             continue
         terminal = max(indices)
         if 0 <= terminal < len(fn.body):
-            fn.body[terminal].kwargs["tessera.fusion.intent"] = kernel
+            op = fn.body[terminal]
+            # Stamp into `attrs` (the MLIR-attribute-only field), NOT `kwargs`:
+            # kwargs are forwarded as the op's real call arguments in the
+            # reference/runtime execution path, so a descriptor placed there
+            # would leak into the numpy op call (e.g. gelu(**kwargs)).
+            intent_attr = f'tessera.fusion.intent = "{kernel}"'
+            if not op.attrs:
+                op.attrs = intent_attr
+            elif "tessera.fusion.intent" not in op.attrs:
+                op.attrs = f"{op.attrs}, {intent_attr}"
             stamped += 1
     return stamped
 

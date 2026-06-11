@@ -31,10 +31,11 @@ def test_stamps_matmul_softmax_matmul_terminal():
     m = _module(f)
     assert stamp_fusion_intents(m) == 1
     body = m.functions[-1].body
-    # the tail matmul (highest index) is where the C++ pass reads the intent
-    assert body[-1].kwargs.get("tessera.fusion.intent") == "matmul_softmax_matmul"
-    # earlier ops are not stamped
-    assert "tessera.fusion.intent" not in body[0].kwargs
+    # the tail matmul (highest index) is where the C++ pass reads the intent.
+    # Stamped into `attrs` (MLIR-only), never kwargs (the op's call arguments).
+    assert 'tessera.fusion.intent = "matmul_softmax_matmul"' in (body[-1].attrs or "")
+    assert "tessera.fusion.intent" not in (body[0].attrs or "")
+    assert "tessera.fusion.intent" not in body[-1].kwargs
 
 
 def test_stamps_two_op_chains():
@@ -52,7 +53,7 @@ def test_stamps_two_op_chains():
                        ("matmul_softmax", softmax_chain)):
         m = _module(fn)
         assert stamp_fusion_intents(m) == 1, kernel
-        assert m.functions[-1].body[-1].kwargs.get("tessera.fusion.intent") == kernel
+        assert f'tessera.fusion.intent = "{kernel}"' in (m.functions[-1].body[-1].attrs or "")
 
 
 def test_rendered_mlir_carries_intent():

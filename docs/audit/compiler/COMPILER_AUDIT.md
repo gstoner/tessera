@@ -90,10 +90,14 @@ multiple root audit documents and compiler archive files.
   so the frontend produces descriptor-annotated IR. Lit:
   `tests/tessera-ir/phase8/apple_gpu_fusion_descriptor.mlir`; Python:
   `tests/unit/test_apple_fusion_descriptor.py` + `test_fusion_intent_emitter.py`
-  (incl. an emit↔consume contract guard). Remaining: auto-wiring
-  `stamp_fusion_intents` into a Target-IR lowering path (today it's a tested,
-  available emitter; the C++ Target IR pipeline is lit-exercised, not the @jit
-  runtime path).
+  (incl. an emit↔consume contract guard). **Auto-wired 2026-06-11:**
+  `driver.compile_graph_module` calls `stamp_fusion_intents(module)` before
+  rendering the Graph IR for Apple targets (gated to `apple_gpu`/`apple_cpu`;
+  the descriptor is backend-agnostic so it extends when other backends consume
+  it), so every Apple compile now produces descriptor-annotated Graph IR that
+  the Target IR passes consume. The intent is stamped into the op's MLIR `attrs`
+  (not `kwargs`, which are the op's real call arguments in the reference/runtime
+  path). Loop closed end-to-end.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
 - **Complete claims need fixtures.** A completed backend claim should resolve to

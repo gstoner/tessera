@@ -77,8 +77,27 @@ multiple root audit documents and compiler archive files.
   locked by `tests/unit/test_strict_dispatch.py` (short-circuit + legacy-path
   tests). **SwiGLU is now derived too** (`_match_swiglu_at` handles the DAG —
   gate/up share %x — inside the known-chain scan) and consumed by the
-  executor. Still open: Target IR (C++ fusion passes) re-discovers the same
-  chains.
+  executor. **Target IR descriptor consume/emit — landed 2026-06-11.** All 7
+  Apple fusion passes now *emit* a first-class fusion descriptor on the fused
+  call (`tessera.fusion.kernel` + `tessera.fusion.source`): the 4 chain passes
+  (matmul→softmax→matmul / matmul→softmax / matmul→gelu / matmul→rmsnorm) also
+  *consume* an upstream `tessera.fusion.intent` (source `"descriptor"` vs
+  `"rediscovered"`, with a Decision-#21 warning on descriptor/IR disagreement);
+  the 3 composite passes (swiglu / mla_decode / native_sparse_attn) emit
+  `source = "composite_op"` (the pre-fused op *is* the descriptor). The Python
+  emit-half `canonical_compile.stamp_fusion_intents(module)` stamps the intent on
+  each recognized chain's terminal op from the canonical `_KNOWN_FUSION_CHAINS`,
+  so the frontend produces descriptor-annotated IR. Lit:
+  `tests/tessera-ir/phase8/apple_gpu_fusion_descriptor.mlir`; Python:
+  `tests/unit/test_apple_fusion_descriptor.py` + `test_fusion_intent_emitter.py`
+  (incl. an emit↔consume contract guard). **Auto-wired 2026-06-11:**
+  `driver.compile_graph_module` calls `stamp_fusion_intents(module)` before
+  rendering the Graph IR for Apple targets (gated to `apple_gpu`/`apple_cpu`;
+  the descriptor is backend-agnostic so it extends when other backends consume
+  it), so every Apple compile now produces descriptor-annotated Graph IR that
+  the Target IR passes consume. The intent is stamped into the op's MLIR `attrs`
+  (not `kwargs`, which are the op's real call arguments in the reference/runtime
+  path). Loop closed end-to-end.
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
 - **Complete claims need fixtures.** A completed backend claim should resolve to

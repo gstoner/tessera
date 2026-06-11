@@ -106,6 +106,11 @@ class CompileResult:
     shape_envelope: dict[str, Any] = field(default_factory=dict)
     effects: dict[str, Any] = field(default_factory=dict)
     layout_contracts: dict[str, Any] = field(default_factory=dict)
+    # Next Work #1 remainder (2026-06-11) — first-class program outputs: the
+    # values each function returns, with producer op + type/shape/dtype/layout.
+    # A focused "what does this program emit" view distinct from the verbose
+    # per-value shape_envelope.
+    outputs: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_single_op(self) -> bool:
@@ -177,6 +182,7 @@ class CompileResult:
             "canonical_shape_envelope": self.shape_envelope,
             "canonical_effects": self.effects,
             "canonical_layout_contracts": self.layout_contracts,
+            "canonical_outputs": self.outputs,
         }
 
     def to_runtime_artifact(self):
@@ -303,6 +309,7 @@ class CompileResult:
             "shape_envelope": self.shape_envelope,
             "effects": self.effects,
             "layout_contracts": self.layout_contracts,
+            "outputs": self.outputs,
             "compiler_path": self.compiler_path,
             "executable": self.executable,
             "reason": self.reason,
@@ -529,6 +536,40 @@ def _derive_shape_envelope(module: GraphIRModule) -> dict[str, Any]:
     return {"schema": "tessera.compile.shape_envelope.v1", "functions": functions}
 
 
+def _derive_outputs(module: GraphIRModule) -> dict[str, Any]:
+    """Program outputs: each function's returned values with their producer op
+    and type/shape/dtype/layout. ``program_outputs`` is the entry (first)
+    function's outputs — the program-level "what is emitted" view."""
+    functions: list[dict[str, Any]] = []
+    for fn in module.functions:
+        value_types: dict[str, dict[str, Any]] = {
+            arg.name: _type_metadata(arg.ir_type, layout=arg.layout)
+            for arg in fn.args
+        }
+        producers: dict[str, str] = {}
+        for op in fn.body:
+            result_meta = _type_metadata(op.inferred_type or op.result_type)
+            for name in op.result_names:
+                value_types[name] = result_meta
+                producers[name] = _canonical_op_name(op.op_name)
+        outputs: list[dict[str, Any]] = []
+        for index, value in enumerate(fn.return_values):
+            name = _strip_percent(value)
+            outputs.append({
+                "index": index,
+                "name": name,
+                "producer": producers.get(name),   # None when a return is an arg
+                **value_types.get(name, _type_metadata("")),
+            })
+        functions.append({"name": fn.name, "outputs": outputs})
+    program_outputs = functions[0]["outputs"] if functions else []
+    return {
+        "schema": "tessera.compile.outputs.v1",
+        "functions": functions,
+        "program_outputs": program_outputs,
+    }
+
+
 def _derive_effects(module: GraphIRModule) -> dict[str, Any]:
     functions: list[dict[str, Any]] = []
     module_effect = "pure"
@@ -743,6 +784,7 @@ def _derive_compile_metadata(module: GraphIRModule) -> dict[str, Any]:
         "shape_envelope": _derive_shape_envelope(module),
         "effects": _derive_effects(module),
         "layout_contracts": _derive_layout_contracts(module),
+        "outputs": _derive_outputs(module),
     }
 
 
@@ -867,6 +909,7 @@ def _result_from_bundle(
         shape_envelope=dict(metadata.get("shape_envelope", {})),
         effects=dict(metadata.get("effects", {})),
         layout_contracts=dict(metadata.get("layout_contracts", {})),
+        outputs=dict(metadata.get("outputs", {})),
     )
 
 

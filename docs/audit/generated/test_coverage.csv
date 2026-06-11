@@ -244,7 +244,7 @@ logical_not,2,0,0,2,0,,structural_only,unclassified — defaults to structural_o
 logical_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logical_xor,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logsumexp,4,3,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-lookahead_sparse_attention,13,2,1,15,0,,needs_direct_test,category default for 'attention'
+lookahead_sparse_attention,14,2,1,16,0,,needs_direct_test,category default for 'attention'
 lora_linear,5,0,0,5,0,,needs_direct_test,category default for 'model_layer'
 lt,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'

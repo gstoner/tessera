@@ -35,9 +35,10 @@ data-dependent selection + GPU dense attention); LSA reuses that lane shape.
 | **D4** | v1 selection is **host-mediated + data-dependent**, identical to the `deepseek_sparse_attention` Apple-GPU lane. **No CPU cold-pool ↔ GPU-resident KV tiering** — deferred. | The tiering substrate (Phase E KV paging, real `schedule.prefetch` overlap) does not exist. v1 stays on proven rails. |
 | **D5** | `tau=64` / `threshold=0.5` are **chosen test fixtures**, not a reproduced external result. No paper-equivalence claim is written into any audit doc. Status stays `planned` for `backend_kernel` until real hardware kernels exist. | Decision #25 / #27 — ground claims in executed oracle equivalence, not citations. |
 
-## Explicitly deferred (named, not dropped)
+## Deferred gaps — all closed 2026-06-11
 
-Per Decision #21/#25 these are tracked gaps, not silent omissions:
+These were tracked gaps (Decision #21/#25 — named, not silent omissions). All
+four have since landed; the strikethrough entries record what closed them.
 
 - ~~**CPU cold-pool ↔ GPU-resident KV tiering**~~ — **LANDED 2026-06-11**
   (`python/tessera/cache/tiered.py`). `TieredKVCache` holds every KV page in a
@@ -69,8 +70,14 @@ Per Decision #21/#25 these are tracked gaps, not silent omissions:
   `memory_index_select` stays non-differentiable for inference.
   `tests/unit/test_lsa_indexer_training.py` (6) includes a gradient-descent loop
   that trains the indexer to select a target block.
-- **Fused GPU LSA kernel** — revisit only if the host-select round-trip is a
-  measured perf wall.
+- ~~**Fused GPU LSA kernel**~~ — **LANDED 2026-06-11.**
+  `tessera_apple_gpu_lookahead_sparse_attn_f32` (MSL kernel +
+  host-reference fallback in `apple_gpu_runtime.mm` / `_stub.cpp`) collapses the
+  host-select bmm + mask-add + softmax + bmm (4 GPU dispatches) into ONE MSL
+  dispatch: per (head, query) it computes `softmax(scale·Q·Kᵀ + mask)·V` over the
+  padded footprint (cap T ≤ 256, else the multi-dispatch path). The runtime LSA
+  lane prefers it; matches the oracle (~5e-7) and the multi-dispatch fallback.
+  Guards: `tests/unit/test_lsa_fused_gpu_kernel.py`.
 
 ## Conformance posture
 

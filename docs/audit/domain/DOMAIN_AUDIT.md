@@ -126,9 +126,14 @@ autodiff domain audit material.
   select_ste` straight-through), closed-form VJP+JVP, with a gradient-descent
   training-loop test (`tests/unit/test_lsa_indexer_training.py`); the hard
   selector stays non-differentiable for inference and the training loop lives in
-  user code. **Still deferred (named, not done):** fused GPU kernel. Scope
-  lock + decisions: `archive/lsa_scope.md`. `backend_kernel` stays `partial`
-  (Phase G/H/I gate).
+  user code. A fused single-dispatch GPU kernel
+  (`tessera_apple_gpu_lookahead_sparse_attn_f32`) collapses the host-select
+  bmm+mask+softmax+bmm into one MSL dispatch, oracle-validated
+  (`tests/unit/test_lsa_fused_gpu_kernel.py`). **All four originally-deferred LSA
+  gaps are now closed** (KV tiering, prefetch overlap, indexer training, fused
+  kernel). Scope lock + decisions: `archive/lsa_scope.md`. `backend_kernel` for
+  the registered primitives stays `partial` (the per-target Phase G/H/I gate —
+  the Apple fused kernel is one target).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.
 - Sharding partial audit classified open buckets instead of leaving a vague
   "distributed is partial" label.

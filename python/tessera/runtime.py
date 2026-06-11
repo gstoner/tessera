@@ -3011,6 +3011,33 @@ def _apple_gpu_native_sparse_attn_f32() -> Any:
     return sym
 
 
+def _apple_gpu_lookahead_sparse_attn_f32() -> Any:
+    """LSA Gap 4 — bind the fused batched masked LSA attention symbol.
+
+    O[b] = softmax_t(scale·Q[b]·K[b,t]ᵀ + MASK[b,t]) · V[b,t] in a single GPU
+    dispatch (collapses the host-select bmm + mask-add + softmax + bmm). The
+    non-Darwin stub exports the same symbol via a host reference, so value
+    execution still requires Darwin + an active Apple GPU runtime.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_lookahead_sparse_attn_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    # (Q, K, V, mask, O, batch, T, D, Dv, scale)
+    sym.argtypes = [fp, fp, fp, fp, fp] + [ctypes.c_int32] * 4 + [ctypes.c_float]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_ppo_policy_loss_f32() -> Any:
     """Stage 13: bind the Apple GPU PPO policy-loss value symbol.
 
@@ -6482,6 +6509,30 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
                     V_flat[b, h, sq, :t] = V[b, h, fp]
                     valid[b, h, sq, :t] = True
         batch = B * H * S
+        bias = np.where(valid, np.float32(0.0), np.float32(-1e30))
+
+        # Gap 4 — fused single-dispatch path: one MSL kernel does
+        # softmax(scale·Q·Kᵀ + mask)·V per (head, query), collapsing the
+        # bmm + mask-add + softmax + bmm below into one GPU dispatch. Falls
+        # through to the multi-dispatch path when the symbol is unavailable or
+        # the padded footprint exceeds the fused kernel's per-thread cap (256).
+        if t_max <= 256:
+            fused = _apple_gpu_lookahead_sparse_attn_f32()
+            if fused is not None:
+                fp_t = ctypes.POINTER(ctypes.c_float)
+                Qf = np.ascontiguousarray(Q.astype(np.float32).reshape(batch, D))
+                Kf = np.ascontiguousarray(K_flat.reshape(batch, t_max, D))
+                Vf = np.ascontiguousarray(V_flat.reshape(batch, t_max, Dv))
+                Mf = np.ascontiguousarray(bias.reshape(batch, t_max))
+                Of = np.zeros((batch, Dv), np.float32)
+                fused(
+                    Qf.ctypes.data_as(fp_t), Kf.ctypes.data_as(fp_t),
+                    Vf.ctypes.data_as(fp_t), Mf.ctypes.data_as(fp_t),
+                    Of.ctypes.data_as(fp_t),
+                    ctypes.c_int32(batch), ctypes.c_int32(t_max),
+                    ctypes.c_int32(D), ctypes.c_int32(Dv), ctypes.c_float(scale))
+                return Of.reshape(B, H, S, Dv).astype(np.result_type(Q, K, V))
+
         Qb = np.ascontiguousarray(
             (Q.astype(np.float32) * np.float32(scale)).reshape(batch, 1, D))
         KsT = np.ascontiguousarray(np.swapaxes(K_flat, -1, -2).reshape(batch, D, t_max))
@@ -6489,7 +6540,6 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
         if A is None:
             return None
         A = np.asarray(A, np.float32).reshape(B, H, S, t_max)
-        bias = np.where(valid, np.float32(0.0), np.float32(-1e30))
         A = np.asarray(
             _apple_gpu_dispatch_mpsgraph_binary(
                 "tessera.add", [np.ascontiguousarray(A), np.ascontiguousarray(bias)],
@@ -10170,6 +10220,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_conv2d_bf16")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
+                # LSA Gap 4 — fused batched masked lookahead-sparse attention.
+                # Freshest staleness sentinel: a prebuilt dylib lacking it is
+                # rejected so a source dylib with the fused kernel is compiled.
+                getattr(lib, "tessera_apple_gpu_lookahead_sparse_attn_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

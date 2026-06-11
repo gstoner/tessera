@@ -706,7 +706,47 @@ inline void reference_matmul_softmax_matmul_f32_stub(
   }
 }
 
+// Lookahead Sparse Attention fused kernel (LSA Gap 4) — portable reference.
+inline void reference_lookahead_sparse_attn_f32_stub(
+    const float* Q, const float* K, const float* V, const float* mask,
+    float* O, int32_t batch, int32_t T, int32_t D, int32_t Dv, float scale) {
+  std::vector<float> scores(static_cast<std::size_t>(T), 0.0f);
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* q = Q + static_cast<std::size_t>(b) * D;
+    const float* kb = K + static_cast<std::size_t>(b) * T * D;
+    const float* vb = V + static_cast<std::size_t>(b) * T * Dv;
+    const float* mb = mask + static_cast<std::size_t>(b) * T;
+    for (int32_t t = 0; t < T; ++t) {
+      float acc = 0.0f;
+      const float* kt = kb + static_cast<std::size_t>(t) * D;
+      for (int32_t d = 0; d < D; ++d) acc += q[d] * kt[d];
+      scores[t] = acc * scale + mb[t];
+    }
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t t = 0; t < T; ++t) row_max = std::max(row_max, scores[t]);
+    float denom = 0.0f;
+    for (int32_t t = 0; t < T; ++t) {
+      scores[t] = std::exp(scores[t] - row_max);
+      denom += scores[t];
+    }
+    float inv = denom > 0.0f ? 1.0f / denom : 0.0f;
+    float* o = O + static_cast<std::size_t>(b) * Dv;
+    for (int32_t p = 0; p < Dv; ++p) o[p] = 0.0f;
+    for (int32_t t = 0; t < T; ++t) {
+      float w = scores[t] * inv;
+      const float* vt = vb + static_cast<std::size_t>(t) * Dv;
+      for (int32_t p = 0; p < Dv; ++p) o[p] += w * vt[p];
+    }
+  }
+}
+
 } // namespace
+
+extern "C" void tessera_apple_gpu_lookahead_sparse_attn_f32(
+    const float* Q, const float* K, const float* V, const float* mask, float* O,
+    int32_t batch, int32_t T, int32_t D, int32_t Dv, float scale) {
+  reference_lookahead_sparse_attn_f32_stub(Q, K, V, mask, O, batch, T, D, Dv, scale);
+}
 
 extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f32(
     const float* A, const float* B, const float* C, float* O,

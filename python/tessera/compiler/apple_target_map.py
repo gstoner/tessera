@@ -362,6 +362,43 @@ def all_rows() -> list[AppleTargetRow]:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# CSV rendering — the canonical machine-readable artifact (the Markdown is
+# the human companion). One row per op, sorted by (family, op_name);
+# multi-value dtype lists are comma-joined inside a single quoted cell.
+# ─────────────────────────────────────────────────────────────────────
+
+APPLE_TARGET_CSV_COLUMNS = (
+    "op_name", "family",
+    "cpu_status", "cpu_framework", "cpu_dtypes", "cpu_symbol", "cpu_execution_kind",
+    "gpu_status", "gpu_framework", "gpu_dtypes", "gpu_symbol", "gpu_dispatch",
+    "proof_test", "notes",
+)
+
+
+def render_csv(rows: Iterable[AppleTargetRow] | None = None) -> str:
+    import csv as _csv
+    import io as _io
+
+    rows_list = sorted(
+        list(rows) if rows is not None else all_rows(),
+        key=lambda r: (r.family, r.op_name),
+    )
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(APPLE_TARGET_CSV_COLUMNS)
+    for r in rows_list:
+        writer.writerow([
+            r.op_name, r.family,
+            r.cpu_status, r.cpu_framework, ",".join(r.cpu_dtypes),
+            r.cpu_symbol, r.cpu_execution_kind,
+            r.gpu_status, r.gpu_framework, ",".join(r.gpu_dtypes),
+            r.gpu_symbol, r.gpu_dispatch,
+            r.proof_test, r.notes,
+        ])
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Markdown rendering
 # ─────────────────────────────────────────────────────────────────────
 

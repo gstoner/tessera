@@ -205,6 +205,32 @@ def all_rocm_rows(arch: str = "rocm") -> list[GPUTargetRow]:
 # ─────────────────────────────────────────────────────────────────────
 
 
+GPU_TARGET_CSV_COLUMNS = (
+    "op_name", "family", "status", "dtypes",
+    "arch_min", "tile_shape", "expected_mfu", "roofline", "notes",
+)
+
+
+def render_csv(target: str) -> str:
+    """Canonical machine-readable per-target capability CSV (the Markdown is the
+    human companion). One row per op, sorted by (family, op_name)."""
+    import csv as _csv
+    import io as _io
+
+    rows = sorted(all_nvidia_rows(target), key=lambda r: (r.family, r.op_name))
+    buf = _io.StringIO()
+    writer = _csv.writer(buf, lineterminator="\n")
+    writer.writerow(GPU_TARGET_CSV_COLUMNS)
+    for r in rows:
+        writer.writerow([
+            r.op_name, r.family, r.status, ",".join(r.dtypes),
+            r.arch_min, r.tile_shape,
+            f"{r.expected_mfu:.4f}" if r.expected_mfu is not None else "",
+            r.roofline, r.notes,
+        ])
+    return buf.getvalue()
+
+
 def render_markdown(target: str) -> str:
     """Render the per-target dashboard.
 

@@ -17,11 +17,26 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 - **Toolchain pins:** CUDA, NCCL, and ROCm pins agree in generated dashboards.
 - **Hardware frontier framing:** archived Phase G/H/I material establishes that
   backend-kernel completion requires real device proof.
+- **C-ABI GPU launch bridge (G7, 2026-06-10):** `tsrLaunchKernel` no longer
+  dead-ends at `UNIMPLEMENTED` for GPU artifact kernels. A pluggable launcher
+  hook — `tsrRegisterGpuLauncher(tsrGpuLauncherFn)` + `tsrGpuLaunchParams`
+  (ordered buffers + scalar dims) — lets a backend map a kernel NAME on a target
+  to its native symbol; the core runtime stays backend-agnostic (no hardcoded
+  dlopen / Apple/CUDA dependency). **Proven end-to-end on Metal:** a registered
+  launcher routes a C-ABI launch of `tessera_apple_gpu_mps_matmul_f32` through
+  the Apple runtime and the GPU output equals `A @ B`; an unregistered kernel
+  name still returns `UNIMPLEMENTED` (no silent success). Locked by
+  `tests/unit/test_runtime_abi_gpu_launch_bridge.py` (contract guards run
+  everywhere; the GEMM e2e runs on Darwin+Metal). NVIDIA/ROCm close their
+  launch bridge by registering a backend launcher into the same hook once
+  hardware exists.
 
 ## Still Open
 
-- **NVIDIA runtime execution:** no execution-matrix rows yet.
-- **ROCm runtime execution:** no execution-matrix rows yet.
+- **NVIDIA runtime execution:** no execution-matrix rows yet (the G7 launch-
+  bridge hook exists; remaining is a registered CUDA launcher + real silicon).
+- **ROCm runtime execution:** no execution-matrix rows yet (same — a registered
+  HIP launcher + real silicon).
 - **Universal backend-kernel axis:** every S-series primitive entry is still
   open on backend-kernel proof (universal Phase-G/H gate) — live count in
   [`../generated/s_series_status.md`](../generated/s_series_status.md).

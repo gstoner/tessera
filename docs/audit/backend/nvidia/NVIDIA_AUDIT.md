@@ -23,7 +23,10 @@ This document consolidates NVIDIA-specific audit material.
 ## Next Work
 
 1. Bring up real NVIDIA hardware CI or a dedicated validation host.
-2. Implement the runtime launch bridge for the first narrow NVIDIA kernel.
+2. Register a CUDA launcher into the C-ABI launch-bridge hook
+   (`tsrRegisterGpuLauncher`, landed G7 2026-06-10 — see
+   `backend/BACKEND_AUDIT.md`) mapping the first narrow NVIDIA kernel name to
+   its native symbol.
 3. Add runtime ABI and hardware-smoke tests.
 4. Add execute-and-compare oracle tests.
 5. Promote manifest rows only after generated dashboards agree.

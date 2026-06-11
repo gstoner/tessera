@@ -21,7 +21,9 @@ This document consolidates ROCm-specific audit material.
 ## Next Work
 
 1. Bring up ROCm hardware validation.
-2. Implement the first narrow HIP runtime launch path.
+2. Register a HIP launcher into the C-ABI launch-bridge hook
+   (`tsrRegisterGpuLauncher`, landed G7 2026-06-10 — see
+   `backend/BACKEND_AUDIT.md`) for the first narrow ROCm kernel.
 3. Add runtime ABI and hardware-smoke tests.
 4. Add execute-and-compare oracle tests.
 5. Promote manifest rows only after generated dashboards agree.

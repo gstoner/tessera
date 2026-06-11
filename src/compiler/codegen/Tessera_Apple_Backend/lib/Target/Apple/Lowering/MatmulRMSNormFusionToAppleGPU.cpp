@@ -64,6 +64,12 @@ struct LowerMatmulRMSNormPatternBase : public RewritePattern {
     if (normOp->getNumOperands() < 1) return failure();
     Value normIn = normOp->getOperand(0);
 
+    // Decision #19 — consume the compiler's fusion descriptor when present.
+    StringRef intent;
+    if (auto a = normOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
+      intent = a.getValue();
+    bool descriptorDriven = (intent == "matmul_rmsnorm");
+
     auto nTy = dyn_cast<RankedTensorType>(normIn.getType());
     if (!nTy || nTy.getRank() != 2)
       return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: rank-2 only");
@@ -73,8 +79,13 @@ struct LowerMatmulRMSNormPatternBase : public RewritePattern {
     Operation *defOp = normIn.getDefiningOp();
     if (!defOp)
       return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: no defining op");
-    if (defOp->getName().getStringRef() != "tessera.matmul")
+    if (defOp->getName().getStringRef() != "tessera.matmul") {
+      if (descriptorDriven)  // Decision #21 — descriptor/IR disagreement.
+        normOp->emitWarning(
+            "tessera.fusion.intent = \"matmul_rmsnorm\" but norm operand is not "
+            "from tessera.matmul — descriptor/IR mismatch; falling back");
       return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: defining op is not tessera.matmul");
+    }
     if (!normIn.hasOneUse())
       return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: matmul result has multiple uses");
 
@@ -140,9 +151,12 @@ struct LowerMatmulRMSNormPatternBase : public RewritePattern {
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty, f32Ty}, {});
     ensureExternalDecl(mod, kMatmulRMSNormF32Symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, kMatmulRMSNormF32Symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv, epsV});
+    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_rmsnorm"));
+    callOp->setAttr("tessera.fusion.source",
+                    rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 
     auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
     Value result =

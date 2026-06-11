@@ -164,9 +164,14 @@ struct LowerSwigluFusedToAppleGPU : public RewritePattern {
         {});
     ensureExternalDecl(mod, symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, symbol, TypeRange{},
         ValueRange{xPtr, wgPtr, wuPtr, wdPtr, oPtr, Mv, Kv, Hv, Kov});
+    // Decision #19 — emit the fusion descriptor. swiglu lowers a pre-fused
+    // tessera.swiglu_fused op, so the op itself is the descriptor (no chain
+    // re-discovery): source = "composite_op".
+    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("swiglu"));
+    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
 
     auto outTensorTy = RankedTensorType::get({M, Kout}, elem);
     Value result =

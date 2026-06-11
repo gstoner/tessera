@@ -77,18 +77,23 @@ multiple root audit documents and compiler archive files.
   locked by `tests/unit/test_strict_dispatch.py` (short-circuit + legacy-path
   tests). **SwiGLU is now derived too** (`_match_swiglu_at` handles the DAG —
   gate/up share %x — inside the known-chain scan) and consumed by the
-  executor. **Target IR descriptor consume/emit — flagship slice landed
-  2026-06-11.** The matmul→softmax→matmul Apple pass
-  (`MatmulSoftmaxMatmulFusionToAppleGPU.cpp`) now *emits* a first-class fusion
-  descriptor on the fused call (`tessera.fusion.kernel` + `tessera.fusion.source
-  = "descriptor"|"rediscovered"`) and *consumes* an upstream
-  `tessera.fusion.intent` when present (Decision #19), with a Decision-#21
-  warning on descriptor/IR disagreement. Lit:
+  executor. **Target IR descriptor consume/emit — landed 2026-06-11.** All 7
+  Apple fusion passes now *emit* a first-class fusion descriptor on the fused
+  call (`tessera.fusion.kernel` + `tessera.fusion.source`): the 4 chain passes
+  (matmul→softmax→matmul / matmul→softmax / matmul→gelu / matmul→rmsnorm) also
+  *consume* an upstream `tessera.fusion.intent` (source `"descriptor"` vs
+  `"rediscovered"`, with a Decision-#21 warning on descriptor/IR disagreement);
+  the 3 composite passes (swiglu / mla_decode / native_sparse_attn) emit
+  `source = "composite_op"` (the pre-fused op *is* the descriptor). The Python
+  emit-half `canonical_compile.stamp_fusion_intents(module)` stamps the intent on
+  each recognized chain's terminal op from the canonical `_KNOWN_FUSION_CHAINS`,
+  so the frontend produces descriptor-annotated IR. Lit:
   `tests/tessera-ir/phase8/apple_gpu_fusion_descriptor.mlir`; Python:
-  `tests/unit/test_apple_fusion_descriptor.py`. Follow-on: extend the same
-  emit/consume template to the other 6 Apple fusion passes, and add the Python
-  emitter that stamps `tessera.fusion.intent` from the canonical
-  `_KNOWN_FUSION_CHAINS` so the real frontend produces descriptor-annotated IR.
+  `tests/unit/test_apple_fusion_descriptor.py` + `test_fusion_intent_emitter.py`
+  (incl. an emit↔consume contract guard). Remaining: auto-wiring
+  `stamp_fusion_intents` into a Target-IR lowering path (today it's a tested,
+  available emitter; the C++ Target IR pipeline is lit-exercised, not the @jit
+  runtime path).
 - **Layout and binding contracts are uneven.** Graph/Schedule/Tile/Target IR
   need stronger dtype, layout, aliasing, and buffer-binding contracts.
 - **Complete claims need fixtures.** A completed backend claim should resolve to

@@ -148,10 +148,14 @@ struct LowerMLADecodeFusionToAppleGPU : public RewritePattern {
               i32Ty, i32Ty, i32Ty, i32Ty, i32Ty, i32Ty}, {});
     ensureExternalDecl(mod, kMLADecodeF32Symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, kMLADecodeF32Symbol, TypeRange{},
         ValueRange{xPtr, wDkvPtr, wUkPtr, wUvPtr, qPtr, oPtr,
                    Bv, Skv, Dx, Dlat, Sq, Dh});
+    // Decision #19 — emit the fusion descriptor. MLA decode lowers a pre-fused
+    // tessera.mla_decode_fused op (the op is the descriptor): source="composite_op".
+    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("mla_decode"));
+    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
 
     auto outTensorTy = RankedTensorType::get({B, S_q, D_h}, elem);
     Value result =

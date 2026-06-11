@@ -54,6 +54,12 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
     if (geluOp->getNumOperands() < 1) return failure();
     Value geluIn = geluOp->getOperand(0);
 
+    // Decision #19 — consume the compiler's fusion descriptor when present.
+    StringRef intent;
+    if (auto a = geluOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
+      intent = a.getValue();
+    bool descriptorDriven = (intent == "matmul_gelu");
+
     auto gTy = dyn_cast<RankedTensorType>(geluIn.getType());
     if (!gTy || gTy.getRank() != 2)
       return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: rank-2 only");
@@ -63,8 +69,13 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
     Operation *defOp = geluIn.getDefiningOp();
     if (!defOp)
       return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: no defining op");
-    if (defOp->getName().getStringRef() != "tessera.matmul")
+    if (defOp->getName().getStringRef() != "tessera.matmul") {
+      if (descriptorDriven)  // Decision #21 — descriptor/IR disagreement.
+        geluOp->emitWarning(
+            "tessera.fusion.intent = \"matmul_gelu\" but gelu operand is not "
+            "from tessera.matmul — descriptor/IR mismatch; falling back");
       return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: defining op is not tessera.matmul");
+    }
     if (!geluIn.hasOneUse())
       return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: matmul result has multiple uses");
 
@@ -123,9 +134,12 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
     ensureExternalDecl(mod, kMatmulGeluF32Symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, kMatmulGeluF32Symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
+    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_gelu"));
+    callOp->setAttr("tessera.fusion.source",
+                    rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 
     auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
     Value result =

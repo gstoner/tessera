@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **449** ops in `primitive_coverage` registry.
-- **2248** total Python-test references, **577** total lit-fixture references.
+- **2263** total Python-test references, **581** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **201** ops have ≤1 reference ("thinly tested").
 - **48** ops have ≥10 references ("well tested").
@@ -17,19 +17,19 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  300 |  156 |  456 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
+| `matmul` |  309 |  158 |  467 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
 | `flash_attn` |   79 |   42 |  121 |   4 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |   72 |   37 |  109 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
+| `softmax` |   75 |   37 |  112 |   4 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   92 |    7 |   99 |   9 | `bf16`, `f16`, `f32`, `fp32` |
 | `silu` |   76 |    2 |   78 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gemm` |   69 |    2 |   71 |   6 | `bf16`, `f16`, `f32`, `fp16` … |
 | `add` |   62 |    6 |   68 |   8 | `bf16`, `f16`, `f32`, `fp32` |
 | `reduce` |   66 |    0 |   66 |   6 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
+| `rmsnorm` |   54 |   10 |   64 |   2 | `bf16`, `fp32` |
 | `mul` |   62 |    0 |   62 |   6 | `fp16`, `fp32`, `fp4_e2m1`, `fp6_e2m3` … |
-| `rmsnorm` |   53 |    9 |   62 |   2 | `bf16`, `fp32` |
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
-| `gelu` |   24 |   16 |   40 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
+| `gelu` |   26 |   17 |   43 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
 | `grouped_gemm` |   27 |   10 |   37 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `selective_ssm` |   36 |    0 |   36 |   2 |  |

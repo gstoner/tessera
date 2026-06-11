@@ -3011,6 +3011,33 @@ def _apple_gpu_native_sparse_attn_f32() -> Any:
     return sym
 
 
+def _apple_gpu_lookahead_sparse_attn_f32() -> Any:
+    """LSA Gap 4 — bind the fused batched masked LSA attention symbol.
+
+    O[b] = softmax_t(scale·Q[b]·K[b,t]ᵀ + MASK[b,t]) · V[b,t] in a single GPU
+    dispatch (collapses the host-select bmm + mask-add + softmax + bmm). The
+    non-Darwin stub exports the same symbol via a host reference, so value
+    execution still requires Darwin + an active Apple GPU runtime.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        from ._apple_gpu_dispatch import apple_gpu_skip_reason
+        if apple_gpu_skip_reason() is not None:
+            return None
+    except Exception:
+        return None
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_lookahead_sparse_attn_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    # (Q, K, V, mask, O, batch, T, D, Dv, scale)
+    sym.argtypes = [fp, fp, fp, fp, fp] + [ctypes.c_int32] * 4 + [ctypes.c_float]
+    sym.restype = None
+    return sym
+
+
 def _apple_gpu_ppo_policy_loss_f32() -> Any:
     """Stage 13: bind the Apple GPU PPO policy-loss value symbol.
 
@@ -6416,6 +6443,115 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
             w = e / e.sum(axis=-1, keepdims=True)
         out = br[0] * w[..., 0:1] + br[1] * w[..., 1:2] + br[2] * w[..., 2:3]
         return out.astype(np.result_type(Q, K, V))
+
+    if short == "tessera.lookahead_sparse_attention":
+        # Lookahead Sparse Attention (experimental). Host-mediated, data-dependent
+        # selection (sigmoid-threshold block select via memory_index_select); the
+        # per-query footprint attention runs on the GPU as a padded + masked
+        # bmm→+mask→softmax→bmm (same shape as attn_local_window_2d). The footprint
+        # is local window ∪ selected historical block tokens (causal). See
+        # docs/audit/domain/archive/lsa_scope.md (D2/D4).
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        window_size = int(kwargs["window_size"])
+        block_size = int(kwargs["block_size"])
+        threshold = float(kwargs.get("threshold", 0.5))
+        causal = bool(kwargs.get("causal", True))
+        tau = int(kwargs.get("tau", 64))
+        indexer_keys = kwargs.get("indexer_keys")
+        if Q.ndim != 4 or int(K.shape[2]) % block_size != 0:
+            return None
+        if tau <= 0 or window_size <= 0 or block_size <= 0:
+            return None
+        from tessera import lsa as _lsa
+        B, H, S, D = Q.shape
+        Dv = int(V.shape[-1])
+        scale = 1.0 / _math.sqrt(D)
+        keys = (indexer_keys if indexer_keys is not None
+                else _lsa.compress_block_keys(K, block_size=block_size))
+        # Host: sigmoid-threshold block selection (data-dependent).
+        mask = _lsa.memory_index_select(
+            keys, Q, block_size=block_size, threshold=threshold,
+            causal=causal, fallback_local=True).mask  # (B, H, S, num_blocks)
+        # Host: build each query's footprint (local window ∪ selected blocks).
+        footprints: list = [[[None] * S for _ in range(H)] for _ in range(B)]
+        t_max = 0
+        for b in range(B):
+            for h in range(H):
+                for sq in range(S):
+                    if causal:
+                        local = np.arange(max(0, sq - window_size + 1), sq + 1)
+                    else:
+                        half = window_size // 2
+                        local = np.arange(max(0, sq - half), min(S - 1, sq + half) + 1)
+                    pieces = [local]
+                    for blk in np.flatnonzero(mask[b, h, sq]):
+                        st = int(blk) * block_size
+                        pieces.append(np.arange(st, st + block_size))
+                    fp = np.concatenate(pieces) if len(pieces) > 1 else local
+                    if causal:
+                        fp = fp[fp <= sq]
+                    fp = np.unique(fp)
+                    footprints[b][h][sq] = fp
+                    t_max = max(t_max, int(fp.shape[0]))
+        if t_max == 0:
+            return None
+        K_flat = np.zeros((B, H, S, t_max, D), np.float32)
+        V_flat = np.zeros((B, H, S, t_max, Dv), np.float32)
+        valid = np.zeros((B, H, S, t_max), bool)
+        for b in range(B):
+            for h in range(H):
+                for sq in range(S):
+                    fp = footprints[b][h][sq]
+                    t = int(fp.shape[0])
+                    K_flat[b, h, sq, :t] = K[b, h, fp]
+                    V_flat[b, h, sq, :t] = V[b, h, fp]
+                    valid[b, h, sq, :t] = True
+        batch = B * H * S
+        bias = np.where(valid, np.float32(0.0), np.float32(-1e30))
+
+        # Gap 4 — fused single-dispatch path: one MSL kernel does
+        # softmax(scale·Q·Kᵀ + mask)·V per (head, query), collapsing the
+        # bmm + mask-add + softmax + bmm below into one GPU dispatch. Falls
+        # through to the multi-dispatch path when the symbol is unavailable or
+        # the padded footprint exceeds the fused kernel's per-thread cap (256).
+        if t_max <= 256:
+            fused = _apple_gpu_lookahead_sparse_attn_f32()
+            if fused is not None:
+                fp_t = ctypes.POINTER(ctypes.c_float)
+                Qf = np.ascontiguousarray(Q.astype(np.float32).reshape(batch, D))
+                Kf = np.ascontiguousarray(K_flat.reshape(batch, t_max, D))
+                Vf = np.ascontiguousarray(V_flat.reshape(batch, t_max, Dv))
+                Mf = np.ascontiguousarray(bias.reshape(batch, t_max))
+                Of = np.zeros((batch, Dv), np.float32)
+                fused(
+                    Qf.ctypes.data_as(fp_t), Kf.ctypes.data_as(fp_t),
+                    Vf.ctypes.data_as(fp_t), Mf.ctypes.data_as(fp_t),
+                    Of.ctypes.data_as(fp_t),
+                    ctypes.c_int32(batch), ctypes.c_int32(t_max),
+                    ctypes.c_int32(D), ctypes.c_int32(Dv), ctypes.c_float(scale))
+                return Of.reshape(B, H, S, Dv).astype(np.result_type(Q, K, V))
+
+        Qb = np.ascontiguousarray(
+            (Q.astype(np.float32) * np.float32(scale)).reshape(batch, 1, D))
+        KsT = np.ascontiguousarray(np.swapaxes(K_flat, -1, -2).reshape(batch, D, t_max))
+        A = _apple_gpu_dispatch_bmm(Qb, KsT, np)                           # [batch,1,t_max]
+        if A is None:
+            return None
+        A = np.asarray(A, np.float32).reshape(B, H, S, t_max)
+        A = np.asarray(
+            _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.add", [np.ascontiguousarray(A), np.ascontiguousarray(bias)],
+                {}, np), np.float32)
+        P = _apple_gpu_dispatch_softmax(
+            "tessera.softmax", [np.ascontiguousarray(A.reshape(batch, t_max))], {}, np)
+        P = np.ascontiguousarray(np.asarray(P, np.float32).reshape(batch, 1, t_max))
+        O = _apple_gpu_dispatch_bmm(
+            P, np.ascontiguousarray(V_flat.reshape(batch, t_max, Dv)), np)
+        if O is None:
+            return None
+        return np.asarray(O, np.float32).reshape(B, H, S, Dv).astype(np.result_type(Q, K, V))
 
     if short == "tessera.attn_local_window_2d":
         Q = np.asarray(operands[0])
@@ -10084,6 +10220,10 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_mtl4_conv2d_bf16")
                 # Phase-G Rung 3 — dynamic speculative accept as one MSL kernel.
                 getattr(lib, "tessera_apple_gpu_msl_spec_accept")
+                # LSA Gap 4 — fused batched masked lookahead-sparse attention.
+                # Freshest staleness sentinel: a prebuilt dylib lacking it is
+                # rejected so a source dylib with the fused kernel is compiled.
+                getattr(lib, "tessera_apple_gpu_lookahead_sparse_attn_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

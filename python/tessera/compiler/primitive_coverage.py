@@ -292,6 +292,10 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "attn_sliding_window": ("Megalodon/Griffin",),
     "attn_local_window_2d": ("weather/spatial grids",),
     "attn_top_k_blocks": ("Titans/Atlas", "Megalodon/Griffin"),
+    "memory_index_select": ("Titans/Atlas",),
+    "memory_index_score": ("Titans/Atlas",),
+    "memory_index_select_ste": ("Titans/Atlas",),
+    "lookahead_sparse_attention": ("Titans/Atlas", "Megalodon/Griffin"),
     "conv2d": ("diffusion", "JEPA"),
     "conv3d": ("diffusion",),
     "dct": ("Hyena/FNet/spectral",),
@@ -628,8 +632,46 @@ for _name in (
     "deepseek_sparse_attention", "lightning_attention", "gated_attention",
     "hybrid_attention", "gated_deltanet", "kimi_delta_attention",
     "modified_delta_attention",
+    # LSA composite policy op (experimental, inference-only). Has a dedicated
+    # ODS op in TesseraOps.td + LookaheadSparseAttnExpandPass in
+    # AttentionFamilyPasses.cpp; sharding stays partial pending backend
+    # validation (Bucket C). See docs/audit/domain/archive/lsa_scope.md.
+    "lookahead_sparse_attention",
 ):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_REASONING_FUSED_HARDENED
+
+# LSA selector — sigmoid-threshold block selection (D3). Deterministic, closed
+# form, boolean-mask output ⇒ non-differentiable (vjp/jvp via the per-name
+# non-diff set below). sharding stays partial pending mesh proof.
+_MEMORY_INDEX_SELECT_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "not_applicable",
+    "masking_effect_rule": "not_applicable",
+    "tests": "complete",
+}
+_EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDENED
+
+# LSA indexer-training surface. memory_index_score is the differentiable scoring
+# head (closed-form VJP+JVP registered → those axes auto-complete). The STE
+# selector has a VJP (straight-through) but no JVP (hard-step forward mode is
+# not_applicable — handled by the per-name non-diff set, which only downgrades
+# the still-"planned" jvp and leaves the registered vjp=complete).
+_MEMORY_INDEX_SCORE_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "masking_effect_rule": "not_applicable",
+    "tests": "complete",
+}
+_EXISTING_CONTRACT_OVERRIDES["memory_index_score"] = _MEMORY_INDEX_SCORE_HARDENED
+_EXISTING_CONTRACT_OVERRIDES["memory_index_select_ste"] = {
+    **_MEMORY_INDEX_SCORE_HARDENED,
+    "transpose_rule": "not_applicable",
+}
 
 for _name in ("ppo_policy_loss", "grpo_policy_loss", "cispo_policy_loss"):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _RL_LOSS_HARDENED
@@ -1846,6 +1888,13 @@ _NONDIFFERENTIABLE_PER_NAME: frozenset[str] = frozenset({
     "popcount",
     # indexing primitives that produce or use integer indices only
     "nonzero",
+    # LSA selector — deterministic sigmoid-threshold block selection returning a
+    # boolean mask; gradient through the selection is undefined (D3).
+    "memory_index_select",
+    # STE selector: has a registered (straight-through) VJP but no JVP — listed
+    # here so the still-"planned" jvp flips to not_applicable while the
+    # registered vjp=complete is preserved (the set only downgrades "planned").
+    "memory_index_select_ste",
     # masked categorical decision → returns indices (greedy argmax / sample)
     "masked_categorical",
     # state-effect / movement ops without a canonical VJP

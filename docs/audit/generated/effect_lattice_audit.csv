@@ -169,6 +169,7 @@ logical_not,pure,,1,0,0
 logical_or,pure,,1,0,0
 logical_xor,pure,,1,0,0
 logsumexp,pure,,1,1,1
+lookahead_sparse_attention,state,,1,0,0
 lt,pure,,1,0,0
 lu,pure,,1,0,0
 mae_loss,pure,,1,0,0
@@ -178,6 +179,9 @@ matmul,pure,pure,1,1,0
 max,pure,,1,0,0
 maximum,pure,,1,0,0
 mean,pure,,1,0,0
+memory_index_score,pure,,1,0,0
+memory_index_select,pure,,1,0,0
+memory_index_select_ste,pure,,1,0,0
 min,pure,,1,0,0
 minimum,pure,,1,0,0
 mla_decode,state,,1,1,1

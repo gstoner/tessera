@@ -1507,6 +1507,55 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             + branch_topk * weights[..., 2:3]
         ).astype(np.result_type(Q, K, V), copy=False)
 
+    def memory_index_select(indexer_keys, query, *, block_size: int,
+                            threshold: float = 0.5, causal: bool = True,
+                            scale=None, fallback_local: bool = True):
+        """LSA selector — sigmoid-threshold historical-block selection.
+
+        Returns the boolean selection mask ``(B, H, S_q, num_blocks)``. See
+        ``tessera.lsa.memory_index_select`` for the full contract (D3).
+        """
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_select(
+            indexer_keys, query, block_size=block_size, threshold=threshold,
+            causal=causal, scale=scale, fallback_local=fallback_local,
+        ).mask
+
+    def memory_index_score(indexer_keys, query, *, scale=None):
+        """Differentiable LSA indexer scoring head — sigmoid(query·keysᵀ·scale).
+
+        The trainable scoring surface for indexer keys (closed-form VJP+JVP). See
+        ``tessera.lsa.memory_index_score``.
+        """
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_score(indexer_keys, query, scale=scale)
+
+    def memory_index_select_ste(indexer_keys, query, *, threshold: float = 0.5, scale=None):
+        """Straight-through hard block selection for LSA indexer training.
+
+        Hard 0/1 mask forward; straight-through (sigmoid) gradient backward. See
+        ``tessera.lsa.memory_index_select_ste``.
+        """
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_select_ste(indexer_keys, query, threshold=threshold, scale=scale)
+
+    def lookahead_sparse_attention(Q, K, V, *, window_size: int, block_size: int,
+                                   tau: int = 64, threshold: float = 0.5,
+                                   causal: bool = True, indexer_keys=None,
+                                   scale=None):
+        """LSA composite policy — local window ∪ selected historical blocks.
+
+        Pure per call (D2): ``tau`` is the caller-owned re-selection cadence and
+        does not change a single forward's math. Delegates to the oracle in
+        ``tessera.lsa`` so the Graph IR / runtime lanes validate against one
+        reference.
+        """
+        from tessera import lsa as _lsa
+        return _lsa.lookahead_sparse_attention(
+            Q, K, V, window_size=window_size, block_size=block_size, tau=tau,
+            threshold=threshold, causal=causal, indexer_keys=indexer_keys, scale=scale,
+        )
+
     def hybrid_attention(Q, K, V, *, pattern: str = "auto",
                          layer_index: int = 0, gate=None, beta=None,
                          decay=None, state=None, w_dkv=None, w_uk=None,
@@ -3571,6 +3620,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "gated_attention": gated_attention,
         "hybrid_attention": hybrid_attention,
         "deepseek_sparse_attention": deepseek_sparse_attention,
+        "memory_index_select": memory_index_select,
+        "memory_index_score": memory_index_score,
+        "memory_index_select_ste": memory_index_select_ste,
+        "lookahead_sparse_attention": lookahead_sparse_attention,
         "lightning_attention": lightning_attention,
         "gated_deltanet": gated_deltanet,
         "kimi_delta_attention": kimi_delta_attention,
@@ -3711,6 +3764,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         gated_attention=gated_attention,
         hybrid_attention=hybrid_attention,
         deepseek_sparse_attention=deepseek_sparse_attention,
+        memory_index_select=memory_index_select,
+        memory_index_score=memory_index_score,
+        memory_index_select_ste=memory_index_select_ste,
+        lookahead_sparse_attention=lookahead_sparse_attention,
         lightning_attention=lightning_attention,
         gated_deltanet=gated_deltanet,
         kimi_delta_attention=kimi_delta_attention,

@@ -24,6 +24,7 @@ static void addGraphIRPreLoweringPasses(OpPassManager &pm) {
   pm.addPass(createHybridAttnExpandPass());
   pm.addPass(createLightningAttnFusionPass());
   pm.addPass(createDeltaAttnChunkingPass());
+  pm.addPass(createLookaheadSparseAttnExpandPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
 }
@@ -116,6 +117,8 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createHybridAttnExpandPass(); });
   ::mlir::registerPass([]() { return createLightningAttnFusionPass(); });
   ::mlir::registerPass([]() { return createDeltaAttnChunkingPass(); });
+  ::mlir::registerPass([]() { return createLookaheadSparseAttnExpandPass(); });
+  ::mlir::registerPass([]() { return createLookaheadSparsePrefetchPass(); });
 
   // ── Stage 13 — RL policy-loss compiler visibility/decomposition ─────────
   ::mlir::registerPass([]() { return createRLLossDecomposePass(); });

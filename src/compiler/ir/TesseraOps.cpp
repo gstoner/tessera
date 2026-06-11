@@ -1814,6 +1814,19 @@ LogicalResult DeepSeekSparseAttentionOp::verify() {
   return success();
 }
 
+LogicalResult LookaheadSparseAttentionOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "window_size",
+                               getWindowSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "tau", getTau())))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "lookahead_sparse_attention")))
+    return failure();
+  return success();
+}
+
 LogicalResult KVCacheAppendOp::verify() {
   auto kTy = dyn_cast<RankedTensorType>(getK().getType());
   auto vTy = dyn_cast<RankedTensorType>(getV().getType());

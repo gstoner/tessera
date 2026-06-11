@@ -25,8 +25,15 @@ from .mla_paged import MLAPagedDecoder
 from .resident_decode import ResidentMLADecoder
 from .resident_kv import (ResidentLatentKVCache, ResidentBlockPagedKVCache,
                           ResidentBlockPagedKVCacheError)
+from .tiered import (TieredKVCache, TieredKVCacheError, StageStats,
+                     TieredStats, lookahead_attention_tiered)
 
 __all__ = [
+    "TieredKVCache",
+    "TieredKVCacheError",
+    "StageStats",
+    "TieredStats",
+    "lookahead_attention_tiered",
     "KVCacheHandle",
     "LatentKVCacheHandle",
     "MemoryStateHandle",

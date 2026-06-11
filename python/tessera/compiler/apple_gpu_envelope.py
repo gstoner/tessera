@@ -129,9 +129,12 @@ _APPLE_GPU_DELTA_ATTN_OPS = frozenset({
 # hybrid_attention — policy wrapper routing to the now-proven delegates.
 _APPLE_GPU_HYBRID_ATTN_OPS = frozenset({"tessera.hybrid_attention"})
 # Data-dependent NSA attention (Sub-sprint E) — host select/gather + GPU attention.
+# Lookahead Sparse Attention (LSA, experimental) joins this lane: its sigmoid-
+# threshold block selection is host-mediated (data-dependent), the per-query
+# footprint attention runs on the GPU. See docs/audit/domain/archive/lsa_scope.md.
 _APPLE_GPU_SPARSE_ATTN_OPS = frozenset({
     "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
-    "tessera.attn_local_window_2d",
+    "tessera.attn_local_window_2d", "tessera.lookahead_sparse_attention",
 })
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)

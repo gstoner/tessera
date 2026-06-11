@@ -101,6 +101,39 @@ autodiff domain audit material.
   the adjoint identity `<op(x),g> == <x,adj(g)>` + JVP-vs-finite-difference.
 - Attention variants, MLA, speculative, KV-cache, and related surfaces have
   reference/compiler-facing implementations.
+- **Lookahead Sparse Attention (LSA, experimental, inference-only, 2026-06-11):**
+  two new primitives landed end-to-end — `memory_index_select` (sigmoid-threshold
+  block selector; deterministic, non-differentiable; the genuinely new piece,
+  distinct from the top-k+softmax `memory_read`) and `lookahead_sparse_attention`
+  (composite policy: causal local window ∪ selected historical blocks). NumPy
+  oracle in `python/tessera/lsa.py`; OP_SPECS + primitive_coverage rows (selector
+  `vjp/jvp=not_applicable`; composite `vjp/jvp=complete`, both
+  finite-difference-verified); Graph IR ODS op + verifier in `TesseraOps.td/.cpp`;
+  `LookaheadSparseAttnExpandPass` (4th attention-family compiler-visibility pass)
+  built + lit-verified; Apple-GPU runtime lane (host-mediated selection + GPU
+  masked footprint attention) matching the oracle to ~2e-7 and reporting
+  `execution_mode="metal_runtime"`. **Gap closure (2026-06-11):** CPU cold-pool ↔
+  GPU-resident KV tiering landed — `TieredKVCache` (`python/tessera/cache/tiered.py`)
+  with a host cold pool + bounded device-resident set + `stage`/`evict`/`gather`
+  staging ABI; `lookahead_attention_tiered` drives staging from the selector and
+  matches the oracle independent of resident capacity
+  (`tests/unit/test_lsa_tiered_kv_cache.py`). The `tpp-async-prefetch` pass is now
+  real (software-pipelined `schedule.prefetch`: double-buffer stages + dependency-
+  safe overlap hoist; `into="host"` recorded without an overlap claim) —
+  `src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`,
+  `tests/unit/test_lsa_prefetch_overlap.py`. Indexer-key training landed as a
+  differentiable surface (`memory_index_score` scoring head + `memory_index_
+  select_ste` straight-through), closed-form VJP+JVP, with a gradient-descent
+  training-loop test (`tests/unit/test_lsa_indexer_training.py`); the hard
+  selector stays non-differentiable for inference and the training loop lives in
+  user code. A fused single-dispatch GPU kernel
+  (`tessera_apple_gpu_lookahead_sparse_attn_f32`) collapses the host-select
+  bmm+mask+softmax+bmm into one MSL dispatch, oracle-validated
+  (`tests/unit/test_lsa_fused_gpu_kernel.py`). **All four originally-deferred LSA
+  gaps are now closed** (KV tiering, prefetch overlap, indexer training, fused
+  kernel). Scope lock + decisions: `archive/lsa_scope.md`. `backend_kernel` for
+  the registered primitives stays `partial` (the per-target Phase G/H/I gate —
+  the Apple fused kernel is one target).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.
 - Sharding partial audit classified open buckets instead of leaving a vague
   "distributed is partial" label.
@@ -130,6 +163,7 @@ autodiff domain audit material.
 - `archive/ebm_scope_lock.md`
 - `archive/ga6_autodiff_plan.md`
 - `archive/attention_variants_plan.md`
+- `archive/lsa_scope.md`
 - `archive/corrdiff_compiler_split_evaluation.md`
 - `archive/sharding_partial_audit.md`
 - `archive/source_base_review_2026_05_17.md`

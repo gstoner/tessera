@@ -6,12 +6,12 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **445** ops in `primitive_coverage` registry.
-- **2221** total Python-test references, **567** total lit-fixture references.
+- **449** ops in `primitive_coverage` registry.
+- **2242** total Python-test references, **571** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **199** ops have ≤1 reference ("thinly tested").
-- **47** ops have ≥10 references ("well tested").
-- **54** ops have at least one associated `pytest.raises` negative test.
+- **201** ops have ≤1 reference ("thinly tested").
+- **48** ops have ≥10 references ("well tested").
+- **56** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **199** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **201** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **199** ops have at most one test reference across the whole test surface.
 | `dataset_interleave` |    0 |    0 |    0 |
 | `dataset_map` |    0 |    0 |    0 |
 
-_(139 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(141 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,22 +117,23 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**199** ops have ≤1 direct test reference.  They break down as:
+**201** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   78 | Tested via a parent op or family wrapper |
-| `structural_only`        |  117 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
+| `structural_only`        |  118 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `needs_direct_test`      |    1 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
 
-These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **1** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
+| `memory_index_score` |   1 |   0 | category default for 'attention' |
 
 ## Hardware-gated ops
 
@@ -184,7 +185,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(48 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 117 ops
+## `structural_only` — 118 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -221,4 +222,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_checkpoint` | category default for 'data' |
 | `dataset_filter` | category default for 'data' |
 
-_(87 additional structural ops omitted.)_
+_(88 additional structural ops omitted.)_

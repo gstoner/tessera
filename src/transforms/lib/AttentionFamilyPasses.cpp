@@ -12,7 +12,9 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
@@ -94,6 +96,91 @@ public:
   }
 };
 
+// Lookahead Sparse Attention (LSA) — experimental, inference-only composite
+// attention policy.  Like HybridAttnExpandPass this is a compiler-visibility
+// slot: it preserves the semantic op while marking it for the sparse-attention
+// backend lane (host-mediated block selection + GPU dense attention).  See
+// docs/audit/domain/archive/lsa_scope.md (D1-D5).
+class LookaheadSparseAttnExpandPass
+    : public PassWrapper<LookaheadSparseAttnExpandPass,
+                         OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LookaheadSparseAttnExpandPass)
+
+  StringRef getArgument() const override {
+    return "tessera-lookahead-sparse-attn-expand";
+  }
+  StringRef getDescription() const override {
+    return "Mark tessera.lookahead_sparse_attention for the sparse-attention "
+           "backend lane (local window ∪ selected historical blocks)";
+  }
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() != "tessera.lookahead_sparse_attention")
+        return;
+      markReasoningVisible(op, builder, "lookahead_sparse",
+                           "lookahead_sparse_attention");
+    });
+  }
+};
+
+// Gap-2 follow-on — LSA Graph→Schedule lowering. For each
+// tessera.lookahead_sparse_attention op, emit a schedule.prefetch op that makes
+// the cold-pool KV staging a first-class IR value: the prefetch consumes the
+// LSA op's K operand and the LSA op is rewired to consume the prefetch result,
+// so the dataflow reads "stage K (from the host cold pool) → attend over it".
+//
+// The prefetch is emitted with into="host" + overlap="none": it *records* the
+// staging tier without claiming overlap, matching the synchronous Gap-1 runtime
+// staging. A backend that can asynchronously stage would set overlap="compute",
+// at which point the (already real) tpp-async-prefetch pass software-pipelines
+// it. Running -tessera-lookahead-sparse-prefetch then -tpp-async-prefetch is the
+// end-to-end Graph→Schedule→overlap flow.
+class LookaheadSparsePrefetchPass
+    : public PassWrapper<LookaheadSparsePrefetchPass,
+                         OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LookaheadSparsePrefetchPass)
+
+  StringRef getArgument() const override {
+    return "tessera-lookahead-sparse-prefetch";
+  }
+  StringRef getDescription() const override {
+    return "Emit schedule.prefetch{into=host} recording LSA cold-pool KV "
+           "staging (Graph->Schedule lowering)";
+  }
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    llvm::SmallVector<Operation *> lsaOps;
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.lookahead_sparse_attention")
+        lsaOps.push_back(op);
+    });
+    for (Operation *op : lsaOps) {
+      if (op->getNumOperands() < 2)
+        continue; // need at least (Q, K)
+      if (op->hasAttr("tessera.lsa.prefetch_emitted"))
+        continue; // idempotent
+      Value kv = op->getOperand(1); // K — the tensor staged from the cold pool
+      builder.setInsertionPoint(op);
+      OperationState state(op->getLoc(), "schedule.prefetch");
+      state.addOperands(kv);
+      state.addTypes(kv.getType());
+      state.addAttribute("into", builder.getStringAttr("host"));
+      state.addAttribute("overlap", builder.getStringAttr("none"));
+      state.addAttribute("tessera.lsa.staging",
+                         builder.getStringAttr("host_cold_pool"));
+      Operation *prefetch = builder.create(state);
+      // Rewire the LSA op to consume the staged value — a true dataflow edge
+      // (prefetch must precede its consumer; the async-prefetch dependency
+      // guard then keeps the prefetch ahead of the attention).
+      op->setOperand(1, prefetch->getResult(0));
+      op->setAttr("tessera.lsa.prefetch_emitted", builder.getBoolAttr(true));
+    }
+  }
+};
+
 } // namespace
 
 namespace tessera {
@@ -108,6 +195,14 @@ std::unique_ptr<Pass> createDeltaAttnChunkingPass() {
 
 std::unique_ptr<Pass> createHybridAttnExpandPass() {
   return std::make_unique<HybridAttnExpandPass>();
+}
+
+std::unique_ptr<Pass> createLookaheadSparseAttnExpandPass() {
+  return std::make_unique<LookaheadSparseAttnExpandPass>();
+}
+
+std::unique_ptr<Pass> createLookaheadSparsePrefetchPass() {
+  return std::make_unique<LookaheadSparsePrefetchPass>();
 }
 
 } // namespace tessera

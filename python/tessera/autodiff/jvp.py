@@ -467,6 +467,29 @@ def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
     return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
 
 
+@_jvp("memory_index_score")
+def jvp_memory_index_score(primals, tangents, *, scale=None, **_):
+    """Forward-mode through P = sigmoid(q·kᵀ·scale)."""
+    k, q = primals
+    dk, dq = tangents
+    k = np.asarray(k, dtype=np.float64)
+    q = np.asarray(q, dtype=np.float64)
+    dk = np.zeros_like(k) if dk is None else np.asarray(dk, dtype=np.float64)
+    dq = np.zeros_like(q) if dq is None else np.asarray(dq, dtype=np.float64)
+    sc = float(scale) if scale is not None else 1.0 / np.sqrt(q.shape[-1])
+    s = np.matmul(q, np.swapaxes(k, -1, -2)) * sc
+    p = 1.0 / (1.0 + np.exp(-s))
+    dS = (np.matmul(dq, np.swapaxes(k, -1, -2)) + np.matmul(q, np.swapaxes(dk, -1, -2))) * sc
+    return (p, p * (1.0 - p) * dS)
+
+
+@_jvp("lookahead_sparse_attention")
+def jvp_lookahead_sparse_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.lookahead_sparse_attention, "__wrapped__", _ops.lookahead_sparse_attention)
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+
+
 @_jvp("gated_deltanet")
 def jvp_gated_deltanet(primals, tangents, **kwargs):
     from tessera import ops as _ops

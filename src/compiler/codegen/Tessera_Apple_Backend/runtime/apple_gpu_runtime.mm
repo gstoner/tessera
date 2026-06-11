@@ -5737,7 +5737,160 @@ bool dispatch_matmul_softmax_matmul_bf16_via_fp32(
   return true;
 }
 
+// ── Lookahead Sparse Attention fused kernel (LSA Gap 4) ───────────────────
+// Batched, masked, single-query attention. For each batch element b:
+//   O[b] = softmax_t( scale * Q[b]·K[b,t]ᵀ + MASK[b,t] ) · V[b,t]
+// One thread per batch element (b = a (head, query) pair after the host folds
+// B·H·S_q into the batch). Padded footprint slots carry MASK = -inf so they
+// contribute zero. This collapses the host-select bmm + mask-add + softmax +
+// bmm (4 GPU dispatches) into ONE dispatch.
+inline void reference_lookahead_sparse_attn_f32(
+    const float* Q, const float* K, const float* V, const float* mask,
+    float* O, int32_t batch, int32_t T, int32_t D, int32_t Dv, float scale) {
+  std::vector<float> scores(static_cast<std::size_t>(T), 0.0f);
+  for (int32_t b = 0; b < batch; ++b) {
+    const float* q = Q + static_cast<std::size_t>(b) * D;
+    const float* kb = K + static_cast<std::size_t>(b) * T * D;
+    const float* vb = V + static_cast<std::size_t>(b) * T * Dv;
+    const float* mb = mask + static_cast<std::size_t>(b) * T;
+    for (int32_t t = 0; t < T; ++t) {
+      float acc = 0.0f;
+      const float* kt = kb + static_cast<std::size_t>(t) * D;
+      for (int32_t d = 0; d < D; ++d) acc += q[d] * kt[d];
+      scores[t] = acc * scale + mb[t];
+    }
+    float row_max = -std::numeric_limits<float>::infinity();
+    for (int32_t t = 0; t < T; ++t) row_max = std::max(row_max, scores[t]);
+    float denom = 0.0f;
+    for (int32_t t = 0; t < T; ++t) {
+      scores[t] = std::exp(scores[t] - row_max);
+      denom += scores[t];
+    }
+    float inv = denom > 0.0f ? 1.0f / denom : 0.0f;
+    float* o = O + static_cast<std::size_t>(b) * Dv;
+    for (int32_t p = 0; p < Dv; ++p) o[p] = 0.0f;
+    for (int32_t t = 0; t < T; ++t) {
+      float w = scores[t] * inv;
+      const float* vt = vb + static_cast<std::size_t>(t) * Dv;
+      for (int32_t p = 0; p < Dv; ++p) o[p] += w * vt[p];
+    }
+  }
+}
+
+#define TESSERA_APPLE_GPU_LSA_MAX_T 256
+
+bool dispatch_lookahead_sparse_attn_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* mask, float* O, int32_t batch, int32_t T, int32_t D,
+    int32_t Dv, float scale) {
+  static NSString *const kLSASource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_LSA_MAX_T 256
+
+kernel void lookahead_sparse_attn_f32(
+    device const float* Q     [[buffer(0)]],
+    device const float* K     [[buffer(1)]],
+    device const float* V     [[buffer(2)]],
+    device const float* MASK  [[buffer(3)]],
+    device float*       O     [[buffer(4)]],
+    constant int&       T     [[buffer(5)]],
+    constant int&       D     [[buffer(6)]],
+    constant int&       Dv    [[buffer(7)]],
+    constant float&     scale [[buffer(8)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (T > TESSERA_APPLE_GPU_LSA_MAX_T) return;
+    int b = (int)gid;
+    int qoff = b * D;
+    int koff = b * T * D;
+    int voff = b * T * Dv;
+    int moff = b * T;
+
+    float scores[TESSERA_APPLE_GPU_LSA_MAX_T];
+    float row_max = -INFINITY;
+    for (int t = 0; t < T; ++t) {
+        float acc = 0.0f;
+        int kt = koff + t * D;
+        for (int d = 0; d < D; ++d) acc += Q[qoff + d] * K[kt + d];
+        float s = acc * scale + MASK[moff + t];
+        scores[t] = s;
+        row_max = max(row_max, s);
+    }
+    float denom = 0.0f;
+    for (int t = 0; t < T; ++t) { scores[t] = exp(scores[t] - row_max); denom += scores[t]; }
+    float inv = denom > 0.0f ? 1.0f / denom : 0.0f;
+
+    int ooff = b * Dv;
+    for (int p = 0; p < Dv; ++p) {
+        float o = 0.0f;
+        for (int t = 0; t < T; ++t) o += scores[t] * inv * V[voff + t * Dv + p];
+        O[ooff + p] = o;
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kLSASource, @"lookahead_sparse_attn_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)batch * D;
+    NSUInteger kBytes = sizeof(float) * (NSUInteger)batch * T * D;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)batch * T * Dv;
+    NSUInteger mBytes = sizeof(float) * (NSUInteger)batch * T;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)batch * Dv;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufM, ctx, mask, mBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufM || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufM offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Dv length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&scale length:sizeof(float) atIndex:8];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)batch, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)batch,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "lookahead_sparse_attn_msl")) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
 } // namespace
+
+extern "C" void tessera_apple_gpu_lookahead_sparse_attn_f32(
+    const float* Q, const float* K, const float* V, const float* mask, float* O,
+    int32_t batch, int32_t T, int32_t D, int32_t Dv, float scale) {
+  if (T > TESSERA_APPLE_GPU_LSA_MAX_T) {
+    reference_lookahead_sparse_attn_f32(Q, K, V, mask, O, batch, T, D, Dv, scale);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_lookahead_sparse_attn_msl(ctx, Q, K, V, mask, O,
+                                                    batch, T, D, Dv, scale))
+    return;
+  reference_lookahead_sparse_attn_f32(Q, K, V, mask, O, batch, T, D, Dv, scale);
+}
 
 extern "C" void tessera_apple_gpu_matmul_softmax_matmul_f32(
     const float* A, const float* B, const float* C, float* O,

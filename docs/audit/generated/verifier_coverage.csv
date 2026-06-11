@@ -75,6 +75,7 @@ src/compiler/ir/TesseraOps.td,LinearAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnStateOp,1,1,real
 src/compiler/ir/TesseraOps.td,LionOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,LogSoftmaxOp,1,1,real
+src/compiler/ir/TesseraOps.td,LookaheadSparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeOp,1,1,real
 src/compiler/ir/TesseraOps.td,MQAAttentionOp,1,1,real

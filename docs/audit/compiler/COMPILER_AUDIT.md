@@ -96,16 +96,21 @@ multiple root audit documents and compiler archive files.
   `tests/unit/test_generated_docs_registry.py` includes an orphan guard so a new
   dashboard must register. The registry immediately caught 3 silently-stale
   dashboards (`test_coverage_by_op`, `test_coverage_classification`,
-  `effect_lattice_audit`). **6 dashboards are now CSV-canonical** (`runtime_abi`,
-  `verifier_coverage`, `support_table`, `op_target_conformance`,
-  `runtime_execution_matrix`, `test_coverage_by_op`). *Still open:* CSV-canonical
-  for the remaining data-shaped docs (`test_coverage_classification`,
-  `tsol_coverage`, `effect_lattice_audit`, `apple_target_map`, the two
-  `*_target_map`s), and the **aggressive content consolidation** (collapse the 3
-  target maps → 1 multi-target doc; the 5 surface-status docs → 1; merge the
-  test-coverage pair; fold `operator_benchmarks_coverage` into benchmarks; fold
-  the `e2e_op_coverage` + `s_series_status` rollups into their primaries) — each
-  is now a localized registry edit + generator change.
+  `effect_lattice_audit`). **CSV-canonical data-shaped tail closed 2026-06-11 —
+  12 dashboards now CSV-canonical:** `runtime_abi`, `verifier_coverage`,
+  `support_table`, `op_target_conformance`, `runtime_execution_matrix`,
+  `test_coverage`, `tsol_coverage`, `effect_lattice_audit`, `surface_status`, and
+  the **3 target maps** (`apple_target_map` + `nvidia_sm90_target_map` +
+  `rocm_target_map`, added via `apple_target_map.render_csv` /
+  `gpu_target_map.render_csv(target)`, wired into the registry so the CSV is the
+  drift-gated artifact). The remaining markdown-only docs are narrative rollups
+  (`e2e_op_coverage`, `s_series_status`, `s_series_accelerator_proof`,
+  `docs_freshness`), not row tables. *Still open (deliberately deferred):* the
+  **aggressive content consolidation** (collapse the 3 target maps → 1
+  multi-target doc; the `e2e_op_coverage` + `s_series_status` rollups into their
+  primaries) — Next Work #6 reassessed these as low-value churn (per-platform
+  maps are cross-referenced by the per-platform audit docs; the rollups are
+  distinct MASTER_AUDIT truth views).
 - **Code-level audit closeout (2026-06-10).** The
   [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md) "Closeout status" section
   drove every remaining code-level finding to done / refuted / accepted /

@@ -29,8 +29,8 @@ import tessera as ts
 from tessera.compiler.trace import run_traced, trace
 
 from _diff_lane import (  # noqa: E402  (sibling helper module, see _diff_lane.py)
-    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, ldt_cases, stable,
-    straightline_fn,
+    N, _BINARY, _EXPECT, _UNARY, apply_op, gpu, inputs, ldt_cases,
+    numeric_cases, stable, straightline_fn,
 )
 
 # Back-compat local aliases (kept so the test bodies read as before).
@@ -186,3 +186,16 @@ def test_ldt_ops_match_oracle(seed):
             np.testing.assert_allclose(
                 cand, np.asarray(oracle), rtol=2e-3, atol=2e-3,
                 err_msg=f"LDT MISCOMPILE {label} seed={seed}")
+
+
+# ── numeric elementwise / reduction differential — @jit(apple_gpu) vs an
+#    independent numpy oracle (item #4 differential-generator extension) ─────── #
+@gpu
+@pytest.mark.parametrize("seed", _SEEDS)
+def test_numeric_ops_match_oracle(seed):
+    nrng = np.random.default_rng(seed + 900)
+    for label, fn, args, oracle, exact in numeric_cases(nrng):
+        cand = np.asarray(fn(*args), dtype=np.float64)
+        np.testing.assert_allclose(
+            cand, np.asarray(oracle, dtype=np.float64), rtol=1e-4, atol=1e-4,
+            err_msg=f"NUMERIC MISCOMPILE {label} seed={seed}")

@@ -115,3 +115,41 @@ def ldt_cases(nrng):
         (logits, mask), np.asarray(ts.ops.masked_categorical(logits, mask)), True))
 
     return cases
+
+
+# ── numeric elementwise + reduction differential cases ─────────────────────── #
+# Audit 2026-06-10 (item #4) — extends the differential generator across the
+# needs-direct-test tail. These run on the **@jit(apple_gpu)** dispatch envelope
+# (beyond the 13-op straight-line tracer lane) and diff against an *independent*
+# numpy oracle — a true impl-vs-reference check (catches implementation bugs,
+# not just trace miscompiles). Each case is (label, jitted_fn, args, oracle,
+# exact); all compare at f32 tolerance (exact=False).
+
+def numeric_cases(nrng):
+    """Elementwise (unary/binary) + last-axis reduction ops, each @jit on
+    apple_gpu vs an independent numpy oracle. log/sqrt/rsqrt use a strictly
+    positive input so the reference is well-defined."""
+    import tessera as ts
+
+    x = (nrng.standard_normal((N, N)) / 4).astype(np.float32)
+    y = (nrng.standard_normal((N, N)) / 4).astype(np.float32)
+    xp = (np.abs(nrng.standard_normal((N, N))) + 0.5).astype(np.float32)  # > 0
+
+    return [
+        # shape-preserving elementwise unary (defined on all reals)
+        ("exp",      _agpu(lambda a: ts.ops.exp(a)),      (x,),  np.exp(x),           False),
+        ("abs",      _agpu(lambda a: ts.ops.abs(a)),      (x,),  np.abs(x),           False),
+        ("softplus", _agpu(lambda a: ts.ops.softplus(a)), (x,),  np.log1p(np.exp(x)), False),
+        # positive-domain unary
+        ("log",      _agpu(lambda a: ts.ops.log(a)),      (xp,), np.log(xp),          False),
+        ("sqrt",     _agpu(lambda a: ts.ops.sqrt(a)),     (xp,), np.sqrt(xp),         False),
+        ("rsqrt",    _agpu(lambda a: ts.ops.rsqrt(a)),    (xp,), 1.0 / np.sqrt(xp),   False),
+        # elementwise binary
+        ("maximum",  _agpu(lambda a, b: ts.ops.maximum(a, b)), (x, y), np.maximum(x, y), False),
+        ("minimum",  _agpu(lambda a, b: ts.ops.minimum(a, b)), (x, y), np.minimum(x, y), False),
+        # last-axis reductions (not shape-preserving)
+        ("sum",      _agpu(lambda a: ts.ops.sum(a, axis=-1)),  (x,), x.sum(-1),       False),
+        ("mean",     _agpu(lambda a: ts.ops.mean(a, axis=-1)), (x,), x.mean(-1),      False),
+        ("amax",     _agpu(lambda a: ts.ops.amax(a, axis=-1)), (x,), x.max(-1),       False),
+        ("amin",     _agpu(lambda a: ts.ops.amin(a, axis=-1)), (x,), x.min(-1),       False),
+    ]

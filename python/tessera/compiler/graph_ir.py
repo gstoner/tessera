@@ -1029,15 +1029,19 @@ class _OpExtractor(ast.NodeVisitor):
             return
         # Capture the returned SSA value(s) + type(s) so the function declares
         # real outputs (tuple returns → multiple values). If any element can't
-        # be lowered to an SSA value, leave returns unset (the function emits a
-        # value-less `return`, as before) rather than declare a partial result.
+        # be lowered to an SSA value, OR it resolves to a value that isn't
+        # actually defined in this function body (e.g. it was produced inside an
+        # unlowered control-flow region — the while_loop / dynamic-for eager
+        # fallback), leave returns unset so the function emits a value-less
+        # `return`, as before. Declaring a return value that the verifier can't
+        # find a definition for would raise GRAPH_IR_RETURN_UNDEFINED.
         elts = (node.value.elts if isinstance(node.value, ast.Tuple)
                 else [node.value])
         names: List[str] = []
         types: List[IRType] = []
         for elt in elts:
             ssa = self._emit_expr(elt)
-            if ssa is None:
+            if ssa is None or not self._is_defined_value(ssa):
                 self.return_values = []
                 self.return_result_types = []
                 self.generic_visit(node)
@@ -1046,6 +1050,16 @@ class _OpExtractor(ast.NodeVisitor):
             types.append(self._value_types.get(ssa, TENSOR_OPAQUE))
         self.return_values = names
         self.return_result_types = types
+
+    def _is_defined_value(self, ssa: str) -> bool:
+        """True if ``ssa`` names a value defined in this function body — an
+        argument or an emitted op result. Mirrors the verifier's notion of a
+        defined value so we never declare a return the verifier would reject."""
+        if not ssa.startswith("%"):
+            return False
+        if ssa in self._value_types:
+            return True
+        return ssa[1:] in self._arg_names
 
     def visit_If(self, node: ast.If) -> None:
         """Lower Python `if/else` to `tessera.scf.if.*` markers.

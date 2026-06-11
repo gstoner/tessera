@@ -128,6 +128,18 @@ def _r_apple_target_map() -> str:
     return apple_target_map.render_markdown()
 
 
+def _r_apple_target_map_csv() -> str:
+    from . import apple_target_map
+    return apple_target_map.render_csv()
+
+
+def _r_gpu_target_map_csv(target: str) -> Callable[[], str]:
+    def render() -> str:
+        from . import gpu_target_map
+        return gpu_target_map.render_csv(target)
+    return render
+
+
 def _r_gpu_target_map(target: str) -> Callable[[], str]:
     def _render() -> str:
         from . import gpu_target_map
@@ -374,18 +386,23 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         "verifier_coverage", "verifier", _GEN / "verifier_coverage.md", _r_verifier_md,
         csv_path=_GEN / "verifier_coverage.csv", render_csv=_r_verifier_csv,
     ),
-    # ── Target maps ──
+    # ── Target maps (CSV-canonical 2026-06-11) ──
     GeneratedDoc(
         "apple_target_map", "target_map", _GEN / "apple_target_map.md",
         _r_apple_target_map,
+        csv_path=_GEN / "apple_target_map.csv", render_csv=_r_apple_target_map_csv,
     ),
     GeneratedDoc(
         "nvidia_sm90_target_map", "target_map", _GEN / "nvidia_sm90_target_map.md",
         _r_gpu_target_map("nvidia_sm90"),
+        csv_path=_GEN / "nvidia_sm90_target_map.csv",
+        render_csv=_r_gpu_target_map_csv("nvidia_sm90"),
     ),
     GeneratedDoc(
         "rocm_target_map", "target_map", _GEN / "rocm_target_map.md",
         _r_gpu_target_map("rocm"),
+        csv_path=_GEN / "rocm_target_map.csv",
+        render_csv=_r_gpu_target_map_csv("rocm"),
     ),
     # ── Test coverage (per-op counts + classification triage, merged) ──
     GeneratedDoc(

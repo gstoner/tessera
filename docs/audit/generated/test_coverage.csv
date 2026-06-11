@@ -184,7 +184,7 @@ gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,7,2,0,9,0,,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,24,16,1,40,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
+gelu,26,17,1,43,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,69,2,6,71,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
@@ -252,7 +252,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,300,152,15,452,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,313,158,15,471,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
@@ -332,7 +332,7 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,53,9,2,62,0,bf16 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm,54,10,2,64,0,bf16 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,3,5,0,8,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -386,7 +386,7 @@ sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-softmax,70,35,4,105,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
+softmax,75,37,4,112,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
 softplus,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only

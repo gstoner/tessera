@@ -76,12 +76,31 @@ struct LowerMatmulSoftmaxMatmulFusionToAppleGPU : public RewritePattern {
     Value secondLhs = secondMatmulOp->getOperand(0);  // softmax output
     Value secondRhs = secondMatmulOp->getOperand(1);  // C
 
+    // Decision #19 — consume the compiler's fusion descriptor. When the
+    // canonical compile recognized this chain it stamps the tail op with
+    // `tessera.fusion.intent = "matmul_softmax_matmul"`; we take that as
+    // authoritative (the emitted call is tagged `source = "descriptor"`),
+    // rather than re-discovering the fusion purely structurally. Absent the
+    // intent, the structural walk below still recognizes the chain and the
+    // call is tagged `source = "rediscovered"` (back-compat).
+    StringRef intent;
+    if (auto a = secondMatmulOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
+      intent = a.getValue();
+    bool descriptorDriven = (intent == "matmul_softmax_matmul");
+
     // Walk: secondLhs must be the result of a tessera.softmax with one use.
     Operation *softmaxOp = secondLhs.getDefiningOp();
     if (!softmaxOp)
       return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: tail matmul lhs has no defining op");
-    if (softmaxOp->getName().getStringRef() != "tessera.softmax")
+    if (softmaxOp->getName().getStringRef() != "tessera.softmax") {
+      // Decision #21 — a fusion intent that the IR structure contradicts is a
+      // real inconsistency; surface it by name instead of silently falling back.
+      if (descriptorDriven)
+        secondMatmulOp->emitWarning(
+            "tessera.fusion.intent = \"matmul_softmax_matmul\" but tail matmul "
+            "lhs is not a tessera.softmax — descriptor/IR mismatch; falling back");
       return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: tail matmul lhs is not a softmax");
+    }
     if (!secondLhs.hasOneUse())
       return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: softmax result has multiple uses");
 
@@ -187,9 +206,17 @@ struct LowerMatmulSoftmaxMatmulFusionToAppleGPU : public RewritePattern {
         ctx, {i64Ty, i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty, i32Ty}, {});
     ensureExternalDecl(mod, symbol, fnTy);
 
-    rewriter.create<func::CallOp>(
+    auto callOp = rewriter.create<func::CallOp>(
         loc, symbol, TypeRange{},
         ValueRange{aPtr, bPtr, cPtr, oPtr, Mv, Kv, Nv, Pv});
+    // Decision #19 — emit the fusion descriptor into the Target IR so the
+    // fusion decision is first-class/auditable (which kernel, and whether the
+    // compiler's intent drove it or it was re-discovered structurally).
+    callOp->setAttr("tessera.fusion.kernel",
+                    rewriter.getStringAttr("matmul_softmax_matmul"));
+    callOp->setAttr("tessera.fusion.source",
+                    rewriter.getStringAttr(descriptorDriven ? "descriptor"
+                                                            : "rediscovered"));
 
     auto outTensorTy = RankedTensorType::get({M, P}, elem);
     Value result =

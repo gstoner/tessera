@@ -728,6 +728,13 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # cpu
     ("matmul", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
+    # assert_allclose'd against a hand-computed expected output (audit
+    # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).
+    ("conv2d", "cpu"): "tests/unit/test_operator_registry_foundation.py",
+    # KV-cache read on the reference handle: append → read(start, end) and
+    # assert_allclose the returned keys/values against the appended slice.
+    ("kv_cache_read", "cpu"): "tests/unit/test_kv_cache_handle.py",
     # apple_cpu
     ("matmul", "apple_cpu"): "tests/unit/test_apple_backend_roadmap.py",
     # apple_gpu — landed runtime paths

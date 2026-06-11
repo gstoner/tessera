@@ -337,12 +337,25 @@ def _eval_hardware_smoke(target: str, op_name: Optional[str]) -> GateResult:
 
 
 def _eval_numerical(target: str, op_name: Optional[str]) -> GateResult:
-    """A numerical-comparison test exists. v1 leans on the capabilities
-    op-level ``runtime_status``: ``ready`` / ``fused`` means there's a real
-    runtime path which is verified by the unit suite (the apple_cpu /
+    """A numerical-comparison test exists. A manifest-declared
+    ``execute_compare_fixture`` is exactly that — a checked-in execute-and-
+    compare test — so it passes the gate directly (audit 2026-06-10: keeps
+    ``first_failing_gate`` consistent with the conformance ``numerical_check``
+    column, which already sources the fixture map). Otherwise v1 leans on the
+    capabilities op-level ``runtime_status``: ``ready`` / ``fused`` means
+    there's a real runtime path verified by the unit suite (the apple_cpu /
     apple_gpu test files exercise these end-to-end with numpy comparisons)."""
     if op_name is None:
         return GateResult(GATE_NUMERICAL, STATUS_NOT_APPLICABLE)
+    # A declared execute_compare_fixture is the strongest numerical signal.
+    try:
+        from .backend_manifest import _NUMERICAL_FIXTURES
+        bare = op_name.split(".")[-1]
+        if (bare, target) in _NUMERICAL_FIXTURES or (op_name, target) in _NUMERICAL_FIXTURES:
+            return GateResult(GATE_NUMERICAL, STATUS_PASS,
+                              "execute_compare_fixture declared")
+    except Exception:  # noqa: BLE001 — manifest optional; fall back to caps
+        pass
     tc = _safe_get_capability(target if target != "nvidia"
                                        else "nvidia_sm90")
     if tc is None:

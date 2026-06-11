@@ -85,7 +85,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `numerical` — no capabilities op-entry for 'conv2d' on 'cpu' |  |
+| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'conv2d' on 'nvidia' |  |
@@ -105,7 +105,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 
 | target | overall | graph | schedule | tile | target_legal | backend_compile | runtime | numerical | first failing gate (B) | notes |
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
-| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `numerical` — no capabilities op-entry for 'kv_cache_read' on 'cpu' |  |
+| `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'kv_cache_read' on 'nvidia' |  |

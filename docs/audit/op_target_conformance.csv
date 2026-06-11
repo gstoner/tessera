@@ -1,7 +1,7 @@
 op,target,overall,graph_emitted,schedule_legal,tile_legal,target_legal,backend_compile,runtime_execute,numerical_check,first_failing_gate
 conv2d,apple_cpu,partial,complete,complete,complete,complete,complete,partial,partial,hardware_smoke
 conv2d,apple_gpu,missing,complete,complete,complete,complete,complete,missing,complete,hardware_smoke
-conv2d,cpu,partial,complete,complete,complete,complete,complete,partial,partial,numerical
+conv2d,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 conv2d,nvidia,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 conv2d,rocm,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 flash_attn,apple_cpu,partial,complete,complete,complete,complete,complete,partial,partial,hardware_smoke
@@ -11,7 +11,7 @@ flash_attn,nvidia,missing,complete,complete,complete,complete,artifact_only,miss
 flash_attn,rocm,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
 kv_cache_read,apple_cpu,partial,complete,complete,complete,complete,complete,partial,partial,hardware_smoke
 kv_cache_read,apple_gpu,missing,complete,complete,complete,complete,complete,missing,partial,hardware_smoke
-kv_cache_read,cpu,partial,complete,complete,complete,complete,complete,partial,partial,numerical
+kv_cache_read,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 kv_cache_read,nvidia,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 kv_cache_read,rocm,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke

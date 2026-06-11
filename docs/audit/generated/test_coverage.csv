@@ -1,5 +1,5 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
-abs,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+abs,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 absolute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 acos,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
@@ -12,8 +12,8 @@ alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
 all_reduce,7,0,1,7,0,f32 fp32 fp8_e4m3 int8,needs_direct_test,category default for 'collective'
 all_to_all,3,0,0,3,0,fp32,needs_direct_test,category default for 'collective'
-amax,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-amin,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+amax,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+amin,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 aot_export,0,0,0,0,1,,structural_only,category default for 'aot'
 aot_load,0,0,0,0,1,,structural_only,category default for 'aot'
 arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
@@ -166,7 +166,7 @@ empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-exp,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+exp,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -235,7 +235,7 @@ lion,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_opti
 load_balance_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
 load_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 load_state,13,0,2,13,0,,structural_only,category default for 'serialization'
-log,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+log,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 log1p,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 log_softmax,5,5,0,10,0,,needs_direct_test,category default for 'stable_reduction'
@@ -254,14 +254,14 @@ masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direc
 matmul,296,152,15,448,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-maximum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-mean,9,0,0,9,0,,structural_only,unclassified — defaults to structural_only
+maximum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+mean,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
 memory_read,2,0,0,2,0,,needs_direct_test,category default for 'memory'
 memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 min_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
-minimum,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+minimum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 mla_decode,3,2,0,5,0,,needs_direct_test,category default for 'attention'
 mla_decode_fused,4,9,0,13,0,,needs_direct_test,category default for 'attention'
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
@@ -355,7 +355,7 @@ rope,17,10,0,27,0,,structural_only,unclassified — defaults to structural_only
 rope_merge,2,0,1,2,0,fp16 fp32,needs_direct_test,category default for 'layout_transform'
 rope_split,8,0,1,8,0,fp16 fp32,needs_direct_test,category default for 'layout_transform'
 round,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-rsqrt,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+rsqrt,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,5,0,2,5,0,,structural_only,category default for 'serialization'
@@ -384,7 +384,7 @@ slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softmax,70,35,4,105,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-softplus,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+softplus,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 spectral_conv,5,0,0,5,0,fp32,needs_direct_test,category default for 'spectral'
 spectral_filter,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
@@ -392,7 +392,7 @@ spectral_norm,2,0,0,2,0,,needs_direct_test,category default for 'normalization'
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,3,0,0,3,0,,needs_direct_test,category default for 'sparse'
 spmm_csr,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
-sqrt,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
+sqrt,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 stablehlo_export,2,0,0,2,0,,structural_only,category default for 'aot'
 stack,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
@@ -404,7 +404,7 @@ std,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 stft,5,0,0,5,0,,needs_direct_test,category default for 'spectral'
 sub,6,0,0,6,0,,covered_by_family,category default for 'elementwise'
-sum,3,0,0,3,0,f32,needs_direct_test,category default for 'stable_reduction'
+sum,4,0,0,4,0,f32,needs_direct_test,category default for 'stable_reduction'
 svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

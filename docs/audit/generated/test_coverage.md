@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **445** ops in `primitive_coverage` registry.
-- **2209** total Python-test references, **567** total lit-fixture references.
+- **2221** total Python-test references, **567** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **206** ops have ≤1 reference ("thinly tested").
-- **46** ops have ≥10 references ("well tested").
+- **199** ops have ≤1 reference ("thinly tested").
+- **47** ops have ≥10 references ("well tested").
 - **54** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -40,11 +40,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **206** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **199** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
-| `abs` |    1 |    0 |    1 |
 | `absolute` |    1 |    0 |    1 |
 | `acos` |    1 |    0 |    1 |
 | `alibi` |    1 |    0 |    1 |
@@ -104,8 +103,9 @@ These **206** ops have at most one test reference across the whole test surface.
 | `dataset_checkpoint` |    0 |    0 |    0 |
 | `dataset_filter` |    0 |    0 |    0 |
 | `dataset_interleave` |    0 |    0 |    0 |
+| `dataset_map` |    0 |    0 |    0 |
 
-_(146 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(139 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**206** ops have ≤1 direct test reference.  They break down as:
+**199** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   82 | Tested via a parent op or family wrapper |
-| `structural_only`        |  120 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   78 | Tested via a parent op or family wrapper |
+| `structural_only`        |  117 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 82 ops
+## `covered_by_family` — 78 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -182,15 +182,14 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `dbar` | exercised by complex differential tests |
 | `ddpm_noise_pred_loss` | category default for 'loss' |
 
-_(52 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(48 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 120 ops
+## `structural_only` — 117 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
 | Op | reason |
 |----|--------|
-| `abs` | unclassified — defaults to structural_only |
 | `absolute` | unclassified — defaults to structural_only |
 | `aot_export` | category default for 'aot' |
 | `aot_load` | category default for 'aot' |
@@ -220,5 +219,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `cyclical_lr` | category default for 'schedule' |
 | `dataset_batch` | category default for 'data' |
 | `dataset_checkpoint` | category default for 'data' |
+| `dataset_filter` | category default for 'data' |
 
-_(90 additional structural ops omitted.)_
+_(87 additional structural ops omitted.)_

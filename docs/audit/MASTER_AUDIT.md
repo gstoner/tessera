@@ -214,26 +214,32 @@ returns a plausible artifact never crashes); fuzzing is layered on top of the
 differential oracle to catch the long tail.
 
 The actionable surface, ranked (numbers live in `stub_surface.md`):
-- **Verifier stubs — largely closed (2026-06-07).** Three verifier sprints
-  (V8 norm/softmax, V9 control-flow + stubs + MoR/quant/FFT) took
-  `verifier_coverage` from 73 → **100 `real`**, `trivial_stub` 9 → **1**
-  (`ArchSTEOneHotOp` — an opaque ArchParam→ArchGate with no scalar/shape
-  contract), `absent` **0**. Control flow (`control_for`/`if`/`while`) enforces
-  the run_graph payload-ABI invariant + carry/flag bounds; the 8 closed stubs
-  (Arch*/KVCacheCreate/RingCreate) got real resource/scalar contracts; MoR,
-  quantize/dequantize (FP8/FP4 format + shape), and the FFT family (axis bounds)
-  landed too. A latent `verifier_coverage.py` parser bug (one-line `def X :
-  Base<...>;` ops bled into the next op's block; base-class `hasVerifier` was
-  invisible) was fixed along the way. Remaining: the `no_verifier` tail is mostly
-  pure elementwise (legitimately need none); a few structural collective/reshape
-  ops could still get one.
-- **Software conformance gaps** — the op×target cells that stop at `codegen` /
-  `numerical` (vs the hardware-gated `hardware_smoke`/`toolchain`/`link` rows):
-  `conv2d`/`kv_cache_read` → cpu (numerical: executes but unverified) and
-  conv2d/flash_attn/kv_cache_read → nvidia/rocm (codegen: lowering emits
-  no code).
-- **Thin-test tail** — the `needs_direct_test` ops: the target for a generative
-  differential harness (tracer vs numpy/CPU oracle).
+- **Verifier stubs — closed (2026-06-10): `trivial_stub` is now 0.** Three
+  verifier sprints (V8 norm/softmax, V9 control-flow + stubs + MoR/quant/FFT)
+  took `verifier_coverage` from 73 → **100+ `real`**, and the **final trivial
+  stub `ArchSTEOneHotOp` was removed 2026-06-10**: `arch.ste_one_hot` maps an
+  opaque parameterless `ArchParam → ArchGate`, so the ODS type constraints
+  fully constrain it and a `verify(){return success();}` was a false claim —
+  dropping `hasVerifier=1` reclassifies it honestly to `no_verifier`
+  (`trivial_stub` 1 → **0**). The `no_verifier` tail is mostly pure elementwise
+  (legitimately need none); a few structural collective/reshape ops could still
+  get one.
+- **Software conformance gaps — CPU numerical cells closed (2026-06-10).**
+  `conv2d → cpu` and `kv_cache_read → cpu` ("executes but unverified") now carry
+  manifest-declared `execute_compare_fixture`s (the existing
+  `test_jit_cpu_executes_conv2d_nhwc_reference` and `test_kv_cache_handle`
+  read-compares), flipping `numerical_check` `partial → complete`. A
+  pipeline-gate fix made `_eval_numerical` honor a declared fixture, so the
+  worklist's software-actionable count dropped **6 → 4**. The remaining 4
+  (`conv2d`/`kv_cache_read` → nvidia/rocm, stop @ `codegen`) emit no code AND
+  have no silicon — effectively hardware-gated.
+- **Thin-test tail — differential generator extended (2026-06-10).**
+  `_diff_lane.numeric_cases` adds 12 elementwise/reduction ops
+  (`exp`/`log`/`sqrt`/`rsqrt`/`abs`/`softplus`/`maximum`/`minimum`/`sum`/`mean`/
+  `amax`/`amin`) run on `@jit(apple_gpu)` vs an **independent numpy oracle** (a
+  true impl-vs-reference check across the dispatch envelope, beyond the 13-op
+  straight-line tracer lane), wired into both the stdlib and hypothesis
+  harnesses.
 
 Workstream (chosen 2026-06-07): **(#1) quantify** — `stub_surface_report.py`
 (✅ done); **(#4) IR round-trip property + fuzz** (✅ done —

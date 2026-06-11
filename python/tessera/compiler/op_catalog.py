@@ -103,6 +103,12 @@ _SPECS = [
     # selected historical blocks) that composes through the existing sparse
     # attention lane.
     OpSpec("memory_index_select", "tessera.memory_index_select", 2, 2, lowering="indexing"),
+    # Differentiable indexer-training surface (the keys are learnable through
+    # these even though the hard selector above is not). memory_index_score is
+    # the smooth scoring head; memory_index_select_ste is hard-forward /
+    # straight-through-backward.
+    OpSpec("memory_index_score", "tessera.memory_index_score", 2, 2, lowering="attention"),
+    OpSpec("memory_index_select_ste", "tessera.memory_index_select_ste", 2, 2, lowering="indexing"),
     OpSpec("lookahead_sparse_attention", "tessera.lookahead_sparse_attention", 3, 3, effect="state", lowering="attention"),
     OpSpec("gated_attention", "tessera.gated_attention", 4, 4, effect="state", lowering="attention"),
     OpSpec("hybrid_attention", "tessera.hybrid_attention", 3, 3, effect="state", lowering="attention"),

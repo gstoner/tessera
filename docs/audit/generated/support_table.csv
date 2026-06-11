@@ -14,6 +14,7 @@ lightning_attention,attention,public,public,registered,complete,partial,referenc
 linear_attn,attention,public,public,registered,complete,partial,reference,ready,none
 linear_attn_state,attention,public,public,registered,complete,partial,reference,ready,none
 lookahead_sparse_attention,attention,public,public,registered,complete,partial,reference,ready,none
+memory_index_score,attention,public,public,registered,complete,partial,reference,ready,none
 mla_decode,attention,public,public,registered,complete,partial,reference,ready,none
 mla_decode_fused,attention,public,public,registered,complete,partial,reference,ready,none
 modified_delta_attention,attention,public,public,registered,complete,partial,reference,ready,none
@@ -108,6 +109,7 @@ index_select,indexing,public,public,registered,complete,partial,reference,ready,
 index_update,indexing,public,public,registered,complete,partial,reference,ready,none
 masked_categorical,indexing,public,public,registered,complete,partial,reference,ready,none
 memory_index_select,indexing,public,public,registered,complete,partial,reference,ready,none
+memory_index_select_ste,indexing,public,public,registered,complete,partial,reference,ready,none
 nonzero,indexing,public,public,registered,complete,partial,reference,ready,none
 scatter,indexing,public,public,registered,complete,partial,reference,ready,none
 scatter_add,indexing,public,public,registered,complete,partial,reference,ready,none

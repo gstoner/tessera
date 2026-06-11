@@ -121,8 +121,12 @@ autodiff domain audit material.
   real (software-pipelined `schedule.prefetch`: double-buffer stages + dependency-
   safe overlap hoist; `into="host"` recorded without an overlap claim) —
   `src/solvers/tpp/lib/Passes/AsyncPrefetch.cpp`,
-  `tests/unit/test_lsa_prefetch_overlap.py`. **Still deferred (named, not done):**
-  indexer-key training, fused GPU kernel. Scope
+  `tests/unit/test_lsa_prefetch_overlap.py`. Indexer-key training landed as a
+  differentiable surface (`memory_index_score` scoring head + `memory_index_
+  select_ste` straight-through), closed-form VJP+JVP, with a gradient-descent
+  training-loop test (`tests/unit/test_lsa_indexer_training.py`); the hard
+  selector stays non-differentiable for inference and the training loop lives in
+  user code. **Still deferred (named, not done):** fused GPU kernel. Scope
   lock + decisions: `archive/lsa_scope.md`. `backend_kernel` stays `partial`
   (Phase G/H/I gate).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.

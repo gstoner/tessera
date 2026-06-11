@@ -292,9 +292,59 @@ def lookahead_sparse_attention(
     return out.astype(np.result_type(_asarray(Q), _asarray(K), _asarray(V)), copy=False)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Indexer training (Gap 4 in the scope doc, "indexer-key learning loop").
+#
+# memory_index_select is non-differentiable (hard sigmoid threshold → bool mask),
+# so the indexer keys cannot be learned through it directly. The two helpers
+# below are the differentiable scoring surface a *user* training loop drives (the
+# loop itself stays outside the compiler, per the scope decision):
+#
+#   * memory_index_score — the indexer's scoring head: sigmoid(q·kᵀ·scale),
+#     fully differentiable in both the indexer keys and the query. Put a
+#     supervision / auxiliary loss on these probabilities to train the keys.
+#   * memory_index_select_ste — hard selection in the forward pass, straight-
+#     through (sigmoid) gradient in the backward pass, so a downstream loss on
+#     the *hard* selection still trains the indexer keys.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def memory_index_score(indexer_keys, query, *, scale: float | None = None):
+    """Differentiable indexer scoring head — ``sigmoid(query·keysᵀ·scale)``.
+
+    ``indexer_keys`` is ``(B, H, num_blocks, Dk)`` and ``query`` is
+    ``(B, H, S_q, Dk)``; returns per-block selection probabilities
+    ``(B, H, S_q, num_blocks)``. Differentiable in both inputs (closed-form VJP
+    + JVP registered), so the indexer keys are trainable.
+    """
+    k = _asarray(indexer_keys, np.float64)
+    q = _asarray(query, np.float64)
+    if k.ndim != 4 or q.ndim != 4 or k.shape[-1] != q.shape[-1]:
+        raise ValueError("indexer_keys (B,H,nb,Dk) and query (B,H,S_q,Dk) required")
+    sc = float(scale) if scale is not None else 1.0 / np.sqrt(q.shape[-1])
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) * sc
+    return _sigmoid(scores)
+
+
+def memory_index_select_ste(indexer_keys, query, *, threshold: float = 0.5,
+                            scale: float | None = None):
+    """Straight-through hard block selection for indexer training.
+
+    Forward: ``(memory_index_score >= threshold)`` as a float 0/1 mask. Backward
+    (registered VJP): the straight-through estimator routes the upstream
+    gradient through the smooth ``sigmoid`` score, so a loss on the hard
+    selection still trains the indexer keys. Forward-mode (JVP) is not
+    applicable (the hard step has no meaningful directional derivative).
+    """
+    probs = memory_index_score(indexer_keys, query, scale=scale)
+    return (probs >= float(threshold)).astype(np.float64)
+
+
 __all__ = [
     "SelectionResult",
     "compress_block_keys",
     "lookahead_sparse_attention",
     "memory_index_select",
+    "memory_index_score",
+    "memory_index_select_ste",
 ]

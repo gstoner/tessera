@@ -1217,6 +1217,28 @@ def vjp_deepseek_sparse_attention(dout, Q, K, V, gate_logits=None, **kwargs):
     return _numeric_attention_family_vjp("deepseek_sparse_attention", dout, args, kwargs)
 
 
+@_vjp("memory_index_score")
+def vjp_memory_index_score(dout, indexer_keys, query, *, scale=None, **_):
+    """P = sigmoid(q·kᵀ·scale). Closed-form gradient to (indexer_keys, query)."""
+    k = np.asarray(indexer_keys, dtype=np.float64)
+    q = np.asarray(query, dtype=np.float64)
+    dP = np.asarray(dout, dtype=np.float64)
+    sc = float(scale) if scale is not None else 1.0 / np.sqrt(q.shape[-1])
+    s = np.matmul(q, np.swapaxes(k, -1, -2)) * sc
+    p = 1.0 / (1.0 + np.exp(-s))
+    dS = dP * p * (1.0 - p)
+    dq = np.matmul(dS, k) * sc                       # (B,H,S_q,Dk)
+    dk = np.matmul(np.swapaxes(dS, -1, -2), q) * sc  # (B,H,nb,Dk)
+    return (dk, dq)
+
+
+@_vjp("memory_index_select_ste")
+def vjp_memory_index_select_ste(dout, indexer_keys, query, *, threshold=0.5, scale=None, **_):
+    """Straight-through estimator: backprop the hard selection as if it were the
+    smooth sigmoid score — identical gradient to memory_index_score."""
+    return vjp_memory_index_score(dout, indexer_keys, query, scale=scale)
+
+
 @_vjp("lookahead_sparse_attention")
 def vjp_lookahead_sparse_attention(dout, Q, K, V, **kwargs):
     # Selection (sigmoid-threshold over compressed block keys) is piecewise

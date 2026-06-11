@@ -258,7 +258,9 @@ max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 mean,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
+memory_index_score,1,0,0,1,1,,needs_direct_test,category default for 'attention'
 memory_index_select,4,0,1,4,0,,structural_only,unclassified — defaults to structural_only
+memory_index_select_ste,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 memory_read,2,0,0,2,0,,needs_direct_test,category default for 'memory'
 memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

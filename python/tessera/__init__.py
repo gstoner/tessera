@@ -1521,6 +1521,24 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             causal=causal, scale=scale, fallback_local=fallback_local,
         ).mask
 
+    def memory_index_score(indexer_keys, query, *, scale=None):
+        """Differentiable LSA indexer scoring head — sigmoid(query·keysᵀ·scale).
+
+        The trainable scoring surface for indexer keys (closed-form VJP+JVP). See
+        ``tessera.lsa.memory_index_score``.
+        """
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_score(indexer_keys, query, scale=scale)
+
+    def memory_index_select_ste(indexer_keys, query, *, threshold: float = 0.5, scale=None):
+        """Straight-through hard block selection for LSA indexer training.
+
+        Hard 0/1 mask forward; straight-through (sigmoid) gradient backward. See
+        ``tessera.lsa.memory_index_select_ste``.
+        """
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_select_ste(indexer_keys, query, threshold=threshold, scale=scale)
+
     def lookahead_sparse_attention(Q, K, V, *, window_size: int, block_size: int,
                                    tau: int = 64, threshold: float = 0.5,
                                    causal: bool = True, indexer_keys=None,
@@ -3603,6 +3621,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "hybrid_attention": hybrid_attention,
         "deepseek_sparse_attention": deepseek_sparse_attention,
         "memory_index_select": memory_index_select,
+        "memory_index_score": memory_index_score,
+        "memory_index_select_ste": memory_index_select_ste,
         "lookahead_sparse_attention": lookahead_sparse_attention,
         "lightning_attention": lightning_attention,
         "gated_deltanet": gated_deltanet,
@@ -3745,6 +3765,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         hybrid_attention=hybrid_attention,
         deepseek_sparse_attention=deepseek_sparse_attention,
         memory_index_select=memory_index_select,
+        memory_index_score=memory_index_score,
+        memory_index_select_ste=memory_index_select_ste,
         lookahead_sparse_attention=lookahead_sparse_attention,
         lightning_attention=lightning_attention,
         gated_deltanet=gated_deltanet,

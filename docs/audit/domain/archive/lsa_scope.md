@@ -60,8 +60,15 @@ Per Decision #21/#25 these are tracked gaps, not silent omissions:
   `tests/unit/test_lsa_prefetch_overlap.py`. **Follow-on:** emitting
   `schedule.prefetch` from the LSA op in IR needs LSA Graph→Schedule lowering
   (not built); today the realized prefetch is the Gap-1 runtime staging.
-- **Indexer-key training** — v1 is inference-only; the indexer learning loop
-  stays outside the compiler.
+- ~~**Indexer-key training**~~ — **LANDED 2026-06-11** (the differentiable
+  surface; the training *loop* still lives in user code, as intended).
+  `memory_index_score` is the indexer's scoring head — `sigmoid(q·kᵀ·scale)` with
+  a closed-form VJP+JVP (finite-difference verified), so the indexer keys are
+  trainable. `memory_index_select_ste` is hard-forward / straight-through
+  (sigmoid) backward for training under hard selection. The hard
+  `memory_index_select` stays non-differentiable for inference.
+  `tests/unit/test_lsa_indexer_training.py` (6) includes a gradient-descent loop
+  that trains the indexer to select a target block.
 - **Fused GPU LSA kernel** — revisit only if the host-select round-trip is a
   measured perf wall.
 

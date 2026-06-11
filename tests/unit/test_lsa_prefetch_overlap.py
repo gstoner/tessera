@@ -91,3 +91,48 @@ def test_host_prefetch_recorded_but_not_overlapped(tmp_path):
     host_line = next(ln for ln in out.stdout.splitlines() if 'into = "host"' in ln)
     assert "tpp.prefetch.overlapped = false" in host_line
     assert "tpp.prefetch.hoisted = false" in host_line
+
+
+# ── Gap-2 follow-on: LSA Graph→Schedule prefetch emission ────────────────────
+
+_LSA_PASS_SRC = (REPO_ROOT / "src" / "transforms" / "lib" / "AttentionFamilyPasses.cpp")
+
+_LSA_FIXTURE = '''
+func.func @lsa(%q: tensor<2x3x16x16xf32>, %k: tensor<2x3x16x16xf32>, %v: tensor<2x3x16x16xf32>) -> tensor<2x3x16x16xf32> {
+  %0 = "tessera.lookahead_sparse_attention"(%q, %k, %v) {window_size = 6 : i64, block_size = 4 : i64, tau = 64 : i64, threshold = 5.000000e-01 : f64, causal = true} : (tensor<2x3x16x16xf32>, tensor<2x3x16x16xf32>, tensor<2x3x16x16xf32>) -> tensor<2x3x16x16xf32>
+  return %0 : tensor<2x3x16x16xf32>
+}
+'''
+
+
+def test_lsa_prefetch_pass_is_declared_and_registered():
+    impl = _LSA_PASS_SRC.read_text()
+    assert "tessera-lookahead-sparse-prefetch" in impl
+    assert "createLookaheadSparsePrefetchPass" in impl
+    passes_cpp = (REPO_ROOT / "src" / "transforms" / "lib" / "Passes.cpp").read_text()
+    assert "createLookaheadSparsePrefetchPass" in passes_cpp
+
+
+@_needs_opt
+def test_lsa_emits_prefetch_then_async_overlap_records_it(tmp_path):
+    # Graph→Schedule: the LSA op emits schedule.prefetch{into=host} and consumes
+    # it; the real async-prefetch pass then records it without claiming overlap.
+    f = tmp_path / "lsa.mlir"
+    f.write_text(_LSA_FIXTURE)
+    out = subprocess.run(
+        [_OPT, str(f), "-tessera-lookahead-sparse-prefetch", "-tpp-async-prefetch",
+         "-allow-unregistered-dialect"],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    text = out.stdout
+    pf = next(ln for ln in text.splitlines() if "schedule.prefetch" in ln)
+    assert 'into = "host"' in pf
+    assert 'overlap = "none"' in pf
+    assert 'tessera.lsa.staging = "host_cold_pool"' in pf
+    assert "tpp.prefetch.overlapped = false" in pf  # no overlap claimed
+    assert "tpp.prefetch.hoisted = false" in pf
+    # The LSA op is rewired to consume the prefetch (it appears after it) and
+    # is tagged as having emitted its staging prefetch.
+    assert "tessera.lsa.prefetch_emitted = true" in text
+    assert text.index("schedule.prefetch") < text.index("lookahead_sparse_attention")

@@ -58,9 +58,16 @@ four have since landed; the strikethrough entries record what closed them.
   cold-pool staging is *recorded*) is annotated but never overlapped/hoisted — no
   overlap semantics claimed, per this gap's contract. Lit:
   `src/solvers/tpp/test/TPP/async_prefetch_overlap.mlir`; Python:
-  `tests/unit/test_lsa_prefetch_overlap.py`. **Follow-on:** emitting
-  `schedule.prefetch` from the LSA op in IR needs LSA Graph→Schedule lowering
-  (not built); today the realized prefetch is the Gap-1 runtime staging.
+  `tests/unit/test_lsa_prefetch_overlap.py`. **Follow-on LANDED 2026-06-11** — the
+  LSA Graph→Schedule lowering now exists: `tessera-lookahead-sparse-prefetch`
+  (`AttentionFamilyPasses.cpp`) emits a `schedule.prefetch{into="host",
+  overlap="none"}` for each `tessera.lookahead_sparse_attention` op and rewires
+  the op to consume it (a true dataflow edge), making the cold-pool KV staging a
+  first-class IR value. Running it then `-tpp-async-prefetch` is the end-to-end
+  Graph→Schedule→overlap flow; the host prefetch is recorded without an overlap
+  claim (matching the synchronous Gap-1 runtime — a backend that stages
+  asynchronously flips `overlap="compute"` and the real pass software-pipelines
+  it). Lit: `tests/tessera-ir/phase8/lsa_prefetch_lowering.mlir`.
 - ~~**Indexer-key training**~~ — **LANDED 2026-06-11** (the differentiable
   surface; the training *loop* still lives in user code, as intended).
   `memory_index_score` is the indexer's scoring head — `sigmoid(q·kᵀ·scale)` with

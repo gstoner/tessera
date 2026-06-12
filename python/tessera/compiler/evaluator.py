@@ -95,15 +95,18 @@ def verdict_for(
 
     if not provenance_ok:
         # The demanded backend did not execute. Whatever number came back is a
-        # fallback, so we make NO execution/correctness claim about this backend
-        # — it caps at "lowered" regardless of numerical agreement.
+        # fallback, so we make NO execution/correctness claim — and we do NOT
+        # claim rung 2 (`lowers_clean`) either, which requires positive evidence
+        # the Target IR passed the MLIR verifier. The honest floor is rung 1
+        # (`artifact_only`): IR was emitted; nothing stronger is proven. This is
+        # exactly where NVIDIA/ROCm sit today (Target IR artifact, no execution).
         return BackendVerdict(
-            target=target, rung=Rung.LOWERS_CLEAN,
+            target=target, rung=Rung.ARTIFACT_ONLY,
             execution_kind=execution_kind, runtime_status=runtime_status,
             provenance_ok=False, correctness="unproven",
             detail=f"did not execute natively on {target} "
                    f"(kind={execution_kind!r}, status={runtime_status!r}); "
-                   "silent fallback cannot earn an execution rung",
+                   "artifact only — silent fallback cannot earn an execution rung",
         )
 
     if oracle_match is None:

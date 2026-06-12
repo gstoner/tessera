@@ -64,22 +64,38 @@ the highest honest rung reached.
 
 | Rung | Claim | Hardware? | Apple | NVIDIA | ROCm |
 |---|---|---|---|---|---|
-| 1 `artifact_only` | IR emitted | no | ✅ | ✅ | ✅ |
-| 2 `lowers_clean` | backend pipeline lowers the *generated* program with no diagnostics; WGMMA/TMA/MFMA descriptors valid per the CUDA-13.2 / ROCm-7.2.3 inventories | no | ✅ | partial | partial |
-| 3 `assembles` | emitted PTX/AMDGCN **actually assembles** (`ptxas -arch=sm_90a` / `hipcc`+`llvm-mc`) — catches register/shared-mem overflow, illegal wgmma/tma encodings, arch mismatch | **no** (toolchain only) | n/a¹ | **buildable now** | **buildable now** |
-| 4 `codegen_stable` | same IR at two opt levels → structurally-equivalent SASS/AMDGCN (kernel count, descriptor count, no dropped fusion) | **no** | ✅ (also runtime checksum) | buildable | buildable |
+| 1 `artifact_only` | IR emitted | no | ✅ | ✅ **(here today)** | ✅ **(here today)** |
+| 2 `lowers_clean` | backend pipeline lowers the *generated* program and the Target IR **passes the MLIR verifier** with no unsupported-diagnostic; WGMMA/TMA/MFMA descriptors valid per the CUDA-13.2 / ROCm-7.2.3 inventories | no (needs `tessera-opt`) | ✅ | gap² | gap² |
+| 2.5 `emits_asm_text` | the backend emits **actual PTX / AMDGCN assembler text** (today it stops at Target IR MLIR — `tessera_nvidia.*` / `tessera_rocm.mfma` / `tessera.tile.wgmma`) | no | n/a¹ | **MISSING — prerequisite for rung 3** | **MISSING** |
+| 3 `assembles` | emitted PTX/AMDGCN **actually assembles** (`ptxas -arch=sm_90a` / `hipcc`+`llvm-mc`) — catches register/shared-mem overflow, illegal wgmma/tma encodings, arch mismatch | **no** (toolchain only) | n/a¹ | blocked on 2.5 | blocked on 2.5 |
+| 4 `codegen_stable` | same IR at two opt levels → structurally-equivalent SASS/AMDGCN (kernel count, descriptor count, no dropped fusion) | **no** | ✅ (also runtime checksum) | blocked on 2.5 | blocked on 2.5 |
 | 5 `numerical_symbolic` | microkernel ≡ reference via finite-field / SMT equivalence (the only hardware-free path to codegen faithfulness) | **no** (heavy) | optional | aspirational | aspirational |
 | 6 `executes` | runs on real silicon (via the G7 launch bridge) | **yes** | ✅ | — | — |
 | 7 `hardware_verified` | oracle-matches reference on real silicon | **yes** | ✅ | — | — |
 
-¹ Apple's "assembles" is subsumed by its runtime path; rung 3 is the
-NVIDIA/ROCm-specific lever.
+¹ Apple's "assembles" is subsumed by its runtime path; rungs 2.5/3 are the
+NVIDIA/ROCm-specific levers.
 
-**The strategic point:** NVIDIA/ROCm sit at rung 1–2 with **0 at rung 7**, and
-the current "artifact_only vs nothing" framing *hides that rungs 3–5 are
-reachable with zero GPUs*. The Evaluator makes the rung distribution **visible
-and monotonic** — you watch NVIDIA climb to rung 3–4 across the whole program
-set without a single GPU, and the audit stays honest.
+² **Correction (2026-06-11, grounded in source).** An earlier draft of this
+plan called the rung-3 assembly lever "buildable now / the biggest
+underexploited lever." That was wrong: `@jit(target="rocm")` (and the NVIDIA
+pipeline) emit **Target IR MLIR, not assembler text** — verified by probing the
+runtime (`execution_mode=artifact_only`, `compiler_path=target_ir_artifact`,
+diagnostic `JIT_TARGET_IR_ARTIFACT_ONLY`) and by reading
+`matmul_pipeline._render_{rocm,nvidia}_target_ir` (they render `tessera_rocm.mfma`
+/ `tessera.tile.wgmma` ops). `scripts/validate_nvcc_compile.py` assembles its
+**own hand-written CUDA stubs**, not Tessera output. So **NVIDIA/ROCm are at
+rung 1 today**; the real next work item is **rung 2.5 — an assembler-text
+emission path** (lower `tessera.tile.wgmma` → real `wgmma.mma` PTX). Only after
+2.5 does `ptxas`/`hipcc` (rung 3) have anything to assemble, and rung-3 still
+runs in Linux CI (the CUDA/ROCm toolchains don't install on the arm64 dev Mac).
+
+**The strategic point:** NVIDIA/ROCm sit at **rung 1** with **0 at rung 7**. The
+honest forward path is to (a) make the Evaluator report that rung truthfully
+(never overstate), then (b) build the rung-2.5 emission path one narrow kernel
+at a time, then (c) the rung-3 assembly gate in Linux CI, then (d) the hardware
+batch. The Evaluator makes each step **visible and monotonic** — and refuses to
+let an `artifact_only` backend claim a higher rung it hasn't earned.
 
 ---
 
@@ -147,19 +163,24 @@ to avoid NaN/Inf regions that dominate FP comparison.
 
 Three hardware-free levers, in priority order:
 
-1. **Real assembly of every emitted kernel in CPU CI (rung 3) — biggest,
-   most underexploited.** Today `scripts/validate_nvcc_compile.py` runs
-   `nvcc -arch=sm_90a -ptx` hardware-free but over only **8 hand-written stub
-   fixtures**, decoupled from what Tessera actually emits. The move: assemble
-   Tessera's *real emitted PTX for the generated program set* with **`ptxas`**
-   (the SASS assembler — strictly stronger than `nvcc -ptx`; it catches register
-   pressure and illegal encodings), and AMDGCN via `hipcc`/`llvm-mc`. This is
-   the **NVIDIA/ROCm analog of the Apple provenance gate**: it turns the vacuous
-   "we emit NVIDIA artifacts" into "every artifact we emit assembles for
-   sm_90a." Runs on a Linux x86 CI box with the CUDA/ROCm toolchain and **no
-   GPU**. (Honest caveat: those toolchains do not install on the arm64 dev Mac,
-   so rung 3 is a *Linux-CI* lane, structured to skip-clean locally exactly like
-   the existing validators.)
+1. **Assembler-text emission, THEN assembly of every emitted kernel (rungs
+   2.5 → 3) — corrected.** The earlier framing ("assemble Tessera's real emitted
+   PTX — buildable now") had an unmet prerequisite: **Tessera does not emit
+   assembler text today.** `@jit(target="rocm")` / the NVIDIA pipeline stop at
+   Target IR MLIR (`tessera_rocm.mfma` / `tessera.tile.wgmma`), and
+   `scripts/validate_nvcc_compile.py` assembles its *own* 8 hand-written CUDA
+   stubs, not Tessera output. So the real sequence is:
+   (i) **rung 2.5 — build the emission path**: lower `tessera.tile.wgmma` →
+   actual `wgmma.mma` PTX (and `tessera_rocm.mfma` → `v_mfma` AMDGCN), one narrow
+   kernel at a time (e.g. an sm_90 bf16 matmul);
+   (ii) **rung 3 — assemble it**: `ptxas -arch=sm_90a` / `hipcc`+`llvm-mc` over
+   the *real emitted* text — strictly stronger than `nvcc -ptx`; catches register
+   pressure and illegal encodings. This is the NVIDIA/ROCm analog of the Apple
+   provenance gate: it turns "we emit NVIDIA artifacts" into "every kernel we
+   emit assembles for sm_90a." Rung 3 runs on a Linux x86 CI box with the
+   CUDA/ROCm toolchain and **no GPU**; both rungs skip-clean on the arm64 dev Mac
+   (no toolchain), so rung 2.5 (emission) is the only piece verifiable up to
+   "emits valid-looking text" locally — assembly is Linux-CI.
 
 2. **Correctness transfer via backend-independent Tile IR (rungs 2+4).**
    Graph/Schedule/Tile IR is backend-neutral. If the Evaluator proves `p`

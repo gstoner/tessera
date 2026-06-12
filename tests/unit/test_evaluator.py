@@ -77,18 +77,19 @@ def test_native_success_plus_mismatch_is_miscompile_not_pass():
 
 def test_silent_fallback_cannot_earn_execution_rung_even_when_correct():
     """``runtime_status='unimplemented'`` + eager fallback must NOT be promoted,
-    regardless of numerical agreement: the demanded backend never ran."""
+    regardless of numerical agreement: the demanded backend never ran. The honest
+    floor is rung 1 (artifact_only), not rung 2 (which needs verifier evidence)."""
     v = verdict_for("apple_gpu", "fallback_eager", "unimplemented", oracle_match=True)
     assert not v.provenance_ok and v.is_silent_fallback
     assert v.correctness == "unproven"
-    assert v.rung is Rung.LOWERS_CLEAN and v.rung < Rung.EXECUTES
+    assert v.rung is Rung.ARTIFACT_ONLY and v.rung < Rung.EXECUTES
 
 
 def test_reference_cpu_success_is_not_native_execution():
     """A reference executor returning a correct number still isn't the demanded
     native backend — provenance must fail."""
     v = verdict_for("cpu", "reference_cpu", "success", oracle_match=True)
-    assert not v.provenance_ok and v.rung is Rung.LOWERS_CLEAN
+    assert not v.provenance_ok and v.rung is Rung.ARTIFACT_ONLY
 
 
 def test_native_success_without_reference_is_executes_unproven():
@@ -99,7 +100,19 @@ def test_native_success_without_reference_is_executes_unproven():
 
 def test_invalid_artifact_is_not_provenance():
     v = verdict_for("apple_gpu", "native_gpu", "invalid_artifact", oracle_match=True)
-    assert not v.provenance_ok and v.rung is Rung.LOWERS_CLEAN
+    assert not v.provenance_ok and v.rung is Rung.ARTIFACT_ONLY
+
+
+def test_artifact_only_backend_reports_rung1_not_overstated():
+    """NVIDIA/ROCm emit a Target IR artifact and do not execute here. The
+    Evaluator must report ARTIFACT_ONLY (rung 1) and refuse to overstate to
+    lowers_clean/executes — portable (no toolchain / GPU needed)."""
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((16, 16)).astype(np.float32)
+    b = rng.standard_normal((16, 16)).astype(np.float32)
+    v = evaluate("rocm", ts.jit(target="rocm")(_mm), (a, b), a @ b)
+    assert v.rung is Rung.ARTIFACT_ONLY, v.detail
+    assert not v.provenance_ok and v.rung < Rung.EXECUTES
 
 
 def test_rung_order_is_meaningful():
@@ -153,9 +166,9 @@ def test_fallback_lane_classified_honestly_no_silent_miscompile():
             f"(kind={v.execution_kind!r}) but disagreed with the numpy oracle "
             f"— {v.detail}"
         )
-        # (b) any non-native verdict is an honest, un-promotable fallback.
+        # (b) any non-native verdict is an honest, un-promotable artifact.
         if not v.provenance_ok:
-            assert v.rung is Rung.LOWERS_CLEAN and v.is_silent_fallback
+            assert v.rung is Rung.ARTIFACT_ONLY and v.is_silent_fallback
 
     # The Evaluator is genuinely distinguishing native from fallback — at least
     # one of these envelope-adjacent ops is shown to NOT execute natively (the

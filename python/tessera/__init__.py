@@ -4101,6 +4101,9 @@ from . import cache  # noqa: E402
 # Speculative decoding scheduler primitives (Theme 6).
 from . import speculative  # noqa: E402
 
+# DFlash — block-diffusion draft model for flash speculative decoding (P1).
+from . import dflash  # noqa: E402
+
 # Probability distributions (deferred-items plan, Item 1).
 from . import distributions  # noqa: E402
 

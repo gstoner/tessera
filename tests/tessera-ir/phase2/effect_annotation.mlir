@@ -40,7 +40,7 @@ module attributes {tessera.ir.version = "1.0"} {
       %K: tensor<8x64x64xbf16>,
       %V: tensor<8x64x64xbf16>
   ) -> tensor<8x64x64xf32> {
-    %O = "tessera.flash_attn"(%Q, %K, %V)
+    %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}>
              {head_dim = 64 : i64, dropout_p = 0.1 : f64, causal = false}
              : (tensor<8x64x64xbf16>, tensor<8x64x64xbf16>, tensor<8x64x64xbf16>)
              -> tensor<8x64x64xf32>

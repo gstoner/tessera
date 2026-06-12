@@ -77,7 +77,7 @@ module attributes {tessera.ir.version = "1.0",
       %V: tensor<64x64xbf16>
             {tessera.effect = "read"}
   ) -> tensor<64x64xf32> {
-    %out = "tessera.flash_attn"(%Q, %K, %V) {
+    %out = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
       causal           = true,
       head_dim         = 64 : i64,
       tessera.tile_q   = 64 : i32,

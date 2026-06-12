@@ -443,6 +443,92 @@ extern "C" void tessera_apple_gpu_flash_attn_bf16(const uint16_t* Q,
   for (std::size_t i = 0; i < Of.size(); ++i) O[i] = float_to_bfloat16_stub(Of[i]);
 }
 
+// attn_bias substrate — softmax(scale*Q*K^T + bias)*V (non-Darwin reference).
+namespace {
+inline void reference_attn_bias_f32_stub(const float* Q, const float* K,
+                                         const float* V, const float* bias,
+                                         float* O, int32_t B, int32_t Sq,
+                                         int32_t Sk, int32_t D, float scale) {
+  std::vector<float> s(static_cast<std::size_t>(Sk));
+  for (int32_t b = 0; b < B; ++b) {
+    const float* Kb = K + static_cast<std::size_t>(b) * Sk * D;
+    const float* Vb = V + static_cast<std::size_t>(b) * Sk * D;
+    const float* Bb = bias + static_cast<std::size_t>(b) * Sq * Sk;
+    for (int32_t q = 0; q < Sq; ++q) {
+      const float* Qr = Q + (static_cast<std::size_t>(b) * Sq + q) * D;
+      float* Or = O + (static_cast<std::size_t>(b) * Sq + q) * D;
+      float m = -std::numeric_limits<float>::infinity();
+      for (int32_t k = 0; k < Sk; ++k) {
+        const float* Kr = Kb + static_cast<std::size_t>(k) * D;
+        float dot = 0.0f;
+        for (int32_t d = 0; d < D; ++d) dot += Qr[d] * Kr[d];
+        s[k] = dot * scale + Bb[static_cast<std::size_t>(q) * Sk + k];
+        m = std::max(m, s[k]);
+      }
+      float den = 0.0f;
+      for (int32_t k = 0; k < Sk; ++k) { s[k] = std::exp(s[k] - m); den += s[k]; }
+      float inv = den > 0.0f ? 1.0f / den : 0.0f;
+      for (int32_t d = 0; d < D; ++d) {
+        float acc = 0.0f;
+        for (int32_t k = 0; k < Sk; ++k) acc += s[k] * Vb[static_cast<std::size_t>(k) * D + d];
+        Or[d] = acc * inv;
+      }
+    }
+  }
+}
+}  // namespace
+
+extern "C" void tessera_apple_gpu_flash_attn_bias_f32(const float* Q,
+                                                      const float* K,
+                                                      const float* V,
+                                                      const float* bias,
+                                                      float* O, int32_t B,
+                                                      int32_t Sq, int32_t Sk,
+                                                      int32_t D, float scale,
+                                                      int32_t /*causal*/) {
+  reference_attn_bias_f32_stub(Q, K, V, bias, O, B, Sq, Sk, D, scale);
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_bias_f16(const uint16_t* Q,
+                                                      const uint16_t* K,
+                                                      const uint16_t* V,
+                                                      const uint16_t* bias,
+                                                      uint16_t* O, int32_t B,
+                                                      int32_t Sq, int32_t Sk,
+                                                      int32_t D, float scale,
+                                                      int32_t causal) {
+  std::size_t nQ = static_cast<std::size_t>(B) * Sq * D;
+  std::size_t nK = static_cast<std::size_t>(B) * Sk * D;
+  std::size_t nB = static_cast<std::size_t>(B) * Sq * Sk;
+  std::vector<float> Qf(nQ), Kf(nK), Vf(nK), Bf(nB), Of(nQ);
+  for (std::size_t i = 0; i < nQ; ++i) Qf[i] = half_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < nK; ++i) { Kf[i] = half_to_float_stub(K[i]); Vf[i] = half_to_float_stub(V[i]); }
+  for (std::size_t i = 0; i < nB; ++i) Bf[i] = half_to_float_stub(bias[i]);
+  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale);
+  for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_half_stub(Of[i]);
+  (void)causal;
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_bias_bf16(const uint16_t* Q,
+                                                       const uint16_t* K,
+                                                       const uint16_t* V,
+                                                       const uint16_t* bias,
+                                                       uint16_t* O, int32_t B,
+                                                       int32_t Sq, int32_t Sk,
+                                                       int32_t D, float scale,
+                                                       int32_t causal) {
+  std::size_t nQ = static_cast<std::size_t>(B) * Sq * D;
+  std::size_t nK = static_cast<std::size_t>(B) * Sk * D;
+  std::size_t nB = static_cast<std::size_t>(B) * Sq * Sk;
+  std::vector<float> Qf(nQ), Kf(nK), Vf(nK), Bf(nB), Of(nQ);
+  for (std::size_t i = 0; i < nQ; ++i) Qf[i] = bfloat16_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < nK; ++i) { Kf[i] = bfloat16_to_float_stub(K[i]); Vf[i] = bfloat16_to_float_stub(V[i]); }
+  for (std::size_t i = 0; i < nB; ++i) Bf[i] = bfloat16_to_float_stub(bias[i]);
+  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale);
+  for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_bfloat16_stub(Of[i]);
+  (void)causal;
+}
+
 namespace {
 
 inline void reference_softmax_f32(const float* X, float* Out, int32_t M,

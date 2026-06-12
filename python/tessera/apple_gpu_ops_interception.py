@@ -256,6 +256,9 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
                     # Shared kwargs (forwarded to both paths):
                     scale: Optional[float] = None,
                     causal: bool = False,
+                    # attn_bias substrate — additive (B, Sq, Sk) score bias
+                    # (DFlash sliding-layer / general structured mask):
+                    attn_bias: Any = None,
                     # original tessera.ops.flash_attn kwargs (eager only):
                     cache: Any = None,
                     dropout_p: float = 0.0,
@@ -285,6 +288,13 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
                     "not supported (the encode-session flash_attn kernel "
                     "is dropout-free forward only). Run eagerly or pass "
                     "dropout_p=0.0.")
+            if attn_bias is not None:
+                raise ValueError(
+                    "flash_attn under @auto_batch with attn_bias is not "
+                    "supported yet (the encode-session kernel is bias-free; "
+                    "the bias path lowers through tessera.flash_attn + the "
+                    "tessera_apple_gpu_flash_attn_bias_* runtime symbols). "
+                    "Run eagerly or via @jit(target='apple_gpu').")
             return _agpu.flash_attn(Q, K, V,
                                      B=B, Sq=Sq, Sk=Sk, D=D,
                                      scale=scale, causal=causal,
@@ -297,7 +307,7 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
         return original_fn(Q, K, V, scale=scale, causal=causal,
                             cache=cache, dropout_p=dropout_p,
                             params=params, deterministic=deterministic,
-                            seed=seed)
+                            seed=seed, attn_bias=attn_bias)
     return flash_attn
 
 

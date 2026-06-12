@@ -37,7 +37,7 @@ func.func @conv_nchw_rejected(%x: tensor<1x8x8x3xf32>, %w: tensor<3x3x3x16xf32>)
 // CHECK:       tessera.flash_attn
 func.func @attn_bhsd_ok(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>, %v: tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32> {
   %qc = "tessera.cast"(%q) {tessera.layout = "bhsd"} : (tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
-  %o = "tessera.flash_attn"(%qc, %k, %v) {head_dim = 4 : i64}
+  %o = "tessera.flash_attn"(%qc, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 4 : i64}
       : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
   return %o : tensor<1x2x8x4xf32>
 }
@@ -48,7 +48,7 @@ func.func @attn_bhsd_ok(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>, %v: te
 func.func @attn_row_major_q_rejected(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>, %v: tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32> {
   %qc = "tessera.cast"(%q) {tessera.layout = "row_major"} : (tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
   // expected-error @+1 {{LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH: tessera.flash_attn operand #0 has layout "row_major" but its accept-set is {bhsd}}}
-  %o = "tessera.flash_attn"(%qc, %k, %v) {head_dim = 4 : i64}
+  %o = "tessera.flash_attn"(%qc, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 4 : i64}
       : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
   return %o : tensor<1x2x8x4xf32>
 }

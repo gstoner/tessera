@@ -739,6 +739,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         params=None,
         deterministic=None,
         seed: int | None = None,
+        attn_bias=None,
     ):
         # Phase 1: naive attention (Phase 3: tile-level FA-4)
         for arr in [Q, K, V]:
@@ -750,12 +751,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             K = K._data
         if hasattr(V, "_data"):
             V = V._data
+        if hasattr(attn_bias, "_data"):
+            attn_bias = attn_bias._data
         if not 0.0 <= dropout_p < 1.0:
             raise ValueError("dropout_p must be in [0.0, 1.0)")
         d = Q.shape[-1]
         if scale is None:
             scale = 1.0 / np.sqrt(d)
         scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
+        # attn_bias substrate: additive (B, Sq, Sk) score bias (DFlash sliding-
+        # layer / general structured mask), applied pre-softmax and pre-causal.
+        if attn_bias is not None:
+            scores = scores + np.asarray(attn_bias)
         if causal:
             q_len, k_len = scores.shape[-2], scores.shape[-1]
             mask = np.triu(

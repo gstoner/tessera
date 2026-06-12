@@ -953,13 +953,18 @@ def vjp_linear_attn_state(
 
 
 @_vjp("flash_attn")
-def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **_):
+def vjp_flash_attn(dout, Q, K, V, attn_bias=None, *, scale=None, causal=False,
+                   dropout_p=0.0, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).
 
-    Forward: ``S = scale * QK^T;  P = softmax(S);  O = PV``.
+    Forward: ``S = scale * QK^T (+ attn_bias);  P = softmax(S);  O = PV``.
     Memory-efficient streaming adjoint is left to fused-kernel custom rules
     on each backend; this v1 recomputes ``S``, ``P`` so it works for any shape
     that the forward already accepts.
+
+    When ``attn_bias`` is supplied (DFlash sliding-layer / general additive
+    mask) the rule also returns its gradient ``dbias = dS`` (broadcast-reduced
+    to the bias shape), and the return tuple grows to ``(dQ, dK, dV, dbias)``.
 
     ``dropout_p`` is ignored on backward — the v1 reference dropout uses a
     fresh rng each call, so the backward path can't reproduce the mask
@@ -978,6 +983,8 @@ def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **
 
     # Recompute forward intermediates
     S = np.matmul(Q, np.swapaxes(K, -1, -2)) * scale
+    if attn_bias is not None:
+        S = S + np.asarray(attn_bias)
     if causal:
         q_len, k_len = S.shape[-2], S.shape[-1]
         mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
@@ -996,6 +1003,11 @@ def vjp_flash_attn(dout, Q, K, V, *, scale=None, causal=False, dropout_p=0.0, **
     # dQ = dS @ K * scale;  dK = dS^T @ Q * scale
     dQ = np.matmul(dS, K) * scale
     dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * scale
+    if attn_bias is not None:
+        # bias adds straight into S (pre-softmax), so dbias = dS, reduced to the
+        # (possibly broadcast) bias shape.
+        dbias = _sum_to_shape(dS, np.asarray(attn_bias).shape)
+        return (dQ, dK, dV, dbias)
     return (dQ, dK, dV)
 
 

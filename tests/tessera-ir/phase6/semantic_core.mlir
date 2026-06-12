@@ -32,7 +32,7 @@ module attributes {tessera.ir.version = "1.1"} {
       stage = 0 : i32,
       vector = 16 : i32
     } : (!tessera.kv_cache) -> !tessera.kv_cache
-    %out = "tessera.flash_attn"(%q, %staged) {
+    %out = "tessera.flash_attn"(%q, %staged) <{operandSegmentSizes = array<i32: 1, 1, 0, 0>}> {
       causal = true,
       head_dim = 128 : i64,
       numeric_policy = #tessera.numeric_policy<

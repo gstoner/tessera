@@ -646,10 +646,20 @@ def Tessera_Conv2DNHWCOp : Op<
 
 def Tessera_FlashAttnOp : Op<
   Tessera_Dialect, "flash_attn",
-  [Pure]
+  [Pure, AttrSizedOperandSegments]
 > {
   let summary = "FlashAttention fused op";
+  let description = [{
+    Fused scaled-dot-product attention. When the optional `attn_bias` operand is
+    present it is an additive score bias of shape `(B, Sq, Sk)` (broadcastable
+    from `(1, Sq, Sk)`), applied as `softmax(scale * Q*K^T + attn_bias) * V` —
+    matching SDPA's additive-mask convention. This is the general substrate for
+    structured masks (e.g. DFlash sliding-layer block masks); the bias-free path
+    is unchanged. `AttrSizedOperandSegments` separates the `v` variadic from the
+    optional bias, so existing 2-/3-operand forms keep their semantics.
+  }];
   let arguments = (ins TensorType:$q, AnyType:$k_or_cache, Variadic<AnyType>:$v,
+                        Optional<TensorType>:$attn_bias,
                         I64Attr:$head_dim,
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
                         OptionalAttr<F64Attr>:$dropout_p,

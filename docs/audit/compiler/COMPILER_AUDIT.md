@@ -17,6 +17,14 @@ multiple root audit documents and compiler archive files.
 > canonicalizer/CSE in named pipelines (fixed), `TESSERA_STRICT_DISPATCH`
 > against silent numpy fallbacks, and runtime consumption of `fusion_groups`.
 > Two earlier agent claims refuted.
+>
+> **Forward direction (ratified 2026-06-11):** [EVALUATOR_PLAN.md](EVALUATOR_PLAN.md)
+> — the next compiler exercise is a generative, execution-derived, **backend-rung-aware**
+> Evaluator that *derives* conformance/benchmark/autotune surfaces from one honest
+> scoring engine (closing the "registry models reality" gap), and drives Apple to
+> rung 7 while climbing NVIDIA/ROCm to rungs 3–5 **without local silicon** (ptxas/hipcc
+> assembly + Tile-IR correctness transfer + pre-trained cost models), leaving a thin
+> hardware-batch promotion. Research-backed (DESIL/PolyJuice/Mirage/TensorBench/BaCO/TLP).
 
 ## Finished
 

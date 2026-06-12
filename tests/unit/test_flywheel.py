@@ -19,12 +19,29 @@ from tessera.compiler.flywheel import (
     DevicePeak,
     LatencyStats,
     default_device_id,
+    detect_device_id,
+    distill_dispatch,
     efficiency_trend,
+    load_corpus,
+    lookup_dispatch,
     matmul_flops_bytes,
+    peak_for_device,
     record_matmul,
     roofline_ms,
+    save_corpus,
+    size_bucket,
     sweep_matmul,
 )
+
+
+def _rec(size, dtype, median_ms, *, sched=None, op="matmul", native=True):
+    """Synthetic record helper for portable tests."""
+    return AutotuneRecord(
+        1, op, {"M": size, "N": size, "K": size}, dtype, "apple_gpu",
+        "apple_gpu:apple-m1-max", sched or {"dtype": dtype, "size": size}, True, "",
+        LatencyStats(median_ms, median_ms, median_ms, 5) if native else None,
+        1.0 if native else None, 0.1, None, "sweep",
+    )
 
 
 def _mm(a, b):
@@ -82,6 +99,71 @@ def test_record_without_latency_has_no_residual():
 def test_default_device_id_is_nonempty_and_targeted():
     did = default_device_id("apple_gpu")
     assert did and "apple_gpu" in did
+
+
+# ── (1) per-chip calibration ─────────────────────────────────────────────────
+
+def test_peak_for_device_matches_family_most_specific_first():
+    assert peak_for_device("apple_gpu:apple-m1-max").name == "apple-m1-max"
+    assert peak_for_device("apple_gpu:apple-m1-ultra").name == "apple-m1-ultra"
+    assert peak_for_device("apple_gpu:apple-m1").name == "apple-m1"   # bare M1
+    # unknown chip → nominal fallback
+    assert peak_for_device("apple_gpu:apple-m9-quantum") is NOMINAL_APPLE_GPU_PEAK
+
+
+def test_m1_max_peak_is_calibrated_not_nominal():
+    p = peak_for_device("apple_gpu:apple-m1-max")
+    assert p is not NOMINAL_APPLE_GPU_PEAK
+    assert p.peak_tflops > NOMINAL_APPLE_GPU_PEAK.peak_tflops  # 10.4 > 8 nominal
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="chip detection is Darwin-only.")
+def test_detect_device_id_resolves_the_real_chip_on_darwin():
+    did = detect_device_id("apple_gpu")
+    assert did.startswith("apple_gpu:apple-m")   # real chip, not the coarse fallback
+    assert did != default_device_id("apple_gpu")
+
+
+# ── (3) persist + distill ────────────────────────────────────────────────────
+
+def test_size_bucket_boundaries():
+    assert size_bucket(128) == "xs"
+    assert size_bucket(512) == "s"
+    assert size_bucket(2048) == "m"
+    assert size_bucket(8192) == "l"
+
+
+def test_corpus_json_round_trip(tmp_path):
+    corpus = [_rec(512, "f32", 1.2), _rec(8, "f32", 0.0, native=False)]
+    path = str(tmp_path / "corpus.json")
+    save_corpus(corpus, path)
+    back = load_corpus(path)
+    assert len(back) == 2
+    assert back[0].problem_shape == {"M": 512, "N": 512, "K": 512}
+    assert back[0].latency is not None and back[0].latency.median_ms == 1.2
+    assert back[1].latency is None      # non-native record survives the round-trip
+
+
+def test_distill_picks_lowest_latency_per_class():
+    # two f32 512-cube candidates (same bucket) — distill must pick the faster.
+    corpus = [
+        _rec(512, "f32", 2.0, sched={"variant": "slow"}),
+        _rec(512, "f32", 1.0, sched={"variant": "fast"}),
+        _rec(512, "f16", 0.8, sched={"variant": "f16"}),
+    ]
+    table = distill_dispatch(corpus)
+    win = lookup_dispatch(table, "matmul", "f32", 512)
+    assert win is not None and win["schedule"]["variant"] == "fast"
+    assert win["median_ms"] == 1.0
+    # f16 is a distinct class
+    assert lookup_dispatch(table, "matmul", "f16", 512)["schedule"]["variant"] == "f16"
+    # uncovered class → None (caller falls back)
+    assert lookup_dispatch(table, "matmul", "f32", 99999) is None
+
+
+def test_distill_skips_non_native_records():
+    table = distill_dispatch([_rec(512, "f32", 0.0, native=False)])
+    assert table == {}
 
 
 def test_efficiency_trend_sorts_by_size():

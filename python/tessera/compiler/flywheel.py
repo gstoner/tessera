@@ -43,17 +43,71 @@ class DevicePeak:
     peak_bw_gb_s: float       # GB/s
 
 
-# Nominal Apple-GPU anchors — deliberately conservative and clearly approximate;
-# real peaks vary widely across M1/M2/M3/Pro/Max/Ultra. Calibrate per device_id.
+# Nominal Apple-GPU anchors — fallback when the chip can't be identified.
 NOMINAL_APPLE_GPU_PEAK = DevicePeak("apple_gpu_nominal", peak_tflops=8.0, peak_bw_gb_s=200.0)
+
+# Per-family calibrated anchors (approximate published f32 GPU peak + memory BW;
+# core counts vary within a family, so these are family-level, not exact —
+# calibratable per device_id). Checked most-specific first (ultra > max > pro).
+_APPLE_GPU_PEAKS: tuple[tuple[str, DevicePeak], ...] = (
+    ("m1-ultra", DevicePeak("apple-m1-ultra", 21.0, 800.0)),
+    ("m1-max", DevicePeak("apple-m1-max", 10.4, 400.0)),
+    ("m1-pro", DevicePeak("apple-m1-pro", 5.2, 200.0)),
+    ("m1", DevicePeak("apple-m1", 2.6, 68.0)),
+    ("m2-ultra", DevicePeak("apple-m2-ultra", 27.2, 800.0)),
+    ("m2-max", DevicePeak("apple-m2-max", 13.6, 400.0)),
+    ("m2-pro", DevicePeak("apple-m2-pro", 6.8, 200.0)),
+    ("m2", DevicePeak("apple-m2", 3.6, 100.0)),
+    ("m3-max", DevicePeak("apple-m3-max", 14.0, 300.0)),
+    ("m3-pro", DevicePeak("apple-m3-pro", 7.0, 150.0)),
+    ("m3", DevicePeak("apple-m3", 3.5, 100.0)),
+    ("m4-max", DevicePeak("apple-m4-max", 17.0, 410.0)),
+    ("m4", DevicePeak("apple-m4", 4.3, 120.0)),
+)
+
+
+def _apple_chip_brand() -> str | None:
+    """The Apple Silicon chip brand (e.g. ``Apple M1 Max``) via sysctl, or None
+    off-Darwin / on failure. The SoC GPU's identity == the chip identity."""
+    import subprocess
+    import sys
+
+    if sys.platform != "darwin":
+        return None
+    try:
+        out = subprocess.check_output(
+            ["sysctl", "-n", "machdep.cpu.brand_string"], text=True, timeout=5
+        ).strip()
+        return out or None
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 def default_device_id(target: str) -> str:
-    """Best-effort device identity (partition key). Coarse today
-    (``arch-system``); the precise GPU chip name (MTLDevice.name) is a follow-up.
-    """
+    """Coarse fallback device identity (``arch-system``)."""
     u = platform.uname()
     return f"{target}:{u.machine}-{u.system}".lower()
+
+
+def detect_device_id(target: str) -> str:
+    """Calibrated device identity. For Apple targets on Darwin this is the real
+    chip (``apple_gpu:apple-m1-max``) so records are keyed by the actual GPU;
+    otherwise the coarse fallback. This is the partition key — never aggregate
+    across it."""
+    brand = _apple_chip_brand()
+    if brand is not None and target.startswith("apple"):
+        slug = brand.lower().replace(" ", "-")
+        return f"{target}:{slug}"
+    return default_device_id(target)
+
+
+def peak_for_device(device_id: str) -> DevicePeak:
+    """The calibrated roofline anchors for a device_id, or the nominal fallback."""
+    d = device_id.lower()
+    for frag, peak in _APPLE_GPU_PEAKS:
+        if frag in d:
+            return peak
+    return NOMINAL_APPLE_GPU_PEAK
 
 
 @dataclass(frozen=True)
@@ -159,16 +213,19 @@ def record_matmul(
     k: int,
     dtype: str = "f32",
     device_id: str | None = None,
-    peak: DevicePeak = NOMINAL_APPLE_GPU_PEAK,
+    peak: DevicePeak | None = None,
     schedule: dict[str, Any] | None = None,
     search_method: str = "manual",
     reps: int = 20,
 ) -> AutotuneRecord:
     """Measure one matmul candidate and build its deterministic record (measured
-    latency + analytical roofline on the same row)."""
+    latency + analytical roofline on the same row). ``device_id`` and ``peak``
+    default to the calibrated chip + its family anchors."""
+    did = device_id or detect_device_id(target)
+    use_peak = peak or peak_for_device(did)
     dtype_bytes = 2 if dtype in ("f16", "bf16") else 4
     flops, bytes_moved = matmul_flops_bytes(m, n, k, dtype_bytes=dtype_bytes)
-    predicted = roofline_ms(flops, bytes_moved, peak)
+    predicted = roofline_ms(flops, bytes_moved, use_peak)
     stats = measure_latency(target, fn, args, reps=reps)
     achieved = (
         flops / (stats.median_ms * 1e-3) / 1e12 if stats is not None else None
@@ -179,7 +236,7 @@ def record_matmul(
         problem_shape={"M": m, "N": n, "K": k},
         dtype=dtype,
         target=target,
-        device_id=device_id or default_device_id(target),
+        device_id=did,
         schedule=schedule or {"dtype": dtype, "fusion_choice": "none"},
         legal=True,
         violation_reason="",
@@ -198,7 +255,7 @@ def sweep_matmul(
     rng: Any,
     *,
     dtype: str = "f32",
-    peak: DevicePeak = NOMINAL_APPLE_GPU_PEAK,
+    peak: DevicePeak | None = None,
     reps: int = 10,
 ) -> list[AutotuneRecord]:
     """Record a square-matmul candidate corpus across ``sizes`` for one dtype.
@@ -230,3 +287,73 @@ def efficiency_trend(records: list[AutotuneRecord]) -> list[tuple[int, float]]:
         for r in records
         if r.achieved_tflops is not None
     )
+
+
+# ── persist + distill (Triton-anatomy: corpus → O(1) decision-tree dispatch) ──
+
+
+def save_corpus(records: list[AutotuneRecord], path: str) -> None:
+    """Write a record corpus to JSON. Host-specific (latencies) — write to an
+    output/cache path, not a checked-in baseline (the perf-ratchet discipline)."""
+    import json
+
+    with open(path, "w") as fh:
+        json.dump([r.to_dict() for r in records], fh, indent=2)
+
+
+def load_corpus(path: str) -> list[AutotuneRecord]:
+    """Read a record corpus written by :func:`save_corpus`."""
+    import json
+
+    with open(path) as fh:
+        rows = json.load(fh)
+    out: list[AutotuneRecord] = []
+    for d in rows:
+        lat = d.get("latency")
+        d = {**d, "latency": LatencyStats(**lat) if lat is not None else None}
+        out.append(AutotuneRecord(**d))
+    return out
+
+
+def size_bucket(n: int) -> str:
+    """Coarse problem-size bucket for the decision-tree key (keeps the table
+    small and generalizes across nearby shapes)."""
+    if n < 256:
+        return "xs"
+    if n < 1024:
+        return "s"
+    if n < 4096:
+        return "m"
+    return "l"
+
+
+def _dispatch_key(op_chain: str, dtype: str, size: int) -> str:
+    return f"{op_chain}|{dtype}|{size_bucket(size)}"
+
+
+def distill_dispatch(records: list[AutotuneRecord]) -> dict[str, dict[str, Any]]:
+    """Distill a corpus into an O(1) decision-tree: for each
+    ``(op_chain, dtype, size-bucket)`` class, the schedule with the lowest median
+    latency. This is the cheap production dispatch the autotuning results bake
+    down to (Triton-anatomy)."""
+    best: dict[str, tuple[float, dict[str, Any]]] = {}
+    for r in records:
+        if r.latency is None:
+            continue
+        key = _dispatch_key(r.op_chain, r.dtype, r.problem_shape["M"])
+        ms = r.latency.median_ms
+        if key not in best or ms < best[key][0]:
+            best[key] = (ms, {
+                "schedule": r.schedule,
+                "median_ms": ms,
+                "device_id": r.device_id,
+            })
+    return {k: v for k, (_, v) in best.items()}
+
+
+def lookup_dispatch(
+    table: dict[str, dict[str, Any]], op_chain: str, dtype: str, size: int
+) -> dict[str, Any] | None:
+    """O(1) lookup into a distilled dispatch table; ``None`` if the class is
+    uncovered (caller falls back to a live search / default)."""
+    return table.get(_dispatch_key(op_chain, dtype, size))

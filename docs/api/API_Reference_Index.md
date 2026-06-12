@@ -1,8 +1,14 @@
 # Tessera API Reference — Index
 
-> **Start here for authoritative documentation.** The four volumes in this directory are
-> pre-canonical references that predate the normative spec. Use the tables below to find
-> the right document for your question.
+> **Start here for authoritative documentation.** This page is a navigation map
+> into the normative specs and reference docs. The original four-volume API
+> reference is **archived** (see the bottom of this page); use the canonical
+> references below for all current work.
+>
+> Counts and section numbers drift — this index links to docs and named
+> sections rather than copying numeric snapshots (per Architecture Decision
+> #26, the generated dashboards under `docs/audit/generated/` are the count
+> authority).
 
 ---
 
@@ -12,85 +18,93 @@
 |---------------|----------------------|
 | **Single naming authority** — wins all disputes | [`docs/CANONICAL_API.md`](../CANONICAL_API.md) |
 | **Tensor attributes and dtypes** (`shape`, `dtype`, `layout`, `target`, `distribution`, `numeric_policy`) | [`docs/reference/tessera_tensor_attributes.md`](../reference/tessera_tensor_attributes.md) |
-| **Complete Python API** (all public symbols, Phases 1–3) | [`docs/spec/PYTHON_API_SPEC.md`](../spec/PYTHON_API_SPEC.md) |
-| **Compiler pass pipeline** (both named pipelines, all passes) | [`docs/spec/COMPILER_REFERENCE.md`](../spec/COMPILER_REFERENCE.md) |
-| **Graph IR ops** (all 6 ops, 4 canonicalization patterns) | [`docs/spec/GRAPH_IR_SPEC.md`](../spec/GRAPH_IR_SPEC.md) |
-| **Lowering passes** (input/output IR contracts, invariants) | [`docs/spec/LOWERING_PIPELINE_SPEC.md`](../spec/LOWERING_PIPELINE_SPEC.md) |
-| **Target IR dialects** (Schedule, Attn, Queue, NVIDIA ops) | [`docs/spec/TARGET_IR_SPEC.md`](../spec/TARGET_IR_SPEC.md) |
-| **Runtime C ABI** (all `tsr*` functions, types, error model) | [`docs/spec/RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md) |
+| **Complete Python API** (all public symbols; normative) | [`docs/spec/PYTHON_API_SPEC.md`](../spec/PYTHON_API_SPEC.md) |
+| **Compiler structure** (IR layers, pass registry, named pipelines, production JIT lane) | [`docs/spec/COMPILER_REFERENCE.md`](../spec/COMPILER_REFERENCE.md) |
+| **Lowering pipelines** (all named pipelines, input/output IR contracts, invariants) | [`docs/spec/LOWERING_PIPELINE_SPEC.md`](../spec/LOWERING_PIPELINE_SPEC.md) |
+| **Graph IR ops** (`tessera.*` dialect ops + canonicalization patterns) | [`docs/spec/GRAPH_IR_SPEC.md`](../spec/GRAPH_IR_SPEC.md) |
+| **Target IR dialects** (Schedule, Attn, Queue; NVIDIA / ROCm / Apple contracts; backend-neutral value lane) | [`docs/spec/TARGET_IR_SPEC.md`](../spec/TARGET_IR_SPEC.md) |
+| **Runtime C ABI** (all `tsr*` functions, types, error model, G7 GPU launch bridge) | [`docs/spec/RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md) |
+| **Autodiff** (tape, transforms, custom rules) | [`docs/spec/AUTODIFF_SPEC.md`](../spec/AUTODIFF_SPEC.md) |
+| **Per-primitive contract status** (count authority) | [`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md) |
 
 ---
 
 ## Quick Lookup by Topic
 
+> Section numbers below point into [`PYTHON_API_SPEC.md`](../spec/PYTHON_API_SPEC.md)
+> unless noted otherwise.
+
 ### Decorators
 
 | Symbol | Spec location |
 |--------|--------------|
-| `@tessera.jit` | [PYTHON_API_SPEC §2](../spec/PYTHON_API_SPEC.md) |
-| `@tessera.kernel` | [PYTHON_API_SPEC §3](../spec/PYTHON_API_SPEC.md) |
+| `@tessera.jit` | PYTHON_API_SPEC §2.1 |
+| `@tessera.kernel` | PYTHON_API_SPEC §2.2 |
 
 ### Type Annotations
 
 | Symbol | Spec location |
 |--------|--------------|
-| `tessera.Region["read"/"write"/"reduce_sum"]` | [PYTHON_API_SPEC §4](../spec/PYTHON_API_SPEC.md) |
-| `tessera.f16[..., ...]`, `tessera.mut_f32[..., ...]` | [PYTHON_API_SPEC §16](../spec/PYTHON_API_SPEC.md) |
-| `tessera.Tensor["B", "D"]` | [PYTHON_API_SPEC §16](../spec/PYTHON_API_SPEC.md) |
-| Canonical dtype names, aliases, planned/gated dtypes, and `tessera.dtype` helpers | [Tensor Attributes And Dtypes](../reference/tessera_tensor_attributes.md) |
+| `tessera.Region["read"/"write"/"reduce_sum"]` | PYTHON_API_SPEC §3 |
+| `tessera.f16[..., ...]`, `tessera.mut_f32[..., ...]`, `tessera.Tensor["B", "D"]` | PYTHON_API_SPEC §14 (Tensor Annotations) |
+| Canonical dtype names, aliases, planned/gated dtypes, `tessera.dtype` helpers | PYTHON_API_SPEC §15 (Dtype Annotations) · [Tensor Attributes And Dtypes](../reference/tessera_tensor_attributes.md) |
 
 ### Distribution API
 
 | Symbol | Spec location |
 |--------|--------------|
-| `tessera.domain.Rect` | [PYTHON_API_SPEC §5](../spec/PYTHON_API_SPEC.md) |
-| `tessera.dist.Block`, `.Cyclic`, `.Replicated` | [PYTHON_API_SPEC §6](../spec/PYTHON_API_SPEC.md) |
-| `tessera.array.from_domain` | [PYTHON_API_SPEC §7](../spec/PYTHON_API_SPEC.md) |
-| `DistributedArray.parts(axis)` | [PYTHON_API_SPEC §8](../spec/PYTHON_API_SPEC.md) |
-| `tessera.index_launch` | [PYTHON_API_SPEC §10](../spec/PYTHON_API_SPEC.md) |
+| `tessera.domain.Rect` | PYTHON_API_SPEC §4 |
+| `tessera.dist.Block`, `.Cyclic`, `.Replicated` | PYTHON_API_SPEC §5 |
+| `tessera.array.from_domain` | PYTHON_API_SPEC §6 |
+| `DistributedArray.parts(axis)` | PYTHON_API_SPEC §6.2 |
+| `ShardSpec` | PYTHON_API_SPEC §7 |
+| `tessera.index_launch` | PYTHON_API_SPEC §8 |
 
 ### Constraints and Effects
 
 | Symbol | Spec location |
 |--------|--------------|
-| `tessera.constraint.Divisible`, `.Range`, `.Equal` | [PYTHON_API_SPEC §11](../spec/PYTHON_API_SPEC.md) |
-| `tessera.EffectLevel` enum | [PYTHON_API_SPEC §12](../spec/PYTHON_API_SPEC.md) |
+| `tessera.constraint.Divisible`, `.Range`, `.Equal` | PYTHON_API_SPEC §9 |
+| `tessera.compiler.effects.Effect` enum (`pure`/`random`/`movement`/`state`/`collective`) | PYTHON_API_SPEC §10 |
 
-### GPU Target
+### GPU / Target
 
 | Symbol | Spec location |
 |--------|--------------|
-| `GPUTargetProfile`, `ISA` enum | [PYTHON_API_SPEC §13](../spec/PYTHON_API_SPEC.md) |
-| `FlashAttnLoweringConfig` | [PYTHON_API_SPEC §14](../spec/PYTHON_API_SPEC.md) |
+| `GPUTargetProfile`, `ISA` enum | PYTHON_API_SPEC §11 |
+| `FlashAttnLoweringConfig` | PYTHON_API_SPEC §12 |
+| String targets (`"apple_cpu"`, `"apple_gpu"`, `"rocm"`, `"metalium"`) | [tessera-api-reference §Targeting](../reference/tessera-api-reference.md) |
 
 ### Operations
 
 | Symbol | Spec location |
 |--------|--------------|
-| `tessera.ops.gemm`, `.flash_attn`, `.layer_norm`, … (15 ops) | [PYTHON_API_SPEC §15](../spec/PYTHON_API_SPEC.md) |
+| `tessera.ops.*` (the standard operator library) | PYTHON_API_SPEC §13 · [Tessera_Standard_Operations.md](../operations/Tessera_Standard_Operations.md) |
 
 ### Error Types
 
 | Symbol | Spec location |
 |--------|--------------|
-| `TesseraConstraintError`, `TesseraPrivilegeError`, … (7 types) | [PYTHON_API_SPEC §17](../spec/PYTHON_API_SPEC.md) |
+| `TesseraConstraintError`, `TesseraEffectError`, `TesseraJitError`, `TesseraTargetError`, `TesseraAttnConfigError`, `TesseraPrivilegeError`, `MockCollectiveError` | PYTHON_API_SPEC §16 |
 
 ### Testing
 
 | Symbol | Spec location |
 |--------|--------------|
-| `MockRankGroup`, `MockRank` | [PYTHON_API_SPEC §18](../spec/PYTHON_API_SPEC.md) |
+| `MockRankGroup`, `MockRank` | PYTHON_API_SPEC §17 |
 
 ### Runtime C ABI
 
 | Symbol | Spec location |
 |--------|--------------|
-| `tsrInit`, `tsrShutdown` | [RUNTIME_ABI_SPEC §5.1](../spec/RUNTIME_ABI_SPEC.md) |
-| `tsrGetDevice`, `tsrGetDeviceProps` | [RUNTIME_ABI_SPEC §5.2](../spec/RUNTIME_ABI_SPEC.md) |
-| `tsrCreateStream`, `tsrStreamSynchronize` | [RUNTIME_ABI_SPEC §5.3](../spec/RUNTIME_ABI_SPEC.md) |
-| `tsrMalloc`, `tsrFree`, `tsrMemcpy` | [RUNTIME_ABI_SPEC §5.5](../spec/RUNTIME_ABI_SPEC.md) |
-| `tsrLaunchHostTileKernel` | [RUNTIME_ABI_SPEC §5.6](../spec/RUNTIME_ABI_SPEC.md) |
-| `TsrStatus` enum | [RUNTIME_ABI_SPEC §4](../spec/RUNTIME_ABI_SPEC.md) |
+| `tsrInit`, `tsrShutdown` | RUNTIME_ABI_SPEC §5.1 |
+| `tsrGetDevice`, `tsrGetDeviceProps` | RUNTIME_ABI_SPEC §5.2 |
+| `tsrCreateStream`, `tsrStreamSynchronize` | RUNTIME_ABI_SPEC §5.3 |
+| `tsrMalloc`, `tsrFree`, `tsrMemcpy` | RUNTIME_ABI_SPEC §5.5 |
+| `tsrLaunchHostTileKernel` (host fn-pointer kernel) | RUNTIME_ABI_SPEC §5.6 |
+| `tsrLaunchKernel`, `tsrRegisterGpuLauncher` (G7 GPU launch bridge) | RUNTIME_ABI_SPEC §5.6.1 |
+| `TsrStatus` enum | RUNTIME_ABI_SPEC §4 |
+| Python wrapper `tessera.runtime.TesseraRuntime`, `tessera.runtime.launch` | RUNTIME_ABI_SPEC §10 |
 
 ---
 

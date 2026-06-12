@@ -21,8 +21,10 @@ executable lane (the configs become measurable there).
 
 from __future__ import annotations
 
+from typing import Any
+
 from tessera.compiler.autotune_v2 import BayesianAutotuner, GEMMWorkload
-from tessera.compiler.flywheel import AutotuneRecord, peak_for_device
+from tessera.compiler.flywheel import AutotuneRecord, peak_for_device, record_matmul
 
 # flywheel dtype names → GEMMWorkload's accepted names.
 _DTYPE_MAP = {"f32": "fp32", "f16": "fp16", "bf16": "bf16", "fp32": "fp32", "fp16": "fp16"}
@@ -59,7 +61,55 @@ def autotuner_for(record: AutotuneRecord, *, seed: int = 42) -> BayesianAutotune
 def best_record(corpus: list[AutotuneRecord]) -> AutotuneRecord | None:
     """The empirically fastest native candidate in a corpus (the measured
     selection criterion), or ``None`` if nothing ran natively."""
+    return pick_best(corpus, by="latency")
+
+
+def pick_best(corpus: list[AutotuneRecord], *, by: str = "latency") -> AutotuneRecord | None:
+    """The best native candidate by ``latency`` (lowest median) or ``tflops``
+    (highest achieved). ``None`` if nothing ran natively."""
     native = [r for r in corpus if r.latency is not None]
     if not native:
         return None
-    return min(native, key=lambda r: r.latency.median_ms)  # type: ignore[union-attr]
+    if by == "tflops":
+        return max(native, key=lambda r: r.achieved_tflops or 0.0)
+    if by == "latency":
+        return min(native, key=lambda r: r.latency.median_ms)  # type: ignore[union-attr]
+    raise ValueError(f"unknown selection objective {by!r}")
+
+
+def autotune_matmul(
+    target: str,
+    fn: Any,
+    m: int,
+    n: int,
+    k: int,
+    rng: Any,
+    *,
+    dtypes: tuple[str, ...] = ("f32", "f16"),
+    reps: int = 10,
+) -> tuple[AutotuneRecord | None, list[AutotuneRecord]]:
+    """Autotune one matmul over the measurable Apple knob space, returning
+    ``(best, corpus)``.
+
+    Realizes the *GPU-portability-needs-autotuning* thesis on Apple: autotune a
+    single parametric program over the knobs the backend actually exposes.
+    Apple's MPS matmul is a black box for tile/stage, so the measurable knob here
+    is **dtype** (f32/f16) — each candidate is measured via the flywheel and the
+    fastest wins. The richer tile/warp/stage candidate space (autotune_v2's
+    ``LegalGEMMCandidateGenerator``) becomes measurable on the NVIDIA executable
+    lane.
+    """
+    import numpy as np
+
+    corpus: list[AutotuneRecord] = []
+    for dt in dtypes:
+        np_dtype = np.float16 if dt == "f16" else np.float32
+        a = rng.standard_normal((m, k)).astype(np_dtype)
+        b = rng.standard_normal((k, n)).astype(np_dtype)
+        corpus.append(
+            record_matmul(
+                target, fn, (a, b), m=m, n=n, k=k, dtype=dt,
+                schedule={"dtype": dt}, search_method="autotune", reps=reps,
+            )
+        )
+    return pick_best(corpus, by="latency"), corpus

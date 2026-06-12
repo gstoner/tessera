@@ -23,7 +23,9 @@ from tessera.compiler.evaluator import (
     BackendVerdict,
     HorizontalVerdict,
     Rung,
+    _cross_path_relation,
     _horizontal_relation,
+    cross_path_equivalence,
     evaluate,
     horizontal_equivalence,
     nvidia_emission_verdict,
@@ -53,11 +55,17 @@ def _msm(a, b, c):                       # fused chain: softmax(matmul)·matmul
     return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(a, b), axis=-1), c)
 
 
+def _mm_aa(a, b):                        # deliberately wrong: a@a, not a@b
+    return ts.ops.matmul(a, a)
+
+
 _MM = ts.jit(target="apple_gpu")(_mm)
 _GELU = ts.jit(target="apple_gpu")(_gelu)
 _SM = ts.jit(target="apple_gpu")(_sm_axis)
 _MM_GELU = ts.jit(target="apple_gpu")(_mm_gelu)
 _MSM = ts.jit(target="apple_gpu")(_msm)
+_MM_CPU = ts.jit(target="apple_cpu")(_mm)
+_MM_AA_CPU = ts.jit(target="apple_cpu")(_mm_aa)
 
 
 # ── portable: the verdict contract over the runtime signal ───────────────────
@@ -145,6 +153,38 @@ def test_nvidia_non_matmul_does_not_overclaim_emission():
     fn = ts.jit(target="nvidia_sm90")(_sm_axis)
     v = nvidia_emission_verdict(fn)
     assert v.rung is Rung.ARTIFACT_ONLY
+
+
+# ── DESIL: cross-path differential oracle ────────────────────────────────────
+
+def test_cross_path_relation_classifier():
+    assert _cross_path_relation(1, 0.0, tol=1e-3)[0] == "inconclusive"   # <2 paths
+    assert _cross_path_relation(2, None, tol=1e-3)[0] == "inconclusive"  # incomparable
+    assert _cross_path_relation(2, 1e-6, tol=1e-3)[0] == "equivalent"
+    assert _cross_path_relation(3, 1e-1, tol=1e-3)[0] == "divergent"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs apple_gpu + apple_cpu execution.")
+def test_matmul_agrees_across_metal_and_accelerate():
+    """The same matmul lowered through two independent compilers (Metal MPS vs
+    Accelerate) must agree — reference-free cross-path differential."""
+    rng = np.random.default_rng(20260612)
+    a = rng.standard_normal((64, 64)).astype(np.float32)
+    b = rng.standard_normal((64, 64)).astype(np.float32)
+    v = cross_path_equivalence([("apple_gpu", _MM), ("apple_cpu", _MM_CPU)], (a, b))
+    assert v.relation == "equivalent", v.detail
+    assert set(v.paths) == {"apple_gpu", "apple_cpu"}
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs apple_gpu + apple_cpu execution.")
+def test_cross_path_catches_a_divergent_lowering():
+    """If one path computes something different, cross-path must flag divergence
+    (proving the oracle has teeth) — here the cpu path computes a@a not a@b."""
+    rng = np.random.default_rng(3)
+    a = rng.standard_normal((64, 64)).astype(np.float32)
+    b = rng.standard_normal((64, 64)).astype(np.float32)
+    v = cross_path_equivalence([("apple_gpu", _MM), ("apple_cpu", _MM_AA_CPU)], (a, b))
+    assert v.is_divergent, v.detail
 
 
 # ── Darwin-gated: derive verdicts from real Metal runs ───────────────────────

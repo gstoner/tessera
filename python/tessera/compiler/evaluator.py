@@ -288,6 +288,88 @@ def horizontal_equivalence(
     return HorizontalVerdict(target, relation, max_abs_err, detail)
 
 
+# ── DESIL — cross-path differential oracle ───────────────────────────────────
+#
+# Run the SAME program through two+ independent executable lowering paths
+# (apple_gpu/Metal, apple_cpu/Accelerate, cpu/JIT) and require they agree. No
+# external reference (the paths cross-check each other) and it exercises distinct
+# compilers, so a miscompile in any single lowering path is caught — DESIL's
+# "differential across lowering paths" realized via Tessera's multiple backends.
+
+
+@dataclass(frozen=True)
+class CrossPathVerdict:
+    """Agreement of one program across independent lowering paths."""
+
+    relation: str                # "equivalent" | "divergent" | "inconclusive"
+    paths: tuple[str, ...]       # the paths that ran natively and were compared
+    max_abs_err: float | None
+    detail: str = ""
+
+    @property
+    def is_divergent(self) -> bool:
+        return self.relation == "divergent"
+
+
+def _cross_path_relation(
+    n_native: int, max_abs_err: float | None, *, tol: float
+) -> tuple[str, str]:
+    """Pure classifier for the cross-path verdict (portably unit-testable)."""
+    if n_native < 2:
+        return "inconclusive", (
+            f"only {n_native} path(s) ran natively — need ≥2 to cross-check"
+        )
+    if max_abs_err is None:
+        return "inconclusive", "paths produced incomparable outputs (shape/non-finite)"
+    if max_abs_err <= tol:
+        return "equivalent", f"paths agree (max_abs_err={max_abs_err:.3e} ≤ {tol:.1e})"
+    return "divergent", (
+        f"lowering paths DISAGREE (max_abs_err={max_abs_err:.3e} > {tol:.1e}) — "
+        "a miscompile in one path"
+    )
+
+
+def cross_path_equivalence(
+    paths: list[tuple[str, Any]],
+    args: tuple[Any, ...],
+    *,
+    rtol: float = 1e-3,
+    atol: float = 1e-4,
+) -> CrossPathVerdict:
+    """Assert a program agrees across independent lowering paths.
+
+    ``paths`` is ``[(target, jitted_fn), ...]`` for the *same* computation (each
+    jitted for its target). Only natively-executed paths are compared; the
+    verdict is ``inconclusive`` unless ≥2 ran natively.
+    """
+    import numpy as np
+
+    outs: list[tuple[str, Any]] = []
+    for target, fn in paths:
+        out, native = run_native(target, fn, args)
+        if native and out is not None:
+            arr = np.asarray(out, dtype=np.float64)
+            if np.all(np.isfinite(arr)):
+                outs.append((target, arr))
+
+    max_abs_err: float | None = None
+    ref_scale = 1.0
+    if len(outs) >= 2:
+        ref = outs[0][1]
+        errs = [
+            float(np.max(np.abs(o - ref)))
+            for _, o in outs[1:]
+            if o.shape == ref.shape
+        ]
+        if len(errs) == len(outs) - 1:           # every path was comparable
+            max_abs_err = max(errs)
+            ref_scale = float(np.max(np.abs(ref))) or 1.0
+
+    tol = atol + rtol * ref_scale
+    relation, detail = _cross_path_relation(len(outs), max_abs_err, tol=tol)
+    return CrossPathVerdict(relation, tuple(t for t, _ in outs), max_abs_err, detail)
+
+
 # ── NVIDIA/ROCm emission rung (rung 2.5) ─────────────────────────────────────
 #
 # These backends do not execute here; their honest forward progress is measured

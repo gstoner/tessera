@@ -7,15 +7,28 @@ candidate generation, and best-by-measurement selection.
 
 from __future__ import annotations
 
+import sys
+
+import numpy as np
 import pytest
 
+import tessera as ts
 from tessera.compiler.flywheel import AutotuneRecord, LatencyStats
 from tessera.compiler.flywheel_autotune import (
+    autotune_matmul,
     autotuner_for,
     best_record,
     gemm_workload_for,
     measured_tflops,
+    pick_best,
 )
+
+
+def _mm(a, b):
+    return ts.ops.matmul(a, b)
+
+
+_MM = ts.jit(target="apple_gpu")(_mm)
 
 
 def _rec(M, N, K, dtype, median_ms):
@@ -69,3 +82,27 @@ def test_best_record_picks_fastest_native():
 
 def test_best_record_none_when_no_native():
     assert best_record([_rec(8, 8, 8, "f32", 0.0)]) is None
+
+
+def test_pick_best_by_latency_and_tflops():
+    slow = _rec(512, 512, 512, "f32", 4.0)    # higher latency, lower tflops
+    fast = _rec(512, 512, 512, "f16", 1.0)    # lower latency, higher tflops
+    assert pick_best([slow, fast], by="latency") is fast
+    assert pick_best([slow, fast], by="tflops") is fast
+    with pytest.raises(ValueError, match="unknown selection objective"):
+        pick_best([fast], by="bogus")
+
+
+# ── Darwin: autotune over the measurable Apple knob space ────────────────────
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+def test_autotune_matmul_over_dtype_returns_best_and_corpus():
+    rng = np.random.default_rng(20260612)
+    best, corpus = autotune_matmul("apple_gpu", _MM, 512, 512, 512, rng,
+                                   dtypes=("f32", "f16"), reps=6)
+    assert {r.dtype for r in corpus} == {"f32", "f16"}     # both candidates measured
+    assert all(r.latency is not None for r in corpus)      # both ran natively
+    assert all(r.search_method == "autotune" for r in corpus)
+    assert best is not None and best.dtype in ("f32", "f16")
+    # the winner is the fastest measured candidate
+    assert best.latency.median_ms == min(r.latency.median_ms for r in corpus)

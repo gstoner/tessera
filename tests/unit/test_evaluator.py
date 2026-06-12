@@ -21,8 +21,12 @@ import pytest
 import tessera as ts
 from tessera.compiler.evaluator import (
     BackendVerdict,
+    HorizontalVerdict,
     Rung,
+    _horizontal_relation,
     evaluate,
+    horizontal_equivalence,
+    run_native,
     verdict_for,
 )
 
@@ -36,8 +40,23 @@ def _gelu(a):
     return ts.ops.gelu(a)
 
 
+def _sm_axis(a):
+    return ts.ops.softmax(a, axis=-1)
+
+
+def _mm_gelu(a, b):                      # fused chain: gelu(matmul(a, b))
+    return ts.ops.gelu(ts.ops.matmul(a, b))
+
+
+def _msm(a, b, c):                       # fused chain: softmax(matmul)·matmul
+    return ts.ops.matmul(ts.ops.softmax(ts.ops.matmul(a, b), axis=-1), c)
+
+
 _MM = ts.jit(target="apple_gpu")(_mm)
 _GELU = ts.jit(target="apple_gpu")(_gelu)
+_SM = ts.jit(target="apple_gpu")(_sm_axis)
+_MM_GELU = ts.jit(target="apple_gpu")(_mm_gelu)
+_MSM = ts.jit(target="apple_gpu")(_msm)
 
 
 # ── portable: the verdict contract over the runtime signal ───────────────────
@@ -146,3 +165,85 @@ def test_fallback_lane_classified_honestly_no_silent_miscompile():
         "expected the differential lane to expose at least one envelope-adjacent "
         "op that falls back rather than executing natively"
     )
+
+
+# ── E1b: horizontal-equivalence oracle (portable classifier) ─────────────────
+
+def test_horizontal_equivalent_when_within_tol():
+    rel, _ = _horizontal_relation(True, True, 1e-6, tol=1e-3)
+    assert rel == "equivalent"
+
+
+def test_horizontal_divergent_when_above_tol():
+    rel, _ = _horizontal_relation(True, True, 1e-1, tol=1e-3)
+    assert rel == "divergent"
+
+
+def test_horizontal_inconclusive_when_a_side_not_native():
+    assert _horizontal_relation(True, False, 0.0, tol=1e-3)[0] == "inconclusive"
+    assert _horizontal_relation(False, True, 0.0, tol=1e-3)[0] == "inconclusive"
+
+
+def test_horizontal_inconclusive_when_incomparable():
+    assert _horizontal_relation(True, True, None, tol=1e-3)[0] == "inconclusive"
+
+
+# ── E1b: horizontal oracle over real Metal fusion ────────────────────────────
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal fusion is Darwin-only.")
+def test_fused_chains_are_equivalent_to_their_unfused_composition():
+    """The PolyJuice self-consistency check: a fused chain run as one kernel must
+    equal the same math composed from separately-executed native ops, on the
+    SAME backend. Isolates the fusion rewrite — no external reference needed."""
+    rng = np.random.default_rng(20260611)
+    a = rng.standard_normal((16, 16)).astype(np.float32)
+    b = rng.standard_normal((16, 16)).astype(np.float32)
+    c = rng.standard_normal((16, 16)).astype(np.float32)
+
+    def unfused_mm_gelu(args):
+        x, y = args
+        mm_out, n1 = run_native("apple_gpu", _MM, (x, y))
+        if not n1:
+            return None, False
+        g_out, n2 = run_native("apple_gpu", _GELU, (mm_out,))
+        return g_out, (n1 and n2)
+
+    v = horizontal_equivalence("apple_gpu", _MM_GELU, (a, b), unfused_mm_gelu, rtol=3e-3, atol=1e-3)
+    assert v.relation == "equivalent", v.detail
+
+    def unfused_msm(args):
+        x, y, z = args
+        s0, n1 = run_native("apple_gpu", _MM, (x, y))
+        if not n1:
+            return None, False
+        sm, n2 = run_native("apple_gpu", _SM, (s0,))
+        if not n2:
+            return None, False
+        out, n3 = run_native("apple_gpu", _MM, (sm, z))
+        return out, (n1 and n2 and n3)
+
+    vm = horizontal_equivalence("apple_gpu", _MSM, (a, b, c), unfused_msm, rtol=3e-3, atol=1e-3)
+    assert vm.relation in ("equivalent", "inconclusive"), vm.detail
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal fusion is Darwin-only.")
+def test_horizontal_oracle_catches_a_divergent_unfused():
+    """Prove the oracle actually flags divergence: a deliberately-perturbed (but
+    'native') unfused operand must be reported divergent, not waved through."""
+    rng = np.random.default_rng(7)
+    a = rng.standard_normal((16, 16)).astype(np.float32)
+    b = rng.standard_normal((16, 16)).astype(np.float32)
+
+    def unfused_wrong(args):
+        x, y = args
+        mm_out, n1 = run_native("apple_gpu", _MM, (x, y))
+        if not n1:
+            return None, False
+        g_out, n2 = run_native("apple_gpu", _GELU, (mm_out,))
+        if not n2:
+            return None, False
+        return np.asarray(g_out) + 0.5, True   # deliberately wrong, still "native"
+
+    v = horizontal_equivalence("apple_gpu", _MM_GELU, (a, b), unfused_wrong, rtol=3e-3, atol=1e-3)
+    assert v.is_divergent, v.detail
+    assert isinstance(v, HorizontalVerdict)

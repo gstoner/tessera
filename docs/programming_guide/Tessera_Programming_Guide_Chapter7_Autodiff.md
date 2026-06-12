@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-05-10
+last_updated: 2026-06-11
 ---
 
 # Tessera Programming Guide
@@ -9,8 +9,10 @@ last_updated: 2026-05-10
 
 Autodiff is a **shipped** Tessera surface. The tape-based reverse-mode
 implementation lives at `tessera.autodiff.tape()` / `tessera.autodiff.reverse()`,
-with category-based VJP/JVP coverage across **188 VJPs and 140 JVPs** in the
-standalone primitive registry. The transforms compose through Graph IR
+with broad category-based VJP/JVP coverage across the standalone primitive
+registry (live counts in the generated dashboard
+[`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md)
+— `vjp`/`jvp` `planned` buckets are closed project-wide). The transforms compose through Graph IR
 (Phase F4), insert effect-aware adjoint collectives (Phase F5), and support
 forward-mode (`jvp`/`jacfwd`), reverse-mode (`vjp`/`jacrev`/`grad`),
 activation checkpointing (`rematerialize`), and JAX-style higher-order
@@ -176,19 +178,20 @@ matching reduction in the backward.
 ## 7.9 Coverage and Audit
 
 Per-primitive VJP/JVP status is tracked in
-`python/tessera/compiler/primitive_coverage.py` and rendered to
-`docs/audit/standalone_primitive_coverage.md`. As of 2026-05-10:
+`python/tessera/compiler/primitive_coverage.py` and rendered to the generated
+dashboard [`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md)
+(the **count authority** — per Decision #26, prose does not copy its numbers).
+Current shape of the surface:
 
-- **188 VJPs registered**, 184 entries at `vjp = complete`.
-- **140 JVPs registered**, 140 entries at `jvp = complete`.
-- 137 entries marked `vjp = not_applicable` (RNG samplers / transforms /
-  schedules / boolean-output / state-effect ops — non-differentiable by
-  design).
-- 138 entries marked `jvp = not_applicable` for the same reasons.
+- The differentiable surface has registered VJP and JVP rules; the `vjp` and
+  `jvp` `planned` buckets are **closed project-wide**.
+- Non-differentiable primitives (RNG samplers, transforms, schedules,
+  boolean-output, state-effect ops) are marked `not_applicable` by design.
+- The remaining open contract axis across primitives is `backend_kernel`
+  (hardware-gated), not autodiff.
 
-The remaining gaps (`vjp = planned` 53; `jvp = planned` 96) are niche
-primitives in the spectral / sparse / linalg / quant-variant tail; see
-`docs/audit/coverage/COVERAGE_AUDIT.md` for the per-category breakdown.
+See [`docs/audit/coverage/COVERAGE_AUDIT.md`](../audit/coverage/COVERAGE_AUDIT.md)
+for the per-category breakdown.
 
 ## 7.10 Common Patterns
 
@@ -231,7 +234,8 @@ g = grad_fn(params, x, y)
 
 - Autodiff is **shipped**, not planned. `tessera.autodiff.tape()` and
   `tessera.autodiff.reverse(fn)` are the canonical entry points.
-- 188 VJPs + 140 JVPs registered across the standalone primitive surface.
+- Broad VJP + JVP coverage across the standalone primitive surface (`planned`
+  buckets closed; live counts in the generated S-series status dashboard).
 - Forward-mode (`jvp`/`jacfwd`), reverse-mode (`vjp`/`jacrev`/`grad`),
   activation checkpointing (`rematerialize`), and JAX-style transforms
   (`vmap`/`pmap`) all compose.

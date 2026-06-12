@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-06
+last_updated: 2026-06-11
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -103,11 +103,13 @@ wgmma.mma_async.aligned.m64n128k32.f32.fp8.fp8.fp32 ...
 ## 6. Autotuning Integration
 
 - Schedule IR attributes (`block`, `warp`, `vector`) flow into Target IR kernels.  
-- Autotune caches store **final target binaries per arch**.  
-- Fatbin/package emission is not the default developer path yet. Artifact
-  metadata already tracks Graph IR, Schedule IR, Tile IR, Target IR, and tuned
-  binaries where a backend emits them; target-specific packaging remains
-  validation-gated.
+- Autotune caches store **final target binaries per arch** where a backend emits them.  
+- **Packaging status is per-backend, not uniform.** Apple ships a production
+  packaged-kernel path (`.mtlpackage` lifecycle PK1–PK7 with reflection +
+  binding-spec ABI validation), so Apple packaging is real today. NVIDIA/ROCm
+  remain artifact-only with packaging validation-gated on Phase G/H hardware.
+  Artifact metadata already tracks Graph IR, Schedule IR, Tile IR, Target IR,
+  and tuned binaries where a backend emits them.
 
 ---
 

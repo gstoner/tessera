@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Conformance profiles; defers API and compiler disputes to docs/README.md
-last_updated: 2026-05-06
+last_updated: 2026-06-11
 ---
 
 # Tessera Conformance Specification (Normative)
@@ -238,6 +238,23 @@ A conformant implementation **shall**:
    (checked via `assert "tessera.matmul" in ir` style assertions in phase1 tests)
 3. Correctly raise each error type with the expected message format
 4. Correctly reject invalid programs (negative tests marked with `pytest.raises`)
+
+### 6.2.1 Fixture-driven numerical proof (normative, 2026-06-07)
+
+A conformance cell in the generated op×target matrix
+([`docs/audit/op_target_conformance.md`](../audit/op_target_conformance.md))
+**shall not** reach `numerical_check = complete` on a filename/keyword
+heuristic alone. A `complete` numerical claim requires a
+**manifest-declared `execute_compare_fixture`** that exists on disk and
+genuinely `assert_allclose`-compares the op against an independent
+reference. The generator enforces this
+(`conformance_matrix._numerical_proof_source` returns `"fixture"` /
+`"heuristic"` / `None`); heuristic-only cells are capped at `partial`.
+The gate is locked by
+[`tests/unit/test_conformance_complete_cells_proven.py`](../../tests/unit/test_conformance_complete_cells_proven.py)
+and verifiable with `conformance_matrix --verify-fixtures`. This is why
+hardware-gated cells (e.g. `softmax/nvidia`, which has no execution path)
+stay `partial` rather than claiming a numerical proof they cannot back.
 
 ### 6.3 Static Conformance Checks
 

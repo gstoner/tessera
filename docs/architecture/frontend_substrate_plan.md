@@ -1,3 +1,9 @@
+---
+status: Active
+classification: Plan
+last_updated: 2026-05-20
+---
+
 # Frontend Substrate Plan
 
 > **Status:** Active. This is the authoritative architecture doc for the

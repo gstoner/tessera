@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Goals
@@ -68,7 +68,7 @@ Error Diagnostics - Clear error messages when shape mismatches occur
 
 - Tensor[Dims…, DType @policy…] where policies include:
 @accum(f32|bf16), @stochastic_round, @loss_scale(k), @saturate.
-- Supported dtypes: fp32, tf32, bf16, fp16, fp8(e4m3|e5m2), int8/4 (+ per-channel scales).
+- Supported storage dtypes: fp64, fp32, bf16, fp16, fp8(e4m3|e5m2), fp6(e2m3|e3m2), fp4_e2m1, nvfp4, int8/16/32/64, bool (+ per-channel scales). TF32 is a `math_mode` on fp32 storage, not a storage dtype.
 - Safe primitives: softmax_safe, layernorm_safe, rmsnorm_safe, logsumexp_safe.
 - Casting rules are typed (e.g., fp8 matmul → fp32 accumulate → policy cast).
 
@@ -144,7 +144,7 @@ def transformer_block(x, Wqkv, Wo, Wmlp_in, Wmlp_out, *, heads: int):
     return y + tessera.ops.gemm(z, Wmlp_out)
 ```
 
-Autodiff transforms, managed KV-cache APIs, dropout lowering, and checkpointing for this block are Phase 5 planned.
+Autodiff transforms, managed KV-cache APIs (`tessera.cache.KVCacheHandle`), dropout lowering, and activation checkpointing for this block are **shipped** (Phase 5 / Phase B-E).
 
 ## Kernel + schedule:
 
@@ -156,7 +156,7 @@ def attention(q, k, v):
 graph_ir_text = attention.graph_ir.to_mlir()
 ```
 
-Custom kernel schedules and Bayesian autotuning are Phase 4 planned; current examples should prefer canonical `tessera.ops` calls unless a Tile IR lowering example is explicitly required.
+The Bayesian autotuner is **shipped** (`tessera.compiler.autotune_v2`, Optuna TPE + SQLite cache). Distributed/per-device schedule autotuning is Phase 4 planned; current examples should prefer canonical `tessera.ops` calls unless a Tile IR lowering example is explicitly required.
 
 # Cost-model APIs (hybrid analytic + learned) for autotune warm-starts.
 Static guarantees for effect ordering across collectives (type/effect system).

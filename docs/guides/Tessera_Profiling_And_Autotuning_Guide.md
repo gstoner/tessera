@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Profiling and autotuning workflows; defers schedule artifact semantics to docs/spec/SHAPE_SYSTEM.md and compiler autotuner implementation
-last_updated: 2026-04-28
+last_updated: 2026-06-11
 ---
 
 # Tessera Profiling and Autotuning Guide
@@ -211,11 +211,14 @@ cfg = autotune(
 )
 ```
 
-The foundation implementation accepts `method="on_device"` but marks the result
-as `status="unmeasured"` with a reason explaining that runtime device timers are
-not wired yet. It still emits the same schedule artifact and telemetry schema as
-synthetic tuning so downstream tooling can be implemented once and upgraded to
-real timing later.
+The foundation implementation accepts `method="on_device"`. On targets with a
+real execution path (x86 CPU, **Apple CPU/GPU** — the Apple GPU lane has a
+recorded perf ratchet, `perf_gate --ratchet`) measured timing is available; on
+artifact-only targets (NVIDIA/ROCm, pending Phase G/H hardware) the result is
+marked `status="unmeasured"` with a reason explaining that no device timer
+exists yet. Either way it emits the same schedule artifact and telemetry schema
+as synthetic tuning, so downstream tooling is written once and upgrades to real
+timing as each backend's runtime lands.
 
 Required behavior for the production implementation:
 

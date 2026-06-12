@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Production inference serving design; normative sections marked inline
-last_updated: 2026-04-28
+last_updated: 2026-06-11
 ---
 
 # Tessera Inference Server Guide
@@ -138,10 +138,14 @@ print(pkg.manifest.entry)
 
 Supported backend families:
 
-- PTX for NVIDIA.
-- ROCm for AMD.
-- Level Zero for Intel.
-- CPU fallback.
+- **CPU** (x86 AMX/AVX-512) — executable today.
+- **Apple M-Series** — CPU (Accelerate) and GPU (Metal/MPS/MPSGraph/custom MSL); executable today, the primary single-node path on Apple Silicon.
+- **NVIDIA** (PTX / CUDA Tile IR) — artifact today; hardware execution Phase G.
+- **AMD** (ROCm / MFMA) — artifact today; hardware execution Phase H.
+- **Intel** (Level Zero) — planned.
+
+Whether a target is *executable* vs. *artifact-only* is the source of truth in
+[`docs/audit/generated/runtime_execution_matrix.md`](../audit/generated/runtime_execution_matrix.md).
 
 Placement should use runtime capabilities:
 

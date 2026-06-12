@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-06-01
+last_updated: 2026-06-11
 ---
 
 # Tessera Runtime ABI Specification
@@ -10,10 +10,11 @@ last_updated: 2026-06-01
 > **Canonical reference.** This document is grounded in the actual header files under
 > `src/runtime/include/tessera/`. It is the only normative runtime ABI reference.
 >
-> **Current-state note (2026-06-01):** The C ABI is implemented and exercised
+> **Current-state note (2026-06-11):** The C ABI is implemented and exercised
 > by runtime-ABI smoke tests, sanitizer lanes, and the Python runtime wrapper.
-> CPU execution is covered by the current smoke suite; CUDA/HIP behavior remains
-> target- and hardware-gated. Do not infer production readiness from ABI
+> CPU execution (host-tile lane) and Apple GPU execution (via the G7 launch
+> bridge, §5.6.1) are covered; CUDA/HIP behavior remains target- and
+> hardware-gated. Do not infer production readiness from ABI
 > presence alone — use `docs/spec/VALIDATION_SPINE.md` and
 > `docs/spec/CONFORMANCE.md` for the validation spine. The concrete smoke
 > binaries are `tessera-runtime-abi-smoke` and
@@ -37,9 +38,11 @@ Resolution:
   unaffected by replay manifest presence.
 - **Apple CPU + Apple GPU runtime symbols** are exported through the
   same C ABI. The generated ABI dashboard
-  (`docs/audit/generated/runtime_abi.md`) is the drift-gated count source
-  and currently reports 218 `extern "C" tessera_*` symbol entries, 207
-  unique Apple symbols, and 84 Apple GPU kernel families:
+  (`docs/audit/generated/runtime_abi.md`) is the drift-gated **count
+  authority** — consult it for the live `extern "C" tessera_*` symbol
+  total, per-backend split, and Apple GPU kernel-family count rather than
+  copying a number here (a copied count silently goes stale; per Decision
+  #26 the generated docs are the source of truth):
   - `apple_cpu_runtime.cpp` exports `tessera_apple_cpu_gemm_{f32,f16,bf16}`
     plus `tessera_apple_cpu_gemm_f32_batched` (rank-3) — wired in
     Phase 8.2.
@@ -344,6 +347,38 @@ tsrLaunchHostTileKernel(s, params, kernel, payload);
 tsrStreamSynchronize(s);
 tsrDestroyStream(s);
 ```
+
+#### 5.6.1 GPU launch bridge (G7)
+
+For artifact kernels backed by device code (not host fn-pointers), the
+runtime exposes a **pluggable launcher hook** so the core runtime stays
+backend-agnostic — no hardcoded `dlopen`, no Apple/CUDA dependency in the
+core. A backend registers a name→symbol launcher once; `tsrLaunchKernel`
+then routes GPU artifact launches through it.
+
+```c
+// Generic kernel launch. For a GPU artifact kernel (G7):
+//   args[0] = const tsrGpuLaunchParams* (required);
+//   the call is routed to the registered GPU launcher.
+// If no launcher is registered (or the kernel name is unknown to it),
+// the call returns TSR_UNIMPLEMENTED rather than silently no-op'ing.
+TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel,
+                          void** args, size_t nargs);
+
+// Register a backend GPU launcher (name → device-symbol dispatch).
+typedef TsrStatus (*tsrGpuLauncherFn)(tsrStream s, const char* name,
+                                      const tsrGpuLaunchParams* params,
+                                      void* user);
+TsrStatus tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user);
+```
+
+Proven end-to-end on Metal: a C-ABI GEMM launch routed through the Apple
+runtime equals `A@B`; unregistered kernels report `TSR_UNIMPLEMENTED`.
+NVIDIA/ROCm plug into the same hook once real hardware exists — Apple is
+not a `tsrDeviceKind` enum value (the enum is `CPU`/`CUDA`/`HIP` only);
+Apple GPU execution flows through the registered launcher plus the Python
+runtime dispatch lane, by design. See `tessera_runtime.h` and
+[backend/BACKEND_AUDIT.md](../audit/backend/BACKEND_AUDIT.md).
 
 ---
 

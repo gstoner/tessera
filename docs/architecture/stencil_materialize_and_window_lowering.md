@@ -1,3 +1,9 @@
+---
+status: Informative
+classification: Architecture
+last_updated: 2026-05-20
+---
+
 # Stencil Materialization + 2D Local-Window Lowering — Design
 
 > Status (2026-05-20): **shipped — see notes per section.** This document

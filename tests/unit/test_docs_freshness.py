@@ -43,9 +43,7 @@ DASHBOARD = REPO_ROOT / "docs" / "audit" / "generated" / "docs_freshness.md"
 # tagged with frontmatter in a follow-up sprint; until then this
 # allow-list prevents the drift gate from blocking on them.
 _KNOWN_UNDATED_DOCS: frozenset[str] = frozenset({
-    "docs/architecture/compiler_gaps_1_3_5_plan.md",
-    "docs/architecture/frontend_substrate_plan.md",
-    "docs/architecture/stencil_materialize_and_window_lowering.md",
+    # Auto-generated; frontmatter is owned by its generator, not hand-edited.
     "docs/reference/tessera_frontend_lanes.md",
 })
 

@@ -1,23 +1,23 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
 ## Chapter 9: Libraries & Primitives (Updated)
 
-Tessera provides a library of **primitives and standard operations** that form the building blocks for high-performance applications. Unlike traditional libraries that exist outside the compiler, Tessera integrates current primitives directly into the IR stack. Autodiff-aware primitive lowering is Phase 5 planned.
+Tessera provides a library of **primitives and standard operations** that form the building blocks for high-performance applications. Unlike traditional libraries that exist outside the compiler, Tessera integrates current primitives directly into the IR stack. Autodiff-aware primitive lowering is **shipped** — differentiable primitives carry registered VJP/JVP rules (see the S-series status dashboard at [`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md) for the live per-primitive contract surface).
 
 ---
 
 ### 9.1 Principles
 
 - **First-class IR nodes**: primitives live in Graph IR and lower through Schedule IR → Tile IR → Target IR.  
-- **Autodiff-ready contracts**: current primitives expose stable forward semantics; generated backward definitions are Phase 5 planned.  
+- **Autodiff-ready contracts**: primitives expose stable forward semantics and **registered backward (VJP) and forward (JVP) rules** for the differentiable surface.  
 - **Composable**: primitives fuse with surrounding code (e.g., matmul + bias + norm).  
 - **Distributed by construction**: work with `ShardSpec`, domains, and distributions automatically.  
 - **Privilege-safe**: region privileges enforce correct use (read/write/reduce).  
@@ -68,7 +68,7 @@ def block(x, Wqkv, Wo):
     return tessera.ops.gemm(y, Wo)
 ```
 
-Autodiff for this block is Phase 5 planned; distributed collectives inside the TP path are Phase 4 planned.
+Autodiff for this block is **shipped**; multi-GPU execution of the distributed collectives inside the TP path is Phase 4 planned.
 
 ---
 

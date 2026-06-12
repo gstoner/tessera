@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-01
+last_updated: 2026-06-11
 ---
 
 # Tessera Lowering Pipeline Specification
 **Status:** Normative — grounded in `src/transforms/lib/` and `src/compiler/tile_opt_fa4/lib/` Phase 1–8 implementations
-**Last updated:** May 22, 2026
+**Last updated:** June 11, 2026
 **Cross-references:** `docs/spec/COMPILER_REFERENCE.md` §Pass Pipeline Registry, `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md`
 
 ---
@@ -39,6 +39,16 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 The §1 table below lists only the original x86 / GPU canonical pair to
 keep that section focused on Phase 2–3 contract; the full inventory
 above is the current truth.
+
+**Fusion-intent stamping in the compile path (2026-06-11).** For Apple
+targets, `driver.compile_graph_module` now calls
+`canonical_compile.stamp_fusion_intents(module)` before rendering Graph
+IR, tagging each recognized linear chain's terminal op with
+`tessera.fusion.intent` from the canonical `_KNOWN_FUSION_CHAINS`. The
+Apple Target IR fusion passes consume that intent (descriptor-driven
+fusion) and fall back to structural re-discovery when it is absent — see
+[`TARGET_IR_SPEC.md`](TARGET_IR_SPEC.md) §"Fusion descriptors" for the
+emit/consume contract and the `tessera.fusion.{kernel,source}` attributes.
 
 ### Apple packaged-kernel path
 

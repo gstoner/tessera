@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide
@@ -40,6 +40,14 @@ And a sixth space for multi-GPU workloads:
 **Programmer takeaway:** Registers and shared memory are for in-flight compute; global
 memory holds persistent tensors between kernel launches; mesh collectives synchronise
 distributed tensors across GPUs.
+
+> **Apple M-Series mapping (operational).** The tiers above are described in
+> NVIDIA terms, but the abstractions carry over to the Apple GPU backend:
+> `register` and `shared` map to Metal thread / **threadgroup** memory,
+> `global` maps to Metal device memory (unified with the CPU on Apple Silicon
+> — no discrete HBM), and there is no `tmem` (a Blackwell-only tier). Buffers
+> are pooled `MTLBuffer`s acquired through RAII-hardened `TS_METAL_BUF_ACQUIRE`
+> macros. See [`docs/apple_gpu_overview.md`](../apple_gpu_overview.md).
 
 ---
 

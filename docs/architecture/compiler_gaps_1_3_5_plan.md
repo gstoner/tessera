@@ -1,3 +1,9 @@
+---
+status: Deferred
+classification: Plan
+last_updated: 2026-05-20
+---
+
 # Compiler Gaps 1, 3, 5 — Deferred Execution-Ready Plan
 
 > Status (2026-05-20): **deferred**. Gaps 2 and 4 (`BoundaryConditionLowerPass`

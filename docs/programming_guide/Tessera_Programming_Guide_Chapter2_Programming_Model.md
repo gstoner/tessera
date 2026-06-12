@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Distributed collectives, NVL72 execution, autodiff transforms, and checkpointing are Phase 4-5 planned unless explicitly marked otherwise. Current examples use APIs from `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Autodiff transforms and activation checkpointing are **shipped** (Phase 5); Apple M-Series CPU/GPU execution is operational (Phase 8). Genuinely still planned: **multi-GPU** distributed-collective execution and **NVL72** rack-scale execution (single-device runs over in-process mock ranks today). Current examples use APIs from `docs/CANONICAL_API.md`.
 
 # Tessera Programming Guide
 ## Chapter 2: Programming Model
@@ -113,14 +113,15 @@ Advanced FP4/FP6 policy syntax and full Blackwell-specific numerics are future-f
 
 ## 2.6 Future Example: Distributed Training On NVL72
 
-The following concepts are Phase 4-5 planned:
+Autodiff and activation checkpointing are **shipped** today (single-device);
+what remains Phase 4 planned is the **multi-GPU rack-scale** form below:
 
 ```python
-# Phase 4-5 planned sketch
+# Phase 4 planned sketch (multi-GPU / NVL72 execution)
 # - 72-GPU mesh placement
-# - NCCL/RCCL collectives
-# - distributed autodiff
-# - activation checkpointing
+# - NCCL/RCCL collectives executing across real ranks
+# - autodiff + activation checkpointing composed over a multi-rank mesh
+#   (the transforms themselves already work on a single device)
 ```
 
 Do not use legacy distribution constructors or unmarked gradient-transform examples as current API guidance.

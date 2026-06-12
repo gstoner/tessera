@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide
@@ -87,7 +87,7 @@ dispatcher(A.parts("tp"), B.parts("tp"), C.parts("tp"))
 
 `DistributedArray.parts(axis)` returns a list of per-rank slices. The dispatcher calls `tp_gemm` once per element in the list, passing the rank-`i` shard to each kernel invocation.
 
-**Phase 1 behaviour:** Ranks execute sequentially (one Python thread per invocation). In Phase 3+, parallel GPU stream dispatch is used.
+**Current behaviour:** single-device backends (x86, Apple CPU/GPU) execute each shard's kernel through their real dispatch path; *multi-rank* fan-out still runs over in-process mock ranks (one Python thread per invocation). True parallel multi-GPU stream dispatch lands with Phase 4 distributed execution.
 
 ---
 

@@ -1,13 +1,45 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-01
+last_updated: 2026-06-11
 ---
 
 # Tessera Target IR Specification
 **Status:** Normative — grounded in `src/compiler/tile_opt_fa4/`, `src/compiler/programming_model/ir/schedule/`, and `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` Phase 2–8 implementations
-**Last updated:** May 22, 2026
+**Last updated:** June 11, 2026
 **Cross-references:** `docs/spec/GRAPH_IR_SPEC.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`
+
+---
+
+## Fusion descriptors (normative, 2026-06-11)
+
+Apple Target IR fusion is now **descriptor-driven and self-describing**
+(commit `27f91c8`, the flagship slice of Architecture Decision #19 —
+make the fusion decision first-class in Target IR rather than re-deriving
+it). All 7 Apple fusion passes (matmul→softmax→matmul, matmul→softmax,
+matmul→gelu, matmul→rmsnorm, plus the swiglu / mla_decode /
+native_sparse_attn composite passes) now:
+
+- **Emit** a descriptor on the fused call: `tessera.fusion.kernel` (the
+  kernel name, e.g. `"matmul_softmax_matmul"`) and `tessera.fusion.source`
+  ∈ `{"descriptor", "rediscovered", "composite_op"}` — so the IR records
+  *which* kernel was chosen and *whether* the compiler's intent drove it
+  vs. a structural re-walk.
+- **Consume** an upstream `tessera.fusion.intent` on the chain's tail op.
+  The Python frontend stamps it via
+  `canonical_compile.stamp_fusion_intents(module)` from the canonical
+  `_KNOWN_FUSION_CHAINS`, auto-wired into `driver.compile_graph_module`
+  for `apple_gpu`/`apple_cpu`. Present → descriptor-driven; absent →
+  structural re-discovery (back-compat).
+- On a descriptor/IR disagreement (intent set but the structure doesn't
+  match) emit a **Decision-#21 warning naming the op** instead of silently
+  falling back.
+
+The descriptor is backend-agnostic; only Apple consumes it today, and it
+extends to other backends as they grow Target IR fusion consumers.
+Locked by `tests/tessera-ir/phase8/apple_gpu_fusion_descriptor.mlir` (lit)
++ `tests/unit/test_apple_fusion_descriptor.py` +
+`tests/unit/test_fusion_intent_emitter.py` (emit↔consume contract guard).
 
 ---
 

@@ -1,10 +1,15 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** The runtime Python wrapper
+> (`tessera.runtime.TesseraRuntime`), autodiff, activation checkpointing, ZeRO-2
+> sharding, and the Bayesian autotuner are **shipped**. The C ABI executes on the
+> CPU host-tile lane and the Apple GPU lane (G7 launch bridge); CUDA/HIP and
+> multi-GPU collective execution remain Phase G/H / Phase 4 planned. Canonical API
+> names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Runtime ABI — Programmer's Guide
@@ -14,9 +19,14 @@ last_updated: 2026-04-26
 > function-by-function specification (exact signatures, all type definitions, error codes,
 > backend architecture) see [`docs/spec/RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md).
 >
-> **Phase status:** The C ABI headers are fully defined. The CPU backend implementation and
-> Python wrapper are planned for Phase 6. Phases 1–5 use `MockRankGroup` for multi-rank
-> tests, which does not go through this ABI.
+> **Phase status (updated 2026-06-11):** The C ABI headers are fully defined and the
+> **CPU backend and Python wrapper are shipped** (`python/tessera/runtime.py` —
+> `tessera.runtime.TesseraRuntime`). The CPU host-tile lane and the Apple GPU lane
+> (via the G7 launch bridge) execute today; CUDA/HIP remain hardware-gated.
+> Multi-rank tests still use in-process `MockRankGroup`, which does not go through
+> this ABI. For live C ABI symbol counts, see
+> [`docs/audit/generated/runtime_abi.md`](../audit/generated/runtime_abi.md) (the
+> drift-gated count authority) — do not copy a number into prose.
 
 ---
 
@@ -121,6 +131,13 @@ group (`logical_tile_threads_max`), and a scheduling hint for occupancy
 | `TSR_DEVICE_CPU` | 0 | Always present; index 0 |
 | `TSR_DEVICE_CUDA` | 1 | Present if CUDA backend compiled in |
 | `TSR_DEVICE_HIP` | 2 | Present if HIP backend compiled in |
+
+> **Apple GPU is intentionally not a `TsrDeviceKind`.** The core runtime is
+> backend-agnostic — no hardcoded `dlopen`, no Apple/CUDA dependency. Apple GPU
+> execution flows through the **G7 launch bridge** (`tsrRegisterGpuLauncher` +
+> `tsrLaunchKernel`, see below) plus the Python runtime dispatch lane, rather than
+> a device-kind enum value. The same hook is how NVIDIA/ROCm GPU launches will
+> plug in once real hardware exists.
 
 ---
 
@@ -301,6 +318,28 @@ For simple cases where you don't need an explicit stream:
 tsrLaunchHostTileKernelSync(dev, &params, kernel_fn, &payload);
 // Returns only after all tiles complete — no stream management needed
 ```
+
+### GPU artifact launch — the G7 bridge
+
+`tsrLaunchHostTileKernel` runs a **host** fn-pointer kernel. For a **device
+artifact** kernel (Metal today; CUDA/HIP once hardware exists) the runtime
+exposes a pluggable launcher so the core stays backend-agnostic. A backend
+registers a name→symbol launcher once; `tsrLaunchKernel` then routes GPU
+launches through it:
+
+```c
+// Register once (the backend does this at init):
+tsrRegisterGpuLauncher(my_launcher_fn, user_ctx);
+
+// Launch: args[0] is a const tsrGpuLaunchParams* for a GPU artifact kernel.
+void* args[1] = { &gpu_params };
+TsrStatus st = tsrLaunchKernel(stream, kernel, args, 1);
+// If no launcher is registered (or the name is unknown), st == TSR_UNIMPLEMENTED
+// — never a silent no-op.
+```
+
+This is proven end-to-end on Metal (a C-ABI GEMM launch equals `A@B`). See
+[`RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md) §5.6.1.
 
 ---
 
@@ -528,24 +567,29 @@ uint64_t now = tsrTimestampNowNs();       // nanoseconds since process start
 
 ---
 
-## Phase 6: Python Wrapper
+## Python Wrapper (shipped)
 
-A Python wrapper (`python/tessera/runtime.py`) is planned for Phase 6. It will be a
-thin ctypes/cffi binding that raises `TesseraRuntimeError` on any non-SUCCESS status:
+The Python wrapper at `python/tessera/runtime.py` is **shipped** —
+`tessera.runtime.TesseraRuntime` is a ctypes binding over the C ABI that raises
+`TesseraRuntimeError` (carrying the failing function name + status) on any
+non-SUCCESS call. The surface is **device-based** (`get_device`), not
+context-based:
 
 ```python
-# Phase 6 API — not yet implemented
 from tessera.runtime import TesseraRuntime
 
 rt = TesseraRuntime()
-ctx = rt.create_context(device_id=0)
-stream = rt.create_stream(ctx)
-buf = rt.malloc(ctx, 4096)
+dev = rt.get_device(0)             # device handle (index 0 = CPU)
+stream = rt.create_stream(dev)
+buf = rt.malloc(dev, 4096)
 rt.memset(buf, 0, 4096)
-rt.synchronize(stream)
+rt.stream_sync(stream)
 rt.destroy_stream(stream)
-rt.destroy_context(ctx)
+rt.free(buf)
 ```
+
+For compiled-function execution, `tessera.runtime.launch(artifact, args, stream)`
+runs a `RuntimeArtifact` produced by `@tessera.jit`. Status checks are automatic.
 
 ---
 

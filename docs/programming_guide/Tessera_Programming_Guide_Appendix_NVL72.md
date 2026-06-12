@@ -1,16 +1,24 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
 ## Appendix A: NVL72 Programming Guide (Extended)
 
-NVIDIA’s NVL72 is a 72-GPU NVSwitch domain built from GB200 superchips. Tessera’s NVL72 support is Phase 4 planned. This appendix is a future-facing guide, not current Phase 1-3 API guidance.
+> ⚠️ **Entirely Phase 4 planned — not operational.** Every example in this
+> appendix describes Tessera's *intended* rack-scale execution on a 72-GPU
+> NVSwitch domain. None of it runs today: multi-GPU/multi-rank execution,
+> NVSwitch+SHARP collectives, and custom mapper policies are all future work,
+> and the dev environment has no such hardware. For **executable** examples
+> use `@tessera.jit(target="apple_gpu")` / `"apple_cpu"` / x86 (see Chapters
+> 2–5 and 10). This appendix is a design/roadmap reference.
+
+NVIDIA’s NVL72 is a 72-GPU NVSwitch domain built from GB200 superchips. Tessera’s NVL72 support is Phase 4 planned. This appendix is a future-facing guide, not current API guidance.
 
 ---
 

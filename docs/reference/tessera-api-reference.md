@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-20
+last_updated: 2026-06-11
 ---
 
 # Tessera API Reference
@@ -241,9 +241,21 @@ Use `ts.ops`.
 | `all_reduce`, `reduce_scatter`, `all_gather` | Implemented distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. Production multi-rank execution is validation-gated. |
 | `fused_epilogue` | Implemented where supported by canonicalization/lowering; target support varies by backend capability. |
 
-## GPU Targeting
+## Targeting
+
+`@ts.jit(target=...)` accepts both a `GPUTargetProfile` object and **string
+aliases**. Valid string targets: `"apple_cpu"`, `"apple_gpu"`, `"rocm"`,
+`"metalium"` (Architecture Decision #20). On Apple Silicon, `"apple_cpu"` and
+`"apple_gpu"` are **executable** today; NVIDIA/ROCm string/profile targets emit
+artifacts pending Phase G/H hardware.
 
 ```python
+# Apple GPU (executable on Apple Silicon)
+@ts.jit(target="apple_gpu")
+def gemm(A, B):
+    return ts.ops.matmul(A, B)
+
+# NVIDIA via a profile object (artifact today; hardware Phase G)
 from tessera.compiler.gpu_target import GPUTargetProfile, ISA
 from tessera.compiler.attn_lower import FlashAttnLoweringConfig
 
@@ -254,6 +266,9 @@ from tessera.compiler.attn_lower import FlashAttnLoweringConfig
 def flash_fwd(Q, K, V):
     return ts.ops.flash_attn(Q, K, V, causal=True)
 ```
+
+Which targets are executable vs. artifact-only is tracked in
+[`docs/audit/generated/runtime_execution_matrix.md`](../audit/generated/runtime_execution_matrix.md).
 
 ## Inspection
 
@@ -326,7 +341,7 @@ human-readable summary; for the current per-component picture, read
 | Area | Status |
 |------|--------|
 | NCCL/RCCL collectives + cluster execution | Implemented lowering and adapter surfaces — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`; production multi-rank execution remains validation-gated. |
-| Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships 241 VJPs + 236 JVPs; `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
+| Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships broad VJP/JVP coverage (live counts in [`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md)); `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
 | Activation checkpointing + ZeRO sharding | Implemented — `tessera.autodiff.rematerialize` + ZeRO stage 2 via `OptimizerShardPass`. |
 | Bayesian autotuning | Implemented — `tessera.autotune` + `compiler/autotune_v2.py` (Optuna TPE + Hyperband + SQLite cache v2). |
 | Runtime Python wrapper | Implemented — `tessera.runtime.TesseraRuntime` over the C ABI. |

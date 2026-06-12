@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-01
+last_updated: 2026-06-11
 ---
 
 # Tessera Compiler Reference
@@ -68,6 +68,26 @@ records `BackendKernelEntry(status="packaged")` plus an
 loads the `.mtlpackage`, extracts reflection, and validates the ABI before
 dispatch. The fixture-backed manifest proves the lifecycle; production packaged
 kernels are tracked separately in `apple_packaged_manifest.py`.
+
+### Production MLIR/LLVM JIT lane (`tessera_jit`)
+
+Distinct from the artifact-lowering paths above, the **production compiler
+track** adds a real MLIR→LLVM **JIT execution** lane on CPU: `tessera.*` ops
+lower through `linalg` → standard MLIR dialects → LLVM IR → an ORC JIT, and the
+compiled function is invoked over the runtime's compiled-function C ABI
+(`tessera_jit_invoke`, see [`RUNTIME_ABI_SPEC.md`](RUNTIME_ABI_SPEC.md) §12).
+This is genuine codegen-and-run, oracle-tested against numpy — not a numpy
+reference. As of Phase 1 it covers `add/sub/mul/div`, `matmul` (±transpose,
+±bf16 with f32 accumulate), `batched_gemm`, `reduce(sum/max/min/mean)`,
+`softmax`, `rmsnorm`, `layer_norm`, `relu/sigmoid/tanh/silu/gelu`, and
+`transpose`, plus **multi-op graph compilation** (`GraphFn` — a whole
+multi-op `tessera` function JIT'd as one unit so intermediates never cross the
+boundary and the lowering can fuse) and a **compilation cache** keyed on MLIR
+text. Capstone proof: a LLaMA-style transformer decoder layer (rmsnorm +
+attention + SwiGLU + residuals) compiles as one function and matches numpy.
+Source of truth and roadmap:
+[`PRODUCTION_COMPILER_PLAN.md`](PRODUCTION_COMPILER_PLAN.md) (Ratified);
+tests under `tests/unit/test_production_jit_*.py`.
 
 ---
 

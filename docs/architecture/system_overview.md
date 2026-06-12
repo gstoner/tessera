@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Informative
-last_updated: 2026-05-20
+last_updated: 2026-06-11
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
@@ -32,8 +32,9 @@ Target hardware: x86 AMX/AVX-512, Apple Silicon CPU/GPU, NVIDIA CUDA, and AMD RO
 | **Python frontend** | Implemented: `@tessera.jit`, `@tessera.kernel`, `fn.explain()`, `from_text`, support queries, constraints, effects, and Graph IR emission. |
 | **IR stack** | Graph/Schedule/Tile/Target IR are implemented and inspectable; metadata normalization and constrained-lane Graph IR views are in place. |
 | **CPU / x86 lowering** | Implemented for supported paths, with reference execution and AMX/AVX-512-oriented backend hooks. |
+| **Production CPU MLIR→LLVM JIT (`tessera_jit`)** | Real JIT codegen-and-run lane (linalg → LLVM IR → ORC JIT), oracle-tested vs numpy. Covers the elementwise/matmul/reduce/softmax/norm/activation surface plus multi-op `GraphFn` graph compilation and a compilation cache. Capstone: a transformer decoder layer compiles+runs as one function. See [`docs/spec/PRODUCTION_COMPILER_PLAN.md`](../spec/PRODUCTION_COMPILER_PLAN.md). |
 | **NVIDIA GPU lowering** | Tile/Target artifact path implemented for supported kernels; runtime/native readiness is target- and op-gated. |
-| **Apple GPU native path** | Fused native kernels exist for the audited GA/EBM and selected Visual Complex surfaces. |
+| **Apple CPU/GPU native path** | Apple CPU executes via Accelerate; Apple GPU executes via MPS / MPSGraph / custom MSL with fused chains, descriptor-driven dispatch (Decision #19), and packaged-kernel lifecycle. Fused native kernels exist for the audited GA/EBM and selected Visual Complex surfaces. |
 | **ROCm** | MFMA/WMMA capability modeling is present, including `gfx1200`; native execution is still capability-gated. |
 | **Distributed / collectives** | Lowering and adapter surfaces exist; production multi-rank execution is validation-gated. An expert-parallel **MegaMoE** forward (GShard 2× all-to-all dispatch/combine, FP8×FP4, async comm/compute overlap) runs over in-process mock collectives with the expert FFN on the Apple GPU — see [`docs/distributed_megamoe.md`](../distributed_megamoe.md). |
 | **Runtime ABI** | C ABI and Python wrapper exist, with runtime smoke and sanitizer coverage. |

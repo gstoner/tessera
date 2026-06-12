@@ -1,16 +1,16 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
 ## Chapter 11: Conclusion & Putting It All Together (Updated)
 
-This guide has introduced the Tessera programming model: a **tile-first, distributed, and numerics-aware framework** for programming modern accelerators. Tessera bridges the gap between high-level productivity and low-level performance, scaling seamlessly from a single GPU to NVL72-scale systems.
+This guide has introduced the Tessera programming model: a **tile-first, distributed, and numerics-aware framework** for programming modern accelerators. Tessera bridges the gap between high-level productivity and low-level performance. Today it **executes** on x86, Apple M-Series CPU/GPU, and a CPU MLIR→LLVM JIT lane; the design scales toward multi-GPU and NVL72-scale systems as those execution paths land (Phase 4 / Phase G–I).
 
 ---
 
@@ -32,28 +32,30 @@ This guide has introduced the Tessera programming model: a **tile-first, distrib
 ### 11.2 Programmer’s Checklist
 
 - ✅ Use **tiles**, not threads.  
-- ✅ Stage data through **shared memory + cp.async**.  
-- ✅ Declare **numerics policies** in tensor types.  
+- ✅ Stage data through **shared memory + cp.async** (NVIDIA) or **Metal encode-sessions** (Apple GPU).  
+- ✅ Declare **numerics policies** in tensor types (TF32 is a `math_mode`, not a dtype).  
 - ✅ Use **safe primitives** (`softmax_safe`, `layernorm_safe`).  
-- ✅ Shard tensors with **ShardSpec** and distributions.  
+- ✅ Shard tensors with **ShardSpec** and distributions (single-device today; multi-GPU Phase 4).  
 - ✅ Apply **region privileges** (`read`, `write`, `reduce`) to enforce safety.  
 - ✅ Scale with **index launches** across mesh axes.  
-- ✅ Capture CUDA Graphs for low-overhead NVL72 runs.  
-- ✅ Use **Mapper API** for fine-tuned placement and portability.  
+- 🔜 *Phase 4+*: CUDA Graph capture for low-overhead NVL72 runs and the **Mapper API** for placement/portability.  
 
 ---
 
-### 11.3 NVL72 in Context
+### 11.3 NVL72 in Context (Phase 4 planned)
 
-NVL72 exemplifies Tessera’s goals:
+NVL72 exemplifies Tessera’s **design goals** for rack-scale execution — it is a
+roadmap target, not an operational path today:
 
 - Treats 72 GPUs as a single programming mesh.  
 - Collectives map to NCCL/SHARP across NVSwitch.  
 - Mixed precision (FP4/FP6/FP8 + FP32 accum) drives performance for LLM training.  
-- Autodiff and collectives scale automatically across dp/tp/pp meshes.  
+- Autodiff and collectives scale across dp/tp/pp meshes.  
 - Mapper API ensures locality-aware scheduling.  
 
-The same Tessera code that runs on a single GPU scales to a full NVL72 supernode with no code changes.
+The intent is that the same Tessera code which runs on a single device scales to
+a full NVL72 supernode with no code changes **once multi-GPU execution lands**;
+today distributed collectives run over in-process mock ranks.
 
 ---
 

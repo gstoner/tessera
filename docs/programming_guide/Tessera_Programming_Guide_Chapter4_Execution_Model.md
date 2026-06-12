@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
@@ -151,7 +151,36 @@ def train_step(batch):
 
 ---
 
-### 4.8 Summary
+### 4.8 Execution on Apple M-Series GPU (operational)
+
+On Apple Silicon, `@tessera.jit(target="apple_gpu")` is a **real execution
+path** today (Phase 8.3 → 8.4.7), not a planned one. Instead of CUDA streams,
+the runtime dispatches through a Metal command-buffer model:
+
+- **Three dispatch lanes** cover the op surface: Apple's **MPS** matmul, the
+  **MPSGraph** lane (Tier-1 activations/norms — `silu`, `gelu`, `softmax`,
+  `layer_norm`, `rmsnorm`, `log_softmax`, … — with no `N ≤ 256` limit), and
+  **custom MSL** kernels for the gaps (rope, flash-attention, fused chains).
+- **Fused chains** execute as single kernels: `matmul→softmax`,
+  `matmul→gelu`, `matmul→rmsnorm`, and the full attention block
+  `matmul→softmax→matmul`. Pipeline ordering tries the longest fusion first
+  so the most specific kernel wins.
+- **Descriptor-driven dispatch**: the compiler stamps a `tessera.fusion.intent`
+  the Target IR consumes, so the chosen fused kernel is the compiler's decision
+  rather than a runtime re-discovery (see Ch. references and the Target IR spec).
+- **Auto-batch** groups compatible ops, MSL libraries are cached by source
+  hash, and MPSGraph graphs are cached by shape/opcode/dtype.
+
+A full multi-head-attention block composes from these without a per-head loop,
+and a single-layer LLaMA-style decoder (RMSNorm + attention + SwiGLU) has been
+validated end-to-end against a numpy reference. See
+[`docs/apple_gpu_overview.md`](../apple_gpu_overview.md). The Apple **CPU**
+path (`target="apple_cpu"`, Accelerate) and a production CPU MLIR→LLVM **JIT**
+lane are likewise executable today.
+
+---
+
+### 4.9 Summary
 
 - Tessera executes kernels in a **tile-first SPMD model**.  
 - Groups cooperate via **shared memory + barriers**.  

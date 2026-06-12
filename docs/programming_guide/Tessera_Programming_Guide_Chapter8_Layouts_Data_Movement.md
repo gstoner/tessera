@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
@@ -136,6 +136,27 @@ NVL72 execution is Phase 4 planned. In that phase, data movement extends across 
 with tessera.overlap(comm="tp_reduce_scatter"):
     grad_W = gemm(X, Y)   # compute while reduce_scatter happens
 ```
+
+---
+
+### 8.7.1 Data Movement on Apple M-Series GPU (operational)
+
+On Apple Silicon the data-movement primitives map onto Metal rather than
+CUDA, and this lane executes today:
+
+- **Buffers** are pooled `MTLBuffer`s acquired through RAII-hardened
+  `TS_METAL_BUF_ACQUIRE` macros, so every dispatcher's early-return paths are
+  release-safe by construction (locked by `test_apple_gpu_buffer_pool.py`).
+- **Movement** is encoded into Metal command buffers; an encode-session /
+  one-command-buffer substrate chains a multi-op program so intermediates stay
+  resident on the GPU instead of round-tripping to host.
+- **Graph reuse**: MPSGraph graphs are cached by `(shape-class, opcode, dtype,
+  shape[, eps, weighted])` and reused across calls; custom MSL libraries are
+  cached by source hash.
+- **Auto-batch** coalesces compatible ops so they share one encode-session.
+
+This is the inter-tile equivalent of the NVIDIA `cp_async`/TMA story for the
+Apple backend. See [`docs/apple_gpu_overview.md`](../apple_gpu_overview.md).
 
 ---
 

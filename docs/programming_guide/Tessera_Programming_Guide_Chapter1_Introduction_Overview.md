@@ -1,16 +1,16 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
 ## Chapter 1: Introduction & Overview (Updated)
 
-Tessera is a new programming model for modern accelerators. The current implemented stack covers the Python frontend, x86 lowering, and supported NVIDIA SM_90+ lowering paths. Distributed training, extended autodiff, and NVL72 rack-scale execution are Phase 4-5 planned.
+Tessera is a new programming model for modern accelerators. The current implemented stack covers the Python frontend; **executable backends** today are x86 (AMX/AVX-512), Apple M-Series CPU (Accelerate) and Apple M-Series GPU (Metal/MPS/MPSGraph/custom MSL), plus a production CPU MLIR→LLVM **JIT** lane. NVIDIA SM_90+ and AMD ROCm produce Target IR artifacts but real-hardware execution is gated on Phase G/H hardware. Autodiff (forward/reverse + checkpointing) is shipped. Multi-GPU distributed training and NVL72 rack-scale execution remain Phase 4 planned.
 
 Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**: programmers think in terms of tiles, groups, and meshes. This abstraction, combined with an expressive type system and a multi-level IR, makes Tessera code both **portable** and **high-performance**.
 
@@ -21,9 +21,10 @@ Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**:
 - **One stack for research → production**: no rewrites between Python prototyping and GPU kernel development.  
 - **Tiles, not threads**: simpler reasoning about performance, memory, and synchronization.  
 - **Numerics as types**: stability and performance with FP4/FP6/FP8/BF16/FP16/FP32, all declared in the type system.  
-- **Autodiff-aware design**: effect-aware and collective-aware transforms are Phase 5 planned.  
-- **Distributed by construction**: domains/distributions exist today; production collectives are Phase 4 planned.  
-- **Portability**: NVIDIA PTX/Tile IR today, AMD/Intel future.  
+- **Autodiff-aware design**: tape-based forward/reverse transforms, custom VJP/JVP rules, and activation checkpointing are **shipped** (effect-aware and collective-aware adjoints registered); see Ch.7.  
+- **Standalone compiler**: the runtime is independent of PyTorch / JAX / Flax — they are reference vocabularies only (Architecture Decision #23). The S-series Python reference surface (RNG, state, control, sharding, NN functional, quantization, optimizers, losses + RL, checkpointing, custom ops, AOT, data pipeline) has shipped.  
+- **Distributed by construction**: domains/distributions exist today; multi-GPU/multi-rank collective execution is Phase 4 planned (single-device runs over in-process mock ranks).  
+- **Portability**: x86 + Apple CPU/GPU execute today; NVIDIA PTX/Tile IR and AMD ROCm artifacts emit today with hardware execution gated on Phase G/H.  
 - **NVL72 design target**: treating a 72-GPU NVSwitch rack as a single programming domain is Phase 4 planned.  
 
 ---
@@ -34,14 +35,14 @@ Unlike thread- and block-centric models (e.g., CUDA), Tessera is **tile-first**:
 |------------|----------------|---------|
 | **Execution model** | Tile → Group → Mesh hierarchy | `tile.linear_id()` |
 | **IR stack** | Graph IR → Schedule IR → Tile IR → Target IR | `fn.graph_ir.to_mlir()` |
-| **Numerics** | FP4/FP6/FP8/BF16/FP16/FP32 policies | `Tensor["B","D", fp8_e4m3 @accum(fp32)]` |
-| **Autodiff** | Forward/reverse transforms are Phase 5 planned | Phase 5 planned |
+| **Numerics** | FP4/FP6/FP8/BF16/FP16/FP32 policies (TF32 is a `math_mode`, not a storage dtype) | `Tensor["B","D", fp8_e4m3 @accum(fp32)]` |
+| **Autodiff** | Forward/reverse transforms, custom rules, checkpointing — **shipped** | `tessera.autodiff.reverse(fn)`, `value_and_grad(fn)` |
+| **Executable backends** | x86, Apple CPU (Accelerate), Apple GPU (Metal/MPS/MPSGraph), CPU JIT | `@tessera.jit(target="apple_gpu")` |
 | **Distributed tensors** | `ShardSpec`, domains, distributions | `tessera.array.from_domain(...)` |
 | **Region privileges** | Read/Write/Reduce semantics for safe scheduling | `def step(W: Region["read"], Y: Region["write"])` |
-| **Collectives** | Declarative DP/TP/PP/EP parallelism | Phase 4 planned |
-| **Index launches** | Scale kernels across shards | `tessera.index_launch(axis="tp")(gemm_tile)` |
-| **Portability** | NVIDIA PTX + CUDA Tile IR | `tile.mma → wgmma` |
-| **Deployment** | Runtime ABI wiring, CUDA Graphs, AOT bundles, NVL72 scale | Phase 6 planned |
+| **Collectives** | Declarative DP/TP/PP/EP parallelism (multi-GPU exec Phase 4 planned) | `tessera.index_launch(axis="tp")(gemm_tile)` |
+| **Portability** | NVIDIA PTX + CUDA Tile IR (artifact; hardware Phase G) | `tile.mma → wgmma` |
+| **Deployment** | Runtime ABI wiring, AOT bundles (`tessera.aot`), packaged Apple kernels | `aot.export(fn, *examples)` |
 
 ---
 
@@ -83,7 +84,7 @@ Future NVL72 examples should be marked Phase 4 planned.
 - **Ch.4 Execution Model**: pipelines, async copies, barriers.  
 - **Ch.5 Kernel Programming**: `@tessera.kernel`, dtype annotations, `index_launch`, tile DSL, FA-4 attention ops.  
 - **Ch.6 Numerics Model**: FP4/6/8/BF16/FP16/FP32, safe ops, rounding.  
-- **Ch.7 Autodiff**: Phase 5 planned transforms and current effect contracts.  
+- **Ch.7 Autodiff**: shipped forward/reverse transforms, custom rules, checkpointing, and effect contracts.  
 - **Ch.8 Layouts & Data Movement**: explicit layouts, async pipelines.  
 - **Ch.9 Libraries & Primitives**: dense, sparse, spectral, RNG.  
 - **Ch.10 Portability**: NVIDIA PTX/Tile IR, NCCL, CUTLASS interop.  

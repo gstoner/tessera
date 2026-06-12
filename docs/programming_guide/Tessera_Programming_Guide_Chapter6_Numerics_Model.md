@@ -1,10 +1,10 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-04-26
+last_updated: 2026-06-11
 ---
 
-> **Phase status note:** Unless this document explicitly says otherwise, distributed collectives (NCCL/RCCL), Cyclic distribution, autodiff transforms, activation checkpointing, ZeRO sharding, Bayesian autotuning, the runtime Python wrapper, production deployment, and NVL72 execution are Phase 4-6 planned as defined in `docs/README.md`. Current Phase 1-3 API names are defined in `docs/CANONICAL_API.md`.
+> **Phase status note (updated 2026-06-11):** Phases 1–7 are complete and Phase 8 (Apple M-Series CPU via Accelerate, GPU via Metal/MPS/MPSGraph/custom MSL) is operational — on Apple Silicon this is the primary single-node execution path. Autodiff (forward/reverse transforms + activation checkpointing), ZeRO-2 optimizer sharding, the Bayesian autotuner, and the runtime Python wrapper (`tessera.runtime.TesseraRuntime`) are **shipped**. Genuinely still planned: **multi-GPU / multi-rank** execution of distributed collectives (NCCL/RCCL), `Cyclic` distribution lowering, and **NVL72** rack-scale execution (single-device collectives run over in-process mock ranks today). Canonical API names: `docs/CANONICAL_API.md`; phase table: root `CLAUDE.md`.
 
 
 # Tessera Programming Guide  
@@ -22,9 +22,21 @@ Tessera supports a wide range of datatypes, aligned with NVIDIA Blackwell hardwa
 - **FP6 (e3m2, e2m3)**: balance between FP4 and FP8 for mixed-precision training.  
 - **FP8 (e4m3, e5m2)**: efficient for training and inference with Transformer Engine scaling.  
 - **FP16 / BF16**: half-precision formats for training stability.  
-- **TF32**: NVIDIA tensor core accelerated format for FP32 workloads.  
 - **FP32**: full precision float, default accumulation type.  
 - **INT8 / INT4**: quantized integer types for inference and embedding tables.  
+
+The **canonical storage-dtype set** (15 names, enforced by
+`tessera.dtype.canonicalize_dtype`) is: `fp64`, `fp32`, `fp16`, `bf16`,
+`fp8_e4m3`, `fp8_e5m2`, `fp6_e2m3`, `fp6_e3m2`, `fp4_e2m1`, `nvfp4`,
+`int8`, `int16`, `int32`, `int64`, `bool`. Aliases (`f32`, `bfloat16`,
+`half`, `i8`, …) normalize to these. A further planned/gated set
+(`uint*`, `complex*`, packed `int4`, AMD `mxfp*`, Tenstorrent
+`bfp*`/`blockfp*`) requires `allow_planned_gated=True`.
+
+> **TF32 is not a storage dtype.** `canonicalize_dtype("tf32")` is
+> rejected; TF32 is modeled as a **compute mode** —
+> `numeric_policy.math_mode="tf32"` on `fp32` storage — never as a tensor
+> dtype. See [`docs/reference/tessera_tensor_attributes.md`](../reference/tessera_tensor_attributes.md).
 
 ---
 
@@ -108,11 +120,11 @@ Privileges guarantee safe accumulation even in distributed settings.
 
 ### 6.7 Autodiff and Numerics
 
-Autodiff is Phase 5 planned. Its numeric contract is:
+Autodiff is **shipped** (tape-based forward/reverse; see Ch.7). Its numeric contract is:
 
 - Gradients accumulate in FP32 by default.  
-- Loss scaling policies propagate through backward passes.  
-- Collectives in AD (e.g., gradient allreduce) use accumulation precision.  
+- Loss scaling policies (`tessera.autodiff.GradScaler`) propagate through backward passes.  
+- Collectives in AD (e.g., gradient allreduce) use accumulation precision; their adjoints are registered (multi-GPU execution remains Phase 4).  
 
 ---
 

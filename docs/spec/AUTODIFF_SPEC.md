@@ -108,18 +108,19 @@ Per-primitive contract status is the single source of truth at
 at `docs/audit/standalone_primitive_coverage.md`, and audited at
 `docs/audit/coverage/COVERAGE_AUDIT.md`.
 
-**Current numbers (2026-05-10):**
-
-| Registry axis | Status |
-|---|---|
-| VJPs registered (`tessera.autodiff.vjp._VJPS`) | **188** |
-| JVPs registered (`tessera.autodiff.jvp._JVPS`) | **140** |
-| Entries with `vjp = complete` | 184 |
-| Entries with `jvp = complete` | 140 |
-| Entries with `vjp = not_applicable` | 137 (RNG / transforms / schedules / boolean-output / state-effect — non-differentiable by design) |
-| Entries with `jvp = not_applicable` | 138 |
-| Entries with `vjp = planned` | 53 (niche tail: spectral `stft`/`istft`/`dct`/`spectral_*`, sparse `spmm_*`/`sddmm`/`bsmm`, linalg `cholesky`/`qr`/`svd`/`tri_solve`, quant `fp4`/`fp6` variants, recurrent `simple_rnn`/`gru`) |
-| Entries with `jvp = planned` | 96 (same tail plus tensor_algebra reshape/cat/stack JVPs) |
+**Live counts are dashboard-owned, not copied here.** The number of
+registered VJPs/JVPs and the per-axis `complete`/`not_applicable`/`planned`
+split move every sprint as primitives land; the **count authority** is the
+generated S-series status dashboard
+([`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md))
+and the registry itself (`tessera.autodiff.vjp._VJPS` /
+`tessera.autodiff.jvp._JVPS`, surfaced through
+`python/tessera/compiler/primitive_coverage.py`). Per Decision #26, prose
+that copies these numbers silently goes stale — read the dashboard for the
+current figures. As of this writing the long-tail `vjp`/`jvp` `planned`
+buckets are closed project-wide (the open contract axis is `backend_kernel`,
+which is hardware-gated). The qualitative family coverage below is stable
+regardless of the exact counts.
 
 **Coverage by family:**
 

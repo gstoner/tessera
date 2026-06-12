@@ -1137,6 +1137,19 @@ class JitFn:
                 "output_name": self.cpu_plan.output_name,
                 "cpu_tile": list(self.cpu_plan.tile),
             })
+            # rung-2.5 (EVALUATOR_PLAN.md): for an sm_90 NVIDIA matmul, attach the
+            # emitted WGMMA PTX assembler text + its structural-validation status,
+            # so the emission is first-class metadata (not just Target IR MLIR) and
+            # the Evaluator can report EMITS_ASM_TEXT. Skeleton only — assembly is
+            # the rung-3 CI gate. Other ops/targets simply omit it (stay rung 1).
+            _tgt = str(metadata.get("target", ""))
+            if _tgt.startswith("nvidia"):
+                from .matmul_pipeline import emit_nvidia_ptx
+                _emitted = emit_nvidia_ptx(self.cpu_plan.ops, target_kind=_tgt)
+                if _emitted is not None:
+                    _ptx, _valid = _emitted
+                    metadata["nvidia_ptx"] = _ptx
+                    metadata["nvidia_ptx_valid"] = _valid
 
         graph_ir_text = self.graph_ir.to_mlir()
         schedule_ir_text = self.schedule_ir or ""

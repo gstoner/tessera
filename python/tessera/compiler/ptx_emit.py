@@ -38,11 +38,18 @@ from dataclasses import dataclass
 # CUDA Toolkit 13.2 Update 1 → PTX ISA 8.6 (matches gpu_target.py's pin).
 PTX_ISA_VERSION = "8.6"
 
-# Canonical Hopper WGMMA tile shapes (bf16 storage, fp32 accumulate) from
-# docs/nvidia_cuda13_kernel_inventory.md. Keyed (M, N, K).
-_WGMMA_BF16_SHAPES: frozenset[tuple[int, int, int]] = frozenset(
-    {(64, 256, 16), (64, 128, 16), (32, 32, 16)}
+# Documented canonical Hopper WGMMA bf16 tiles (docs/nvidia_cuda13_kernel_inventory.md).
+_WGMMA_BF16_CANONICAL: frozenset[tuple[int, int, int]] = frozenset(
+    {(64, 256, 16), (64, 128, 16), (64, 64, 16)}
 )
+
+
+def is_valid_wgmma_bf16_shape(m: int, n: int, k: int) -> bool:
+    """The Hopper WGMMA bf16 shape constraint: M is fixed at 64, K at 16, and
+    N ∈ {8, 16, …, 256} in steps of 8 (PTX ISA 8.x ``wgmma.mma_async`` for
+    ``.f32.bf16.bf16``). Stricter than a curated list — it accepts the tile the
+    Target IR actually selects (e.g. m64n64k16) and rejects non-WGMMA shapes."""
+    return m == 64 and k == 16 and 8 <= n <= 256 and n % 8 == 0
 
 
 def wgmma_mnemonic(m: int, n: int, k: int, *, acc: str = "f32", ab: str = "bf16") -> str:
@@ -68,10 +75,10 @@ def emit_wgmma_matmul_ptx(
     documented *encoding* + the mandatory fence/commit/wait protocol so it can be
     validated and, in CI, fed to ``ptxas``.
     """
-    if (m, n, k) not in _WGMMA_BF16_SHAPES:
+    if not is_valid_wgmma_bf16_shape(m, n, k):
         raise ValueError(
-            f"({m},{n},{k}) is not a documented Hopper WGMMA bf16 tile "
-            f"{sorted(_WGMMA_BF16_SHAPES)} — refusing to emit an un-inventoried shape"
+            f"({m},{n},{k}) is not a valid Hopper WGMMA bf16 shape "
+            "(need m=64, k=16, n∈{8..256 step 8}) — refusing to emit it"
         )
     mma = wgmma_mnemonic(m, n, k, acc=acc, ab=ab)
     return f"""//

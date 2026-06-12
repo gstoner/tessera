@@ -33,15 +33,17 @@ from typing import Any
 
 class Rung(IntEnum):
     """Per-backend status ladder (EVALUATOR_PLAN.md §2). Higher = stronger,
-    and the integer order is meaningful (``verdict.rung >= Rung.EXECUTES``)."""
+    and the integer order is meaningful (``verdict.rung >= Rung.EXECUTES``).
+    The names are the contract; rely on ordering, not specific integers."""
 
     ARTIFACT_ONLY = 1       # IR emitted
-    LOWERS_CLEAN = 2        # backend pipeline lowered the program, no diagnostics
-    ASSEMBLES = 3           # emitted PTX/AMDGCN actually assembles (ptxas/hipcc)
-    CODEGEN_STABLE = 4      # same IR @ two opt levels → structurally-equivalent code
-    NUMERICAL_SYMBOLIC = 5  # microkernel ≡ reference via finite-field / SMT
-    EXECUTES = 6            # ran on the demanded backend (real silicon)
-    HARDWARE_VERIFIED = 7   # ran AND oracle-matched on real silicon
+    LOWERS_CLEAN = 2        # Target IR passes the MLIR verifier, no unsupported-diag
+    EMITS_ASM_TEXT = 3      # backend emits real PTX/AMDGCN assembler text (rung 2.5)
+    ASSEMBLES = 4           # emitted text actually assembles (ptxas/hipcc) — CI
+    CODEGEN_STABLE = 5      # same IR @ two opt levels → structurally-equivalent code
+    NUMERICAL_SYMBOLIC = 6  # microkernel ≡ reference via finite-field / SMT
+    EXECUTES = 7            # ran on the demanded backend (real silicon)
+    HARDWARE_VERIFIED = 8   # ran AND oracle-matched on real silicon
 
 
 # ``execution_kind`` values (from ``runtime.launch``) that mean the program
@@ -284,3 +286,40 @@ def horizontal_equivalence(
         native_fused, native_unfused, max_abs_err, tol=tol
     )
     return HorizontalVerdict(target, relation, max_abs_err, detail)
+
+
+# ── NVIDIA/ROCm emission rung (rung 2.5) ─────────────────────────────────────
+#
+# These backends do not execute here; their honest forward progress is measured
+# by whether the lowering emits real assembler text. The lowering attaches the
+# emitted PTX + its structural-validation status to the artifact metadata
+# (jit.py target_ir_artifact branch); this reads it and reports the rung —
+# metadata only, no toolchain, no GPU. Assembly (rung 4) is the CI gate.
+
+
+def nvidia_emission_verdict(jitted_fn: Any) -> BackendVerdict:
+    """Derive an NVIDIA program's emission rung from its artifact metadata.
+
+    ``EMITS_ASM_TEXT`` when the lowering attached structurally-valid WGMMA PTX;
+    ``ARTIFACT_ONLY`` otherwise. Never claims execution or assembly — an
+    artifact-only backend cannot earn a higher rung here.
+    """
+    try:
+        meta = jitted_fn.runtime_artifact().metadata
+    except Exception:
+        meta = {}
+    target = str(meta.get("target", "nvidia"))
+    if "nvidia_ptx" in meta and bool(meta.get("nvidia_ptx_valid", False)):
+        return BackendVerdict(
+            target=target, rung=Rung.EMITS_ASM_TEXT,
+            execution_kind="ptx_emitted", runtime_status="artifact_only",
+            provenance_ok=False, correctness="unproven",
+            detail="emits structurally-valid WGMMA PTX assembler text (skeleton); "
+                   "ptxas assembly is the rung-4 CI gate",
+        )
+    return BackendVerdict(
+        target=target, rung=Rung.ARTIFACT_ONLY,
+        execution_kind="none", runtime_status="artifact_only",
+        provenance_ok=False, correctness="unproven",
+        detail="no emitted assembler text — Target IR artifact only",
+    )

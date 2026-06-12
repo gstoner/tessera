@@ -22,7 +22,7 @@ def test_canonical_mnemonic_matches_inventory():
 
 
 def test_emitted_ptx_validates_clean_for_all_documented_shapes():
-    for m, n, k in [(64, 256, 16), (64, 128, 16), (32, 32, 16)]:
+    for m, n, k in [(64, 256, 16), (64, 128, 16), (64, 64, 16)]:
         ptx = P.emit_wgmma_matmul_ptx(m, n, k)
         assert P.wgmma_mnemonic(m, n, k) in ptx
         problems = P.validate_ptx_structure(ptx)
@@ -39,7 +39,7 @@ def test_emitted_ptx_has_version_target_and_protocol():
 
 
 def test_uninventoried_shape_is_refused():
-    with pytest.raises(ValueError, match="not a documented Hopper WGMMA"):
+    with pytest.raises(ValueError, match="not a valid Hopper WGMMA"):
         P.emit_wgmma_matmul_ptx(13, 7, 3)
 
 

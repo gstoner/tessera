@@ -26,6 +26,7 @@ from tessera.compiler.evaluator import (
     _horizontal_relation,
     evaluate,
     horizontal_equivalence,
+    nvidia_emission_verdict,
     run_native,
     verdict_for,
 )
@@ -116,8 +117,34 @@ def test_artifact_only_backend_reports_rung1_not_overstated():
 
 
 def test_rung_order_is_meaningful():
-    assert Rung.ARTIFACT_ONLY < Rung.EXECUTES < Rung.HARDWARE_VERIFIED
-    assert int(Rung.HARDWARE_VERIFIED) == 7
+    assert (
+        Rung.ARTIFACT_ONLY < Rung.EMITS_ASM_TEXT < Rung.ASSEMBLES
+        < Rung.EXECUTES < Rung.HARDWARE_VERIFIED
+    )
+
+
+def test_nvidia_matmul_emits_wgmma_ptx_and_reports_emission_rung():
+    """Wiring check (portable, no toolchain): @jit(target="nvidia_sm90") on a
+    matmul attaches structurally-valid WGMMA PTX to the artifact, and the
+    Evaluator reports EMITS_ASM_TEXT (rung 2.5) — above artifact_only, but never
+    claiming execution."""
+    fn = ts.jit(target="nvidia_sm90")(_mm)
+    meta = fn.runtime_artifact().metadata
+    assert "nvidia_ptx" in meta, "lowering did not attach emitted PTX"
+    assert meta.get("nvidia_ptx_valid") is True
+    assert "wgmma.mma_async.sync.aligned.m64n64k16" in meta["nvidia_ptx"]
+
+    v = nvidia_emission_verdict(fn)
+    assert v.rung is Rung.EMITS_ASM_TEXT
+    assert Rung.ARTIFACT_ONLY < v.rung < Rung.EXECUTES
+    assert not v.provenance_ok  # emission ≠ execution
+
+
+def test_nvidia_non_matmul_does_not_overclaim_emission():
+    """A non-matmul NVIDIA program emits no WGMMA PTX → stays ARTIFACT_ONLY."""
+    fn = ts.jit(target="nvidia_sm90")(_sm_axis)
+    v = nvidia_emission_verdict(fn)
+    assert v.rung is Rung.ARTIFACT_ONLY
 
 
 # ── Darwin-gated: derive verdicts from real Metal runs ───────────────────────

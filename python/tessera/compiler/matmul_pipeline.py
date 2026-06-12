@@ -709,6 +709,32 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
     return "\n".join(lines)
 
 
+def emit_nvidia_ptx(
+    ops: Sequence[IROp], *, target_kind: str
+) -> tuple[str, bool] | None:
+    """Rung-2.5 emission: for an sm_90 NVIDIA matmul program, emit the documented
+    WGMMA PTX assembler text (the encoding the ``tessera_nvidia.wgmma`` Target IR
+    op describes). Returns ``(ptx_text, structurally_valid)`` or ``None`` when the
+    program is not an emittable WGMMA matmul.
+
+    Scope (honest): sm_90 (Hopper) WGMMA bf16 matmul only. sm_80 has no WGMMA and
+    Blackwell (sm_100/sm_120) uses ``tcgen05`` — both are separate slices. This
+    emits a skeleton (see ``ptx_emit``); assemblability is the rung-3 CI gate.
+    """
+    if target_kind != "nvidia_sm90":
+        return None
+    matmuls = [o for o in ops if _canonical_op_name(o.op_name) in MATMUL_OPS]
+    if not matmuls:
+        return None
+    from . import ptx_emit
+
+    # The non-Blackwell NVIDIA renderer selects the m64n64k16 WGMMA tile; keep the
+    # emitted PTX consistent with that Target IR op.
+    ptx = ptx_emit.emit_wgmma_matmul_ptx(64, 64, 16, arch="sm_90a")
+    problems = ptx_emit.validate_ptx_structure(ptx, arch="sm_90a")
+    return ptx, (problems == [])
+
+
 def _operand_name(operand: str) -> str:
     return operand[1:] if operand.startswith("%") else operand
 

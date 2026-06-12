@@ -19,9 +19,11 @@ from tessera.compiler.flywheel import (
     DevicePeak,
     LatencyStats,
     default_device_id,
+    efficiency_trend,
     matmul_flops_bytes,
     record_matmul,
     roofline_ms,
+    sweep_matmul,
 )
 
 
@@ -82,6 +84,26 @@ def test_default_device_id_is_nonempty_and_targeted():
     assert did and "apple_gpu" in did
 
 
+def test_efficiency_trend_sorts_by_size():
+    recs = [
+        AutotuneRecord(1, "matmul", {"M": s, "N": s, "K": s}, "f32", "apple_gpu",
+                       "d", {}, True, "", LatencyStats(1, 1, 1, 1), tflops,
+                       0.1, None, "sweep")
+        for s, tflops in [(1024, 0.9), (256, 0.03), (512, 0.23)]
+    ]
+    trend = efficiency_trend(recs)
+    assert [s for s, _ in trend] == [256, 512, 1024]      # sorted by size
+    assert [t for _, t in trend] == [0.03, 0.23, 0.9]
+
+
+def test_efficiency_trend_skips_non_native_records():
+    recs = [
+        AutotuneRecord(1, "matmul", {"M": 8, "N": 8, "K": 8}, "f32", "nvidia_sm90",
+                       "d", {}, True, "", None, None, 0.1, None, "sweep"),
+    ]
+    assert efficiency_trend(recs) == []
+
+
 # ── Darwin: record a real matmul on Metal ────────────────────────────────────
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
@@ -104,3 +126,34 @@ def test_flywheel_records_a_real_matmul():
     # latency sits well ABOVE the compute/BW roofline floor (residual > 0).
     assert rec.latency.median_ms > rec.roofline_predicted_ms
     assert rec.roofline_residual_ms > 0.0
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+def test_sweep_builds_a_corpus_with_rising_efficiency():
+    """The candidate sweep is a corpus, and efficiency climbs with size as launch
+    overhead amortizes — a host-independent trend (assert the trend, not numbers)."""
+    rng = np.random.default_rng(20260612)
+    records = sweep_matmul("apple_gpu", _MM, (256, 512, 1024), rng, dtype="f32", reps=6)
+
+    assert len(records) == 3
+    assert all(r.latency is not None for r in records)        # all ran natively
+    assert all(r.search_method == "sweep" for r in records)
+    assert all(r.schedule["size"] == r.problem_shape["M"] for r in records)
+
+    trend = efficiency_trend(records)
+    sizes = [s for s, _ in trend]
+    tflops = [t for _, t in trend]
+    assert sizes == [256, 512, 1024]
+    # Efficiency rises with size (overhead fraction shrinks). Robust margin: the
+    # largest is comfortably more efficient than the smallest.
+    assert tflops[-1] > tflops[0] * 3.0, dict(trend)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Metal measurement is Darwin-only.")
+def test_sweep_records_f16_natively():
+    rng = np.random.default_rng(1)
+    records = sweep_matmul("apple_gpu", _MM, (512,), rng, dtype="f16", reps=6)
+    assert len(records) == 1
+    r = records[0]
+    assert r.latency is not None and r.dtype == "f16"
+    assert r.achieved_tflops is not None and r.achieved_tflops > 0.0

@@ -189,3 +189,44 @@ def record_matmul(
         model_predicted_ms=None,
         search_method=search_method,
     )
+
+
+def sweep_matmul(
+    target: str,
+    fn: Any,
+    sizes: tuple[int, ...],
+    rng: Any,
+    *,
+    dtype: str = "f32",
+    peak: DevicePeak = NOMINAL_APPLE_GPU_PEAK,
+    reps: int = 10,
+) -> list[AutotuneRecord]:
+    """Record a square-matmul candidate corpus across ``sizes`` for one dtype.
+    Turns the flywheel from one row into a corpus — the data a cost model trains
+    on. Inputs are dtype-typed so the native kernel path is exercised."""
+    import numpy as np
+
+    np_dtype = np.float16 if dtype == "f16" else np.float32
+    records: list[AutotuneRecord] = []
+    for s in sizes:
+        a = rng.standard_normal((s, s)).astype(np_dtype)
+        b = rng.standard_normal((s, s)).astype(np_dtype)
+        records.append(
+            record_matmul(
+                target, fn, (a, b), m=s, n=s, k=s, dtype=dtype, peak=peak,
+                schedule={"dtype": dtype, "size": s}, search_method="sweep", reps=reps,
+            )
+        )
+    return records
+
+
+def efficiency_trend(records: list[AutotuneRecord]) -> list[tuple[int, float]]:
+    """``(problem_size, achieved_tflops)`` sorted by size, for records that ran
+    natively. The launch-overhead fraction shrinks as size grows, so achieved
+    efficiency climbs — this exposes that trend (and makes the roofline residual
+    a real efficiency signal at the large end, not just overhead at the small)."""
+    return sorted(
+        (r.problem_shape["M"], r.achieved_tflops)
+        for r in records
+        if r.achieved_tflops is not None
+    )

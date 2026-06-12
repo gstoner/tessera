@@ -512,6 +512,144 @@ def multi_head_attention(
     return out.transpose(0, 2, 1, 3).reshape(B, Sq, hd)
 
 
+def _rms_over_last(t, weight=None, eps: float = 1e-6):
+    """RMSNorm over the last (head_dim) axis — the QK-norm used by DFlash/Qwen3."""
+    t = _asarray(t).astype(np.float32, copy=False)
+    y = t / np.sqrt(np.mean(t * t, axis=-1, keepdims=True) + eps)
+    if weight is not None:
+        y = y * _asarray(weight)
+    return y
+
+
+def mask_token_block(prev_token, block_size: int, mask_token_id: int):
+    """Build the DFlash draft input block ``[prev_token, MASK, MASK, ...]``.
+
+    The block-diffusion draft predicts ``block_size - 1`` masked positions in a
+    single parallel forward; position 0 carries the real previous token and the
+    rest are the ``mask_token_id`` placeholder (see DFlash ``model_mlx`` line 497).
+    Returns an int64 array of shape ``(..., block_size)``.
+    """
+    prev = np.asarray(prev_token, dtype=np.int64)
+    if block_size < 1:
+        raise ValueError("block_size must be >= 1")
+    tail = np.full(prev.shape + (block_size - 1,), int(mask_token_id), dtype=np.int64)
+    return np.concatenate([prev[..., None], tail], axis=-1)
+
+
+def block_diffusion_attention(
+    x,
+    x_ctx,
+    *,
+    q_proj,
+    k_proj,
+    v_proj,
+    o_proj,
+    num_heads: int,
+    num_kv_heads: int,
+    head_dim: int,
+    q_norm=None,
+    k_norm=None,
+    cache_keys=None,
+    cache_values=None,
+    rope_fn=None,
+    cache_offset: int = 0,
+    sliding_window: int | None = None,
+    scale: float | None = None,
+    eps: float = 1e-6,
+):
+    """One DFlash block-diffusion attention layer (numpy reference).
+
+    Faithful to DFlash ``DFlashAttention.__call__`` (``model_mlx`` lines 82-116):
+    queries come from the draft block hidden ``x`` ``(B, L, D_model)``; keys and
+    values are ``concat([context_KV, proposal_KV])`` where the context KV is
+    projected from the injected target features ``x_ctx`` ``(B, S, D_model)`` (the
+    same tensor fed to every layer) and the proposal KV is projected from ``x``.
+    Within-block attention is bidirectional (``mask=None``) for full-attention
+    layers; sliding-attention layers fold a causal window into an additive bias
+    routed through the ``attn_bias`` substrate of ``ops.flash_attn``.
+
+    QK-norm (RMSNorm over ``head_dim``) is applied to queries / context keys /
+    proposal keys, matching Qwen3-style draft models. GQA is handled by repeating
+    the ``num_kv_heads`` K/V heads up to ``num_heads`` query heads. ``rope_fn`` —
+    when given — is ``rope_fn(tensor_BHSD, offset)``; context keys use
+    ``cache_offset`` and queries / proposal keys use ``cache_offset + S`` so block
+    positions sit after the context (``model_mlx`` lines 102-104).
+
+    ``cache_keys`` / ``cache_values`` (shape ``(B, S_cached, num_kv_heads,
+    head_dim)``) are prior accumulated context KV prepended ahead of this step's
+    context — this is where a ``KVCacheHandle`` plugs in across drafting steps.
+
+    Heads are folded into the batch axis so the attention core rides the rank-3
+    ``ops.flash_attn`` path (Apple GPU ``metal_runtime`` lane).
+    """
+    x = _asarray(x)
+    x_ctx = _asarray(x_ctx)
+    if x.ndim != 3 or x_ctx.ndim != 3:
+        raise ValueError("block_diffusion_attention expects rank-3 (B, L, D) x and x_ctx")
+    B, L, _ = x.shape
+    S = x_ctx.shape[1]
+    Hq, Hkv, Dh = int(num_heads), int(num_kv_heads), int(head_dim)
+    if Hq % Hkv != 0:
+        raise ValueError(f"num_heads {Hq} must be a multiple of num_kv_heads {Hkv}")
+    if scale is None:
+        scale = Dh ** -0.5
+
+    def proj_heads(t, W, heads):
+        # (B, T, D_model) @ (D_model, heads*Dh) -> (B, heads, T, Dh)
+        y = linear_general(t, W)
+        T = y.shape[1]
+        return _asarray(y).reshape(B, T, heads, Dh).transpose(0, 2, 1, 3)
+
+    queries = _rms_over_last(proj_heads(x, q_proj, Hq), q_norm, eps)
+    ctx_k = _rms_over_last(proj_heads(x_ctx, k_proj, Hkv), k_norm, eps)
+    ctx_v = proj_heads(x_ctx, v_proj, Hkv)
+    prop_k = _rms_over_last(proj_heads(x, k_proj, Hkv), k_norm, eps)
+    prop_v = proj_heads(x, v_proj, Hkv)
+
+    if rope_fn is not None:
+        queries = _asarray(rope_fn(queries, cache_offset + S))
+        ctx_k = _asarray(rope_fn(ctx_k, cache_offset))
+        prop_k = _asarray(rope_fn(prop_k, cache_offset + S))
+
+    # Prepend prior cached context KV (accumulated across drafting steps).
+    if cache_keys is not None and cache_values is not None:
+        ck = _asarray(cache_keys).transpose(0, 2, 1, 3)  # (B, Hkv, Sc, Dh)
+        cv = _asarray(cache_values).transpose(0, 2, 1, 3)
+        ctx_k = np.concatenate([ck, ctx_k], axis=2)
+        ctx_v = np.concatenate([cv, ctx_v], axis=2)
+    ctx_len = ctx_k.shape[2]
+
+    # KV injection layout: K/V = [context_KV, proposal_KV] along the seq axis.
+    keys = np.concatenate([ctx_k, prop_k], axis=2)    # (B, Hkv, ctx_len+L, Dh)
+    values = np.concatenate([ctx_v, prop_v], axis=2)
+    Sk = keys.shape[2]
+
+    # GQA: repeat KV heads up to query heads.
+    if Hkv != Hq:
+        rep = Hq // Hkv
+        keys = np.repeat(keys, rep, axis=1)
+        values = np.repeat(values, rep, axis=1)
+
+    # Optional additive bias — sliding-window causal mask folded into attn_bias.
+    bias = None
+    if sliding_window is not None:
+        # Block query i sits at absolute position ctx_len + i; it may attend to
+        # keys within the trailing ``sliding_window`` positions (causal).
+        qpos = ctx_len + np.arange(L)[:, None]          # (L, 1)
+        kpos = np.arange(Sk)[None, :]                    # (1, Sk)
+        allow = (kpos <= qpos) & (kpos > qpos - int(sliding_window))
+        bias = np.where(allow, 0.0, -1e30).astype(np.float32)  # (L, Sk)
+        bias = np.broadcast_to(bias, (B * Hq, L, Sk)).astype(np.float32)
+
+    # Fold heads into batch for the rank-3 flash_attn lane.
+    q3 = queries.reshape(B * Hq, L, Dh)
+    k3 = keys.reshape(B * Hq, Sk, Dh)
+    v3 = values.reshape(B * Hq, Sk, Dh)
+    out = ops.flash_attn(q3, k3, v3, scale=scale, causal=False, attn_bias=bias)
+    out = _asarray(out).reshape(B, Hq, L, Dh).transpose(0, 2, 1, 3).reshape(B, L, Hq * Dh)
+    return linear_general(out, o_proj)
+
+
 # Alias for torch-style `nn.flash_attention` callsites (same signature as ops.flash_attn).
 flash_attention = ops.flash_attn
 
@@ -521,6 +659,7 @@ __all__ = [
     "alibi",
     "avg_pool",
     "bidirectional_scan",
+    "block_diffusion_attention",
     "conv1d",
     "conv_transpose",
     "einsum",
@@ -531,6 +670,7 @@ __all__ = [
     "gqa_attention",
     "gru_cell",
     "instance_norm",
+    "mask_token_block",
     "max_pool",
     "min_pool",
     "mla_decode",

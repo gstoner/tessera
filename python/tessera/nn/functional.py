@@ -556,6 +556,7 @@ def block_diffusion_attention(
     sliding_window: int | None = None,
     scale: float | None = None,
     eps: float = 1e-6,
+    attention_fn=None,
 ):
     """One DFlash block-diffusion attention layer (numpy reference).
 
@@ -645,7 +646,11 @@ def block_diffusion_attention(
     q3 = queries.reshape(B * Hq, L, Dh)
     k3 = keys.reshape(B * Hq, Sk, Dh)
     v3 = values.reshape(B * Hq, Sk, Dh)
-    out = ops.flash_attn(q3, k3, v3, scale=scale, causal=False, attn_bias=bias)
+    # The attention core is the rank-3 flash_attn(+attn_bias) workload. It
+    # defaults to ops.flash_attn (eager / tape / @jit-traced) but a caller may
+    # inject the Apple GPU metal_runtime dispatcher (or any equivalent) here.
+    attn_core = attention_fn if attention_fn is not None else ops.flash_attn
+    out = attn_core(q3, k3, v3, scale=scale, causal=False, attn_bias=bias)
     out = _asarray(out).reshape(B, Hq, L, Dh).transpose(0, 2, 1, 3).reshape(B, L, Hq * Dh)
     return linear_general(out, o_proj)
 

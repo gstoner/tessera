@@ -323,3 +323,73 @@ def nvidia_emission_verdict(jitted_fn: Any) -> BackendVerdict:
         provenance_ok=False, correctness="unproven",
         detail="no emitted assembler text — Target IR artifact only",
     )
+
+
+# ── E2: legal-by-construction inputs (DESIL UB-elim / NNSmith safe inputs) ────
+#
+# Generated-program inputs must be legal by construction so a tolerance compare
+# isn't dominated by NaN/Inf garbage and optimizers' non-UB assumptions hold.
+
+
+def safe_input(kind: str, shape: tuple[int, ...], rng: Any) -> Any:
+    """A finite, in-domain f32 input for one op family. ``kind``:
+    ``real`` (bounded, no overflow), ``positive`` (>0 — log/sqrt/rsqrt domain),
+    ``nonzero`` (away from 0 — division denominators), ``unit`` (bounded ~[-1,1])."""
+    import numpy as np
+
+    if kind == "real":
+        return (rng.standard_normal(shape) / 4).astype(np.float32)
+    if kind == "positive":
+        return (np.abs(rng.standard_normal(shape)) + 0.5).astype(np.float32)
+    if kind == "nonzero":
+        x = (rng.standard_normal(shape) / 4).astype(np.float32)
+        x[np.abs(x) < 0.1] = 0.1
+        return x
+    if kind == "unit":
+        return (rng.standard_normal(shape).clip(-3, 3) / 3).astype(np.float32)
+    raise ValueError(f"unknown safe-input kind {kind!r}")
+
+
+# ── E2: metamorphic-equivalence oracle (algebraic invariants) ────────────────
+#
+# A reference-free relation oracle: ``output_map(fn(args_a)) ≡ fn(args_b)`` on
+# the same backend, for an algebraic invariant the compiler MUST preserve (e.g.
+# softmax shift-invariance). Catches numerical/algebraic miscompiles the vertical
+# numpy oracle can mask (both sides run on the real backend, no external ref).
+
+
+def metamorphic_equivalence(
+    target: str,
+    fn: Any,
+    args_a: tuple[Any, ...],
+    args_b: tuple[Any, ...],
+    *,
+    output_map: Callable[[Any], Any] | None = None,
+    rtol: float = 1e-3,
+    atol: float = 1e-4,
+) -> HorizontalVerdict:
+    """Assert ``output_map(fn(args_a)) ≡ fn(args_b)`` natively on ``target``.
+
+    Example (softmax shift-invariance): ``args_a=(x,)``, ``args_b=(x+c,)``,
+    ``output_map=None`` (identity) — softmax(x) must equal softmax(x+c).
+    ``inconclusive`` unless both runs are native.
+    """
+    import numpy as np
+
+    out_a, na = run_native(target, fn, args_a)
+    out_b, nb = run_native(target, fn, args_b)
+
+    max_abs_err: float | None = None
+    ref_scale = 1.0
+    if na and nb and out_a is not None and out_b is not None:
+        a = np.asarray(out_a, dtype=np.float64)
+        if output_map is not None:
+            a = np.asarray(output_map(a), dtype=np.float64)
+        b = np.asarray(out_b, dtype=np.float64)
+        if a.shape == b.shape and np.all(np.isfinite(a)) and np.all(np.isfinite(b)):
+            max_abs_err = float(np.max(np.abs(a - b)))
+            ref_scale = float(np.max(np.abs(b))) or 1.0
+
+    tol = atol + rtol * ref_scale
+    relation, detail = _horizontal_relation(na, nb, max_abs_err, tol=tol)
+    return HorizontalVerdict(target, relation, max_abs_err, detail)

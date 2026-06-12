@@ -178,6 +178,77 @@ def test_step_perfect_draft_accepts_all():
     assert fresh.shape == (1, result.accepted + 1, nL * D_)
 
 
+def _make_target(rng, vocab, D_, nL):
+    """Deterministic *causal* tiny target LM: logits_t / hidden_t depend only on
+    tokens[:t+1] (cumulative-mean embedding)."""
+    E = rng.standard_normal((vocab, D_)).astype(np.float32)
+    Wout = (rng.standard_normal((D_, vocab)).astype(np.float32) * 0.3)
+
+    def step(tokens):
+        toks = np.asarray(tokens).reshape(-1)
+        emb = E[toks]
+        cum = (np.cumsum(emb, 0) / np.arange(1, len(toks) + 1)[:, None]).astype(np.float32)
+        logits = (cum @ Wout)[None]
+        hidden = np.concatenate([cum] * nL, axis=-1)[None].astype(np.float32)
+        return logits, hidden
+
+    return step
+
+
+def _greedy_ar(prompt, step, max_new, eos_id=None):
+    tokens = list(prompt)
+    for _ in range(max_new):
+        lg, _ = step(np.asarray(tokens, dtype=np.int64)[None, :])
+        nxt = int(np.argmax(lg[:, -1]))
+        tokens.append(nxt)
+        if eos_id is not None and nxt == eos_id:
+            break
+    return tokens
+
+
+def test_generate_matches_greedy_autoregressive():
+    """Gold-standard spec-decode invariant: greedy DFlash output == greedy AR
+    target decode, independent of the (here random) draft quality."""
+    rng = np.random.default_rng(5)
+    cfg = _cfg(vocab_size=29)
+    w = _make_weights(rng, cfg)
+    rope = D.make_rope(cfg.head_dim, cfg.rope_theta)
+    step = _make_target(rng, cfg.vocab_size, cfg.hidden_size, cfg.num_target_layers)
+    prompt = [3, 1, 4, 1, 5]
+    max_new = 12
+    ar = _greedy_ar(prompt, step, max_new)
+    spec = D.dflash_generate(prompt, w, cfg, step, max_new_tokens=max_new, rope_fn=rope)
+    assert len(spec) > len(prompt)
+    assert spec == ar[: len(spec)]          # generated tokens are exact AR prefix
+
+
+def test_generate_block_size_independent():
+    """The accepted sequence must not depend on the speculation block size."""
+    rng = np.random.default_rng(6)
+    cfg = _cfg(vocab_size=23, block_size=8)
+    w = _make_weights(rng, cfg)
+    step = _make_target(rng, cfg.vocab_size, cfg.hidden_size, cfg.num_target_layers)
+    prompt = [2, 7, 1]
+    out2 = D.dflash_generate(prompt, w, cfg, step, max_new_tokens=10, block_size=2)
+    out6 = D.dflash_generate(prompt, w, cfg, step, max_new_tokens=10, block_size=6)
+    n = min(len(out2), len(out6))
+    assert out2[:n] == out6[:n] and n > len(prompt)
+
+
+def test_generate_stops_at_eos():
+    rng = np.random.default_rng(8)
+    cfg = _cfg(vocab_size=19)
+    w = _make_weights(rng, cfg)
+    step = _make_target(rng, cfg.vocab_size, cfg.hidden_size, cfg.num_target_layers)
+    prompt = [1, 2, 3]
+    ar = _greedy_ar(prompt, step, 30)
+    eos = ar[len(prompt) + 4]               # force an EOS a few tokens in
+    ar_eos = _greedy_ar(prompt, step, 30, eos_id=eos)
+    spec = D.dflash_generate(prompt, w, cfg, step, max_new_tokens=30, eos_id=eos)
+    assert spec[-1] == eos
+    assert spec == ar_eos[: len(spec)]
+
+
 def test_step_early_divergence_trims():
     """A target that disagrees at position 0 accepts nothing and emits one
     corrected token; fresh hidden trims to length 1."""

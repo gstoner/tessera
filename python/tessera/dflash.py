@@ -257,6 +257,71 @@ def dflash_step(prev_token: int, target_hidden, w: DFlashWeights, cfg: DFlashCon
     return result, fresh_hidden
 
 
+def dflash_generate(prompt, w: DFlashWeights, cfg: DFlashConfig,
+                    target_step: Callable[[np.ndarray], Tuple[np.ndarray, np.ndarray]],
+                    *, max_new_tokens: int, block_size: Optional[int] = None,
+                    rope_fn=None, sampler: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+                    eos_id: Optional[int] = None) -> List[int]:
+    """Full DFlash speculative generation loop (``model_mlx`` stream_generate).
+
+    ``target_step(token_ids_1xT) -> (logits_1xTxV, target_hidden_1xTx(nL*D))`` is
+    a *causal* target forward over the running sequence (this numpy reference
+    recomputes statelessly; a production target keeps a KV cache and rolls back
+    rejected tokens via ``advance_kv``). The multi-layer tapped ``target_hidden``
+    conditions the draft.
+
+    Each cycle drafts ``block_size - 1`` tokens in one parallel forward, verifies
+    them against the target in one forward, and commits the accepted prefix plus
+    one bonus token. With greedy sampling the output is **identical** to greedy
+    autoregressive decode from ``target_step`` — speculation changes only speed,
+    never the tokens. Returns the prompt followed by the generated tokens.
+    """
+    bs = int(block_size if block_size is not None else cfg.block_size)
+    sample = sampler if sampler is not None else (lambda lg: np.argmax(lg, axis=-1))
+    tokens = list(np.asarray(prompt, dtype=np.int64).reshape(-1).tolist())
+    prompt_len = len(tokens)
+
+    # Prefill: first token + tapped hidden over the prompt.
+    logits, hidden = target_step(np.asarray(tokens, dtype=np.int64)[None, :])
+    first = int(np.asarray(sample(logits[:, -1:])).reshape(-1)[0])
+    tokens.append(first)
+    target_hidden = np.asarray(hidden)                       # (1, prompt_len, nL*D)
+    if eos_id is not None and first == eos_id:
+        return tokens
+    n = 1
+
+    while n < max_new_tokens:
+        b = min(bs, max_new_tokens - n + 1)
+        if b <= 1:
+            break
+        prev = int(tokens[-1])
+        block = F.mask_token_block(np.asarray([prev]), b, cfg.mask_token_id)      # (1, b)
+        draft_logits = dflash_draft_forward(block, target_hidden, w, cfg,
+                                            logits_start=1, rope_fn=rope_fn)
+        draft_tokens = np.asarray(sample(draft_logits)).reshape(-1)               # (b-1,)
+
+        # Verify: causal target over [running prefix .. prev, draft...]. The last
+        # ``b`` positions are verify_input = [prev, *draft_tokens].
+        full = np.asarray(tokens + draft_tokens.tolist(), dtype=np.int64)[None, :]
+        v_logits, v_hidden = target_step(full)
+        target_tokens = np.asarray(sample(v_logits[:, -b:])).reshape(-1)          # (b,)
+
+        result = dflash_linear_verify(draft_tokens, target_tokens)
+        new_tokens = result.new_tokens[: max_new_tokens - n]
+        eos_cut = next((i for i, t in enumerate(new_tokens) if t == eos_id), None)
+        if eos_cut is not None:
+            new_tokens = new_tokens[: eos_cut + 1]
+        tokens.extend(new_tokens)
+        n += len(new_tokens)
+        if eos_cut is not None:
+            break
+        # Carry the target hidden for the accepted context into the next draft
+        # (verify positions 0..accepted), mirroring hidden[:, :accepted+1].
+        target_hidden = np.asarray(v_hidden)[:, -b:][:, : result.accepted + 1, :]
+
+    return tokens
+
+
 __all__ = [
     "DFlashConfig",
     "DFlashLayerWeights",
@@ -268,4 +333,5 @@ __all__ = [
     "dflash_draft_forward",
     "dflash_linear_verify",
     "dflash_step",
+    "dflash_generate",
 ]

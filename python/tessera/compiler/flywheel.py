@@ -70,9 +70,11 @@ def _apple_chip_brand() -> str | None:
     """The Apple Silicon chip brand (e.g. ``Apple M1 Max``) via sysctl, or None
     off-Darwin / on failure. The SoC GPU's identity == the chip identity."""
     import subprocess
-    import sys
 
-    if sys.platform != "darwin":
+    # Use platform.system() (not sys.platform): mypy platform-narrows
+    # sys.platform to the type-check host, which would mark the sysctl path
+    # unreachable under --warn-unreachable on a non-Darwin CI.
+    if platform.system() != "Darwin":
         return None
     try:
         out = subprocess.check_output(

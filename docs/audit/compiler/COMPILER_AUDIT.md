@@ -18,13 +18,22 @@ multiple root audit documents and compiler archive files.
 > against silent numpy fallbacks, and runtime consumption of `fusion_groups`.
 > Two earlier agent claims refuted.
 >
-> **Forward direction (ratified 2026-06-11):** [EVALUATOR_PLAN.md](EVALUATOR_PLAN.md)
-> — the next compiler exercise is a generative, execution-derived, **backend-rung-aware**
-> Evaluator that *derives* conformance/benchmark/autotune surfaces from one honest
-> scoring engine (closing the "registry models reality" gap), and drives Apple to
-> rung 7 while climbing NVIDIA/ROCm to rungs 3–5 **without local silicon** (ptxas/hipcc
-> assembly + Tile-IR correctness transfer + pre-trained cost models), leaving a thin
-> hardware-batch promotion. Research-backed (DESIL/PolyJuice/Mirage/TensorBench/BaCO/TLP).
+> **Evaluator program — substantially shipped (2026-06-12):** [EVALUATOR_PLAN.md](EVALUATOR_PLAN.md)
+> (see its §9.5 "what has landed"). A generative, execution-derived,
+> **backend-rung-aware** Evaluator that *derives* conformance/benchmark/autotune
+> surfaces from one honest scoring engine (closing the "registry models reality"
+> gap). **Landed:** the 8-rung verdict engine + provenance gate
+> (`evaluator.py`); four oracles — vertical, horizontal/PolyJuice, metamorphic,
+> and DESIL cross-path (`cross_path_equivalence`); conformance corroboration
+> (`conformance_evaluator.py`); the autotuning flywheel + per-chip calibration +
+> autotune_v2 bridge (`flywheel.py`, `flywheel_autotune.py`); and the scored
+> environment — a TensorBench-style grader (`compiler_grader.py`), LongCA
+> structure-keyed attention (`attention_tasks.py`), and Magellan/AlphaEvolve
+> gated search (`magellan.py`, `alphaevolve.py`, with reward-hack rejection
+> proven). **Open (hardware-gated):** NVIDIA/ROCm sit truthfully at rung 1–2.5
+> (WGMMA PTX *emitted* via `ptx_emit.py`; rung-3 `ptxas` + complete kernel +
+> silicon need a Linux/CUDA runner). Research-backed
+> (DESIL/PolyJuice/Mirage/TensorBench/Magellan/AlphaEvolve/BaCO/TLP).
 
 ## Finished
 

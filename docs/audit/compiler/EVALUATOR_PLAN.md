@@ -2,7 +2,7 @@
 status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
-last_updated: 2026-06-11
+last_updated: 2026-06-12
 ---
 
 # Tessera Compiler Evaluator — Architecture & Roadmap
@@ -303,9 +303,39 @@ scorer.* Defenses, adopted before any search:
 
 ---
 
-## 10. Phasing — what gets built, in order
+## 9.5 Status — what has landed (updated 2026-06-12)
 
-**Phase E1 — Evaluator spine + first two rungs (the concrete first slice).**
+The plan below was authored as a forward roadmap; most of it has now shipped.
+Notably, the **scored environment + search layers (E5) landed earlier than their
+original last-place sequencing** — the oracles matured fast enough that the grader
+and Magellan/AlphaEvolve lanes became buildable. Generated dashboards remain the
+count authority; this is a structural map, not a count.
+
+| Area | Status | Shipped surface |
+|---|---|---|
+| **Evaluator engine** (E1) | ✅ landed | `evaluator.py` — `Rung` ladder (8 rungs), `verdict_for`/`evaluate` (execution-derived, provenance-gated), `run_native` |
+| **Oracles** | ✅ landed | vertical (`evaluate`), horizontal/PolyJuice (`horizontal_equivalence`), metamorphic (`metamorphic_equivalence`), **DESIL cross-path** (`cross_path_equivalence`) |
+| **Legal-by-construction inputs** (E2) | ✅ landed | `safe_input` (DESIL UB-elim / NNSmith) |
+| **Conformance corroboration** (E1c) | ✅ landed | `conformance_evaluator.py` — all complete cells re-derived at rung 7 ("derive validates declare") |
+| **NVIDIA emission** | 🟡 rung 2.5 | `ptx_emit.py` + `matmul_pipeline.emit_nvidia_ptx` + `evaluator.nvidia_emission_verdict` (WGMMA PTX text, wired into `@jit`). Rung 3 (`ptxas`)/4+/hardware **open** |
+| **Flywheel** (E3) | ✅ landed | `flywheel.py` (records, roofline, sweep, per-chip calibration, persist/distill) + `flywheel_autotune.py` (autotune_v2 bridge, `autotune_matmul`) |
+| **Scored environment / grader** (E5) | ✅ landed | `compiler_grader.py` (TensorBench-style, hidden inputs, anti-cheat) + `attention_tasks.py` (LongCA mask×seqlen) |
+| **Search layers** (E5) | ✅ landed | `magellan.py` (gated heuristic evolution) + `alphaevolve.py` (evaluator-driven search; reward-hack rejection proven) |
+| **Opt-level checksum + MLIRod coverage** (E2) | ⬜ open | follow-ups (cross-path realizes the differential intent today) |
+| **NVIDIA/ROCm hardware window** (E4) | ⬜ open | Linux/CUDA runner: `ptxas` rung 3, complete WGMMA kernel, rungs 6–7 |
+
+Guards: `tests/unit/test_{evaluator,evaluator_e2,conformance_evaluator,ptx_emit,
+flywheel,flywheel_autotune,compiler_grader,attention_tasks,magellan,alphaevolve}.py`
+(~80 tests; Darwin-gated where execution is required, portable contracts elsewhere).
+
+---
+
+## 10. Phasing — original plan (annotated with landed status)
+
+> ✅ landed · 🟡 partial · ⬜ open. The scored environment (E5) shipped ahead of
+> sequence; the NVIDIA hardware window (E4) remains the gate.
+
+**Phase E1 — Evaluator spine + first two rungs (the concrete first slice). ✅**
 One engine, one generated program set, a per-backend `Verdict`:
 - *Apple:* horizontal-equivalence oracle (run `p` through its fusion rewrites,
   assert pre ≡ post on Apple GPU) + provenance gate (silent numpy fallback =
@@ -319,20 +349,20 @@ Deliverables: extend `_diff_lane.py`; new `horizontal_oracle` + `provenance_gate
 Acceptance: catches a deliberately-injected fusion divergence on Apple; fails on
 a deliberately-malformed PTX in CI; conformance rows are *derived*, drift-gated.
 
-**Phase E2 — Generator hardening + opt-level oracle.** DESIL UB-elimination so
+**Phase E2 — Generator hardening + opt-level oracle. 🟡** (safe inputs + the cross-path/metamorphic oracles landed; opt-level checksum + MLIRod coverage open.) DESIL UB-elimination so
 generated programs are legal-by-construction; NNSmith gradient inputs; opt-level
 checksum (Apple/x86 runtime) + structural-SASS diff (NVIDIA/ROCm). MLIRod
 op-dependency coverage to steer generation toward novel adjacencies.
 
-**Phase E3 — Flywheel (Apple-measurable).** BaCO constrained search into
+**Phase E3 — Flywheel (Apple-measurable). ✅** BaCO constrained search into
 `autotune_v2`; ROFT roofline baseline; offline microbench harness; the §7 record
 corpus; decision-tree distillation for O(1) dispatch.
 
-**Phase E4 — NVIDIA/ROCm hardware window.** Register a CUDA/HIP launcher into G7;
+**Phase E4 — NVIDIA/ROCm hardware window. ⬜** (the remaining gate — needs Linux/CUDA + silicon.) Register a CUDA/HIP launcher into G7;
 run the assembly-validated batch on a rented/CI GPU; promote rungs 6–7; fine-tune
 the pre-trained cost model with the ~7% target data.
 
-**Phase E5 — Scored environment.** Wrap E1–E3 as `evaluate()→reward` behind a
+**Phase E5 — Scored environment. ✅** (landed ahead of sequence — grader + Magellan + AlphaEvolve.) Wrap E1–E3 as `evaluate()→reward` behind a
 CompilerGym-style interface; only then layer Magellan/AlphaEvolve-style search,
 anti-cheat (§8) baked in.
 

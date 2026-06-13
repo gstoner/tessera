@@ -1554,6 +1554,136 @@ class MixtureOfRecursions(Module):
         return h
 
 
+class MinimaxSparseAttention(Module):
+    """MiniMax Sparse Attention (MSA, arXiv:2606.13392) — GQA block-sparse attention.
+
+    A lightweight Index Branch scores KV blocks and selects ``top_k`` of them per
+    GQA group (exp-free, forced-local); the Main Branch runs *exact* attention
+    over only the selected blocks (``tessera.ops.msa_sparse_attention``). Distinct
+    from :class:`NativeSparseAttention` (NSA), which blends sliding/compressed/
+    top-k branches per head — MSA is a single exact path with per-GQA-group
+    selection. When ``top_k`` equals the number of KV blocks this reduces to
+    dense GQA attention (a drop-in baseline / training-warmup setting).
+
+    Grouped-query projections: ``num_heads`` query heads, ``num_kv_heads`` KV
+    heads (``num_heads % num_kv_heads == 0``). See docs/msa.md.
+    """
+
+    def __init__(
+        self,
+        *,
+        embed_dim: int,
+        num_heads: int,
+        num_kv_heads: int,
+        block_size: int,
+        top_k: int,
+        head_dim: int | None = None,
+        force_local_block: bool = True,
+        causal: bool = True,
+        dtype: str = "fp32",
+    ):
+        super().__init__()
+        if num_kv_heads <= 0 or num_heads % num_kv_heads != 0:
+            raise ValueError(
+                f"num_heads ({num_heads}) must be divisible by num_kv_heads ({num_kv_heads})"
+            )
+        if head_dim is None and embed_dim % num_heads != 0:
+            raise ValueError(
+                f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads}) "
+                f"when head_dim is not given"
+            )
+        self.embed_dim = int(embed_dim)
+        self.num_heads = int(num_heads)
+        self.num_kv_heads = int(num_kv_heads)
+        self.head_dim = int(head_dim) if head_dim is not None else self.embed_dim // self.num_heads
+        self.block_size = int(block_size)
+        self.top_k = int(top_k)
+        self.force_local_block = bool(force_local_block)
+        self.causal = bool(causal)
+        q_out = self.num_heads * self.head_dim
+        kv_out = self.num_kv_heads * self.head_dim
+        # Grouped-query Q/K/V projections (K/V are narrower than Q under GQA).
+        self.W_q = Parameter(shape=(self.embed_dim, q_out), dtype=dtype)
+        self.W_k = Parameter(shape=(self.embed_dim, kv_out), dtype=dtype)
+        self.W_v = Parameter(shape=(self.embed_dim, kv_out), dtype=dtype)
+        self.W_o = Parameter(shape=(q_out, self.embed_dim), dtype=dtype)
+        _kaiming_uniform_(self.W_q._data._data, fan_in=self.embed_dim)
+        _kaiming_uniform_(self.W_k._data._data, fan_in=self.embed_dim)
+        _kaiming_uniform_(self.W_v._data._data, fan_in=self.embed_dim)
+        _kaiming_uniform_(self.W_o._data._data, fan_in=q_out)
+
+    @classmethod
+    def from_gqa(
+        cls,
+        *,
+        embed_dim: int,
+        num_heads: int,
+        num_kv_heads: int,
+        seq_len: int,
+        block_size: int = 64,
+        sparsity: float = 0.25,
+        dense: bool = False,
+        head_dim: int | None = None,
+        force_local_block: bool = True,
+        causal: bool = True,
+        dtype: str = "fp32",
+    ) -> "MinimaxSparseAttention":
+        """Build an MSA layer from a dense GQA / full-attention config.
+
+        ``seq_len`` + ``block_size`` + ``sparsity`` derive ``top_k``::
+
+            num_blocks = seq_len // block_size
+            top_k = num_blocks            if dense or sparsity >= 1
+                  = ceil(sparsity * num_blocks)   otherwise   (clamped to [1, num_blocks])
+
+        Full attention is ``num_kv_heads == num_heads``. ``dense=True`` makes MSA
+        exactly dense GQA — the drop-in baseline you train with before annealing
+        ``sparsity`` down (the warmup/training flag). The reference Index Branch
+        is parameter-free (mean-pooled per-block summaries), so there are no
+        separate index-projection dimensions to configure here.
+        """
+        if seq_len % block_size != 0:
+            raise ValueError(
+                f"seq_len ({seq_len}) must be divisible by block_size ({block_size})"
+            )
+        num_blocks = seq_len // block_size
+        if dense or sparsity >= 1.0:
+            top_k = num_blocks
+        else:
+            top_k = max(1, math.ceil(sparsity * num_blocks))
+        top_k = min(top_k, num_blocks)
+        return cls(
+            embed_dim=embed_dim, num_heads=num_heads, num_kv_heads=num_kv_heads,
+            block_size=block_size, top_k=top_k, head_dim=head_dim,
+            force_local_block=force_local_block, causal=causal, dtype=dtype,
+        )
+
+    def forward(self, x):
+        x = _as_array(x)
+        if x.ndim == 2:
+            x = x[None]
+        B, S, _ = x.shape
+        if S % self.block_size != 0:
+            raise ValueError(
+                f"MinimaxSparseAttention: seq len {S} must be divisible by "
+                f"block_size {self.block_size}"
+            )
+        Hq, Hkv, D = self.num_heads, self.num_kv_heads, self.head_dim
+
+        def to_heads(t, heads):
+            return t.reshape(B, S, heads, D).transpose(0, 2, 1, 3)
+
+        Q = to_heads(ops.gemm(x, _as_array(self.W_q)), Hq)   # (B, Hq, S, D)
+        K = to_heads(ops.gemm(x, _as_array(self.W_k)), Hkv)  # (B, Hkv, S, D)
+        V = to_heads(ops.gemm(x, _as_array(self.W_v)), Hkv)
+        O = np.asarray(ops.msa_sparse_attention(
+            Q, K, V, block_size=self.block_size, top_k=self.top_k,
+            force_local_block=self.force_local_block, causal=self.causal,
+        ))  # (B, Hq, S, D) — never the return_debug tuple here
+        O = O.transpose(0, 2, 1, 3).reshape(B, S, Hq * D)
+        return ops.gemm(O, _as_array(self.W_o))
+
+
 __all__ = [
     "Linear",
     "LinearGeneral",
@@ -1589,4 +1719,5 @@ __all__ = [
     "LSTM",
     "NativeSparseAttention",
     "MixtureOfRecursions",
+    "MinimaxSparseAttention",
 ]

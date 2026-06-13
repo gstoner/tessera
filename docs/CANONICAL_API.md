@@ -427,6 +427,7 @@ attributes are auto-registered via `__setattr__` (torch.nn pattern).
 | `GRUCell` / `SimpleRNNCell` | `GRUCell(input_size, hidden_size, bias=True, dtype="fp32")` · `SimpleRNNCell(input_size, hidden_size, bias=True, activation="tanh", dtype="fp32")` | stateful recurrent cells over `gru_cell` / `simple_rnn_cell` |
 | `NativeSparseAttention` | `NativeSparseAttention(*, embed_dim, num_heads, window_size=64, block_size=16, top_k=2, compress_weight=False, causal=True, dtype="fp32")` | DeepSeek-style native sparse attention (sliding + compressed + top-k blocks) |
 | `MixtureOfRecursions` | `MixtureOfRecursions(layer, *, embed_dim, max_depth=3, dtype="fp32")` | recursion-depth router over a shared layer |
+| `MinimaxSparseAttention` | `MinimaxSparseAttention(*, embed_dim, num_heads, num_kv_heads, block_size, top_k, head_dim=None, force_local_block=True, causal=True, dtype="fp32")` · `MinimaxSparseAttention.from_gqa(*, embed_dim, num_heads, num_kv_heads, seq_len, block_size=64, sparsity=0.25, dense=False, ...)` | MiniMax Sparse Attention (arXiv:2606.13392) — GQA block-sparse layer: Index Branch top-k block selection per group + exact Main Branch over `ops.msa_sparse_attention`; `top_k == num_blocks` ⇒ dense GQA. See [docs/msa.md](msa.md) |
 
 `Module` provides:
 

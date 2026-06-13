@@ -238,3 +238,83 @@ def test_coverage_contract_axes():
     idx = coverage_for("msa_index_scores")
     assert idx.contract_status["vjp"] == "complete"
     assert idx.contract_status["jvp"] == "complete"
+
+
+# ── nn.MinimaxSparseAttention module (Phase 4) ───────────────────────────────
+
+def test_minimax_sparse_attention_is_exported():
+    assert hasattr(ts.nn, "MinimaxSparseAttention")
+
+
+def test_module_forward_shape():
+    m = ts.nn.MinimaxSparseAttention(
+        embed_dim=16, num_heads=4, num_kv_heads=2, block_size=4, top_k=2
+    )
+    x = np.random.default_rng(0).normal(size=(2, 16, 16)).astype(np.float32)
+    out = m(x)
+    assert out.shape == (2, 16, 16)  # (B, S, embed_dim)
+
+
+def test_module_rejects_bad_gqa_and_seqlen():
+    with pytest.raises(ValueError):
+        ts.nn.MinimaxSparseAttention(
+            embed_dim=16, num_heads=4, num_kv_heads=3, block_size=4, top_k=2
+        )
+    m = ts.nn.MinimaxSparseAttention(
+        embed_dim=16, num_heads=4, num_kv_heads=2, block_size=8, top_k=1
+    )
+    bad = np.zeros((1, 12, 16), dtype=np.float32)  # 12 % 8 != 0
+    with pytest.raises(ValueError):
+        m(bad)
+
+
+def test_module_composes_the_msa_op_with_its_own_weights():
+    m = ts.nn.MinimaxSparseAttention(
+        embed_dim=16, num_heads=4, num_kv_heads=2, block_size=4, top_k=2, causal=True
+    )
+    x = np.random.default_rng(7).normal(size=(1, 16, 16)).astype(np.float32)
+    out = m(x)
+
+    # Manually compose the same path with the module's (kaiming-init) weights.
+    Wq = np.asarray(m.W_q._data._data)
+    Wk = np.asarray(m.W_k._data._data)
+    Wv = np.asarray(m.W_v._data._data)
+    Wo = np.asarray(m.W_o._data._data)
+    B, S, D = 1, 16, 4
+    Q = (x @ Wq).reshape(B, S, 4, D).transpose(0, 2, 1, 3)
+    K = (x @ Wk).reshape(B, S, 2, D).transpose(0, 2, 1, 3)
+    V = (x @ Wv).reshape(B, S, 2, D).transpose(0, 2, 1, 3)
+    O = ts.ops.msa_sparse_attention(Q, K, V, block_size=4, top_k=2, causal=True)
+    manual = O.transpose(0, 2, 1, 3).reshape(B, S, 16) @ Wo
+    np.testing.assert_allclose(out, manual, rtol=1e-6, atol=1e-6)
+
+
+def test_module_dense_when_topk_equals_num_blocks():
+    # top_k == num_blocks → exact dense GQA (independent of the index scores).
+    m = ts.nn.MinimaxSparseAttention(
+        embed_dim=16, num_heads=4, num_kv_heads=2, block_size=4, top_k=4
+    )
+    x = np.random.default_rng(1).normal(size=(1, 16, 16)).astype(np.float32)
+    out = m(x)
+    assert out.shape == (1, 16, 16)
+    assert np.isfinite(out).all()
+
+
+@pytest.mark.parametrize(
+    "dense,sparsity,expected_top_k",
+    [(True, 0.25, 8), (False, 0.5, 4), (False, 0.1, 1), (False, 1.0, 8)],
+)
+def test_from_gqa_derives_top_k(dense, sparsity, expected_top_k):
+    m = ts.nn.MinimaxSparseAttention.from_gqa(
+        embed_dim=16, num_heads=4, num_kv_heads=2,
+        seq_len=64, block_size=8, sparsity=sparsity, dense=dense,
+    )
+    assert m.top_k == expected_top_k  # num_blocks = 64 // 8 = 8
+    assert m.num_kv_heads == 2 and m.num_heads == 4
+
+
+def test_from_gqa_rejects_indivisible_seqlen():
+    with pytest.raises(ValueError):
+        ts.nn.MinimaxSparseAttention.from_gqa(
+            embed_dim=16, num_heads=4, num_kv_heads=2, seq_len=60, block_size=8
+        )

@@ -100,6 +100,8 @@ from .layers import (
     NativeSparseAttention,
     # execution_roadmap.md, Phase F-MoR — Mixture of Recursions.
     MixtureOfRecursions,
+    # MSA Phase 4 — MiniMax Sparse Attention GQA block-sparse layer.
+    MinimaxSparseAttention,
 )
 from . import utils
 
@@ -171,4 +173,6 @@ __all__ = [
     "NativeSparseAttention",
     # Phase F-MoR — Mixture of Recursions
     "MixtureOfRecursions",
+    # MSA Phase 4 — MiniMax Sparse Attention GQA layer
+    "MinimaxSparseAttention",
 ]

@@ -2545,10 +2545,21 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 f"apple_gpu runtime path does not support op {op_name!r} "
                 f"(envelope: {sorted(_APPLE_GPU_RUNTIME_OPS)})"
             )
+        # Resolve tensor-valued kwargs: the AST lowering encodes a tensor passed
+        # by keyword (e.g. flash_attn's ``attn_bias``) as the operand-name string
+        # rather than a graph operand. When a kwarg's value is a string naming a
+        # bound value, bind it to the array so the handler sees the tensor (not
+        # the name). Scalar/enum kwargs (axis, eps, "sum", ...) never match a
+        # value name and pass through untouched.
+        resolved_kwargs = {
+            kk: (_as_numpy(values[vv.lstrip("%")])
+                 if isinstance(vv, str) and vv.lstrip("%") in values else vv)
+            for kk, vv in kwargs.items()
+        }
         values[str(result)] = handler(
             op_name,
             [_as_numpy(values[name]) for name in operand_names],
-            kwargs,
+            resolved_kwargs,
             np,
         )
 

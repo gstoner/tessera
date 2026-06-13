@@ -322,13 +322,114 @@ def dflash_generate(prompt, w: DFlashWeights, cfg: DFlashConfig,
     return tokens
 
 
+# ---------------------------------------------------------------------------
+# Target-model hidden-state tap (multi-layer feature injection)
+# ---------------------------------------------------------------------------
+
+class HiddenStateTap:
+    """Capture the outputs of a fixed set of target-model layers.
+
+    The DFlash draft is conditioned on hidden states tapped from a fixed set of
+    target layers (``model_mlx`` ``_patch_model`` / ``_LayerHook``). This wraps
+    each selected layer's ``forward`` to record its output; after the target
+    forward runs, :attr:`hidden_states` concatenates the per-layer captures along
+    the last axis into the ``(B, S, num_target_layers * D)`` tensor that
+    :func:`target_feature_projection` consumes.
+
+    Works with any ``nn.Module`` layer container that is index-addressable
+    (``nn.ModuleList`` or a plain list). Use as a context manager or call
+    :meth:`install` / :meth:`remove` explicitly. ``object.__setattr__`` bypasses
+    ``Module``'s attribute machinery so the wrap is transparent and reversible.
+    """
+
+    def __init__(self, layers, layer_ids):
+        self.layers = layers
+        self.layer_ids = list(layer_ids)
+        self._captured: dict = {}
+        self._installed = False
+
+    def install(self) -> "HiddenStateTap":
+        if self._installed:
+            return self
+        for i in self.layer_ids:
+            layer = self.layers[i]
+            orig = layer.forward
+
+            def make(idx, orig_fwd):
+                def hook(*a, **k):
+                    out = orig_fwd(*a, **k)
+                    self._captured[idx] = out[0] if isinstance(out, tuple) else out
+                    return out
+                return hook
+
+            object.__setattr__(layer, "forward", make(i, orig))
+        self._installed = True
+        return self
+
+    def remove(self) -> None:
+        for i in self.layer_ids:
+            try:
+                object.__delattr__(self.layers[i], "forward")
+            except AttributeError:
+                pass
+        self._installed = False
+
+    def reset(self) -> None:
+        self._captured.clear()
+
+    @property
+    def hidden_states(self) -> np.ndarray:
+        missing = [i for i in self.layer_ids if i not in self._captured]
+        if missing:
+            raise RuntimeError(
+                f"hidden-state tap has not captured layers {missing}; "
+                "run the target forward while the tap is installed")
+        return np.concatenate(
+            [np.asarray(self._captured[i]) for i in self.layer_ids], axis=-1)
+
+    def __enter__(self) -> "HiddenStateTap":
+        return self.install()
+
+    def __exit__(self, *exc) -> None:
+        self.remove()
+
+
+def capture_target_hidden(layers, layer_ids) -> HiddenStateTap:
+    """Context manager that taps ``layers[i]`` for ``i in layer_ids`` (DFlash
+    multi-layer feature injection). See :class:`HiddenStateTap`."""
+    return HiddenStateTap(layers, layer_ids)
+
+
+# ---------------------------------------------------------------------------
+# Apple GPU attention core
+# ---------------------------------------------------------------------------
+
+def apple_gpu_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None):
+    """``attention_fn`` for :func:`tessera.nn.functional.block_diffusion_attention`
+    that runs the rank-3 attention core on the Apple GPU ``metal_runtime`` lane.
+
+    Routes through the P0 ``flash_attn`` / ``flash_attn_bias`` runtime symbols.
+    Pass as ``block_diffusion_attention(..., attention_fn=apple_gpu_attention_fn)``
+    (or via :func:`dflash_decoder_layer`'s composition) to execute the DFlash
+    draft attention on Metal. Falls back to the numpy reference off-Darwin / when
+    a tensor is outside the kernel envelope (the dispatcher handles that).
+    """
+    from . import runtime as _rt
+    operands = [q, k, v] if attn_bias is None else [q, k, v, attn_bias]
+    return _rt._apple_gpu_dispatch_flash_attn(
+        "tessera.flash_attn", operands, {"scale": scale, "causal": causal}, np)
+
+
 __all__ = [
     "DFlashConfig",
     "DFlashLayerWeights",
     "DFlashWeights",
     "DFlashVerification",
+    "HiddenStateTap",
     "make_rope",
     "target_feature_projection",
+    "capture_target_hidden",
+    "apple_gpu_attention_fn",
     "dflash_decoder_layer",
     "dflash_draft_forward",
     "dflash_linear_verify",

@@ -174,10 +174,131 @@ def execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm,
         committed=int(res.accepted_mask.sum()))
 
 
+# ── End-to-end native decode loop ───────────────────────────────────────────
+
+def synthetic_decoder_weights(config, *, num_denoise_layers: int, seed: int = 0) -> dict:
+    """Faithful weights for the native decoder: per-layer denoiser weights, the
+    LM head, an embedding table, a mask embedding, and the committed-context K/V
+    projections (``H -> num_kv_heads * head_dim``) used for KV promotion."""
+    rng = np.random.default_rng(seed)
+    H, V = config.hidden_size, config.vocab_size
+    Hkv, Dh = config.num_kv_heads, config.head_dim
+    s = 1.0 / np.sqrt(H)
+    return {
+        "layers": [synthetic_layer_weights(config, seed=seed + 1 + i)
+                   for i in range(num_denoise_layers)],
+        "w_lm": (rng.standard_normal((H, V)) / np.sqrt(H)).astype(np.float32),
+        "embed_table": (rng.standard_normal((V, H)) * s).astype(np.float32),
+        "mask_embedding": (rng.standard_normal(H) * s).astype(np.float32),
+        "ctx_k_proj": (rng.standard_normal((H, Hkv * Dh)) * s).astype(np.float32),
+        "ctx_v_proj": (rng.standard_normal((H, Hkv * Dh)) * s).astype(np.float32),
+    }
+
+
+class NativeBlockDiffusionDecoder:
+    """End-to-end native block-diffusion decoder.
+
+    Orchestrates the commit / freeze / re-noise / KV-promotion loop over the
+    *native* :func:`execute_block_diffusion_step` (multi-head GQA denoiser + MoE
+    + LM head + entropy sampler). ``backend="apple_gpu"`` runs every step on the
+    Metal lane. Committed blocks are projected (``ctx_k_proj`` / ``ctx_v_proj``)
+    into per-head encoder KV and promoted into the context for later blocks —
+    the canvas denoiser attends bidirectionally over the canvas and causally over
+    the committed context.
+    """
+
+    def __init__(self, config, weights: dict, *, num_denoise_layers: int,
+                 max_steps: int, sampler_config, top_k: int,
+                 backend: str = "numpy", max_context_blocks: int = 4):
+        if max_steps > 48:
+            raise ValueError("max_steps must be <= 48 (block-diffusion budget)")
+        self.cfg = config
+        self.w = weights
+        self.num_layers = num_denoise_layers
+        self.max_steps = max_steps
+        self.sampler = sampler_config
+        self.top_k = top_k
+        self.backend = backend
+        self.embed = np.asarray(weights["embed_table"], dtype=np.float64)
+        self.mask_emb = np.asarray(weights["mask_embedding"], dtype=np.float64)
+        # Per-head committed-context KV cache (num_kv_heads).
+        from ..cache import KVCacheHandle
+        self.kv = KVCacheHandle(
+            num_heads=config.num_kv_heads, head_dim=config.head_dim,
+            max_seq=config.canvas_size * max_context_blocks, dtype="fp32")
+        self.blocks: list = []
+
+    @property
+    def context_len(self) -> int:
+        return self.kv.current_seq
+
+    def _embed(self, committed, frozen):
+        e = self.embed[committed].copy()
+        e[~frozen] = self.mask_emb
+        return e
+
+    def _context_kv(self, *, sliding: bool):
+        """Committed context KV as ``(Hkv, S, Dh)`` (empty when no context yet)."""
+        Hkv, Dh = self.cfg.num_kv_heads, self.cfg.head_dim
+        n = self.kv.current_seq
+        if n == 0:
+            return np.zeros((Hkv, 0, Dh), np.float64), np.zeros((Hkv, 0, Dh), np.float64)
+        start = max(0, n - self.cfg.sliding_window) if sliding else 0
+        k, v = self.kv.read(start, n)              # (s, Hkv, Dh)
+        return (np.asarray(k, np.float64).transpose(1, 0, 2),
+                np.asarray(v, np.float64).transpose(1, 0, 2))
+
+    def decode_block(self, *, rng_key: int, sliding: bool = False):
+        from .decode import BlockDecodeResult
+        cfg = self.cfg
+        canvas = cfg.canvas_size
+        committed = np.full(canvas, self.sampler.mask_id, dtype=np.int64)
+        frozen = np.zeros(canvas, dtype=bool)
+        progress: list = []
+        stop, steps = "max_steps", 0
+
+        for step in range(self.max_steps):
+            steps = step + 1
+            embeds = self._embed(committed, frozen)
+            enc = self._context_kv(sliding=sliding)
+            res = execute_block_diffusion_step(
+                embeds, enc, self.w["layers"], self.w["w_lm"], cfg, step=step,
+                sampler_config=self.sampler, num_denoise_layers=self.num_layers,
+                rng_key=rng_key + step, top_k=self.top_k, backend=self.backend)
+            newly = res.accepted_mask & ~frozen
+            if newly.any():
+                committed[newly] = res.tokens[newly]
+            else:
+                unfrozen = np.flatnonzero(~frozen)
+                pick = int(unfrozen[int(np.argmin(res.entropy[unfrozen]))])
+                committed[pick] = res.sampled[pick]
+                newly = np.zeros(canvas, dtype=bool)
+                newly[pick] = True
+            frozen |= newly
+            progress.append(int(frozen.sum()))
+            if frozen.all():
+                stop = "all_committed"
+                break
+
+        # KV promotion: project the committed block to per-head encoder KV.
+        final = self._embed(committed, np.ones(canvas, dtype=bool))   # (canvas, H)
+        Hkv, Dh = cfg.num_kv_heads, cfg.head_dim
+        ck = (final @ np.asarray(self.w["ctx_k_proj"], np.float64)).reshape(canvas, Hkv, Dh)
+        cv = (final @ np.asarray(self.w["ctx_v_proj"], np.float64)).reshape(canvas, Hkv, Dh)
+        self.kv.append(ck.astype(np.float32), cv.astype(np.float32))
+        self.blocks.append(committed.copy())
+
+        return BlockDecodeResult(
+            tokens=committed, steps=steps, stop_reason=stop,
+            committed=int(frozen.sum()), progress=tuple(progress))
+
+
 __all__ = [
     "synthetic_layer_weights",
     "synthetic_encoder_kv",
+    "synthetic_decoder_weights",
     "denoise_layer",
     "run_denoise",
     "execute_block_diffusion_step",
+    "NativeBlockDiffusionDecoder",
 ]

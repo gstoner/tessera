@@ -90,7 +90,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current high-level status (as of June 9, 2026):
+Current high-level status (as of June 12, 2026):
 
 | Area | Status |
 |------|--------|
@@ -104,6 +104,9 @@ Current high-level status (as of June 9, 2026):
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
+| **Tier 2 autodiff** — Python tape (`tessera.autodiff.{tape, reverse, custom_rule, rematerialize}`) + 270+ built-in VJPs/JVPs covering matmul, depthwise conv 1d/2d, RNN cells (LSTM), Mamba2 `selective_ssm`, distributed collectives | implemented / hardware-runtime (numpy-reference tape); end-to-end BPTT through multi-step LSTM, depthwise conv chains, and selective SSMs verified vs. central-difference numerical Jacobian at fp64 |
+| **Phase F4/F5 — Graph IR adjoint pass** — `tessera-autodiff` MLIR pass + `Tessera_AdjointInterface` op trait + per-op `buildAdjoint` impls (`MatmulOp`, `LayerNormOp`, `SoftmaxOp`, GELU/ReLU/Sigmoid/Sin via `tessera.custom_adjoint_call` placeholder); `tessera-adjoint-collective-insertion` emits real `tessera.collective.{reduce_scatter, all_gather, all_reduce}` on cotangent SSA values from F4's multi-output rewrite; `tessera-autodiff-pipeline` combines F4+F5 | implemented / lit-testable — `tessera-opt` builds clean against MLIR 21 + 22; `tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir` passes FileCheck showing cotangent seed + two transposed matmuls (`dA = seed @ B^T`, `dB = A^T @ seed`) + `tessera.autodiff.arg_cotangents` annotation |
+| **Phase I — DDP / FSDP wrappers** — `tessera.distributed.DDP` (replicated weights, `all_reduce` mean-reduction on `Parameter.grad`); `tessera.distributed.FSDP` (ZeRO stage 2/3, leading-dim sharding, `gather_for_forward` / `reshard_after_forward` / `reduce_scatter` to local shard) | implemented / mock-runtime (in-process `MockRankGroup`); real NCCL/RCCL bindings land alongside Phase G |
 | **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 445 entries × 12 contract axes tracked in `primitive_coverage.py` (count truth: [`docs/audit/standalone_primitive_coverage.md`](docs/audit/standalone_primitive_coverage.md)); backend-kernel proof remains the universal open Phase G/H gate |
 | **Reasoning-model attention family** — DeepSeek sparse attention, MiniMax Lightning, Kimi-Delta, gated/hybrid/MLA decode + RL post-training losses, all with VJP+JVP | implemented / lit-testable |
 | Clifford / geometric algebra Python surface, canonical `tessera.ops.clifford_*` shim, autodiff registry, dialect, lowering passes, and Apple GPU fused kernels | implemented / lit-testable; **all 17 canonical `tessera.ops.clifford_*` ops route through autodiff + Apple GPU metal_runtime — the GA autodiff surface is fully closed (16 vjp/jvp complete + 1 not_applicable `clifford_integral`, 0 planned), incl. rotor-sandwich, exp/log, hodge-star, and the ext_deriv/vec_deriv/codiff field operators; 17/17 Apple GPU GA primitives benchmarked** |
@@ -287,7 +290,8 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/CANONICAL_API.md`](docs/CANONICAL_API.md) | Public API names and syntax |
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
-| [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) design |
+| [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) + Phase F4 Graph IR adjoint pass (`AdjointInterface` op trait, multi-output rewrite, `tessera-autodiff` MLIR pass) + Phase F5 adjoint collective insertion |
+| [`docs/audit/nvidia_execution_audit.md`](docs/audit/nvidia_execution_audit.md) | Phase G1 — concrete punch list (G1-1 through G1-8) for first SM_90 BF16 GEMM on H100 |
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |
@@ -360,6 +364,13 @@ lit tests/tessera-ir/ -v
 build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
   --pass-pipeline='builtin.module(tessera-lower-to-apple_gpu)' --allow-unregistered-dialect \
   | "$LLVM_PREFIX/bin/FileCheck" tests/tessera-ir/phase8/apple_gpu_lowering.mlir
+
+# Phase F4 — Graph IR autodiff. Verify the AutodiffPass + AdjointInterface
+# trait build cleanly and the reverse-mode pass produces the expected adjoint IR:
+cmake --build build --target tessera-opt --parallel
+build/tools/tessera-opt/tessera-opt --tessera-autodiff \
+  tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir \
+  | "$LLVM_PREFIX/bin/FileCheck" tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir
 ```
 
 NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):
@@ -435,7 +446,9 @@ src/
   runtime/               Runtime C ABI, CPU/CUDA/HIP backends, scheduler tests
   solvers/               core, linalg, scaling_resilience, spectral, tpp,
                          clifford (M5), ebm (M6)
-  transforms/            Canonicalization, lowering, named pipelines
+  transforms/            Canonicalization, lowering, named pipelines;
+                         Phase F4 AutodiffPass + AdjointInterface (op trait);
+                         Phase F5 AdjointCollectiveInsertionPass
 
 tests/
   unit/                  Python unit and compiler-contract tests

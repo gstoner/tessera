@@ -45,6 +45,13 @@ from .block_diffusion import (
     run_block_diffusion_step,
 )
 from .decode import BlockDiffusionDecoder, BlockDecodeResult
+from .block_diffusion_runtime import (
+    synthetic_layer_weights,
+    synthetic_encoder_kv,
+    denoise_layer,
+    run_denoise,
+    execute_block_diffusion_step,
+)
 from .staging import (
     StagingError,
     QuantizationPlan,
@@ -71,6 +78,11 @@ __all__ = [
     "BlockDecodeResult",
     "BlockDiffusionStepGraph",
     "BlockDiffusionStepResult",
+    "synthetic_layer_weights",
+    "synthetic_encoder_kv",
+    "denoise_layer",
+    "run_denoise",
+    "execute_block_diffusion_step",
     "build_block_diffusion_step",
     "verify_block_diffusion_step",
     "run_block_diffusion_step",

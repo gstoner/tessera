@@ -1861,6 +1861,23 @@ kernel lowering of the block-diffusion region is a subsequent phase.
 The Gemma logit soft-cap op `tessera.ops.softcap(x, *, cap)` (= `cap·tanh(x/cap)`,
 VJP+JVP registered) lands with this model — see §13.
 
+### 19.5 Native execution (`tessera.models.block_diffusion_runtime`)
+
+The executable lowering of the block-diffusion region (the shape-only graph +
+verifier in §19.3 is the contract). The canvas-denoiser layer is multi-head GQA
+attention — canvas queries over `[encoder_context_KV ++ canvas_KV]`, bidirectional
+(the same KV-injection shape as DFlash `block_diffusion_attention`) — plus the
+grouped-SwiGLU MoE FFN, composed through `ops.flash_attn` + `moe_swiglu_block` so
+the attention runs on the Apple GPU `metal_runtime` lane via the `attn_bias`
+substrate. The result is identical across attention backends.
+
+| Symbol | Notes |
+|--------|-------|
+| `denoise_layer(h, ctx_k, ctx_v, w, config, *, top_k, attention_fn=None)` | One native canvas-denoiser layer (pre-norm GQA attn + residual, pre-norm MoE + residual). `attention_fn` selects the attention backend (e.g. `tessera.dflash.apple_gpu_attention_fn` → Metal). |
+| `run_denoise(canvas_embed, encoder_kv, layer_weights, config, *, num_layers, top_k, attention_fn=None)` | Stack `num_layers` denoiser layers over the canvas. |
+| `execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm, config, *, step, sampler_config, num_denoise_layers, rng_key, top_k, attention_fn=None)` | One native step: denoiser → LM head (`ops.gemm`) → entropy-bound sampler → `BlockDiffusionStepResult`. |
+| `synthetic_layer_weights(config, *, seed)` / `synthetic_encoder_kv(config, *, context_len, seed)` | Faithful synthetic per-layer weights / committed context KV (tests/benchmarks). |
+
 ---
 
 ## Appendix A: Public Symbol Index

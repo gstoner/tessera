@@ -199,6 +199,9 @@ mor_partition,pure,,1,0,0
 mor_router,pure,,1,0,0
 mor_scatter,pure,,1,0,0
 mqa_attention,state,,1,1,1
+msa_index_scores,pure,,1,0,0
+msa_select_blocks,pure,,1,0,0
+msa_sparse_attention,state,,1,0,0
 mse_loss,pure,,1,0,0
 mul,pure,,1,0,0
 multi_head_attention,state,,1,1,1

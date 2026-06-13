@@ -102,6 +102,7 @@ auto addAppleReasoningAttentionPrologue = [](mlir::OpPassManager &pm) {
   pm.addPass(tessera::createLightningAttnFusionPass());
   pm.addPass(tessera::createDeltaAttnChunkingPass());
   pm.addPass(tessera::createLookaheadSparseAttnExpandPass());
+  pm.addPass(tessera::createMSAExpandPass());
   pm.addPass(tessera::createRLLossDecomposePass());
 };
 

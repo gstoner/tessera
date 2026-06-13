@@ -654,6 +654,47 @@ _MEMORY_INDEX_SELECT_HARDENED: dict[str, str] = {
 }
 _EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDENED
 
+# MiniMax Sparse Attention (MSA, arXiv:2606.13392). Three primitives:
+#   - msa_index_scores  : smooth per-GQA-group block scoring (matmul) →
+#     differentiable (VJP+JVP registered, auto-complete).
+#   - msa_select_blocks : hard deterministic top-k → non-differentiable.
+#   - msa_sparse_attention : exact block-sparse Main Branch → differentiable.
+# sharding_rule + backend_kernel stay at the category default (partial): the
+# native sparse-block kernel is Phase 3 work (Apple GPU host-select first, CUDA
+# KV-outer lowering lit-only on this Mac). See docs/msa.md.
+_MSA_INDEX_SCORES_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "complete",
+    "masking_effect_rule": "not_applicable",
+    "tests": "complete",
+}
+_MSA_SELECT_BLOCKS_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "vjp": "not_applicable",
+    "jvp": "not_applicable",
+    "transpose_rule": "not_applicable",
+    "masking_effect_rule": "not_applicable",
+    "tests": "complete",
+}
+_MSA_SPARSE_ATTENTION_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "batching_rule": "complete",
+    "transpose_rule": "complete",
+    "masking_effect_rule": "complete",
+    "tests": "complete",
+}
+_EXISTING_CONTRACT_OVERRIDES["msa_index_scores"] = _MSA_INDEX_SCORES_HARDENED
+_EXISTING_CONTRACT_OVERRIDES["msa_select_blocks"] = _MSA_SELECT_BLOCKS_HARDENED
+_EXISTING_CONTRACT_OVERRIDES["msa_sparse_attention"] = _MSA_SPARSE_ATTENTION_HARDENED
+
 # LSA indexer-training surface. memory_index_score is the differentiable scoring
 # head (closed-form VJP+JVP registered → those axes auto-complete). The STE
 # selector has a VJP (straight-through) but no JVP (hard-step forward mode is
@@ -2322,6 +2363,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "gated_attention": ("attention", "gated softmax attention wrapper — attention-family batch 2026-05-10"),
         "hybrid_attention": ("attention", "named Ling/Kimi hybrid attention policy wrapper — attention-family batch 2026-05-10"),
         "deepseek_sparse_attention": ("attention", "DeepSeek/NSA three-branch sparse attention wrapper — attention-family batch 2026-05-10"),
+        "msa_index_scores": ("attention", "MSA Index Branch — exp-free per-GQA-group KV-block scoring — MSA 2026-06-13"),
+        "msa_select_blocks": ("attention", "MSA Top-k block selection (forced-local, deterministic, non-diff) — MSA 2026-06-13"),
+        "msa_sparse_attention": ("attention", "MiniMax Sparse Attention exact block-sparse Main Branch — MSA 2026-06-13"),
         "lightning_attention": ("attention", "Lightning linear attention wrapper — attention-family batch 2026-05-10"),
         "gated_deltanet": ("attention", "Gated DeltaNet recurrence — attention-family batch 2026-05-10"),
         "kimi_delta_attention": ("attention", "Kimi Delta Attention recurrence — attention-family batch 2026-05-10"),

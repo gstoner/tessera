@@ -135,6 +135,11 @@ _APPLE_GPU_HYBRID_ATTN_OPS = frozenset({"tessera.hybrid_attention"})
 _APPLE_GPU_SPARSE_ATTN_OPS = frozenset({
     "tessera.attn_top_k_blocks", "tessera.deepseek_sparse_attention",
     "tessera.attn_local_window_2d", "tessera.lookahead_sparse_attention",
+    # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — host-select + GPU exact
+    # attention (Phase 3): the Index Branch top-k block selection runs on the
+    # host (data-dependent, like attn_top_k_blocks); the exact Main Branch
+    # attention over the gathered selected blocks runs on the GPU. See docs/msa.md.
+    "tessera.msa_sparse_attention",
 })
 _APPLE_GPU_MPSGRAPH_OPS = (
     frozenset(_APPLE_GPU_UNARY_OPCODES)

@@ -1876,6 +1876,84 @@ LogicalResult LookaheadSparseAttentionOp::verify() {
   return success();
 }
 
+// MSA — GQA divisibility (Hq % Hkv == 0) + KV-block divisibility
+// (Sk % block_size == 0), shared by the Index Branch and the Main Branch.
+// Static-shape only: dynamic dims are skipped (verifyAttentionQKV covers the
+// rest of the shape contract for the Main Branch).
+static LogicalResult verifyMSAGqaAndBlocks(Operation *op, Value q, Value k,
+                                           int64_t blockSize, StringRef label) {
+  auto qTy = dyn_cast<RankedTensorType>(q.getType());
+  auto kTy = dyn_cast<RankedTensorType>(k.getType());
+  if (!qTy || !kTy)
+    return success();
+  if (qTy.getRank() != 4 || kTy.getRank() != 4)
+    return op->emitOpError() << label << " expects rank-4 Q and K (B,H,S,D)";
+  int64_t hq = qTy.getDimSize(1);
+  int64_t hkv = kTy.getDimSize(1);
+  if (!ShapedType::isDynamic(hq) && !ShapedType::isDynamic(hkv) && hkv != 0 &&
+      hq % hkv != 0)
+    return op->emitOpError()
+           << label << " requires Hq % Hkv == 0 (GQA grouping); got Hq=" << hq
+           << ", Hkv=" << hkv;
+  int64_t sk = kTy.getDimSize(2);
+  if (!ShapedType::isDynamic(sk) && blockSize > 0 && sk % blockSize != 0)
+    return op->emitOpError()
+           << label << " requires Sk % block_size == 0; got Sk=" << sk
+           << ", block_size=" << blockSize;
+  return success();
+}
+
+LogicalResult MSAIndexScoresOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())))
+    return failure();
+  return verifyMSAGqaAndBlocks(this->getOperation(), getQ(), getK(),
+                               getBlockSize(), "msa_index_scores");
+}
+
+LogicalResult MSASelectBlocksOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())))
+    return failure();
+  auto sTy = dyn_cast<RankedTensorType>(getScores().getType());
+  if (sTy && sTy.getRank() == 4) {
+    int64_t numBlocks = sTy.getDimSize(3);
+    if (!ShapedType::isDynamic(numBlocks) &&
+        static_cast<int64_t>(getTopK()) > numBlocks)
+      return emitOpError()
+             << "top_k must be <= num_blocks (scores dim 3); got top_k="
+             << getTopK() << ", num_blocks=" << numBlocks;
+  }
+  return success();
+}
+
+LogicalResult MSASparseAttentionOp::verify() {
+  if (failed(verifyPositiveI64(this->getOperation(), "block_size",
+                               getBlockSize())) ||
+      failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())))
+    return failure();
+  if (failed(verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
+                                getO(), "msa_sparse_attention")))
+    return failure();
+  if (failed(verifyMSAGqaAndBlocks(this->getOperation(), getQ(), getK(),
+                                   getBlockSize(), "msa_sparse_attention")))
+    return failure();
+  // top_k <= num_blocks = Sk / block_size (static shapes only).
+  auto kTy = dyn_cast<RankedTensorType>(getK().getType());
+  if (kTy && kTy.getRank() == 4) {
+    int64_t sk = kTy.getDimSize(2);
+    if (!ShapedType::isDynamic(sk) && getBlockSize() > 0) {
+      int64_t numBlocks = sk / getBlockSize();
+      if (static_cast<int64_t>(getTopK()) > numBlocks)
+        return emitOpError()
+               << "top_k must be <= num_blocks=Sk/block_size; got top_k="
+               << getTopK() << ", num_blocks=" << numBlocks;
+    }
+  }
+  return success();
+}
+
 LogicalResult KVCacheAppendOp::verify() {
   auto kTy = dyn_cast<RankedTensorType>(getK().getType());
   auto vTy = dyn_cast<RankedTensorType>(getV().getType());

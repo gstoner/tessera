@@ -344,6 +344,26 @@ def mqa_attention(Q, K, V, **kwargs):
     return gqa_attention(Q, K, V, num_query_heads=_asarray(Q).shape[1], num_kv_heads=1, **kwargs)
 
 
+def minimax_sparse_attention(Q, K, V, *, block_size: int, top_k: int,
+                             force_local_block: bool = True, causal: bool = True,
+                             scale=None, return_debug: bool = False):
+    """MiniMax Sparse Attention (arXiv:2606.13392).
+
+    Grouped-query block-sparse attention: a lightweight Index Branch scores KV
+    blocks and selects ``top_k`` of them per GQA group, then the Main Branch
+    runs exact attention over only the selected blocks. ``Q`` ``(B, Hq, Sq, D)``,
+    ``K``/``V`` ``(B, Hkv, Sk, D)`` with ``Hq % Hkv == 0``. Delegates to the
+    reference :func:`tessera.ops.msa_sparse_attention`; when ``top_k`` equals the
+    number of KV blocks this reduces to dense GQA attention.
+    """
+    return ops.msa_sparse_attention(
+        _asarray(Q), _asarray(K), _asarray(V),
+        block_size=block_size, top_k=top_k,
+        force_local_block=force_local_block, causal=causal,
+        scale=scale, return_debug=return_debug,
+    )
+
+
 def mla_decode(Q, K_latent, V_latent, W_k=None, W_v=None, **kwargs):
     K = _asarray(K_latent) if W_k is None else linear_general(K_latent, W_k)
     V = _asarray(V_latent) if W_v is None else linear_general(V_latent, W_v)

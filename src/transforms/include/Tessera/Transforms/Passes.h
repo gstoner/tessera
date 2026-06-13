@@ -217,6 +217,7 @@ std::unique_ptr<mlir::Pass> createDeltaAttnChunkingPass();
 std::unique_ptr<mlir::Pass> createHybridAttnExpandPass();
 std::unique_ptr<mlir::Pass> createLookaheadSparseAttnExpandPass();
 std::unique_ptr<mlir::Pass> createLookaheadSparsePrefetchPass();
+std::unique_ptr<mlir::Pass> createMSAExpandPass();
 
 // Stage 13 — RL policy-loss compiler visibility / decomposition pass.
 // PPO receives a stable primitive-form decomposition marker when it is inside

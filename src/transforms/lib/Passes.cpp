@@ -119,6 +119,7 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createDeltaAttnChunkingPass(); });
   ::mlir::registerPass([]() { return createLookaheadSparseAttnExpandPass(); });
   ::mlir::registerPass([]() { return createLookaheadSparsePrefetchPass(); });
+  ::mlir::registerPass([]() { return createMSAExpandPass(); });
 
   // ── Stage 13 — RL policy-loss compiler visibility/decomposition ─────────
   ::mlir::registerPass([]() { return createRLLossDecomposePass(); });

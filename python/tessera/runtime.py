@@ -6370,6 +6370,94 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
     import math as _math
     short = str(op_name)
 
+    if short == "tessera.msa_sparse_attention":
+        # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — Phase 3 host-select
+        # + GPU exact attention. The Index Branch scoring + Top-k block selection
+        # run on the host (data-dependent, reusing the reference ops so the math
+        # is identical); the exact block-sparse Main Branch runs on the GPU.
+        # Token-level causal masking + block dedup are folded into a per-row
+        # additive mask so the GPU result matches ops.msa_sparse_attention.
+        from . import ops as _ops_ns
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        V = np.asarray(operands[2])
+        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+            return None
+        block_size = int(kwargs["block_size"])
+        top_k = int(kwargs["top_k"])
+        causal = bool(kwargs.get("causal", True))
+        force_local = bool(kwargs.get("force_local_block", True))
+        scale_kw = kwargs.get("scale", None)
+        B, Hq, S_q, D = Q.shape
+        Hkv, S_k = int(K.shape[1]), int(K.shape[2])
+        Dv = int(V.shape[-1])
+        if Hq % Hkv != 0 or S_k % block_size != 0:
+            return None
+        g = Hq // Hkv
+        num_blocks = S_k // block_size
+        attn_scale = (1.0 / _math.sqrt(D)) if scale_kw is None else float(scale_kw)
+        # Host: Index Branch + Top-k selection (identical to the reference).
+        scores = _ops_ns.msa_index_scores(Q, K, block_size=block_size, scale=scale_kw)
+        sel = _ops_ns.msa_select_blocks(
+            scores, top_k=top_k, block_size=block_size,
+            force_local_block=force_local, causal=causal)  # (B, Hkv, S_q, top_k)
+        # Host: per-(b, group, query) deduped, causally-valid token index lists.
+        row_idx: dict = {}
+        maxw = 0
+        for b in range(B):
+            for grp in range(Hkv):
+                for sq in range(S_q):
+                    blocks = np.unique(sel[b, grp, sq])
+                    idxs = np.concatenate([
+                        np.arange(int(blk) * block_size, int(blk) * block_size + block_size)
+                        for blk in blocks])
+                    if causal:
+                        idxs = idxs[idxs <= sq]
+                    row_idx[(b, grp, sq)] = idxs
+                    if int(idxs.size) > maxw:
+                        maxw = int(idxs.size)
+        if maxw == 0:
+            return np.zeros((B, Hq, S_q, Dv), np.result_type(Q, K, V))
+        # Padded gather + additive mask (host); the attention FLOPs run on GPU.
+        batch = B * Hq * S_q
+        Qb = np.zeros((batch, 1, D), np.float32)
+        Kb = np.zeros((batch, maxw, D), np.float32)
+        Vb = np.zeros((batch, maxw, Dv), np.float32)
+        mask = np.full((batch, maxw), -np.inf, np.float32)
+        zero_rows: list[int] = []
+        for b in range(B):
+            for h in range(Hq):
+                grp = h // g
+                for sq in range(S_q):
+                    idxs = row_idx[(b, grp, sq)]
+                    w = int(idxs.size)
+                    r = (b * Hq + h) * S_q + sq
+                    if w == 0:
+                        zero_rows.append(r)
+                        continue
+                    Qb[r, 0, :] = Q[b, h, sq, :].astype(np.float32) * np.float32(attn_scale)
+                    Kb[r, :w, :] = K[b, grp, idxs, :].astype(np.float32)
+                    Vb[r, :w, :] = V[b, grp, idxs, :].astype(np.float32)
+                    mask[r, :w] = 0.0
+        # GPU: A = Qb @ Kbᵀ ; A += mask ; P = softmax(A) ; O = P @ Vb.
+        KbT = np.ascontiguousarray(np.swapaxes(Kb, -1, -2))            # [batch, D, maxw]
+        A = _apple_gpu_dispatch_bmm(np.ascontiguousarray(Qb), KbT, np)  # [batch, 1, maxw]
+        if A is None:
+            return None
+        A = np.asarray(A, np.float32).reshape(batch, maxw) + mask
+        P = _apple_gpu_dispatch_softmax("tessera.softmax", [A], {}, np)
+        P = np.ascontiguousarray(np.asarray(P, np.float32).reshape(batch, 1, maxw))
+        O = _apple_gpu_dispatch_bmm(P, np.ascontiguousarray(Vb), np)    # [batch, 1, Dv]
+        if O is None:
+            return None
+        O = np.asarray(O, np.float32).reshape(B, Hq, S_q, Dv)
+        for r in zero_rows:
+            b = r // (Hq * S_q)
+            h = (r // S_q) % Hq
+            sq = r % S_q
+            O[b, h, sq, :] = 0.0
+        return O.astype(np.result_type(Q, K, V))
+
     if short == "tessera.attn_top_k_blocks":
         Q = np.asarray(operands[0])
         K = np.asarray(operands[1])

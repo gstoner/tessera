@@ -21,6 +21,8 @@ import numpy as np
 from .. import ops
 from ..nn import functional as F
 from . import moe_routing as _mr
+from .block_diffusion import BlockDiffusionStepResult
+from .sampler import SamplerConfig, SamplerResult, entropy_bound_sample
 
 
 def synthetic_layer_weights(config, *, seed: int = 0) -> dict:
@@ -108,9 +110,36 @@ def run_denoise(canvas_embed, encoder_kv, layer_weights, config, *,
     return h
 
 
+def execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm,
+                                 config, *, step: int, sampler_config: SamplerConfig,
+                                 num_denoise_layers: int, rng_key: int, top_k: int,
+                                 attention_fn=None) -> BlockDiffusionStepResult:
+    """Native execution of one block-diffusion step (the faithful multi-head
+    counterpart to :func:`block_diffusion.run_block_diffusion_step`).
+
+    Runs ``num_denoise_layers`` native denoiser layers over the canvas (attention
+    on ``attention_fn``'s backend — Apple GPU ``metal_runtime`` when given the
+    GPU seam), projects the LM head, then the Phase-C entropy-bound sampler. The
+    result is identical across attention backends; the heavy compute (per-head
+    attention + grouped MoE + LM-head matmul) lands on ``ops.*`` lanes.
+    """
+    h = run_denoise(canvas_embed, encoder_kv, layer_weights, config,
+                    num_layers=num_denoise_layers, top_k=top_k,
+                    attention_fn=attention_fn)
+    logits = np.asarray(ops.gemm(np.asarray(h), np.asarray(w_lm)))   # LM head (T, vocab)
+    res: SamplerResult = entropy_bound_sample(
+        logits, step=step, config=sampler_config, rng_key=rng_key)
+    return BlockDiffusionStepResult(
+        tokens=res.tokens, accepted_mask=res.accepted_mask,
+        renoise_mask=res.renoise_mask, sampled=res.sampled, entropy=res.entropy,
+        entropy_summary=res.entropy_summary, stop_reason=res.stop_reason,
+        committed=int(res.accepted_mask.sum()))
+
+
 __all__ = [
     "synthetic_layer_weights",
     "synthetic_encoder_kv",
     "denoise_layer",
     "run_denoise",
+    "execute_block_diffusion_step",
 ]

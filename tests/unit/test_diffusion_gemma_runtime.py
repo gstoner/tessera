@@ -103,6 +103,47 @@ def test_bidirectional_canvas_sees_all_positions():
     assert not np.allclose(out_a[0], out_b[0])
 
 
+def _step_inputs(cfg, *, S=8, seed=20):
+    from tessera.models import SamplerConfig
+    rng = np.random.default_rng(seed)
+    ws = [BR.synthetic_layer_weights(cfg, seed=seed + i) for i in range(cfg.num_layers)]
+    enc = BR.synthetic_encoder_kv(cfg, context_len=S, seed=seed + 99)
+    canvas = (rng.standard_normal((cfg.canvas_size, cfg.hidden_size)) * 0.1).astype(np.float32)
+    w_lm = (rng.standard_normal((cfg.hidden_size, cfg.vocab_size)) / np.sqrt(cfg.hidden_size)).astype(np.float32)
+    sc = SamplerConfig(vocab_size=cfg.vocab_size)
+    return ws, enc, canvas, w_lm, sc
+
+
+def test_execute_step_shapes_and_contract():
+    cfg = _small_cfg()
+    ws, enc, canvas, w_lm, sc = _step_inputs(cfg)
+    r = BR.execute_block_diffusion_step(
+        canvas, enc, ws, w_lm, cfg, step=1, sampler_config=sc,
+        num_denoise_layers=cfg.num_layers, rng_key=7, top_k=cfg.num_experts_per_tok)
+    assert r.tokens.shape == (cfg.canvas_size,)
+    assert np.array_equal(r.renoise_mask, ~r.accepted_mask)
+    assert r.committed == int(r.accepted_mask.sum())
+    assert r.stop_reason in {"continue", "all_accepted", "stability", "eos", "max_steps"}
+
+
+def test_execute_step_gpu_backend_matches_numpy():
+    """The full step (denoiser + LM head + sampler) yields identical tokens/masks
+    whether the attention runs via numpy or the Apple GPU dispatcher."""
+    from tessera import dflash as D
+    cfg = _small_cfg()
+    ws, enc, canvas, w_lm, sc = _step_inputs(cfg, seed=30)
+    ref = BR.execute_block_diffusion_step(
+        canvas, enc, ws, w_lm, cfg, step=2, sampler_config=sc,
+        num_denoise_layers=cfg.num_layers, rng_key=5, top_k=cfg.num_experts_per_tok)
+    gpu = BR.execute_block_diffusion_step(
+        canvas, enc, ws, w_lm, cfg, step=2, sampler_config=sc,
+        num_denoise_layers=cfg.num_layers, rng_key=5, top_k=cfg.num_experts_per_tok,
+        attention_fn=D.apple_gpu_attention_fn)
+    assert np.array_equal(ref.tokens, gpu.tokens)
+    assert np.array_equal(ref.accepted_mask, gpu.accepted_mask)
+    assert np.allclose(ref.entropy, gpu.entropy, rtol=1e-3, atol=1e-3)
+
+
 @pytest.mark.skipif(not (DARWIN and apple_gpu_available()), reason="Metal device required")
 def test_denoiser_attention_envelope_on_metal():
     """At production head_dim=256 the per-head attention is in the GPU kernel

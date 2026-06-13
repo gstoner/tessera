@@ -50,6 +50,7 @@ from .block_diffusion_runtime import (
     synthetic_encoder_kv,
     denoise_layer,
     run_denoise,
+    execute_block_diffusion_step,
 )
 from .staging import (
     StagingError,
@@ -81,6 +82,7 @@ __all__ = [
     "synthetic_encoder_kv",
     "denoise_layer",
     "run_denoise",
+    "execute_block_diffusion_step",
     "build_block_diffusion_step",
     "verify_block_diffusion_step",
     "run_block_diffusion_step",

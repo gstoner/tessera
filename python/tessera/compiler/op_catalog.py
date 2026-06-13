@@ -47,6 +47,8 @@ _SPECS = [
     OpSpec("sum", "tessera.reduce", 1, 1, lowering="stable_reduction"),
     OpSpec("gelu", "tessera.gelu", 1, 1),
     OpSpec("tanh", "tessera.tanh", 1, 1),
+    # Gemma-style logit soft-cap: cap * tanh(x / cap). Differentiable.
+    OpSpec("softcap", "tessera.softcap", 1, 1),
     OpSpec("add", "tessera.add", 1, 2),
     OpSpec("mul", "tessera.mul", 1, 2),
     OpSpec("relu", "tessera.relu", 1, 1),

@@ -143,6 +143,15 @@ def jvp_tanh(primals, tangents, **_):
     return t, dx * (1.0 - t * t)
 
 
+@_jvp("softcap")
+def jvp_softcap(primals, tangents, *, cap=None, **_):
+    (x,) = primals
+    (dx,) = tangents
+    c = float(cap)
+    t = np.tanh(np.asarray(x) / c)
+    return c * t, np.asarray(dx) * (1.0 - t * t)
+
+
 @_jvp("silu")
 def jvp_silu(primals, tangents, **_):
     (x,) = primals

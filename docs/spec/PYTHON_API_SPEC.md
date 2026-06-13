@@ -1347,6 +1347,8 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |
 | `matmul(A, B)` | `(array, array) → array` | `pure` | Alias for `gemm` |
 | `batched_gemm(A, B)` | `(array, array) → array` | `pure` | Batched `np.matmul` reference |
+| `bmm(A, B, epilogue=None)` | `(array, array) → array` | `pure` | Batched matmul (rank-3+) with shared-`[1,K,N]`-B broadcasting; Apple GPU `tessera_apple_gpu_bmm_{f32,f16}` (`metal_runtime`) |
+| `fake_quantize(x, ...)` | `(array, ...) → array` | `pure` | QAT fake-quantize with straight-through gradient (`tessera.quantization`) |
 | `einsum(spec, *tensors)` | `(str, arrays...) → array` | `pure` | `np.einsum` reference |
 | `factorized_matmul(A, B, rank)` | `(array, array) → array` | `pure` | Low-rank SVD reference over `A @ B` |
 | `grouped_gemm(x, weights, group_sizes, *, kind="contiguous", alignment=None, quant=None)` | `(array, array, array) → array` | `pure` | Ragged grouped matmul (MoE expert-FFN core): each contiguous token group `e` is multiplied by `weights[e]`; Graph IR op `tessera.grouped_gemm`. `kind` selects the grouped-layout family (masked/k_grouped rejected); `quant` runs a dequant-on-host FP8/NVFP4 path. Apple GPU fused MSL / per-group MPS matmul |

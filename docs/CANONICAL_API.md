@@ -381,6 +381,15 @@ subclassing. Available as `tessera.nn.<name>` and as
 | `tessera.nn.flash_attention` | alias for `tessera.ops.flash_attn` | identical signature |
 | `tessera.nn.functional.block_diffusion_attention` | `(x, x_ctx, *, q_proj, k_proj, v_proj, o_proj, num_heads, num_kv_heads, head_dim, q_norm=None, k_norm=None, cache_keys=None, cache_values=None, rope_fn=None, cache_offset=0, sliding_window=None, scale=None, eps=1e-6, attention_fn=None, return_ctx_kv=False) → array` | DFlash block-diffusion attention layer (QK-norm, KV injection, GQA, sliding-window-via-`attn_bias`); folds heads → rank-3 `flash_attn` (see [`tessera.dflash`](#tesseradflash--speculative-decoding-dflash)) |
 | `tessera.nn.functional.mask_token_block` | `(prev_token, block_size, mask_token_id) → int64[..., block_size]` | DFlash draft input block `[prev, MASK, …]` |
+| `tessera.nn.functional.linear_general` | `(x, W, bias=None, axis=-1) → array` | Axis-flexible (Flax-style) LinearGeneral/Einsum contraction |
+| `tessera.nn.functional.lora_linear` | `(x, weight, lora_a, lora_b, bias=None, alpha=1.0) → array` | LoRA-adapted linear: `x@W + (alpha)·(x@A@B)` |
+| `tessera.nn.functional.spectral_norm` | `(weight, eps=1e-12) → array` | Spectral normalization (top singular value) |
+| `tessera.nn.functional.conv_transpose` | `(x, weight, bias=None, stride=1, padding=0, output_padding=0, dilation=1, groups=1) → array` | NCL grouped ConvTranspose1d reference |
+| `tessera.nn.functional.{avg_pool, max_pool, min_pool}` | `(x, kernel_size, stride=None, padding=0) → array` | 1-D pooling references |
+| `tessera.nn.functional.adaptive_pool` | `(x, output_size, reducer=mean) → array` | Adaptive pooling to a target size |
+| `tessera.nn.functional.gru_cell` | `(x, h, W_ih, W_hh, b_ih=None, b_hh=None) → array` | One GRU cell step |
+| `tessera.nn.functional.simple_rnn_cell` | `(x, h, W_ih, W_hh, bias=None, activation="tanh") → array` | One vanilla-RNN cell step |
+| `tessera.nn.functional.bidirectional_scan` | `(fn, init_fwd, init_bwd, xs) → (fwd, bwd)` | Forward+reverse scan (bi-RNN substrate) |
 
 ```python
 import tessera
@@ -410,6 +419,14 @@ attributes are auto-registered via `__setattr__` (torch.nn pattern).
 | `Dropout` | `Dropout(p=0.5, seed=None)` | gated by `self.training` |
 | `MLP` | `MLP(dim, hidden_dim, dtype="fp32")` | SwiGLU block (W_gate / W_up / W_down) |
 | `MultiHeadAttention` | `MultiHeadAttention(embed_dim, num_heads, bias=True, dropout_p=0.0, dtype="fp32")` | packed Q/K/V proj + output proj; `forward(Q, K=None, V=None, causal=False, scale=None, seed=None)` |
+| `LinearGeneral` | `LinearGeneral(in_shape, out_shape, axis=-1, bias=True, dtype="fp32")` | Flax-style axis-flexible linear over `linear_general` |
+| `Einsum` | `Einsum(spec, weight_shape, dtype="fp32")` | learnable-weight einsum contraction |
+| `LoRALinear` | `LoRALinear(in_features, out_features, rank, alpha=1.0, bias=True, dtype="fp32")` | base linear + low-rank `A@B` adapter |
+| `ConvTranspose1d` / `ConvTranspose` | `ConvTranspose1d(in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, dtype="fp32")` | NCL transposed conv (`ConvTranspose` is the alias) |
+| `SpectralNorm` | `SpectralNorm(eps=1e-12)` | spectral-normalization wrapper |
+| `GRUCell` / `SimpleRNNCell` | `GRUCell(input_size, hidden_size, bias=True, dtype="fp32")` · `SimpleRNNCell(input_size, hidden_size, bias=True, activation="tanh", dtype="fp32")` | stateful recurrent cells over `gru_cell` / `simple_rnn_cell` |
+| `NativeSparseAttention` | `NativeSparseAttention(*, embed_dim, num_heads, window_size=64, block_size=16, top_k=2, compress_weight=False, causal=True, dtype="fp32")` | DeepSeek-style native sparse attention (sliding + compressed + top-k blocks) |
+| `MixtureOfRecursions` | `MixtureOfRecursions(layer, *, embed_dim, max_depth=3, dtype="fp32")` | recursion-depth router over a shared layer |
 
 `Module` provides:
 
@@ -512,6 +529,8 @@ lowerings; runtime kernels can be registered separately.
 |----|-----------|-------|
 | `tessera.ops.gemm(A, B)` | `(array, array) → array` | Matrix multiply via `np.matmul` |
 | `tessera.ops.matmul(A, B)` | alias for `gemm` | |
+| `tessera.ops.bmm(A, B, epilogue=None)` | `(array, array) → array` | Batched matmul (rank-3+); broadcasts a shared `[1,K,N]` B operand. Apple GPU `tessera_apple_gpu_bmm_{f32,f16}` (`metal_runtime`) |
+| `tessera.ops.fake_quantize(x, ...)` | `(array, …) → array` | QAT fake-quantize with straight-through gradient (see `tessera.quantization`) |
 | `tessera.ops.layer_norm(x, eps=1e-5)` | `(array) → array` | Pure effect |
 | `tessera.ops.softmax(x, axis=-1)` | `(array) → array` | Pure effect |
 | `tessera.ops.gelu(x)` | `(array) → array` | Pure effect |

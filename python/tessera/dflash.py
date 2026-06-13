@@ -21,12 +21,11 @@ attention core (heads folded into batch → rank-3 ``ops.flash_attn``).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 
-from . import ops
 from .nn import functional as F
 
 

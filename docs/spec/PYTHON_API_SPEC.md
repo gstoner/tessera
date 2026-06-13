@@ -1867,16 +1867,32 @@ The executable lowering of the block-diffusion region (the shape-only graph +
 verifier in §19.3 is the contract). The canvas-denoiser layer is multi-head GQA
 attention — canvas queries over `[encoder_context_KV ++ canvas_KV]`, bidirectional
 (the same KV-injection shape as DFlash `block_diffusion_attention`) — plus the
-grouped-SwiGLU MoE FFN, composed through `ops.flash_attn` + `moe_swiglu_block` so
-the attention runs on the Apple GPU `metal_runtime` lane via the `attn_bias`
-substrate. The result is identical across attention backends.
+grouped-SwiGLU MoE FFN, composed through `ops.flash_attn` + `moe_swiglu_block`.
+``backend="apple_gpu"`` runs the *whole* step on the Apple GPU `metal_runtime`
+lane: per-head attention (`attn_bias`/`flash_attn`), grouped MoE
+(`moe_swiglu_block`), and the LM-head matmul (MPS). ``attention_fn`` overrides
+just the attention backend.
 
 | Symbol | Notes |
 |--------|-------|
-| `denoise_layer(h, ctx_k, ctx_v, w, config, *, top_k, attention_fn=None)` | One native canvas-denoiser layer (pre-norm GQA attn + residual, pre-norm MoE + residual). `attention_fn` selects the attention backend (e.g. `tessera.dflash.apple_gpu_attention_fn` → Metal). |
-| `run_denoise(canvas_embed, encoder_kv, layer_weights, config, *, num_layers, top_k, attention_fn=None)` | Stack `num_layers` denoiser layers over the canvas. |
-| `execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm, config, *, step, sampler_config, num_denoise_layers, rng_key, top_k, attention_fn=None)` | One native step: denoiser → LM head (`ops.gemm`) → entropy-bound sampler → `BlockDiffusionStepResult`. |
-| `synthetic_layer_weights(config, *, seed)` / `synthetic_encoder_kv(config, *, context_len, seed)` | Faithful synthetic per-layer weights / committed context KV (tests/benchmarks). |
+| `denoise_layer(h, ctx_k, ctx_v, w, config, *, top_k, attention_fn=None, backend="numpy")` | One native canvas-denoiser layer (pre-norm GQA attn + residual, pre-norm MoE + residual). `backend="apple_gpu"` runs attn + MoE on Metal. |
+| `run_denoise(canvas_embed, encoder_kv, layer_weights, config, *, num_layers, top_k, attention_fn=None, backend="numpy")` | Stack `num_layers` denoiser layers over the canvas. |
+| `execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm, config, *, step, sampler_config, num_denoise_layers, rng_key, top_k, attention_fn=None, backend="numpy")` | One native step: denoiser → LM head → entropy-bound sampler → `BlockDiffusionStepResult`. `backend="apple_gpu"` runs the whole step on Metal. |
+| `NativeBlockDiffusionDecoder(config, weights, *, num_denoise_layers, max_steps, sampler_config, top_k, backend="numpy", max_context_blocks=4)` | End-to-end native decode loop: commit/freeze/re-noise over `execute_block_diffusion_step`, projecting committed blocks into per-head encoder KV promoted into a `num_kv_heads` `KVCacheHandle`. `.decode_block(rng_key, sliding=False) -> BlockDecodeResult`. |
+| `synthetic_layer_weights(config, *, seed)` / `synthetic_encoder_kv(config, *, context_len, seed)` / `synthetic_decoder_weights(config, *, num_denoise_layers, seed)` | Faithful synthetic per-layer weights / committed context KV / full decoder weights (tests/benchmarks). |
+
+### 19.6 Graph IR region op (`tessera.diffusion_block_step`)
+
+The compiler sees the block-diffusion canvas-denoise step as **one structured
+Graph IR op** (`Tessera_DiffusionBlockStepOp`), not the unrolled per-layer
+attention/MoE graph. Operands: canvas hidden + committed encoder K/V. Attributes:
+`num_denoise_layers`, `num_attention_heads`, `num_kv_heads`, `head_dim`, `causal`
+(default false). The verifier enforces the contract — canvas denoising must be
+bidirectional (`causal=false`; a causal step is the encoder prefill), GQA heads a
+multiple of KV heads, `head_dim ∈ (0, 256]` (GPU attention-kernel envelope). The
+Tile→Apple pass recognizes it and tags the region `status="metal_runtime"` (the
+per-head attention rides the `attn_bias`/`flash_attn` lane, the MoE the
+`moe_swiglu_block` lane). Lit: `tests/tessera-ir/phase8/diffusion_block_step*.mlir`.
 
 ---
 

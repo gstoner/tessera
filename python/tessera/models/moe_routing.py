@@ -122,14 +122,17 @@ def _swiglu(x, w_gate, w_up, w_down) -> np.ndarray:
 def moe_forward(
     x, w_router, w_gate, w_up, w_down,
     w_shared_gate, w_shared_up, w_shared_down,
-    *, top_k: int, normalize: bool = True,
+    *, top_k: int, normalize: bool = True, swiglu_fn=None,
 ):
     """Full MoE layer forward via the pack/grouped/scatter pipeline.
 
     Returns ``(y (T,H), plan)``. Uses ``tessera.ops.moe_swiglu_block`` for the
-    grouped expert compute (the contiguous-grouped kernel surface).
+    grouped expert compute (the contiguous-grouped kernel surface). ``swiglu_fn``
+    overrides that grouped-expert kernel — e.g. an Apple GPU dispatch — with the
+    same ``(x, w_gate, w_up, w_down, group_sizes, *, kind)`` signature.
     """
     from tessera import ops as _ops
+    _swiglu_block = swiglu_fn if swiglu_fn is not None else _ops.moe_swiglu_block
 
     xa = _arr(x).astype(np.float64)
     wr = _arr(w_router).astype(np.float64)
@@ -145,7 +148,7 @@ def moe_forward(
 
     # 3. pack → 4. grouped SwiGLU (per-expert contiguous groups)
     x_packed = pack_tokens(xa, plan)
-    y_packed = np.asarray(_ops.moe_swiglu_block(
+    y_packed = np.asarray(_swiglu_block(
         x_packed, _arr(w_gate).astype(np.float64), _arr(w_up).astype(np.float64),
         _arr(w_down).astype(np.float64), plan.group_sizes, kind="contiguous"))
 

@@ -99,6 +99,9 @@ bool isReduction(llvm::StringRef name) {
 }
 
 bool isFlashAttn(llvm::StringRef name) { return name == "tessera.flash_attn"; }
+bool isDiffusionBlockStep(llvm::StringRef name) {
+  return name == "tessera.diffusion_block_step";
+}
 
 bool isRoPE(llvm::StringRef name) { return name == "tessera.rope"; }
 
@@ -250,6 +253,8 @@ bool isAppleGpuRuntimeOp(llvm::StringRef n) {
       return true;
   if (isNativeSparseAttnFused(n))
     return true;
+  if (isDiffusionBlockStep(n))
+    return true;
   return false;
 }
 
@@ -266,7 +271,7 @@ bool isLowerable(Operation *op) {
       isNativeSparseAttnFused(name) || isPPOPolicyLoss(name) ||
       isEBMEnergyQuadratic(name) || isEBMLangevinStep(name) ||
       isEBMRefinement(name) || isEBMPartitionExact(name) ||
-      isCliffordValueSeamOp(name))
+      isCliffordValueSeamOp(name) || isDiffusionBlockStep(name))
     return true;
   if (name.starts_with("tessera.tile.") || name.starts_with("tile."))
     return op->hasAttr("source");

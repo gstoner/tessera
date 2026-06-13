@@ -48,9 +48,11 @@ from .decode import BlockDiffusionDecoder, BlockDecodeResult
 from .block_diffusion_runtime import (
     synthetic_layer_weights,
     synthetic_encoder_kv,
+    synthetic_decoder_weights,
     denoise_layer,
     run_denoise,
     execute_block_diffusion_step,
+    NativeBlockDiffusionDecoder,
 )
 from .staging import (
     StagingError,
@@ -80,9 +82,11 @@ __all__ = [
     "BlockDiffusionStepResult",
     "synthetic_layer_weights",
     "synthetic_encoder_kv",
+    "synthetic_decoder_weights",
     "denoise_layer",
     "run_denoise",
     "execute_block_diffusion_step",
+    "NativeBlockDiffusionDecoder",
     "build_block_diffusion_step",
     "verify_block_diffusion_step",
     "run_block_diffusion_step",

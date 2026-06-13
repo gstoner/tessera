@@ -476,6 +476,22 @@ def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
     return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
 
 
+@_jvp("msa_index_scores")
+def jvp_msa_index_scores(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.msa_index_scores, "__wrapped__", _ops.msa_index_scores)
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_jvp_rule(lambda q, k: fn(q, k, **kwargs), primals[:2], tangents[:2])
+
+
+@_jvp("msa_sparse_attention")
+def jvp_msa_sparse_attention(primals, tangents, **kwargs):
+    from tessera import ops as _ops
+    fn = getattr(_ops.msa_sparse_attention, "__wrapped__", _ops.msa_sparse_attention)
+    kwargs = {k: v for k, v in kwargs.items() if k not in ("_output_index", "return_debug")}
+    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
+
+
 @_jvp("memory_index_score")
 def jvp_memory_index_score(primals, tangents, *, scale=None, **_):
     """Forward-mode through P = sigmoid(q·kᵀ·scale)."""

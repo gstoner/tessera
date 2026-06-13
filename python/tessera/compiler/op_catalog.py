@@ -98,6 +98,14 @@ _SPECS = [
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
     OpSpec("deepseek_sparse_attention", "tessera.deepseek_sparse_attention", 3, 4, effect="state", lowering="attention"),
+    # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — Index Branch (per-GQA-
+    # group exp-free block scoring) + exact block-sparse Main Branch. The index
+    # scorer is a smooth (differentiable) matmul; the block selector is a hard,
+    # deterministic top-k (non-differentiable); the sparse attention is the
+    # exact main branch. See docs/msa.md.
+    OpSpec("msa_index_scores", "tessera.msa_index_scores", 2, 2, lowering="attention"),
+    OpSpec("msa_select_blocks", "tessera.msa_select_blocks", 1, 1, lowering="indexing"),
+    OpSpec("msa_sparse_attention", "tessera.msa_sparse_attention", 3, 3, effect="state", lowering="attention"),
     # Lookahead Sparse Attention (LSA) — experimental, inference-only. See
     # docs/audit/domain/archive/lsa_scope.md (D1-D5). `memory_index_select` is a
     # sigmoid-threshold block selector (non-differentiable, deterministic);

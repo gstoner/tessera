@@ -1247,6 +1247,23 @@ def vjp_deepseek_sparse_attention(dout, Q, K, V, gate_logits=None, **kwargs):
     return _numeric_attention_family_vjp("deepseek_sparse_attention", dout, args, kwargs)
 
 
+@_vjp("msa_index_scores")
+def vjp_msa_index_scores(dout, Q, K, **kwargs):
+    # Index Branch is a smooth matmul over mean-pooled queries/blocks → both
+    # operands are differentiable. (Top-k selection downstream is non-diff.)
+    kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
+    return _numeric_attention_family_vjp("msa_index_scores", dout, (Q, K), kwargs)
+
+
+@_vjp("msa_sparse_attention")
+def vjp_msa_sparse_attention(dout, Q, K, V, **kwargs):
+    # Gradient flows through the exact Main Branch attention. The block
+    # selection is piecewise-constant, so the VJP is exact away from selection
+    # boundaries (and exact everywhere when top_k == num_blocks).
+    kwargs = {k: v for k, v in kwargs.items() if k not in ("_output_index", "return_debug")}
+    return _numeric_attention_family_vjp("msa_sparse_attention", dout, (Q, K, V), kwargs)
+
+
 @_vjp("memory_index_score")
 def vjp_memory_index_score(dout, indexer_keys, query, *, scale=None, **_):
     """P = sigmoid(q·kᵀ·scale). Closed-form gradient to (indexer_keys, query)."""

@@ -607,6 +607,86 @@ def apple_gpu_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None)
         "tessera.flash_attn", operands, {"scale": scale, "causal": causal}, np)
 
 
+def dflash_generate_cached(prompt, draft_w: DFlashWeights, cfg: DFlashConfig,
+                           target, *, max_new_tokens: int,
+                           block_size: Optional[int] = None, rope_fn=None,
+                           temperature: float = 0.0, top_k: int = 0, top_p: float = 0.0,
+                           rng=None, eos_id: Optional[int] = None) -> List[int]:
+    """Efficient DFlash generation: cached draft (#1) + stateful target (#3) +
+    optional sampling (#2).
+
+    ``target`` is a stateful object exposing ``reset()``, ``step(tokens) ->
+    (logits, hidden)`` (causal, KV-cached, appends to its cache), and
+    ``rollback(n)`` (discard the last ``n`` cached tokens) — e.g.
+    :class:`tessera.dflash_reference.ReferenceDecoderLM`. The draft accumulates
+    its own per-layer context cache so it attends to the full history.
+
+    With ``temperature == 0`` (greedy) the output is identical to greedy
+    autoregressive decode from ``target``; with sampling it uses the
+    distribution-preserving rejection rule (:func:`dflash_speculative_verify`),
+    so the output distribution matches plain target sampling. Returns the prompt
+    followed by the generated tokens.
+    """
+    bs = int(block_size if block_size is not None else cfg.block_size)
+    greedy = temperature <= 0.0
+    if rng is None:
+        rng = np.random.default_rng()
+    sample = make_sampler(temperature, top_k, top_p, rng)
+
+    target.reset()
+    tokens = list(np.asarray(prompt, dtype=np.int64).reshape(-1).tolist())
+
+    logits, hidden = target.step(np.asarray(tokens, dtype=np.int64)[None, :])
+    first = int(np.asarray(sample(logits[:, -1:])).reshape(-1)[0])
+    tokens.append(first)
+    target_hidden = np.asarray(hidden)
+    if eos_id is not None and first == eos_id:
+        return tokens
+    n = 1
+    draft_cache = DraftKVCache(cfg.num_hidden_layers)
+
+    while n < max_new_tokens:
+        b = min(bs, max_new_tokens - n + 1)
+        if b <= 1:
+            break
+        prev = int(tokens[-1])
+        block = F.mask_token_block(np.asarray([prev]), b, cfg.mask_token_id)
+        draft_logits = dflash_draft_forward_cached(block, target_hidden, draft_w, cfg,
+                                                   draft_cache, logits_start=1, rope_fn=rope_fn)
+        draft_tokens = np.asarray(sample(draft_logits)).reshape(-1)               # (b-1,)
+
+        verify_input = np.concatenate([[prev], draft_tokens])[None, :]            # (1, b)
+        v_logits, v_hidden = target.step(verify_input)
+        if greedy:
+            target_tokens = np.asarray(np.argmax(v_logits, axis=-1)).reshape(-1)
+            result = dflash_linear_verify(draft_tokens, target_tokens)
+        else:
+            dprob = sampler_probs(draft_logits, temperature, top_k, top_p)[0]     # (b-1, V)
+            tprob = sampler_probs(v_logits, temperature, top_k, top_p)[0]         # (b, V)
+            result = dflash_speculative_verify(draft_tokens, dprob, tprob, rng)
+
+        # Discard the over-speculated tail from the target cache: step appended b
+        # tokens; keep prev (1) + accepted, drop the rest.
+        trim = b - 1 - result.accepted
+        if trim > 0:
+            target.rollback(trim)
+
+        new_tokens = result.new_tokens[: max_new_tokens - n]
+        eos_cut = (next((i for i, t in enumerate(new_tokens) if t == eos_id), None)
+                   if eos_id is not None else None)
+        if eos_cut is not None:
+            new_tokens = new_tokens[: eos_cut + 1]
+        tokens.extend(new_tokens)
+        n += len(new_tokens)
+        if eos_cut is not None:
+            break
+        # Next draft context = this step's target hidden for the accepted prefix
+        # ([prev, accepted drafts]) = v_hidden[:, :accepted+1].
+        target_hidden = np.asarray(v_hidden)[:, : result.accepted + 1, :]
+
+    return tokens
+
+
 __all__ = [
     "DFlashConfig",
     "DFlashLayerWeights",
@@ -628,4 +708,5 @@ __all__ = [
     "dflash_speculative_verify",
     "dflash_step",
     "dflash_generate",
+    "dflash_generate_cached",
 ]

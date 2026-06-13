@@ -27,6 +27,7 @@ from typing import Any, Callable, List, Optional, Tuple
 import numpy as np
 
 from .nn import functional as F
+from .nn import Module, ModuleList, Parameter
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +140,14 @@ def target_feature_projection(target_hidden, fc, hidden_norm, *, eps: float = 1e
 
 def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
                          layer_idx: int, *, rope_fn=None,
-                         cache_keys=None, cache_values=None, cache_offset: int = 0):
+                         cache_keys=None, cache_values=None, cache_offset: int = 0,
+                         attention_fn=None):
     """One DFlash decoder layer: pre-norm attention + pre-norm SwiGLU, residual.
 
     Mirrors ``DFlashDecoderLayer.__call__``: ``input_layernorm`` is applied to
     the query/proposal source ``x`` only (the injected ``x_ctx`` is projected
-    raw inside attention).
+    raw inside attention). ``attention_fn`` (e.g.
+    :func:`apple_gpu_attention_fn`) routes the attention core onto a backend.
     """
     sliding = cfg.sliding_window if cfg.layer_types[layer_idx] == "sliding_attention" else None
     x_normed = F.rms_norm(x, lw.input_layernorm, eps=cfg.rms_norm_eps)
@@ -155,7 +158,7 @@ def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
         num_heads=cfg.num_attention_heads, num_kv_heads=cfg.num_key_value_heads,
         head_dim=cfg.head_dim, rope_fn=rope_fn, cache_offset=cache_offset,
         cache_keys=cache_keys, cache_values=cache_values,
-        sliding_window=sliding, eps=cfg.rms_norm_eps)
+        sliding_window=sliding, eps=cfg.rms_norm_eps, attention_fn=attention_fn)
     h = np.asarray(x) + np.asarray(attn)
     h_normed = F.rms_norm(h, lw.post_attention_layernorm, eps=cfg.rms_norm_eps)
     mlp = F.swiglu(h_normed, lw.mlp_gate, lw.mlp_up, lw.mlp_down)
@@ -164,7 +167,8 @@ def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
 
 def dflash_draft_forward(block_tokens, target_hidden, w: DFlashWeights,
                          cfg: DFlashConfig, *, logits_start: int = 0,
-                         rope_fn=None, caches: Optional[List[Tuple[Any, Any]]] = None):
+                         rope_fn=None, caches: Optional[List[Tuple[Any, Any]]] = None,
+                         attention_fn=None):
     """Run the draft over a token block in a single parallel forward → logits.
 
     ``block_tokens`` ``(B, L)`` is ``[prev_token, MASK, ...]``; ``target_hidden``
@@ -184,7 +188,8 @@ def dflash_draft_forward(block_tokens, target_hidden, w: DFlashWeights,
             ck, cv = caches[i]
         cache_offset = 0 if ck is None else np.asarray(ck).shape[1]
         h = dflash_decoder_layer(h, x_ctx, lw, cfg, i, rope_fn=rope_fn,
-                                 cache_keys=ck, cache_values=cv, cache_offset=cache_offset)
+                                 cache_keys=ck, cache_values=cv, cache_offset=cache_offset,
+                                 attention_fn=attention_fn)
     if logits_start:
         h = np.asarray(h)[:, logits_start:]
     h = F.rms_norm(h, w.final_norm, eps=cfg.rms_norm_eps)
@@ -220,6 +225,333 @@ def dflash_linear_verify(draft_tokens, target_tokens) -> DFlashVerification:
     accepted = next((i for i in range(len(d)) if d[i] != t[i]), len(d))
     new_tokens = d[:accepted] + [t[accepted]] if accepted < len(t) else d[:accepted]
     return DFlashVerification(accepted=accepted, new_tokens=new_tokens)
+
+
+def dflash_speculative_verify(draft_tokens, draft_probs, target_probs,
+                              rng) -> DFlashVerification:
+    """Distribution-preserving speculative-sampling acceptance (Leviathan rule).
+
+    Generalizes :func:`dflash_linear_verify` to non-greedy sampling: draft token
+    ``d_i`` is accepted with probability ``min(1, p_target/p_draft)``; on the
+    first rejection a corrected token is drawn from the residual
+    ``normalize(relu(p_target - p_draft))``; if the whole block is accepted a
+    bonus token is drawn from the target's distribution at the next position.
+    The marginal of every emitted token equals the target's distribution — the
+    output is distributionally identical to plain target sampling.
+
+    ``draft_probs`` is ``(b-1, V)`` (one row per drafted position), ``target_probs``
+    is ``(b, V)`` (one extra row for the bonus). ``rng`` is a numpy Generator.
+    With one-hot (temperature-0) distributions this reduces to exact-match.
+    """
+    d = np.asarray(draft_tokens).reshape(-1)
+    dp = np.asarray(draft_probs, dtype=np.float64)
+    tp = np.asarray(target_probs, dtype=np.float64)
+    V = tp.shape[1]
+    new: List[int] = []
+    accepted = 0
+    for i in range(len(d)):
+        pd = dp[i, d[i]]
+        pt = tp[i, d[i]]
+        if pd > 0.0 and rng.random() <= min(1.0, pt / pd):
+            new.append(int(d[i]))
+            accepted += 1
+        else:
+            resid = np.maximum(tp[i] - dp[i], 0.0)
+            s = resid.sum()
+            tok = int(rng.choice(V, p=resid / s)) if s > 0 else int(np.argmax(tp[i]))
+            new.append(tok)
+            return DFlashVerification(accepted=accepted, new_tokens=new)
+    # whole block accepted → bonus from the extra target row.
+    bonus = int(rng.choice(V, p=tp[len(d)])) if tp.shape[0] > len(d) else int(np.argmax(tp[-1]))
+    new.append(bonus)
+    return DFlashVerification(accepted=accepted, new_tokens=new)
+
+
+# ---------------------------------------------------------------------------
+# Samplers
+# ---------------------------------------------------------------------------
+
+def _softmax_lastaxis(x) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    x = x - x.max(axis=-1, keepdims=True)
+    e = np.exp(x)
+    return e / e.sum(axis=-1, keepdims=True)
+
+
+def make_sampler(temperature: float = 0.0, top_k: int = 0, top_p: float = 0.0,
+                 rng=None) -> Callable[[np.ndarray], np.ndarray]:
+    """Build a token sampler ``sampler(logits) -> token_ids``.
+
+    ``temperature == 0`` is greedy ``argmax``. Otherwise logits are scaled by
+    ``1/temperature``, optionally restricted to the ``top_k`` highest and/or the
+    ``top_p`` nucleus, then sampled. ``rng`` (a numpy Generator) makes sampling
+    reproducible; if ``None`` a fresh default generator is used per call.
+    """
+    def sampler(logits: np.ndarray) -> np.ndarray:
+        lg = np.asarray(logits, dtype=np.float64)
+        if temperature <= 0.0:
+            return np.argmax(lg, axis=-1)
+        flat = (lg / float(temperature)).reshape(-1, lg.shape[-1])
+        V = flat.shape[-1]
+        gen = rng if rng is not None else np.random.default_rng()
+        out = np.empty(flat.shape[0], dtype=np.int64)
+        for r in range(flat.shape[0]):
+            row = flat[r].copy()
+            if top_k and 0 < top_k < V:
+                kth = np.partition(row, -top_k)[-top_k]
+                row = np.where(row < kth, -np.inf, row)
+            p = _softmax_lastaxis(row)
+            if top_p and 0.0 < top_p < 1.0:
+                order = np.argsort(-p)
+                csum = np.cumsum(p[order])
+                cut = int(np.searchsorted(csum, top_p)) + 1
+                drop = order[cut:]
+                p[drop] = 0.0
+                p = p / p.sum()
+            out[r] = gen.choice(V, p=p)
+        return out.reshape(lg.shape[:-1])
+
+    return sampler
+
+
+def sampler_probs(logits, temperature: float = 1.0, top_k: int = 0,
+                  top_p: float = 0.0) -> np.ndarray:
+    """Return the (renormalized) sampling distribution for ``logits`` under the
+    same temperature/top-k/top-p truncation a :func:`make_sampler` would apply —
+    used by :func:`dflash_speculative_verify` to score draft vs target."""
+    lg = np.asarray(logits, dtype=np.float64) / max(float(temperature), 1e-8)
+    flat = lg.reshape(-1, lg.shape[-1])
+    V = flat.shape[-1]
+    out = np.empty_like(flat)
+    for r in range(flat.shape[0]):
+        row = flat[r].copy()
+        if top_k and 0 < top_k < V:
+            kth = np.partition(row, -top_k)[-top_k]
+            row = np.where(row < kth, -np.inf, row)
+        p = _softmax_lastaxis(row)
+        if top_p and 0.0 < top_p < 1.0:
+            order = np.argsort(-p)
+            csum = np.cumsum(p[order])
+            cut = int(np.searchsorted(csum, top_p)) + 1
+            p[order[cut:]] = 0.0
+            p = p / p.sum()
+        out[r] = p
+    return out.reshape(lg.shape)
+
+
+# ---------------------------------------------------------------------------
+# Training loss (position-weighted block cross-entropy)
+# ---------------------------------------------------------------------------
+
+def dflash_position_weights(block_len: int, gamma: Optional[float] = None) -> np.ndarray:
+    """Per-position loss weights ``wₖ = exp(-k/γ)`` (normalized), emphasizing the
+    early positions of the drafted block (DFlash ``model_mlx`` loss decay,
+    ``wₖ = exp(-(k-1)/γ)`` in 1-indexed form). ``γ`` defaults to ``block_len``."""
+    g = float(gamma if gamma is not None else block_len)
+    w = np.exp(-np.arange(block_len, dtype=np.float64) / max(g, 1e-8))
+    return w / w.sum()
+
+
+def dflash_block_loss(logits, targets, *, gamma: Optional[float] = None,
+                      reduction: str = "mean"):
+    """Position-weighted cross-entropy for training a DFlash draft block.
+
+    ``logits`` ``(B, L, V)``, ``targets`` ``(B, L)`` int. Each block position is
+    weighted by :func:`dflash_position_weights`. Returns a scalar (``mean``/
+    ``sum`` over the batch) or per-example ``(B,)`` when ``reduction == "none"``.
+    """
+    logits = np.asarray(logits, dtype=np.float64)
+    targets = np.asarray(targets, dtype=np.int64)
+    B, L, V = logits.shape
+    w = dflash_position_weights(L, gamma)
+    logp = logits - (logits.max(-1, keepdims=True)
+                     + np.log(np.exp(logits - logits.max(-1, keepdims=True)).sum(-1, keepdims=True)))
+    ce = -np.take_along_axis(logp, targets[..., None], axis=-1)[..., 0]  # (B, L)
+    wce = (ce * w[None, :]).sum(-1)                                       # (B,)
+    if reduction == "mean":
+        return float(wce.mean())
+    if reduction == "sum":
+        return float(wce.sum())
+    if reduction == "none":
+        return wce
+    raise ValueError(f"reduction must be mean/sum/none; got {reduction!r}")
+
+
+def dflash_block_loss_grad(logits, targets, *, gamma: Optional[float] = None):
+    """``dLoss/dlogits`` for the mean-reduced :func:`dflash_block_loss` — the
+    explicit gradient for draft training (composes with any optimizer in
+    ``tessera.optim``)."""
+    logits = np.asarray(logits, dtype=np.float64)
+    targets = np.asarray(targets, dtype=np.int64)
+    B, L, V = logits.shape
+    w = dflash_position_weights(L, gamma)
+    p = _softmax_lastaxis(logits)
+    onehot = np.zeros_like(p)
+    np.put_along_axis(onehot, targets[..., None], 1.0, axis=-1)
+    return (p - onehot) * w[None, :, None] / float(B)
+
+
+# ---------------------------------------------------------------------------
+# Draft KV cache (efficient cached drafting)
+# ---------------------------------------------------------------------------
+
+class DraftKVCache:
+    """Per-layer accumulated context KV for the DFlash draft.
+
+    Each drafting step appends this step's projected+roped context KV (the
+    injected target features) per layer; the draft attends to the full
+    accumulation plus the current block's proposal. The proposal KV is never
+    cached, and the context is always already-accepted, so no rollback is
+    needed (cf. ``model_mlx`` ``make_cache`` + ``cache.update_and_fetch``).
+    """
+
+    def __init__(self, num_layers: int):
+        self.keys: List[Optional[np.ndarray]] = [None] * num_layers
+        self.values: List[Optional[np.ndarray]] = [None] * num_layers
+        self.offset = 0
+
+    def append(self, i: int, k, v) -> None:
+        k = np.asarray(k)
+        v = np.asarray(v)
+        self.keys[i] = k if self.keys[i] is None else np.concatenate([self.keys[i], k], axis=1)
+        self.values[i] = v if self.values[i] is None else np.concatenate([self.values[i], v], axis=1)
+
+    def advance(self, s: int) -> None:
+        self.offset += int(s)
+
+
+class RotatingDraftKVCache(DraftKVCache):
+    """A :class:`DraftKVCache` bounded to the last ``max_size`` context tokens —
+    the draft analogue of MLX's ``RotatingKVCache`` for sliding-attention layers.
+    Older context (outside the window) is dropped on append. ``offset`` stays
+    absolute (cached K are roped at their absolute positions), so the kept window
+    keeps correct relative positions."""
+
+    def __init__(self, num_layers: int, max_size: int):
+        super().__init__(num_layers)
+        self.max_size = int(max_size)
+
+    def append(self, i: int, k, v) -> None:
+        super().append(i, k, v)
+        ki, vi = self.keys[i], self.values[i]
+        if ki is not None and vi is not None and ki.shape[1] > self.max_size:
+            self.keys[i] = ki[:, -self.max_size:]
+            self.values[i] = vi[:, -self.max_size:]
+
+
+# ---------------------------------------------------------------------------
+# Stateful nn.Module wrapper (#6)
+# ---------------------------------------------------------------------------
+
+_LAYER_FIELDS = ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm",
+                 "input_layernorm", "post_attention_layernorm",
+                 "mlp_gate", "mlp_up", "mlp_down")
+
+
+class _DFlashLayerModule(Module):
+    def __init__(self, lw: DFlashLayerWeights):
+        super().__init__()
+        for f in _LAYER_FIELDS:
+            setattr(self, f, Parameter(np.asarray(getattr(lw, f))))
+
+    def to_weights(self) -> DFlashLayerWeights:
+        return DFlashLayerWeights(**{f: F._asarray(getattr(self, f)) for f in _LAYER_FIELDS})
+
+
+class DFlashDraft(Module):
+    """Stateful ``nn.Module`` wrapper over :class:`DFlashWeights`.
+
+    Holds every draft tensor as a :class:`tessera.nn.Parameter` (so the draft
+    participates in ``parameters()`` / ``state_dict`` / ``.to(dtype)``), and
+    forwards through the functional draft. ``cache`` (a :class:`DraftKVCache`)
+    selects the cached path. Build with ``DFlashDraft(cfg, weights)`` or
+    ``DFlashDraft.from_weights(weights, cfg)``; recover plain weights with
+    ``to_weights()``.
+    """
+
+    def __init__(self, cfg: DFlashConfig, w: DFlashWeights):
+        super().__init__()
+        self.cfg = cfg
+        self.embed_tokens = Parameter(np.asarray(w.embed_tokens))
+        self.fc = Parameter(np.asarray(w.fc))
+        self.hidden_norm = Parameter(np.asarray(w.hidden_norm))
+        self.final_norm = Parameter(np.asarray(w.final_norm))
+        self.lm_head = None if w.lm_head is None else Parameter(np.asarray(w.lm_head))
+        self.layers = ModuleList([_DFlashLayerModule(lw) for lw in w.layers])
+        self.rope = make_rope(cfg.head_dim, cfg.rope_theta)
+
+    @classmethod
+    def from_weights(cls, w: DFlashWeights, cfg: DFlashConfig) -> "DFlashDraft":
+        return cls(cfg, w)
+
+    def to_weights(self) -> DFlashWeights:
+        return DFlashWeights(
+            embed_tokens=F._asarray(self.embed_tokens), fc=F._asarray(self.fc),
+            hidden_norm=F._asarray(self.hidden_norm),
+            layers=[lm.to_weights() for lm in self.layers],
+            final_norm=F._asarray(self.final_norm),
+            lm_head=None if self.lm_head is None else F._asarray(self.lm_head))
+
+    def forward(self, block_tokens, target_hidden, *, logits_start: int = 1,
+                cache: Optional[DraftKVCache] = None, attention_fn=None):
+        w = self.to_weights()
+        if cache is None:
+            return dflash_draft_forward(block_tokens, target_hidden, w, self.cfg,
+                                        logits_start=logits_start, rope_fn=self.rope,
+                                        attention_fn=attention_fn)
+        return dflash_draft_forward_cached(block_tokens, target_hidden, w, self.cfg, cache,
+                                           logits_start=logits_start, rope_fn=self.rope,
+                                           attention_fn=attention_fn)
+
+
+def dflash_decoder_layer_cached(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
+                                layer_idx: int, cache: DraftKVCache, *, rope_fn=None,
+                                attention_fn=None):
+    """Cached DFlash decoder layer — attends to ``cache`` ++ this step's context
+    and appends this step's projected context KV to ``cache``. Equivalent to
+    :func:`dflash_decoder_layer` with the prior context supplied via the cache."""
+    sliding = cfg.sliding_window if cfg.layer_types[layer_idx] == "sliding_attention" else None
+    x_normed = F.rms_norm(x, lw.input_layernorm, eps=cfg.rms_norm_eps)
+    attn, ck_new, cv_new = F.block_diffusion_attention(
+        x_normed, x_ctx,
+        q_proj=lw.q_proj, k_proj=lw.k_proj, v_proj=lw.v_proj, o_proj=lw.o_proj,
+        q_norm=lw.q_norm, k_norm=lw.k_norm,
+        num_heads=cfg.num_attention_heads, num_kv_heads=cfg.num_key_value_heads,
+        head_dim=cfg.head_dim, rope_fn=rope_fn, cache_offset=cache.offset,
+        cache_keys=cache.keys[layer_idx], cache_values=cache.values[layer_idx],
+        sliding_window=sliding, eps=cfg.rms_norm_eps, return_ctx_kv=True,
+        attention_fn=attention_fn)
+    cache.append(layer_idx, ck_new, cv_new)
+    h = np.asarray(x) + np.asarray(attn)
+    h_normed = F.rms_norm(h, lw.post_attention_layernorm, eps=cfg.rms_norm_eps)
+    mlp = F.swiglu(h_normed, lw.mlp_gate, lw.mlp_up, lw.mlp_down)
+    return np.asarray(h) + np.asarray(mlp)
+
+
+def dflash_draft_forward_cached(block_tokens, target_hidden, w: DFlashWeights,
+                                cfg: DFlashConfig, cache: DraftKVCache, *,
+                                logits_start: int = 0, rope_fn=None, attention_fn=None):
+    """Cached draft forward — threads ``cache`` through every layer so the draft
+    attends to the full accumulated context (not just this step's). Output is
+    identical to :func:`dflash_draft_forward` fed the same accumulated context;
+    the cache is advanced by this step's context length."""
+    tokens = np.asarray(block_tokens, dtype=np.int64)
+    h = w.embed_tokens[tokens] * cfg.embed_scale
+    x_ctx = target_feature_projection(target_hidden, w.fc, w.hidden_norm, eps=cfg.rms_norm_eps)
+    S = np.asarray(x_ctx).shape[1]
+    for i, lw in enumerate(w.layers):
+        h = dflash_decoder_layer_cached(h, x_ctx, lw, cfg, i, cache, rope_fn=rope_fn,
+                                        attention_fn=attention_fn)
+    cache.advance(S)
+    if logits_start:
+        h = np.asarray(h)[:, logits_start:]
+    h = F.rms_norm(h, w.final_norm, eps=cfg.rms_norm_eps)
+    lm_head = w.embed_tokens.T if w.lm_head is None else w.lm_head
+    logits = F.linear_general(h, lm_head)
+    if cfg.final_logit_softcapping is not None:
+        cap = cfg.final_logit_softcapping
+        logits = np.tanh(np.asarray(logits) / cap) * cap
+    return np.asarray(logits)
 
 
 def dflash_step(prev_token: int, target_hidden, w: DFlashWeights, cfg: DFlashConfig,
@@ -419,19 +751,111 @@ def apple_gpu_attention_fn(q, k, v, *, scale=None, causal=False, attn_bias=None)
         "tessera.flash_attn", operands, {"scale": scale, "causal": causal}, np)
 
 
+def dflash_generate_cached(prompt, draft_w: DFlashWeights, cfg: DFlashConfig,
+                           target, *, max_new_tokens: int,
+                           block_size: Optional[int] = None, rope_fn=None,
+                           temperature: float = 0.0, top_k: int = 0, top_p: float = 0.0,
+                           rng=None, eos_id: Optional[int] = None) -> List[int]:
+    """Efficient DFlash generation: cached draft (#1) + stateful target (#3) +
+    optional sampling (#2).
+
+    ``target`` is a stateful object exposing ``reset()``, ``step(tokens) ->
+    (logits, hidden)`` (causal, KV-cached, appends to its cache), and
+    ``rollback(n)`` (discard the last ``n`` cached tokens) — e.g.
+    :class:`tessera.dflash_reference.ReferenceDecoderLM`. The draft accumulates
+    its own per-layer context cache so it attends to the full history.
+
+    With ``temperature == 0`` (greedy) the output is identical to greedy
+    autoregressive decode from ``target``; with sampling it uses the
+    distribution-preserving rejection rule (:func:`dflash_speculative_verify`),
+    so the output distribution matches plain target sampling. Returns the prompt
+    followed by the generated tokens.
+    """
+    bs = int(block_size if block_size is not None else cfg.block_size)
+    greedy = temperature <= 0.0
+    if rng is None:
+        rng = np.random.default_rng()
+    sample = make_sampler(temperature, top_k, top_p, rng)
+
+    target.reset()
+    tokens = list(np.asarray(prompt, dtype=np.int64).reshape(-1).tolist())
+
+    logits, hidden = target.step(np.asarray(tokens, dtype=np.int64)[None, :])
+    first = int(np.asarray(sample(logits[:, -1:])).reshape(-1)[0])
+    tokens.append(first)
+    target_hidden = np.asarray(hidden)
+    if eos_id is not None and first == eos_id:
+        return tokens
+    n = 1
+    draft_cache = DraftKVCache(cfg.num_hidden_layers)
+
+    while n < max_new_tokens:
+        b = min(bs, max_new_tokens - n + 1)
+        if b <= 1:
+            break
+        prev = int(tokens[-1])
+        block = F.mask_token_block(np.asarray([prev]), b, cfg.mask_token_id)
+        draft_logits = dflash_draft_forward_cached(block, target_hidden, draft_w, cfg,
+                                                   draft_cache, logits_start=1, rope_fn=rope_fn)
+        draft_tokens = np.asarray(sample(draft_logits)).reshape(-1)               # (b-1,)
+
+        verify_input = np.concatenate([[prev], draft_tokens])[None, :]            # (1, b)
+        v_logits, v_hidden = target.step(verify_input)
+        if greedy:
+            target_tokens = np.asarray(np.argmax(v_logits, axis=-1)).reshape(-1)
+            result = dflash_linear_verify(draft_tokens, target_tokens)
+        else:
+            dprob = sampler_probs(draft_logits, temperature, top_k, top_p)[0]     # (b-1, V)
+            tprob = sampler_probs(v_logits, temperature, top_k, top_p)[0]         # (b, V)
+            result = dflash_speculative_verify(draft_tokens, dprob, tprob, rng)
+
+        # Discard the over-speculated tail from the target cache: step appended b
+        # tokens; keep prev (1) + accepted, drop the rest.
+        trim = b - 1 - result.accepted
+        if trim > 0:
+            target.rollback(trim)
+
+        new_tokens = result.new_tokens[: max_new_tokens - n]
+        eos_cut = (next((i for i, t in enumerate(new_tokens) if t == eos_id), None)
+                   if eos_id is not None else None)
+        if eos_cut is not None:
+            new_tokens = new_tokens[: eos_cut + 1]
+        tokens.extend(new_tokens)
+        n += len(new_tokens)
+        if eos_cut is not None:
+            break
+        # Next draft context = this step's target hidden for the accepted prefix
+        # ([prev, accepted drafts]) = v_hidden[:, :accepted+1].
+        target_hidden = np.asarray(v_hidden)[:, : result.accepted + 1, :]
+
+    return tokens
+
+
 __all__ = [
     "DFlashConfig",
     "DFlashLayerWeights",
     "DFlashWeights",
     "DFlashVerification",
     "HiddenStateTap",
+    "DraftKVCache",
+    "RotatingDraftKVCache",
+    "DFlashDraft",
     "make_rope",
+    "make_sampler",
+    "sampler_probs",
+    "dflash_position_weights",
+    "dflash_block_loss",
+    "dflash_block_loss_grad",
     "target_feature_projection",
     "capture_target_hidden",
     "apple_gpu_attention_fn",
     "dflash_decoder_layer",
+    "dflash_decoder_layer_cached",
     "dflash_draft_forward",
+    "dflash_draft_forward_cached",
     "dflash_linear_verify",
+    "dflash_speculative_verify",
     "dflash_step",
     "dflash_generate",
+    "dflash_generate_cached",
 ]

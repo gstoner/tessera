@@ -111,6 +111,34 @@ def test_block_diffusion_attention_core_on_metal(sliding):
     assert np.allclose(np.asarray(gpu), np.asarray(ref), rtol=1e-3, atol=1e-3)
 
 
+def test_whole_draft_attention_on_metal():
+    """#5 — the whole draft forward runs its attention on Metal via the
+    attention_fn seam threaded through every decoder layer, matching numpy."""
+    from tessera import dflash as Df
+
+    rng = np.random.default_rng(13)
+    cfg = Df.DFlashConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4,
+                          num_key_value_heads=2, head_dim=16, intermediate_size=64,
+                          vocab_size=41, block_size=16, target_layer_ids=(0, 1, 2))
+    Dm, Hq, Hkv, Dh, I, V, nL = 32, 4, 2, 16, 64, 41, 3
+    s = lambda *sh: rng.standard_normal(sh).astype(np.float32) * 0.1
+    layers = [Df.DFlashLayerWeights(
+        q_proj=s(Dm, Hq * Dh), k_proj=s(Dm, Hkv * Dh), v_proj=s(Dm, Hkv * Dh),
+        o_proj=s(Hq * Dh, Dm), q_norm=s(Dh) + 1.0, k_norm=s(Dh) + 1.0,
+        input_layernorm=s(Dm) + 1.0, post_attention_layernorm=s(Dm) + 1.0,
+        mlp_gate=s(Dm, I), mlp_up=s(Dm, I), mlp_down=s(I, Dm)) for _ in range(2)]
+    w = Df.DFlashWeights(embed_tokens=s(V, Dm), fc=s(nL * Dm, Dm),
+                         hidden_norm=s(Dm) + 1.0, layers=layers,
+                         final_norm=s(Dm) + 1.0, lm_head=s(Dm, V))
+    block = rng.integers(0, V, (1, cfg.block_size))
+    th = rng.standard_normal((1, 8, nL * Dm)).astype(np.float32)
+    rope = Df.make_rope(cfg.head_dim)
+    cpu = Df.dflash_draft_forward(block, th, w, cfg, logits_start=1, rope_fn=rope)
+    gpu = Df.dflash_draft_forward(block, th, w, cfg, logits_start=1, rope_fn=rope,
+                                  attention_fn=Df.apple_gpu_attention_fn)
+    assert np.allclose(np.asarray(gpu), np.asarray(cpu), rtol=1e-3, atol=1e-3)
+
+
 def test_full_dflash_layer_on_metal():
     """A whole DFlash decoder layer (attention core on Metal) matches numpy."""
     from tessera import dflash as Df

@@ -557,6 +557,7 @@ def block_diffusion_attention(
     scale: float | None = None,
     eps: float = 1e-6,
     attention_fn=None,
+    return_ctx_kv: bool = False,
 ):
     """One DFlash block-diffusion attention layer (numpy reference).
 
@@ -612,6 +613,13 @@ def block_diffusion_attention(
         ctx_k = _asarray(rope_fn(ctx_k, cache_offset))
         prop_k = _asarray(rope_fn(prop_k, cache_offset + S))
 
+    # This step's (roped) context KV, before prepending the prior cache. These
+    # are what a stateful loop appends to the per-layer cache for the next step
+    # (re-projecting accumulated x_ctx would give the same result, but caching
+    # the projected+roped KV is what makes DFlash drafting cheap).
+    ctx_k_this = ctx_k
+    ctx_v_this = ctx_v
+
     # Prepend prior cached context KV (accumulated across drafting steps).
     if cache_keys is not None and cache_values is not None:
         ck = _asarray(cache_keys).transpose(0, 2, 1, 3)  # (B, Hkv, Sc, Dh)
@@ -625,7 +633,11 @@ def block_diffusion_attention(
     values = np.concatenate([ctx_v, prop_v], axis=2)
     Sk = keys.shape[2]
 
-    # GQA: repeat KV heads up to query heads.
+    # GQA: repeat KV heads up to query heads. This is numerically exact; the
+    # native non-repeated path (the runtime `flash_attn_gqa` kernel) reads the
+    # KV group directly to save bandwidth, but it does not support DFlash's
+    # concatenated-context+proposal KV with an additive bias, so the reference
+    # (and the rank-3 flash_attn lane) materialize the repeat.
     if Hkv != Hq:
         rep = Hq // Hkv
         keys = np.repeat(keys, rep, axis=1)
@@ -652,7 +664,11 @@ def block_diffusion_attention(
     attn_core = attention_fn if attention_fn is not None else ops.flash_attn
     out = attn_core(q3, k3, v3, scale=scale, causal=False, attn_bias=bias)
     out = _asarray(out).reshape(B, Hq, L, Dh).transpose(0, 2, 1, 3).reshape(B, L, Hq * Dh)
-    return linear_general(out, o_proj)
+    out = linear_general(out, o_proj)
+    if return_ctx_kv:
+        # (B, Hkv, S, Dh) -> (B, S, Hkv, Dh) to match the cache_keys/values layout.
+        return out, ctx_k_this.transpose(0, 2, 1, 3), ctx_v_this.transpose(0, 2, 1, 3)
+    return out
 
 
 # Alias for torch-style `nn.flash_attention` callsites (same signature as ops.flash_attn).

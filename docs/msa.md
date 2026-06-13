@@ -153,6 +153,7 @@ partial-output/logsumexp buffers, combine) is carried into Phase 3 lowering.
   {reference, host_select_gpu_attention, native_sparse}`.
 - **Phase 4 — Model integration:** `NativeSparseAttention(mode="msa")` or
   equivalent; long-context config wiring; GQA/full → MSA conversion helpers.
-- **Phase 5 — Example + benchmark:** `examples/attention/minimax_sparse_attention.py`
-  (dense vs MSA + selected-block stats / FLOP reduction); long-context synthetic
-  benchmark separating *theoretical compute* from *runtime speedup*.
+- **Phase 5 — Example + benchmark:** a planned MSA example under examples/attention/
+  (minimax_sparse_attention.py — dense vs MSA + selected-block stats / FLOP
+  reduction); long-context synthetic benchmark separating *theoretical compute*
+  from *runtime speedup*.

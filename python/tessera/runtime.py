@@ -2545,10 +2545,21 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                 f"apple_gpu runtime path does not support op {op_name!r} "
                 f"(envelope: {sorted(_APPLE_GPU_RUNTIME_OPS)})"
             )
+        # Resolve tensor-valued kwargs: the AST lowering encodes a tensor passed
+        # by keyword (e.g. flash_attn's ``attn_bias``) as the operand-name string
+        # rather than a graph operand. When a kwarg's value is a string naming a
+        # bound value, bind it to the array so the handler sees the tensor (not
+        # the name). Scalar/enum kwargs (axis, eps, "sum", ...) never match a
+        # value name and pass through untouched.
+        resolved_kwargs = {
+            kk: (_as_numpy(values[vv.lstrip("%")])
+                 if isinstance(vv, str) and vv.lstrip("%") in values else vv)
+            for kk, vv in kwargs.items()
+        }
         values[str(result)] = handler(
             op_name,
             [_as_numpy(values[name]) for name in operand_names],
-            kwargs,
+            resolved_kwargs,
             np,
         )
 
@@ -6858,6 +6869,22 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
     k = np.asarray(operands[1])
     v = np.asarray(operands[2])
 
+    # attn_bias substrate — optional additive (B, Sq, Sk) score bias arriving
+    # either as a 4th operand (Graph IR form) or an ``attn_bias`` kwarg (eager
+    # form). Normalised into ``kwargs`` so every reference fallback applies it.
+    bias = None
+    if len(operands) >= 4 and operands[3] is not None:
+        bias = np.asarray(operands[3])
+    elif kwargs.get("attn_bias", None) is not None:
+        bias = np.asarray(kwargs["attn_bias"])
+    if bias is not None and kwargs.get("attn_bias", None) is None:
+        kwargs = {**kwargs, "attn_bias": bias}
+
+    bias_in_envelope = bias is None or (
+        bias.ndim == 3
+        and bias.shape == (q.shape[0], q.shape[1], k.shape[1])
+        and bias.dtype == q.dtype
+    )
     if not (
         q.ndim == 3 and k.ndim == 3 and v.ndim == 3
         and q.shape[0] == k.shape[0] == v.shape[0]
@@ -6865,6 +6892,7 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
         and q.shape[2] == k.shape[2] == v.shape[2]
         and q.shape[2] <= _apple_fused_score_cap()
         and q.dtype == k.dtype == v.dtype
+        and bias_in_envelope
     ):
         return _runtime_flash_attn(np, q, k, v, kwargs)
 
@@ -6882,12 +6910,21 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
         if not v.flags.c_contiguous:
             v = np.ascontiguousarray(v, dtype=np.float32)
         out = np.zeros((B, Sq, D), dtype=np.float32)
+        fp = ctypes.POINTER(ctypes.c_float)
+        if bias is not None:
+            bias = np.ascontiguousarray(bias, dtype=np.float32)
+            flash_attn_bias = _apple_gpu_flash_attn_bias_f32()
+            flash_attn_bias(
+                q.ctypes.data_as(fp), k.ctypes.data_as(fp), v.ctypes.data_as(fp),
+                bias.ctypes.data_as(fp), out.ctypes.data_as(fp),
+                ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+                ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+            )
+            return out
         flash_attn = _apple_gpu_flash_attn_f32()
         flash_attn(
-            q.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            k.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            v.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            q.ctypes.data_as(fp), k.ctypes.data_as(fp), v.ctypes.data_as(fp),
+            out.ctypes.data_as(fp),
             ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
             ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
         )
@@ -6901,13 +6938,31 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
         if not v.flags.c_contiguous:
             v = np.ascontiguousarray(v, dtype=np.float16)
         out = np.zeros((B, Sq, D), dtype=np.float16)
+        up = ctypes.POINTER(ctypes.c_uint16)
+        if bias is not None:
+            bias16 = np.ascontiguousarray(bias, dtype=np.float16)
+            flash_attn_bias_f16 = _apple_gpu_flash_attn_bias_f16()
+            if flash_attn_bias_f16 is not None:
+                flash_attn_bias_f16(
+                    q.view(np.uint16).ctypes.data_as(up),
+                    k.view(np.uint16).ctypes.data_as(up),
+                    v.view(np.uint16).ctypes.data_as(up),
+                    bias16.view(np.uint16).ctypes.data_as(up),
+                    out.view(np.uint16).ctypes.data_as(up),
+                    ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+                    ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+                )
+                return out
+            return _runtime_flash_attn(
+                np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+            ).astype(np.float16)
         flash_attn_f16 = _apple_gpu_flash_attn_f16()
         if flash_attn_f16 is not None:
             flash_attn_f16(
-                q.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                k.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                v.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                q.view(np.uint16).ctypes.data_as(up),
+                k.view(np.uint16).ctypes.data_as(up),
+                v.view(np.uint16).ctypes.data_as(up),
+                out.view(np.uint16).ctypes.data_as(up),
                 ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
                 ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
             )
@@ -6925,13 +6980,31 @@ def _apple_gpu_dispatch_flash_attn(op_name: str, operands: list[Any],
         if not v.flags.c_contiguous:
             v = np.ascontiguousarray(v, dtype=bf16_dtype)
         out = np.zeros((B, Sq, D), dtype=bf16_dtype)
+        up = ctypes.POINTER(ctypes.c_uint16)
+        if bias is not None:
+            bias_bf = np.ascontiguousarray(bias, dtype=bf16_dtype)
+            flash_attn_bias_bf16 = _apple_gpu_flash_attn_bias_bf16()
+            if flash_attn_bias_bf16 is not None:
+                flash_attn_bias_bf16(
+                    q.view(np.uint16).ctypes.data_as(up),
+                    k.view(np.uint16).ctypes.data_as(up),
+                    v.view(np.uint16).ctypes.data_as(up),
+                    bias_bf.view(np.uint16).ctypes.data_as(up),
+                    out.view(np.uint16).ctypes.data_as(up),
+                    ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
+                    ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
+                )
+                return out
+            return _runtime_flash_attn(
+                np, q.astype(np.float32), k.astype(np.float32), v.astype(np.float32), kwargs
+            ).astype(bf16_dtype)
         flash_attn_bf16 = _apple_gpu_flash_attn_bf16()
         if flash_attn_bf16 is not None:
             flash_attn_bf16(
-                q.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                k.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                v.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
+                q.view(np.uint16).ctypes.data_as(up),
+                k.view(np.uint16).ctypes.data_as(up),
+                v.view(np.uint16).ctypes.data_as(up),
+                out.view(np.uint16).ctypes.data_as(up),
                 ctypes.c_int32(B), ctypes.c_int32(Sq), ctypes.c_int32(Sk),
                 ctypes.c_int32(D), ctypes.c_float(scale), ctypes.c_int32(causal),
             )
@@ -6989,6 +7062,51 @@ def _apple_gpu_flash_attn_bf16() -> Any:
         ctypes.POINTER(ctypes.c_uint16),
         ctypes.POINTER(ctypes.c_uint16),
         ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_bias_f32() -> Any:
+    """attn_bias path — softmax(scale*Q*K^T + bias)*V on MPSGraph.
+    Signature: (Q, K, V, bias, O, B, Sq, Sk, D, scale, causal)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = runtime.tessera_apple_gpu_flash_attn_bias_f32
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [
+        fp, fp, fp, fp, fp,              # Q, K, V, bias, O
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,  # scale, causal
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_bias_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_bias_f16", None)
+    if sym is None:
+        return None
+    up = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [
+        up, up, up, up, up,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_flash_attn_bias_bf16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_flash_attn_bias_bf16", None)
+    if sym is None:
+        return None
+    up = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [
+        up, up, up, up, up,
         ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
         ctypes.c_float, ctypes.c_int32,
     ]
@@ -10438,6 +10556,10 @@ def _runtime_flash_attn(np: Any, q: Any, k: Any, v: Any, kwargs: Mapping[str, An
     scale = kwargs.get("scale", None)
     scale = 1.0 / np.sqrt(q.shape[-1]) if scale is None else float(scale)
     scores = np.matmul(q, np.swapaxes(k, -1, -2)) * scale
+    # attn_bias substrate — additive (B, Sq, Sk) score bias, pre-softmax.
+    attn_bias = kwargs.get("attn_bias", None)
+    if attn_bias is not None:
+        scores = scores + np.asarray(attn_bias)
     if bool(kwargs.get("causal", False)):
         q_len, k_len = scores.shape[-2], scores.shape[-1]
         mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))

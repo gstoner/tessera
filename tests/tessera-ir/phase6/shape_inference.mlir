@@ -64,7 +64,7 @@ func.func @test_flash_attn_shape(
     %v : tensor<2x8x512x64xf32>) -> tensor<2x8x512x64xf32> {
 
   // CHECK: tessera.inferred_shape = [2, 8, 512, 64]
-  %out = "tessera.flash_attn"(%q, %k, %v) {head_dim = 64 : i64}
+  %out = "tessera.flash_attn"(%q, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 64 : i64}
       : (tensor<2x8x512x64xf32>,
          tensor<2x8x512x64xf32>,
          tensor<2x8x512x64xf32>) -> tensor<2x8x512x64xf32>

@@ -22,7 +22,7 @@ func.func @mla_collapses(%x: tensor<8x16xf32>,
   %c = "tessera.latent_kv_compress"(%x, %Wdkv) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %K = "tessera.latent_kv_expand_k"(%c, %Wuk) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
   %V = "tessera.latent_kv_expand_v"(%c, %Wuv) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
-  %O = "tessera.flash_attn"(%Q, %K, %V) {head_dim = 16 : i64, causal = false}
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 16 : i64, causal = false}
       : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>
   return %O : tensor<1x8x16xf32>
 }
@@ -44,7 +44,7 @@ func.func @two_latents_no_fusion(%x1: tensor<8x16xf32>,
   %c2 = "tessera.latent_kv_compress"(%x2, %Wdkv) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %K = "tessera.latent_kv_expand_k"(%c1, %Wuk) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
   %V = "tessera.latent_kv_expand_v"(%c2, %Wuv) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
-  %O = "tessera.flash_attn"(%Q, %K, %V) {head_dim = 16 : i64, causal = false}
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 16 : i64, causal = false}
       : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>
   return %O : tensor<1x8x16xf32>
 }
@@ -63,7 +63,7 @@ func.func @k_with_extra_user(%x: tensor<8x16xf32>,
   %c = "tessera.latent_kv_compress"(%x, %Wdkv) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %K = "tessera.latent_kv_expand_k"(%c, %Wuk) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
   %V = "tessera.latent_kv_expand_v"(%c, %Wuv) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
-  %O = "tessera.flash_attn"(%Q, %K, %V) {head_dim = 16 : i64, causal = false}
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 16 : i64, causal = false}
       : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>
   return %O, %K : tensor<1x8x16xf32>, tensor<1x8x16xf32>
 }
@@ -82,7 +82,7 @@ func.func @mla_propagates_numeric_policy(%x: tensor<8x16xf32>,
   %c = "tessera.latent_kv_compress"(%x, %Wdkv) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %K = "tessera.latent_kv_expand_k"(%c, %Wuk) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
   %V = "tessera.latent_kv_expand_v"(%c, %Wuv) : (tensor<8x32xf32>, tensor<32x16xf32>) -> tensor<1x8x16xf32>
-  %O = "tessera.flash_attn"(%Q, %K, %V)
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}>
       {head_dim = 16 : i64, causal = false,
        numeric_policy = {storage = "bf16", accum = "fp32"}}
       : (tensor<1x8x16xf32>, tensor<1x8x16xf32>, tensor<1x8x16xf32>) -> tensor<1x8x16xf32>

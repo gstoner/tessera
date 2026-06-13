@@ -1227,6 +1227,27 @@ LogicalResult FlashAttnOp::verify() {
                << " (Sprint G-2 NVIDIA kernel inventory)";
     }
   }
+  // attn_bias substrate (DFlash sliding-layer mask / general additive mask).
+  // Additive bias of shape (B, Sq, Sk), broadcastable from (1, Sq, Sk), applied
+  // as softmax(scale * Q*K^T + attn_bias) * V. Sk is checked at lowering time
+  // against the (possibly concatenated) K seqlen; here we pin rank, the Sq axis,
+  // and the broadcastable batch axis.
+  if (Value bias = getAttnBias()) {
+    auto qT = dyn_cast<RankedTensorType>(getQ().getType());
+    auto bT = dyn_cast<RankedTensorType>(bias.getType());
+    if (bT && bT.getRank() != 3)
+      return emitOpError("attn_bias must be rank-3 (B, Sq, Sk)");
+    if (qT && bT && qT.hasStaticShape() && bT.hasStaticShape()) {
+      if (bT.getDimSize(1) != qT.getDimSize(1))
+        return emitOpError("attn_bias dim 1 (Sq=")
+               << bT.getDimSize(1) << ") must match q seqlen ("
+               << qT.getDimSize(1) << ")";
+      if (bT.getDimSize(0) != 1 && bT.getDimSize(0) != qT.getDimSize(0))
+        return emitOpError("attn_bias batch dim (")
+               << bT.getDimSize(0) << ") must be 1 or match q batch ("
+               << qT.getDimSize(0) << ")";
+    }
+  }
   return success();
 }
 

@@ -1,6 +1,6 @@
 # Tessera Audit Master
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-12
 
 This is the root audit document. It consolidates the current state, finished
 work, and remaining work across the compiler, runtime/backend, platform
@@ -155,6 +155,20 @@ Finished:
 - Attention/MLA/KV-cache planning has shifted from API invention to backend proof.
 - CorrDiff analysis clarified what belongs in compiler primitives vs library/runtime code.
 - Sharding audit classified long-tail buckets.
+- **DFlash block-diffusion speculative-decoding draft landed (2026-06-12, PR #67).**
+  P0 added an additive `attn_bias` operand to `FlashAttnOp` end-to-end — Graph IR
+  ODS + verifier, Tile→Apple lowering, MPSGraph `flash_attn_bias_{f32,f16,bf16}`
+  runtime symbols (+ stub), eager/CPU/GPU dispatch, VJP (`dbias = dS`), `op_catalog`
+  arity, and the `runtime_abi` audit — validated on Metal at 3.3e-7. P1 built the
+  DFlash draft on that substrate: `nn.functional.block_diffusion_attention`
+  (QK-norm, KV injection, GQA, sliding-window-via-bias), `tessera.dflash` (draft
+  model, multi-layer `HiddenStateTap`, `dflash_step`/`dflash_generate`), the
+  `apple_gpu_attention_fn` seam, and a `@jit(target="apple_gpu")` flash_attn(bias)
+  proof reporting `metal_runtime`. The gold-standard invariant — greedy spec-decode
+  output == greedy autoregressive decode — is proven against an independent numpy
+  port of the `z-lab/dflash` MLX reference. Open: real target-model
+  `output_hidden_states` integration, stateful KV-cache rollback, and loading real
+  `z-lab/*-DFlash` checkpoints. Detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 Still needs work:
 

@@ -57,7 +57,7 @@ func.func @conv_bad(%x: tensor<1x8x8x3xf32>, %w: tensor<3x3x3x16xf32>) -> tensor
 }
 func.func @attn_bad(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>, %v: tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32> {
   %qc = "tessera.cast"(%q) {tessera.layout = "row_major"} : (tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
-  %o = "tessera.flash_attn"(%qc, %k, %v) {head_dim = 4 : i64} : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
+  %o = "tessera.flash_attn"(%qc, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 4 : i64} : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
   return %o : tensor<1x2x8x4xf32>
 }
 '''
@@ -77,7 +77,7 @@ def test_correct_layouts_pass_clean(tmp_path):
     fixture = '''
 func.func @ok(%q: tensor<1x2x8x4xf32>, %k: tensor<1x2x8x4xf32>, %v: tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32> {
   %qc = "tessera.cast"(%q) {tessera.layout = "bhsd"} : (tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
-  %o = "tessera.flash_attn"(%qc, %k, %v) {head_dim = 4 : i64} : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
+  %o = "tessera.flash_attn"(%qc, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {head_dim = 4 : i64} : (tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>, tensor<1x2x8x4xf32>) -> tensor<1x2x8x4xf32>
   return %o : tensor<1x2x8x4xf32>
 }
 '''

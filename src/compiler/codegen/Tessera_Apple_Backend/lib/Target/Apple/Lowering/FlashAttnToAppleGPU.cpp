@@ -35,6 +35,7 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -59,6 +60,16 @@ constexpr llvm::StringLiteral kFlashAttnF16Symbol =
 constexpr llvm::StringLiteral kFlashAttnBF16Symbol =
     "tessera_apple_gpu_flash_attn_bf16";
 
+// Bias-aware MPSGraph attention path: softmax(scale*Q*K^T + bias)*V.
+// Same dims as the bias-free symbols plus one extra bias pointer; the
+// runtime transposes K internally and adds the (B, Sq, Sk) bias pre-softmax.
+constexpr llvm::StringLiteral kFlashAttnBiasF32Symbol =
+    "tessera_apple_gpu_flash_attn_bias_f32";
+constexpr llvm::StringLiteral kFlashAttnBiasF16Symbol =
+    "tessera_apple_gpu_flash_attn_bias_f16";
+constexpr llvm::StringLiteral kFlashAttnBiasBF16Symbol =
+    "tessera_apple_gpu_flash_attn_bias_bf16";
+
 
 
 struct LowerFlashAttnToAppleGPU : public RewritePattern {
@@ -72,6 +83,16 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     Value q = op->getOperand(0);
     Value k = op->getOperand(1);
     Value v = op->getOperand(2);
+
+    // attn_bias: with AttrSizedOperandSegments the segment layout is
+    // [q=1, k_or_cache=1, v=N, attn_bias=0|1]. When the trailing segment is 1
+    // the bias is the last operand and we route to the bias-aware MPSGraph path.
+    Value bias;
+    if (auto seg = op->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes")) {
+      auto arr = seg.asArrayRef();
+      if (arr.size() == 4 && arr[3] == 1)
+        bias = op->getOperand(op->getNumOperands() - 1);
+    }
 
     auto qTy = dyn_cast<RankedTensorType>(q.getType());
     auto kTy = dyn_cast<RankedTensorType>(k.getType());
@@ -88,16 +109,27 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     // Phase 8.4.4.2 — pick symbol by element type. Q/K/V/O ABI changes
     // pointer interpretation (uint16_t* for f16/bf16) but the func signature
     // stays the same i64×4 + i32×4 + f32 + i32 since pointers are i64.
+    const bool hasBias = static_cast<bool>(bias);
     StringRef symbol;
     if (qElem.isF32()) {
-      symbol = kFlashAttnF32Symbol;
+      symbol = hasBias ? kFlashAttnBiasF32Symbol : kFlashAttnF32Symbol;
     } else if (qElem.isF16()) {
-      symbol = kFlashAttnF16Symbol;
+      symbol = hasBias ? kFlashAttnBiasF16Symbol : kFlashAttnF16Symbol;
     } else if (qElem.isBF16()) {
-      symbol = kFlashAttnBF16Symbol;
+      symbol = hasBias ? kFlashAttnBiasBF16Symbol : kFlashAttnBF16Symbol;
     } else {
       return rewriter.notifyMatchFailure(
           op, "AppleGPU flash-attn MSL path supports f32, f16, and bf16 in Phase 8.4.4.2");
+    }
+    // Bias must be a static rank-3 (B, Sq, Sk) tensor matching Q's dtype; the
+    // Phase-1 Apple path requires bias batch == B (broadcast (1,Sq,Sk) is a
+    // runtime follow-up). Out-of-envelope bias falls back to the reference path.
+    if (hasBias) {
+      auto bTy = dyn_cast<RankedTensorType>(bias.getType());
+      if (!bTy || bTy.getRank() != 3 || !bTy.hasStaticShape() ||
+          bTy.getElementType() != qElem)
+        return rewriter.notifyMatchFailure(
+            op, "AppleGPU bias attn path needs a static rank-3 bias matching Q dtype");
     }
     if (qTy.isDynamicDim(0) || qTy.isDynamicDim(1) || qTy.isDynamicDim(2) ||
         kTy.isDynamicDim(0) || kTy.isDynamicDim(1) || kTy.isDynamicDim(2) ||
@@ -123,6 +155,20 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     if (Dq > 256)
       return rewriter.notifyMatchFailure(
           op, "AppleGPU flash-attn MSL kernel limited to head_dim <= 256");
+
+    // attn_bias must be exactly (B, Sq, Sk): this path bufferizes the bias as a
+    // (B, Sq, Sk) memref and passes B to the runtime, so a broadcast (1, Sq, Sk)
+    // bias (legal per the op verifier) would create an invalid memref / let the
+    // runtime read past the single-batch buffer. Reject it so it falls back to
+    // the reference path (which numpy-broadcasts the bias correctly).
+    if (hasBias) {
+      auto bTy = cast<RankedTensorType>(bias.getType());
+      if (bTy.getDimSize(0) != B || bTy.getDimSize(1) != Sq ||
+          bTy.getDimSize(2) != Sk)
+        return rewriter.notifyMatchFailure(
+            op, "AppleGPU bias attn path needs attn_bias of exact shape "
+                "(B, Sq, Sk); broadcast bias falls back to the reference path");
+    }
 
     // Defaults match the numpy reference in tessera.runtime._runtime_flash_attn.
     float scale = 1.0f / std::sqrt(static_cast<float>(Dq));
@@ -166,20 +212,38 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
 
     Value causalV = rewriter.create<arith::ConstantIntOp>(loc, causal, 32);
 
-    FunctionType fnTy = FunctionType::get(
-        ctx,
-        {i64Ty, i64Ty, i64Ty, i64Ty,        // Q, K, V, O ptrs
-         i32Ty, i32Ty, i32Ty, i32Ty,        // B, Sq, Sk, D
-         f32Ty,                             // scale
-         i32Ty},                            // causal
-        {});
-    ensureExternalDecl(mod, symbol, fnTy);
-
-    rewriter.create<func::CallOp>(
-        loc, symbol, TypeRange{},
-        ValueRange{qPtr, kPtr, vPtr, oPtr,
-                   Bv32, Sqv32, Skv32, Dv32,
-                   scaleV, causalV});
+    if (hasBias) {
+      // softmax(scale*Q*K^T + bias)*V — one extra bias pointer after V.
+      auto biasMemTy = MemRefType::get({B, Sq, Sk}, qElem);
+      Value biasPtr = extractPtr(rewriter, loc, bias, biasMemTy);
+      FunctionType fnTy = FunctionType::get(
+          ctx,
+          {i64Ty, i64Ty, i64Ty, i64Ty, i64Ty,  // Q, K, V, bias, O ptrs
+           i32Ty, i32Ty, i32Ty, i32Ty,         // B, Sq, Sk, D
+           f32Ty,                              // scale
+           i32Ty},                             // causal
+          {});
+      ensureExternalDecl(mod, symbol, fnTy);
+      rewriter.create<func::CallOp>(
+          loc, symbol, TypeRange{},
+          ValueRange{qPtr, kPtr, vPtr, biasPtr, oPtr,
+                     Bv32, Sqv32, Skv32, Dv32,
+                     scaleV, causalV});
+    } else {
+      FunctionType fnTy = FunctionType::get(
+          ctx,
+          {i64Ty, i64Ty, i64Ty, i64Ty,        // Q, K, V, O ptrs
+           i32Ty, i32Ty, i32Ty, i32Ty,        // B, Sq, Sk, D
+           f32Ty,                             // scale
+           i32Ty},                            // causal
+          {});
+      ensureExternalDecl(mod, symbol, fnTy);
+      rewriter.create<func::CallOp>(
+          loc, symbol, TypeRange{},
+          ValueRange{qPtr, kPtr, vPtr, oPtr,
+                     Bv32, Sqv32, Skv32, Dv32,
+                     scaleV, causalV});
+    }
 
     auto outTensorTy = RankedTensorType::get({B, Sq, Dq}, qElem);
     Value result =

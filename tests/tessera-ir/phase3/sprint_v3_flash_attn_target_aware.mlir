@@ -20,7 +20,7 @@ func.func @flash_attn_sm90_at_limit(
     %v: tensor<2x4x16x256xf32>
 ) -> tensor<2x4x16x256xf32>
     attributes { tessera.target_sm = "sm_90" } {
-  %o = "tessera.flash_attn"(%q, %k, %v) {
+  %o = "tessera.flash_attn"(%q, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
     head_dim = 256 : i64,
     causal = false
   } : (tensor<2x4x16x256xf32>, tensor<2x4x16x256xf32>, tensor<2x4x16x256xf32>)
@@ -38,7 +38,7 @@ func.func @flash_attn_sm90_overflow(
 ) -> tensor<2x4x16x257xf32>
     attributes { tessera.target_sm = "sm_90" } {
   // expected-error @+1 {{head_dim=257 exceeds the SM sm_90 flash-attention kernel limit of 256}}
-  %o = "tessera.flash_attn"(%q, %k, %v) {
+  %o = "tessera.flash_attn"(%q, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
     head_dim = 257 : i64,
     causal = false
   } : (tensor<2x4x16x257xf32>, tensor<2x4x16x257xf32>, tensor<2x4x16x257xf32>)
@@ -56,7 +56,7 @@ func.func @flash_attn_sm80_overflow(
 ) -> tensor<2x4x16x256xf32>
     attributes { tessera.target_sm = "sm_80" } {
   // expected-error @+1 {{head_dim=256 exceeds the SM sm_80 flash-attention kernel limit of 128}}
-  %o = "tessera.flash_attn"(%q, %k, %v) {
+  %o = "tessera.flash_attn"(%q, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
     head_dim = 256 : i64,
     causal = false
   } : (tensor<2x4x16x256xf32>, tensor<2x4x16x256xf32>, tensor<2x4x16x256xf32>)
@@ -76,7 +76,7 @@ func.func @flash_attn_no_target_sm(
     %k: tensor<2x4x16x512xf32>,
     %v: tensor<2x4x16x512xf32>
 ) -> tensor<2x4x16x512xf32> {
-  %o = "tessera.flash_attn"(%q, %k, %v) {
+  %o = "tessera.flash_attn"(%q, %k, %v) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {
     head_dim = 512 : i64,
     causal = false
   } : (tensor<2x4x16x512xf32>, tensor<2x4x16x512xf32>, tensor<2x4x16x512xf32>)

@@ -3986,6 +3986,208 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
 }
 
 //===---------------------------------------------------------------------===//
+// attn_bias substrate — softmax(scale*Q*K^T + bias)*V on MPSGraph.
+//
+// The DFlash sliding-layer block mask and general structured masks lower to a
+// tessera.flash_attn carrying an additive (B, Sq, Sk) bias operand. This is the
+// bias-aware sibling of the MSL flash kernel: K is transposed in-graph, the
+// score matrix is scaled, the bias is added pre-softmax, then PV. The bias-free
+// path is untouched. `causal` is expected to be baked into `bias` by the caller
+// (DFlash full-attention layers pass causal=0; sliding layers fold the window
+// into the bias), so this path treats `causal` as advisory.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+// Self-contained half/bf16 <-> f32 converters (the file's shared helpers are
+// defined later in the TU, so the bias path carries its own to avoid an
+// ordering dependency).
+inline float bias_f16_to_f32(uint16_t h) {
+  uint32_t sign = (uint32_t)(h & 0x8000u) << 16;
+  uint32_t exp = (h >> 10) & 0x1F;
+  uint32_t mant = h & 0x3FF;
+  uint32_t f;
+  if (exp == 0) {
+    if (mant == 0) { f = sign; }
+    else {
+      exp = 127 - 15 + 1;
+      while ((mant & 0x400) == 0) { mant <<= 1; --exp; }
+      mant &= 0x3FF;
+      f = sign | (exp << 23) | (mant << 13);
+    }
+  } else if (exp == 0x1F) {
+    f = sign | 0x7F800000u | (mant << 13);
+  } else {
+    f = sign | ((exp - 15 + 127) << 23) | (mant << 13);
+  }
+  float out; std::memcpy(&out, &f, 4); return out;
+}
+inline uint16_t bias_f32_to_f16(float v) {
+  uint32_t f; std::memcpy(&f, &v, 4);
+  uint32_t sign = (f >> 16) & 0x8000u;
+  int32_t exp = (int32_t)((f >> 23) & 0xFF) - 127 + 15;
+  uint32_t mant = f & 0x7FFFFF;
+  if (exp <= 0) return (uint16_t)sign;            // flush subnormals to zero
+  if (exp >= 0x1F) return (uint16_t)(sign | 0x7C00u);
+  return (uint16_t)(sign | ((uint32_t)exp << 10) | (mant >> 13));
+}
+inline float bias_bf16_to_f32(uint16_t b) {
+  uint32_t u = (uint32_t)b << 16; float out; std::memcpy(&out, &u, 4); return out;
+}
+inline uint16_t bias_f32_to_bf16(float v) {
+  uint32_t u; std::memcpy(&u, &v, 4);
+  u += 0x7FFFu + ((u >> 16) & 1u);                 // round-to-nearest-even
+  return (uint16_t)(u >> 16);
+}
+
+inline void reference_attn_bias_f32(const float* Q, const float* K,
+                                    const float* V, const float* bias, float* O,
+                                    int32_t B, int32_t Sq, int32_t Sk, int32_t D,
+                                    float scale, int32_t causal) {
+  // Causal masking matches the Python reference (`_runtime_flash_attn`): query
+  // q attends to key k only when k <= q + max(Sk - Sq, 0). Applied *in addition*
+  // to the additive bias (masked keys are dropped from the softmax).
+  const int32_t off = (Sk > Sq) ? (Sk - Sq) : 0;
+  std::vector<float> s((std::size_t)Sk);
+  for (int32_t b = 0; b < B; ++b) {
+    const float* Kbase = K + (std::size_t)b * Sk * D;
+    const float* Vbase = V + (std::size_t)b * Sk * D;
+    const float* Bbase = bias + (std::size_t)b * Sq * Sk;
+    for (int32_t q = 0; q < Sq; ++q) {
+      const float* Qrow = Q + ((std::size_t)b * Sq + q) * D;
+      float* Orow = O + ((std::size_t)b * Sq + q) * D;
+      float m = -std::numeric_limits<float>::infinity();
+      for (int32_t k = 0; k < Sk; ++k) {
+        if (causal != 0 && k > q + off) {
+          s[k] = -std::numeric_limits<float>::infinity();  // masked → exp = 0
+          continue;
+        }
+        const float* Krow = Kbase + (std::size_t)k * D;
+        float dot = 0.0f;
+        for (int32_t d = 0; d < D; ++d) dot += Qrow[d] * Krow[d];
+        float sc = dot * scale + Bbase[(std::size_t)q * Sk + k];
+        s[k] = sc;
+        m = std::max(m, sc);
+      }
+      float den = 0.0f;
+      for (int32_t k = 0; k < Sk; ++k) { s[k] = std::exp(s[k] - m); den += s[k]; }
+      float inv = den > 0.0f ? 1.0f / den : 0.0f;
+      for (int32_t d = 0; d < D; ++d) {
+        float acc = 0.0f;
+        for (int32_t k = 0; k < Sk; ++k)
+          acc += s[k] * Vbase[(std::size_t)k * D + d];
+        Orow[d] = acc * inv;
+      }
+    }
+  }
+}
+
+static bool mpsg_run_attn_bias_f32(MetalDeviceContext &ctx, const float* Q,
+                                   const float* K, const float* V,
+                                   const float* bias, float* O, int32_t B,
+                                   int32_t Sq, int32_t Sk, int32_t D,
+                                   float scale) {
+  if (B <= 0 || Sq <= 0 || Sk <= 0 || D <= 0) return true;
+  @autoreleasepool {
+    size_t qBytes = (size_t)B * Sq * D * 4;
+    size_t kBytes = (size_t)B * Sk * D * 4;
+    size_t bBytes = (size_t)B * Sq * Sk * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, bias, bBytes);
+    if (!bufQ || !bufK || !bufV || !bufB) return false;
+    NSArray<NSNumber*>* qShape = @[ @(B), @(Sq), @(D) ];
+    NSArray<NSNumber*>* kShape = @[ @(B), @(Sk), @(D) ];
+    NSArray<NSNumber*>* bShape = @[ @(B), @(Sq), @(Sk) ];
+    MPSGraph* g = [MPSGraph new];
+    MPSGraphTensor* pq = [g placeholderWithShape:qShape dataType:MPSDataTypeFloat32 name:nil];
+    MPSGraphTensor* pk = [g placeholderWithShape:kShape dataType:MPSDataTypeFloat32 name:nil];
+    MPSGraphTensor* pv = [g placeholderWithShape:kShape dataType:MPSDataTypeFloat32 name:nil];
+    MPSGraphTensor* pb = [g placeholderWithShape:bShape dataType:MPSDataTypeFloat32 name:nil];
+    MPSGraphTensor* kT = [g transposeTensor:pk dimension:1 withDimension:2 name:nil];
+    MPSGraphTensor* s = [g matrixMultiplicationWithPrimaryTensor:pq secondaryTensor:kT name:nil];
+    MPSGraphTensor* scaled = [g multiplicationWithPrimaryTensor:s
+                                secondaryTensor:[g constantWithScalar:(double)scale dataType:MPSDataTypeFloat32]
+                                           name:nil];
+    MPSGraphTensor* biased = [g additionWithPrimaryTensor:scaled secondaryTensor:pb name:nil];
+    MPSGraphTensor* attn = [g softMaxWithTensor:biased axis:2 name:nil];
+    MPSGraphTensor* y = [g matrixMultiplicationWithPrimaryTensor:attn secondaryTensor:pv name:nil];
+    MPSGraphTensorData* qd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufQ shape:qShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData* kd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufK shape:kShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData* vd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufV shape:kShape dataType:MPSDataTypeFloat32];
+    MPSGraphTensorData* bd = [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:MPSDataTypeFloat32];
+    NSDictionary* res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{pq : qd, pk : kd, pv : vd, pb : bd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData* od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:O strideBytes:nil];
+    return true;
+  }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_flash_attn_bias_f32(const float* Q,
+                                                      const float* K,
+                                                      const float* V,
+                                                      const float* bias,
+                                                      float* O, int32_t B,
+                                                      int32_t Sq, int32_t Sk,
+                                                      int32_t D, float scale,
+                                                      int32_t causal) {
+  MetalDeviceContext &ctx = deviceContext();
+  // The MPSGraph bias graph is non-causal; causal + bias routes to the
+  // reference, which applies both masks (matching the Python reference). The
+  // common DFlash paths are non-causal (full layers) or fold the window into
+  // the bias (sliding layers), so the GPU fast path covers them.
+  if (causal == 0 && ctx.ok
+      && mpsg_run_attn_bias_f32(ctx, Q, K, V, bias, O, B, Sq, Sk, D, scale))
+    return;
+  reference_attn_bias_f32(Q, K, V, bias, O, B, Sq, Sk, D, scale, causal);
+}
+
+// f16 / bf16: upcast Q/K/V/bias to fp32, run the fp32 bias path, downcast O.
+// Matches the bf16 host round-trip convention used elsewhere in this runtime.
+extern "C" void tessera_apple_gpu_flash_attn_bias_f16(const uint16_t* Q,
+                                                      const uint16_t* K,
+                                                      const uint16_t* V,
+                                                      const uint16_t* bias,
+                                                      uint16_t* O, int32_t B,
+                                                      int32_t Sq, int32_t Sk,
+                                                      int32_t D, float scale,
+                                                      int32_t causal) {
+  size_t nQ = (size_t)B * Sq * D, nK = (size_t)B * Sk * D, nBias = (size_t)B * Sq * Sk;
+  std::vector<float> qf(nQ), kf(nK), vf(nK), bf(nBias), of(nQ);
+  for (size_t i = 0; i < nQ; ++i) qf[i] = bias_f16_to_f32(Q[i]);
+  for (size_t i = 0; i < nK; ++i) { kf[i] = bias_f16_to_f32(K[i]); vf[i] = bias_f16_to_f32(V[i]); }
+  for (size_t i = 0; i < nBias; ++i) bf[i] = bias_f16_to_f32(bias[i]);
+  tessera_apple_gpu_flash_attn_bias_f32(qf.data(), kf.data(), vf.data(), bf.data(),
+                                        of.data(), B, Sq, Sk, D, scale, causal);
+  for (size_t i = 0; i < nQ; ++i) O[i] = bias_f32_to_f16(of[i]);
+}
+
+extern "C" void tessera_apple_gpu_flash_attn_bias_bf16(const uint16_t* Q,
+                                                       const uint16_t* K,
+                                                       const uint16_t* V,
+                                                       const uint16_t* bias,
+                                                       uint16_t* O, int32_t B,
+                                                       int32_t Sq, int32_t Sk,
+                                                       int32_t D, float scale,
+                                                       int32_t causal) {
+  size_t nQ = (size_t)B * Sq * D, nK = (size_t)B * Sk * D, nBias = (size_t)B * Sq * Sk;
+  std::vector<float> qf(nQ), kf(nK), vf(nK), bf(nBias), of(nQ);
+  for (size_t i = 0; i < nQ; ++i) qf[i] = bias_bf16_to_f32(Q[i]);
+  for (size_t i = 0; i < nK; ++i) { kf[i] = bias_bf16_to_f32(K[i]); vf[i] = bias_bf16_to_f32(V[i]); }
+  for (size_t i = 0; i < nBias; ++i) bf[i] = bias_bf16_to_f32(bias[i]);
+  tessera_apple_gpu_flash_attn_bias_f32(qf.data(), kf.data(), vf.data(), bf.data(),
+                                        of.data(), B, Sq, Sk, D, scale, causal);
+  for (size_t i = 0; i < nQ; ++i) O[i] = bias_f32_to_bf16(of[i]);
+}
+
+//===---------------------------------------------------------------------===//
 // Phase 8.4.4.2 — fp16 / bf16 flash-attention forward.
 //
 // Mixed-precision design — the K/V/Q tensors are fp16 / bf16 at the I/O

@@ -39,6 +39,6 @@ func.func @mla_decode(%x: tensor<4x16xf32>, %Wdkv: tensor<16x8xf32>,
   %c = tessera.latent_kv_compress %x, %Wdkv : (tensor<4x16xf32>, tensor<16x8xf32>) -> tensor<4x8xf32>
   %K = tessera.latent_kv_expand_k %c, %Wuk : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
   %V = tessera.latent_kv_expand_v %c, %Wuv : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
-  %O = tessera.flash_attn %Q, %K, %V {head_dim = 16 : i64} : (tensor<4x16xf32>, tensor<4x16xf32>, tensor<4x16xf32>) -> tensor<4x16xf32>
+  %O = tessera.flash_attn %Q, %K, %V {operandSegmentSizes = array<i32: 1, 1, 1, 0>, head_dim = 16 : i64} : (tensor<4x16xf32>, tensor<4x16xf32>, tensor<4x16xf32>) -> tensor<4x16xf32>
   return %O : tensor<4x16xf32>
 }

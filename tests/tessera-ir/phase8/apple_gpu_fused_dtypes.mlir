@@ -50,21 +50,21 @@ func.func @fused_bf16(%A: tensor<8x16xbf16>, %B: tensor<16x32xbf16>) -> tensor<8
 func.func @flash_f32(%Q: tensor<2x8x16xf32>, %K: tensor<2x8x16xf32>, %V: tensor<2x8x16xf32>) -> tensor<2x8x16xf32> {
   // CHECK-LABEL: func.func @flash_f32
   // CHECK:       call @tessera_apple_gpu_flash_attn_f32
-  %O = "tessera.flash_attn"(%Q, %K, %V) {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xf32>, tensor<2x8x16xf32>, tensor<2x8x16xf32>) -> tensor<2x8x16xf32>
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xf32>, tensor<2x8x16xf32>, tensor<2x8x16xf32>) -> tensor<2x8x16xf32>
   return %O : tensor<2x8x16xf32>
 }
 
 func.func @flash_f16(%Q: tensor<2x8x16xf16>, %K: tensor<2x8x16xf16>, %V: tensor<2x8x16xf16>) -> tensor<2x8x16xf16> {
   // CHECK-LABEL: func.func @flash_f16
   // CHECK:       call @tessera_apple_gpu_flash_attn_f16
-  %O = "tessera.flash_attn"(%Q, %K, %V) {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xf16>, tensor<2x8x16xf16>, tensor<2x8x16xf16>) -> tensor<2x8x16xf16>
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xf16>, tensor<2x8x16xf16>, tensor<2x8x16xf16>) -> tensor<2x8x16xf16>
   return %O : tensor<2x8x16xf16>
 }
 
 func.func @flash_bf16(%Q: tensor<2x8x16xbf16>, %K: tensor<2x8x16xbf16>, %V: tensor<2x8x16xbf16>) -> tensor<2x8x16xbf16> {
   // CHECK-LABEL: func.func @flash_bf16
   // CHECK:       call @tessera_apple_gpu_flash_attn_bf16
-  %O = "tessera.flash_attn"(%Q, %K, %V) {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xbf16>, tensor<2x8x16xbf16>, tensor<2x8x16xbf16>) -> tensor<2x8x16xbf16>
+  %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {causal = false, head_dim = 16 : i64} : (tensor<2x8x16xbf16>, tensor<2x8x16xbf16>, tensor<2x8x16xbf16>) -> tensor<2x8x16xbf16>
   return %O : tensor<2x8x16xbf16>
 }
 

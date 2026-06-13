@@ -156,6 +156,20 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
       return rewriter.notifyMatchFailure(
           op, "AppleGPU flash-attn MSL kernel limited to head_dim <= 256");
 
+    // attn_bias must be exactly (B, Sq, Sk): this path bufferizes the bias as a
+    // (B, Sq, Sk) memref and passes B to the runtime, so a broadcast (1, Sq, Sk)
+    // bias (legal per the op verifier) would create an invalid memref / let the
+    // runtime read past the single-batch buffer. Reject it so it falls back to
+    // the reference path (which numpy-broadcasts the bias correctly).
+    if (hasBias) {
+      auto bTy = cast<RankedTensorType>(bias.getType());
+      if (bTy.getDimSize(0) != B || bTy.getDimSize(1) != Sq ||
+          bTy.getDimSize(2) != Sk)
+        return rewriter.notifyMatchFailure(
+            op, "AppleGPU bias attn path needs attn_bias of exact shape "
+                "(B, Sq, Sk); broadcast bias falls back to the reference path");
+    }
+
     // Defaults match the numpy reference in tessera.runtime._runtime_flash_attn.
     float scale = 1.0f / std::sqrt(static_cast<float>(Dq));
     if (auto attr = op->getAttrOfType<FloatAttr>("scale"))

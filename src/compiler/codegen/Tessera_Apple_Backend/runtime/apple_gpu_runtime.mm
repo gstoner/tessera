@@ -4043,7 +4043,11 @@ inline uint16_t bias_f32_to_bf16(float v) {
 inline void reference_attn_bias_f32(const float* Q, const float* K,
                                     const float* V, const float* bias, float* O,
                                     int32_t B, int32_t Sq, int32_t Sk, int32_t D,
-                                    float scale) {
+                                    float scale, int32_t causal) {
+  // Causal masking matches the Python reference (`_runtime_flash_attn`): query
+  // q attends to key k only when k <= q + max(Sk - Sq, 0). Applied *in addition*
+  // to the additive bias (masked keys are dropped from the softmax).
+  const int32_t off = (Sk > Sq) ? (Sk - Sq) : 0;
   std::vector<float> s((std::size_t)Sk);
   for (int32_t b = 0; b < B; ++b) {
     const float* Kbase = K + (std::size_t)b * Sk * D;
@@ -4054,6 +4058,10 @@ inline void reference_attn_bias_f32(const float* Q, const float* K,
       float* Orow = O + ((std::size_t)b * Sq + q) * D;
       float m = -std::numeric_limits<float>::infinity();
       for (int32_t k = 0; k < Sk; ++k) {
+        if (causal != 0 && k > q + off) {
+          s[k] = -std::numeric_limits<float>::infinity();  // masked → exp = 0
+          continue;
+        }
         const float* Krow = Kbase + (std::size_t)k * D;
         float dot = 0.0f;
         for (int32_t d = 0; d < D; ++d) dot += Qrow[d] * Krow[d];
@@ -4129,11 +4137,16 @@ extern "C" void tessera_apple_gpu_flash_attn_bias_f32(const float* Q,
                                                       float* O, int32_t B,
                                                       int32_t Sq, int32_t Sk,
                                                       int32_t D, float scale,
-                                                      int32_t /*causal*/) {
+                                                      int32_t causal) {
   MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && mpsg_run_attn_bias_f32(ctx, Q, K, V, bias, O, B, Sq, Sk, D, scale))
+  // The MPSGraph bias graph is non-causal; causal + bias routes to the
+  // reference, which applies both masks (matching the Python reference). The
+  // common DFlash paths are non-causal (full layers) or fold the window into
+  // the bias (sliding layers), so the GPU fast path covers them.
+  if (causal == 0 && ctx.ok
+      && mpsg_run_attn_bias_f32(ctx, Q, K, V, bias, O, B, Sq, Sk, D, scale))
     return;
-  reference_attn_bias_f32(Q, K, V, bias, O, B, Sq, Sk, D, scale);
+  reference_attn_bias_f32(Q, K, V, bias, O, B, Sq, Sk, D, scale, causal);
 }
 
 // f16 / bf16: upcast Q/K/V/bias to fp32, run the fp32 bias path, downcast O.

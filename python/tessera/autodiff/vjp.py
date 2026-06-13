@@ -953,8 +953,8 @@ def vjp_linear_attn_state(
 
 
 @_vjp("flash_attn")
-def vjp_flash_attn(dout, Q, K, V, attn_bias=None, *, scale=None, causal=False,
-                   dropout_p=0.0, **_):
+def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
+                   dropout_p=0.0, attn_bias=None, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).
 
     Forward: ``S = scale * QK^T (+ attn_bias);  P = softmax(S);  O = PV``.
@@ -962,9 +962,15 @@ def vjp_flash_attn(dout, Q, K, V, attn_bias=None, *, scale=None, causal=False,
     on each backend; this v1 recomputes ``S``, ``P`` so it works for any shape
     that the forward already accepts.
 
-    When ``attn_bias`` is supplied (DFlash sliding-layer / general additive
-    mask) the rule also returns its gradient ``dbias = dS`` (broadcast-reduced
-    to the bias shape), and the return tuple grows to ``(dQ, dK, dV, dbias)``.
+    **Arity contract.** The cotangent tuple must match the tape's recorded
+    *positional* inputs. The bias affects the recompute either way, but its
+    gradient is only returned when ``attn_bias`` was passed **positionally**
+    (i.e. it was a recorded differentiable input → 4th cotangent ``dbias``). The
+    common call ``ops.flash_attn(Q, K, V, attn_bias=bias)`` passes bias as a
+    keyword — the tape records only ``(Q, K, V)``, so backward must return three
+    cotangents; returning four would raise an arity mismatch. Differentiating
+    the bias therefore requires passing it positionally (e.g. via a positional
+    custom-VJP wrapper).
 
     ``dropout_p`` is ignored on backward — the v1 reference dropout uses a
     fresh rng each call, so the backward path can't reproduce the mask
@@ -977,14 +983,17 @@ def vjp_flash_attn(dout, Q, K, V, attn_bias=None, *, scale=None, causal=False,
         # Users training with dropout should provide a seed.
         pass
 
+    bias_pos = bias_positional[0] if bias_positional else None
+    bias = bias_pos if bias_pos is not None else attn_bias
+
     d = Q.shape[-1]
     if scale is None:
         scale = 1.0 / math.sqrt(d)
 
     # Recompute forward intermediates
     S = np.matmul(Q, np.swapaxes(K, -1, -2)) * scale
-    if attn_bias is not None:
-        S = S + np.asarray(attn_bias)
+    if bias is not None:
+        S = S + np.asarray(bias)
     if causal:
         q_len, k_len = S.shape[-2], S.shape[-1]
         mask = np.triu(np.ones((q_len, k_len), dtype=bool), k=1 + max(k_len - q_len, 0))
@@ -1003,10 +1012,11 @@ def vjp_flash_attn(dout, Q, K, V, attn_bias=None, *, scale=None, causal=False,
     # dQ = dS @ K * scale;  dK = dS^T @ Q * scale
     dQ = np.matmul(dS, K) * scale
     dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * scale
-    if attn_bias is not None:
-        # bias adds straight into S (pre-softmax), so dbias = dS, reduced to the
-        # (possibly broadcast) bias shape.
-        dbias = _sum_to_shape(dS, np.asarray(attn_bias).shape)
+    if bias_pos is not None:
+        # bias was a recorded positional input → return its gradient. It adds
+        # straight into S (pre-softmax), so dbias = dS reduced to the (possibly
+        # broadcast) bias shape.
+        dbias = _sum_to_shape(dS, np.asarray(bias_pos).shape)
         return (dQ, dK, dV, dbias)
     return (dQ, dK, dV)
 

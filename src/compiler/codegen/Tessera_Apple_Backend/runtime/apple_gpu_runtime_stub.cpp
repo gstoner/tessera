@@ -448,7 +448,9 @@ namespace {
 inline void reference_attn_bias_f32_stub(const float* Q, const float* K,
                                          const float* V, const float* bias,
                                          float* O, int32_t B, int32_t Sq,
-                                         int32_t Sk, int32_t D, float scale) {
+                                         int32_t Sk, int32_t D, float scale,
+                                         int32_t causal) {
+  const int32_t off = (Sk > Sq) ? (Sk - Sq) : 0;
   std::vector<float> s(static_cast<std::size_t>(Sk));
   for (int32_t b = 0; b < B; ++b) {
     const float* Kb = K + static_cast<std::size_t>(b) * Sk * D;
@@ -459,6 +461,10 @@ inline void reference_attn_bias_f32_stub(const float* Q, const float* K,
       float* Or = O + (static_cast<std::size_t>(b) * Sq + q) * D;
       float m = -std::numeric_limits<float>::infinity();
       for (int32_t k = 0; k < Sk; ++k) {
+        if (causal != 0 && k > q + off) {
+          s[k] = -std::numeric_limits<float>::infinity();
+          continue;
+        }
         const float* Kr = Kb + static_cast<std::size_t>(k) * D;
         float dot = 0.0f;
         for (int32_t d = 0; d < D; ++d) dot += Qr[d] * Kr[d];
@@ -485,8 +491,8 @@ extern "C" void tessera_apple_gpu_flash_attn_bias_f32(const float* Q,
                                                       float* O, int32_t B,
                                                       int32_t Sq, int32_t Sk,
                                                       int32_t D, float scale,
-                                                      int32_t /*causal*/) {
-  reference_attn_bias_f32_stub(Q, K, V, bias, O, B, Sq, Sk, D, scale);
+                                                      int32_t causal) {
+  reference_attn_bias_f32_stub(Q, K, V, bias, O, B, Sq, Sk, D, scale, causal);
 }
 
 extern "C" void tessera_apple_gpu_flash_attn_bias_f16(const uint16_t* Q,
@@ -504,7 +510,7 @@ extern "C" void tessera_apple_gpu_flash_attn_bias_f16(const uint16_t* Q,
   for (std::size_t i = 0; i < nQ; ++i) Qf[i] = half_to_float_stub(Q[i]);
   for (std::size_t i = 0; i < nK; ++i) { Kf[i] = half_to_float_stub(K[i]); Vf[i] = half_to_float_stub(V[i]); }
   for (std::size_t i = 0; i < nB; ++i) Bf[i] = half_to_float_stub(bias[i]);
-  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale);
+  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale, causal);
   for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_half_stub(Of[i]);
   (void)causal;
 }
@@ -524,7 +530,7 @@ extern "C" void tessera_apple_gpu_flash_attn_bias_bf16(const uint16_t* Q,
   for (std::size_t i = 0; i < nQ; ++i) Qf[i] = bfloat16_to_float_stub(Q[i]);
   for (std::size_t i = 0; i < nK; ++i) { Kf[i] = bfloat16_to_float_stub(K[i]); Vf[i] = bfloat16_to_float_stub(V[i]); }
   for (std::size_t i = 0; i < nB; ++i) Bf[i] = bfloat16_to_float_stub(bias[i]);
-  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale);
+  reference_attn_bias_f32_stub(Qf.data(), Kf.data(), Vf.data(), Bf.data(), Of.data(), B, Sq, Sk, D, scale, causal);
   for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_bfloat16_stub(Of[i]);
   (void)causal;
 }

@@ -38,6 +38,7 @@ src/compiler/ir/TesseraOps.td,DCTOp,1,1,real
 src/compiler/ir/TesseraOps.td,DeepSeekSparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,DequantizeFP4Op,1,1,real
 src/compiler/ir/TesseraOps.td,DequantizeFP8Op,1,1,real
+src/compiler/ir/TesseraOps.td,DiffusionBlockStepOp,1,1,real
 src/compiler/ir/TesseraOps.td,DivOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,DropoutOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMBivectorLangevinStepOp,1,1,real

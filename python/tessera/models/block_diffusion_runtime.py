@@ -25,6 +25,36 @@ from .block_diffusion import BlockDiffusionStepResult
 from .sampler import SamplerConfig, SamplerResult, entropy_bound_sample
 
 
+# ── Apple GPU dispatch helpers (eager metal_runtime routing) ────────────────
+
+def _apple_gpu_matmul(a, b):
+    """Rank-2/3 matmul on the Apple GPU MPS lane (f32). Falls back to numpy
+    off-Darwin / outside the envelope (the dispatcher handles that)."""
+    from .. import runtime as _rt
+    return _rt._apple_gpu_dispatch_matmul(
+        "tessera.matmul",
+        [np.asarray(a, dtype=np.float32), np.asarray(b, dtype=np.float32)], np)
+
+
+def _apple_gpu_moe_swiglu(x, w_gate, w_up, w_down, group_sizes, *, kind="contiguous"):
+    """Grouped-SwiGLU MoE expert FFN on the Apple GPU lane (f32). Same signature
+    as ``ops.moe_swiglu_block`` so it slots into ``moe_forward(swiglu_fn=...)``."""
+    from .. import runtime as _rt
+    ops_ = [np.asarray(x, dtype=np.float32), np.asarray(w_gate, dtype=np.float32),
+            np.asarray(w_up, dtype=np.float32), np.asarray(w_down, dtype=np.float32),
+            np.asarray(group_sizes)]
+    return _rt._apple_gpu_dispatch_moe_swiglu_block(ops_, {"kind": kind}, np)
+
+
+def _attention_backend(backend, attention_fn):
+    if attention_fn is not None:
+        return attention_fn
+    if backend == "apple_gpu":
+        from ..dflash import apple_gpu_attention_fn
+        return apple_gpu_attention_fn
+    return None  # ops.flash_attn (numpy / eager)
+
+
 def synthetic_layer_weights(config, *, seed: int = 0) -> dict:
     """Synthetic per-layer weights for the native denoiser: attention
     projections (Q/K/V/O), the two RMSNorm scales, and the MoE block."""
@@ -54,14 +84,18 @@ def synthetic_encoder_kv(config, *, context_len: int, seed: int = 0):
 
 
 def denoise_layer(h, ctx_k, ctx_v, w: dict, config, *, top_k: int,
-                  attention_fn=None):
+                  attention_fn=None, backend: str = "numpy"):
     """One native block-diffusion canvas-denoiser layer.
 
     ``h`` ``(T, H)`` is the canvas hidden; ``ctx_k`` / ``ctx_v`` ``(Hkv, S, Dh)``
     are the committed encoder/context KV. Pre-norm GQA attention (canvas queries
     over ``[ctx_KV ++ canvas_KV]``, bidirectional) + residual, then pre-norm MoE
-    FFN + residual. ``attention_fn`` routes the per-head attention core onto a
-    backend (e.g. Apple GPU ``metal_runtime``).
+    FFN + residual.
+
+    ``backend="apple_gpu"`` runs the *whole* layer on the Apple GPU lane: the
+    per-head attention via the ``attn_bias``/``flash_attn`` symbols and the
+    grouped-SwiGLU MoE via ``moe_swiglu_block`` (both ``metal_runtime``).
+    ``attention_fn`` overrides just the attention backend.
     """
     H = config.hidden_size
     Hq, Hkv, Dh = config.num_attention_heads, config.num_kv_heads, config.head_dim
@@ -84,7 +118,7 @@ def denoise_layer(h, ctx_k, ctx_v, w: dict, config, *, top_k: int,
         K = np.repeat(K, rep, axis=0)            # (Hq, S+T, Dh)
         V = np.repeat(V, rep, axis=0)
 
-    attn_core = attention_fn if attention_fn is not None else ops.flash_attn
+    attn_core = _attention_backend(backend, attention_fn) or ops.flash_attn
     scale = Dh ** -0.5
     # Per-head batched, bidirectional (canvas denoising sees the whole canvas).
     out = attn_core(q, K, V, scale=scale, causal=False)          # (Hq, T, Dh)
@@ -92,41 +126,45 @@ def denoise_layer(h, ctx_k, ctx_v, w: dict, config, *, top_k: int,
     h = h + (out @ np.asarray(w["o_proj"]))                       # attn residual
 
     pn = np.asarray(F.rms_norm(h, w["post_norm"], eps=config.rms_norm_eps))
-    moe_out, _ = _mr.moe_forward(pn, **w["moe"], top_k=top_k)
+    swiglu_fn = _apple_gpu_moe_swiglu if backend == "apple_gpu" else None
+    moe_out, _ = _mr.moe_forward(pn, **w["moe"], top_k=top_k, swiglu_fn=swiglu_fn)
     return h + np.asarray(moe_out)                               # MoE residual
 
 
 def run_denoise(canvas_embed, encoder_kv, layer_weights, config, *,
-                num_layers: int, top_k: int, attention_fn=None):
+                num_layers: int, top_k: int, attention_fn=None, backend: str = "numpy"):
     """Run ``num_layers`` native denoiser layers over the canvas. ``encoder_kv``
     is ``(ctx_k, ctx_v)``; ``layer_weights`` is a list of per-layer weight dicts
-    (or one dict, reused across layers). Returns the denoised canvas ``(T, H)``."""
+    (or one dict, reused across layers). Returns the denoised canvas ``(T, H)``.
+    ``backend="apple_gpu"`` runs attention + MoE on the Metal lane."""
     h = np.asarray(canvas_embed, dtype=np.float64)
     ctx_k, ctx_v = encoder_kv
     for i in range(num_layers):
         w = layer_weights[i] if isinstance(layer_weights, (list, tuple)) else layer_weights
         h = denoise_layer(h, ctx_k, ctx_v, w, config, top_k=top_k,
-                          attention_fn=attention_fn)
+                          attention_fn=attention_fn, backend=backend)
     return h
 
 
 def execute_block_diffusion_step(canvas_embed, encoder_kv, layer_weights, w_lm,
                                  config, *, step: int, sampler_config: SamplerConfig,
                                  num_denoise_layers: int, rng_key: int, top_k: int,
-                                 attention_fn=None) -> BlockDiffusionStepResult:
+                                 attention_fn=None, backend: str = "numpy"
+                                 ) -> BlockDiffusionStepResult:
     """Native execution of one block-diffusion step (the faithful multi-head
     counterpart to :func:`block_diffusion.run_block_diffusion_step`).
 
-    Runs ``num_denoise_layers`` native denoiser layers over the canvas (attention
-    on ``attention_fn``'s backend — Apple GPU ``metal_runtime`` when given the
-    GPU seam), projects the LM head, then the Phase-C entropy-bound sampler. The
-    result is identical across attention backends; the heavy compute (per-head
-    attention + grouped MoE + LM-head matmul) lands on ``ops.*`` lanes.
+    Runs ``num_denoise_layers`` native denoiser layers over the canvas, projects
+    the LM head, then the Phase-C entropy-bound sampler. With
+    ``backend="apple_gpu"`` the *whole* step's heavy compute — per-head attention,
+    grouped MoE, and the LM-head matmul — lands on the Apple GPU ``metal_runtime``
+    lane. ``attention_fn`` overrides just the attention backend.
     """
     h = run_denoise(canvas_embed, encoder_kv, layer_weights, config,
                     num_layers=num_denoise_layers, top_k=top_k,
-                    attention_fn=attention_fn)
-    logits = np.asarray(ops.gemm(np.asarray(h), np.asarray(w_lm)))   # LM head (T, vocab)
+                    attention_fn=attention_fn, backend=backend)
+    lm_matmul = _apple_gpu_matmul if backend == "apple_gpu" else ops.gemm
+    logits = np.asarray(lm_matmul(np.asarray(h), np.asarray(w_lm)))   # LM head (T, vocab)
     res: SamplerResult = entropy_bound_sample(
         logits, step=step, config=sampler_config, rng_key=rng_key)
     return BlockDiffusionStepResult(

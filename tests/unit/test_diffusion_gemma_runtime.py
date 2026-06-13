@@ -144,6 +144,41 @@ def test_execute_step_gpu_backend_matches_numpy():
     assert np.allclose(ref.entropy, gpu.entropy, rtol=1e-3, atol=1e-3)
 
 
+def test_full_gpu_backend_denoise_matches_numpy_within_f32():
+    """backend='apple_gpu' routes attention + MoE through the Metal lanes (f32);
+    off-Darwin those dispatchers fall back to numpy. Either way the denoised
+    canvas matches the numpy-f64 reference within f32 tolerance."""
+    cfg = _small_cfg()
+    rng = np.random.default_rng(40)
+    T, S = cfg.canvas_size, 8
+    w = BR.synthetic_layer_weights(cfg, seed=41)
+    ck, cv = BR.synthetic_encoder_kv(cfg, context_len=S, seed=42)
+    h = (rng.standard_normal((T, cfg.hidden_size)) * 0.1).astype(np.float32)
+    ref = BR.denoise_layer(h, ck, cv, w, cfg, top_k=cfg.num_experts_per_tok, backend="numpy")
+    gpu = BR.denoise_layer(h, ck, cv, w, cfg, top_k=cfg.num_experts_per_tok, backend="apple_gpu")
+    assert gpu.shape == (T, cfg.hidden_size)
+    assert np.allclose(ref, gpu, rtol=2e-2, atol=2e-2)
+
+
+def test_full_gpu_step_runs_and_close_to_numpy():
+    """The whole step (attention + MoE + LM head on GPU) produces a valid result
+    and logits close to numpy; commit decisions agree on the bulk of positions."""
+    cfg = _small_cfg()
+    ws, enc, canvas, w_lm, sc = _step_inputs(cfg, seed=50)
+    ref = BR.execute_block_diffusion_step(
+        canvas, enc, ws, w_lm, cfg, step=1, sampler_config=sc,
+        num_denoise_layers=cfg.num_layers, rng_key=3, top_k=cfg.num_experts_per_tok,
+        backend="numpy")
+    gpu = BR.execute_block_diffusion_step(
+        canvas, enc, ws, w_lm, cfg, step=1, sampler_config=sc,
+        num_denoise_layers=cfg.num_layers, rng_key=3, top_k=cfg.num_experts_per_tok,
+        backend="apple_gpu")
+    assert gpu.tokens.shape == (cfg.canvas_size,)
+    assert np.array_equal(gpu.renoise_mask, ~gpu.accepted_mask)
+    # entropy (hence commit decisions) close at f32 precision
+    assert np.allclose(ref.entropy, gpu.entropy, rtol=5e-2, atol=5e-2)
+
+
 @pytest.mark.skipif(not (DARWIN and apple_gpu_available()), reason="Metal device required")
 def test_denoiser_attention_envelope_on_metal():
     """At production head_dim=256 the per-head attention is in the GPU kernel

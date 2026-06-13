@@ -291,7 +291,7 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 | [`docs/spec/PYTHON_API_SPEC.md`](docs/spec/PYTHON_API_SPEC.md) | Public Python symbols and signatures |
 | [`docs/spec/COMPILER_REFERENCE.md`](docs/spec/COMPILER_REFERENCE.md) | IR stack, pass registry, pipelines, compiler source map |
 | [`docs/spec/AUTODIFF_SPEC.md`](docs/spec/AUTODIFF_SPEC.md) | Tape-based reverse-mode autodiff (Tier 2) + Phase F4 Graph IR adjoint pass (`AdjointInterface` op trait, multi-output rewrite, `tessera-autodiff` MLIR pass) + Phase F5 adjoint collective insertion |
-| [`docs/audit/nvidia_execution_audit.md`](docs/audit/nvidia_execution_audit.md) | Phase G1 — concrete punch list (G1-1 through G1-8) for first SM_90 BF16 GEMM on H100 |
+| [`docs/audit/backend/nvidia/archive/nvidia_execution_audit.md`](docs/audit/backend/nvidia/archive/nvidia_execution_audit.md) | Phase G1 — concrete punch list (G1-1 through G1-8) for first SM_90 BF16 GEMM on H100 |
 | [`docs/spec/CLIFFORD_SPEC.md`](docs/spec/CLIFFORD_SPEC.md) | Clifford / geometric algebra primitive surface |
 | [`docs/spec/EBM_SPEC.md`](docs/spec/EBM_SPEC.md) | Energy-based model primitive surface |
 | [`docs/spec/GA_EBM_EXECUTION_STATUS.md`](docs/spec/GA_EBM_EXECUTION_STATUS.md) | GA + EBM execution status by implementation layer |

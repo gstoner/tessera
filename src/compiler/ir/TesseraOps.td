@@ -1321,6 +1321,58 @@ def Tessera_DeepSeekSparseAttentionOp : Op<
   let hasVerifier = 1;
 }
 
+// MiniMax Sparse Attention (MSA, arXiv:2606.13392). Three Graph IR ops mirror
+// the reference Python surface (see docs/msa.md): an exp-free per-GQA-group
+// Index Branch scorer, a deterministic forced-local Top-k block selector, and
+// an exact block-sparse Main Branch. Unlike deepseek_sparse_attention (which
+// blends sliding/compressed/top-k branches per head), MSA is a single exact
+// path with per-GQA-group selection. `force_local_block` is carried as a
+// *semantic* attribute (not a heuristic) so Schedule/Tile IR may rely on each
+// query's own block always being resident. Pure per call.
+def Tessera_MSAIndexScoresOp : Op<
+  Tessera_Dialect, "msa_index_scores",
+  [Pure]
+> {
+  let summary = "MSA Index Branch — exp-free per-GQA-group KV-block scores";
+  let arguments = (ins TensorType:$q, TensorType:$k,
+                        I64Attr:$block_size,
+                        OptionalAttr<F64Attr>:$scale);
+  let results = (outs TensorType:$scores);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_MSASelectBlocksOp : Op<
+  Tessera_Dialect, "msa_select_blocks",
+  [Pure]
+> {
+  let summary = "MSA Top-k block selection (per GQA group, forced-local, deterministic)";
+  let arguments = (ins TensorType:$scores,
+                        I64Attr:$top_k,
+                        I64Attr:$block_size,
+                        DefaultValuedAttr<BoolAttr, "true">:$force_local_block,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal);
+  let results = (outs TensorType:$block_ids);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_MSASparseAttentionOp : Op<
+  Tessera_Dialect, "msa_sparse_attention",
+  [Pure]
+> {
+  let summary = "MiniMax Sparse Attention — exact block-sparse Main Branch over selected blocks";
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        I64Attr:$block_size,
+                        I64Attr:$top_k,
+                        DefaultValuedAttr<BoolAttr, "true">:$force_local_block,
+                        DefaultValuedAttr<BoolAttr, "true">:$causal,
+                        OptionalAttr<F64Attr>:$scale);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Lookahead Sparse Attention (LSA) — experimental, inference-only composite
 // attention policy. Each query attends over the union of its causal local
 // window and the tokens of the sigmoid-threshold-selected historical blocks.

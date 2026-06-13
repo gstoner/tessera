@@ -181,6 +181,38 @@ public:
   }
 };
 
+// MiniMax Sparse Attention (MSA, arXiv:2606.13392). Compiler-visibility slot
+// for the three MSA Graph IR ops (Index Branch / Top-k selector / exact
+// block-sparse Main Branch). Like the LSA pass above, this preserves the
+// semantic ops while marking them for the block-sparse backend lane; the ops
+// already carry block_size/top_k/force_local_block/causal as ODS attributes, so
+// Schedule/Tile IR reads the selection semantics directly off the op. See
+// docs/msa.md.
+class MSAExpandPass
+    : public PassWrapper<MSAExpandPass, OperationPass<ModuleOp>> {
+public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(MSAExpandPass)
+
+  StringRef getArgument() const override { return "tessera-msa-expand"; }
+  StringRef getDescription() const override {
+    return "Mark MiniMax Sparse Attention (msa_index_scores / msa_select_blocks "
+           "/ msa_sparse_attention) for the block-sparse backend lane";
+  }
+  void runOnOperation() override {
+    OpBuilder builder(getOperation().getContext());
+    getOperation().walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.msa_index_scores")
+        markReasoningVisible(op, builder, "minimax_sparse", "msa_index_scores");
+      else if (name == "tessera.msa_select_blocks")
+        markReasoningVisible(op, builder, "minimax_sparse", "msa_select_blocks");
+      else if (name == "tessera.msa_sparse_attention")
+        markReasoningVisible(op, builder, "minimax_sparse",
+                             "msa_sparse_attention");
+    });
+  }
+};
+
 } // namespace
 
 namespace tessera {
@@ -203,6 +235,10 @@ std::unique_ptr<Pass> createLookaheadSparseAttnExpandPass() {
 
 std::unique_ptr<Pass> createLookaheadSparsePrefetchPass() {
   return std::make_unique<LookaheadSparsePrefetchPass>();
+}
+
+std::unique_ptr<Pass> createMSAExpandPass() {
+  return std::make_unique<MSAExpandPass>();
 }
 
 } // namespace tessera

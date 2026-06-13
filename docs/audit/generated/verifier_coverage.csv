@@ -80,6 +80,9 @@ src/compiler/ir/TesseraOps.td,LookaheadSparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeOp,1,1,real
 src/compiler/ir/TesseraOps.td,MQAAttentionOp,1,1,real
+src/compiler/ir/TesseraOps.td,MSAIndexScoresOp,1,1,real
+src/compiler/ir/TesseraOps.td,MSASelectBlocksOp,1,1,real
+src/compiler/ir/TesseraOps.td,MSASparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MaskedFillOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,MatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,ModifiedDeltaAttentionOp,1,1,real

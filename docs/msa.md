@@ -13,14 +13,17 @@ This page documents Tessera's implementation status, the shape contract, the
 public API, and how MSA differs from the existing
 [`deepseek_sparse_attention`](CANONICAL_API.md) (NSA) path.
 
-> **Status (2026-06-13).** Phase 0 (contract) + Phase 1 (reference numpy API)
-> landed. The reference path runs on CPU and is dense-equivalent when
-> `top_k == num_blocks`. Native target speedups are **not** claimed yet: the
+> **Status (2026-06-13).** Phase 0 (contract) + Phase 1 (reference numpy API) +
+> Phase 2 (Graph IR op contract) landed. The reference path runs on CPU and is
+> dense-equivalent when `top_k == num_blocks`. The three MSA Graph IR ops are
+> ODS-registered with verifiers and a compiler-visibility pass (`tessera-opt`
+> builds clean; lit-proven). Native target speedups are **not** claimed yet: the
 > Apple-GPU host-select path (Phase 3) reuses the existing `flash_attn` lane for
 > exact attention over host-selected blocks, and the CUDA KV-outer sparse kernel
-> is lit-fixture-only on non-NVIDIA hardware. Phases 2–5 (Graph IR op family,
-> target lowering, model integration, example/benchmark) are tracked but not yet
-> built.
+> is lit-fixture-only on non-NVIDIA hardware. The Schedule/Tile IR sparse
+> worklist (selected-block layout, reverse index, partial-output/logsumexp
+> buffers, combine phase) is carried into Phase 3 with the lowering. Phases 3–5
+> (target lowering, model integration, example/benchmark) are tracked.
 
 ---
 
@@ -118,13 +121,32 @@ independent of the (approximate, mean-pooled) index scores.
 
 ---
 
-## 5. Roadmap (Phases 2–5, not yet built)
+## 5. Phase 2 — Graph IR op contract (landed)
 
-- **Phase 2 — Compiler IR:** `tessera.attn.msa_index` / `msa_select` / `msa`
-  Graph IR op family (or one fused op with optional decomposition); Schedule IR
-  carrying selected-block layout + GQA group mapping + reverse sparse worklist;
-  Tile IR for selected-KV-block gather, query grouping, partial-output/logsumexp
-  buffers, and the split-sparse combine; lit fixtures.
+Three ODS ops in the `tessera` dialect (`src/compiler/ir/TesseraOps.td`), mirroring
+the reasoning-family pattern (cf. `deepseek_sparse_attention`):
+
+| Op | Operands | Key attributes | Result |
+|---|---|---|---|
+| `tessera.msa_index_scores` | `q`, `k` | `block_size`, opt `scale` | `scores` |
+| `tessera.msa_select_blocks` | `scores` | `top_k`, `block_size`, `force_local_block`, `causal` | `block_ids` |
+| `tessera.msa_sparse_attention` | `q`, `k`, `v` | `block_size`, `top_k`, `force_local_block`, `causal`, opt `scale` | `o` |
+
+`force_local_block` is an ODS attribute — a **semantic** the verifier and any
+downstream pass can rely on, not a lowering heuristic. Verifiers
+(`TesseraOps.cpp`) enforce GQA divisibility (`Hq % Hkv == 0`), KV-block
+divisibility (`Sk % block_size == 0`), and `top_k <= num_blocks`, on top of the
+shared `verifyAttentionQKV` shape/dtype checks. A compiler-visibility pass
+`-tessera-msa-expand` (`AttentionFamilyPasses.cpp`) tags the ops
+`tessera.reasoning.family = "minimax_sparse"` + per-op variant and is wired into
+the Apple reasoning-attention prologue. Lit:
+`tests/tessera-ir/phase8/msa_visibility.mlir` (visibility) +
+`tests/tessera-ir/phase3/msa_verifier.mlir` (1 positive + 3 negative verifier
+cases). Schedule/Tile IR (selected-block layout, reverse sparse worklist,
+partial-output/logsumexp buffers, combine) is carried into Phase 3 lowering.
+
+## 6. Roadmap (Phases 3–5, not yet built)
+
 - **Phase 3 — Target runtime:** Apple GPU host-select + existing `flash_attn`
   lane first (real execution here); CUDA exp-free top-k + KV-outer sparse kernel
   lit-only on this Mac. Runtime metadata records `execution_mode ∈

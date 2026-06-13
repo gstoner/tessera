@@ -379,6 +379,8 @@ subclassing. Available as `tessera.nn.<name>` and as
 | `tessera.nn.swiglu` | `(x, W_gate, W_up, W_down) → array` | `gemm(silu(x @ W_gate) * (x @ W_up), W_down)` |
 | `tessera.nn.multi_head_attention` | `(Q, K, V, num_heads, scale=None, causal=False, dropout_p=0.0, seed=None) → array` | reshape `[B,S,H*D] → [B,H,S,D]`, `flash_attn(...)`, reshape back |
 | `tessera.nn.flash_attention` | alias for `tessera.ops.flash_attn` | identical signature |
+| `tessera.nn.functional.block_diffusion_attention` | `(x, x_ctx, *, q_proj, k_proj, v_proj, o_proj, num_heads, num_kv_heads, head_dim, q_norm=None, k_norm=None, cache_keys=None, cache_values=None, rope_fn=None, cache_offset=0, sliding_window=None, scale=None, eps=1e-6, attention_fn=None, return_ctx_kv=False) → array` | DFlash block-diffusion attention layer (QK-norm, KV injection, GQA, sliding-window-via-`attn_bias`); folds heads → rank-3 `flash_attn` (see [`tessera.dflash`](#tesseradflash--speculative-decoding-dflash)) |
+| `tessera.nn.functional.mask_token_block` | `(prev_token, block_size, mask_token_id) → int64[..., block_size]` | DFlash draft input block `[prev, MASK, …]` |
 
 ```python
 import tessera
@@ -520,7 +522,7 @@ lowerings; runtime kernels can be registered separately.
 | `tessera.ops.cast(x, dtype)` | `(array, str) → array` | Pure effect |
 | `tessera.ops.dropout(x, p=0.1, training=True)` | `(array) → array` | `random` effect |
 | `tessera.ops.conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC,HWIO) → NHWC` | NumPy reference convolution |
-| `tessera.ops.flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | NumPy reference attention; SM90+ lowering artifacts where supported |
+| `tessera.ops.flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None, attn_bias=None)` | `(array,array,array[,array]) → array` | NumPy reference attention; SM90+ lowering artifacts where supported. Optional additive `attn_bias` `(B,Sq,Sk)` → `softmax(scale·Q·Kᵀ + attn_bias)·V` (Apple GPU `metal_runtime` via `flash_attn_bias_*`) |
 | `tessera.ops.all_reduce(x, op="sum")` | `(array) → array` | Single-rank no-op reference path |
 | `tessera.ops.reduce_scatter(x, op="sum", axis=0)` | `(array) → array` | Single-rank no-op reference path |
 | `tessera.ops.all_gather(x, axis=0)` | `(array) → array` | Single-rank no-op reference path |
@@ -698,6 +700,46 @@ k_now, v_now = ts.ops.kv_cache_read(cache, 0, cache.current_seq)
 real paging + block quantization. User code written today doesn't need to
 change when that lands. See [`docs/audit/coverage/COVERAGE_AUDIT.md`](audit/coverage/COVERAGE_AUDIT.md)
 for per-backend lowering status.
+
+---
+
+## `tessera.dflash` — Speculative Decoding (DFlash)
+
+Block-diffusion speculative-decoding draft ([z-lab/dflash](https://github.com/z-lab/dflash))
+on the `attn_bias` substrate. Python reference; attention core on Apple GPU
+`metal_runtime`. Greedy spec-decode output == greedy autoregressive decode (proven
+vs the MLX reference). Full overview: [`docs/dflash.md`](dflash.md);
+spec: [`PYTHON_API_SPEC.md` §18](spec/PYTHON_API_SPEC.md).
+
+Canonical names (one per concept):
+
+| Concept | Canonical name |
+|---------|----------------|
+| Block-diffusion attention layer | `tessera.nn.functional.block_diffusion_attention` |
+| Draft input block `[prev, MASK…]` | `tessera.nn.functional.mask_token_block` |
+| Draft config / weights | `tessera.dflash.DFlashConfig` / `DFlashLayerWeights` / `DFlashWeights` |
+| Stateful draft module | `tessera.dflash.DFlashDraft` (`nn.Module`) |
+| Draft KV cache | `tessera.dflash.DraftKVCache` / `RotatingDraftKVCache` |
+| RoPE factory | `tessera.dflash.make_rope` |
+| Multi-layer target tap | `tessera.dflash.HiddenStateTap` / `capture_target_hidden` |
+| Sampler | `tessera.dflash.make_sampler` (greedy/temp/top-k/top-p) |
+| Greedy / rejection acceptance | `tessera.dflash.dflash_linear_verify` / `dflash_speculative_verify` |
+| Efficient generation loop | `tessera.dflash.dflash_generate_cached` |
+| Training loss | `tessera.dflash.dflash_block_loss` (+ `dflash_block_loss_grad`) |
+| Apple GPU attention seam | `tessera.dflash.apple_gpu_attention_fn` |
+| Reference target model | `tessera.dflash_reference.ReferenceDecoderLM` (stateful KV cache + `rollback`) |
+| Checkpoint I/O | `tessera.dflash_io.load_dflash_weights` / `save_dflash_weights` |
+| Serving | `tessera.dflash_serve.dflash_generate_text` / `DFlashScheduler` |
+
+```python
+from tessera import dflash as D
+from tessera import dflash_reference as R
+from tessera.dflash_serve import DFlashScheduler
+
+target = R.random_decoder_lm(lm_cfg, rng)              # or a real target LM
+sched = DFlashScheduler(draft_weights, cfg, target)    # draft_weights: DFlashWeights
+ids = sched.generate(prompt_ids, max_new_tokens=64)    # greedy == autoregressive
+```
 
 ---
 

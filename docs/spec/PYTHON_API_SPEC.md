@@ -77,6 +77,7 @@ Python symbols beyond what is already specified here.
 15. [Dtype Annotations](#15-dtype-annotations)
 16. [Error Types](#16-error-types)
 17. [Testing Utilities](#17-testing-utilities)
+18. [Speculative Decoding (DFlash)](#18-speculative-decoding-dflash)
 
 ---
 
@@ -176,6 +177,12 @@ tessera.rl           # PPO/GRPO/CISPO post-training helpers
 
 # Inference serving
 tessera.server       # App / load_package / scheduler / KVCacheManager
+
+# Speculative decoding (DFlash) — see §18
+tessera.dflash            # block-diffusion draft, caches, samplers, verify, generate, loss, DFlashDraft
+tessera.dflash_reference  # ReferenceDecoderLM — stateful KV-cached target (+ rollback) and tap
+tessera.dflash_io         # safetensors I/O + HF state-dict <-> DFlashWeights mapping
+tessera.dflash_serve      # dflash_generate_text + DFlashScheduler
 
 # Canonical dtype helpers
 tessera.dtype        # Dtype, canonicalize_dtype, result_type, planned-gated checks
@@ -1447,7 +1454,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `conv2d(x, weight, bias=None, stride=1, padding=0)` | `(NHWC, HWIO) → NHWC` | `pure` | NumPy NHWC/HWIO reference |
 | `conv3d(x, weight, bias=None, stride=1, padding=0)` | `(NDHWC, DHWIO) → NDHWC` | `pure` | NumPy NDHWC/DHWIO reference |
 | `qkv_projection(x, W_qkv)` | `(array, array) → tuple` | `pure` | Matmul and split into Q/K/V references |
-| `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None)` | `(array,array,array) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3 |
+| `flash_attn(Q, K, V, scale=None, causal=False, dropout_p=0.0, seed=None, attn_bias=None)` | `(array,array,array[,array]) → array` | `pure` / `random` when dropout is active | Naive O(S²) Phase 1; FA-4 Phase 3. Optional additive `attn_bias` (Graph IR operand) — `softmax(scale·Q·Kᵀ + attn_bias)·V`; on Apple GPU routes to `tessera_apple_gpu_flash_attn_bias_*` (`metal_runtime`). |
 | `linear_attn(Q, K, V, *, feature_map="elu", state=None, chunk_size=None, decay=None, causal=True)` | `(array,array,array) → array` | `state` | Linear / kernel-feature attention. Recurrent or chunk-parallel forms; optional decay (RetNet/GLA/Mamba2-selective). Returns just `O` — pair with `linear_attn_state` for chained-chunk inference (see attention_variants_plan LA-1) |
 | `linear_attn_state(Q, K, V, ...)` | `(array,array,array) → array` | `state` | Companion to `linear_attn` returning the post-update state `(B, H, D_qk, D_v)` |
 | `power_attn(Q, K, V, *, state, window=None, deg=2, causal=True)` | `(array,array,array) → array` | `state` | LA-4 — Symmetric power attention (linear-cost). Promoted from `examples/advanced/power_retention/` |
@@ -1532,6 +1539,7 @@ by `python/tessera/compiler/op_catalog.py`; tests guard this table against drift
 | `causal` | `bool` | `False` | Apply causal (lower-triangular) mask. |
 | `dropout_p` | `float` | `0.0` | Dropout probability in `[0, 1)`. If `> 0`, applies inverted dropout to attention weights. |
 | `seed` | `int \| None` | `None` | Optional NumPy RNG seed for deterministic dropout masks. |
+| `attn_bias` | `array \| None` | `None` | Optional additive score bias of shape `(B, Sq, Sk)`, broadcastable from `(1, Sq, Sk)`, applied pre-softmax: `softmax(scale·Q·Kᵀ + attn_bias)·V`. The general substrate for structured attention masks (e.g. DFlash sliding-window blocks). On Apple GPU it lowers to `tessera_apple_gpu_flash_attn_bias_{f32,f16,bf16}` (`metal_runtime`); causal + bias applies both masks; a broadcast `(1,Sq,Sk)` bias falls back to the reference. The VJP returns a `dbias` cotangent only when the bias is passed positionally (a recorded input). |
 
 **`fused_epilogue` activation values:** `"linear"` (identity), `"relu"`, `"gelu"`.
 
@@ -1735,6 +1743,67 @@ assert group.mesh_axes["tp"] == 2
 
 ---
 
+## 18. Speculative Decoding (DFlash)
+
+Block-diffusion speculative-decoding draft ([z-lab/dflash](https://github.com/z-lab/dflash),
+arXiv:2602.06036). Python reference; the attention core runs on the Apple GPU
+`metal_runtime` lane via the `attn_bias` substrate (§13). Greedy speculative
+output equals greedy autoregressive decode (proven vs the MLX reference). See
+[`docs/dflash.md`](../dflash.md) for the architecture overview.
+
+### 18.1 `tessera.nn.functional` — attention primitive
+
+| Function | Signature | Notes |
+|----------|-----------|-------|
+| `block_diffusion_attention` | `(x, x_ctx, *, q_proj, k_proj, v_proj, o_proj, num_heads, num_kv_heads, head_dim, q_norm=None, k_norm=None, cache_keys=None, cache_values=None, rope_fn=None, cache_offset=0, sliding_window=None, scale=None, eps=1e-6, attention_fn=None, return_ctx_kv=False) → array \| (array, k, v)` | One DFlash attention layer: QK-norm, KV injection `concat([context_KV, proposal_KV])`, GQA, rope offsets, full or sliding-window-via-`attn_bias`. Heads fold into batch → rank-3 `flash_attn`. `attention_fn=` routes the core onto a backend; `return_ctx_kv` exposes this step's context KV for caching. |
+| `mask_token_block` | `(prev_token, block_size, mask_token_id) → int64[..., block_size]` | Build the draft input block `[prev_token, MASK, …]`. |
+
+### 18.2 `tessera.dflash` — draft model, caches, sampling, generation, training
+
+| Symbol | Kind | Notes |
+|--------|------|-------|
+| `DFlashConfig`, `DFlashLayerWeights`, `DFlashWeights` | dataclasses | Draft config + weight containers (`x @ W` convention). |
+| `DFlashVerification` | dataclass | `accepted: int`, `new_tokens: list[int]`. |
+| `DFlashDraft` | `nn.Module` | Stateful wrapper over `DFlashWeights` (Parameters); `from_weights(w, cfg)` / `to_weights()` / `forward(block, target_hidden, *, logits_start=1, cache=None, attention_fn=None)`. |
+| `make_rope(head_dim, theta=10000.0)` | factory | `rope_fn(tensor_BHSD, offset)`. |
+| `target_feature_projection(target_hidden, fc, hidden_norm, *, eps=1e-6)` | fn | Multi-layer tap → `x_ctx`. |
+| `HiddenStateTap`, `capture_target_hidden(layers, layer_ids)` | class / ctx-mgr | Capture + concat target layer outputs (DFlash conditioning). |
+| `dflash_decoder_layer[_cached]`, `dflash_draft_forward[_cached]` | fns | Pre-norm attn + SwiGLU; `_cached` thread a `DraftKVCache`. |
+| `DraftKVCache`, `RotatingDraftKVCache(num_layers, max_size)` | classes | Per-layer accumulated context KV; rotating bounds the window. |
+| `make_sampler(temperature=0.0, top_k=0, top_p=0.0, rng=None)`, `sampler_probs(...)` | fns | Token sampler / truncated distribution. |
+| `dflash_linear_verify(draft_tokens, target_tokens)` | fn | Greedy exact-prefix acceptance + bonus. |
+| `dflash_speculative_verify(draft_tokens, draft_probs, target_probs, rng)` | fn | Distribution-preserving rejection acceptance (Leviathan). |
+| `dflash_step(...)`, `dflash_generate(...)` | fns | One step / stateless-target loop. |
+| `dflash_generate_cached(prompt, draft_w, cfg, target, *, max_new_tokens, block_size=None, rope_fn=None, temperature=0.0, top_k=0, top_p=0.0, rng=None, eos_id=None)` | fn | Efficient loop: cached draft + stateful target + sampling. |
+| `dflash_position_weights`, `dflash_block_loss`, `dflash_block_loss_grad` | fns | Position-weighted training loss (+ explicit gradient). |
+| `apple_gpu_attention_fn` | fn | `attention_fn` that runs the rank-3 core on Apple GPU `metal_runtime`. |
+
+### 18.3 `tessera.dflash_reference` — reference target model
+
+| Symbol | Kind | Notes |
+|--------|------|-------|
+| `DecoderLMConfig`, `DecoderLayerWeights` | dataclasses | Target config + per-layer weights. |
+| `ReferenceDecoderLM` | class | Causal MHA+SwiGLU target: `forward(tokens) → (logits, hidden)` (stateless ground truth), stateful `step(tokens)` / `rollback(n)` / `reset()` / `cache_len`. |
+| `random_decoder_lm(cfg, rng)` | fn | Build one with small random weights. |
+
+### 18.4 `tessera.dflash_io` — checkpoint I/O
+
+| Symbol | Notes |
+|--------|-------|
+| `load_safetensors(path)`, `save_safetensors(path, tensors)` | Dependency-free safetensors numpy reader/writer. |
+| `dflash_weights_from_state_dict(sd, cfg, *, embed_tokens, lm_head=None, prefix="model.")` | HF state dict → `DFlashWeights` (transposes `(out,in)` Linear weights). |
+| `dflash_weights_to_state_dict(w, *, prefix="model.")` | Inverse (HF layout). |
+| `load_dflash_weights(path, cfg, *, embed_tokens, lm_head=None)` / `save_dflash_weights(path, w)` | Read a `z-lab/*-DFlash` draft / save a trained draft. |
+
+### 18.5 `tessera.dflash_serve` — serving
+
+| Symbol | Notes |
+|--------|-------|
+| `dflash_generate_text(prompt, tokenizer, draft_w, cfg, target, *, max_new_tokens, ...)` | String-in/out via any `encode`/`decode` tokenizer. |
+| `DFlashScheduler(draft_w, cfg, target, *, rope_fn=None, default_max_new_tokens=128)` | `.generate(prompt_ids, ...)` / `.generate_text(prompt, tokenizer, ...)`. |
+
+---
+
 ## Appendix A: Public Symbol Index
 
 Quick-lookup table of all public symbols and their canonical module paths.
@@ -1771,3 +1840,8 @@ Quick-lookup table of all public symbols and their canonical module paths.
 | `MockRankGroup` | `tessera.testing.mock_collective.MockRankGroup` |
 | `MockRank` | `tessera.testing.mock_collective.MockRank` |
 | `MockCollectiveError` | `tessera.testing.mock_collective.MockCollectiveError` |
+| `block_diffusion_attention`, `mask_token_block` | `tessera.nn.functional` |
+| `DFlashConfig` / `DFlashWeights` / `DFlashDraft` / `dflash_generate_cached` / `make_sampler` / `dflash_speculative_verify` / `dflash_block_loss` (full surface — §18.2) | `tessera.dflash` |
+| `ReferenceDecoderLM` / `DecoderLMConfig` / `random_decoder_lm` | `tessera.dflash_reference` |
+| `load_dflash_weights` / `save_dflash_weights` / `load_safetensors` / `dflash_weights_from_state_dict` | `tessera.dflash_io` |
+| `dflash_generate_text` / `DFlashScheduler` | `tessera.dflash_serve` |

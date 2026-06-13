@@ -166,9 +166,20 @@ Finished:
   `apple_gpu_attention_fn` seam, and a `@jit(target="apple_gpu")` flash_attn(bias)
   proof reporting `metal_runtime`. The gold-standard invariant — greedy spec-decode
   output == greedy autoregressive decode — is proven against an independent numpy
-  port of the `z-lab/dflash` MLX reference. Open: real target-model
-  `output_hidden_states` integration, stateful KV-cache rollback, and loading real
-  `z-lab/*-DFlash` checkpoints. Detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
+  port of the `z-lab/dflash` MLX reference.
+  **Integration items 1–9 landed (2026-06-12):** (1) per-layer draft KV cache
+  (`DraftKVCache`, cached==non-cached); (2) non-greedy sampling + distribution-
+  preserving rejection acceptance (`make_sampler`/`dflash_speculative_verify`,
+  marginal==target by Monte Carlo); (3) stateful target KV cache + rollback and
+  (4) a real reference target (`dflash_reference.ReferenceDecoderLM`; stateful==
+  stateless; full cached+stateful loop == greedy AR); (5) whole-draft attention on
+  Metal via the `attention_fn` seam; (6) `DFlashDraft(nn.Module)`; (7) safetensors
+  checkpoint I/O + HF state-dict mapping (`dflash_io`); (8) GQA via exact repeat
+  (the native kernel doesn't fit the concat-KV+bias layout); (9) position-weighted
+  training loss, `RotatingDraftKVCache`, tokenizer-wired `dflash_generate_text`, and
+  `DFlashScheduler` (`dflash_serve`). Remaining gates are external: numerical parity
+  vs a downloaded `z-lab/*-DFlash` checkpoint (network), and a single fully-jitted
+  GPU draft artifact (GPU gather/embedding). Detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 Still needs work:
 

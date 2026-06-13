@@ -633,7 +633,11 @@ def block_diffusion_attention(
     values = np.concatenate([ctx_v, prop_v], axis=2)
     Sk = keys.shape[2]
 
-    # GQA: repeat KV heads up to query heads.
+    # GQA: repeat KV heads up to query heads. This is numerically exact; the
+    # native non-repeated path (the runtime `flash_attn_gqa` kernel) reads the
+    # KV group directly to save bandwidth, but it does not support DFlash's
+    # concatenated-context+proposal KV with an additive bias, so the reference
+    # (and the rank-3 flash_attn lane) materialize the repeat.
     if Hkv != Hq:
         rep = Hq // Hkv
         keys = np.repeat(keys, rep, axis=1)

@@ -4105,6 +4105,7 @@ from . import speculative  # noqa: E402
 from . import dflash  # noqa: E402
 from . import dflash_reference  # noqa: E402
 from . import dflash_io  # noqa: E402
+from . import dflash_serve  # noqa: E402
 
 # Probability distributions (deferred-items plan, Item 1).
 from . import distributions  # noqa: E402

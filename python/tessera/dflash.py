@@ -27,6 +27,7 @@ from typing import Any, Callable, List, Optional, Tuple
 import numpy as np
 
 from .nn import functional as F
+from .nn import Module, ModuleList, Parameter
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +420,90 @@ class DraftKVCache:
         self.offset += int(s)
 
 
+class RotatingDraftKVCache(DraftKVCache):
+    """A :class:`DraftKVCache` bounded to the last ``max_size`` context tokens —
+    the draft analogue of MLX's ``RotatingKVCache`` for sliding-attention layers.
+    Older context (outside the window) is dropped on append. ``offset`` stays
+    absolute (cached K are roped at their absolute positions), so the kept window
+    keeps correct relative positions."""
+
+    def __init__(self, num_layers: int, max_size: int):
+        super().__init__(num_layers)
+        self.max_size = int(max_size)
+
+    def append(self, i: int, k, v) -> None:
+        super().append(i, k, v)
+        ki, vi = self.keys[i], self.values[i]
+        if ki is not None and vi is not None and ki.shape[1] > self.max_size:
+            self.keys[i] = ki[:, -self.max_size:]
+            self.values[i] = vi[:, -self.max_size:]
+
+
+# ---------------------------------------------------------------------------
+# Stateful nn.Module wrapper (#6)
+# ---------------------------------------------------------------------------
+
+_LAYER_FIELDS = ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm",
+                 "input_layernorm", "post_attention_layernorm",
+                 "mlp_gate", "mlp_up", "mlp_down")
+
+
+class _DFlashLayerModule(Module):
+    def __init__(self, lw: DFlashLayerWeights):
+        super().__init__()
+        for f in _LAYER_FIELDS:
+            setattr(self, f, Parameter(np.asarray(getattr(lw, f))))
+
+    def to_weights(self) -> DFlashLayerWeights:
+        return DFlashLayerWeights(**{f: F._asarray(getattr(self, f)) for f in _LAYER_FIELDS})
+
+
+class DFlashDraft(Module):
+    """Stateful ``nn.Module`` wrapper over :class:`DFlashWeights`.
+
+    Holds every draft tensor as a :class:`tessera.nn.Parameter` (so the draft
+    participates in ``parameters()`` / ``state_dict`` / ``.to(dtype)``), and
+    forwards through the functional draft. ``cache`` (a :class:`DraftKVCache`)
+    selects the cached path. Build with ``DFlashDraft(cfg, weights)`` or
+    ``DFlashDraft.from_weights(weights, cfg)``; recover plain weights with
+    ``to_weights()``.
+    """
+
+    def __init__(self, cfg: DFlashConfig, w: DFlashWeights):
+        super().__init__()
+        self.cfg = cfg
+        self.embed_tokens = Parameter(np.asarray(w.embed_tokens))
+        self.fc = Parameter(np.asarray(w.fc))
+        self.hidden_norm = Parameter(np.asarray(w.hidden_norm))
+        self.final_norm = Parameter(np.asarray(w.final_norm))
+        self.lm_head = None if w.lm_head is None else Parameter(np.asarray(w.lm_head))
+        self.layers = ModuleList([_DFlashLayerModule(lw) for lw in w.layers])
+        self.rope = make_rope(cfg.head_dim, cfg.rope_theta)
+
+    @classmethod
+    def from_weights(cls, w: DFlashWeights, cfg: DFlashConfig) -> "DFlashDraft":
+        return cls(cfg, w)
+
+    def to_weights(self) -> DFlashWeights:
+        return DFlashWeights(
+            embed_tokens=F._asarray(self.embed_tokens), fc=F._asarray(self.fc),
+            hidden_norm=F._asarray(self.hidden_norm),
+            layers=[lm.to_weights() for lm in self.layers],
+            final_norm=F._asarray(self.final_norm),
+            lm_head=None if self.lm_head is None else F._asarray(self.lm_head))
+
+    def forward(self, block_tokens, target_hidden, *, logits_start: int = 1,
+                cache: Optional[DraftKVCache] = None, attention_fn=None):
+        w = self.to_weights()
+        if cache is None:
+            return dflash_draft_forward(block_tokens, target_hidden, w, self.cfg,
+                                        logits_start=logits_start, rope_fn=self.rope,
+                                        attention_fn=attention_fn)
+        return dflash_draft_forward_cached(block_tokens, target_hidden, w, self.cfg, cache,
+                                           logits_start=logits_start, rope_fn=self.rope,
+                                           attention_fn=attention_fn)
+
+
 def dflash_decoder_layer_cached(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
                                 layer_idx: int, cache: DraftKVCache, *, rope_fn=None,
                                 attention_fn=None):
@@ -753,6 +838,8 @@ __all__ = [
     "DFlashVerification",
     "HiddenStateTap",
     "DraftKVCache",
+    "RotatingDraftKVCache",
+    "DFlashDraft",
     "make_rope",
     "make_sampler",
     "sampler_probs",

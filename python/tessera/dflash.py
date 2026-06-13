@@ -139,12 +139,14 @@ def target_feature_projection(target_hidden, fc, hidden_norm, *, eps: float = 1e
 
 def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
                          layer_idx: int, *, rope_fn=None,
-                         cache_keys=None, cache_values=None, cache_offset: int = 0):
+                         cache_keys=None, cache_values=None, cache_offset: int = 0,
+                         attention_fn=None):
     """One DFlash decoder layer: pre-norm attention + pre-norm SwiGLU, residual.
 
     Mirrors ``DFlashDecoderLayer.__call__``: ``input_layernorm`` is applied to
     the query/proposal source ``x`` only (the injected ``x_ctx`` is projected
-    raw inside attention).
+    raw inside attention). ``attention_fn`` (e.g.
+    :func:`apple_gpu_attention_fn`) routes the attention core onto a backend.
     """
     sliding = cfg.sliding_window if cfg.layer_types[layer_idx] == "sliding_attention" else None
     x_normed = F.rms_norm(x, lw.input_layernorm, eps=cfg.rms_norm_eps)
@@ -155,7 +157,7 @@ def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
         num_heads=cfg.num_attention_heads, num_kv_heads=cfg.num_key_value_heads,
         head_dim=cfg.head_dim, rope_fn=rope_fn, cache_offset=cache_offset,
         cache_keys=cache_keys, cache_values=cache_values,
-        sliding_window=sliding, eps=cfg.rms_norm_eps)
+        sliding_window=sliding, eps=cfg.rms_norm_eps, attention_fn=attention_fn)
     h = np.asarray(x) + np.asarray(attn)
     h_normed = F.rms_norm(h, lw.post_attention_layernorm, eps=cfg.rms_norm_eps)
     mlp = F.swiglu(h_normed, lw.mlp_gate, lw.mlp_up, lw.mlp_down)
@@ -164,7 +166,8 @@ def dflash_decoder_layer(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
 
 def dflash_draft_forward(block_tokens, target_hidden, w: DFlashWeights,
                          cfg: DFlashConfig, *, logits_start: int = 0,
-                         rope_fn=None, caches: Optional[List[Tuple[Any, Any]]] = None):
+                         rope_fn=None, caches: Optional[List[Tuple[Any, Any]]] = None,
+                         attention_fn=None):
     """Run the draft over a token block in a single parallel forward → logits.
 
     ``block_tokens`` ``(B, L)`` is ``[prev_token, MASK, ...]``; ``target_hidden``
@@ -184,7 +187,8 @@ def dflash_draft_forward(block_tokens, target_hidden, w: DFlashWeights,
             ck, cv = caches[i]
         cache_offset = 0 if ck is None else np.asarray(ck).shape[1]
         h = dflash_decoder_layer(h, x_ctx, lw, cfg, i, rope_fn=rope_fn,
-                                 cache_keys=ck, cache_values=cv, cache_offset=cache_offset)
+                                 cache_keys=ck, cache_values=cv, cache_offset=cache_offset,
+                                 attention_fn=attention_fn)
     if logits_start:
         h = np.asarray(h)[:, logits_start:]
     h = F.rms_norm(h, w.final_norm, eps=cfg.rms_norm_eps)
@@ -335,6 +339,58 @@ def sampler_probs(logits, temperature: float = 1.0, top_k: int = 0,
 
 
 # ---------------------------------------------------------------------------
+# Training loss (position-weighted block cross-entropy)
+# ---------------------------------------------------------------------------
+
+def dflash_position_weights(block_len: int, gamma: Optional[float] = None) -> np.ndarray:
+    """Per-position loss weights ``wₖ = exp(-k/γ)`` (normalized), emphasizing the
+    early positions of the drafted block (DFlash ``model_mlx`` loss decay,
+    ``wₖ = exp(-(k-1)/γ)`` in 1-indexed form). ``γ`` defaults to ``block_len``."""
+    g = float(gamma if gamma is not None else block_len)
+    w = np.exp(-np.arange(block_len, dtype=np.float64) / max(g, 1e-8))
+    return w / w.sum()
+
+
+def dflash_block_loss(logits, targets, *, gamma: Optional[float] = None,
+                      reduction: str = "mean"):
+    """Position-weighted cross-entropy for training a DFlash draft block.
+
+    ``logits`` ``(B, L, V)``, ``targets`` ``(B, L)`` int. Each block position is
+    weighted by :func:`dflash_position_weights`. Returns a scalar (``mean``/
+    ``sum`` over the batch) or per-example ``(B,)`` when ``reduction == "none"``.
+    """
+    logits = np.asarray(logits, dtype=np.float64)
+    targets = np.asarray(targets, dtype=np.int64)
+    B, L, V = logits.shape
+    w = dflash_position_weights(L, gamma)
+    logp = logits - (logits.max(-1, keepdims=True)
+                     + np.log(np.exp(logits - logits.max(-1, keepdims=True)).sum(-1, keepdims=True)))
+    ce = -np.take_along_axis(logp, targets[..., None], axis=-1)[..., 0]  # (B, L)
+    wce = (ce * w[None, :]).sum(-1)                                       # (B,)
+    if reduction == "mean":
+        return float(wce.mean())
+    if reduction == "sum":
+        return float(wce.sum())
+    if reduction == "none":
+        return wce
+    raise ValueError(f"reduction must be mean/sum/none; got {reduction!r}")
+
+
+def dflash_block_loss_grad(logits, targets, *, gamma: Optional[float] = None):
+    """``dLoss/dlogits`` for the mean-reduced :func:`dflash_block_loss` — the
+    explicit gradient for draft training (composes with any optimizer in
+    ``tessera.optim``)."""
+    logits = np.asarray(logits, dtype=np.float64)
+    targets = np.asarray(targets, dtype=np.int64)
+    B, L, V = logits.shape
+    w = dflash_position_weights(L, gamma)
+    p = _softmax_lastaxis(logits)
+    onehot = np.zeros_like(p)
+    np.put_along_axis(onehot, targets[..., None], 1.0, axis=-1)
+    return (p - onehot) * w[None, :, None] / float(B)
+
+
+# ---------------------------------------------------------------------------
 # Draft KV cache (efficient cached drafting)
 # ---------------------------------------------------------------------------
 
@@ -364,7 +420,8 @@ class DraftKVCache:
 
 
 def dflash_decoder_layer_cached(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashConfig,
-                                layer_idx: int, cache: DraftKVCache, *, rope_fn=None):
+                                layer_idx: int, cache: DraftKVCache, *, rope_fn=None,
+                                attention_fn=None):
     """Cached DFlash decoder layer — attends to ``cache`` ++ this step's context
     and appends this step's projected context KV to ``cache``. Equivalent to
     :func:`dflash_decoder_layer` with the prior context supplied via the cache."""
@@ -377,7 +434,8 @@ def dflash_decoder_layer_cached(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashCon
         num_heads=cfg.num_attention_heads, num_kv_heads=cfg.num_key_value_heads,
         head_dim=cfg.head_dim, rope_fn=rope_fn, cache_offset=cache.offset,
         cache_keys=cache.keys[layer_idx], cache_values=cache.values[layer_idx],
-        sliding_window=sliding, eps=cfg.rms_norm_eps, return_ctx_kv=True)
+        sliding_window=sliding, eps=cfg.rms_norm_eps, return_ctx_kv=True,
+        attention_fn=attention_fn)
     cache.append(layer_idx, ck_new, cv_new)
     h = np.asarray(x) + np.asarray(attn)
     h_normed = F.rms_norm(h, lw.post_attention_layernorm, eps=cfg.rms_norm_eps)
@@ -387,7 +445,7 @@ def dflash_decoder_layer_cached(x, x_ctx, lw: DFlashLayerWeights, cfg: DFlashCon
 
 def dflash_draft_forward_cached(block_tokens, target_hidden, w: DFlashWeights,
                                 cfg: DFlashConfig, cache: DraftKVCache, *,
-                                logits_start: int = 0, rope_fn=None):
+                                logits_start: int = 0, rope_fn=None, attention_fn=None):
     """Cached draft forward — threads ``cache`` through every layer so the draft
     attends to the full accumulated context (not just this step's). Output is
     identical to :func:`dflash_draft_forward` fed the same accumulated context;
@@ -397,7 +455,8 @@ def dflash_draft_forward_cached(block_tokens, target_hidden, w: DFlashWeights,
     x_ctx = target_feature_projection(target_hidden, w.fc, w.hidden_norm, eps=cfg.rms_norm_eps)
     S = np.asarray(x_ctx).shape[1]
     for i, lw in enumerate(w.layers):
-        h = dflash_decoder_layer_cached(h, x_ctx, lw, cfg, i, cache, rope_fn=rope_fn)
+        h = dflash_decoder_layer_cached(h, x_ctx, lw, cfg, i, cache, rope_fn=rope_fn,
+                                        attention_fn=attention_fn)
     cache.advance(S)
     if logits_start:
         h = np.asarray(h)[:, logits_start:]
@@ -697,6 +756,9 @@ __all__ = [
     "make_rope",
     "make_sampler",
     "sampler_probs",
+    "dflash_position_weights",
+    "dflash_block_loss",
+    "dflash_block_loss_grad",
     "target_feature_projection",
     "capture_target_hidden",
     "apple_gpu_attention_fn",

@@ -78,6 +78,7 @@ Python symbols beyond what is already specified here.
 16. [Error Types](#16-error-types)
 17. [Testing Utilities](#17-testing-utilities)
 18. [Speculative Decoding (DFlash)](#18-speculative-decoding-dflash)
+19. [Production Model Graphs (DiffusionGemma)](#19-production-model-graphs-diffusiongemma)
 
 ---
 
@@ -183,6 +184,9 @@ tessera.dflash            # block-diffusion draft, caches, samplers, verify, gen
 tessera.dflash_reference  # ReferenceDecoderLM — stateful KV-cached target (+ rollback) and tap
 tessera.dflash_io         # safetensors I/O + HF state-dict <-> DFlashWeights mapping
 tessera.dflash_serve      # dflash_generate_text + DFlashScheduler
+
+# Production model graphs (experimental) — see §19
+tessera.models            # DiffusionGemma config/graph/verifier + MoE routing, sampler, decode, staging
 
 # Canonical dtype helpers
 tessera.dtype        # Dtype, canonicalize_dtype, result_type, planned-gated checks
@@ -1393,6 +1397,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `ebm_inner_step(y, grad, eta, noise_scale=0.0)` | `(array, array) → array` | `pure` | EBM single Langevin/SGD inner step `y − eta·grad` (+ optional noise); Graph IR op `tessera.ebm_inner_step` |
 | `gelu(x)` | `(array) → array` | `pure` | NumPy GELU |
 | `tanh(x)` | `(array) → array` | `pure` | NumPy tanh |
+| `softcap(x, *, cap)` | `(array) → array` | `pure` | Gemma-style logit soft-cap `cap·tanh(x/cap)` (bounds to `(-cap, cap)`); VJP+JVP registered |
 | `add(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy addition; also used by Python frontend binary `+` lowering |
 | `mul(x, y=None, scalar=None)` | `(array, array/scalar) → array` | `pure` | NumPy multiplication; also used by Python frontend binary `*` lowering |
 | `relu(x)` | `(array) → array` | `pure` | NumPy ReLU |
@@ -1806,6 +1811,58 @@ output equals greedy autoregressive decode (proven vs the MLX reference). See
 
 ---
 
+## 19. Production Model Graphs (DiffusionGemma)
+
+`tessera.models` hosts compiler-visible, dimension-checked model graphs built
+from Tessera primitives. Today it is **DiffusionGemma** — a Gemma-4-calibrated
+block-diffusion MoE text model. It is a **contract layer**: a frozen config, a
+*shape-only* graph builder for one full text layer at production dimensions, and
+a config-aware verifier that rejects mismatched dimensions before any runtime;
+plus numpy-reference MoE routing, an entropy-bound sampler, the block-diffusion
+step graph + decode loop, and quantization/vision staging manifests. Runtime /
+kernel lowering of the block-diffusion region is a subsequent phase.
+
+### 19.1 Config + graph + verifiers
+
+| Symbol | Notes |
+|--------|-------|
+| `DiffusionGemmaConfig` | Frozen config; defaults to the Gemma 4 26B A4B card (30 layers, 128 experts/8 active+1 shared, hybrid sliding/global attention, p-RoPE, 262144 vocab). |
+| `DiffusionGemmaDimError` | Raised by the verifiers on a dimension/config mismatch. |
+| `GraphNode`, `TextBlockGraph` | A graph node (op + input/output shapes + attrs) and the ordered-node graph for one text layer. |
+| `build_text_block(config)` / `build_lm_head(config)` | Build the shape-only text-layer graph / LM-head node. |
+| `verify_config(config)` / `verify_text_block(graph, config)` / `verify_lm_head(node, config)` | Config-aware verifiers. |
+| `estimated_param_counts(config)` / `verify_param_budget(config, ...)` | Param-budget estimate + check against the published total/active budget. |
+
+### 19.2 MoE routing (reference)
+
+| Symbol | Notes |
+|--------|-------|
+| `RoutingPlan` · `route_top_k(logits, k, ...)` | Top-k expert routing. |
+| `plan_packing` / `pack_tokens` / `unpack_combine` | Contiguous expert packing + scatter/combine. |
+| `moe_forward(...)` / `moe_forward_naive(...)` | Reference MoE expert-FFN forward (grouped vs naive). |
+| `synthetic_moe_weights(config, ...)` | Synthetic BF16 expert weights for tests. |
+
+### 19.3 Sampler · block-diffusion step · decode
+
+| Symbol | Notes |
+|--------|-------|
+| `SamplerConfig` · `SamplerResult` · `temperature_schedule` · `entropy_bound_sample(...)` | Entropy-bounded block sampler + temperature schedule. |
+| `BlockDiffusionStepGraph` · `BlockDiffusionStepResult` · `build_block_diffusion_step` / `verify_block_diffusion_step` / `run_block_diffusion_step` | One block-diffusion denoise/predict step (graph + reference runner + its result). |
+| `BlockDiffusionDecoder` · `BlockDecodeResult` | The block-diffusion decode loop. |
+
+### 19.4 Staging (quantization / vision / manifest)
+
+| Symbol | Notes |
+|--------|-------|
+| `QuantizationPlan` · `plan_quantization(...)` | Quantization staging plan. |
+| `VisionMetadata` · `default_vision_metadata` / `validate_vision_metadata` / `vision_execution_supported` | Vision-modality staging metadata (encoder deferred). |
+| `ModelManifest` · `import_model_metadata(...)` · `StagingError` | Model manifest import + staging error. |
+
+The Gemma logit soft-cap op `tessera.ops.softcap(x, *, cap)` (= `cap·tanh(x/cap)`,
+VJP+JVP registered) lands with this model — see §13.
+
+---
+
 ## Appendix A: Public Symbol Index
 
 Quick-lookup table of all public symbols and their canonical module paths.
@@ -1847,3 +1904,4 @@ Quick-lookup table of all public symbols and their canonical module paths.
 | `ReferenceDecoderLM` / `DecoderLMConfig` / `random_decoder_lm` | `tessera.dflash_reference` |
 | `load_dflash_weights` / `save_dflash_weights` / `load_safetensors` / `dflash_weights_from_state_dict` | `tessera.dflash_io` |
 | `dflash_generate_text` / `DFlashScheduler` | `tessera.dflash_serve` |
+| `DiffusionGemmaConfig` / `build_text_block` / `verify_text_block` / `route_top_k` / `moe_forward` / `entropy_bound_sample` / `BlockDiffusionDecoder` / `plan_quantization` (full surface — §19) | `tessera.models` |

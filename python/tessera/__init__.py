@@ -403,6 +403,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return np.tanh(x)
 
+    def softcap(x, *, cap: float):
+        """Gemma-style logit soft-capping: ``cap * tanh(x / cap)`` bounds values
+        to ``(-cap, cap)`` smoothly. Used for attention and final logits."""
+        if hasattr(x, "_data"):
+            x = x._data
+        cap = float(cap)
+        if cap <= 0.0:
+            raise ValueError("softcap cap must be positive")
+        return cap * np.tanh(np.asarray(x) / cap)
+
     def add(x, y=None, *, scalar=None):
         if hasattr(x, "_data"):
             x = x._data
@@ -3386,6 +3396,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "sum": sum,
         "gelu": gelu,
         "tanh": tanh,
+        "softcap": softcap,
         "add": add,
         "mul": mul,
         "relu": relu,
@@ -3739,6 +3750,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         sigmoid=sigmoid,
         gelu=gelu,
         tanh=tanh,
+        softcap=softcap,
         add=add,
         mul=mul,
         relu=relu,
@@ -4106,6 +4118,9 @@ from . import dflash  # noqa: E402
 from . import dflash_reference  # noqa: E402
 from . import dflash_io  # noqa: E402
 from . import dflash_serve  # noqa: E402
+
+# Production model graphs (experimental) — DiffusionGemma block-diffusion MoE.
+from . import models  # noqa: E402
 
 # Probability distributions (deferred-items plan, Item 1).
 from . import distributions  # noqa: E402

@@ -465,6 +465,14 @@ def vjp_tanh(dout, x, **_):
     return (dout * (1.0 - t * t),)
 
 
+@_vjp("softcap")
+def vjp_softcap(dout, x, *, cap=None, **_):
+    # y = cap * tanh(x / cap); dy/dx = 1 - tanh(x/cap)^2 = sech^2(x/cap).
+    c = float(cap)
+    t = np.tanh(np.asarray(x) / c)
+    return (np.asarray(dout) * (1.0 - t * t),)
+
+
 @_vjp("silu")
 def vjp_silu(dout, x, **_):
     s = 1.0 / (1.0 + np.exp(-x))

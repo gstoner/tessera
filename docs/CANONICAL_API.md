@@ -762,6 +762,35 @@ ids = sched.generate(prompt_ids, max_new_tokens=64)    # greedy == autoregressiv
 
 ---
 
+## `tessera.models` — Production Model Graphs (experimental)
+
+Compiler-visible, dimension-checked model graphs built from Tessera primitives.
+Today: **DiffusionGemma**, a Gemma-4-calibrated block-diffusion MoE text model as
+a *shape-only* graph + config-aware verifier (the contract layer the
+runtime/kernel lowering builds on) plus numpy-reference routing/sampling/decode.
+Full spec: [`PYTHON_API_SPEC.md` §19](spec/PYTHON_API_SPEC.md).
+
+| Concept | Canonical name |
+|---------|----------------|
+| Model config (Gemma-4-calibrated) | `tessera.models.DiffusionGemmaConfig` |
+| One text layer: shape-only graph | `tessera.models.build_text_block` → `TextBlockGraph` (`GraphNode` list) |
+| Config / graph / LM-head / budget verifiers | `tessera.models.verify_config` / `verify_text_block` / `verify_lm_head` / `verify_param_budget` |
+| Param-budget estimate | `tessera.models.estimated_param_counts` |
+| MoE top-k routing + pack/combine (reference) | `tessera.models.route_top_k` / `plan_packing` / `pack_tokens` / `unpack_combine` / `moe_forward` |
+| Entropy-bound sampler | `tessera.models.entropy_bound_sample` (`SamplerConfig` / `temperature_schedule`) |
+| Block-diffusion step graph + decode loop | `tessera.models.build_block_diffusion_step` / `run_block_diffusion_step` / `BlockDiffusionDecoder` |
+| Quantization / vision staging manifests | `tessera.models.plan_quantization` / `default_vision_metadata` / `import_model_metadata` (`ModelManifest`) |
+| Gemma logit soft-cap op | `tessera.ops.softcap(x, *, cap)` — `cap·tanh(x/cap)`, VJP+JVP |
+
+```python
+from tessera.models import DiffusionGemmaConfig, build_text_block, verify_text_block
+cfg = DiffusionGemmaConfig()                    # Gemma 4 26B A4B card defaults
+graph = build_text_block(cfg)                   # shape-only GraphNode list
+verify_text_block(graph, cfg)                   # rejects dim mismatches before any runtime
+```
+
+---
+
 ## `tessera.autodiff` — Tape-based Reverse-Mode Autodiff (v1)
 
 Tape-based reverse-mode at the numpy-reference op layer. Hooks into the Tier 1

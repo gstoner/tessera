@@ -258,6 +258,7 @@ sin,pure,,1,0,0
 sinh,pure,,1,0,0
 slice,pure,,1,0,0
 smooth_l1_loss,pure,,1,0,0
+softcap,pure,,1,0,0
 softmax,pure,pure,1,1,1
 softmax_safe,pure,,1,1,1
 softplus,pure,,1,0,0

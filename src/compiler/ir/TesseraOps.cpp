@@ -171,6 +171,34 @@ LogicalResult MoeSwigluBlockOp::verify() {
   return success();
 }
 
+// DiffusionGemma block-diffusion step — the canvas denoiser is bidirectional by
+// construction; GQA query heads must be a multiple of KV heads; the per-head
+// head_dim must fit the Apple GPU flash-attention kernel (<= 256).
+LogicalResult DiffusionBlockStepOp::verify() {
+  if (getCausal())
+    return emitOpError("canvas denoising must be bidirectional (causal = false); "
+                       "a causal step is the encoder prefill, not the block-"
+                       "diffusion canvas region");
+  if (getNumDenoiseLayers() <= 0)
+    return emitOpError("num_denoise_layers must be positive");
+  int64_t hq = getNumAttentionHeads(), hkv = getNumKvHeads(), dh = getHeadDim();
+  if (hq <= 0 || hkv <= 0)
+    return emitOpError("num_attention_heads and num_kv_heads must be positive");
+  if (hq % hkv != 0)
+    return emitOpError("GQA requires num_attention_heads (")
+           << hq << ") to be a multiple of num_kv_heads (" << hkv << ")";
+  if (dh <= 0 || dh > 256)
+    return emitOpError("head_dim must be in (0, 256] for the GPU attention "
+                       "kernel; got ")
+           << dh;
+  auto canvasTy = dyn_cast<RankedTensorType>(getCanvas().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getOut().getType());
+  if (canvasTy && outTy && canvasTy.hasStaticShape() && outTy.hasStaticShape() &&
+      canvasTy.getShape() != outTy.getShape())
+    return emitOpError("out must have the same shape as canvas (T, H)");
+  return success();
+}
+
 namespace {
 bool isFloatTensor(RankedTensorType ty) {
   Type elem = ty.getElementType();

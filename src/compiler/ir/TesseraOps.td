@@ -243,6 +243,31 @@ def Tessera_MoeSwigluBlockOp : Op<
   let hasVerifier = 1;
 }
 
+// DiffusionGemma block-diffusion canvas-denoise step — a structured region the
+// compiler sees as one op (vs. the unrolled per-layer attention/MoE graph). It
+// marks the bidirectional canvas denoiser over committed encoder/context KV;
+// lowering recognizes it as an Apple GPU metal_runtime region (the per-head
+// attention rides the attn_bias/flash_attn lane, the MoE the moe_swiglu_block
+// lane). See python/tessera/models/block_diffusion_runtime.py for the executable
+// reference.
+def Tessera_DiffusionBlockStepOp : Op<
+  Tessera_Dialect, "diffusion_block_step",
+  [Pure]
+> {
+  let summary = "DiffusionGemma block-diffusion canvas-denoise step (structured region)";
+  let arguments = (ins TensorType:$canvas,
+                        TensorType:$encoder_k,
+                        TensorType:$encoder_v,
+                        I64Attr:$num_denoise_layers,
+                        I64Attr:$num_attention_heads,
+                        I64Attr:$num_kv_heads,
+                        I64Attr:$head_dim,
+                        DefaultValuedAttr<BoolAttr, "false">:$causal);
+  let results = (outs TensorType:$out);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Stage 13 — RL post-training loss Graph IR surface. These ops make PPO/GRPO/
 // CISPO compiler-visible at the Graph layer. Only PPO's strict fp32 mean
 // envelope is promoted to Apple GPU value execution in this stage; GRPO/CISPO

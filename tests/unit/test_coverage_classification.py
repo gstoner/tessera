@@ -32,10 +32,15 @@ from tessera.compiler.coverage_classification import (
     HARDWARE_GATED,
     NEEDS_DIRECT_TEST,
     STRUCTURAL_ONLY,
+    _CATEGORY_DEFAULT_BUCKET,
+    _NAME_OVERRIDES,
     classification_summary,
+    classify_op,
     classify_thinly_tested,
     needs_direct_test_ops,
 )
+from tessera.compiler.primitive_coverage import all_primitive_coverages
+from tessera.compiler.test_coverage_audit import OpTestCoverage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -155,49 +160,110 @@ def test_structural_only_bucket_has_substantial_size(
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Sentinel per-bucket ops — pin a small handful so reorganizations
-# don't silently move them.
+# Classifier LOGIC tests — exercise classify_op's rules directly instead of
+# pinning hand-picked example ops.
+#
+# The old approach pinned specific ops (e.g. complex_abs, tree_flatten) to an
+# expected bucket and looked them up in the *thinly-tested* set.  That decays:
+# the moment an example op accumulates >1 test reference it leaves the thin
+# set and the assertion self-skips with "sentinel needs updating" — a test
+# that quietly stops testing.  classify_op's bucket is a pure function of
+# op_name (name override > registry category default > structural fallback;
+# the coverage arg is only attached to the result), so we test the *rules*
+# across the whole live registry.  These never decay.
 # ─────────────────────────────────────────────────────────────────────────
 
 
-_SENTINEL_CLASSIFICATIONS = (
-    # (op, expected_bucket, why)
-    ("ebm_bivector_langevin_sample", HARDWARE_GATED,
-     "manifold Langevin needs real GPU mesh"),
-    ("ebm_sphere_langevin_step", HARDWARE_GATED,
-     "manifold Langevin needs real GPU mesh"),
-    ("cross_entropy_loss", COVERED_BY_FAMILY,
-     "category default for loss"),
-    ("rng_bernoulli", COVERED_BY_FAMILY,
-     "category default for rng"),
-    ("complex_abs", COVERED_BY_FAMILY,
-     "category default for complex elementwise"),
-    ("tree_flatten", STRUCTURAL_ONLY,
-     "category default for state_tree"),
-    ("custom_jvp", STRUCTURAL_ONLY,
-     "category default for extension"),
-)
+def _dummy_coverage(op_name: str) -> OpTestCoverage:
+    """A content-free coverage record — classify_op buckets by op_name only,
+    so the counts here don't affect the result."""
+    return OpTestCoverage(op_name, 0, 0, 0, (), ())
 
 
-@pytest.mark.parametrize(
-    "op,expected,why", _SENTINEL_CLASSIFICATIONS,
-    ids=[s[0] for s in _SENTINEL_CLASSIFICATIONS],
-)
-def test_sentinel_op_in_expected_bucket(
-    op: str, expected: str, why: str
-) -> None:
-    by_name = {c.op_name: c.bucket for c in classify_thinly_tested()}
-    actual = by_name.get(op)
-    if actual is None:
-        pytest.skip(
-            f"sentinel op {op!r} is no longer thinly-tested — that's "
-            f"good, but the sentinel needs updating."
+def test_category_default_table_is_well_formed() -> None:
+    # every declared category routes to a real bucket
+    for category, bucket in _CATEGORY_DEFAULT_BUCKET.items():
+        assert bucket in ALL_BUCKETS, (
+            f"category {category!r} maps to unknown bucket {bucket!r}"
         )
-    assert actual == expected, (
-        f"Sentinel op {op!r} expected in bucket {expected!r} ({why}) "
-        f"but found in {actual!r}.  Either the classification rules "
-        f"changed or the op moved out of the thin set."
-    )
+
+
+def test_name_override_table_is_well_formed() -> None:
+    for op, (bucket, reason) in _NAME_OVERRIDES.items():
+        assert bucket in ALL_BUCKETS, f"override {op!r} → bad bucket {bucket!r}"
+        assert reason, f"override {op!r} has an empty reason"
+
+
+def test_every_category_routes_to_its_declared_default() -> None:
+    # For each declared category, sample a LIVE registry op of that category
+    # (one without a per-name override) and verify classify_op routes it to the
+    # category default.  Sampling dynamically asks "does the rule still fire",
+    # never "is this specific example op still thin" — so it cannot decay.
+    covs = all_primitive_coverages()
+    mismatches: list[tuple[str, str, str, str]] = []
+    sampled = 0
+    for category, expected in _CATEGORY_DEFAULT_BUCKET.items():
+        rep = next(
+            (name for name, c in sorted(covs.items())
+             if c.category == category and name not in _NAME_OVERRIDES),
+            None,
+        )
+        if rep is None:
+            continue  # declared category with no override-free op: nothing to route
+        sampled += 1
+        bucket = classify_op(rep, _dummy_coverage(rep)).bucket
+        if bucket != expected:
+            mismatches.append((category, rep, bucket, expected))
+    assert not mismatches, f"category routing broken: {mismatches}"
+    assert sampled > 0, "no categories had a sampleable op"
+
+
+def test_name_overrides_take_precedence_over_category_default() -> None:
+    checked = 0
+    for op, (bucket, _reason) in _NAME_OVERRIDES.items():
+        result = classify_op(op, _dummy_coverage(op))
+        assert result.bucket == bucket, (
+            f"override op {op!r} classified as {result.bucket!r}, "
+            f"expected override bucket {bucket!r}"
+        )
+        checked += 1
+    assert checked > 0, "no name overrides to verify"
+
+
+def test_unknown_op_falls_back_to_structural_only() -> None:
+    name = "__definitely_not_a_real_op__"
+    result = classify_op(name, _dummy_coverage(name))
+    assert result.bucket == STRUCTURAL_ONLY
+    assert "unclassified" in result.reason
+
+
+def test_classify_op_is_total_and_deterministic_over_registry() -> None:
+    # The real safety invariant the sentinels gestured at: EVERY registry op
+    # classifies to exactly one valid bucket, reproducibly.
+    covs = all_primitive_coverages()
+    assert covs, "registry is empty"
+    for name in covs:
+        a = classify_op(name, _dummy_coverage(name)).bucket
+        b = classify_op(name, _dummy_coverage(name)).bucket
+        assert a in ALL_BUCKETS, f"op {name!r} → invalid bucket {a!r}"
+        assert a == b, f"op {name!r} classification is non-deterministic"
+
+
+def test_known_bucket_examples_still_route_as_documented() -> None:
+    # A few representative ops, asserted through classify_op directly (NOT via
+    # the thin-set lookup) so they never self-skip.  These document intent;
+    # if the registry category for one changes, update the expectation here.
+    covs = all_primitive_coverages()
+    expectations = {
+        "cross_entropy_loss": COVERED_BY_FAMILY,   # loss family
+        "kv_cache_append": NEEDS_DIRECT_TEST,      # state_update (this session)
+    }
+    for op, expected in expectations.items():
+        if op not in covs:
+            continue
+        assert classify_op(op, _dummy_coverage(op)).bucket == expected, (
+            f"{op!r} no longer routes to {expected!r}"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────

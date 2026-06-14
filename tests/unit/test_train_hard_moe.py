@@ -99,3 +99,50 @@ def test_hard_moe_lm_trains_end_to_end():
         losses.append(loss)
     assert all(np.isfinite(v) for v in losses)
     assert losses[-1] < losses[0] - 0.05            # CE clearly decreased
+
+
+# ── Compute-sparse MoE dispatch (gather/scatter per-expert routing) ──────────
+
+def test_sparse_dispatch_equals_dense_combine():
+    cfg = TracedHardMoEConfig()
+    model = TracedHardMoELM(cfg, seed=2)
+    ids = np.random.default_rng(4).integers(0, cfg.vocab_size, size=24).astype(np.int64)
+    dense = np.asarray(model.logits(ids, dispatch="dense"))
+    sparse = np.asarray(model.logits(ids, dispatch="sparse"))
+    # Sparse dispatch must be numerically identical to the dense soft-combine.
+    np.testing.assert_allclose(sparse, dense, atol=1e-5)
+
+
+def test_sparse_dispatch_grads_flow_to_all_params():
+    cfg = TracedHardMoEConfig()
+    model = TracedHardMoELM(cfg, seed=3)
+    rng = np.random.default_rng(5)
+    ids = rng.integers(0, cfg.vocab_size, size=24).astype(np.int64)
+    onehot = np.eye(cfg.vocab_size, dtype=np.float32)[rng.integers(0, cfg.vocab_size, size=24)]
+    for p in model.parameters():
+        p._grad = None
+    with ts.autodiff.tape() as t:
+        t.backward(traced_ce_loss(model.logits(ids, dispatch="sparse"), onehot))
+    named = dict(model.named_parameters())
+    # Through gather/scatter_add: embedding, router, experts, head all get grads.
+    for key in ["embed", "w_router", "w_gate_0", "w_down_0", "w_out"]:
+        assert named[key].grad is not None, key
+
+
+def test_sparse_dispatch_trains_end_to_end():
+    cfg = TracedHardMoEConfig()
+    model = TracedHardMoELM(cfg, seed=1)
+    rng = np.random.default_rng(6)
+    ids = rng.integers(0, cfg.vocab_size, size=32).astype(np.int64)
+    onehot = np.eye(cfg.vocab_size, dtype=np.float32)[rng.integers(0, cfg.vocab_size, size=32)]
+
+    def loss_fn():
+        return traced_ce_loss(model.logits(ids, dispatch="sparse"), onehot)
+
+    opt = None
+    losses = []
+    for _ in range(25):
+        loss, opt = adamw_step(model, loss_fn, opt, lr=0.05)
+        losses.append(loss)
+    assert all(np.isfinite(v) for v in losses)
+    assert losses[-1] < losses[0] - 0.05

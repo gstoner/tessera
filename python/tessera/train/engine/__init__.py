@@ -9,6 +9,20 @@ execution paths light up — keeping this layer compact by construction.
 
 from __future__ import annotations
 
-from .moe import MoERouter, MoEFeedForward, load_balancing_loss, router_z_loss
+from .moe import (
+    MoERouter,
+    MoEFeedForward,
+    load_balancing_loss,
+    router_z_loss,
+    sparse_moe_dispatch,
+    top_k_selection,
+)
 
-__all__ = ["MoERouter", "MoEFeedForward", "load_balancing_loss", "router_z_loss"]
+__all__ = [
+    "MoERouter",
+    "MoEFeedForward",
+    "load_balancing_loss",
+    "router_z_loss",
+    "sparse_moe_dispatch",
+    "top_k_selection",
+]

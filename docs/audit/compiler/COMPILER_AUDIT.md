@@ -86,6 +86,19 @@ Guards: `tests/unit/test_autodiff_tape_fixes.py` (E1/E2/E3/F1/F2),
 `tests/unit/test_train_hard_moe.py` (G1/G2). New ops registered as numpy
 references (no OP_SPECS requirement — 11 registry-only refs already exist).
 
+### Compute-sparse MoE dispatch (2026-06-14)
+
+The differentiable hard-MoE above used a *dense soft-combine* (every expert
+evaluated on every token, off-top-k contributions zeroed). Closed the deferred
+follow-on: `tessera.train.engine.moe.sparse_moe_dispatch` does **real per-expert
+routing** — each expert runs only on its routed tokens via `ops.gather` →
+expert FFN → `ops.scatter_add`. Expert work drops from O(N·E) to O(N·k) while
+the result is *numerically identical* to the dense combine (proven, atol=1e-5),
+and the whole path stays tape-traceable (gradients reach embedding, router, and
+experts; the data-dependent token-index sets are the non-differentiable runtime
+part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
+`tests/unit/test_train_hard_moe.py` (parity, grad-flow, end-to-end training).
+
 ## Finished
 
 - **Canonical driver:** `canonical_compile` and `CompileResult` are the common

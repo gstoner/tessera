@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from tessera import nn
+from tessera import nn, ops
 from tessera.models.moe_routing import moe_forward_naive, route_top_k
 
 
@@ -180,3 +180,61 @@ class MoEFeedForward(nn.Module):
             "router_z_loss": router_z_loss(logits),
         }
         return y.reshape(xa.shape).astype(np.float32), aux
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compute-sparse MoE dispatch (real per-expert routing via gather/scatter)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def top_k_selection(router_logits, top_k: int) -> np.ndarray:
+    """Per-token top-k expert indices ``(N, k)`` from router logits (numpy).
+
+    The discrete selection — the non-differentiable part of routing. Matches the
+    stable-argsort tie-break used by ``ops.top_k_routing`` so the sparse weights
+    and the dispatch agree on which experts are selected.
+    """
+    lz = _arr(router_logits)
+    return np.argsort(-lz, axis=1, kind="stable")[:, :top_k].astype(np.int64)
+
+
+def sparse_moe_dispatch(x, routing_weights, topk_idx, num_experts, eye, apply_expert):
+    """Compute-sparse MoE combine: each expert runs **only on its routed tokens**.
+
+    Unlike the dense soft-combine (which evaluates every expert on every token
+    and zeroes the off-top-k contributions), this gathers each expert's assigned
+    tokens, runs that expert's FFN on just those rows, and scatter-adds the
+    weighted result back. Total expert work is ``N*k`` rows instead of ``N*E``,
+    while the result is *numerically identical* to the dense path.
+
+    Every step is tape-traceable (``ops.gather`` / ``ops.gemm`` / ``ops.mul`` /
+    ``ops.scatter_add``), so gradients flow to the experts (through their tokens),
+    the router (through ``routing_weights``), and any upstream params. The token
+    index sets are data-dependent integer arrays (non-differentiable), exactly
+    the part a production MoE computes at runtime.
+
+    Args:
+        x:               ``(N, H)`` traced token features.
+        routing_weights: ``(N, E)`` traced sparse gate (e.g. ``ops.top_k_routing``).
+        topk_idx:        ``(N, k)`` numpy selection (``top_k_selection``).
+        num_experts:     ``E``.
+        eye:             ``(E, E)`` constant identity (for traced column-select).
+        apply_expert:    ``(xe, e) -> (n_e, H)`` traced per-expert FFN.
+    Returns:
+        ``(N, H)`` combined output.
+    """
+    xa = _arr(x)
+    N, H = xa.shape
+    zeros = np.zeros((N, H), dtype=np.float32)
+    y = None
+    for e in range(num_experts):
+        tok = np.nonzero((topk_idx == e).any(axis=1))[0].astype(np.int64)
+        if tok.size == 0:
+            continue
+        xe = ops.gather(x, tok, axis=0)                              # (n_e, H)
+        we = ops.gather(ops.gemm(routing_weights, eye[:, e:e + 1]), tok, axis=0)  # (n_e, 1)
+        ye = ops.mul(apply_expert(xe, e), we)                        # (n_e, H)
+        contrib = ops.scatter_add(zeros, tok, ye, axis=0)           # (N, H)
+        y = contrib if y is None else ops.add(y, contrib)
+    if y is None:  # degenerate: nothing routed anywhere
+        return ops.mul(x, np.zeros((N, 1), np.float32))
+    return y

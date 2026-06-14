@@ -59,6 +59,8 @@ from .engine.moe import (
     MoEFeedForward,
     load_balancing_loss,
     router_z_loss,
+    sparse_moe_dispatch,
+    top_k_selection,
 )
 from .models.qwen3_moe import (
     Qwen3MoEConfig,
@@ -75,6 +77,8 @@ __all__ = [
     "MoEFeedForward",
     "load_balancing_loss",
     "router_z_loss",
+    "sparse_moe_dispatch",
+    "top_k_selection",
     # models
     "Qwen3MoEConfig",
     "Qwen3MoEBlock",

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from tessera import nn, ops
+from tessera.train.engine.moe import sparse_moe_dispatch, top_k_selection
 
 
 @dataclass(frozen=True)
@@ -52,19 +53,38 @@ class TracedHardMoELM(nn.Module):
         self.w_out = par((H, V), 1.0 / np.sqrt(H))
         self._eye = np.eye(E, dtype=np.float32)
 
-    def logits(self, ids):
-        """Traced next-token logits ``(N, V)`` for flat token ids ``(N,)``."""
+    def _apply_expert(self, xe, e):
+        """Expert ``e``'s SwiGLU FFN on rows ``xe`` ``(n, H) -> (n, H)``, traced."""
+        wg = getattr(self, f"w_gate_{e}")
+        wd = getattr(self, f"w_down_{e}")
+        return ops.gemm(ops.silu_mul(ops.gemm(xe, wg), ops.gemm(xe, wg)), wd)
+
+    def logits(self, ids, *, dispatch: str = "dense"):
+        """Traced next-token logits ``(N, V)`` for flat token ids ``(N,)``.
+
+        ``dispatch="dense"`` evaluates all experts and combines by the sparse
+        gate (simple, O(N·E) expert work). ``dispatch="sparse"`` runs each expert
+        only on its routed tokens via ``gather``/``scatter_add`` (O(N·k) expert
+        work) — numerically identical, the compute-efficient production path.
+        """
         cfg = self.cfg
         x = ops.embedding(self.embed, np.asarray(ids, np.int64))      # (N, H)  [G1]
-        routing = ops.top_k_routing(ops.gemm(x, self.w_router), k=cfg.top_k)  # (N, E) [G2]
-        y = None
-        for e in range(cfg.num_experts):
-            w = ops.gemm(routing, self._eye[:, e:e + 1])             # (N, 1) traced col-select
-            wg = getattr(self, f"w_gate_{e}")
-            wd = getattr(self, f"w_down_{e}")
-            he = ops.gemm(ops.silu_mul(ops.gemm(x, wg), ops.gemm(x, wg)), wd)  # (N, H)
-            ye = ops.mul(he, w)
-            y = ye if y is None else ops.add(y, ye)
+        logits = ops.gemm(x, self.w_router)                           # (N, E)
+        routing = ops.top_k_routing(logits, k=cfg.top_k)             # (N, E)  [G2]
+
+        if dispatch == "sparse":
+            topk = top_k_selection(logits, cfg.top_k)                # (N, k) numpy
+            y = sparse_moe_dispatch(
+                x, routing, topk, cfg.num_experts, self._eye, self._apply_expert,
+            )
+        elif dispatch == "dense":
+            y = None
+            for e in range(cfg.num_experts):
+                w = ops.gemm(routing, self._eye[:, e:e + 1])         # (N, 1) traced col-select
+                ye = ops.mul(self._apply_expert(x, e), w)
+                y = ye if y is None else ops.add(y, ye)
+        else:
+            raise ValueError(f"dispatch must be 'dense' or 'sparse', got {dispatch!r}")
         return ops.gemm(ops.add(x, y), self.w_out)                   # (N, V)
 
 

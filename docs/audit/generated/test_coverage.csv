@@ -432,7 +432,7 @@ tokenizer_byte,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
-top_k,6,0,0,6,0,,structural_only,unclassified — defaults to structural_only
+top_k,5,0,0,5,0,,structural_only,unclassified — defaults to structural_only
 transpose,12,18,0,30,0,fp32,needs_direct_test,category default for 'layout_transform'
 tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'

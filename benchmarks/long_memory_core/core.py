@@ -58,10 +58,12 @@ MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = (
 # kernel) and LANDED (fully usable end-to-end).
 PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = (
     # Hard top-k (k>1) runs on Metal via MPSGraph TopK
-    # (tessera_apple_gpu_mpsgraph_topk_f32, values+indices) on the `topk` lane —
-    # hardware-verified in tests/unit/test_apple_gpu_topk.py.  Remaining: the
-    # frontend AST lowerer does not yet emit the multi-output `tessera.top_k`
-    # op into Graph IR, so `@jit(target="apple_gpu")(top_k)` falls back to eager.
+    # (tessera_apple_gpu_mpsgraph_topk_f32, values+indices) through the directly-
+    # callable runtime._apple_gpu_dispatch_topk — hardware-verified in
+    # tests/unit/test_apple_gpu_topk.py.  NOT pipeline-routed: the frontend AST
+    # lowerer can't emit the multi-output `tessera.top_k` into Graph IR, so it is
+    # deliberately not in the runtime envelope (that wiring lands with the
+    # frontend).  `@jit(target="apple_gpu")(top_k)` falls back to eager today.
     "segmented_topk_gpu",
 )
 

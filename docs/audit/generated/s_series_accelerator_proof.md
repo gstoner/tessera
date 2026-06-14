@@ -5,17 +5,17 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**175/456 primitives are accelerator-proven on Apple GPU today.** Of the 310 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**174/456 primitives are accelerator-proven on Apple GPU today.** Of the 309 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
 | Class | Count | Meaning |
 |-------|------:|---------|
-| `proven` | 175 | executes on Apple GPU today (`metal_runtime`) |
+| `proven` | 174 | executes on Apple GPU today (`metal_runtime`) |
 | `eligible` | 123 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
-| `host` | 136 | structural / orchestration / shape — accelerator not-applicable |
+| `host` | 137 | structural / orchestration / shape — accelerator not-applicable |
 
 ## By category
 
@@ -67,7 +67,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `segment_reduce` | 1 | 0 | 1 | `eligible` |
 | `serialization` | 6 | 0 | 0 | `host` |
 | `sharding` | 3 | 0 | 0 | `host` |
-| `sort` | 3 | 1 | 0 | `host` |
+| `sort` | 3 | 0 | 0 | `host` |
 | `sparse` | 4 | 0 | 4 | `eligible` |
 | `spectral` | 9 | 9 | 0 | `eligible` |
 | `stable_reduction` | 9 | 7 | 2 | `eligible` |

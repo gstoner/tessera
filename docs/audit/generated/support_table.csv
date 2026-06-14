@@ -60,6 +60,7 @@ popcount,elementwise,public,public,registered,complete,partial,reference,ready,n
 pow,elementwise,public,public,registered,complete,partial,reference,ready,none
 relu,elementwise,public,public,registered,complete,partial,fused,ready,none
 rsqrt,elementwise,public,public,registered,complete,partial,reference,ready,none
+score_combine,elementwise,public,public,registered,complete,partial,reference,ready,none
 sigmoid,elementwise,public,public,registered,complete,partial,reference,ready,none
 silu,elementwise,public,public,registered,complete,partial,reference,ready,none
 silu_mul,elementwise,public,public,registered,complete,partial,reference,ready,none

@@ -61,3 +61,14 @@ func.func @msa_select_bad_topk(%scores: tensor<1x2x16x4xf32>) -> tensor<1x2x16x5
       : (tensor<1x2x16x4xf32>) -> tensor<1x2x16x5xi64>
   return %ids : tensor<1x2x16x5xi64>
 }
+
+// -----
+
+// NEGATIVE: selected-block layout must be (B,Hkv,Sq,top_k) with i64 block ids.
+func.func @msa_select_bad_layout(%scores: tensor<1x2x16x4xf32>) -> tensor<1x2x15x2xi64> {
+  // expected-error @+1 {{block_ids layout must be (B,Hkv,Sq,top_k) matching scores}}
+  %ids = "tessera.msa_select_blocks"(%scores)
+      {top_k = 2 : i64, block_size = 4 : i64, force_local_block = true, causal = true}
+      : (tensor<1x2x16x4xf32>) -> tensor<1x2x15x2xi64>
+  return %ids : tensor<1x2x15x2xi64>
+}

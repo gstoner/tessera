@@ -43,6 +43,7 @@ from . import fault
 from . import elastic
 from . import checkpoint
 from . import server
+from . import diffusion_guidance
 # Apple-GPU encode-session surface (single-cb decode chain — see
 # docs/audit/backend/apple/APPLE_AUDIT.md). Importing
 # unconditionally; the module degrades gracefully off-Darwin (the
@@ -428,6 +429,25 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             y = y._data
         rhs = scalar if y is None else y
         return np.asarray(x) * rhs
+
+    def score_combine(base, delta, *, gamma: float = 1.0):
+        """Diffusion-guidance score composition: ``base + gamma * delta``.
+
+        This is deliberately just the algebraic bridge into Graph IR. CGG still
+        orchestrates favored/unfavored denoisers in the library layer.
+        """
+        if hasattr(base, "_data"):
+            base = base._data
+        if hasattr(delta, "_data"):
+            delta = delta._data
+        base_arr = np.asarray(base)
+        delta_arr = np.asarray(delta)
+        if base_arr.shape != delta_arr.shape:
+            raise ValueError(
+                "score_combine expects base and delta to have identical shapes; "
+                f"got base {base_arr.shape}, delta {delta_arr.shape}"
+            )
+        return base_arr + float(gamma) * delta_arr
 
     def relu(x):
         if hasattr(x, "_data"):
@@ -3561,6 +3581,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "softcap": softcap,
         "add": add,
         "mul": mul,
+        "score_combine": score_combine,
         "relu": relu,
         "sigmoid": sigmoid,
         "sin": sin,
@@ -3918,6 +3939,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         softcap=softcap,
         add=add,
         mul=mul,
+        score_combine=score_combine,
         relu=relu,
         silu=silu,
         silu_mul=silu_mul,

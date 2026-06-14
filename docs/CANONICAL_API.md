@@ -790,6 +790,51 @@ graph = build_text_block(cfg)                   # shape-only GraphNode list
 verify_text_block(graph, cfg)                   # rejects dim mismatches before any runtime
 ```
 
+## `tessera.diffusion_guidance` — Guided Diffusion (CGG v1)
+
+Forward-only guided diffusion utilities. CGG combines denoiser scores at test
+time; it does **not** require a reward model or autodiff. Objective-gradient
+guidance is intentionally a later contract because it needs gradients through
+`x0_pred`.
+
+| Concept | Canonical name |
+|---------|----------------|
+| Schedule metadata | `tessera.diffusion_guidance.DiffusionSchedule` |
+| Denoiser result | `tessera.diffusion_guidance.DenoiseOutput` |
+| One favored/unfavored pair | `tessera.diffusion_guidance.ContrastivePair` |
+| CGG score composition | `tessera.diffusion_guidance.ContrastiveScoreGuidance` |
+| Compiler-visible combine primitive | `tessera.ops.score_combine(base, delta, gamma=...)` |
+| Compiler-visible orchestration marker | `tessera.guided_denoise_region` Graph IR op |
+| Deterministic guided sampler | `tessera.diffusion_guidance.GuidedDiffusionSampler` |
+| Deferred look-ahead contract | `tessera.diffusion_guidance.ObjectiveGradientGuidance` |
+
+CGG composition:
+
+```python
+s_guided = s_ref + sum(gamma_i * (s_favored_i - s_unfavored_i))
+# library implementation composes each pair through:
+s_next = tessera.ops.score_combine(s_prev, s_favored_i - s_unfavored_i, gamma=gamma_i)
+```
+
+For PO-vs-reference guidance, set `unfavored="base"` to get
+`(1 - gamma) * s_ref + gamma * s_po`.
+
+Examples:
+
+```bash
+PYTHONPATH=python python3 examples/diffusion_guidance/cgg_diffusion_gemma.py --out /tmp/cgg_report.json
+PYTHONPATH=python python3 examples/diffusion_guidance/cgg_benchmark.py --smoke --out /tmp/cgg_benchmark.json
+```
+
+Compiler boundary:
+
+- `tessera.score_combine` is the executable primitive; it verifies equal ranked
+  floating score tensor shapes and lowers to `base + gamma * delta` through
+  `tessera-to-linalg`.
+- `tessera.guided_denoise_region` is a metadata/audit marker for the enclosing
+  guided-denoise orchestration. It records timestep, schedule, gamma, and
+  optional preference label, but it is not a fused model kernel.
+
 ---
 
 ## `tessera.autodiff` — Tape-based Reverse-Mode Autodiff (v1)

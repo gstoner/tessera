@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 107 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 109 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 47 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 154 | |
+| **Total** | 156 | |
 
 ## Per-dialect details
 
@@ -78,6 +78,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `GatedDeltaNetOp` | `real` |
 | `GeluOp` | `no_verifier` |
 | `GroupedGemmOp` | `real` |
+| `GuidedDenoiseRegionOp` | `real` |
 | `HybridAttentionOp` | `real` |
 | `IFFTOp` | `real` |
 | `IRFFTOp` | `real` |
@@ -147,6 +148,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RopeOp` | `real` |
 | `RopeSplitOp` | `no_verifier` |
 | `SVDOp` | `real` |
+| `ScoreCombineOp` | `real` |
 | `SelectOp` | `no_verifier` |
 | `SigmoidOp` | `no_verifier` |
 | `SiluMulOp` | `no_verifier` |

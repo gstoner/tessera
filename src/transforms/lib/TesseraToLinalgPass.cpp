@@ -132,6 +132,38 @@ struct BinaryEltwiseLowering : public RewritePattern {
   }
 };
 
+struct ScoreCombineLowering : public RewritePattern {
+  ScoreCombineLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.score_combine", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return failure();
+    auto resultType = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!resultType || !resultType.hasStaticShape())
+      return rewriter.notifyMatchFailure(
+          op, "static-shape ranked-tensor result required");
+    Type elem = resultType.getElementType();
+    auto floatElem = dyn_cast<FloatType>(elem);
+    if (!floatElem)
+      return rewriter.notifyMatchFailure(op, "floating tensor required");
+    auto gammaAttr = op->getAttrOfType<FloatAttr>("gamma");
+    double gamma = gammaAttr ? gammaAttr.getValueAsDouble() : 1.0;
+    Value out = buildElementwiseGeneric(
+        rewriter, op->getLoc(), resultType, op->getOperand(0),
+        op->getOperand(1),
+        [&](OpBuilder &b, Location l, Value base, Value delta) -> Value {
+          Value g = arith::ConstantOp::create(b, l, elem,
+                                              b.getFloatAttr(elem, gamma));
+          Value scaled = arith::MulFOp::create(b, l, delta, g).getResult();
+          return arith::AddFOp::create(b, l, base, scaled).getResult();
+        });
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+};
+
 // N-ary elementwise `linalg.generic` over `inputs` (all same shape as
 // `resultType`) into a fresh DPS init. Generalizes buildElementwiseGeneric.
 static Value buildElementwiseNary(
@@ -893,6 +925,7 @@ public:
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.mul", BinaryKind::Mul);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.div", BinaryKind::Div);
+    patterns.add<ScoreCombineLowering>(ctx);
     patterns.add<SelectLowering>(ctx);
     patterns.add<MaskedFillLowering>(ctx);
     patterns.add<WriteRowLowering>(ctx);

@@ -59,6 +59,7 @@ src/compiler/ir/TesseraOps.td,GatedAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedDeltaNetOp,1,1,real
 src/compiler/ir/TesseraOps.td,GeluOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,GroupedGemmOp,1,1,real
+src/compiler/ir/TesseraOps.td,GuidedDenoiseRegionOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,IRFFTOp,1,1,real
@@ -128,6 +129,7 @@ src/compiler/ir/TesseraOps.td,RopeMergeOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,RopeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeSplitOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SVDOp,1,1,real
+src/compiler/ir/TesseraOps.td,ScoreCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,SelectOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SigmoidOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SiluMulOp,0,0,no_verifier

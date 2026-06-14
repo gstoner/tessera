@@ -310,6 +310,14 @@ LogicalResult verifyOptionalTensorShape(Operation *op, Value maybe,
   return verifySameRankedShape(op, reference, ty, label);
 }
 
+LogicalResult verifyRequiredSameRankedShape(Operation *op, RankedTensorType a,
+                                            RankedTensorType b,
+                                            StringRef label) {
+  if (!a || !b)
+    return op->emitOpError() << label << " expects ranked tensor types";
+  return verifySameRankedShape(op, a, b, label);
+}
+
 LogicalResult verifyPositiveI64(Operation *op, StringRef name, int64_t value) {
   if (value <= 0)
     return op->emitOpError() << name << " must be positive";
@@ -567,6 +575,51 @@ LogicalResult verifyGradeMask(Operation *op, int64_t p, int64_t q,
   return success();
 }
 } // namespace
+
+LogicalResult ScoreCombineOp::verify() {
+  auto baseTy = dyn_cast<RankedTensorType>(getBase().getType());
+  auto deltaTy = dyn_cast<RankedTensorType>(getDelta().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (failed(verifyRequiredSameRankedShape(getOperation(), baseTy, deltaTy,
+                                           "score_combine base/delta")))
+    return failure();
+  if (failed(verifyRequiredSameRankedShape(getOperation(), baseTy, resultTy,
+                                           "score_combine result")))
+    return failure();
+  if (!isFloatTensor(baseTy) || !isFloatTensor(deltaTy) ||
+      !isFloatTensor(resultTy))
+    return emitOpError("expects floating tensor operands and result");
+  if (baseTy.getElementType() != deltaTy.getElementType() ||
+      baseTy.getElementType() != resultTy.getElementType())
+    return emitOpError("base, delta, and result element types must match");
+  return success();
+}
+
+LogicalResult GuidedDenoiseRegionOp::verify() {
+  if (getTimestepAttr().getInt() < 0)
+    return emitOpError("timestep must be non-negative");
+  if (getSchedule().empty())
+    return emitOpError("schedule must be non-empty");
+  auto refTy = dyn_cast<RankedTensorType>(getRefScore().getType());
+  auto favTy = dyn_cast<RankedTensorType>(getFavoredScore().getType());
+  auto unfavTy = dyn_cast<RankedTensorType>(getUnfavoredScore().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getGuidedScore().getType());
+  if (failed(verifyRequiredSameRankedShape(getOperation(), refTy, favTy,
+                                           "guided_denoise_region favored")) ||
+      failed(verifyRequiredSameRankedShape(getOperation(), refTy, unfavTy,
+                                           "guided_denoise_region unfavored")) ||
+      failed(verifyRequiredSameRankedShape(getOperation(), refTy, outTy,
+                                           "guided_denoise_region result")))
+    return failure();
+  if (!isFloatTensor(refTy) || !isFloatTensor(favTy) ||
+      !isFloatTensor(unfavTy) || !isFloatTensor(outTy))
+    return emitOpError("expects floating score tensors");
+  if (refTy.getElementType() != favTy.getElementType() ||
+      refTy.getElementType() != unfavTy.getElementType() ||
+      refTy.getElementType() != outTy.getElementType())
+    return emitOpError("score tensor element types must match");
+  return success();
+}
 
 LogicalResult RLNormalizeGroupAdvantagesOp::verify() {
   auto rewards = dyn_cast<RankedTensorType>(getRewards().getType());
@@ -1917,6 +1970,15 @@ LogicalResult MSASelectBlocksOp::verify() {
       failed(verifyPositiveI64(this->getOperation(), "top_k", getTopK())))
     return failure();
   auto sTy = dyn_cast<RankedTensorType>(getScores().getType());
+  auto idsTy = dyn_cast<RankedTensorType>(getBlockIds().getType());
+  if (sTy && sTy.getRank() != 4)
+    return emitOpError("scores must be rank-4 (B,Hkv,Sq,num_blocks)");
+  if (!idsTy)
+    return emitOpError("block_ids must be a ranked tensor");
+  if (idsTy.getRank() != 4)
+    return emitOpError("block_ids must be rank-4 (B,Hkv,Sq,top_k)");
+  if (!idsTy.getElementType().isInteger(64))
+    return emitOpError("block_ids element type must be i64");
   if (sTy && sTy.getRank() == 4) {
     int64_t numBlocks = sTy.getDimSize(3);
     if (!ShapedType::isDynamic(numBlocks) &&
@@ -1924,7 +1986,18 @@ LogicalResult MSASelectBlocksOp::verify() {
       return emitOpError()
              << "top_k must be <= num_blocks (scores dim 3); got top_k="
              << getTopK() << ", num_blocks=" << numBlocks;
+    for (int64_t dim = 0; dim < 3; ++dim) {
+      if (!dimsAgree(sTy.getDimSize(dim), idsTy.getDimSize(dim)))
+        return emitOpError()
+               << "block_ids layout must be (B,Hkv,Sq,top_k) matching scores";
+    }
   }
+  int64_t idsTopK = idsTy.getDimSize(3);
+  if (!ShapedType::isDynamic(idsTopK) &&
+      idsTopK != static_cast<int64_t>(getTopK()))
+    return emitOpError()
+           << "block_ids dim 3 must equal top_k; got dim3=" << idsTopK
+           << ", top_k=" << getTopK();
   return success();
 }
 

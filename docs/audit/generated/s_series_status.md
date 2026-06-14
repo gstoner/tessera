@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 449 |
-| `transpose_rule` | 0 | 453 |
-| `sharding_rule` | 38 | 415 |
-| `lowering_rule` | 0 | 453 |
-| `backend_kernel` | 453 | 0 |
+| `batching_rule` | 4 | 450 |
+| `transpose_rule` | 0 | 454 |
+| `sharding_rule` | 38 | 416 |
+| `lowering_rule` | 0 | 454 |
+| `backend_kernel` | 454 | 0 |
 
 ## Per-category breakdown
 
@@ -46,7 +46,7 @@
 | other | `collective` | 10 | — | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
 | other | `contraction` | 1 | — | — | — | — | 1 |
-| other | `elementwise` | 50 | — | — | — | — | 50 |
+| other | `elementwise` | 51 | — | — | — | — | 51 |
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
@@ -93,7 +93,7 @@
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 255 | 4 | 0 | 21 | 255 |
+| other | 256 | 4 | 0 | 21 | 256 |
 
 ## Closure trajectory
 

@@ -213,6 +213,22 @@ def test_ops_and_op_catalog_present():
         assert get_op_spec(name) is not None, name
 
 
+def test_msa_op_catalog_contract_is_exact():
+    idx = get_op_spec("msa_index_scores")
+    sel = get_op_spec("msa_select_blocks")
+    sparse = get_op_spec("msa_sparse_attention")
+    assert idx.graph_name == "tessera.msa_index_scores"
+    assert idx.min_arity == idx.max_arity == 2
+    assert idx.lowering == "attention"
+    assert sel.graph_name == "tessera.msa_select_blocks"
+    assert sel.min_arity == sel.max_arity == 1
+    assert sel.lowering == "indexing"
+    assert sparse.graph_name == "tessera.msa_sparse_attention"
+    assert sparse.min_arity == sparse.max_arity == 3
+    assert sparse.effect == "state"
+    assert sparse.lowering == "attention"
+
+
 def test_autodiff_registration_matches_differentiability():
     # Smooth ops have VJP+JVP; the hard selector does not.
     assert get_vjp("msa_index_scores") is not None

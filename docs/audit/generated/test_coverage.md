@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **453** ops in `primitive_coverage` registry.
-- **2333** total Python-test references, **607** total lit-fixture references.
+- **2348** total Python-test references, **607** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
 - **202** ops have ≤1 reference ("thinly tested").
-- **49** ops have ≥10 references ("well tested").
+- **50** ops have ≥10 references ("well tested").
 - **59** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -30,12 +30,12 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gelu` |   28 |   17 |   45 |   1 | `bf16`, `f16`, `f32`, `fp16` … |
+| `msa_sparse_attention` |   36 |    6 |   42 |   1 |  |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
 | `grouped_gemm` |   27 |   10 |   37 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `selective_ssm` |   36 |    0 |   36 |   2 |  |
 | `cast` |    7 |   27 |   34 |   0 | `fp32` |
 | `transpose` |   12 |   18 |   30 |   0 | `fp32` |
-| `msa_sparse_attention` |   23 |    6 |   29 |   1 |  |
 | `rope` |   17 |   10 |   27 |   0 |  |
 
 ## Thinly-tested ops (≤1 reference)

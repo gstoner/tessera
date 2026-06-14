@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 19 | runnable=12, runnable_optional=1, scaffold=6 |
+| examples | 20 | runnable=13, runnable_optional=1, scaffold=6 |
 | benchmarks | 18 | archived=1, compile_only=6, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -27,6 +27,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/advanced/mla` | runnable | `examples/advanced/mla/tests/smoke_random.py` |  |
 | `examples/advanced/power_retention` | scaffold | `examples/advanced/power_retention/examples/minimal_power_attn.py` | Placeholder — entry-point script currently just prints ``'example'``.  Real implementation lives in the ``python/tessera_power/`` subpackage (CUDA scaffolds, Retention op) which is not wired into the audit yet. |
 | `examples/advanced/rlvr_reasoning_suite` | runnable | `examples/advanced/rlvr_reasoning_suite/run_demo.py` |  |
+| `examples/attention` | runnable | `examples/attention/minimax_sparse_attention.py` |  |
 | `examples/compiler/dnas` | runnable | `examples/compiler/dnas/dnas_schedule_autotune.py` |  |
 | `examples/compiler/ir_pipeline_tutorial` | runnable | `examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py` |  |
 | `examples/conformance` | runnable | `examples/conformance/apple_path_ga_ebm_demos.py` |  |

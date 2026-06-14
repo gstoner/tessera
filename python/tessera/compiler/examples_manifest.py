@@ -165,6 +165,20 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         notes="Per-head role classification + cache-bytes estimator.",
     ),
     ExampleEntry(
+        directory="examples/attention",
+        entry_point="examples/attention/minimax_sparse_attention.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python examples/attention/minimax_sparse_attention.py"
+        ),
+        notes=(
+            "MiniMax Sparse Attention (arXiv:2606.13392) — dense-GQA vs sparse-MSA "
+            "comparison (dense-equivalence anchor + selected-block stats) and a "
+            "long-context *theoretical* attention-compute reduction sweep. CPU "
+            "reference; no wall-clock speedup claimed (native sparse kernel is future)."
+        ),
+    ),
+    ExampleEntry(
         directory="examples/advanced/gumiho",
         entry_point="examples/advanced/gumiho/demo.py",
         status="runnable",

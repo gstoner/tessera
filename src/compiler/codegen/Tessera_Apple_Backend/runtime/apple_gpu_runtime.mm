@@ -3986,6 +3986,938 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
 }
 
 //===---------------------------------------------------------------------===//
+// MSA (MiniMax Sparse Attention, arXiv:2606.13392) — native fused block-sparse
+// flash attention (Phase 6). The Main Branch as a single MSL kernel: one thread
+// per (b, query_head, query_row) streams KV-OUTER over the host-selected blocks
+// only, with online softmax — never materializing a gathered KV set or an
+// (Sq, Sk) score matrix. GQA-aware (query head h reads KV group h / (Hq/Hkv) and
+// its block ids). The host Index Branch produces `block_ids` (B, Hkv, Sq, top_k)
+// of *distinct* selected block ids per (batch, group, query); intra-block causal
+// masking (k_row > q_row) reproduces the numpy reference exactly. Dv == Dqk == D
+// and D <= 256 (per-thread stack accumulator); the dispatcher falls back to the
+// composed bmm path otherwise.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kMsaBlockSparseF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MSA_MAX_D 256
+
+kernel void msa_block_sparse_f32(
+    device const float* Q          [[buffer(0)]],   // (B, Hq, Sq, D)
+    device const float* K          [[buffer(1)]],   // (B, Hkv, Sk, D)
+    device const float* V          [[buffer(2)]],   // (B, Hkv, Sk, D)
+    device const int*   block_ids  [[buffer(3)]],   // (B, Hkv, Sq, top_k)
+    device float*       O          [[buffer(4)]],   // (B, Hq, Sq, D)
+    constant int&       B          [[buffer(5)]],
+    constant int&       Hq         [[buffer(6)]],
+    constant int&       Hkv        [[buffer(7)]],
+    constant int&       Sq         [[buffer(8)]],
+    constant int&       Sk         [[buffer(9)]],
+    constant int&       D          [[buffer(10)]],
+    constant int&       block_size [[buffer(11)]],
+    constant int&       top_k      [[buffer(12)]],
+    constant float&     scale      [[buffer(13)]],
+    constant int&       causal     [[buffer(14)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int q_row = (int)gid.x;
+    int bh    = (int)gid.y;            // b * Hq + h
+    if (q_row >= Sq || bh >= B * Hq) return;
+    if (D > TESSERA_APPLE_GPU_MSA_MAX_D) return;
+
+    int b   = bh / Hq;
+    int h   = bh % Hq;
+    int g   = Hq / Hkv;               // GQA group size
+    int grp = h / g;
+
+    int q_off   = bh * Sq * D + q_row * D;             // Q/O flat offset
+    int kv_base = (b * Hkv + grp) * Sk * D;            // K/V base for this group
+    int bid_off = ((b * Hkv + grp) * Sq + q_row) * top_k;
+
+    float m = -INFINITY;   // running max
+    float l = 0.0f;        // running denominator
+    float o[TESSERA_APPLE_GPU_MSA_MAX_D];
+    for (int d = 0; d < D; ++d) o[d] = 0.0f;
+
+    for (int t = 0; t < top_k; ++t) {
+        int blk = block_ids[bid_off + t];
+        if (blk < 0) continue;                          // safety (padding slot)
+        int start = blk * block_size;
+        for (int j = 0; j < block_size; ++j) {
+            int k_row = start + j;
+            if (k_row >= Sk) break;
+            if (causal != 0 && k_row > q_row) continue; // intra-block causal mask
+
+            int k_off = kv_base + k_row * D;
+            float score = 0.0f;
+            for (int d = 0; d < D; ++d) score += Q[q_off + d] * K[k_off + d];
+            score *= scale;
+
+            float new_m = max(m, score);
+            float exp_old = exp(m - new_m);
+            float exp_score = exp(score - new_m);
+            float new_l = l * exp_old + exp_score;
+            for (int d = 0; d < D; ++d) {
+                o[d] = o[d] * exp_old + V[k_off + d] * exp_score;
+            }
+            m = new_m;
+            l = new_l;
+        }
+    }
+
+    if (l == 0.0f) {
+        for (int d = 0; d < D; ++d) O[q_off + d] = 0.0f;
+    } else {
+        float inv_l = 1.0f / l;
+        for (int d = 0; d < D; ++d) O[q_off + d] = o[d] * inv_l;
+    }
+}
+)MSL";
+
+inline void reference_msa_block_sparse_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  // Same online-softmax KV-outer algorithm as the MSL kernel, in plain C++.
+  // Non-Darwin fallback + Metal-unavailable path.
+  int32_t g = Hq / Hkv;
+  for (int32_t bh = 0; bh < B * Hq; ++bh) {
+    int32_t b = bh / Hq;
+    int32_t h = bh % Hq;
+    int32_t grp = h / g;
+    int32_t kv_base = (b * Hkv + grp) * Sk * D;
+    for (int32_t q = 0; q < Sq; ++q) {
+      int32_t q_off = bh * Sq * D + q * D;
+      int32_t bid_off = ((b * Hkv + grp) * Sq + q) * top_k;
+      float m = -std::numeric_limits<float>::infinity();
+      float l = 0.0f;
+      float o[256];
+      for (int32_t d = 0; d < D; ++d) o[d] = 0.0f;
+      for (int32_t t = 0; t < top_k; ++t) {
+        int32_t blk = block_ids[bid_off + t];
+        if (blk < 0) continue;
+        int32_t start = blk * block_size;
+        for (int32_t j = 0; j < block_size; ++j) {
+          int32_t k_row = start + j;
+          if (k_row >= Sk) break;
+          if (causal != 0 && k_row > q) continue;
+          int32_t k_off = kv_base + k_row * D;
+          float score = 0.0f;
+          for (int32_t d = 0; d < D; ++d) score += Q[q_off + d] * K[k_off + d];
+          score *= scale;
+          float new_m = std::max(m, score);
+          float exp_old = std::exp(m - new_m);
+          float exp_score = std::exp(score - new_m);
+          float new_l = l * exp_old + exp_score;
+          for (int32_t d = 0; d < D; ++d) {
+            o[d] = o[d] * exp_old + V[k_off + d] * exp_score;
+          }
+          m = new_m;
+          l = new_l;
+        }
+      }
+      if (l == 0.0f) {
+        for (int32_t d = 0; d < D; ++d) O[q_off + d] = 0.0f;
+      } else {
+        float inv_l = 1.0f / l;
+        for (int32_t d = 0; d < D; ++d) O[q_off + d] = o[d] * inv_l;
+      }
+    }
+  }
+}
+
+bool dispatch_msa_block_sparse_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const int32_t* block_ids, float* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMsaBlockSparseF32Source, @"msa_block_sparse_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * Hq * Sq * D;
+    NSUInteger kvBytes = sizeof(float) * (NSUInteger)B * Hkv * Sk * D;
+    NSUInteger idBytes = sizeof(int32_t) * (NSUInteger)B * Hkv * Sq * top_k;
+    NSUInteger oBytes = qBytes;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufI, ctx, block_ids, idBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufI || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufI offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&B          length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&Hq         length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Hkv        length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Sq         length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&Sk         length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D          length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&top_k      length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&scale      length:sizeof(float)   atIndex:13];
+    [enc setBytes:&causal     length:sizeof(int32_t) atIndex:14];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)(B * Hq), 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+    NSUInteger tg_y = std::min<NSUInteger>(
+        (NSUInteger)(B * Hq),
+        pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "msa_block_sparse_msl")) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  if (D > 256 || Hkv <= 0 || Hq % Hkv != 0) {
+    reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                   block_size, top_k, scale, causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_msa_block_sparse_msl(ctx, Q, K, V, block_ids, O, B, Hq,
+                                              Hkv, Sq, Sk, D, block_size, top_k,
+                                              scale, causal)) {
+    return;
+  }
+  reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                 block_size, top_k, scale, causal);
+}
+
+//===---------------------------------------------------------------------===//
+// MSA native block-sparse — fp16 variant. Mixed precision: half I/O (half the
+// memory bandwidth — the dominant cost of this bandwidth-bound kernel), fp32
+// accumulators (m, l, o[]) so the online softmax stays precise — the standard
+// production flash-attn pattern. bf16 routes through the fp32 kernel at the
+// runtime boundary (no native MSL bf16 type), like the rest of the Apple lane.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kMsaBlockSparseF16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MSA_MAX_D 256
+
+kernel void msa_block_sparse_f16(
+    device const half*  Q          [[buffer(0)]],
+    device const half*  K          [[buffer(1)]],
+    device const half*  V          [[buffer(2)]],
+    device const int*   block_ids  [[buffer(3)]],
+    device half*        O          [[buffer(4)]],
+    constant int&       B          [[buffer(5)]],
+    constant int&       Hq         [[buffer(6)]],
+    constant int&       Hkv        [[buffer(7)]],
+    constant int&       Sq         [[buffer(8)]],
+    constant int&       Sk         [[buffer(9)]],
+    constant int&       D          [[buffer(10)]],
+    constant int&       block_size [[buffer(11)]],
+    constant int&       top_k      [[buffer(12)]],
+    constant float&     scale      [[buffer(13)]],
+    constant int&       causal     [[buffer(14)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int q_row = (int)gid.x;
+    int bh    = (int)gid.y;
+    if (q_row >= Sq || bh >= B * Hq) return;
+    if (D > TESSERA_APPLE_GPU_MSA_MAX_D) return;
+
+    int b   = bh / Hq;
+    int h   = bh % Hq;
+    int g   = Hq / Hkv;
+    int grp = h / g;
+
+    int q_off   = bh * Sq * D + q_row * D;
+    int kv_base = (b * Hkv + grp) * Sk * D;
+    int bid_off = ((b * Hkv + grp) * Sq + q_row) * top_k;
+
+    float m = -INFINITY;
+    float l = 0.0f;
+    float o[TESSERA_APPLE_GPU_MSA_MAX_D];
+    for (int d = 0; d < D; ++d) o[d] = 0.0f;
+
+    for (int t = 0; t < top_k; ++t) {
+        int blk = block_ids[bid_off + t];
+        if (blk < 0) continue;
+        int start = blk * block_size;
+        for (int j = 0; j < block_size; ++j) {
+            int k_row = start + j;
+            if (k_row >= Sk) break;
+            if (causal != 0 && k_row > q_row) continue;
+            int k_off = kv_base + k_row * D;
+            float score = 0.0f;
+            for (int d = 0; d < D; ++d)
+                score += float(Q[q_off + d]) * float(K[k_off + d]);
+            score *= scale;
+            float new_m = max(m, score);
+            float exp_old = exp(m - new_m);
+            float exp_score = exp(score - new_m);
+            float new_l = l * exp_old + exp_score;
+            for (int d = 0; d < D; ++d)
+                o[d] = o[d] * exp_old + float(V[k_off + d]) * exp_score;
+            m = new_m;
+            l = new_l;
+        }
+    }
+
+    if (l == 0.0f) {
+        for (int d = 0; d < D; ++d) O[q_off + d] = half(0.0f);
+    } else {
+        float inv_l = 1.0f / l;
+        for (int d = 0; d < D; ++d) O[q_off + d] = half(o[d] * inv_l);
+    }
+}
+)MSL";
+
+bool dispatch_msa_block_sparse_msl_f16(
+    MetalDeviceContext &ctx, const uint16_t* Q, const uint16_t* K,
+    const uint16_t* V, const int32_t* block_ids, uint16_t* O, int32_t B,
+    int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk, int32_t D,
+    int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMsaBlockSparseF16Source, @"msa_block_sparse_f16");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)B * Hq * Sq * D;
+    NSUInteger kvBytes = sizeof(uint16_t) * (NSUInteger)B * Hkv * Sk * D;
+    NSUInteger idBytes = sizeof(int32_t) * (NSUInteger)B * Hkv * Sq * top_k;
+    NSUInteger oBytes = qBytes;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufI, ctx, block_ids, idBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufI || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufI offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&B          length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&Hq         length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Hkv        length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Sq         length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&Sk         length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D          length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&top_k      length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&scale      length:sizeof(float)   atIndex:13];
+    [enc setBytes:&causal     length:sizeof(int32_t) atIndex:14];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)(B * Hq), 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+    NSUInteger tg_y = std::min<NSUInteger>(
+        (NSUInteger)(B * Hq),
+        pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    MTLSize tg = MTLSizeMake(tg_x, tg_y, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "msa_block_sparse_msl_f16")) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_msa_block_sparse_f16_via_fp32(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const int32_t* block_ids, uint16_t* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  std::size_t nQ = (std::size_t)B * Hq * Sq * D;
+  std::size_t nKV = (std::size_t)B * Hkv * Sk * D;
+  std::vector<float> Qf(nQ), Kf(nKV), Vf(nKV), Of(nQ);
+  for (std::size_t i = 0; i < nQ; ++i) Qf[i] = half_to_float_gpu(Q[i]);
+  for (std::size_t i = 0; i < nKV; ++i) { Kf[i] = half_to_float_gpu(K[i]); Vf[i] = half_to_float_gpu(V[i]); }
+  reference_msa_block_sparse_f32(Qf.data(), Kf.data(), Vf.data(), block_ids,
+                                 Of.data(), B, Hq, Hkv, Sq, Sk, D, block_size,
+                                 top_k, scale, causal);
+  for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_half_gpu(Of[i]);
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const int32_t* block_ids, uint16_t* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  if (D > 256 || Hkv <= 0 || Hq % Hkv != 0) {
+    reference_msa_block_sparse_f16_via_fp32(Q, K, V, block_ids, O, B, Hq, Hkv,
+                                            Sq, Sk, D, block_size, top_k, scale,
+                                            causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_msa_block_sparse_msl_f16(ctx, Q, K, V, block_ids, O, B,
+                                                  Hq, Hkv, Sq, Sk, D, block_size,
+                                                  top_k, scale, causal)) {
+    return;
+  }
+  reference_msa_block_sparse_f16_via_fp32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq,
+                                          Sk, D, block_size, top_k, scale,
+                                          causal);
+}
+
+//===---------------------------------------------------------------------===//
+// MSA native block-sparse — tiled (simdgroup-cooperative) variant. The scalar
+// kernel is one thread per query doing a serial D-length dot per key — it is
+// compute-bound (the dot product), not bandwidth-bound. This variant assigns a
+// 32-lane SIMD-group per query: each key's Q·K dot is computed cooperatively
+// across the 32 lanes (each lane strides over D, then `simd_sum` reduces), and
+// the fp32 online-softmax accumulator o[] is partitioned across lanes (each lane
+// owns d ∈ {lane, lane+32, …}). m/l are scalar and identical on every lane (the
+// reduced score is uniform), so no extra barriers are needed. Correctness is
+// identical to the scalar kernel; throughput rises with the cooperative dot.
+// Requires simd reduction (Mac2 family); the extern C falls back to the scalar
+// kernel otherwise.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kMsaBlockSparseTiledF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MSA_MAX_D 256
+#define TESSERA_APPLE_GPU_MSA_LANES 32
+#define TESSERA_APPLE_GPU_MSA_MAX_OWNED 8   // ceil(256 / 32)
+
+kernel void msa_block_sparse_tiled_f32(
+    device const float* Q          [[buffer(0)]],
+    device const float* K          [[buffer(1)]],
+    device const float* V          [[buffer(2)]],
+    device const int*   block_ids  [[buffer(3)]],
+    device float*       O          [[buffer(4)]],
+    constant int&       B          [[buffer(5)]],
+    constant int&       Hq         [[buffer(6)]],
+    constant int&       Hkv        [[buffer(7)]],
+    constant int&       Sq         [[buffer(8)]],
+    constant int&       Sk         [[buffer(9)]],
+    constant int&       D          [[buffer(10)]],
+    constant int&       block_size [[buffer(11)]],
+    constant int&       top_k      [[buffer(12)]],
+    constant float&     scale      [[buffer(13)]],
+    constant int&       causal     [[buffer(14)]],
+    uint  qgid [[threadgroup_position_in_grid]],
+    uint  lid  [[thread_position_in_threadgroup]])
+{
+    int query = (int)qgid;                 // flattened (b*Hq + h)*Sq + q_row
+    if (query >= B * Hq * Sq) return;
+    if (D > TESSERA_APPLE_GPU_MSA_MAX_D) return;
+    int lane = (int)lid;                   // 0 .. 31
+
+    int bh    = query / Sq;
+    int q_row = query % Sq;
+    int b     = bh / Hq;
+    int h     = bh % Hq;
+    int g     = Hq / Hkv;
+    int grp   = h / g;
+
+    int q_off   = bh * Sq * D + q_row * D;
+    int kv_base = (b * Hkv + grp) * Sk * D;
+    int bid_off = ((b * Hkv + grp) * Sq + q_row) * top_k;
+
+    float m = -INFINITY, l = 0.0f;
+    float o_local[TESSERA_APPLE_GPU_MSA_MAX_OWNED];
+    int n_owned = 0;
+    for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) o_local[n_owned++] = 0.0f;
+
+    for (int t = 0; t < top_k; ++t) {
+        int blk = block_ids[bid_off + t];
+        if (blk < 0) continue;
+        int start = blk * block_size;
+        for (int j = 0; j < block_size; ++j) {
+            int k_row = start + j;
+            if (k_row >= Sk) break;
+            if (causal != 0 && k_row > q_row) continue;  // uniform across the simdgroup
+            int k_off = kv_base + k_row * D;
+            float partial = 0.0f;
+            for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES)
+                partial += Q[q_off + d] * K[k_off + d];
+            float score = simd_sum(partial) * scale;     // full dot, broadcast to all lanes
+            float new_m = max(m, score);
+            float exp_old = exp(m - new_m);
+            float exp_score = exp(score - new_m);
+            float new_l = l * exp_old + exp_score;
+            int oi = 0;
+            for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) {
+                o_local[oi] = o_local[oi] * exp_old + V[k_off + d] * exp_score;
+                ++oi;
+            }
+            m = new_m;
+            l = new_l;
+        }
+    }
+
+    if (l == 0.0f) {
+        for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) O[q_off + d] = 0.0f;
+    } else {
+        float inv_l = 1.0f / l;
+        int oi = 0;
+        for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) {
+            O[q_off + d] = o_local[oi] * inv_l;
+            ++oi;
+        }
+    }
+}
+)MSL";
+
+bool dispatch_msa_block_sparse_tiled_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const int32_t* block_ids, float* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kMsaBlockSparseTiledF32Source, @"msa_block_sparse_tiled_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * Hq * Sq * D;
+    NSUInteger kvBytes = sizeof(float) * (NSUInteger)B * Hkv * Sk * D;
+    NSUInteger idBytes = sizeof(int32_t) * (NSUInteger)B * Hkv * Sq * top_k;
+    NSUInteger oBytes = qBytes;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufI, ctx, block_ids, idBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufI || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufI offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&B          length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&Hq         length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Hkv        length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Sq         length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&Sk         length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D          length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&top_k      length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&scale      length:sizeof(float)   atIndex:13];
+    [enc setBytes:&causal     length:sizeof(int32_t) atIndex:14];
+
+    NSUInteger total_q = (NSUInteger)B * Hq * Sq;
+    [enc dispatchThreadgroups:MTLSizeMake(total_q, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];  // one 32-lane simdgroup / query
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "msa_block_sparse_tiled_msl")) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_tiled_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  if (D > 256 || Hkv <= 0 || Hq % Hkv != 0) {
+    reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                   block_size, top_k, scale, causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  // Tiled needs simd reduction; otherwise fall back to the scalar MSL kernel.
+  if (ctx.ok && (ctx.simd_caps & kTsSimdReduction) &&
+      dispatch_msa_block_sparse_tiled_msl(ctx, Q, K, V, block_ids, O, B, Hq, Hkv,
+                                          Sq, Sk, D, block_size, top_k, scale,
+                                          causal)) {
+    return;
+  }
+  if (ctx.ok && dispatch_msa_block_sparse_msl(ctx, Q, K, V, block_ids, O, B, Hq,
+                                              Hkv, Sq, Sk, D, block_size, top_k,
+                                              scale, causal)) {
+    return;
+  }
+  reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                 block_size, top_k, scale, causal);
+}
+
+//===---------------------------------------------------------------------===//
+// MSA native block-sparse — tiled fp16 (the two follow-ons combined). 32-lane
+// SIMD-group per query (cooperative `simd_sum` dot) + half I/O (half the KV
+// bandwidth) + fp32 accumulators. With the dot now cooperative the kernel is far
+// less compute-bound, so the halved bandwidth can finally help. Falls back to
+// the fp16 scalar kernel (then the fp32-conversion reference) when simd
+// reduction is unavailable.
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kMsaBlockSparseTiledF16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TESSERA_APPLE_GPU_MSA_MAX_D 256
+#define TESSERA_APPLE_GPU_MSA_LANES 32
+#define TESSERA_APPLE_GPU_MSA_MAX_OWNED 8
+
+kernel void msa_block_sparse_tiled_f16(
+    device const half*  Q          [[buffer(0)]],
+    device const half*  K          [[buffer(1)]],
+    device const half*  V          [[buffer(2)]],
+    device const int*   block_ids  [[buffer(3)]],
+    device half*        O          [[buffer(4)]],
+    constant int&       B          [[buffer(5)]],
+    constant int&       Hq         [[buffer(6)]],
+    constant int&       Hkv        [[buffer(7)]],
+    constant int&       Sq         [[buffer(8)]],
+    constant int&       Sk         [[buffer(9)]],
+    constant int&       D          [[buffer(10)]],
+    constant int&       block_size [[buffer(11)]],
+    constant int&       top_k      [[buffer(12)]],
+    constant float&     scale      [[buffer(13)]],
+    constant int&       causal     [[buffer(14)]],
+    uint  qgid [[threadgroup_position_in_grid]],
+    uint  lid  [[thread_position_in_threadgroup]])
+{
+    int query = (int)qgid;
+    if (query >= B * Hq * Sq) return;
+    if (D > TESSERA_APPLE_GPU_MSA_MAX_D) return;
+    int lane = (int)lid;
+
+    int bh    = query / Sq;
+    int q_row = query % Sq;
+    int b     = bh / Hq;
+    int h     = bh % Hq;
+    int g     = Hq / Hkv;
+    int grp   = h / g;
+
+    int q_off   = bh * Sq * D + q_row * D;
+    int kv_base = (b * Hkv + grp) * Sk * D;
+    int bid_off = ((b * Hkv + grp) * Sq + q_row) * top_k;
+
+    float m = -INFINITY, l = 0.0f;
+    float o_local[TESSERA_APPLE_GPU_MSA_MAX_OWNED];
+    int n_owned = 0;
+    for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) o_local[n_owned++] = 0.0f;
+
+    for (int t = 0; t < top_k; ++t) {
+        int blk = block_ids[bid_off + t];
+        if (blk < 0) continue;
+        int start = blk * block_size;
+        for (int j = 0; j < block_size; ++j) {
+            int k_row = start + j;
+            if (k_row >= Sk) break;
+            if (causal != 0 && k_row > q_row) continue;
+            int k_off = kv_base + k_row * D;
+            float partial = 0.0f;
+            for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES)
+                partial += float(Q[q_off + d]) * float(K[k_off + d]);
+            float score = simd_sum(partial) * scale;
+            float new_m = max(m, score);
+            float exp_old = exp(m - new_m);
+            float exp_score = exp(score - new_m);
+            float new_l = l * exp_old + exp_score;
+            int oi = 0;
+            for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) {
+                o_local[oi] = o_local[oi] * exp_old + float(V[k_off + d]) * exp_score;
+                ++oi;
+            }
+            m = new_m;
+            l = new_l;
+        }
+    }
+
+    if (l == 0.0f) {
+        for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) O[q_off + d] = half(0.0f);
+    } else {
+        float inv_l = 1.0f / l;
+        int oi = 0;
+        for (int d = lane; d < D; d += TESSERA_APPLE_GPU_MSA_LANES) {
+            O[q_off + d] = half(o_local[oi] * inv_l);
+            ++oi;
+        }
+    }
+}
+)MSL";
+
+bool dispatch_msa_block_sparse_tiled_msl_f16(
+    MetalDeviceContext &ctx, const uint16_t* Q, const uint16_t* K,
+    const uint16_t* V, const int32_t* block_ids, uint16_t* O, int32_t B,
+    int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk, int32_t D,
+    int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kMsaBlockSparseTiledF16Source, @"msa_block_sparse_tiled_f16");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)B * Hq * Sq * D;
+    NSUInteger kvBytes = sizeof(uint16_t) * (NSUInteger)B * Hkv * Sk * D;
+    NSUInteger idBytes = sizeof(int32_t) * (NSUInteger)B * Hkv * Sq * top_k;
+    NSUInteger oBytes = qBytes;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, kvBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufI, ctx, block_ids, idBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufI || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufI offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&B          length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&Hq         length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Hkv        length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&Sq         length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&Sk         length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D          length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&block_size length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&top_k      length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&scale      length:sizeof(float)   atIndex:13];
+    [enc setBytes:&causal     length:sizeof(int32_t) atIndex:14];
+
+    NSUInteger total_q = (NSUInteger)B * Hq * Sq;
+    [enc dispatchThreadgroups:MTLSizeMake(total_q, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "msa_block_sparse_tiled_msl_f16")) return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_tiled_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const int32_t* block_ids, uint16_t* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  if (D > 256 || Hkv <= 0 || Hq % Hkv != 0) {
+    reference_msa_block_sparse_f16_via_fp32(Q, K, V, block_ids, O, B, Hq, Hkv,
+                                            Sq, Sk, D, block_size, top_k, scale,
+                                            causal);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && (ctx.simd_caps & kTsSimdReduction) &&
+      dispatch_msa_block_sparse_tiled_msl_f16(ctx, Q, K, V, block_ids, O, B, Hq,
+                                              Hkv, Sq, Sk, D, block_size, top_k,
+                                              scale, causal)) {
+    return;
+  }
+  if (ctx.ok && dispatch_msa_block_sparse_msl_f16(ctx, Q, K, V, block_ids, O, B,
+                                                  Hq, Hkv, Sq, Sk, D, block_size,
+                                                  top_k, scale, causal)) {
+    return;
+  }
+  reference_msa_block_sparse_f16_via_fp32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq,
+                                          Sk, D, block_size, top_k, scale,
+                                          causal);
+}
+
+//===---------------------------------------------------------------------===//
+// MSA Index-Branch Top-k *selection* on the GPU (huge-batch regime). At the
+// shapes this implementation targets, host selection (numpy argpartition) is
+// cheap and GPU-resident selection is an anti-optimization (see docs/msa.md
+// §10). But at very large `B·Hkv·Sq·num_blocks` the host index *scoring* matmul
+// dominates; routing it through the GPU bmm + this select kernel keeps the whole
+// Index Branch GPU-resident. Input: precomputed block scores
+// `(B, Hkv, Sq, num_blocks)`. Output: `block_ids (B, Hkv, Sq, top_k)` int32 —
+// the local block (when force_local) + the top-(k') causally-valid past blocks
+// by score, remaining slots = -1. This reproduces the *attention-relevant* part
+// of msa_select_blocks (future-block fillers are masked by the attention kernel,
+// so the arbitrary tie-break on them need not match).
+//===---------------------------------------------------------------------===//
+
+namespace {
+
+static NSString *const kMsaSelectBlocksF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void msa_select_blocks_f32(
+    device const float* scores      [[buffer(0)]],   // (B, Hkv, Sq, num_blocks)
+    device int*         block_ids   [[buffer(1)]],   // (B, Hkv, Sq, top_k)
+    constant int&       B           [[buffer(2)]],
+    constant int&       Hkv         [[buffer(3)]],
+    constant int&       Sq          [[buffer(4)]],
+    constant int&       num_blocks  [[buffer(5)]],
+    constant int&       block_size  [[buffer(6)]],
+    constant int&       top_k       [[buffer(7)]],
+    constant int&       causal      [[buffer(8)]],
+    constant int&       force_local [[buffer(9)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int sq   = (int)gid.x;
+    int bgrp = (int)gid.y;                 // b * Hkv + grp
+    if (sq >= Sq || bgrp >= B * Hkv) return;
+
+    int soff = (bgrp * Sq + sq) * num_blocks;
+    int boff = (bgrp * Sq + sq) * top_k;
+    int q_block = min(sq / block_size, num_blocks - 1);
+
+    for (int t = 0; t < top_k; ++t) block_ids[boff + t] = -1;
+
+    int filled = 0;
+    if (force_local != 0) { block_ids[boff] = q_block; filled = 1; }
+    int slots = top_k - filled;            // past-block slots
+    if (slots <= 0) return;
+
+    int pcount = 0;
+    for (int blk = 0; blk < num_blocks; ++blk) {
+        if (force_local != 0 && blk == q_block) continue;
+        if (causal != 0 && blk > q_block) continue;
+        float sc = scores[soff + blk];
+        if (pcount < slots) {
+            block_ids[boff + filled + pcount] = blk;
+            ++pcount;
+        } else {
+            // replace the current min-scoring past slot if this block beats it
+            int mi = filled;
+            float mv = scores[soff + block_ids[boff + filled]];
+            for (int u = 1; u < slots; ++u) {
+                float v = scores[soff + block_ids[boff + filled + u]];
+                if (v < mv) { mv = v; mi = filled + u; }
+            }
+            if (sc > mv) block_ids[boff + mi] = blk;
+        }
+    }
+}
+)MSL";
+
+inline void reference_msa_select_blocks_f32(
+    const float* scores, int32_t* block_ids, int32_t B, int32_t Hkv, int32_t Sq,
+    int32_t num_blocks, int32_t block_size, int32_t top_k, int32_t causal,
+    int32_t force_local) {
+  for (int32_t bgrp = 0; bgrp < B * Hkv; ++bgrp) {
+    for (int32_t sq = 0; sq < Sq; ++sq) {
+      int32_t soff = (bgrp * Sq + sq) * num_blocks;
+      int32_t boff = (bgrp * Sq + sq) * top_k;
+      int32_t q_block = std::min(sq / block_size, num_blocks - 1);
+      for (int32_t t = 0; t < top_k; ++t) block_ids[boff + t] = -1;
+      int32_t filled = 0;
+      if (force_local != 0) { block_ids[boff] = q_block; filled = 1; }
+      int32_t slots = top_k - filled;
+      if (slots <= 0) continue;
+      int32_t pcount = 0;
+      for (int32_t blk = 0; blk < num_blocks; ++blk) {
+        if (force_local != 0 && blk == q_block) continue;
+        if (causal != 0 && blk > q_block) continue;
+        float sc = scores[soff + blk];
+        if (pcount < slots) { block_ids[boff + filled + pcount] = blk; ++pcount; }
+        else {
+          int32_t mi = filled;
+          float mv = scores[soff + block_ids[boff + filled]];
+          for (int32_t u = 1; u < slots; ++u) {
+            float v = scores[soff + block_ids[boff + filled + u]];
+            if (v < mv) { mv = v; mi = filled + u; }
+          }
+          if (sc > mv) block_ids[boff + mi] = blk;
+        }
+      }
+    }
+  }
+}
+
+bool dispatch_msa_select_blocks_msl(
+    MetalDeviceContext &ctx, const float* scores, int32_t* block_ids, int32_t B,
+    int32_t Hkv, int32_t Sq, int32_t num_blocks, int32_t block_size,
+    int32_t top_k, int32_t causal, int32_t force_local) {
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kMsaSelectBlocksF32Source, @"msa_select_blocks_f32");
+    if (!pso) return false;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)B * Hkv * Sq * num_blocks;
+    NSUInteger bBytes = sizeof(int32_t) * (NSUInteger)B * Hkv * Sq * top_k;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS, ctx, scores, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufB, ctx, bBytes);
+    if (!bufS || !bufB) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufS offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBytes:&B           length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&Hkv         length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&Sq          length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&num_blocks  length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&block_size  length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&top_k       length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&causal      length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&force_local length:sizeof(int32_t) atIndex:9];
+    MTLSize grid = MTLSizeMake((NSUInteger)Sq, (NSUInteger)(B * Hkv), 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)Sq, 32);
+    NSUInteger tg_y = std::min<NSUInteger>(
+        (NSUInteger)(B * Hkv),
+        pso.maxTotalThreadsPerThreadgroup / std::max<NSUInteger>(tg_x, 1));
+    if (tg_y == 0) tg_y = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, tg_y, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "msa_select_blocks_msl")) return false;
+    std::memcpy(block_ids, [bufB contents], bBytes);
+    return true;
+  }
+}
+
+} // namespace
+
+extern "C" void tessera_apple_gpu_msa_select_blocks_f32(
+    const float* scores, int32_t* block_ids, int32_t B, int32_t Hkv, int32_t Sq,
+    int32_t num_blocks, int32_t block_size, int32_t top_k, int32_t causal,
+    int32_t force_local) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_msa_select_blocks_msl(ctx, scores, block_ids, B, Hkv,
+                                               Sq, num_blocks, block_size, top_k,
+                                               causal, force_local)) {
+    return;
+  }
+  reference_msa_select_blocks_f32(scores, block_ids, B, Hkv, Sq, num_blocks,
+                                  block_size, top_k, causal, force_local);
+}
+
+//===---------------------------------------------------------------------===//
 // attn_bias substrate — softmax(scale*Q*K^T + bias)*V on MPSGraph.
 //
 // The DFlash sliding-layer block mask and general structured masks lower to a

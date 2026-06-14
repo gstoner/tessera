@@ -6396,11 +6396,80 @@ def _apple_gpu_dispatch_sparse_attn(op_name: str, operands: list[Any],
         g = Hq // Hkv
         num_blocks = S_k // block_size
         attn_scale = (1.0 / _math.sqrt(D)) if scale_kw is None else float(scale_kw)
-        # Host: Index Branch + Top-k selection (identical to the reference).
-        scores = _ops_ns.msa_index_scores(Q, K, block_size=block_size, scale=scale_kw)
-        sel = _ops_ns.msa_select_blocks(
-            scores, top_k=top_k, block_size=block_size,
-            force_local_block=force_local, causal=causal)  # (B, Hkv, S_q, top_k)
+        # Index Branch + Top-k selection. For huge shapes the host scoring matmul
+        # (O(B·Hkv·Sq·D·num_blocks)) dominates, so run the whole Index Branch on
+        # the GPU (bmm scoring + GPU select kernel). Below the threshold the host
+        # path is cheaper than the GPU launch overhead (docs/msa.md §10).
+        sel = None
+        _nb = S_k // block_size
+        _idx_flops = B * Hkv * S_q * D * _nb
+        if _idx_flops >= _MSA_GPU_SELECT_FLOP_THRESHOLD:
+            sel = _apple_gpu_msa_gpu_resident_select(
+                Q, K, block_size=block_size, top_k=top_k, causal=causal,
+                force_local=force_local, np=np)
+        if sel is None:
+            scores = _ops_ns.msa_index_scores(Q, K, block_size=block_size, scale=scale_kw)
+            sel = _ops_ns.msa_select_blocks(
+                scores, top_k=top_k, block_size=block_size,
+                force_local_block=force_local, causal=causal)  # (B, Hkv, S_q, top_k)
+
+        # Phase 6 — native fused block-sparse flash kernel (the "native_sparse"
+        # path): one MSL dispatch, KV-outer over the selected blocks, online
+        # softmax — no host gather, no MPS-bmm round-trips, no materialized score
+        # matrix. Fast path for Dv == Dqk == D <= 256; falls through to the
+        # composed bmm path otherwise. Selection stays host-side (data-dependent,
+        # like attn_top_k_blocks).
+        if Dv == D and D <= 256:
+            # fp16 native fast path — half I/O (half the bandwidth), fp32 accum.
+            if Q.dtype == np.float16 and K.dtype == np.float16 and V.dtype == np.float16:
+                # Prefer the tiled f16 kernel; it falls back internally.
+                native16 = (_apple_gpu_msa_block_sparse_tiled_f16()
+                            or _apple_gpu_msa_block_sparse_f16())
+                if native16 is not None:
+                    Qc = np.ascontiguousarray(Q, dtype=np.float16)
+                    Kc = np.ascontiguousarray(K, dtype=np.float16)
+                    Vc = np.ascontiguousarray(V, dtype=np.float16)
+                    ids = np.ascontiguousarray(np.asarray(sel, dtype=np.int32))
+                    tk = int(ids.shape[-1])
+                    O = np.zeros((B, Hq, S_q, Dv), dtype=np.float16)
+                    up = ctypes.POINTER(ctypes.c_uint16)
+                    ip = ctypes.POINTER(ctypes.c_int32)
+                    native16(
+                        Qc.view(np.uint16).ctypes.data_as(up),
+                        Kc.view(np.uint16).ctypes.data_as(up),
+                        Vc.view(np.uint16).ctypes.data_as(up),
+                        ids.ctypes.data_as(ip),
+                        O.view(np.uint16).ctypes.data_as(up),
+                        ctypes.c_int32(B), ctypes.c_int32(Hq), ctypes.c_int32(Hkv),
+                        ctypes.c_int32(S_q), ctypes.c_int32(S_k), ctypes.c_int32(D),
+                        ctypes.c_int32(block_size), ctypes.c_int32(tk),
+                        ctypes.c_float(attn_scale), ctypes.c_int32(1 if causal else 0),
+                    )
+                    return O
+            # Prefer the tiled (simdgroup-cooperative) kernel; it falls back to
+            # the scalar kernel internally when simd reduction is unavailable.
+            native = (_apple_gpu_msa_block_sparse_tiled_f32()
+                      or _apple_gpu_msa_block_sparse_f32())
+            if native is not None:
+                Qc = np.ascontiguousarray(Q, dtype=np.float32)
+                Kc = np.ascontiguousarray(K, dtype=np.float32)
+                Vc = np.ascontiguousarray(V, dtype=np.float32)
+                ids = np.ascontiguousarray(np.asarray(sel, dtype=np.int32))
+                tk = int(ids.shape[-1])
+                O = np.zeros((B, Hq, S_q, Dv), dtype=np.float32)
+                fp = ctypes.POINTER(ctypes.c_float)
+                ip = ctypes.POINTER(ctypes.c_int32)
+                native(
+                    Qc.ctypes.data_as(fp), Kc.ctypes.data_as(fp),
+                    Vc.ctypes.data_as(fp), ids.ctypes.data_as(ip),
+                    O.ctypes.data_as(fp),
+                    ctypes.c_int32(B), ctypes.c_int32(Hq), ctypes.c_int32(Hkv),
+                    ctypes.c_int32(S_q), ctypes.c_int32(S_k), ctypes.c_int32(D),
+                    ctypes.c_int32(block_size), ctypes.c_int32(tk),
+                    ctypes.c_float(attn_scale), ctypes.c_int32(1 if causal else 0),
+                )
+                return O.astype(np.result_type(Q, K, V))
+
         # Host: per-(b, group, query) deduped, causally-valid token index lists.
         row_idx: dict = {}
         maxw = 0
@@ -7118,6 +7187,156 @@ def _apple_gpu_flash_attn_f32() -> Any:
         ctypes.c_int32,                  # D
         ctypes.c_float,                  # scale
         ctypes.c_int32,                  # causal
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_msa_block_sparse_f32() -> Any:
+    """MSA Phase 6 — native fused block-sparse flash-attention kernel binding.
+    Returns None if the runtime lacks the symbol (stale prebuilt)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msa_block_sparse_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [
+        fp, fp, fp, ip, fp,  # Q, K, V, block_ids, O
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # B, Hq, Hkv
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # Sq, Sk, D
+        ctypes.c_int32, ctypes.c_int32,                  # block_size, top_k
+        ctypes.c_float, ctypes.c_int32,                  # scale, causal
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_msa_select_blocks_f32() -> Any:
+    """MSA Phase 6 follow-on — GPU Top-k block-selection kernel binding.
+    scores (B,Hkv,Sq,num_blocks) → block_ids (B,Hkv,Sq,top_k). Returns None if
+    the symbol is absent."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msa_select_blocks_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [
+        fp, ip,  # scores, block_ids
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # B, Hkv, Sq, num_blocks
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # block_size, top_k, causal, force_local
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_msa_gpu_resident_select(Q, K, *, block_size, top_k, causal,
+                                       force_local, np) -> Any:
+    """Fully-GPU-resident MSA Index Branch for the huge-batch regime: the
+    expensive q_grp·K_cᵀ scoring matmul runs on the GPU bmm (not host numpy),
+    then the GPU select kernel produces block_ids. Group-mean query + block-mean
+    keys are cheap host reductions (~input size). Returns the int32 block_ids
+    (B, Hkv, Sq, top_k) or None if the GPU select / bmm path is unavailable.
+
+    Selection ranking is scale-invariant, so the unscaled GPU scores produce the
+    same Top-k as the host path; future-block fillers are -1 (masked downstream).
+    """
+    sel_sym = _apple_gpu_msa_select_blocks_f32()
+    if sel_sym is None:
+        return None
+    Qf = np.ascontiguousarray(Q, dtype=np.float32)
+    Kf = np.ascontiguousarray(K, dtype=np.float32)
+    B, Hq, Sq, D = Qf.shape
+    Hkv, Sk = Kf.shape[1], Kf.shape[2]
+    g = Hq // Hkv
+    num_blocks = Sk // block_size
+    q_grp = Qf.reshape(B, Hkv, g, Sq, D).mean(axis=2)                  # (B,Hkv,Sq,D)
+    K_c = Kf.reshape(B, Hkv, num_blocks, block_size, D).mean(axis=3)   # (B,Hkv,nb,D)
+    q2 = np.ascontiguousarray(q_grp.reshape(B * Hkv, Sq, D), np.float32)
+    kt = np.ascontiguousarray(
+        np.swapaxes(K_c.reshape(B * Hkv, num_blocks, D), -1, -2), np.float32)  # (B*Hkv,D,nb)
+    scores = _apple_gpu_dispatch_bmm(q2, kt, np)                       # (B*Hkv,Sq,nb)
+    if scores is None:
+        return None
+    scores = np.ascontiguousarray(np.asarray(scores, np.float32))
+    block_ids = np.zeros((B, Hkv, Sq, top_k), np.int32)
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sel_sym(
+        scores.ctypes.data_as(fp), block_ids.ctypes.data_as(ip),
+        ctypes.c_int32(B), ctypes.c_int32(Hkv), ctypes.c_int32(Sq),
+        ctypes.c_int32(num_blocks), ctypes.c_int32(block_size), ctypes.c_int32(top_k),
+        ctypes.c_int32(1 if causal else 0), ctypes.c_int32(1 if force_local else 0),
+    )
+    return block_ids
+
+
+# Huge-batch threshold (Index-Branch FLOPs ≈ B·Hkv·Sq·D·num_blocks): below this,
+# host selection is cheaper than the GPU launch overhead (Decision: see
+# docs/msa.md §10). Tunable via TESSERA_MSA_GPU_SELECT_FLOPS.
+_MSA_GPU_SELECT_FLOP_THRESHOLD = int(
+    os.environ.get("TESSERA_MSA_GPU_SELECT_FLOPS", str(64 * 1024 * 1024))
+)
+
+
+def _apple_gpu_msa_block_sparse_tiled_f32() -> Any:
+    """MSA Phase 6 follow-on — tiled (simdgroup-cooperative) f32 kernel binding.
+    Same ABI as the scalar f32 kernel; the C side falls back to the scalar kernel
+    when simd reduction is unavailable. Returns None if the symbol is absent."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msa_block_sparse_tiled_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [
+        fp, fp, fp, ip, fp,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_msa_block_sparse_tiled_f16() -> Any:
+    """MSA Phase 6 follow-on — tiled (simdgroup-cooperative) fp16 kernel binding.
+    Same ABI as the scalar f16 kernel; the C side falls back to the f16 scalar
+    kernel / fp32-conversion reference when simd reduction is unavailable."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msa_block_sparse_tiled_f16", None)
+    if sym is None:
+        return None
+    up = ctypes.POINTER(ctypes.c_uint16)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [
+        up, up, up, ip, up,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32,
+        ctypes.c_float, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_msa_block_sparse_f16() -> Any:
+    """MSA Phase 6 follow-on — fp16 native block-sparse kernel (half I/O, fp32
+    accumulators). Returns None if the runtime lacks the symbol."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_msa_block_sparse_f16", None)
+    if sym is None:
+        return None
+    up = ctypes.POINTER(ctypes.c_uint16)
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [
+        up, up, up, ip, up,  # Q, K, V, block_ids, O (half bits as uint16)
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # B, Hq, Hkv
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # Sq, Sk, D
+        ctypes.c_int32, ctypes.c_int32,                  # block_size, top_k
+        ctypes.c_float, ctypes.c_int32,                  # scale, causal
     ]
     sym.restype = None
     return sym

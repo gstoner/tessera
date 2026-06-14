@@ -393,6 +393,59 @@ inline void reference_flash_attn_f32(const float* Q, const float* K,
   }
 }
 
+// MSA native block-sparse flash attention — non-Darwin reference parity for
+// tessera_apple_gpu_msa_block_sparse_f32. KV-outer over the host-selected blocks
+// with online softmax + intra-block causal masking. See apple_gpu_runtime.mm.
+inline void reference_msa_block_sparse_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  int32_t g = (Hkv > 0) ? (Hq / Hkv) : 1;
+  for (int32_t bh = 0; bh < B * Hq; ++bh) {
+    int32_t b = bh / Hq;
+    int32_t h = bh % Hq;
+    int32_t grp = (g > 0) ? (h / g) : 0;
+    int32_t kv_base = (b * Hkv + grp) * Sk * D;
+    for (int32_t q = 0; q < Sq; ++q) {
+      int32_t q_off = bh * Sq * D + q * D;
+      int32_t bid_off = ((b * Hkv + grp) * Sq + q) * top_k;
+      float m = -std::numeric_limits<float>::infinity();
+      float l = 0.0f;
+      float o[256];
+      for (int32_t d = 0; d < D; ++d) o[d] = 0.0f;
+      for (int32_t t = 0; t < top_k; ++t) {
+        int32_t blk = block_ids[bid_off + t];
+        if (blk < 0) continue;
+        int32_t start = blk * block_size;
+        for (int32_t j = 0; j < block_size; ++j) {
+          int32_t k_row = start + j;
+          if (k_row >= Sk) break;
+          if (causal != 0 && k_row > q) continue;
+          int32_t k_off = kv_base + k_row * D;
+          float score = 0.0f;
+          for (int32_t d = 0; d < D; ++d) score += Q[q_off + d] * K[k_off + d];
+          score *= scale;
+          float new_m = std::max(m, score);
+          float exp_old = std::exp(m - new_m);
+          float exp_score = std::exp(score - new_m);
+          float new_l = l * exp_old + exp_score;
+          for (int32_t d = 0; d < D; ++d) {
+            o[d] = o[d] * exp_old + V[k_off + d] * exp_score;
+          }
+          m = new_m;
+          l = new_l;
+        }
+      }
+      if (l == 0.0f) {
+        for (int32_t d = 0; d < D; ++d) O[q_off + d] = 0.0f;
+      } else {
+        float inv_l = 1.0f / l;
+        for (int32_t d = 0; d < D; ++d) O[q_off + d] = o[d] * inv_l;
+      }
+    }
+  }
+}
+
 } // namespace
 
 extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
@@ -401,6 +454,90 @@ extern "C" void tessera_apple_gpu_flash_attn_f32(const float* Q, const float* K,
                                                  int32_t Sk, int32_t D,
                                                  float scale, int32_t causal) {
   reference_flash_attn_f32(Q, K, V, O, B, Sq, Sk, D, scale, causal);
+}
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                 block_size, top_k, scale, causal);
+}
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_tiled_f32(
+    const float* Q, const float* K, const float* V, const int32_t* block_ids,
+    float* O, int32_t B, int32_t Hq, int32_t Hkv, int32_t Sq, int32_t Sk,
+    int32_t D, int32_t block_size, int32_t top_k, float scale, int32_t causal) {
+  // No SIMD/GPU off-Darwin — the tiled kernel reduces to the scalar reference.
+  reference_msa_block_sparse_f32(Q, K, V, block_ids, O, B, Hq, Hkv, Sq, Sk, D,
+                                 block_size, top_k, scale, causal);
+}
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const int32_t* block_ids, uint16_t* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  std::size_t nQ = (std::size_t)B * Hq * Sq * D;
+  std::size_t nKV = (std::size_t)B * Hkv * Sk * D;
+  std::vector<float> Qf(nQ), Kf(nKV), Vf(nKV), Of(nQ);
+  for (std::size_t i = 0; i < nQ; ++i) Qf[i] = half_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < nKV; ++i) { Kf[i] = half_to_float_stub(K[i]); Vf[i] = half_to_float_stub(V[i]); }
+  reference_msa_block_sparse_f32(Qf.data(), Kf.data(), Vf.data(), block_ids,
+                                 Of.data(), B, Hq, Hkv, Sq, Sk, D, block_size,
+                                 top_k, scale, causal);
+  for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_msa_block_sparse_tiled_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const int32_t* block_ids, uint16_t* O, int32_t B, int32_t Hq, int32_t Hkv,
+    int32_t Sq, int32_t Sk, int32_t D, int32_t block_size, int32_t top_k,
+    float scale, int32_t causal) {
+  // No SIMD/GPU off-Darwin — reduces to the fp32-conversion reference.
+  std::size_t nQ = (std::size_t)B * Hq * Sq * D;
+  std::size_t nKV = (std::size_t)B * Hkv * Sk * D;
+  std::vector<float> Qf(nQ), Kf(nKV), Vf(nKV), Of(nQ);
+  for (std::size_t i = 0; i < nQ; ++i) Qf[i] = half_to_float_stub(Q[i]);
+  for (std::size_t i = 0; i < nKV; ++i) { Kf[i] = half_to_float_stub(K[i]); Vf[i] = half_to_float_stub(V[i]); }
+  reference_msa_block_sparse_f32(Qf.data(), Kf.data(), Vf.data(), block_ids,
+                                 Of.data(), B, Hq, Hkv, Sq, Sk, D, block_size,
+                                 top_k, scale, causal);
+  for (std::size_t i = 0; i < nQ; ++i) O[i] = float_to_half_stub(Of[i]);
+}
+
+extern "C" void tessera_apple_gpu_msa_select_blocks_f32(
+    const float* scores, int32_t* block_ids, int32_t B, int32_t Hkv, int32_t Sq,
+    int32_t num_blocks, int32_t block_size, int32_t top_k, int32_t causal,
+    int32_t force_local) {
+  for (int32_t bgrp = 0; bgrp < B * Hkv; ++bgrp) {
+    for (int32_t sq = 0; sq < Sq; ++sq) {
+      int32_t soff = (bgrp * Sq + sq) * num_blocks;
+      int32_t boff = (bgrp * Sq + sq) * top_k;
+      int32_t q_block = std::min(sq / block_size, num_blocks - 1);
+      for (int32_t t = 0; t < top_k; ++t) block_ids[boff + t] = -1;
+      int32_t filled = 0;
+      if (force_local != 0) { block_ids[boff] = q_block; filled = 1; }
+      int32_t slots = top_k - filled;
+      if (slots <= 0) continue;
+      int32_t pcount = 0;
+      for (int32_t blk = 0; blk < num_blocks; ++blk) {
+        if (force_local != 0 && blk == q_block) continue;
+        if (causal != 0 && blk > q_block) continue;
+        float sc = scores[soff + blk];
+        if (pcount < slots) { block_ids[boff + filled + pcount] = blk; ++pcount; }
+        else {
+          int32_t mi = filled;
+          float mv = scores[soff + block_ids[boff + filled]];
+          for (int32_t u = 1; u < slots; ++u) {
+            float v = scores[soff + block_ids[boff + filled + u]];
+            if (v < mv) { mv = v; mi = filled + u; }
+          }
+          if (sc > mv) block_ids[boff + mi] = blk;
+        }
+      }
+    }
+  }
 }
 
 // Phase 8.4.4.2 — fp16 / bf16 stubs for flash_attn (fp32 conversion path).

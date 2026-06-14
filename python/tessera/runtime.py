@@ -4310,8 +4310,17 @@ def _apple_gpu_dispatch_moe_swiglu_block(operands: Any, kwargs: Any, np: Any) ->
     if alignment is not None:
         gl.validate_grouped_alignment(g, int(alignment))
 
-    # Fused fast path — one dispatch for the whole expert FFN (f32, no quant).
-    if kw.get("quant") is None:
+    # Single-dispatch fused MSL kernel — OPT-IN ONLY (default off).
+    #
+    # The `moe_swiglu_f32` kernel is one-thread-per-token with 3×H/Kout-wide
+    # private arrays, so it (a) launches only T threads — catastrophic GPU
+    # occupancy — and (b) spills registers. Measured ~9.6× SLOWER than the
+    # composed lane below (13.3 ms vs 1.4 ms at 64×128×256×128, E4) for identical
+    # output. The composed path (3 grouped GEMMs + silu_mul) parallelizes over
+    # T×N and rides MPS, and gets relatively faster as T grows. So the composed
+    # path is the default; the fused kernel stays reachable behind
+    # TESSERA_APPLE_MOE_FUSED=1 for a future threadgroup-cooperative rewrite.
+    if kw.get("quant") is None and os.environ.get("TESSERA_APPLE_MOE_FUSED") == "1":
         xa = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
         wg = np.ascontiguousarray(np.asarray(w_gate, dtype=np.float32))
         wu = np.ascontiguousarray(np.asarray(w_up, dtype=np.float32))

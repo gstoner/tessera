@@ -38,6 +38,13 @@ def _median_ms(fn, reps: int = 20, warmup: int = 3) -> float:
     return statistics.median(samples)
 
 
+# Dispatch mode per op (part of the ratchet key). Most hot paths are a single
+# fused MSL kernel; moe_swiglu_block runs the composed grouped-GEMM + silu_mul
+# lane (the fused MSL kernel is ~9.6× slower — one-thread-per-token, register
+# spill — and is opt-in via TESSERA_APPLE_MOE_FUSED=1).
+MODE_BY_OP = {"moe_swiglu_block": "composed"}
+
+
 def hot_path_cases(rt):
     """(op, shape, dtype, thunk) per named hot path — module-level so the
     ratchet test re-times the identical work."""
@@ -102,7 +109,8 @@ def main() -> int:
     for op, shape, dtype, thunk in hot_path_cases(rt):
         med = _median_ms(thunk, reps=args.reps)
         rows.append({
-            "op": op, "shape": shape, "dtype": dtype, "mode": "fused",
+            "op": op, "shape": shape, "dtype": dtype,
+            "mode": MODE_BY_OP.get(op, "fused"),
             "median_ms": round(med, 4),
             "max_latency_ms": round(med * args.margin, 4),
         })

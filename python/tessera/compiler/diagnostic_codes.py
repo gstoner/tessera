@@ -571,6 +571,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/spec/SHAPE_SYSTEM.md §2.1",
         sprint="V2",
     ),
+    DiagnosticCode(
+        code="LAYOUT_LEGALITY_SCALE_WITHOUT_LAYOUT",
+        pass_origin="LayoutLegalityPass",
+        severity="error",
+        summary=(
+            "A `tessera.grouped_gemm` / `tessera.moe_swiglu_block` carries a "
+            "low-precision scale *operand* but no `scale_layout` attribute — an "
+            "untyped scale tensor has no compiler-visible layout contract."
+        ),
+        fix_hint=(
+            "Declare a `scale_layout` attribute (granularity / block / packing / "
+            "transposed) describing the scale operand's packed layout, or drop "
+            "the scale operand to use the unscaled form."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="DeepGEMM-keystone",
+    ),
 
     # ── Queue dialect verifiers (V8) ─────────────────────────────────────
     DiagnosticCode(

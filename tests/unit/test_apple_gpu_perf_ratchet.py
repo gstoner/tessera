@@ -162,6 +162,7 @@ def test_live_hot_paths_within_ratchet():
     for op, shape, dtype, thunk in recorder.hot_path_cases(rt):
         med = recorder._median_ms(thunk, reps=10)
         rows.append({"op": op, "shape": shape, "dtype": dtype,
-                     "mode": "fused", "latency_ms": med})
+                     "mode": recorder.MODE_BY_OP.get(op, "fused"),
+                     "latency_ms": med})
     failures = perf_gate.evaluate_ratchet(rows, baseline)
     assert not failures, "\n".join(failures)

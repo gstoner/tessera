@@ -4,9 +4,9 @@ absolute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 acos,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-adamw,5,0,0,5,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
+adamw,6,0,0,6,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,65,6,8,71,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+add,66,6,8,72,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -75,7 +75,7 @@ clifford_reverse,1,0,0,1,1,,covered_by_family,category default for 'geometric_al
 clifford_rotor_sandwich,2,0,0,2,0,,covered_by_family,category default for 'geometric_algebra'
 clifford_vec_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_wedge,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clip,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,covered_by_family,category default for 'elementwise'
+clip,11,0,1,11,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,covered_by_family,category default for 'elementwise'
 clip_grad_norm,3,0,0,3,0,,structural_only,category default for 'grad_transform'
 clip_grad_value,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 collective_permute,2,0,0,2,0,,needs_direct_test,category default for 'collective'
@@ -166,7 +166,7 @@ empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-exp,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
+exp,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -185,13 +185,13 @@ gated_deltanet,7,2,0,9,0,,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 gelu,28,17,1,45,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
-gemm,69,2,6,71,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
 grad_scaler_step,3,0,0,3,0,,needs_direct_test,category default for 'numerics'
 group_norm,6,0,0,6,0,,needs_direct_test,category default for 'normalization'
 grouped_gemm,27,10,2,37,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
-grpo_policy_loss,3,3,0,6,0,,needs_direct_test,category default for 'rl_loss'
+grpo_policy_loss,6,3,0,9,0,,needs_direct_test,category default for 'rl_loss'
 gru_cell,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
 gt,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 huber_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
@@ -255,7 +255,7 @@ masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direc
 matmul,321,158,15,479,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-maximum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+maximum,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
 mean,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
 memory_index_score,1,0,0,1,1,,needs_direct_test,category default for 'attention'
@@ -265,7 +265,7 @@ memory_read,2,0,0,2,0,,needs_direct_test,category default for 'memory'
 memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 min_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
-minimum,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+minimum,5,0,0,5,0,,structural_only,unclassified — defaults to structural_only
 mla_decode,3,2,0,5,0,,needs_direct_test,category default for 'attention'
 mla_decode_fused,4,9,0,13,0,,needs_direct_test,category default for 'attention'
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
@@ -286,7 +286,7 @@ msa_index_scores,8,4,1,12,0,,needs_direct_test,category default for 'attention'
 msa_select_blocks,8,6,1,14,0,,structural_only,unclassified — defaults to structural_only
 msa_sparse_attention,37,8,1,45,0,,needs_direct_test,category default for 'attention'
 mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
-mul,62,0,6,62,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+mul,72,0,7,72,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 multi_head_attention,5,0,0,5,0,,covered_by_family,covered by attention family + flash_attn tests
 muon,5,0,0,5,0,,needs_direct_test,category default for 'optimizer'
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -327,7 +327,7 @@ quantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 quantize_nvfp4,10,0,2,10,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,needs_direct_test,category default for 'quantize'
 rearrange,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reduce,66,0,6,66,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
+reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 reduce_scatter,0,4,0,4,0,,needs_direct_test,category default for 'collective'
 relu,92,7,9,99,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 remat,0,0,0,0,1,,structural_only,category default for 'transform'

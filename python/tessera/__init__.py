@@ -382,9 +382,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def reduce(x, op: str = "sum", axis=None, keepdims: bool = False):
         if hasattr(x, "_data"):
             x = x._data
-        if op != "sum":
-            raise ValueError("only reduce op='sum' is implemented in the CPU reference path")
-        return np.sum(x, axis=axis, keepdims=keepdims)
+        x = np.asarray(x)
+        if op == "sum":
+            return np.sum(x, axis=axis, keepdims=keepdims)
+        if op == "mean":
+            return np.mean(x, axis=axis, keepdims=keepdims)
+        raise ValueError(
+            f"reduce(op={op!r}) not supported in the CPU reference path; "
+            f"use op in {{'sum','mean'}} or ops.amax/amin for max/min reductions"
+        )
 
     def sum(x, axis=None, keepdims: bool = False):
         return reduce(x, op="sum", axis=axis, keepdims=keepdims)
@@ -551,21 +557,26 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         idx = np.asarray(indices, dtype=np.int64)
         return np.take(x, idx, axis=axis)
 
-    def clip(x, *, min_val=None, max_val=None):
+    def clip(x, *, min_val=None, max_val=None, min=None, max=None):
         """Element-wise clamp into ``[min_val, max_val]``.
 
         Either bound may be ``None`` to leave that side open. Mirrors
         ``numpy.clip``. The VJP routes upstream cotangents only through
         elements that weren't clamped (a straight-through estimator).
 
-        ``min_val``/``max_val`` are keyword-only so the autodiff tape
-        captures them as ``entry.kwargs`` for the VJP — non-tensor
-        positional args would otherwise be dropped by ``_make_wrapper``.
+        ``min``/``max`` are accepted as ergonomic aliases for
+        ``min_val``/``max_val`` (the canonical names). All are keyword-only so
+        the autodiff tape captures them as ``entry.kwargs`` for the VJP —
+        non-tensor positional args would otherwise be dropped by
+        ``_make_wrapper``. ``vjp_clip`` coalesces the aliases too, so the
+        backward clamp stays correct regardless of which spelling is used.
         """
         if hasattr(x, "_data"):
             x = x._data
         x = np.asarray(x)
-        return np.clip(x, min_val, max_val)
+        lo = min_val if min_val is not None else min
+        hi = max_val if max_val is not None else max
+        return np.clip(x, lo, hi)
 
     def masked_fill(x, mask, *, value):
         """Replace elements of ``x`` where ``mask`` is True with ``value``.
@@ -3504,6 +3515,46 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         values = np.take_along_axis(a, idx, axis=axis)
         return values, idx
 
+    def embedding(table, ids):
+        """Trainable embedding lookup ``table[ids]`` (row gather).
+
+        A tape-traced alternative to raw numpy indexing so the embedding
+        ``table`` (a Parameter) receives gradients via scatter-add (VJP in
+        ``autodiff/vjp.py``). ``ids`` is an integer index tensor (any shape);
+        the output appends the trailing ``embedding_dim`` axis.
+        """
+        tb = table
+        while hasattr(tb, "_data"):
+            tb = tb._data
+        ix = ids
+        while hasattr(ix, "_data"):
+            ix = ix._data
+        return np.asarray(tb)[np.asarray(ix, dtype=np.int64)]
+
+    def top_k_routing(logits, *, k: int, axis: int = -1):
+        """Differentiable hard top-k routing weights.
+
+        Returns a full-width ``(..., E)`` tensor that is the softmax over each
+        row's top-``k`` logits at those ``k`` positions and zero elsewhere — the
+        gate weights for a hard top-k MoE. ``k`` is keyword-only so it stays in
+        the autodiff tape's kwargs (a non-differentiable config), and the VJP
+        (registered in ``autodiff/vjp.py``) routes gradient to the selected
+        logits via the sparse softmax jacobian.
+        """
+        z = np.asarray(_unwrap(logits))
+        E = z.shape[axis]
+        if not (1 <= k <= E):
+            raise ValueError(f"top_k_routing: k={k} out of [1, E={E}]")
+        # Select top-k by descending sort (stable, deterministic tie-break).
+        order = np.argsort(-z, axis=axis, kind="stable")
+        topk_idx = np.take(order, np.arange(k), axis=axis)
+        mask = np.zeros_like(z, dtype=bool)
+        np.put_along_axis(mask, topk_idx, True, axis=axis)
+        masked = np.where(mask, z, -np.inf)
+        m = np.max(masked, axis=axis, keepdims=True)
+        e = np.where(mask, np.exp(masked - m), 0.0)
+        return (e / e.sum(axis=axis, keepdims=True)).astype(z.dtype)
+
     def sort(x, axis: int = -1, descending: bool = False):
         out = np.sort(_unwrap(x), axis=axis)
         return np.flip(out, axis=axis) if descending else out
@@ -3885,6 +3936,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # through the tape so their VJP/JVP in autodiff/{vjp,jvp}.py are honored.
     from . import _ebm_ops as _ebm_ops_mod
     references.update(_ebm_ops_mod.EBM_OPS)
+    # Differentiable routing/lookup primitives (G1/G2): registered so the
+    # autodiff tape wraps them (install_op_wrappers iterates the registry) and
+    # their VJPs in autodiff/vjp.py are honored — `top_k_routing` (sparse-softmax
+    # hard-MoE gate) and `embedding` (trainable row lookup via scatter-add).
+    references.update({
+        "top_k_routing": top_k_routing,
+        "embedding": embedding,
+    })
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -4158,6 +4217,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         popcount=popcount,
         masked_categorical=masked_categorical,
         top_k=top_k,
+        top_k_routing=top_k_routing,
+        embedding=embedding,
         sort=sort,
         argsort=argsort,
         linear_general=linear_general_ref,

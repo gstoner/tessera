@@ -40,6 +40,7 @@ class InputDesc:
     param: Any   # Parameter | None — typed loosely to avoid import cycle
     array_id: int
     array: np.ndarray
+    is_literal: bool = False  # True for python-scalar operands (non-differentiable)
 
 
 @dataclass
@@ -162,6 +163,20 @@ class Tape:
             d_in = entry.vjp(dout, *forward_args, **entry.kwargs)
             if not isinstance(d_in, tuple):
                 d_in = (d_in,)
+            # Tolerate a VJP that omits cotangents for trailing python-scalar
+            # *literal* operands (non-differentiable; e.g. ops.minimum(t, 1.2)).
+            # Pad with None so the strict per-array count check below still
+            # catches genuine VJP-author bugs for real array inputs.
+            if len(d_in) < len(entry.inputs):
+                trailing_literals = 0
+                for desc in reversed(entry.inputs):
+                    if desc.is_literal:
+                        trailing_literals += 1
+                    else:
+                        break
+                missing = len(entry.inputs) - len(d_in)
+                if 0 < missing <= trailing_literals:
+                    d_in = d_in + (None,) * missing
             if len(d_in) != len(entry.inputs):
                 raise TesseraAutodiffError(
                     f"VJP for {entry.op!r} returned {len(d_in)} cotangents, "
@@ -284,8 +299,22 @@ def _describe(arg: Any):
 
     # numpy generic scalars (np.float32(...), np.int64(...), 0-d arrays from .sum())
     if isinstance(arg, np.generic):
-        a = np.asarray(arg)
-        return InputDesc(param=None, array_id=id(a), array=a)
+        # Key on id(arg), NOT id(np.asarray(arg)): a producer op records its
+        # output by id(output). When that output is a np.generic scalar (e.g.
+        # reduce-to-scalar) and is then consumed by another op, keying on a
+        # fresh array's id would sever the producer→consumer gradient link.
+        # Using id(arg) keeps the chain intact for scalar-valued intermediates.
+        return InputDesc(param=None, array_id=id(arg), array=np.asarray(arg))
+
+    # Python numeric scalars passed *positionally* as differentiable operands
+    # (e.g. ops.minimum(ratio, 1.2), ops.mul(x, -0.5)). Record them as
+    # non-differentiable (param=None) literal inputs so the VJP receives the
+    # operand value and the cotangent count matches. `bool` is excluded — it is
+    # an int subclass used for flags, not a differentiable operand. Backward
+    # tolerates a VJP that omits trailing literal cotangents (see Tape.backward).
+    if isinstance(arg, (int, float)) and not isinstance(arg, bool):
+        a = np.asarray(arg, dtype=np.float64)
+        return InputDesc(param=None, array_id=id(arg), array=a, is_literal=True)
 
     return _NON_ARRAY
 

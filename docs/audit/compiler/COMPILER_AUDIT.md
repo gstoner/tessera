@@ -35,6 +35,57 @@ multiple root audit documents and compiler archive files.
 > silicon need a Linux/CUDA runner). Research-backed
 > (DESIL/PolyJuice/Mirage/TensorBench/Magellan/AlphaEvolve/BaCO/TLP).
 
+## Autodiff v1 tape — gaps closed (2026-06-13)
+
+Surfaced while building the agent-native MoE training stack (`tessera.train`,
+GRPO post-training). The `CODE_AUDIT_2026_06_10.md` already *diagnosed* "silent
+autodiff chain breaks"; this pass found the **root cause and fixed it**, plus two
+adjacent ergonomic gaps. All additive; full `tests/unit -m "not slow"` green.
+
+- **Scalar/0-d tape-link break (root cause, fixed).** `autodiff/tape.py::_describe`
+  keyed `np.generic` (scalar) inputs on `id(np.asarray(arg))` — a *fresh* array —
+  while producers record outputs by `id(output)`. Any reduction-to-scalar feeding
+  a later op (i.e. essentially every loss expression: `mul(reduce(...), k)`,
+  `exp(reduce(...))`) silently severed the gradient chain (grad came back `None`).
+  Fix: key on `id(arg)`. This is the concrete mechanism behind the previously
+  "diagnosed" silent breaks.
+- **`reduce(op=...)` was sum-only (fixed).** The op advertised an `op=` parameter
+  but raised for anything but `"sum"` in both forward and VJP. Added `"mean"`
+  (forward + `vjp_reduce`, axis/keepdims-correct). Max/min still route to
+  `ops.amax`/`ops.amin` by design.
+- **`clip` bound aliases (fixed).** `ops.clip` accepted only `min_val`/`max_val`;
+  added `min`/`max` aliases coalesced in **both** the forward and `vjp_clip`, so
+  PPO-style clipping is one tape-safe call (its bounds ride in kwargs, avoiding
+  the scalar-operand detach below).
+
+### Follow-on closures (2026-06-14): F1, F2, G1, G2
+
+- **F1 + F2 (fixed — shared root cause).** `_make_wrapper`/`_describe` dropped
+  *python-scalar* positional operands from the tape, so `ops.minimum(t, 1.2)`
+  raised in backward (VJP missing `y`) and `ops.mul(scalar_tensor, -3.0)`
+  returned grad as if the factor were `1`. Fix: `_describe` records python
+  `int`/`float` (not `bool`) as **non-differentiable literal inputs**
+  (`InputDesc.is_literal=True`), and `Tape.backward` tolerates a VJP that omits
+  cotangents for *trailing literal* operands (pads `None`) — preserving the
+  strict per-array count check that catches genuine VJP-author bugs. Verified
+  safe across the full `tests/unit -m "not slow"` suite.
+- **G1 (clarified + closed).** The earlier "no tape-traceable gather" claim was
+  wrong: `ops.gather` already exists, is tape-wrapped, and scatter-adds
+  correctly. The real gap was that `nn.Embedding`/models used raw numpy
+  indexing. Added `ops.embedding(table, ids)` (gather + scatter-add VJP) and a
+  fully-traceable LM proving the embedding table trains.
+- **G2 (new op).** `ops.top_k` had no VJP for routing. Added
+  `ops.top_k_routing(logits, *, k)` → full-width sparse-softmax gate (zero off
+  the top-k) with a VJP that routes gradient to the selected logits via the
+  sparse softmax jacobian (numerically verified vs central difference). This is
+  the missing primitive for a **differentiable hard top-k MoE** — proven
+  end-to-end in `tessera.train.models.TracedHardMoELM` (embedding + router +
+  experts + head all train via `adamw_step`).
+
+Guards: `tests/unit/test_autodiff_tape_fixes.py` (E1/E2/E3/F1/F2),
+`tests/unit/test_train_hard_moe.py` (G1/G2). New ops registered as numpy
+references (no OP_SPECS requirement — 11 registry-only refs already exist).
+
 ## Finished
 
 - **Canonical driver:** `canonical_compile` and `CompileResult` are the common

@@ -528,14 +528,22 @@ def vjp_gather(dout, x, indices, *, axis=0, **_):
 
 
 @_vjp("clip")
-def vjp_clip(dout, x, *, min_val=None, max_val=None, **_):
+def vjp_clip(dout, x, *, min_val=None, max_val=None, min=None, max=None, **_):
     """y = clip(x, min_val, max_val).
 
     Straight-through estimator: dx = dout where x is **strictly** inside
     the range, 0 at or beyond the bounds. Matches PyTorch's `torch.clamp`
     convention and the central-difference numerical Jacobian (which sees a
     flat plateau at any point that's eps-clipped on either side).
+
+    Accepts ``min``/``max`` as aliases for ``min_val``/``max_val`` so the
+    backward clamp matches the forward regardless of which spelling the caller
+    used (see ``ops.clip``).
     """
+    if min_val is None:
+        min_val = min
+    if max_val is None:
+        max_val = max
     mask = np.ones_like(x, dtype=x.dtype)
     if min_val is not None:
         mask = mask * (x > min_val).astype(x.dtype)
@@ -688,6 +696,41 @@ def vjp_softmax(dout, x, *, axis=-1, **_):
     return ((dout - (dout * s).sum(axis=axis, keepdims=True)) * s,)
 
 
+@_vjp("top_k_routing")
+def vjp_top_k_routing(dout, logits, *, k, axis=-1, **_):
+    """y = sparse-softmax over the top-k logits per row (zero elsewhere).
+
+    Recompute the selection + sparse weights ``w``, then apply the softmax
+    jacobian. Because ``w`` is exactly zero outside the selected set, the
+    standard softmax VJP ``dz = w * (dout - sum(dout*w))`` automatically yields
+    zero gradient for unselected logits — no explicit masking needed in the
+    backward. The selection (argmax set) is treated as constant (the
+    non-differentiable, discrete part of routing).
+    """
+    z = np.asarray(logits)
+    E = z.shape[axis]
+    order = np.argsort(-z, axis=axis, kind="stable")
+    topk_idx = np.take(order, np.arange(k), axis=axis)
+    mask = np.zeros_like(z, dtype=bool)
+    np.put_along_axis(mask, topk_idx, True, axis=axis)
+    masked = np.where(mask, z, -np.inf)
+    m = np.max(masked, axis=axis, keepdims=True)
+    e = np.where(mask, np.exp(masked - m), 0.0)
+    w = e / e.sum(axis=axis, keepdims=True)
+    do = np.asarray(dout)
+    return (w * (do - (do * w).sum(axis=axis, keepdims=True)),)
+
+
+@_vjp("embedding")
+def vjp_embedding(dout, table, ids, **_):
+    """y = table[ids] (row gather). Gradient scatter-adds into table rows;
+    ``ids`` is a non-differentiable integer index tensor."""
+    idx = np.asarray(ids, dtype=np.int64)
+    dtable = np.zeros_like(np.asarray(table))
+    np.add.at(dtable, idx, np.asarray(dout))
+    return (dtable, None)
+
+
 @_vjp("layer_norm")
 def vjp_layer_norm(dout, x, *, eps=1e-5, **_):
     """Forward (no affine): y = (x - mean) / sqrt(var + eps).
@@ -736,10 +779,21 @@ def vjp_rmsnorm_safe(dout, x, *, eps=1e-6, **_):
 
 @_vjp("reduce")
 def vjp_reduce(dout, x, *, op="sum", axis=None, keepdims=False, **_):
-    if op != "sum":
+    if op not in ("sum", "mean"):
         raise NotImplementedError(
-            f"VJP for reduce(op={op!r}) is not implemented in v1; only 'sum' is supported"
+            f"VJP for reduce(op={op!r}) is not implemented in v1; only 'sum' and "
+            f"'mean' are supported (use ops.amax/amin for max/min reductions)"
         )
+    x = np.asarray(x)
+    # mean = sum / N over the reduced elements; its cotangent is the sum
+    # cotangent scaled by 1/N.
+    if op == "mean":
+        if axis is None:
+            n = x.size
+        else:
+            ax = (axis,) if isinstance(axis, int) else tuple(axis)
+            n = int(np.prod([x.shape[a] for a in ax]))
+        dout = np.asarray(dout) / max(n, 1)
     if axis is None:
         return (np.broadcast_to(dout, x.shape).copy(),)
     if not keepdims:
@@ -748,7 +802,7 @@ def vjp_reduce(dout, x, *, op="sum", axis=None, keepdims=False, **_):
         shape = list(x.shape)
         for a in ax:
             shape[a] = 1
-        dout = dout.reshape(shape)
+        dout = np.asarray(dout).reshape(shape)
     return (np.broadcast_to(dout, x.shape).copy(),)
 
 

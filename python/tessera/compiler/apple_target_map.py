@@ -166,6 +166,9 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     # Followup (2026-06-10) — MoE expert-FFN fused kernels dispatch via the
     # runtime's lane→handler table (the driver path), like matmul.
     "grouped_gemm", "moe_swiglu_block",
+    # Frontier MoE quant track — dequant_matmul dispatches via the runtime
+    # (_apple_gpu_backend.gpu_dequant_matmul), like grouped_gemm.
+    "dequant_matmul",
 })
 
 
@@ -282,6 +285,9 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     # grouped_gemm / moe_swiglu_block lanes.
     "grouped_gemm":     "tessera_apple_gpu_grouped_gemm_f32",
     "moe_swiglu_block": "tessera_apple_gpu_moe_swiglu_f32",
+    # Frontier MoE quant track — fused dequantize-into-GEMM (packed-INT4 codes +
+    # group scales). Real kernel + dispatch (_apple_gpu_backend.gpu_dequant_matmul).
+    "dequant_matmul":   "tessera_apple_gpu_dequant_matmul_f32",
 }
 
 

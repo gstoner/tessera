@@ -65,7 +65,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | bmm | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | - | fp32,fp16,bf16 | tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
 | conv2d | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | - | fp32,fp16,bf16 | tessera_apple_gpu_conv2d_dev_{f32,f16,bf16}_enc | driver | tests/unit/test_apple_*.py |
-| dequant_matmul | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | - | manifest | tests/unit/test_apple_*.py |
+| dequant_matmul | reference | numpy_reference | fp32 | - | numpy_reference | fused | - | fp32 | tessera_apple_gpu_dequant_matmul_f32 | driver | tests/unit/test_apple_*.py |
 | flash_attn | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_flash_attn_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | gelu | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_gelu_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | gemm | fused | Accelerate (cblas_sgemm) + BNNS (fp16/bf16) | fp32,fp16,bf16 | tessera_apple_cpu_gemm_{f32,f16,bf16} | accelerate_native | absent | - | - | - | absent | tests/unit/test_apple_backend_roadmap.py |

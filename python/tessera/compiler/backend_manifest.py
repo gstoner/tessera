@@ -846,12 +846,16 @@ _APPLE_GPU_HOT_PATH_METADATA: dict[str, BenchmarkMetadata] = {
         ratcheted=False, notes="benchmarked; standalone baseline row pending"),
     "grouped_gemm": BenchmarkMetadata(
         hot_path_group="moe",
-        harness="benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
-        ratcheted=False, notes="MoE expert-FFN core; benchmarked via MegaMoE overlap harness"),
+        harness="benchmarks/apple_gpu/benchmark_grouped_gemm.py",
+        ratcheted=True, ratchet_key="grouped_gemm",
+        notes="MoE expert-FFN core; isolated ratchet row (DeepGEMM keystone) — "
+              "timed standalone, not via the MegaMoE overlap harness"),
     "moe_swiglu_block": BenchmarkMetadata(
         hot_path_group="moe",
-        harness="benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
-        ratcheted=False, notes="MoE expert-FFN block; benchmarked via MegaMoE overlap harness"),
+        harness="benchmarks/apple_gpu/benchmark_grouped_gemm.py",
+        ratcheted=True, ratchet_key="moe_swiglu_block",
+        notes="MoE expert-FFN block; isolated ratchet row (DeepGEMM keystone) — "
+              "timed standalone, not via the MegaMoE overlap harness"),
 }
 
 

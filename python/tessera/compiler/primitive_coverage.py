@@ -1741,6 +1741,13 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     "depthwise_conv2d":  _matmul_policy,
     "qkv_projection":    _matmul_policy,
     "fused_epilogue":    _matmul_policy,
+    # Grouped GEMM / MoE expert FFN carry the same storage=bf16/accum=fp32
+    # two-level-accumulation contract as dense matmul (low-precision storage,
+    # fp32 accumulation — DeepGEMM's two-level accumulate).  The scale_layout
+    # per low-precision dtype rides on the grouped-layout metadata + the IR's
+    # first-class scale_layout attr (see TesseraOps.td GroupedGemmOp).
+    "grouped_gemm":      _matmul_policy,
+    "moe_swiglu_block":  _matmul_policy,
     # ── Attention family ───────────────────────────────────────────────
     "flash_attn":                 _attn_policy,
     "multi_head_attention":       _attn_policy,

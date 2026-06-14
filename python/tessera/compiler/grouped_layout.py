@@ -322,3 +322,39 @@ def reference_grouped_gemm(x: Any, w: Any, group_sizes: Any) -> "np.ndarray":
             out[off:off + n] = x[off:off + n] @ w[e]
         off += n
     return out
+
+
+def reference_grouped_gemm_masked(x: Any, w: Any, expert_ids: Any) -> "np.ndarray":
+    """fp32 reference for an M-grouped **masked** GEMM (DeepGEMM family B3).
+
+    Unlike the contiguous form, masked grouped GEMM does not require tokens to be
+    laid out in contiguous per-expert blocks and does not need the per-expert
+    counts at launch — each token carries its own expert id, so the token→expert
+    assignment (and therefore the per-expert count) is resolved dynamically.  This
+    is the decode / CUDA-graph-capture shape, where the number of tokens routed to
+    each expert is unknown when the kernel is launched.
+
+    x: (T, K) tokens in arbitrary order; w: (E, K, N) per-expert weights;
+    expert_ids: (T,) int per-token expert id.  A negative id marks a *masked*
+    (padding) row whose output is zero — the mechanism that lets a fixed-size
+    launch buffer hold a runtime-variable number of real tokens.  Returns (T, N).
+    """
+    x = np.asarray(x, dtype=np.float64)
+    w = np.asarray(w, dtype=np.float64)
+    eid = np.asarray(expert_ids).astype(np.int64).reshape(-1)
+    T, E = x.shape[0], w.shape[0]
+    if eid.shape[0] != T:
+        raise ValueError(
+            f"grouped_gemm (masked): expert_ids length {eid.shape[0]} must equal "
+            f"the token count T={T}")
+    bad = [int(e) for e in np.unique(eid) if e >= E]
+    if bad:
+        raise ValueError(
+            f"grouped_gemm (masked): expert id(s) {bad} out of range for E={E} "
+            f"experts (use a negative id to mask/pad a row)")
+    out = np.zeros((T, w.shape[2]), dtype=np.float64)
+    for t in range(T):
+        e = int(eid[t])
+        if e >= 0:  # e < 0 → masked padding row → zero output
+            out[t] = x[t] @ w[e]
+    return out

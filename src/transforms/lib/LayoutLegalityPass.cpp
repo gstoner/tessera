@@ -44,6 +44,17 @@
 //     The `tessera.layout` attribute names a layout not in the
 //     canonical accept-set listed above.
 //
+//   LAYOUT_LEGALITY_PRODUCER_CONSUMER_MISMATCH
+//     A consumer op (matmul / conv2d_nhwc / flash_attn) receives an
+//     operand whose producer layout attr is not in the consumer's
+//     accept-set, with no intervening cast.
+//
+//   LAYOUT_LEGALITY_SCALE_WITHOUT_LAYOUT
+//     A tessera.grouped_gemm / tessera.moe_swiglu_block carries a
+//     low-precision scale *operand* but no `scale_layout` attribute —
+//     an untyped scale tensor has no layout contract (DeepGEMM
+//     keystone, 2026-06).
+//
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -83,8 +94,9 @@ struct LayoutLegality
   StringRef getDescription() const override {
     return "Layout legality pass — cast-layout accept-set + producer/consumer "
            "accept-set rule for tessera.matmul (row_major/col_major), "
-           "tessera.conv2d_nhwc (nhwc, data operand), and tessera.flash_attn "
-           "(bhsd, Q/K/V).";
+           "tessera.conv2d_nhwc (nhwc, data operand), tessera.flash_attn "
+           "(bhsd, Q/K/V), and scale-layout legality for tessera.grouped_gemm / "
+           "tessera.moe_swiglu_block (scale operand requires scale_layout).";
   }
 
   // First rule: tessera.cast with a `tessera.layout` attribute whose
@@ -193,6 +205,41 @@ struct LayoutLegality
     return anyFail ? failure() : success();
   }
 
+  // Scale-layout legality for grouped GEMM / MoE (2026-06 — DeepGEMM keystone).
+  //
+  // A low-precision scale *operand* (the optional x_scale/w_scale on
+  // tessera.grouped_gemm, or the four optional scales on
+  // tessera.moe_swiglu_block) is only legal when the op also declares a
+  // `scale_layout` attribute describing that operand's packed layout
+  // (granularity / block / packing / transposed).  An untyped scale tensor has
+  // no compiler-visible layout contract, so the target-lowering layer would have
+  // nothing to legalize against.
+  //
+  // NOTE on scope: this pass *enforces the invariant*; it does not insert the
+  // repack/transpose/align op that converts a declared scale layout into a
+  // target's wanted layout.  That rewrite belongs in the Tile->Target lowering
+  // (which carries the per-target wanted-scale-layout signal this legality pass
+  // deliberately does not have) — see TileToApple / NVIDIA scale lowering.
+  static LogicalResult checkGroupedScaleLayout(Operation *op) {
+    StringRef name = op->getName().getStringRef();
+    unsigned base;
+    if (name == "tessera.grouped_gemm")
+      base = 3;  // x, weights, group_sizes
+    else if (name == "tessera.moe_swiglu_block")
+      base = 5;  // x, w_gate, w_up, w_down, group_sizes
+    else
+      return success();
+    bool hasScaleOperands = op->getNumOperands() > base;
+    if (!hasScaleOperands) return success();  // bare (unscaled) form — legal
+    if (op->getAttr("scale_layout")) return success();
+    return op->emitOpError(
+               "LAYOUT_LEGALITY_SCALE_WITHOUT_LAYOUT: ")
+           << name
+           << " has scale operand(s) but no `scale_layout` attribute; an "
+              "untyped scale tensor has no layout contract.  Declare "
+              "scale_layout (granularity / block / packing / transposed).";
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     bool anyError = false;
@@ -202,6 +249,8 @@ struct LayoutLegality
       if (failed(checkMatmulOperandLayouts(op))) anyError = true;
       // 2026-06-11: same rule for conv2d_nhwc (nhwc) + flash_attn (bhsd).
       if (failed(checkTensorOpLayouts(op))) anyError = true;
+      // 2026-06 (DeepGEMM keystone): scale operand requires a scale_layout.
+      if (failed(checkGroupedScaleLayout(op))) anyError = true;
     });
     if (anyError)
       signalPassFailure();

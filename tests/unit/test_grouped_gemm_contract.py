@@ -310,3 +310,60 @@ def test_fp8xfp4_grouped_gemm_between_fp8_and_fp4_error():
     r_fp8, r_mixed, r_fp4 = rel("fp8_e4m3"), rel("fp8xfp4"), rel("nvfp4")
     # FP8 activations × FP4 weights sits between pure-FP8 and pure-FP4 error.
     assert r_fp8 <= r_mixed <= r_fp4 + 0.02, (r_fp8, r_mixed, r_fp4)
+
+
+# ── Masked grouped GEMM reference semantics (DeepGEMM family B3) ─────────────
+# The native Apple lane still rejects `masked` (Decision #21 — no per-group tiled
+# kernel); these lock the *reference* contract so the masked family is
+# numerically defined for the oracle/evaluator even before a native kernel.
+def test_masked_reference_matches_per_token_routing():
+    rng = np.random.default_rng(0)
+    T, K, N, E = 7, 4, 5, 3
+    x = rng.standard_normal((T, K)).astype(np.float32)
+    w = rng.standard_normal((E, K, N)).astype(np.float32)
+    # Arbitrary (non-contiguous) per-token expert assignment.
+    eid = np.array([2, 0, 1, 1, 0, 2, 0], dtype=np.int64)
+    got = gl.reference_grouped_gemm_masked(x, w, eid)
+    x64, w64 = x.astype(np.float64), w.astype(np.float64)
+    exp = np.stack([x64[t] @ w64[int(eid[t])] for t in range(T)])
+    np.testing.assert_allclose(got, exp, rtol=1e-12, atol=1e-12)
+    assert got.shape == (T, N)
+
+
+def test_masked_reference_zeros_padding_rows():
+    rng = np.random.default_rng(1)
+    T, K, N, E = 5, 3, 4, 2
+    x = rng.standard_normal((T, K)).astype(np.float32)
+    w = rng.standard_normal((E, K, N)).astype(np.float32)
+    eid = np.array([0, -1, 1, -1, 0], dtype=np.int64)  # -1 = masked padding row
+    got = gl.reference_grouped_gemm_masked(x, w, eid)
+    x64, w64 = x.astype(np.float64), w.astype(np.float64)
+    # Padding rows are exactly zero; real rows route to their expert.
+    assert np.all(got[1] == 0.0) and np.all(got[3] == 0.0)
+    np.testing.assert_allclose(got[0], x64[0] @ w64[0], rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(got[2], x64[2] @ w64[1], rtol=1e-12, atol=1e-12)
+
+
+def test_masked_reference_equivalent_to_contiguous_when_sorted():
+    # A masked routing whose tokens happen to be expert-contiguous must match the
+    # contiguous reference with the corresponding group_sizes — the two families
+    # agree on the overlap.
+    rng = np.random.default_rng(2)
+    K, N = 4, 6
+    group_sizes = [3, 0, 2]  # expert 1 gets no tokens
+    eid = np.array([0, 0, 0, 2, 2], dtype=np.int64)
+    T, E = len(eid), len(group_sizes)
+    x = rng.standard_normal((T, K)).astype(np.float32)
+    w = rng.standard_normal((E, K, N)).astype(np.float32)
+    masked = gl.reference_grouped_gemm_masked(x, w, eid)
+    contig = gl.reference_grouped_gemm(x, w, group_sizes)
+    np.testing.assert_allclose(masked, contig, rtol=1e-12, atol=1e-12)
+
+
+def test_masked_reference_validates_shapes():
+    x = np.zeros((4, 3), np.float32)
+    w = np.zeros((2, 3, 5), np.float32)
+    with pytest.raises(ValueError, match="must equal the token count"):
+        gl.reference_grouped_gemm_masked(x, w, np.zeros(3, np.int64))
+    with pytest.raises(ValueError, match="out of range"):
+        gl.reference_grouped_gemm_masked(x, w, np.array([0, 1, 2, 0], np.int64))

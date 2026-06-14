@@ -216,9 +216,9 @@ js_divergence,6,0,0,6,0,,covered_by_family,category default for 'loss'
 jvp,0,0,0,0,1,,structural_only,category default for 'transform'
 kimi_delta_attention,5,2,0,7,0,,needs_direct_test,category default for 'attention'
 kl_divergence,5,0,0,5,0,,covered_by_family,category default for 'loss'
-kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,structural_only,unclassified — defaults to structural_only
-kv_cache_prune,1,0,1,1,1,fp16 fp32,structural_only,unclassified — defaults to structural_only
-kv_cache_read,2,0,1,2,0,fp16 fp32,structural_only,unclassified — defaults to structural_only
+kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,needs_direct_test,category default for 'state_update'
+kv_cache_prune,1,0,1,1,1,fp16 fp32,needs_direct_test,category default for 'state_update'
+kv_cache_read,2,0,1,2,0,fp16 fp32,needs_direct_test,category default for 'state_update'
 label_smoothed_cross_entropy,4,0,0,4,0,,covered_by_family,category default for 'loss'
 lamb,4,0,0,4,0,,needs_direct_test,category default for 'optimizer'
 laplacian_2d,2,0,0,2,0,,needs_direct_test,category default for 'stencil'
@@ -299,7 +299,7 @@ normalize_group_advantages,2,0,0,2,0,,needs_direct_test,category default for 'rl
 nt_xent_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
 ntk_rope,2,0,0,2,0,,needs_direct_test,category default for 'position_encoding'
 online_softmax,5,2,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-online_softmax_state,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
+online_softmax_state,4,0,0,4,0,,needs_direct_test,category default for 'state_update'
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
 pack,3,0,0,3,0,,needs_direct_test,category default for 'layout_transform'
 pad,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only

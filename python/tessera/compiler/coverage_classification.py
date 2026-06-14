@@ -164,6 +164,11 @@ _CATEGORY_DEFAULT_BUCKET: dict[str, str] = {
     "layout_transform": NEEDS_DIRECT_TEST,
     "stencil": NEEDS_DIRECT_TEST,
     "collective": NEEDS_DIRECT_TEST,
+    # KV-cache state ops (kv_cache_append/read/prune): real numerical state
+    # primitives, NOT metadata wrappers — they carry append↔read roundtrip,
+    # recency-window prune, sliding-window eviction, and quantized-storage
+    # behavior.  Direct contract tests live in test_kv_cache_contract.py.
+    "state_update": NEEDS_DIRECT_TEST,
 }
 
 

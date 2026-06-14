@@ -59,6 +59,16 @@ class MemoryReadResult:
     indices: np.ndarray
     weights: np.ndarray
     scores: np.ndarray
+    abstained: "bool | np.ndarray" = False
+    """Whether the read abstained because no entry cleared ``abstain_below``.
+
+    Scalar ``bool`` for a single query; a ``(batch,)`` bool array for a batched
+    query.  Defaults to ``False`` so existing callers (and the autodiff
+    constructors that build this result positionally by keyword) are unaffected.
+    When a row abstains, its ``values`` are filled with ``NaN`` so a stale hit
+    can never be mistaken for a real retrieval — the LongMemEval "answer is not
+    in memory → abstain" contract.
+    """
 
 
 def _as_table(memory: MemoryTable | tuple[np.ndarray, np.ndarray]) -> MemoryTable:
@@ -74,14 +84,46 @@ def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
     return exp / np.sum(exp, axis=axis, keepdims=True)
 
 
+def _recency_signal(table: MemoryTable, recency_key: str | None) -> np.ndarray:
+    """The per-entry recency ordering used to break score ties.
+
+    ``None`` means *insertion order* — the bank appends newest-last, so the row
+    index is the recency rank.  A ``recency_key`` reads an explicit metadata
+    column (e.g. ``"version"`` / ``"timestamp"`` / ``"session"``)."""
+    if recency_key is None:
+        return np.arange(table.size)
+    if table.metadata is None or recency_key not in table.metadata:
+        raise ValueError(
+            f"recency_key {recency_key!r} not found in MemoryTable.metadata"
+        )
+    return np.asarray(table.metadata[recency_key])
+
+
 def memory_read(
     memory: MemoryTable | tuple[np.ndarray, np.ndarray],
     query: np.ndarray,
     *,
     top_k: int = 1,
     normalize: bool = True,
+    abstain_below: float | None = None,
+    prefer_recent: bool = False,
+    recency_key: str | None = None,
 ) -> MemoryReadResult:
-    """Read from memory with top-k similarity and normalized weighted values."""
+    """Read from memory with top-k similarity and normalized weighted values.
+
+    When ``abstain_below`` is given, a query whose best similarity score (the
+    same score used to rank entries) falls below the threshold *abstains*: its
+    ``values`` are filled with ``NaN`` and the result's ``abstained`` flag is set
+    (a scalar ``bool`` for a single query, a ``(batch,)`` bool array otherwise).
+    Scores are raw ``query·keyᵀ`` similarities, so normalize keys/queries
+    upstream if you want the threshold to behave like a cosine floor.
+
+    When ``prefer_recent`` is set (or a ``recency_key`` metadata column is
+    named), entries are ranked by ``(score desc, recency desc)`` so that an
+    exact-key tie resolves to the *newest* write — the version-aware /
+    knowledge-update retrieval that plain similarity top-k cannot express. The
+    recency signal is insertion order by default, or the named metadata column.
+    """
 
     table = _as_table(memory)
     query_arr = np.asarray(_unwrap(query))
@@ -104,19 +146,45 @@ def memory_read(
     order = np.argsort(-top_scores, axis=-1)
     indices = np.take_along_axis(partition, order, axis=-1)
     top_scores = np.take_along_axis(top_scores, order, axis=-1)
+
+    if prefer_recent or recency_key is not None:
+        # Rank by (score desc, recency desc): lexsort's LAST key is primary, so
+        # ``(-recency, -score)`` sorts ascending -score (score desc) then breaks
+        # ties on ascending -recency (recency desc).
+        recency = _recency_signal(table, recency_key)
+        recency_b = np.broadcast_to(recency, scores.shape)
+        ranked = np.lexsort((-recency_b, -scores), axis=-1)
+        indices = ranked[:, :k]
+        top_scores = np.take_along_axis(scores, indices, axis=-1)
+
     weights = _softmax(top_scores, axis=-1) if normalize else np.ones_like(top_scores)
     if not normalize:
         weights = weights / k
     gathered_values = table.values[indices]
     read_values = np.sum(gathered_values * weights[(...,) + (None,) * (table.values.ndim - 1)], axis=1)
+
+    abstained_mask = np.zeros(query_arr.shape[0], dtype=bool)
+    if abstain_below is not None:
+        abstained_mask = top_scores.max(axis=-1) < float(abstain_below)  # (nq,) bool
+        if abstained_mask.any():
+            read_values = read_values.copy()
+            read_values[abstained_mask] = np.nan
+
     if single_query:
         return MemoryReadResult(
             values=read_values[0],
             indices=indices[0],
             weights=weights[0],
             scores=top_scores[0],
+            abstained=bool(abstained_mask[0]),
         )
-    return MemoryReadResult(values=read_values, indices=indices, weights=weights, scores=top_scores)
+    return MemoryReadResult(
+        values=read_values,
+        indices=indices,
+        weights=weights,
+        scores=top_scores,
+        abstained=abstained_mask if abstain_below is not None else False,
+    )
 
 
 def memory_write(

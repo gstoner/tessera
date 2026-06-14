@@ -3,6 +3,7 @@
 from .adapters import (
     ADAPTERS,
     AdapterResult,
+    AMABenchAdapter,
     LongBenchV2Adapter,
     LongMemEvalAdapter,
     MemoryArenaAdapter,
@@ -27,6 +28,7 @@ from .core import (
 
 __all__ = [
     "ADAPTERS",
+    "AMABenchAdapter",
     "AdapterResult",
     "LANDED_MEMORY_PRIMITIVES",
     "LongBenchV2Adapter",

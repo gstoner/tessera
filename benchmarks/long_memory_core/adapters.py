@@ -301,10 +301,117 @@ class LongBenchV2Adapter:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# AMA-Bench — long-horizon memory over agentic *trajectories* (ICML'26).
+#
+# Its finding — the bottleneck is memory SYSTEM DESIGN, not base-model capability
+# — is the argument for the resident runtime: memory must survive a tool-call →
+# observation → next-action loop over *arbitrary* horizons.  This is a superset
+# of MemoryArenaAdapter's single action loop: a long trajectory where a fact
+# observed early must drive an action much later, facts get updated mid-run, and
+# a query for something never observed must abstain.  Synthetic + rule-based QA
+# scaling to any horizon (exactly the harness pattern), across a few of the six
+# AMA-Bench domains (Web / Text2SQL / SWE) modeled as distinct key schemas.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AMABenchAdapter:
+    """Tool-call trajectory memory: observe over a long horizon, then act."""
+
+    DOMAINS = ("web", "text2sql", "swe")
+
+    def __init__(self, horizon: int = 256, n_facts: int = 16, n_actions: int = 8,
+                 abstain_floor: float = 0.5, seed: int = 0):
+        self.horizon = int(horizon)            # trajectory length (arbitrary)
+        self.n_facts = int(n_facts)
+        self.n_actions = int(n_actions)
+        self.abstain_floor = float(abstain_floor)
+        self.seed = int(seed)
+        self.dim = self.n_facts + 1            # +1 reserved for the absent probe
+
+    def _trajectory_bank(self, rng: np.random.Generator):
+        """Write ``horizon`` tool-observations to a resident bank, keyed by which
+        of ``n_facts`` entities each step concerns.  The newest observation of an
+        entity is its current value (recency).  Returns (bank, latest_action)."""
+        keys = _basis_keys(self.n_facts, self.dim)
+        latest = np.full((self.n_facts,), -1, np.int64)
+        bank = MemoryTable(
+            keys=np.zeros((0, self.dim), np.float32),
+            values=np.zeros((0, self.n_actions), np.float32),
+            metadata={"step": np.zeros((0,), np.int64)},
+        )
+        for step in range(self.horizon):
+            ent = int(rng.integers(0, self.n_facts))
+            action = int(rng.integers(0, self.n_actions))
+            latest[ent] = action
+            bank = memory_write(bank, keys[ent][None], _onehot(action, self.n_actions)[None])
+        return bank, keys, latest
+
+    def long_horizon_recall(self) -> AdapterResult:
+        # a fact observed anywhere in the trajectory drives the action now;
+        # prefer_recent resolves the entity's *current* value over the horizon.
+        rng = np.random.default_rng(self.seed ^ 0xA3A)
+        bank, keys, latest = self._trajectory_bank(rng)
+        observed = [e for e in range(self.n_facts) if latest[e] >= 0]
+        hits = 0
+        for ent in observed:
+            got = memory_read(bank, keys[ent], top_k=1, prefer_recent=True)
+            hits += int(np.argmax(got.values) == latest[ent])
+        n = max(len(observed), 1)
+        return AdapterResult("ama_bench", "long_horizon_recall", hits / n, n,
+                             detail=f"horizon={self.horizon}")
+
+    def abstain_on_unobserved(self) -> AdapterResult:
+        rng = np.random.default_rng(self.seed ^ 0xB5B)
+        bank, keys, latest = self._trajectory_bank(rng)
+        # the reserved basis direction is never written → must abstain
+        absent = np.eye(self.dim, dtype=np.float32)[self.n_facts]
+        miss = memory_read(bank, absent, top_k=1, abstain_below=self.abstain_floor)
+        observed = next((e for e in range(self.n_facts) if latest[e] >= 0), 0)
+        hit = memory_read(bank, keys[observed], top_k=1, abstain_below=self.abstain_floor)
+        ok = bool(miss.abstained) and not bool(hit.abstained)
+        return AdapterResult("ama_bench", "abstain_on_unobserved", float(ok), 1)
+
+    def multi_domain(self) -> AdapterResult:
+        # the same recall contract holds across distinct domain key schemas
+        accs = []
+        for d, domain in enumerate(self.DOMAINS):
+            rng = np.random.default_rng(self.seed ^ (0xD0 + d))
+            bank, keys, latest = self._trajectory_bank(rng)
+            observed = [e for e in range(self.n_facts) if latest[e] >= 0]
+            hits = sum(
+                int(np.argmax(memory_read(bank, keys[e], top_k=1,
+                                          prefer_recent=True).values) == latest[e])
+                for e in observed
+            )
+            accs.append(hits / max(len(observed), 1))
+        return AdapterResult("ama_bench", "multi_domain", float(np.mean(accs)),
+                             len(self.DOMAINS), detail=",".join(self.DOMAINS))
+
+    def run(self) -> list[AdapterResult]:
+        return [self.long_horizon_recall(), self.abstain_on_unobserved(),
+                self.multi_domain()]
+
+    @staticmethod
+    def from_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Normalize AMA-Bench-format trajectory records (file-format compat)."""
+        out = []
+        for r in records:
+            out.append({
+                "id": r.get("trajectory_id"),
+                "domain": r.get("domain"),
+                "steps": r.get("trajectory", []),
+                "question": r.get("question"),
+                "answer": r.get("answer"),
+            })
+        return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Aggregate.
 # ─────────────────────────────────────────────────────────────────────────────
 
-ADAPTERS = (LongMemEvalAdapter, MemoryArenaAdapter, LongBenchV2Adapter)
+ADAPTERS = (LongMemEvalAdapter, MemoryArenaAdapter, LongBenchV2Adapter,
+            AMABenchAdapter)
 
 
 def run_all_adapters(seed: int = 0) -> list[AdapterResult]:

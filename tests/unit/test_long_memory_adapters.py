@@ -22,6 +22,7 @@ for _p in (REPO_ROOT, REPO_ROOT / "python"):
 
 from benchmarks.common import ExecutionKind, RuntimeStatus  # noqa: E402
 from benchmarks.long_memory_core import (  # noqa: E402
+    AMABenchAdapter,
     AdapterResult,
     LongBenchV2Adapter,
     LongMemEvalAdapter,
@@ -92,6 +93,32 @@ def test_longbench_v2_from_records_normalizes_choices():
     assert out[0]["answer"] == "C"
 
 
+# ── AMA-Bench: long-horizon trajectory memory ────────────────────────────────
+
+
+def test_ama_bench_recalls_across_a_long_horizon():
+    # a fact observed anywhere in a long trajectory must drive the action now
+    res = {r.ability: r for r in AMABenchAdapter(horizon=512, seed=4).run()}
+    assert res["long_horizon_recall"].accuracy == 1.0
+    assert res["multi_domain"].accuracy == 1.0
+    assert res["abstain_on_unobserved"].accuracy == 1.0
+
+
+def test_ama_bench_recall_holds_as_horizon_grows():
+    # arbitrary-horizon: residency requirement — accuracy is horizon-invariant
+    for h in (64, 256, 1024):
+        r = AMABenchAdapter(horizon=h, seed=h).long_horizon_recall()
+        assert r.accuracy == 1.0, f"horizon {h} dropped recall"
+
+
+def test_ama_bench_from_records_normalizes_trajectory_schema():
+    recs = [{"trajectory_id": "t1", "domain": "swe",
+             "trajectory": [{"tool": "grep"}], "question": "?", "answer": "x"}]
+    out = AMABenchAdapter.from_records(recs)
+    assert out[0]["id"] == "t1" and out[0]["domain"] == "swe"
+    assert out[0]["steps"] == [{"tool": "grep"}]
+
+
 # ── aggregate ────────────────────────────────────────────────────────────────
 
 
@@ -100,7 +127,8 @@ def test_run_all_adapters_report():
     assert all(isinstance(r, AdapterResult) for r in results)
     report = adapter_report(results)
     assert report["all_pass"] is True
-    assert set(report["benchmarks"]) == {"longmemeval", "memory_arena", "longbench_v2"}
+    assert set(report["benchmarks"]) == {"longmemeval", "memory_arena",
+                                          "longbench_v2", "ama_bench"}
     assert report["abilities_graded"] == len(results)
 
 

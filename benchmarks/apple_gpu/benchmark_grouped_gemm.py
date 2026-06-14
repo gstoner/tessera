@@ -99,7 +99,10 @@ def run() -> list[dict]:
             else:
                 thunk = lambda o=operands, k=kw: rt._apple_gpu_dispatch_moe_swiglu_block(o, k, np)
             latency_ms = _median_ms(thunk)
-            mode = "fused"
+            # moe_swiglu_block runs the composed grouped-GEMM + silu_mul lane by
+            # default (the fused MSL kernel is ~9.6× slower; opt-in via
+            # TESSERA_APPLE_MOE_FUSED=1).
+            mode = "composed" if op == "moe_swiglu_block" else "fused"
         else:
             latency_ms = _roofline_ms(flops)
             mode = "roofline"

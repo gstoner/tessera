@@ -70,9 +70,9 @@
       "op": "moe_swiglu_block",
       "shape": "64x128x256x128_E4",
       "dtype": "f32",
-      "mode": "fused",
-      "median_ms": 13.02,
-      "max_latency_ms": 26.04
+      "mode": "composed",
+      "median_ms": 1.5,
+      "max_latency_ms": 3.0
     }
   ]
 }

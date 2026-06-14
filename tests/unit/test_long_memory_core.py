@@ -29,6 +29,7 @@ from benchmarks.common import ExecutionKind, RuntimeStatus  # noqa: E402
 from benchmarks.long_memory_core import (  # noqa: E402
     LANDED_MEMORY_PRIMITIVES,
     MEMORY_PRIMITIVE_GAPS,
+    PARTIAL_MEMORY_PRIMITIVES,
     LongMemoryConfig,
     abstention_scenario,
     build_report,
@@ -251,6 +252,23 @@ def test_landed_contracts_are_not_also_gaps(name):
     # a contract we shipped must not also be advertised as an open gap
     assert name in LANDED_MEMORY_PRIMITIVES
     assert name not in MEMORY_PRIMITIVE_GAPS
+
+
+def test_segmented_topk_is_partial_kernel_landed_frontend_pending():
+    # the Metal TopK kernel is landed+verified but not yet @jit-reachable —
+    # it must be in the PARTIAL bucket, not GAPS and not (fully) LANDED.
+    assert "segmented_topk_gpu" in PARTIAL_MEMORY_PRIMITIVES
+    assert "segmented_topk_gpu" not in MEMORY_PRIMITIVE_GAPS
+    assert "segmented_topk_gpu" not in LANDED_MEMORY_PRIMITIVES
+
+
+def test_buckets_are_disjoint():
+    gaps = set(MEMORY_PRIMITIVE_GAPS)
+    landed = set(LANDED_MEMORY_PRIMITIVES)
+    partial = set(PARTIAL_MEMORY_PRIMITIVES)
+    assert gaps.isdisjoint(landed)
+    assert gaps.isdisjoint(partial)
+    assert landed.isdisjoint(partial)
 
 
 def test_telemetry_one_event_per_row():

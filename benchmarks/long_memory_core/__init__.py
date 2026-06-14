@@ -13,6 +13,7 @@ from .adapters import (
 from .core import (
     LANDED_MEMORY_PRIMITIVES,
     MEMORY_PRIMITIVE_GAPS,
+    PARTIAL_MEMORY_PRIMITIVES,
     LongMemoryConfig,
     abstention_scenario,
     build_report,
@@ -31,6 +32,7 @@ __all__ = [
     "LongBenchV2Adapter",
     "LongMemEvalAdapter",
     "MEMORY_PRIMITIVE_GAPS",
+    "PARTIAL_MEMORY_PRIMITIVES",
     "MemoryArenaAdapter",
     "LongMemoryConfig",
     "abstention_scenario",

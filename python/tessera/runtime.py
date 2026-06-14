@@ -2607,6 +2607,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "linear_general": lambda op, a, k, np: _apple_gpu_dispatch_linear_general(a, k, np),
         "qkv_projection": lambda op, a, k, np: _apple_gpu_dispatch_qkv_projection(a, np),
         "reduce": _apple_gpu_dispatch_reduce,
+        "topk": _apple_gpu_dispatch_topk,
         "conv2d": lambda op, a, k, np: _apple_gpu_dispatch_conv2d(a, k, np),
         "conv3d": lambda op, a, k, np: _apple_gpu_dispatch_conv3d(a, k, np),
         "linalg": _apple_gpu_dispatch_linalg,
@@ -4754,6 +4755,57 @@ def _apple_gpu_mpsgraph_scan_f32() -> Any:
                     ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32]
     sym.restype = None
     return sym
+
+
+def _apple_gpu_mpsgraph_topk_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_topk_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_int32), ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_topk(op_name: str, operands: list[Any], kwargs: dict,
+                             np: Any) -> Any:
+    """Hard top-k (k>1) per row via the MPSGraph TopK lane. Returns
+    ``(values, indices)`` descending — the eager ``top_k`` semantics. Arbitrary
+    ``axis`` is folded to the last axis; non-float inputs / unavailable Metal
+    fall back to numpy argsort. ``segmented_topk_gpu``."""
+    x = np.asarray(operands[0])
+    k = kwargs.get("k")
+    if k is None and len(operands) > 1:
+        k = int(np.asarray(operands[1]).item())
+    if k is None:
+        raise ValueError("top_k requires a 'k' argument")
+    k = int(k)
+    axis = int(kwargs.get("axis", -1))
+
+    xm = np.moveaxis(x, axis, -1)
+    lead = xm.shape[:-1]
+    cols = int(xm.shape[-1])
+    rows = int(np.prod(lead)) if lead else 1
+    sym = _apple_gpu_mpsgraph_topk_f32()
+    can_gpu = (sym is not None and x.dtype == np.float32 and 1 <= k <= cols)
+    if not can_gpu:
+        idx2 = np.argsort(np.ascontiguousarray(xm.reshape(rows, cols)),
+                          axis=-1)[:, ::-1][:, :k]
+        vals2 = np.take_along_axis(xm.reshape(rows, cols), idx2, axis=-1)
+    else:
+        x2 = np.ascontiguousarray(xm.reshape(rows, cols), dtype=np.float32)
+        vals2 = np.zeros((rows, k), np.float32)
+        idx2 = np.zeros((rows, k), np.int32)
+        fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        ip = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        sym(fp(x2), fp(vals2), ip(idx2), rows, cols, k)
+
+    out_shape = (*lead, k)
+    vals = np.moveaxis(vals2.reshape(out_shape), -1, axis) if lead else vals2.reshape(k)
+    idx = np.moveaxis(idx2.reshape(out_shape), -1, axis) if lead else idx2.reshape(k)
+    return vals, idx.astype(np.int64)
 
 
 def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,

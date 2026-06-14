@@ -33,15 +33,20 @@ row** that names the open gap from `MEMORY_PRIMITIVE_GAPS`; `passed` is `None`
 
 ### Open gaps (`MEMORY_PRIMITIVE_GAPS`) — genuine Metal-kernel work
 
-- `memory_index_score_gpu` — `query·keysᵀ` scoring as a resident kernel
-- `segmented_topk_gpu` — batched top-k over the bank on-device
 - `resident_state_handle` — bank stays on-device across decode steps
 - `kv_cache_append_read` — fused on-device append-then-read
 
-These need real device kernels, not reference Python. The resident-decode row
-proves the *algorithm* (append-without-reprocess) and the traffic win at
-reference level; the per-step bank scan it still pays is exactly what the GPU
-scoring/top-k kernels above would accelerate.
+These need real device-residency wiring (the `apple_gpu_batched` session /
+`DeviceTensor` API), not reference Python.
+
+### Kernel landed, frontend pending (`PARTIAL_MEMORY_PRIMITIVES`)
+
+- `segmented_topk_gpu` — hard top-k (k>1) runs on Metal via MPSGraph TopK
+  (`tessera_apple_gpu_mpsgraph_topk_f32`, values + indices) on the `topk`
+  dispatch lane, **hardware-verified** in `tests/unit/test_apple_gpu_topk.py`.
+  Remaining: the `@jit` AST frontend does not yet emit the multi-output
+  `tessera.top_k` op into Graph IR, so the single-call jit path falls back to
+  eager. A kernel landing, not a kernel gap.
 
 ### Landed (`LANDED_MEMORY_PRIMITIVES`)
 

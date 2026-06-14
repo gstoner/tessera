@@ -175,6 +175,9 @@ _APPLE_GPU_REDUCE_OPS = {
     "tessera.min": ("reduce", 3),   # reduce-min (alias of amin)
 }
 _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
+# Hard top-k (k>1) per row via MPSGraph's native TopK op (values + indices) —
+# the segmented_topk_gpu primitive. argmax/argmin (above) only give k==1.
+_APPLE_GPU_TOPK_OPS = frozenset({"tessera.top_k"})
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
 # (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
 _APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
@@ -232,7 +235,8 @@ _APPLE_GPU_EBM_LOSS_OPS = frozenset({
 })
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_TOPK_OPS
+    | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_SPECTRAL_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
@@ -275,6 +279,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put({"tessera.linear_general"}, "linear_general")
     put({"tessera.qkv_projection"}, "qkv_projection")
     put(_APPLE_GPU_REDUCE_OPS, "reduce")
+    put(_APPLE_GPU_TOPK_OPS, "topk")
     put({"tessera.conv2d"}, "conv2d")
     put({"tessera.conv3d"}, "conv3d")
     put(_APPLE_GPU_LINALG_OPS, "linalg")

@@ -45,12 +45,24 @@ from tessera.memory import MemoryTable, memory_evict, memory_read, memory_write
 
 
 # Composites that have no dedicated on-device op yet — the registry that drives
-# stdlib/runtime growth.  These three are genuinely backend gaps: a hard top-k
-# (k>1) kernel and cross-step device residency, not reference Python.
+# stdlib/runtime growth.  These two are genuinely backend gaps: cross-step device
+# residency and a fused append-read, not reference Python.
 MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = (
-    "segmented_topk_gpu",            # batched HARD top-k (k>1) over the bank on-device
     "resident_state_handle",         # bank stays on-device across decode steps
     "kv_cache_append_read",          # fused on-device append-then-read
+)
+
+# Primitives whose on-device kernel + runtime path is landed and HARDWARE-
+# VERIFIED, but which are not yet reachable through the full ``@jit`` single-call
+# path (a frontend-integration gap, not a kernel gap).  Distinct from GAPS (no
+# kernel) and LANDED (fully usable end-to-end).
+PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = (
+    # Hard top-k (k>1) runs on Metal via MPSGraph TopK
+    # (tessera_apple_gpu_mpsgraph_topk_f32, values+indices) on the `topk` lane —
+    # hardware-verified in tests/unit/test_apple_gpu_topk.py.  Remaining: the
+    # frontend AST lowerer does not yet emit the multi-output `tessera.top_k`
+    # op into Graph IR, so `@jit(target="apple_gpu")(top_k)` falls back to eager.
+    "segmented_topk_gpu",
 )
 
 # Primitives that started as gaps and have since landed a real contract.
@@ -298,11 +310,10 @@ def run_core(cfg: LongMemoryConfig | None = None) -> list[BenchmarkRow]:
     rows.append(_ref_row("resident_decode_vs_recompute", shape,
                          passed=reads_match, max_err=None, metrics=tele))
 
-    # 6. Resident on-device bank/index — scoring+top-1 now run on Metal (see
-    #    tessera.compiler.memory_tasks); HARD top-k + cross-step residency remain.
+    # 6. Resident on-device bank/index — scoring + top-1 + hard top-k now run on
+    #    Metal (memory_tasks + test_apple_gpu_topk); cross-step residency remains.
     rows.append(_gap_row("resident_bank_topk_gpu", shape, gap="resident_state_handle",
-                         metrics={"would_need": ["segmented_topk_gpu"],
-                                  "score_and_top1_on_device": True}))
+                         metrics={"score_top1_and_topk_on_device": True}))
 
     return rows
 
@@ -317,6 +328,7 @@ def build_report(rows: list[BenchmarkRow]) -> dict[str, Any]:
         "missing_backend": sum(r.runtime_status is RuntimeStatus.MISSING_BACKEND for r in rows),
         "open_gaps": gaps,
         "landed_primitives": list(LANDED_MEMORY_PRIMITIVES),
+        "partial_primitives": list(PARTIAL_MEMORY_PRIMITIVES),
     }
 
 

@@ -18789,6 +18789,58 @@ static bool mpsg_run_argreduce(MetalDeviceContext &ctx, int op, const float *x,
   }
 }
 
+// Hard top-k (k>1) per row via MPSGraph's native TopK op
+// (topKWithSourceTensor:axis:k: — MPSGraphTopKOps.h). Returns the k largest
+// values AND their indices, both shaped [rows, k], descending. This is the
+// segmented_topk_gpu primitive: argMax only gives k==1, this gives k>1 on
+// device. Indices are cast to int32 for an unambiguous host read.
+static bool mpsg_run_topk(MetalDeviceContext &ctx, const float *x,
+                          float *out_vals, int32_t *out_idx, int32_t rows,
+                          int32_t cols, int32_t k) {
+  if (rows <= 0 || cols <= 0 || k <= 0) return true;
+  if (k > cols) return false;
+  @autoreleasepool {
+    size_t xbytes = (size_t)rows * cols * 4;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, xbytes);
+    if (!bufX) return false;
+    NSArray<NSNumber *> *xs = @[ @(rows), @(cols) ];
+    NSString *key = [NSString stringWithFormat:@"topk:%d:%d:%d", rows, cols, k];
+    NSArray *entry = mpsg_cache_get(key);
+    MPSGraph *g;
+    MPSGraphTensor *ph;
+    MPSGraphTensor *vals;
+    MPSGraphTensor *idx;
+    if (entry) {
+      g = entry[0];
+      ph = ((NSArray *)entry[1])[0];
+      vals = entry[2];
+      idx = entry[3];
+    } else {
+      g = [MPSGraph new];
+      ph = [g placeholderWithShape:xs dataType:MPSDataTypeFloat32 name:nil];
+      NSArray<MPSGraphTensor *> *tk =
+          [g topKWithSourceTensor:ph axis:1 k:(NSUInteger)k name:nil];
+      if (!tk || tk.count < 2) return false;
+      vals = tk[0];
+      // tk[1] indices → normalize to int32 for the host read.
+      idx = [g castTensor:tk[1] toType:MPSDataTypeInt32 name:nil];
+      mpsg_cache_put(key, @[ g, @[ ph ], vals, idx ]);
+    }
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:xs dataType:MPSDataTypeFloat32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{ph : xd}
+                                    targetTensors:@[ vals, idx ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *vd = res[vals];
+    MPSGraphTensorData *ixd = res[idx];
+    if (!vd || !ixd) return false;
+    [[vd mpsndarray] readBytes:out_vals strideBytes:nil];
+    [[ixd mpsndarray] readBytes:out_idx strideBytes:nil];
+    return true;
+  }
+}
+
 static bool mpsg_run_scan(MetalDeviceContext &ctx, int op, const float *x,
                           float *out, int32_t rows, int32_t cols) {
   if (rows <= 0 || cols <= 0) return true;
@@ -19049,6 +19101,32 @@ extern "C" void tessera_apple_gpu_mpsgraph_argreduce_f32(int32_t op,
       if ((op == 0 && row[c] > row[best]) || (op == 1 && row[c] < row[best]))
         best = c;
     out[r] = best;
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_topk_f32(const float *x,
+                                                    float *out_vals,
+                                                    int32_t *out_idx,
+                                                    int32_t rows, int32_t cols,
+                                                    int32_t k) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && mpsg_run_topk(ctx, x, out_vals, out_idx, rows, cols, k)) return;
+  // Reference fallback: per-row hard top-k, descending, stable on ties
+  // (lower index wins) — matches the numpy oracle on distinct inputs.
+  if (k > cols) k = cols;
+  std::vector<int32_t> order(cols);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float *row = x + (size_t)r * cols;
+    for (int32_t c = 0; c < cols; ++c) order[c] = c;
+    std::partial_sort(
+        order.begin(), order.begin() + k, order.end(),
+        [&](int32_t a, int32_t b) {
+          return row[a] > row[b] || (row[a] == row[b] && a < b);
+        });
+    for (int32_t j = 0; j < k; ++j) {
+      out_vals[(size_t)r * k + j] = row[order[j]];
+      out_idx[(size_t)r * k + j] = order[j];
+    }
   }
 }
 

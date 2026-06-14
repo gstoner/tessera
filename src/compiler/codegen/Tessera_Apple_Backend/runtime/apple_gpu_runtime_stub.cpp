@@ -3503,6 +3503,28 @@ extern "C" void tessera_apple_gpu_mpsgraph_argreduce_f32(int32_t op, const float
     out[r] = best;
   }
 }
+extern "C" void tessera_apple_gpu_mpsgraph_topk_f32(const float* x,
+                                                    float* out_vals,
+                                                    int32_t* out_idx,
+                                                    int32_t rows, int32_t cols,
+                                                    int32_t k) {
+  // Non-Apple reference parity for the Metal TopK lane: per-row hard top-k,
+  // descending, stable on ties (lower index wins).
+  if (k > cols) k = cols;
+  std::vector<int32_t> order(cols);
+  for (int32_t r = 0; r < rows; ++r) {
+    const float* row = x + static_cast<std::size_t>(r) * cols;
+    for (int32_t c = 0; c < cols; ++c) order[c] = c;
+    std::partial_sort(order.begin(), order.begin() + k, order.end(),
+        [&](int32_t a, int32_t b) {
+          return row[a] > row[b] || (row[a] == row[b] && a < b);
+        });
+    for (int32_t j = 0; j < k; ++j) {
+      out_vals[static_cast<std::size_t>(r) * k + j] = row[order[j]];
+      out_idx[static_cast<std::size_t>(r) * k + j] = order[j];
+    }
+  }
+}
 extern "C" void tessera_apple_gpu_gumbel_argmax_f32(const float* logits,
                                                     const float* gumbel,
                                                     int32_t* out, int32_t rows,

@@ -36,6 +36,7 @@ complex_mul,m7,reference,numpy_reference,fp32,,numpy_reference,fused,Metal (MSL)
 complex_stereographic,m7,reference,numpy_reference,fp32,,numpy_reference,fused,Metal (MSL),fp32,tessera_apple_gpu_complex_stereographic_f32,manifest,tests/unit/test_complex_*.py,
 bmm,tensor,reference,numpy_reference,fp32,,numpy_reference,hardware_verified,,"fp32,fp16,bf16","tessera_apple_gpu_bmm_dev_{f32,f16,bf16}_enc",driver,tests/unit/test_apple_*.py,
 conv2d,tensor,reference,numpy_reference,fp32,,numpy_reference,hardware_verified,,"fp32,fp16,bf16","tessera_apple_gpu_conv2d_dev_{f32,f16,bf16}_enc",driver,tests/unit/test_apple_*.py,
+dequant_matmul,tensor,reference,numpy_reference,fp32,,numpy_reference,fused,,fp32,,manifest,tests/unit/test_apple_*.py,
 flash_attn,tensor,reference,numpy_reference,fp32,,numpy_reference,hardware_verified,Metal (MSL),"fp32,fp16,bf16",tessera_apple_gpu_flash_attn_f32,driver,tests/unit/test_apple_backend_roadmap.py,
 gelu,tensor,reference,numpy_reference,fp32,,numpy_reference,hardware_verified,Metal (MSL),"fp32,fp16,bf16",tessera_apple_gpu_gelu_f32,driver,tests/unit/test_apple_backend_roadmap.py,
 gemm,tensor,fused,Accelerate (cblas_sgemm) + BNNS (fp16/bf16),"fp32,fp16,bf16","tessera_apple_cpu_gemm_{f32,f16,bf16}",accelerate_native,absent,,,,absent,tests/unit/test_apple_backend_roadmap.py,

@@ -702,6 +702,23 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "fused kernel H,Kout<=256"
         ),
     },
+    # Frontier MoE model-class track (2026-06-13) — fused dequantize-into-GEMM.
+    # The genuine fused kernel behind stdlib.quant.dequant_matmul(backend=
+    # "apple_gpu"): packed-INT4 codes + group scales dequantized in-register,
+    # f32 accumulate, one dispatch. README references the runtime symbol; the
+    # claim-lint requires the matching manifest row.
+    "dequant_matmul": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": (
+            "Fused dequantize-into-GEMM MSL kernel "
+            "(tessera_apple_gpu_dequant_matmul_f32 — packed-INT4 weight codes + "
+            "group scales dequantized in-register, fp32 accumulate, one "
+            "dispatch). The quant pillar of the frontier MoE model-class track."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_dequant_matmul_f32",
+        "shape_envelope": "x (M,K) + codes/scales packed (K%GS==0); O (M,N) fp32",
+    },
 }
 
 
@@ -757,6 +774,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("selective_ssm", "apple_gpu"): "tests/unit/test_mamba_ssd_gpu.py",
     # Ragged grouped matmul (MoE expert FFN): per-group MPS matmul.
     ("grouped_gemm", "apple_gpu"): "tests/unit/test_grouped_gemm_gpu.py",
+    # Fused dequantize-into-GEMM: dequant_matmul(backend="apple_gpu") output
+    # compared to the full-precision x @ dequant(W) oracle.
+    ("dequant_matmul", "apple_gpu"): "tests/unit/test_stdlib_quant.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     # rope(q)/rope(k) vs a numpy rotary reference (execute-compare), not the

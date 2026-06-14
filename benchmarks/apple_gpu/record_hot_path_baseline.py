@@ -54,6 +54,15 @@ def hot_path_cases(rt):
     wd = rng.standard_normal((256, 128)).astype(f32)
     cx = rng.standard_normal((1, 32, 32, 16)).astype(f32)
     cw = rng.standard_normal((3, 3, 16, 32)).astype(f32)
+    # Isolated grouped-GEMM / MoE-block rows (DeepGEMM keystone, 2026-06) — timed
+    # standalone (NOT inside the MegaMoE overlap harness, which conflates
+    # collective + compute) so a ratchet regression pins to the primitive.
+    gg_x = rng.standard_normal((64, 128)).astype(f32)
+    gg_w = rng.standard_normal((4, 128, 256)).astype(f32)
+    gg_gs = np.array([16, 16, 16, 16], dtype=np.int64)
+    me_wg = rng.standard_normal((4, 128, 256)).astype(f32)
+    me_wu = rng.standard_normal((4, 128, 256)).astype(f32)
+    me_wd = rng.standard_normal((4, 256, 128)).astype(f32)
     return [
         ("matmul", "512x512x512", "f32",
          lambda: rt._apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)),
@@ -69,6 +78,12 @@ def hot_path_cases(rt):
          lambda: rt._apple_gpu_dispatch_swiglu(x, wg, wu, wd, np)),
         ("conv2d", "1x32x32x16_3x3x16x32", "f32",
          lambda: rt._apple_gpu_dispatch_conv2d([cx, cw], {}, np)),
+        ("grouped_gemm", "64x128x256_E4", "f32",
+         lambda: rt._apple_gpu_dispatch_grouped_gemm(
+             (gg_x, gg_w, gg_gs), {"grouped_kind": "contiguous"}, np)),
+        ("moe_swiglu_block", "64x128x256x128_E4", "f32",
+         lambda: rt._apple_gpu_dispatch_moe_swiglu_block(
+             (gg_x, me_wg, me_wu, me_wd, gg_gs), {"grouped_kind": "contiguous"}, np)),
     ]
 
 

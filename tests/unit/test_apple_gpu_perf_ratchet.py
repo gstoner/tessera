@@ -59,7 +59,8 @@ def test_baseline_covers_named_hot_paths():
     rows = json.loads(BASELINE.read_text())["rows"]
     ops = {r["op"] for r in rows}
     assert {"matmul", "matmul_softmax", "matmul_gelu", "matmul_rmsnorm",
-            "matmul_softmax_matmul", "swiglu", "conv2d"} <= ops
+            "matmul_softmax_matmul", "swiglu", "conv2d",
+            "grouped_gemm", "moe_swiglu_block"} <= ops
     for r in rows:
         assert r["max_latency_ms"] > r["median_ms"] > 0
 

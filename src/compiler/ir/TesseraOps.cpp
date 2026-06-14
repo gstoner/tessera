@@ -1,5 +1,6 @@
 #include "Tessera/IR/TesseraOps.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/Support/LogicalResult.h"
@@ -81,6 +82,48 @@ LogicalResult BatchedGemmOp::verify() {
   return success();
 }
 
+// Validate a `scale_layout` dictionary attribute (DeepGEMM-inspired scale
+// contract), mirroring python `grouped_layout.ScaleLayout.__post_init__`:
+// granularity ∈ {per_tensor,per_row,per_channel,block}; packing (if present) ∈
+// {none,e4m3,e5m2,e8m0,ue8m0}; block granularity requires a 2-int positive
+// `block` shape, and `block` is only valid for block granularity.
+static LogicalResult verifyScaleLayoutDict(Operation *op, DictionaryAttr sl) {
+  auto gAttr = dyn_cast_or_null<StringAttr>(sl.get("granularity"));
+  if (!gAttr)
+    return op->emitOpError("scale_layout requires a 'granularity' string entry");
+  StringRef g = gAttr.getValue();
+  if (g != "per_tensor" && g != "per_row" && g != "per_channel" && g != "block")
+    return op->emitOpError("scale_layout granularity must be one of "
+                           "{per_tensor, per_row, per_channel, block}; got ")
+           << g;
+  if (auto pAttr = dyn_cast_or_null<StringAttr>(sl.get("packing"))) {
+    StringRef p = pAttr.getValue();
+    if (p != "none" && p != "e4m3" && p != "e5m2" && p != "e8m0" && p != "ue8m0")
+      return op->emitOpError("scale_layout packing must be one of "
+                             "{none, e4m3, e5m2, e8m0, ue8m0}; got ")
+             << p;
+  }
+  Attribute blockAttr = sl.get("block");
+  bool hasBlock = blockAttr && !isa<UnitAttr>(blockAttr) &&
+                  !mlir::isa_and_nonnull<mlir::DictionaryAttr>(blockAttr) &&
+                  isa<ArrayAttr>(blockAttr);
+  if (g == "block") {
+    auto arr = dyn_cast_or_null<ArrayAttr>(blockAttr);
+    if (!arr || arr.size() != 2)
+      return op->emitOpError(
+          "scale_layout block granularity requires a 2-element 'block' shape");
+    for (Attribute e : arr) {
+      auto i = dyn_cast<IntegerAttr>(e);
+      if (!i || i.getInt() <= 0)
+        return op->emitOpError("scale_layout block dims must be positive ints");
+    }
+  } else if (hasBlock) {
+    return op->emitOpError(
+        "scale_layout 'block' shape is only valid for granularity='block'");
+  }
+  return success();
+}
+
 LogicalResult GroupedGemmOp::verify() {
   // DeepGEMM-inspired grouped-layout contract, verified at the IR level.
   StringRef kind = getGroupedKind();
@@ -122,6 +165,9 @@ LogicalResult GroupedGemmOp::verify() {
       !agree(gType.getDimSize(0), wType.getDimSize(0)))
     return emitOpError("group_sizes length must equal the expert count E "
                        "(weights dim 0)");
+  if (auto sl = getScaleLayoutAttr())
+    if (failed(verifyScaleLayoutDict(getOperation(), sl)))
+      return failure();
   return success();
 }
 
@@ -168,6 +214,9 @@ LogicalResult MoeSwigluBlockOp::verify() {
     return emitOpError("result T must equal x T");
   if (!agree(rType.getDimSize(1), wdType.getDimSize(2)))
     return emitOpError("result N must equal w_down N");
+  if (auto sl = getScaleLayoutAttr())
+    if (failed(verifyScaleLayoutDict(getOperation(), sl)))
+      return failure();
   return success();
 }
 

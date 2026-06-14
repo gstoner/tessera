@@ -101,6 +101,18 @@ def Tessera_NumericPolicyAttr
     : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
                          "Tessera numeric policy dictionary">;
 
+// DeepGEMM-inspired scale-layout contract as a first-class IR attribute (2026-06).
+// Mirrors the python `grouped_layout.ScaleLayout` dataclass: granularity
+// (per_tensor/per_row/per_channel/block), block shape, packed scale element
+// format (none/e4m3/e5m2/e8m0/ue8m0), vector_size, alignment, and whether the
+// scale tensor is TMA-ready transposed (MN-major).  Carried alongside (and
+// describing the layout of) the optional scale-tensor operands on grouped GEMM
+// ops so LayoutLegalityPass can insert repack/transpose/align — promoting scale
+// from a `quant` dtype-name string to a verifiable layout type.
+def Tessera_ScaleLayoutAttr
+    : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
+                         "Tessera scale-layout dictionary">;
+
 def TensorType : AnyTypeOf<[AnyRankedTensor, AnyUnrankedTensor]>;
 
 def Tessera_KVCacheType : TypeDef<Tessera_Dialect, "KVCache"> {
@@ -206,17 +218,39 @@ def Tessera_BatchedGemmOp : Op<
 // runtime kwargs.
 def Tessera_GroupedGemmOp : Op<
   Tessera_Dialect, "grouped_gemm",
-  [Pure]
+  [Pure, AttrSizedOperandSegments]
 > {
   let summary = "Ragged grouped matmul (MoE expert FFN) with a grouped-layout contract";
+  let description = [{
+    Ragged grouped matmul. The optional `x_scale` / `w_scale` operands are the
+    low-precision (de)quantization scale tensors for the activations and expert
+    weights; their layout is described by the `scale_layout` attribute (granularity
+    / block / packing / transposed). `numeric_policy` records the storage/accum
+    coupling (e.g. fp8 storage with fp32 accumulation — DeepGEMM's two-level
+    accumulation). `AttrSizedOperandSegments` separates the three required operands
+    from the optional scale operands so existing 3-operand forms keep their
+    semantics. The legacy `quant` dtype-name string is retained for back-compat;
+    new emitters should attach `scale_layout` + the scale operands instead.
+  }];
   let arguments = (ins TensorType:$x,
                         TensorType:$weights,
                         TensorType:$group_sizes,
+                        Optional<TensorType>:$x_scale,
+                        Optional<TensorType>:$w_scale,
                         DefaultValuedAttr<StrAttr, "\"contiguous\"">:$grouped_kind,
                         OptionalAttr<I64Attr>:$grouped_alignment,
-                        OptionalAttr<StrAttr>:$quant);
+                        OptionalAttr<StrAttr>:$quant,
+                        OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$result);
-  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Custom format keeps the bare 3-operand form unchanged (back-compat) and adds
+  // an optional `scales(%x_scale, %w_scale)` clause; operandSegmentSizes is
+  // auto-managed (not printed) since presence is derived from the optional group.
+  let assemblyFormat = [{
+    $x `,` $weights `,` $group_sizes
+    (`scales` `(` $x_scale^ `,` $w_scale `)`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
   let hasVerifier = 1;
 }
 
@@ -227,19 +261,39 @@ def Tessera_GroupedGemmOp : Op<
 // (E,) -> result (T,N).
 def Tessera_MoeSwigluBlockOp : Op<
   Tessera_Dialect, "moe_swiglu_block",
-  [Pure]
+  [Pure, AttrSizedOperandSegments]
 > {
   let summary = "Local SwiGLU-fused MoE expert FFN over grouped tokens";
+  let description = [{
+    SwiGLU-fused MoE expert FFN. Optional scale operands carry the low-precision
+    (de)quant scales for the activations (`x_scale`) and the three expert weight
+    tensors (`w_gate_scale` / `w_up_scale` / `w_down_scale`); `scale_layout`
+    describes their packed layout and `numeric_policy` the storage/accum coupling.
+    `AttrSizedOperandSegments` keeps the existing 5-operand form valid. Legacy
+    `quant` string retained for back-compat.
+  }];
   let arguments = (ins TensorType:$x,
                         TensorType:$w_gate,
                         TensorType:$w_up,
                         TensorType:$w_down,
                         TensorType:$group_sizes,
+                        Optional<TensorType>:$x_scale,
+                        Optional<TensorType>:$w_gate_scale,
+                        Optional<TensorType>:$w_up_scale,
+                        Optional<TensorType>:$w_down_scale,
                         DefaultValuedAttr<StrAttr, "\"contiguous\"">:$grouped_kind,
                         OptionalAttr<I64Attr>:$grouped_alignment,
-                        OptionalAttr<StrAttr>:$quant);
+                        OptionalAttr<StrAttr>:$quant,
+                        OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$result);
-  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // Bare 5-operand form unchanged; optional all-or-nothing scale clause for the
+  // activation + 3 expert weights. operandSegmentSizes auto-managed.
+  let assemblyFormat = [{
+    $x `,` $w_gate `,` $w_up `,` $w_down `,` $group_sizes
+    (`scales` `(` $x_scale^ `,` $w_gate_scale `,` $w_up_scale `,` $w_down_scale `)`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
   let hasVerifier = 1;
 }
 

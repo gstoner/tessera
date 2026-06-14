@@ -177,6 +177,15 @@ def vjp_matmul(dout, A, B, **_):
     return vjp_gemm(dout, A, B)
 
 
+@_vjp("dequant_matmul")
+def vjp_dequant_matmul(dout, x, w, **_):
+    """``y = x @ dequant(w)`` — straight-through estimator: the dequantize is
+    treated as identity on the (already-dequantized) weight operand, so the rule
+    is exactly the GEMM rule. ``dw`` is the QAT/fine-tune gradient to the weight.
+    """
+    return vjp_gemm(dout, x, w)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Elementwise binary
 # ─────────────────────────────────────────────────────────────────────────────

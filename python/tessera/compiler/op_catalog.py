@@ -32,6 +32,11 @@ _SPECS = [
     OpSpec("factorized_matmul", "tessera.factorized_matmul", 2, 2, lowering="loop_nest"),
     OpSpec("grouped_gemm", "tessera.grouped_gemm", 3, 3, lowering="loop_nest"),
     OpSpec("moe_swiglu_block", "tessera.moe_swiglu_block", 5, 5, lowering="loop_nest"),
+    # Fused dequantize-into-GEMM (model-class roadmap M1): packed low-precision
+    # weight codes + a separate per-group scale operand → fp32-accumulated GEMM.
+    # operands: (x, w_codes, [w_scales]); grouped form adds group_sizes.
+    OpSpec("dequant_matmul", "tessera.dequant_matmul", 2, 3, lowering="loop_nest"),
+    OpSpec("dequant_grouped_gemm", "tessera.dequant_grouped_gemm", 3, 4, lowering="loop_nest"),
     OpSpec("tri_solve", "tessera.tri_solve", 2, 2, lowering="linalg_solver"),
     OpSpec("cholesky_solve", "tessera.cholesky_solve", 2, 2, lowering="linalg_solver"),
     OpSpec("cholesky", "tessera.cholesky", 1, 1, lowering="linalg_decomposition"),

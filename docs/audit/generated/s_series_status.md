@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 450 |
-| `transpose_rule` | 0 | 454 |
-| `sharding_rule` | 38 | 416 |
-| `lowering_rule` | 0 | 454 |
-| `backend_kernel` | 454 | 0 |
+| `batching_rule` | 4 | 452 |
+| `transpose_rule` | 0 | 456 |
+| `sharding_rule` | 38 | 418 |
+| `lowering_rule` | 0 | 456 |
+| `backend_kernel` | 456 | 0 |
 
 ## Per-category breakdown
 
@@ -62,7 +62,7 @@
 | other | `numerics` | 1 | — | — | — | — | 1 |
 | other | `pooling` | 4 | — | — | — | — | 4 |
 | other | `projection` | 1 | — | — | — | — | 1 |
-| other | `quantization` | 6 | — | — | — | — | 6 |
+| other | `quantization` | 8 | — | — | — | — | 8 |
 | other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
 | other | `random_source` | 2 | — | — | — | — | 2 |
@@ -93,7 +93,7 @@
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 256 | 4 | 0 | 21 | 256 |
+| other | 258 | 4 | 0 | 21 | 258 |
 
 ## Closure trajectory
 

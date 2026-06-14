@@ -297,6 +297,76 @@ def Tessera_MoeSwigluBlockOp : Op<
   let hasVerifier = 1;
 }
 
+// Fused dequantize-into-GEMM (model-class roadmap M5.1, 2026-06): the packed
+// low-precision weight codes + a separate scale operand are consumed in one op
+// that dequantizes inside the contraction with an fp32 accumulator. Distinct
+// from MatmulOp (dense) — the weight is a packed INT4/INT8/FP8 code tensor and
+// `w_scale` is a load-bearing per-group scale operand whose layout rides on
+// `scale_layout`. `weight_dtype` names the packed code format. The reference +
+// Apple GPU composed lane lives in python/tessera/stdlib/quant.py.
+def Tessera_DequantMatmulOp : Op<
+  Tessera_Dialect, "dequant_matmul",
+  [Pure]
+> {
+  let summary = "Fused dequantize-into-GEMM: y = x @ dequant(w_codes) (fp32 accum)";
+  let description = [{
+    `y = x @ dequantize(w_codes, w_scale)` with an fp32 accumulator. `w_codes`
+    holds packed low-precision weight codes (INT4 nibble-packed, INT8, or an FP8
+    grid); the optional `w_scale` operand is the separate per-group / per-channel
+    scale tensor whose packed layout is described by `scale_layout`.
+    `weight_dtype` is one of {int4, int8, fp8_e4m3, fp8_e5m2}; `quant_group_size`
+    (when present) is the group extent along the contraction axis (omitted =
+    per-channel). `numeric_policy` records the storage/accum coupling.
+  }];
+  let arguments = (ins TensorType:$x,
+                        TensorType:$w_codes,
+                        Optional<TensorType>:$w_scale,
+                        StrAttr:$weight_dtype,
+                        OptionalAttr<I64Attr>:$quant_group_size,
+                        OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = [{
+    $x `,` $w_codes (`scale` `(` $w_scale^ `)`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
+// Quantized M-grouped grouped GEMM (M5.1): the MoE expert-FFN core where each
+// expert's weight is a packed low-precision code tensor + per-group scales.
+// Token block e is dequant-matmul'd by expert e. Mirrors GroupedGemmOp's
+// grouped-layout contract but with the weight carried as packed codes.
+def Tessera_DequantGroupedGemmOp : Op<
+  Tessera_Dialect, "dequant_grouped_gemm",
+  [Pure]
+> {
+  let summary = "Quantized ragged grouped matmul (packed expert weights + scales)";
+  let description = [{
+    Quantized grouped GEMM: x (T,K) tokens sorted by expert; `w_codes` (E,K,N)
+    packed low-precision expert weights; `group_sizes` (E,) per-expert token
+    counts; optional `w_scale` per-group scale operand (`scale_layout` describes
+    its layout). `weight_dtype` names the packed code format; `numeric_policy`
+    the storage/accum coupling. Row block e of the result is the dequant-matmul
+    of x[block e] by expert e.
+  }];
+  let arguments = (ins TensorType:$x,
+                        TensorType:$w_codes,
+                        TensorType:$group_sizes,
+                        Optional<TensorType>:$w_scale,
+                        DefaultValuedAttr<StrAttr, "\"contiguous\"">:$grouped_kind,
+                        StrAttr:$weight_dtype,
+                        OptionalAttr<I64Attr>:$quant_group_size,
+                        OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = [{
+    $x `,` $w_codes `,` $group_sizes (`scale` `(` $w_scale^ `)`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
 // DiffusionGemma block-diffusion canvas-denoise step — a structured region the
 // compiler sees as one op (vs. the unrolled per-layer attention/MoE graph). It
 // marks the bidirectional canvas denoiser over committed encoder/context KV;

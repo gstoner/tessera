@@ -65,8 +65,30 @@ from .staging import (
     vision_execution_supported,
     import_model_metadata,
 )
+from . import deepseek_v32, glm5, kimi_k2
+from . import moe_transformer_runtime
+from .moe_transformer import (
+    MoETransformerConfig,
+    MoETransformerDimError,
+    BlockGraph,
+    build_block,
+    verify_block,
+    estimated_param_counts as moe_estimated_param_counts,
+    verify_param_budget as moe_verify_param_budget,
+)
 
 __all__ = [
+    "MoETransformerConfig",
+    "MoETransformerDimError",
+    "BlockGraph",
+    "build_block",
+    "verify_block",
+    "moe_estimated_param_counts",
+    "moe_verify_param_budget",
+    "deepseek_v32",
+    "glm5",
+    "kimi_k2",
+    "moe_transformer_runtime",
     "StagingError",
     "QuantizationPlan",
     "VisionMetadata",

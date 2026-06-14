@@ -2347,6 +2347,25 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
   }
 }
 
+// Fused dequantize-into-GEMM (non-Darwin reference parity, M1.1):
+//   O[m,n] = sum_k X[m,k] * (Wcodes[k,n] * Wscale[k/GS, n])
+extern "C" void tessera_apple_gpu_dequant_matmul_f32(
+    const float* X, const float* Wcodes, const float* Wscale, float* O,
+    int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / GS;
+        acc += X[static_cast<std::size_t>(m) * K + k] *
+               (Wcodes[static_cast<std::size_t>(k) * N + n] *
+                Wscale[static_cast<std::size_t>(g) * N + n]);
+      }
+      O[static_cast<std::size_t>(m) * N + n] = acc;
+    }
+}
+
 // Fused ragged SwiGLU MoE expert-FFN block (non-Darwin reference parity).
 extern "C" void tessera_apple_gpu_moe_swiglu_f32(
     const float* X, const float* Wg, const float* Wu, const float* Wd,

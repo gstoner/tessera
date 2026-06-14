@@ -87,6 +87,8 @@ dct,pure,,1,1,0
 ddpm_noise_pred_loss,pure,,1,0,0
 deepseek_sparse_attention,state,,1,1,1
 denoising_score_matching_loss,pure,,1,0,0
+dequant_grouped_gemm,pure,,1,1,0
+dequant_matmul,pure,,1,1,0
 dequantize_fp4,pure,,1,1,0
 dequantize_fp6,pure,,1,1,0
 dequantize_fp8,pure,,1,1,0

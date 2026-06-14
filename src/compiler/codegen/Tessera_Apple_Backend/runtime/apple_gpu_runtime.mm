@@ -17505,6 +17505,125 @@ extern "C" void tessera_apple_gpu_grouped_gemm_f32(
 }
 
 //===---------------------------------------------------------------------===//
+// Fused dequantize-into-GEMM (model-class roadmap M1.1, 2026-06).
+//
+//   O[m,n] = sum_k X[m,k] * (Wcodes[k,n] * Wscale[k/GS, n])
+//
+// The dequantize (unit-grid code * per-group scale) is computed *in-register*
+// inside the contraction with an fp32 accumulator — the full fp32 weight is
+// never materialized, and it is one dispatch instead of per-group GEMMs. This
+// is the genuine fused kernel behind stdlib.quant.dequant_matmul(backend=
+// "apple_gpu"); numerically validated against dequantize-then-matmul.
+//===---------------------------------------------------------------------===//
+namespace {
+
+bool dispatch_dequant_matmul_msl(MetalDeviceContext &ctx, const float *X,
+                                 const float *Wcodes, const float *Wscale,
+                                 float *O, int32_t M, int32_t K, int32_t N,
+                                 int32_t GS, int32_t NG) {
+  static NSString *const kDequantMatmulSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void dequant_matmul_f32(
+    device const float* X      [[buffer(0)]],   // (M, K)
+    device const float* Wcodes [[buffer(1)]],   // (K, N) unit-grid codes
+    device const float* Wscale [[buffer(2)]],   // (NG, N) per-group scales
+    device float*       O      [[buffer(3)]],   // (M, N)
+    constant int&       M      [[buffer(4)]],
+    constant int&       K      [[buffer(5)]],
+    constant int&       N      [[buffer(6)]],
+    constant int&       GS     [[buffer(7)]],   // group size along K
+    uint2 gid [[thread_position_in_grid]])
+{
+    int m = (int)gid.x;
+    int n = (int)gid.y;
+    if (m >= M || n >= N) return;
+    int x_off = m * K;
+    float acc = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        int g = k / GS;                          // group index along K
+        float w = Wcodes[k * N + n] * Wscale[g * N + n];   // dequant in-register
+        acc += X[x_off + k] * w;
+    }
+    O[m * N + n] = acc;
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kDequantMatmulSource, @"dequant_matmul_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger cBytes = sizeof(float) * (NSUInteger)K * (NSUInteger)N;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)NG * (NSUInteger)N;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, Wcodes, cBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS, ctx, Wscale, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufC || !bufS || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufC offset:0 atIndex:1];
+    [enc setBuffer:bufS offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&GS length:sizeof(int32_t) atIndex:7];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, (NSUInteger)N, 1);
+    NSUInteger w = pso.threadExecutionWidth;
+    NSUInteger h = pso.maxTotalThreadsPerThreadgroup / (w == 0 ? 1 : w);
+    if (w == 0) w = 1;
+    if (h == 0) h = 1;
+    MTLSize tg = MTLSizeMake(w, h, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "dequant_matmul_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_dequant_matmul_f32(const float *X, const float *Wcodes,
+                                         const float *Wscale, float *O,
+                                         int32_t M, int32_t K, int32_t N,
+                                         int32_t GS) {
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / GS;
+        acc += X[(std::size_t)m * K + k] *
+               (Wcodes[(std::size_t)k * N + n] * Wscale[(std::size_t)g * N + n]);
+      }
+      O[(std::size_t)m * N + n] = acc;
+    }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_dequant_matmul_f32(
+    const float *X, const float *Wcodes, const float *Wscale, float *O,
+    int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  int32_t NG = (K + GS - 1) / GS;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 &&
+      dispatch_dequant_matmul_msl(ctx, X, Wcodes, Wscale, O, M, K, N, GS, NG))
+    return;
+  reference_dequant_matmul_f32(X, Wcodes, Wscale, O, M, K, N, GS);
+}
+
+//===---------------------------------------------------------------------===//
 // Fused ragged SwiGLU MoE expert-FFN block — the grouped analog of swiglu_f32.
 //
 // ONE Metal dispatch over the whole (T, Kout) output for the entire MoE expert

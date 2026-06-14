@@ -96,6 +96,8 @@ def _load():
         ("tessera_apple_gpu_layer_norm_bf16", [u16, u16, u16, u16, i32, i32, flt]),
         # Thrust #3a — fused ragged grouped-GEMM (X, W, expert_ids, O, T, K, N, E).
         ("tessera_apple_gpu_grouped_gemm_f32", [fp, fp, ip, fp, i32, i32, i32, i32]),
+        # M1.1 — fused dequant-into-GEMM (X, Wcodes, Wscale, O, M, K, N, group_size).
+        ("tessera_apple_gpu_dequant_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, i32]),
         # Fused ragged SwiGLU MoE block (X, Wg, Wu, Wd, expert_ids, O, T, K, H, Kout, E).
         ("tessera_apple_gpu_moe_swiglu_f32",
          [fp, fp, fp, fp, ip, fp, i32, i32, i32, i32, i32]),
@@ -218,6 +220,36 @@ def gpu_grouped_gemm(x: np.ndarray, w: np.ndarray,
     _load().tessera_apple_gpu_grouped_gemm_f32(
         _ptr(x), _ptr(w), e.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
         _ptr(out), T, K, N, E)
+    return out
+
+
+def gpu_dequant_matmul(x: np.ndarray, codes: np.ndarray, scales: np.ndarray,
+                       group_size: int) -> np.ndarray:
+    """Fused dequantize-into-GEMM on the Apple GPU — ONE dispatch.
+
+    ``O[m,n] = sum_k x[m,k] * (codes[k,n] * scales[k//group_size, n])`` with an
+    fp32 accumulator; the dequant is computed in-register inside the GEMM so the
+    full fp32 weight is never materialized. x (M,K) f32; codes (K,N) unit-grid
+    f32; scales (NG,N) f32 (NG = K//group_size, or 1 for per-channel). Returns
+    (M,N) f32."""
+    x = _arr(x, "x").astype(np.float32, copy=False)
+    codes = np.ascontiguousarray(codes, dtype=np.float32)
+    scales = np.ascontiguousarray(scales, dtype=np.float32)
+    if x.ndim != 2 or codes.ndim != 2:
+        raise AppleGpuError(
+            f"gpu_dequant_matmul expects x (M,K) + codes (K,N); got {x.shape}, {codes.shape}")
+    M, K = int(x.shape[0]), int(x.shape[1])
+    ck, N = int(codes.shape[0]), int(codes.shape[1])
+    if ck != K:
+        raise AppleGpuError(f"gpu_dequant_matmul K mismatch: x K={K}, codes K={ck}")
+    gs = int(group_size) if group_size and group_size > 0 else K
+    ng = (K + gs - 1) // gs
+    if scales.shape != (ng, N):
+        raise AppleGpuError(
+            f"gpu_dequant_matmul scales must be (NG={ng}, N={N}); got {scales.shape}")
+    out = np.zeros((M, N), np.float32)
+    _load().tessera_apple_gpu_dequant_matmul_f32(
+        _ptr(x), _ptr(codes), _ptr(scales), _ptr(out), M, K, N, gs)
     return out
 
 

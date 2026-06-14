@@ -322,6 +322,9 @@ _EXISTING_CATEGORIES: dict[str, str] = {
     # New EBM op (not in the python-primitive registry) — group it with the
     # rest of the EBM lane in the audit dashboard.
     "ebm_refinement": "ebm",
+    # M5.1 fused dequant-GEMM ops group with the quantization lane.
+    "dequant_matmul": "quantization",
+    "dequant_grouped_gemm": "quantization",
     # S2 tensor-algebra names are layout-transform lowering targets in Graph IR,
     # but the audit dashboard groups them by their compiler primitive family.
     "reshape": "tensor_algebra",
@@ -735,6 +738,29 @@ for _name in (
 ):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _SHARDING_COMPLETE
 del _name
+
+# Model-class roadmap M5.1 — fused dequantize-into-GEMM (M1 keystone) promoted
+# to first-class catalog ops. Closed-form semantics (y = x @ dequant(W),
+# fp32 accumulate) + oracle tests (stdlib.quant vs dequant-then-matmul), so
+# math/shape/dtype/lowering/tests are complete. backend_kernel stays partial
+# (composed Apple GPU matmul lane; the fused dequant MSL kernel is M1.1).
+# transpose/sharding/batching stay partial pending mesh proof (Phase G).
+_QUANT_GEMM_HARDENED: dict[str, str] = {
+    "math_semantics": "complete",
+    "shape_rule": "complete",
+    "dtype_layout_rule": "complete",
+    "lowering_rule": "complete",
+    "masking_effect_rule": "not_applicable",
+    "tests": "complete",
+}
+_EXISTING_CONTRACT_OVERRIDES["dequant_matmul"] = dict(_QUANT_GEMM_HARDENED)
+# The grouped (per-expert) form composes the scalar dequant_matmul rule per
+# group — like grouped_gemm, its VJP/JVP are not a single-array rule.
+_EXISTING_CONTRACT_OVERRIDES["dequant_grouped_gemm"] = {
+    **_QUANT_GEMM_HARDENED,
+    "vjp": "not_applicable",
+    "jvp": "not_applicable",
+}
 
 # Set of names whose contract is hardened beyond the default
 # `explicit_partial` schema; these get a `contract_schema=explicit_semantic`
@@ -1748,6 +1774,11 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     # first-class scale_layout attr (see TesseraOps.td GroupedGemmOp).
     "grouped_gemm":      _matmul_policy,
     "moe_swiglu_block":  _matmul_policy,
+    # Fused dequant-into-GEMM (M5.1): packed low-precision storage, fp32
+    # accumulate — same two-level-accumulation contract; the per-group scale
+    # rides on the grouped-layout / scale_layout metadata.
+    "dequant_matmul":        _matmul_policy,
+    "dequant_grouped_gemm":  _matmul_policy,
     # ── Attention family ───────────────────────────────────────────────
     "flash_attn":                 _attn_policy,
     "multi_head_attention":       _attn_policy,
@@ -1844,6 +1875,7 @@ def _grouped_layout_for_name(name: str) -> "Any | None":
         # (experts laid out back-to-back along the token axis).
         "grouped_gemm":            contiguous_layout,
         "moe_swiglu_block":        contiguous_layout,
+        "dequant_grouped_gemm":    contiguous_layout,
         "grouped_gemm_contiguous": contiguous_layout,
         "grouped_gemm_masked":     masked_layout,
         "k_grouped_gemm":          k_grouped_layout,

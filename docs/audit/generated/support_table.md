@@ -184,6 +184,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logical_or` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `logical_xor` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `batched_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `dequant_grouped_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `dequant_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `factorized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
@@ -339,7 +341,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| loop_nest | 9 | PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB |
+| loop_nest | 11 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB |
 | loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |

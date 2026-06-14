@@ -86,6 +86,13 @@ def jvp_matmul(primals, tangents, **kwargs):
     return jvp_gemm(primals, tangents, **kwargs)
 
 
+@_jvp("dequant_matmul")
+def jvp_dequant_matmul(primals, tangents, **kwargs):
+    """``y = x @ dequant(w)`` — STE forward-mode: identical to the GEMM JVP on
+    the (dequantized) weight operand."""
+    return jvp_gemm(primals, tangents, **kwargs)
+
+
 @_jvp("add")
 def jvp_add(primals, tangents, **_):
     if len(primals) == 1:

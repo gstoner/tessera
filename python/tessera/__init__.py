@@ -311,6 +311,25 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             off += n
         return out
 
+    def dequant_matmul(x, packed_w, *, backend: str = "reference"):
+        """Fused dequantize-into-GEMM: ``y = x @ dequant(packed_w)`` with an
+        fp32 accumulator (model-class roadmap M1 keystone).
+
+        ``packed_w`` is a :class:`tessera.stdlib.quant.PackedQuantTensor`
+        (packed INT4/INT8/FP8 codes + a separate per-group scale tensor).
+        ``backend="apple_gpu"`` runs the per-group matmuls on the Metal lane.
+        """
+        from .stdlib import quant as _q
+        return _q.dequant_matmul(x, packed_w, backend=backend)
+
+    def dequant_grouped_gemm(x, packed_experts, group_sizes, *,
+                             backend: str = "reference"):
+        """Quantized M-grouped grouped GEMM — token block ``e`` matmul'd by
+        expert ``e``'s :class:`PackedQuantTensor` via :func:`dequant_matmul`
+        (the M2 quantized-MoE expert-FFN core)."""
+        from .stdlib import quant as _q
+        return _q.dequant_grouped_gemm(x, packed_experts, group_sizes, backend=backend)
+
     def tri_solve(A, b, lower: bool = True):
         if hasattr(A, "_data"):
             A = A._data
@@ -3614,6 +3633,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "factorized_matmul": factorized_matmul,
         "grouped_gemm": grouped_gemm,
         "moe_swiglu_block": moe_swiglu_block,
+        "dequant_matmul": dequant_matmul,
+        "dequant_grouped_gemm": dequant_grouped_gemm,
         "tri_solve": tri_solve,
         "cholesky": cholesky,
         "cholesky_solve": cholesky_solve,
@@ -3981,6 +4002,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         factorized_matmul=factorized_matmul,
         grouped_gemm=grouped_gemm,
         moe_swiglu_block=moe_swiglu_block,
+        dequant_matmul=dequant_matmul,
+        dequant_grouped_gemm=dequant_grouped_gemm,
         tri_solve=tri_solve,
         cholesky=cholesky,
         cholesky_solve=cholesky_solve,

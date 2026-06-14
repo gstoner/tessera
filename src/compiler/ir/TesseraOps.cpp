@@ -220,6 +220,82 @@ LogicalResult MoeSwigluBlockOp::verify() {
   return success();
 }
 
+// Fused dequant-into-GEMM (M5.1). The weight is packed (INT4 nibble-packed /
+// INT8 / FP8 grid) so the contracting dim of `w_codes` need not match x's K
+// (int4 packs two codes per byte) — we check only ranks, the M dim, the named
+// weight dtype, the group size, and the scale-layout dict.
+static LogicalResult verifyQuantWeightDtype(Operation *op, StringRef dt) {
+  if (dt != "int4" && dt != "int8" && dt != "fp8_e4m3" && dt != "fp8_e5m2")
+    return op->emitOpError("weight_dtype must be one of "
+                           "{int4, int8, fp8_e4m3, fp8_e5m2}; got ")
+           << dt;
+  return success();
+}
+
+LogicalResult DequantMatmulOp::verify() {
+  if (failed(verifyQuantWeightDtype(getOperation(), getWeightDtype())))
+    return failure();
+  if (auto g = getQuantGroupSize())
+    if (*g <= 0)
+      return emitOpError("quant_group_size must be positive; got ") << *g;
+  auto xType = dyn_cast<RankedTensorType>(getX().getType());
+  auto wType = dyn_cast<RankedTensorType>(getWCodes().getType());
+  auto rType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (xType && xType.getRank() != 2)
+    return emitOpError("x must be a rank-2 (M, K) tensor");
+  if (wType && wType.getRank() != 2)
+    return emitOpError("w_codes must be a rank-2 packed (K, N) tensor");
+  if (rType && rType.getRank() != 2)
+    return emitOpError("result must be a rank-2 (M, N) tensor");
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  if (xType && rType && !agree(rType.getDimSize(0), xType.getDimSize(0)))
+    return emitOpError("result M must equal x M");
+  if (auto sl = getScaleLayoutAttr())
+    if (failed(verifyScaleLayoutDict(getOperation(), sl)))
+      return failure();
+  return success();
+}
+
+LogicalResult DequantGroupedGemmOp::verify() {
+  StringRef kind = getGroupedKind();
+  if (kind != "dense" && kind != "contiguous" && kind != "masked" &&
+      kind != "k_grouped")
+    return emitOpError("grouped_kind must be one of "
+                       "{dense, contiguous, masked, k_grouped}; got ")
+           << kind;
+  if (failed(verifyQuantWeightDtype(getOperation(), getWeightDtype())))
+    return failure();
+  if (auto g = getQuantGroupSize())
+    if (*g <= 0)
+      return emitOpError("quant_group_size must be positive; got ") << *g;
+  auto xType = dyn_cast<RankedTensorType>(getX().getType());
+  auto wType = dyn_cast<RankedTensorType>(getWCodes().getType());
+  auto gType = dyn_cast<RankedTensorType>(getGroupSizes().getType());
+  auto rType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (xType && xType.getRank() != 2)
+    return emitOpError("x must be a rank-2 (T, K) tensor");
+  if (wType && wType.getRank() != 3)
+    return emitOpError("w_codes must be a rank-3 (E, K, N) packed tensor");
+  if (rType && rType.getRank() != 2)
+    return emitOpError("result must be a rank-2 (T, N) tensor");
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  if (xType && rType && !agree(rType.getDimSize(0), xType.getDimSize(0)))
+    return emitOpError("result T must equal x T");
+  if (wType && rType && !agree(rType.getDimSize(1), wType.getDimSize(2)))
+    return emitOpError("result N must equal w_codes N");
+  if (gType && wType && gType.getRank() == 1 &&
+      !agree(gType.getDimSize(0), wType.getDimSize(0)))
+    return emitOpError("group_sizes length must equal the expert count E");
+  if (auto sl = getScaleLayoutAttr())
+    if (failed(verifyScaleLayoutDict(getOperation(), sl)))
+      return failure();
+  return success();
+}
+
 // DiffusionGemma block-diffusion step — the canvas denoiser is bidirectional by
 // construction; GQA query heads must be a multiple of KV heads; the per-head
 // head_dim must fit the Apple GPU flash-attention kernel (<= 256).

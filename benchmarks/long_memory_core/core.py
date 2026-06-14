@@ -48,8 +48,7 @@ from tessera.memory import MemoryTable, memory_evict, memory_read, memory_write
 # stdlib/runtime growth.  These two are genuinely backend gaps: cross-step device
 # residency and a fused append-read, not reference Python.
 MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = (
-    "resident_state_handle",         # bank stays on-device across decode steps
-    "kv_cache_append_read",          # fused on-device append-then-read
+    "kv_cache_append_read",          # fused on-device append-then-read (offset-write)
 )
 
 # Primitives whose on-device kernel + runtime path is landed and HARDWARE-
@@ -65,6 +64,13 @@ PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = (
     # deliberately not in the runtime envelope (that wiring lands with the
     # frontend).  `@jit(target="apple_gpu")(top_k)` falls back to eager today.
     "segmented_topk_gpu",
+    # Read-residency: ResidentBank (tessera.resident_bank) keeps the bank's keys
+    # on-device across reads (one upload), scoring each query via the bmm_enc
+    # encode-session lane without re-uploading — hardware-verified in
+    # tests/unit/test_resident_bank.py (~28× upload reduction on Metal).  The
+    # remaining piece is incremental on-device append (offset-write), tracked as
+    # kv_cache_append_read in GAPS.
+    "resident_state_handle",
 )
 
 # Primitives that started as gaps and have since landed a real contract.
@@ -312,10 +318,29 @@ def run_core(cfg: LongMemoryConfig | None = None) -> list[BenchmarkRow]:
     rows.append(_ref_row("resident_decode_vs_recompute", shape,
                          passed=reads_match, max_err=None, metrics=tele))
 
-    # 6. Resident on-device bank/index — scoring + top-1 + hard top-k now run on
-    #    Metal (memory_tasks + test_apple_gpu_topk); cross-step residency remains.
-    rows.append(_gap_row("resident_bank_topk_gpu", shape, gap="resident_state_handle",
-                         metrics={"score_top1_and_topk_on_device": True}))
+    # 6. Read-residency landed: ResidentBank keeps the bank on-device across
+    #    reads (one upload), scoring each query without re-uploading — proven on
+    #    Metal in tests/unit/test_resident_bank.py. Metamorphic-gated here.
+    from tessera.resident_bank import ResidentBank
+    rb_rng = np.random.default_rng(cfg.seed ^ 0x4E51)
+    rb_keys = rb_rng.standard_normal((cfg.bank_size, cfg.key_dim)).astype(np.float32)
+    rb_keys /= np.linalg.norm(rb_keys, axis=1, keepdims=True)
+    rb_vals = rb_rng.standard_normal((cfg.bank_size, cfg.value_dim)).astype(np.float32)
+    rb = ResidentBank(rb_keys, rb_vals)
+    rb_match = True
+    for i in range(min(cfg.decode_steps, cfg.bank_size)):
+        _v, idx, _s = rb.read(rb_keys[i], top_k=1)
+        rb_match = rb_match and int(idx[0]) == i           # self-query recall
+    rb_tele = rb.telemetry()
+    rb.free()
+    rows.append(_ref_row("resident_bank_read_residency", shape,
+                         passed=rb_match, max_err=None, metrics=rb_tele))
+
+    # 7. Fused on-device append-then-read — the remaining append-residency gap
+    #    (write a new entry into the resident buffer without a full re-upload).
+    rows.append(_gap_row("resident_append_read_gpu", shape, gap="kv_cache_append_read",
+                         metrics={"read_residency_landed": True,
+                                  "needs": "device offset-write (bank_append_enc)"}))
 
     return rows
 

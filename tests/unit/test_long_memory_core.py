@@ -218,7 +218,7 @@ def test_run_core_proof_levels():
     rows = run_core(LongMemoryConfig(bank_size=64, seed=14))
     ref = [r for r in rows if r.execution_kind is ExecutionKind.REFERENCE]
     gap = [r for r in rows if r.runtime_status is RuntimeStatus.MISSING_BACKEND]
-    assert len(ref) == 5 and all(r.correctness.passed for r in ref)
+    assert len(ref) == 6 and all(r.correctness.passed for r in ref)
     assert len(gap) == 1 and all(r.correctness.passed is None for r in gap)
 
 
@@ -238,7 +238,7 @@ def test_gap_row_rejects_undeclared_gap():
 def test_build_report_summary():
     rows = run_core(LongMemoryConfig(bank_size=64))
     report = build_report(rows)
-    assert report["reference_passed"] == 5
+    assert report["reference_passed"] == 6
     assert report["missing_backend"] == 1
     assert set(report["open_gaps"]).issubset(set(MEMORY_PRIMITIVE_GAPS))
     assert "abstention_read_threshold" in report["landed_primitives"]
@@ -260,6 +260,13 @@ def test_segmented_topk_is_partial_kernel_landed_frontend_pending():
     assert "segmented_topk_gpu" in PARTIAL_MEMORY_PRIMITIVES
     assert "segmented_topk_gpu" not in MEMORY_PRIMITIVE_GAPS
     assert "segmented_topk_gpu" not in LANDED_MEMORY_PRIMITIVES
+
+
+def test_resident_state_handle_read_residency_is_partial():
+    # read-residency landed (ResidentBank, HW-verified); append-residency remains
+    assert "resident_state_handle" in PARTIAL_MEMORY_PRIMITIVES
+    assert "resident_state_handle" not in MEMORY_PRIMITIVE_GAPS
+    assert "kv_cache_append_read" in MEMORY_PRIMITIVE_GAPS
 
 
 def test_buckets_are_disjoint():

@@ -282,9 +282,9 @@ mor_partition,3,2,1,5,0,,needs_direct_test,category default for 'layout_transfor
 mor_router,5,3,1,8,0,,needs_direct_test,category default for 'layout_transform'
 mor_scatter,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
 mqa_attention,3,0,0,3,0,,covered_by_family,covered by attention family + scaled_dot_product tests
-msa_index_scores,7,2,1,9,0,,needs_direct_test,category default for 'attention'
-msa_select_blocks,7,3,1,10,0,,structural_only,unclassified — defaults to structural_only
-msa_sparse_attention,36,6,1,42,0,,needs_direct_test,category default for 'attention'
+msa_index_scores,8,4,1,12,0,,needs_direct_test,category default for 'attention'
+msa_select_blocks,8,6,1,14,0,,structural_only,unclassified — defaults to structural_only
+msa_sparse_attention,37,8,1,45,0,,needs_direct_test,category default for 'attention'
 mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
 mul,62,0,6,62,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 multi_head_attention,5,0,0,5,0,,covered_by_family,covered by attention family + flash_attn tests
@@ -370,6 +370,7 @@ scan,8,0,0,8,0,,structural_only,category default for 'control_flow'
 scatter,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_add,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_reduce,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+score_combine,3,6,1,9,0,,covered_by_family,category default for 'elementwise'
 score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 sddmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
 segment_reduce,4,0,0,4,0,fp32,structural_only,unclassified — defaults to structural_only

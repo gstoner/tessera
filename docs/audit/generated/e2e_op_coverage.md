@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 36 |
-| ``runnable_reference`` | 266 |
+| ``runnable_reference`` | 267 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **304** |
+| **total** | **305** |
 
 ## complete (36)
 
@@ -72,7 +72,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (266)
+## runnable_reference (267)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -136,6 +136,7 @@ each row into a single E2E tier.
 | ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``pow`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``rsqrt`` | elementwise | public | public | registered | partial | reference | ready | none |
+| ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``sigmoid`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``silu`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``silu_mul`` | elementwise | public | public | registered | partial | reference | ready | none |

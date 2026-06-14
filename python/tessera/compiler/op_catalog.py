@@ -51,6 +51,10 @@ _SPECS = [
     OpSpec("softcap", "tessera.softcap", 1, 1),
     OpSpec("add", "tessera.add", 1, 2),
     OpSpec("mul", "tessera.mul", 1, 2),
+    # Diffusion guidance score composition. Kept as a simple compiler-visible
+    # numeric primitive: base + gamma * delta. CGG orchestration remains in the
+    # library; this op is the IR bridge for the composition algebra.
+    OpSpec("score_combine", "tessera.score_combine", 2, 2),
     OpSpec("relu", "tessera.relu", 1, 1),
     OpSpec("silu", "tessera.silu", 1, 1),
     OpSpec("silu_mul", "tessera.silu_mul", 2, 2),

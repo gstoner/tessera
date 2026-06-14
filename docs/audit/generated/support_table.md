@@ -76,6 +76,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `pow` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `rsqrt` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `score_combine` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `silu` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `silu_mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -328,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 36 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| elementwise | 37 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PP·C··N· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |

@@ -246,6 +246,7 @@ rsqrt,pure,,1,0,0
 scatter,pure,,1,0,0
 scatter_add,pure,,1,0,0
 scatter_reduce,pure,,1,0,0
+score_combine,pure,,1,0,0
 score_matching_loss,pure,,1,0,0
 sddmm,pure,,1,0,0
 segment_reduce,pure,,1,0,0

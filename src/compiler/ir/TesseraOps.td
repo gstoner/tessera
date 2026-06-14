@@ -1058,6 +1058,35 @@ def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
+def Tessera_ScoreCombineOp : Op<Tessera_Dialect, "score_combine", [Pure]> {
+  let summary = "Diffusion guidance score composition (base + gamma * delta)";
+  let arguments = (ins TensorType:$base, TensorType:$delta,
+                       DefaultValuedAttr<F64Attr, "1.0">:$gamma);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// CGG orchestration marker. This is intentionally not a fused model kernel: it
+// records that a library-level guided-denoise region produced the visible
+// score-combine chain for a given timestep/schedule/gamma. Lowerings may use it
+// for audit/scheduling metadata, but the executable math remains the ordinary
+// denoiser outputs plus `tessera.score_combine`.
+def Tessera_GuidedDenoiseRegionOp : Op<
+  Tessera_Dialect, "guided_denoise_region",
+  [Pure]
+> {
+  let summary = "Guided denoise orchestration marker for CGG-style score composition";
+  let arguments = (ins TensorType:$ref_score, TensorType:$favored_score,
+                       TensorType:$unfavored_score,
+                       I64Attr:$timestep,
+                       StrAttr:$schedule,
+                       F64Attr:$gamma,
+                       OptionalAttr<StrAttr>:$preference);
+  let results = (outs TensorType:$guided_score);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
 def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
   let summary = "Elementwise tensor division (a / b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);

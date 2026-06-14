@@ -58,6 +58,15 @@ summarized by its mean key. Selection is **exp-free** (raw dot products) and
 **deterministic** (ties broken by ascending block id). The query's own
 ("local") block is always selected when `force_local_block`.
 
+**Selected-block layout contract:** `msa_select_blocks(scores, ...)` consumes
+`scores` shaped `(B, Hkv, Sq, num_blocks)` and produces `block_ids` shaped
+`(B, Hkv, Sq, top_k)` with `i64` element type. The first three dimensions must
+match the score tensor exactly, and the final dimension must equal the
+`top_k` attribute. This is the schedule-facing layout consumed by sparse main
+branch planning: each `(B, Hkv, Sq)` row owns a sorted Top-`k` block-id list,
+and query heads map into that selected row through the GQA group id
+`h // (Hq / Hkv)`.
+
 ---
 
 ## 2. How MSA differs from `deepseek_sparse_attention` (NSA)
@@ -178,6 +187,18 @@ The single-source envelope auto-feeds the driver gate, the C++
 `tests/unit/test_msa_apple_gpu.py` (skips off-Darwin) — direct-dispatch and
 end-to-end `@jit` paths validated vs the reference at fp32 tolerance, incl. GQA
 and dense-equivalence (`top_k == num_blocks`).
+
+## 7. Phase 3 CUDA/NVIDIA lowering target (planned)
+
+The CUDA path should lower the selected-block layout to a KV-outer sparse
+attention target, not to a monolithic opaque model op. The planned Tile IR
+contract is `tessera.attn.msa_kv_outer_sparse(Q, K, V, block_ids, O)` with
+`block_ids` shaped `(B,Hkv,Sq,top_k)`, `gqa_group_size = Hq / Hkv`, and explicit
+`mode = "prefill" | "decode"` metadata. Dense-equivalence remains the first
+oracle: when `top_k == Sk / block_size`, the sparse target must match dense GQA.
+
+See [msa_cuda_phase3_plan.md](msa_cuda_phase3_plan.md) and
+[`msa_kv_outer_sparse_attention.mlir`](../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir).
 
 **Execution-mode reality.** The program reports `execution_mode = "metal_runtime"`
 (`compiler_path = apple_gpu_mps`) — identical to the rest of the sparse-attn lane:

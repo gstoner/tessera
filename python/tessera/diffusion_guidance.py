@@ -48,6 +48,9 @@ class DiffusionSchedule:
     """
 
     alpha_bar: Sequence[float]
+    # Validated float64 cache of ``alpha_bar``, set in __post_init__ via
+    # object.__setattr__ (frozen dataclass). Declared so the type checker sees it.
+    _alpha_bar: "np.ndarray" = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         values = np.asarray(self.alpha_bar, dtype=np.float64)

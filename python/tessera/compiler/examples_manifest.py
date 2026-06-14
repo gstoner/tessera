@@ -179,6 +179,31 @@ _ENTRIES: tuple[ExampleEntry, ...] = (
         ),
     ),
     ExampleEntry(
+        directory="examples/diffusion_guidance",
+        entry_point="examples/diffusion_guidance/cgg_benchmark.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python examples/diffusion_guidance/cgg_benchmark.py --smoke"
+        ),
+        notes=(
+            "Contrastive Gradient Guidance (CGG) benchmark harness — gamma grid + "
+            "adapter strengths, aggregate JSON, fixed seed. `--smoke` runs a "
+            "CI-friendly two-case sweep. CPU reference."
+        ),
+    ),
+    ExampleEntry(
+        directory="examples/diffusion_guidance",
+        entry_point="examples/diffusion_guidance/cgg_diffusion_gemma.py",
+        status="runnable",
+        command=(
+            "PYTHONPATH=python python examples/diffusion_guidance/cgg_diffusion_gemma.py"
+        ),
+        notes=(
+            "CGG over a DiffusionGemma-shaped denoiser — score-composition demo "
+            "exercising the tessera.score_combine Graph IR bridge. CPU reference."
+        ),
+    ),
+    ExampleEntry(
         directory="examples/advanced/gumiho",
         entry_point="examples/advanced/gumiho/demo.py",
         status="runnable",

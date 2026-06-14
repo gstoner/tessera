@@ -6,7 +6,7 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 
 | Surface | Entries | Status breakdown |
 |---|--:|---|
-| examples | 20 | runnable=13, runnable_optional=1, scaffold=6 |
+| examples | 22 | runnable=15, runnable_optional=1, scaffold=6 |
 | benchmarks | 18 | archived=1, compile_only=6, runnable=11 |
 | research | 2 | compile_only=1, runnable=1 |
 | tools | 6 | archived=1, compile_only=2, runnable=3 |
@@ -31,6 +31,8 @@ Consolidated status of the repo's audited surfaces — examples / benchmarks / r
 | `examples/compiler/dnas` | runnable | `examples/compiler/dnas/dnas_schedule_autotune.py` |  |
 | `examples/compiler/ir_pipeline_tutorial` | runnable | `examples/compiler/ir_pipeline_tutorial/tessera_ir_pipeline_demo.py` |  |
 | `examples/conformance` | runnable | `examples/conformance/apple_path_ga_ebm_demos.py` |  |
+| `examples/diffusion_guidance` | runnable | `examples/diffusion_guidance/cgg_benchmark.py` |  |
+| `examples/diffusion_guidance` | runnable | `examples/diffusion_guidance/cgg_diffusion_gemma.py` |  |
 | `examples/getting_started` | runnable | `examples/getting_started/basic_tensor_ops.py` |  |
 | `examples/getting_started` | runnable | `examples/getting_started/compile_and_explain.py` |  |
 | `examples/getting_started/tessera_flash_attention_demo` | runnable_optional | `examples/getting_started/tessera_flash_attention_demo/examples/flash_attention_demo.py` |  |

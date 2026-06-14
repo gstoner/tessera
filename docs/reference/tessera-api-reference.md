@@ -238,8 +238,72 @@ Use `ts.ops`.
 | `dropout` | Implemented with a random effect in the Python/compiler surface; native lowering remains target-specific. |
 | `conv2d` | Implemented — NHWC + NCHW Module forms (`tessera.nn.Conv2d` / `Conv2dNCHW`); Graph IR op + VJP/JVP registered. |
 | `flash_attn` | Implemented with reference execution and NVIDIA-oriented Tile/Target artifact paths; native execution is target-gated. |
+| `grouped_gemm`, `moe_swiglu_block` | Implemented — ragged grouped matmul / SwiGLU-fused MoE expert FFN (Graph IR ops + Apple GPU fused MSL kernels); first-class `scale_layout` operand for FP8/FP4. |
+| `dequant_matmul`, `dequant_grouped_gemm` | Implemented — fused dequantize-into-GEMM over packed INT4/INT8/FP8 weight codes + a separate per-group scale operand, fp32 accumulate (model-class roadmap M1). Registered `tessera.*` MLIR dialect ops + VJP/JVP; **fused Apple GPU Metal kernel** (`backend="apple_gpu"`, in-register dequant). |
 | `all_reduce`, `reduce_scatter`, `all_gather` | Implemented distributed lowering (`GPUCollectiveInsertionPass`); NCCL/RCCL adapters wired; VJP+JVP registered for all four collectives. Production multi-rank execution is validation-gated. |
 | `fused_epilogue` | Implemented where supported by canonicalization/lowering; target support varies by backend capability. |
+
+## Model-class compiler track (`tessera.models` + `tessera.stdlib`)
+
+The frontier MoE architectures — **Kimi-K2**, **DeepSeek-V3.2**, **GLM-5** — are
+expressed as shared-pillar model graphs (added June 2026). On Apple Silicon a
+structurally-faithful *scaled* instance executes end-to-end (oracle-gated vs.
+numpy); the *full-config* graph is a valid lowered artifact (lit + verifier),
+with full-scale + NVIDIA execution hardware-gated. Roadmap:
+[`docs/audit/roadmap/MODEL_CLASS_ROADMAP.md`](../audit/roadmap/MODEL_CLASS_ROADMAP.md).
+
+**Shared stdlib pillars** (`tessera.stdlib`):
+
+| Module | Surface |
+|--------|---------|
+| `stdlib.quant` | `PackedQuantTensor`, `quantize_weight` (per-channel / group-wise INT4·INT8·FP8, genuine int4 nibble-packing), `dequant_matmul` / `dequant_grouped_gemm` (fused, fp32 accum; `backend="apple_gpu"` uses the fused Metal kernel), `unit_codes_and_scales`. |
+| `stdlib.moe` | `compute_capacity`, `plan_dispatch` (capacity/bucketing + token permutation), `dispatch` / `combine`, `shared_expert_swiglu`, `grouped_swiglu`, `moe_swiglu_quantized`, `moe_forward` (capacity-aware, returns a `MoEResult`). |
+| `stdlib.attention` | `MLAWeights` + `mla_attention` (decoupled-RoPE + weight absorption), `mla_prefill` / `mla_decode_step` (paged latent cache); `dsa_block_index` / `dsa_select_blocks` / `dsa_block_sparse_attention` (offset-aware block-sparse). LSA primitives live in `tessera.lsa`. |
+
+**Model graphs** (`tessera.models`):
+
+```python
+from tessera.models import deepseek_v32, glm5, kimi_k2
+from tessera.models import moe_transformer as mt
+from tessera.models import moe_transformer_runtime as rt
+
+cfg = deepseek_v32.scaled_config()        # MLA + DSA + FP8 (Mac-executable)
+mt.build_block(cfg, layer_index=0)         # shape-only graph, verified at dims
+w = rt.synthetic_weights(cfg)
+logits = rt.forward(cfg, w, [1, 2, 3])     # full decoder stack → logits
+tokens = rt.greedy_generate(cfg, w, [1, 2, 3], max_new_tokens=8)  # KV-cached decode
+```
+
+- `deepseek_v32` / `glm5` / `kimi_k2` each export `config()` (full scale) and
+  `scaled_config()` (Mac-executable). GLM-5 dims are an unconfirmed placeholder.
+- `moe_transformer.MoETransformerConfig` is the shared shape contract;
+  `attn_kind ∈ {"mla","gqa"}`, `sparse ∈ {None, "dsa", "lsa"}`,
+  `weight_dtype ∈ {None, "int4", "fp8_e4m3", "fp8_e5m2"}`.
+- `moe_transformer_runtime` runs `forward` / `prefill` / `decode_step` /
+  `greedy_generate` with per-layer KV caches (MLA latent cache; materialized K/V
+  for GQA/DSA/LSA). The headline guarantee is **KV-cached greedy decode ≡ full
+  recompute**, including with DSA and LSA block-sparsity in the decode loop.
+
+### Lookahead Sparse Attention (`tessera.lsa`)
+
+LSA is a composite attention *policy*: each query attends over the union of its
+causal local window and the tokens of historical blocks selected by a
+sigmoid-threshold indexer. Public surface (reference + Apple GPU fused kernel
+`tessera_apple_gpu_lookahead_sparse_attn_f32`):
+
+| Function | Purpose |
+|----------|---------|
+| `lookahead_sparse_attention(Q, K, V, *, window_size, block_size, tau=64, threshold=0.5, causal=True, indexer_keys=None, scale=None)` | Composite local-window ∪ selected-block attention, rank-4 `(B,H,S,D)`. |
+| `memory_index_select(indexer_keys, query, *, block_size, threshold=0.5, causal=True, ...)` | Sigmoid-threshold boolean block selection → `SelectionResult`. |
+| `memory_index_score(indexer_keys, query, *, scale=None)` | Differentiable indexer scoring head (VJP+JVP) — trains the indexer keys. |
+| `memory_index_select_ste(indexer_keys, query, *, threshold=0.5, ...)` | Hard selection forward, straight-through gradient backward. |
+| `compress_block_keys(K, *, block_size)` | Zero-param mean-pool indexer keys. |
+
+To run a *model* with LSA, set `sparse="lsa"` + `lsa_window_size` /
+`dsa_block_size` / `lsa_threshold` on `MoETransformerConfig`. The runtime uses a
+decode-loop-consistent variant (local window ∪ threshold-selected strictly-past
+blocks) so KV-cached decode ≡ recompute. LSA also ships a `TieredKVCache`
+(host cold-pool ↔ GPU-resident staging) and Graph→Schedule prefetch passes.
 
 ## Targeting
 

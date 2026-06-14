@@ -168,19 +168,72 @@ def _dsa_attend(Q, K, V, config, q_positions):
     return out.transpose(1, 0, 2).reshape(Sq, Hq * Dv)
 
 
+def _lsa_attend(Q, K, V, config, q_positions):
+    """Lookahead-sparse attention (offset-aware, decode-consistent) over
+    materialized per-head Q/K/V → (Sq, Hq*Dv).
+
+    Footprint per query = its causal local window ∪ the tokens of
+    threshold-selected **strictly-past** blocks (sigmoid(q·block_key) ≥
+    threshold). Restricting selection to fully-past blocks (the own block is
+    covered by the local window) makes the block summaries — and therefore the
+    selection — identical in a full forward and an incremental decode step, so
+    KV-cached decode ≡ recompute. Mirrors the runtime DSA path; the primitive
+    reference is python/tessera/lsa.py."""
+    Qa = np.asarray(Q, dtype=np.float64)
+    Ka = np.asarray(K, dtype=np.float64)
+    Va = np.asarray(V, dtype=np.float64)
+    Sq, Hq, D = Qa.shape
+    Hkv, Dv = Ka.shape[1], Va.shape[-1]
+    Sk = Ka.shape[0]
+    g = Hq // Hkv
+    bs = config.dsa_block_size
+    window = config.lsa_window_size
+    thr = config.lsa_threshold
+    scale = 1.0 / np.sqrt(D)
+    qpos = np.asarray(q_positions).reshape(-1)
+    # per-block mean-key summaries per KV head (pad to a multiple of block_size;
+    # only strictly-past, always-full blocks are ever consulted).
+    pad = (-Sk) % bs
+    Kp = np.concatenate([Ka, np.zeros((pad, Hkv, D))], axis=0) if pad else Ka
+    nb = Kp.shape[0] // bs
+    block_keys = Kp.reshape(nb, bs, Hkv, D).mean(axis=1)            # (nb, Hkv, D)
+
+    out = np.zeros((Sq, Hq, Dv), dtype=np.float64)
+    for s in range(Sq):
+        p = int(qpos[s])
+        qb = p // bs
+        local = np.arange(max(0, p - window + 1), p + 1)
+        for h in range(Hq):
+            kv = h // g
+            footprint = local
+            if qb > 0:
+                scores = (block_keys[:qb, kv] @ Qa[s, h]) * scale   # (qb,)
+                sel = np.nonzero(1.0 / (1.0 + np.exp(-scores)) >= thr)[0]
+                if sel.size:
+                    toks = np.concatenate([np.arange(b * bs, b * bs + bs) for b in sel])
+                    footprint = np.concatenate([local, toks])
+            fp = np.unique(footprint[footprint <= p])
+            ks = Ka[fp, kv]                                          # (T, D)
+            sc = (Qa[s, h] @ ks.T) * scale
+            w = np.exp(sc - sc.max()); w = w / w.sum()
+            out[s, h] = w @ Va[fp, kv]
+    return out.reshape(Sq, Hq * Dv)
+
+
 def _attn_prefill(x, lw, config, max_seq):
     """Full causal attention over a prompt; returns (out (S,H), cache).
 
     ``max_seq`` sizes the MLA latent cache for the whole decode (prompt + new
     tokens). For the recompute ``forward`` path the cache is unused, so
     ``max_seq = S`` is fine."""
-    if config.sparse == "dsa":
-        # DSA layers materialize K/V (the indexer needs real keys) and cache
+    if config.sparse in ("dsa", "lsa"):
+        # Sparse layers materialize K/V (the indexer needs real keys) and cache
         # them for an offset-aware decode step.
         S = x.shape[0]
         Q, K, V = _project_qkv_materialized(x, lw, config, np.arange(S))
-        out = _dsa_attend(Q, K, V, config, np.arange(S))
-        return out @ lw.attn["w_o"], ("dsa", K, V)
+        attend = _dsa_attend if config.sparse == "dsa" else _lsa_attend
+        out = attend(Q, K, V, config, np.arange(S))
+        return out @ lw.attn["w_o"], (config.sparse, K, V)
     if lw.attn["kind"] == "mla":
         mlaw = lw.attn["mla"]
         o, c, kr = _attn.mla_prefill(x, mlaw)
@@ -205,13 +258,14 @@ def _attn_prefill(x, lw, config, max_seq):
 def _attn_decode(x_t, lw, cache, config, position):
     """Single-token attention against the cache; returns (out (1,H), cache)."""
     Hq, Hkv, D = config.num_attention_heads, config.num_kv_heads, config.head_dim
-    if cache[0] == "dsa":
+    if cache[0] in ("dsa", "lsa"):
         _, K_prev, V_prev = cache                      # materialized (P,Hkv,D)/(P,Hkv,Dv)
         Qn, Kn, Vn = _project_qkv_materialized(x_t, lw, config, np.array([position]))
         K = np.concatenate([K_prev, Kn], axis=0)       # (P+1,Hkv,D)
         V = np.concatenate([V_prev, Vn], axis=0)
-        out = _dsa_attend(Qn, K, V, config, np.array([position]))
-        return out @ lw.attn["w_o"], ("dsa", K, V)
+        attend = _dsa_attend if cache[0] == "dsa" else _lsa_attend
+        out = attend(Qn, K, V, config, np.array([position]))
+        return out @ lw.attn["w_o"], (cache[0], K, V)
     if cache[0] == "mla":
         _, c_cache, kr_cache = cache
         lat = c_cache; rope = kr_cache

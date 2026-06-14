@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from tessera.models import deepseek_v32, glm5, kimi_k2
+from tessera.models import moe_transformer as mt
 from tessera.models import moe_transformer_runtime as rt
 
 SCALED = [deepseek_v32.scaled_config, glm5.scaled_config, kimi_k2.scaled_config]
@@ -93,6 +94,48 @@ def test_dsa_decode_equals_recompute_long():
     cached = rt.greedy_generate(cfg, w, prompt, 6)
     recompute = _recompute_generate(cfg, w, prompt, 6)
     assert cached == recompute
+
+
+def _lsa_config():
+    """A scaled MoE-transformer that runs with Lookahead Sparse Attention."""
+    return mt.MoETransformerConfig(
+        name="lsa_scaled", hidden_size=256, num_layers=4, vocab_size=1024,
+        attn_kind="gqa", num_attention_heads=8, num_kv_heads=2, head_dim=32,
+        rope_head_dim=32, sparse="lsa", lsa_window_size=4, dsa_block_size=4,
+        lsa_threshold=0.5, num_experts=8, num_experts_per_tok=2,
+        num_shared_experts=1, moe_intermediate_size=256,
+        shared_expert_intermediate_size=256, first_k_dense=1,
+        dense_intermediate_size=512)
+
+
+def test_lsa_decode_equals_recompute():
+    """A model running with LSA attention: KV-cached greedy decode ≡ recompute
+    (offset-aware lookahead selection is decode-loop-consistent)."""
+    cfg = _lsa_config()
+    w = rt.synthetic_weights(cfg, seed=7)
+    prompt = list(range(11))
+    cached = rt.greedy_generate(cfg, w, prompt, 6)
+    recompute = _recompute_generate(cfg, w, prompt, 6)
+    assert cached == recompute
+
+
+def test_lsa_is_genuinely_engaged_not_dense():
+    """Over a long-enough sequence the LSA layers prune history — the LSA forward
+    must differ from a dense run (threshold below 1 would otherwise select all)."""
+    import dataclasses
+    cfg = dataclasses.replace(_lsa_config(), lsa_threshold=0.9, lsa_window_size=2)
+    w = rt.synthetic_weights(cfg, seed=8)
+    seq = list(range(20))
+    lsa_logits = rt.forward(cfg, w, seq)
+    dense_logits = rt.forward(dataclasses.replace(cfg, sparse=None), w, seq)
+    assert not np.allclose(lsa_logits, dense_logits), "LSA collapsed to dense"
+
+
+def test_lsa_graph_builds_and_verifies():
+    cfg = _lsa_config()
+    g = mt.build_block(cfg, layer_index=cfg.num_layers - 1)
+    assert "lookahead_sparse_attention" in g.op_sequence()
+    mt.verify_block(g, cfg)
 
 
 def test_first_layer_dense_rest_moe():

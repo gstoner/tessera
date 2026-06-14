@@ -16,7 +16,7 @@ representation style of :mod:`diffusion_gemma`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .diffusion_gemma import GraphNode
 
@@ -26,7 +26,7 @@ class MoETransformerDimError(ValueError):
 
 
 ATTENTION_KINDS = ("mla", "gqa")
-SPARSE_KINDS = (None, "dsa")
+SPARSE_KINDS = (None, "dsa", "lsa")
 QUANT_DTYPES = (None, "int4", "fp8_e4m3", "fp8_e5m2")
 
 
@@ -38,7 +38,8 @@ class MoETransformerConfig:
     cache the latent, expand to K/V; a decoupled ``rope_head_dim`` carries
     position) or ``"gqa"`` (``num_attention_heads`` query heads share
     ``num_kv_heads``).  ``sparse="dsa"`` adds DeepSeek sparse attention (top-k
-    block selection).  ``weight_dtype`` selects the packed quant scheme the
+    block selection); ``sparse="lsa"`` adds Lookahead Sparse Attention (local
+    window ∪ threshold-selected past blocks).  ``weight_dtype`` selects the packed quant scheme the
     expert/dense GEMMs lower through (``stdlib.quant``).  ``first_k_dense`` leading
     layers use a plain FFN before the MoE layers begin (DeepSeek convention).
     """
@@ -61,11 +62,15 @@ class MoETransformerConfig:
     rope_variant: str = "rope"
 
     # ── sparse / hybrid attention ─────────────────────────────────────────────
-    sparse: str | None = None
+    sparse: str | None = None     # None | "dsa" (DeepSeek block-sparse) | "lsa"
     dsa_top_k_blocks: int = 0
-    dsa_block_size: int = 64
+    dsa_block_size: int = 64       # block size for DSA *and* LSA
     sliding_window: int = 0       # 0 → dense; >0 → sliding-window layers
     layer_types: tuple[str, ...] = ("full",)
+    # Lookahead Sparse Attention (sparse == "lsa"): local window ∪ threshold-
+    # selected strictly-past blocks (block size = dsa_block_size).
+    lsa_window_size: int = 0
+    lsa_threshold: float = 0.5
 
     # ── MoE ────────────────────────────────────────────────────────────────────
     num_experts: int = 16
@@ -135,6 +140,12 @@ def verify_config(config: MoETransformerConfig) -> None:
         if config.dsa_top_k_blocks <= 0 or config.dsa_block_size <= 0:
             raise MoETransformerDimError(
                 "DSA requires dsa_top_k_blocks > 0 and dsa_block_size > 0")
+    if config.sparse == "lsa":
+        if config.lsa_window_size <= 0 or config.dsa_block_size <= 0:
+            raise MoETransformerDimError(
+                "LSA requires lsa_window_size > 0 and dsa_block_size > 0")
+        if not (0.0 <= config.lsa_threshold <= 1.0):
+            raise MoETransformerDimError("lsa_threshold must be in [0, 1]")
 
     if config.num_experts < 1:
         raise MoETransformerDimError("num_experts must be >= 1")
@@ -209,7 +220,8 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
         applies_to="q", variant=config.rope_variant,
         rope_head_dim=(config.rope_head_dim if config.attn_kind == "mla" else config.head_dim))
 
-    attn_op = "deepseek_sparse_attention" if sparse == "dsa" else "attention"
+    attn_op = {"dsa": "deepseek_sparse_attention",
+               "lsa": "lookahead_sparse_attention"}.get(sparse or "", "attention")
     attn_attrs = dict(
         mode=mode, num_heads=config.num_attention_heads,
         num_kv_heads=(config.num_attention_heads if unified_kv else config.num_kv_heads),
@@ -219,6 +231,10 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
     if sparse == "dsa":
         attn_attrs.update(top_k_blocks=config.dsa_top_k_blocks,
                           block_size=config.dsa_block_size)
+    elif sparse == "lsa":
+        attn_attrs.update(window_size=config.lsa_window_size,
+                          block_size=config.dsa_block_size,
+                          threshold=config.lsa_threshold)
     add(attn_op,
         [(T, config.attn_dim), (T, kv_dim), (T, kv_dim)],
         (T, config.attn_dim), **attn_attrs)
@@ -306,6 +322,10 @@ def verify_block(graph: BlockGraph, config: MoETransformerConfig) -> None:
         attn = graph.find("deepseek_sparse_attention")
         if int(attn.attrs.get("top_k_blocks", 0)) != config.dsa_top_k_blocks:
             raise MoETransformerDimError("DSA top_k_blocks attr mismatch")
+    if config.sparse == "lsa":
+        attn = graph.find("lookahead_sparse_attention")
+        if int(attn.attrs.get("window_size", 0)) != config.lsa_window_size:
+            raise MoETransformerDimError("LSA window_size attr mismatch")
 
     if graph.is_moe:
         router = graph.find("router")

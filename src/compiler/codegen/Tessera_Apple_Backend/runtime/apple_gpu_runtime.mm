@@ -13263,37 +13263,26 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f32(
         [phs addObject:[g placeholderWithShape:shp dataType:dt name:nil]];
         [shapes addObject:shp];
       }
-      // predicate = flag[0] > 0, as a scalar (rank-0) bool tensor.
-      MPSGraphTensor *flagS = [g reshapeTensor:phs[flag_arg_index]
-                                     withShape:@[]
-                                          name:nil];
-      MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
-      MPSGraphTensor *pred = [g greaterThanWithPrimaryTensor:flagS
-                                             secondaryTensor:zero
-                                                        name:nil];
-      __block int32_t err = 0;
-      NSArray<MPSGraphTensor *> *results = [g
-          ifWithPredicateTensor:pred
-                      thenBlock:^NSArray<MPSGraphTensor *> *() {
-                        MPSGraphTensor *y = mpsg_build_branch(
-                            g, phs, n_args, nil, dt, n_then_ops, then_codes,
-                            then_in0, then_in1, then_iattr, then_fattr,
-                            then_out_id);
-                        if (!y) { err = -6; y = [g constantWithScalar:0.0 dataType:dt]; }
-                        return @[ y ];
-                      }
-                      elseBlock:^NSArray<MPSGraphTensor *> *() {
-                        MPSGraphTensor *y = mpsg_build_branch(
-                            g, phs, n_args, nil, dt, n_else_ops, else_codes,
-                            else_in0, else_in1, else_iattr, else_fattr,
-                            else_out_id);
-                        if (!y) { err = -6; y = [g constantWithScalar:0.0 dataType:dt]; }
-                        return @[ y ];
-                      }
-                           name:nil];
-      if (err != 0) return err;
-      if (!results || results.count < 1) return -3;
-      MPSGraphTensor *outT = results[0];
+      // Data-dependent `if` with a SCALAR predicate (flag[0] > 0). The flag is
+      // an input arg, so it is host-readable before dispatch — evaluate it here
+      // and build ONLY the taken branch as a straight-line graph. This avoids
+      // MPSGraph's `ifWithPredicateTensor` entirely: its control-flow region
+      // runtime (GPU::WhileOpHandler) SIGSEGVs under bulk executable churn
+      // (docs/apple_gpu_control_flow_lowering.md). Straight-line graphs are
+      // safe; only the region ops crash. Semantically identical — exactly one
+      // branch is taken, selected by the same flag>0 test.
+      const bool take_then =
+          ((const float *)arg_ptrs[flag_arg_index])[0] > 0.0f;
+      MPSGraphTensor *outT = mpsg_build_branch(
+          g, phs, n_args, nil, dt,
+          take_then ? n_then_ops : n_else_ops,
+          take_then ? then_codes : else_codes,
+          take_then ? then_in0 : else_in0,
+          take_then ? then_in1 : else_in1,
+          take_then ? then_iattr : else_iattr,
+          take_then ? then_fattr : else_fattr,
+          take_then ? then_out_id : else_out_id);
+      if (!outT) return -6;
       std::vector<MetalBufferGuard> guards;
       guards.reserve(n_args);
       NSMutableDictionary *feeds = [NSMutableDictionary dictionary];
@@ -13579,43 +13568,23 @@ extern "C" int32_t tessera_apple_gpu_run_graph_cond_f16(
         MPSDataTypeFloat16, 2, n_args, arg_ptrs, arg_rows, arg_cols, out,
         ^MPSGraphTensor *(MPSGraph *g, NSArray<MPSGraphTensor *> *phs,
                           MPSDataType dt, int32_t *err) {
-          MPSGraphTensor *flagS = [g reshapeTensor:phs[flag_arg_index]
-                                         withShape:@[]
-                                              name:nil];
-          MPSGraphTensor *zero = [g constantWithScalar:0.0 dataType:dt];
-          MPSGraphTensor *pred = [g greaterThanWithPrimaryTensor:flagS
-                                                 secondaryTensor:zero
-                                                            name:nil];
-          __block int32_t berr = 0;
-          NSArray<MPSGraphTensor *> *results = [g
-              ifWithPredicateTensor:pred
-                          thenBlock:^NSArray<MPSGraphTensor *> *() {
-                            MPSGraphTensor *y = mpsg_build_branch(
-                                g, phs, n_args, nil, dt, n_then_ops, then_codes,
-                                then_in0, then_in1, then_iattr, then_fattr,
-                                then_out_id);
-                            if (!y) {
-                              berr = -6;
-                              y = [g constantWithScalar:0.0 dataType:dt];
-                            }
-                            return @[ y ];
-                          }
-                          elseBlock:^NSArray<MPSGraphTensor *> *() {
-                            MPSGraphTensor *y = mpsg_build_branch(
-                                g, phs, n_args, nil, dt, n_else_ops, else_codes,
-                                else_in0, else_in1, else_iattr, else_fattr,
-                                else_out_id);
-                            if (!y) {
-                              berr = -6;
-                              y = [g constantWithScalar:0.0 dataType:dt];
-                            }
-                            return @[ y ];
-                          }
-                               name:nil];
-          *err = berr;
-          if (berr != 0) return nil;
-          if (!results || results.count < 1) { *err = -3; return nil; }
-          return results[0];
+          // Host-evaluate the scalar predicate (flag[0] > 0) and build only the
+          // taken branch — avoids MPSGraph's `ifWithPredicateTensor` and the
+          // GPU::WhileOpHandler bulk-churn SIGSEGV. The flag is an input arg, so
+          // it is host-readable; on Apple Silicon `__fp16` decodes the half.
+          const bool take_then =
+              (float)(*(const __fp16 *)arg_ptrs[flag_arg_index]) > 0.0f;
+          MPSGraphTensor *y = mpsg_build_branch(
+              g, phs, n_args, nil, dt,
+              take_then ? n_then_ops : n_else_ops,
+              take_then ? then_codes : else_codes,
+              take_then ? then_in0 : else_in0,
+              take_then ? then_in1 : else_in1,
+              take_then ? then_iattr : else_iattr,
+              take_then ? then_fattr : else_fattr,
+              take_then ? then_out_id : else_out_id);
+          if (!y) { *err = -6; return nil; }
+          return y;
         });
   }
   return -1;

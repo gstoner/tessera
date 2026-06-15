@@ -167,10 +167,11 @@ scaled execution on Apple GPU gated vs numpy.
 | **L2.1** ✅ | Chunked UT-transform on Metal (prefill form) | `tessera_apple_gpu_gated_delta_rule_chunked_f32` — one threadgroup per (b,h), the within-chunk `(I+Ã)⁻¹` solve on-device; `backend="apple_gpu"` on the chunked reference | **Metal chunked ≡ numpy** (all chunk sizes incl. partial) + **Metal chunked ≡ Metal recurrent** |
 | **L2.2** | Cooperative-parallel chunk kernel | Parallelize the within-chunk solve + state carry across threads (currently lane-0); tensor-core-style GEMM tiles | perf ratchet; correctness already gated |
 | **L3** ✅ | **Hybrid layer schedule** as a first-class attribute | `HybridSchedule` lowers `layer_types` literally; reference stack threads the **dual cache** (recurrent Ŝ for linear layers, KV for full layers) | **streaming dual-cache decode ≡ full recompute** + Qwen3.6 full-config schedule check |
-| **L3.1** | Promote `gated_deltanet` ODS → true rule | Decide + execute the shipped-numerics change (today's op is linear attn); wire the ODS op to the L1.1/L2.1 kernels | DESIL + existing-test migration |
+| **L3.1** ✅ | `gated_deltanet` shipped-numerics decision | **Decision: opt-in, don't flip.** Added `erase=False` (default = current linear attn, backward-compatible) to `gated_deltanet`/`kimi_delta`/`modified_delta`; `erase=True` is the genuine rule. Flipping the default would break every caller's numerics — a future major version may. ODS `erase` attr deferred until graph→kernel honors it (no-op attr = drift) | `erase=True` ≡ `stdlib.delta_rule`; default ≡ existing; no regression |
 | **L4** ✅ | `selective_ssm` (Mamba2) ODS op | Materialize the op the registry falsely claimed: `Tessera_SelectiveSsmOp` + verifier; close the drift. Chunk-scan (`_mamba_ssd.py`) + chunk≡sequential oracle already existed | lit roundtrip/verifier + chunk-scan ≡ sequential-scan |
 | **L4.1** ✅ | Hybrid SSM mixer (Nemotron) | `linear_mixer="ssm"` adds a Mamba SSM mixer to the L3 hybrid stack; SSM state `h[D,N]` carried in the dual cache alongside attention-anchor KV | dual-cache decode ≡ recompute with SSM layers + `_ssm_scan` ≡ shipped `selective_ssm` |
-| **L5** | LFM2.5 LIV mixer variant | `Linear→(B⊙x̃)→depthwise-causal-conv(k=3)→(C⊙z)→Linear_out` as a fused mixer over the existing `depthwise_conv1d` | vs numpy LIV ref; scaled exec |
+| **L5** ✅ | LFM2.5 LIV mixer variant | `linear_mixer="liv"` — `Linear→(B⊙x̃)→depthwise-causal-conv(k=3)→(C⊙z)→Linear_out`; constant conv state (last k-1) in the dual cache | dual-cache decode ≡ recompute + conv causality |
+| **Full blocks** ✅ | MoE FFN + MTP draft head | `ffn="moe"` (routed experts + shared, exact per-token routing); `HybridLM` + graph-level MTP head + lossless self-speculation | decode ≡ recompute (MoE); spec == AR (MTP, lossless) |
 
 ### Landed 2026-06-15 — L0–L2 (reference tier, host-free)
 
@@ -258,9 +259,31 @@ not), so streaming SSM decode is exact.  Nemotron is now the second flagship
 (+5 L4.1 oracles): `_ssm_scan ≡ selective_ssm`, Nemotron-shaped dual-cache decode
 ≡ recompute (across prefill points), and an all-SSM stack.
 
-**Still open:** MoE/MTP composition into the hybrid stack (`stdlib.moe` exists;
-additive), the optional Mamba short-conv (shares the L5 LIV machinery), L2.2
-(perf), L3.1 (`gated_deltanet` ODS→true-rule), L5 (LFM2.5 LIV mixer).
+### Landed 2026-06-15 — L5 + MoE/MTP (full model blocks) + L3.1
+
+**L5 (LIV):** `linear_mixer="liv"` — the LFM2.5 double-gated causal short-conv
+(`Linear→B⊙x̃→depthwise-conv k=3→C⊙z→Linear_out`), constant conv state (last k-1
+inputs) in the dual cache. Third hybrid family expressible. **MoE FFN:** `ffn="moe"`
+wires `stdlib.moe` (routed experts + optional shared) with **exact, no-capacity-drop
+routing** so it stays per-token → decode≡recompute holds; `top_k` proven
+load-bearing; a Nemotron SSM+MoE full block runs. **MTP:** `HybridLM` (tied-embed
+LM head + a shared-weight MTP draft head predicting t+2 from `h_t` + `embed(t+1)`)
++ `mtp_speculative_generate` — greedy self-speculation that is **lossless (== AR)**
+by construction, with the accept-path exercised on a constructed predictable model.
+27 oracles in `test_stdlib_hybrid.py`.
+
+**L3.1 — the `gated_deltanet` shipped-numerics decision (made):** added
+`erase=False` (default = current gated *linear* attention, **backward-compatible**)
+to `gated_deltanet`/`kimi_delta`/`modified_delta`; `erase=True` opts into the
+genuine DeltaNet rule (≡ `stdlib.delta_rule`). The default is **deliberately not
+flipped** — that would silently change every caller's numerics; a future major
+version may. The ODS `erase` attr is deferred until the graph→kernel path honors
+it (a no-op attr would just be new drift). Guards in `test_stdlib_delta_rule.py`;
+no regression in the existing delta/attention suites.
+
+**Still open:** L2.2 (cooperative-parallel chunk kernel — perf, needs a measured
+ratchet), graph→Metal `erase` routing (so `@jit` graphs get the true rule on GPU),
+and wiring the full blocks into the named model configs (`models/*`).
 
 Sequencing: **L1 unblocks L2** (decode state is the chunk carry); **L2 is the
 keystone** (only the chunked GEMM form is tensor-core-viable for prefill — the

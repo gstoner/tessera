@@ -118,6 +118,13 @@ def _load():
         ("tessera_apple_gpu_ebm_half_mse_f32", [fp, fp, fp, i32]),
         ("tessera_apple_gpu_ebm_ism_f32", [fp, fp, fp, i32, i32]),
         ("tessera_apple_gpu_ebm_dsm_f32", [fp, fp, fp, fp, i32, i32, flt]),
+        # Track L (L1.1) — genuine gated delta rule (recurrent, true erase).
+        # (Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase).
+        ("tessera_apple_gpu_gated_delta_rule_f32",
+         [fp, fp, fp, fp, fp, fp, i32, i32, i32, i32, i32, i32]),
+        # Track L (L2.1) — chunked UT-transform prefill (+chunk arg).
+        ("tessera_apple_gpu_gated_delta_rule_chunked_f32",
+         [fp, fp, fp, fp, fp, fp, i32, i32, i32, i32, i32, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -170,6 +177,52 @@ def _to_bf16(a) -> np.ndarray:
 
 def _ptr(a: np.ndarray):
     return a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+
+def gpu_gated_delta_rule(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                         beta: np.ndarray, decay: np.ndarray,
+                         erase: bool = True) -> np.ndarray:
+    """Genuine gated delta rule (recurrent) on the Apple GPU (Track L L1.1).
+
+    Q, K, V : [B, H, S, D] f32 (D_qk = K/Q last dim, D_v = V last dim).
+    beta, decay : [B, H, S] f32 per-token scalars (pass ones for "absent").
+    The output gate is applied by the caller.  Matches
+    ``tessera.stdlib.delta_rule.gated_delta_rule_recurrent``.
+    """
+    lib = _load()
+    Qf, Kf, Vf = _f32(Q, "Q"), _f32(K, "K"), _f32(V, "V")
+    bf, df = _f32(beta, "beta"), _f32(decay, "decay")
+    B, H, S, D_qk = Qf.shape
+    D_v = Vf.shape[-1]
+    O = np.empty((B, H, S, D_v), dtype=np.float32)
+    lib.tessera_apple_gpu_gated_delta_rule_f32(
+        _ptr(Qf), _ptr(Kf), _ptr(Vf), _ptr(bf), _ptr(df), _ptr(O),
+        ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(S),
+        ctypes.c_int32(D_qk), ctypes.c_int32(D_v),
+        ctypes.c_int32(1 if erase else 0))
+    return O
+
+
+def gpu_gated_delta_rule_chunked(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                                 beta: np.ndarray, decay: np.ndarray,
+                                 chunk: int = 32, erase: bool = True) -> np.ndarray:
+    """Chunk-parallel UT-transform gated delta rule on the Apple GPU (L2.1).
+
+    Same signature/contract as :func:`gpu_gated_delta_rule` plus ``chunk`` (the
+    within-chunk tile, ≤ 32).  chunk ≡ recurrent.
+    """
+    lib = _load()
+    Qf, Kf, Vf = _f32(Q, "Q"), _f32(K, "K"), _f32(V, "V")
+    bf, df = _f32(beta, "beta"), _f32(decay, "decay")
+    B, H, S, D_qk = Qf.shape
+    D_v = Vf.shape[-1]
+    O = np.empty((B, H, S, D_v), dtype=np.float32)
+    lib.tessera_apple_gpu_gated_delta_rule_chunked_f32(
+        _ptr(Qf), _ptr(Kf), _ptr(Vf), _ptr(bf), _ptr(df), _ptr(O),
+        ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(S),
+        ctypes.c_int32(D_qk), ctypes.c_int32(D_v), ctypes.c_int32(int(chunk)),
+        ctypes.c_int32(1 if erase else 0))
+    return O
 
 
 # ── Bespoke Metal kernels (the back-half) ────────────────────────────────────

@@ -1667,11 +1667,16 @@ _GRAPH_IR_LOWERING_OVERRIDES: dict[str, str] = {
     "depthwise_conv1d":      "registered",
     "online_softmax":        "registered",
     "online_softmax_state":  "registered",
-    # selective_ssm — dedicated Mamba2 Graph IR op landed (2026-05-18) as
-    # `tessera.selective_ssm` (state-space lowering kind, stateful effect).
-    # The closed-form JVP through the recurrence was already shipped; the
-    # `registered` flip below completes the Graph IR lowering brick that
-    # was the last remaining `missing` entry across the registry.
+    # selective_ssm — dedicated Mamba2 Graph IR op `tessera.selective_ssm`
+    # (state-space lowering kind, stateful effect).  NOTE (Track L L4,
+    # 2026-06-15): this entry previously asserted the op "landed (2026-05-18)"
+    # while NO ODS op existed in TesseraOps.td — registry/prose intent that
+    # outran the compiler surface (Decision #25/#26).  The op is now genuinely
+    # materialized: `Tessera_SelectiveSsmOp` in TesseraOps.td +
+    # `SelectiveSsmOp::verify` in TesseraOps.cpp, proven by
+    # `tests/tessera-ir/model_class/selective_ssm.mlir`.  The closed-form JVP
+    # and the chunked-parallel SSD lowering (`_mamba_ssd.py`, chunk ≡ sequential)
+    # were already shipped; this makes `registered` honest.
     "selective_ssm":         "registered",
 }
 

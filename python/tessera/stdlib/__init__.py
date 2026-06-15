@@ -11,6 +11,6 @@ See ``docs/audit/roadmap/MODEL_CLASS_ROADMAP.md`` for the milestone map.
 
 from __future__ import annotations
 
-from . import attention, moe, quant
+from . import attention, delta_rule, hybrid, moe, quant
 
-__all__ = ["quant", "moe", "attention"]
+__all__ = ["quant", "moe", "attention", "delta_rule", "hybrid"]

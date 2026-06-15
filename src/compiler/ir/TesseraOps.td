@@ -1119,6 +1119,44 @@ def Tessera_ModifiedDeltaAttentionOp
   let hasVerifier = 1;
 }
 
+// Mamba-2 selective state-space model (SSD).  Track L L4 — this is the op the
+// coverage registry previously *claimed* had landed; it now genuinely exists.
+def Tessera_SelectiveSsmOp : Op<
+  Tessera_Dialect, "selective_ssm",
+  [Pure, AttrSizedOperandSegments]
+> {
+  let summary = "Mamba-2 selective state-space model (SSD) recurrence";
+  let description = [{
+    Selective state-space recurrence (Mamba-2 / SSD).  Per token t, channel d,
+    state dim n:
+      A_bar = exp(delta[b,t,d] * a[d,n]);  B_bar = delta[b,t,d] * b[b,t,n]
+      h[t,d,n] = A_bar * h[t-1,d,n] + B_bar * x[b,t,d]
+      y[t,d]   = sum_n c[b,t,n] * h[t,d,n]
+    `a` is the (negative) state-matrix diagonal — rank-1 `(D)` (scalar-state, the
+    common per-head config that lowers to the chunked-parallel SSD matmul form)
+    or rank-2 `(D,N)`.  `b`/`c` are the input/output projections `(B,S,N)`,
+    `delta` the selective time-step `(B,S,D)`.  Optional `gate` (output gate,
+    shape of `x`) and `state` (initial carry `(B,D,N)`).  Reference:
+    `tessera.ops.selective_ssm`; chunked-parallel lowering:
+    `python/tessera/_mamba_ssd.py`.
+  }];
+  let arguments = (ins TensorType:$x,
+                        TensorType:$a,
+                        TensorType:$b,
+                        TensorType:$c,
+                        TensorType:$delta,
+                        Optional<TensorType>:$gate,
+                        Optional<TensorType>:$state,
+                        DefaultValuedAttr<I64Attr, "128">:$chunk_size);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = [{
+    $x `,` $a `,` $b `,` $c `,` $delta
+    (`gate` `(` $gate^ `)`)? (`init` `(` $state^ `)`)?
+    attr-dict `:` functional-type(operands, results)
+  }];
+  let hasVerifier = 1;
+}
+
 def Tessera_HybridAttentionOp : Op<
   Tessera_Dialect, "hybrid_attention",
   [Pure]

@@ -1198,6 +1198,58 @@ extern "C" void tessera_apple_gpu_linear_attn_f32(const float* Q, const float* K
                                  causal);
 }
 
+// Track L (L1.1) — genuine gated delta rule, non-Apple twin of the .mm
+// host reference.  Same math as the MSL kernel + .mm fallback (with the
+// (v_t − α·v̂_t) erase term).  See apple_gpu_runtime.mm for the contract.
+extern "C" void tessera_apple_gpu_gated_delta_rule_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state(static_cast<std::size_t>(D_qk) * D_v, 0.0f);
+  std::vector<float> vhat(static_cast<std::size_t>(D_v), 0.0f);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      std::fill(state.begin(), state.end(), 0.0f);
+      int qb = (b * H + h) * S * D_qk, kb = qb;
+      int vb = (b * H + h) * S * D_v, ob = vb, sb = (b * H + h) * S;
+      for (int32_t t = 0; t < S; ++t) {
+        float a = decay[sb + t], bt = beta[sb + t];
+        for (int32_t e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int32_t d = 0; d < D_qk; ++d)
+            acc += K[kb + t * D_qk + d] * state[static_cast<std::size_t>(d) * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int32_t d = 0; d < D_qk; ++d) {
+          float k_d = K[kb + t * D_qk + d];
+          for (int32_t e = 0; e < D_v; ++e) {
+            float v_e = V[vb + t * D_v + e];
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[static_cast<std::size_t>(d) * D_v + e] =
+                a * state[static_cast<std::size_t>(d) * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int32_t e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int32_t d = 0; d < D_qk; ++d)
+            acc += Q[qb + t * D_qk + d] * state[static_cast<std::size_t>(d) * D_v + e];
+          O[ob + t * D_v + e] = acc;
+        }
+      }
+    }
+  }
+}
+
+// Track L (L2.1) — chunked UT-transform, non-Apple twin.  chunk ≡ recurrent,
+// so the stub forwards to the (proven) recurrent reference above.
+extern "C" void tessera_apple_gpu_gated_delta_rule_chunked_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t /*chunk*/, int32_t erase) {
+  tessera_apple_gpu_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S,
+                                         D_qk, D_v, erase);
+}
+
 // attention_variants_plan, MLA-2 — non-Apple stub. Numpy-reference path
 // for the host-only fallback. The Apple .mm file's `reference_mla_decode_f32`
 // already implements the same math; this is its non-Apple twin.

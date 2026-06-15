@@ -25,16 +25,31 @@ already shipped the right validation tool for promotion: the evaluator's DESIL
 cross-path + metamorphic oracles (`python/tessera/compiler/evaluator.py`) — a
 fused kernel is auto-provable against its reference.
 
-### Doc-drift correction (fix before building)
+### Grounding corrections (verified at source)
 
-The audit pass surfaced a CLAUDE.md claim that a "dedicated Mamba2 Graph IR op
-landed (2026-05-18)". **It did not** — there is no `selective_ssm` op in
-`src/compiler/ir/TesseraOps.td`; the registry only flips `graph_ir_lowering =
-registered` (intent). Conversely, an earlier internal audit claimed
-`gated_deltanet` has *no* ODS op — **also wrong**: `Tessera_GatedDeltaNetOp`
-exists at `TesseraOps.td:1071` with a rich operand set. Both errors are the same
-hazard (Decision #25/#26): registry/prose intent ≠ materialized compiler surface.
-Every status in this doc is grounded to a `file:line`.
+Two claims that floated through the audit, both checked against the tree:
+
+1. **The false "Mamba2 op landed" claim was real — in `primitive_coverage.py`,
+   not CLAUDE.md.** CLAUDE.md proper says the op is "*pending*"; but the coverage
+   registry's comment asserted *"dedicated Mamba2 Graph IR op landed (2026-05-18)
+   as `tessera.selective_ssm`"* and set `graph_ir_lowering="registered"` while **no
+   ODS op existed** in `TesseraOps.td` — registry intent that outran the compiler
+   surface (Decision #25/#26). **L4 closed this for real** (see below): the op is
+   now materialized + lit-proven, so `registered` is finally honest. (`gated_deltanet`
+   always did have its ODS op at `TesseraOps.td:1109`.)
+
+2. **The real correctness finding (now test-proven):** the shipped
+   `gated_deltanet` / `kimi_delta_attention` / `modified_delta_attention`
+   reference (`__init__.py::_delta_attention_impl`, lines 1215-1225) computes
+   `Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t v_tᵀ` — **gated linear attention, missing the
+   DeltaNet `(I − β_t k_t k_tᵀ)` erase term**. The ODS summary ("Gated DeltaNet
+   recurrent attention") and the runtime comment ("the delta recurrence is
+   algebraically the quadratic form `(QKᵀ⊙mask)@V`", `runtime.py:6428`) describe
+   the delta rule, but the math is linear attention — and every parity test passes
+   because the GPU path faithfully matches the mislabeled reference.
+   `tessera.stdlib.delta_rule` (Track L L1/L2, landed below) adds the genuine rule
+   and the oracle that locks the distinction
+   (`tests/unit/test_stdlib_delta_rule.py`).
 
 ## Per-model contract → Tessera status (grounded)
 
@@ -145,12 +160,107 @@ scaled execution on Apple GPU gated vs numpy.
 
 | L | Title | Definition of done | Oracle |
 |---|---|---|---|
-| **L0** | Doc-drift fix + contract lock | Remove the false "Mamba2 op landed" claim; lock the `gated_deltanet` operand contract; add a failing scaled gate | n/a |
-| **L1** | **Wire β/decay/state through the recurrent kernel** | `linear_attn_f32` becomes a true gated-delta-rule step: `S_t = α_t·S_{t-1}(I − β_t k kᵀ) + β_t v kᵀ`, fp32 state accum; decode path correct | metamorphic: decay=1,β=1 ≡ existing linear_attn; vs numpy delta-rule ref |
-| **L2** | **Chunked UT-transform prefill (the keystone)** | New lowering: chunk C=64, per-chunk `A=tril(−diag(β)KKᵀ,−1)`, `T=(I−A)⁻¹` as a dedicated C×C triangular-solve tile primitive, WY factors via GEMM, cross-chunk state carry; α-decay folded in | **chunk ≡ recurrent** (DESIL cross-path) — the make-or-break proof |
-| **L3** | **Hybrid layer schedule** as a first-class attribute | Lower `layer_types` literally (`(i+1)%period==0 → full_attention`) into the layer schedule; dual KV/recurrent-state cache coexist per layer | full-config artifact lit (Qwen3.6 dims) |
-| **L4** | `selective_ssm` (Mamba2) ODS op + chunk-scan lowering | Materialize the op the docs already claim; reuse the L2 chunk machinery | chunk-scan ≡ sequential-scan |
+| **L0** ✅ | Grounding correction + contract lock | Correct the propagated misquote; document the *real* finding (delta family = linear attn, no erase); lock it with an oracle | `test_existing_gated_deltanet_is_linear_attention_not_delta` |
+| **L1** ✅ | **Genuine gated delta recurrence** (decode form) | `gated_delta_rule_recurrent` adds the `(v_t − α_t v̂_t)` erase, fp32 state, return_state; **not** "wire β/decay" (those were already wired) — the existing reference was missing the erase entirely | vs independent brute-force `(I−βkkᵀ)` recurrence; `erase=False` ≡ existing ref; state-carry |
+| **L2** ✅ | **Chunked UT-transform prefill (the keystone)** | `gated_delta_rule_chunked`: chunk C, `Ã=tril(β·γ-ratio·KKᵀ,−1)`, `(I+Ã)⁻¹` via explicit forward substitution (`_forward_substitution`), WY/output as GEMM, γ-decay folding, cross-chunk state carry | **chunk ≡ recurrent** across ungated/β/fully-gated/output-gated + chunk-size-invariant (the make-or-break proof) |
+| **L1.1** ✅ | Genuine delta rule on Metal (decode form) | `tessera_apple_gpu_gated_delta_rule_f32` — per-(b,h) sequential MSL scan with the erase; `backend="apple_gpu"` on the recurrent reference | **Metal ≡ numpy** (DESIL) + Metal ≡ L2 chunked (independent routes) |
+| **L2.1** ✅ | Chunked UT-transform on Metal (prefill form) | `tessera_apple_gpu_gated_delta_rule_chunked_f32` — one threadgroup per (b,h), the within-chunk `(I+Ã)⁻¹` solve on-device; `backend="apple_gpu"` on the chunked reference | **Metal chunked ≡ numpy** (all chunk sizes incl. partial) + **Metal chunked ≡ Metal recurrent** |
+| **L2.2** | Cooperative-parallel chunk kernel | Parallelize the within-chunk solve + state carry across threads (currently lane-0); tensor-core-style GEMM tiles | perf ratchet; correctness already gated |
+| **L3** ✅ | **Hybrid layer schedule** as a first-class attribute | `HybridSchedule` lowers `layer_types` literally; reference stack threads the **dual cache** (recurrent Ŝ for linear layers, KV for full layers) | **streaming dual-cache decode ≡ full recompute** + Qwen3.6 full-config schedule check |
+| **L3.1** | Promote `gated_deltanet` ODS → true rule | Decide + execute the shipped-numerics change (today's op is linear attn); wire the ODS op to the L1.1/L2.1 kernels | DESIL + existing-test migration |
+| **L4** ✅ | `selective_ssm` (Mamba2) ODS op | Materialize the op the registry falsely claimed: `Tessera_SelectiveSsmOp` + verifier; close the drift. Chunk-scan (`_mamba_ssd.py`) + chunk≡sequential oracle already existed | lit roundtrip/verifier + chunk-scan ≡ sequential-scan |
+| **L4.1** ✅ | Hybrid SSM mixer (Nemotron) | `linear_mixer="ssm"` adds a Mamba SSM mixer to the L3 hybrid stack; SSM state `h[D,N]` carried in the dual cache alongside attention-anchor KV | dual-cache decode ≡ recompute with SSM layers + `_ssm_scan` ≡ shipped `selective_ssm` |
 | **L5** | LFM2.5 LIV mixer variant | `Linear→(B⊙x̃)→depthwise-causal-conv(k=3)→(C⊙z)→Linear_out` as a fused mixer over the existing `depthwise_conv1d` | vs numpy LIV ref; scaled exec |
+
+### Landed 2026-06-15 — L0–L2 (reference tier, host-free)
+
+`python/tessera/stdlib/delta_rule.py` + `tests/unit/test_stdlib_delta_rule.py`
+(18 oracles, all green). Mirrors the M-series house pattern: numpy reference +
+oracle first, fused MSL kernel (L1.1/L2.1) as the hardware-gated follow-up. What
+is proven host-free: the genuine gated delta rule (recurrent ≡ independent
+brute-force in the paper's `(I−βkkᵀ)` layout), the chunk-parallel UT-transform
+(`chunk ≡ recurrent` across all gating modes, chunk-size-invariant), the
+triangular-solve primitive, cross-chunk state carry, and the L0 lock that the
+shipped `gated_deltanet` is linear attention (`erase=False`), materially distinct
+from the true rule when keys correlate.
+
+### Landed 2026-06-15 — L1.1 (genuine delta rule on Metal)
+
+`tessera_apple_gpu_gated_delta_rule_f32` (`apple_gpu_runtime.mm` + non-Darwin
+stub parity) — a per-(b,h) sequential MSL scan carrying the `(v_t − α·v̂_t)`
+erase, registered in `_apple_gpu_backend` and reachable via
+`gated_delta_rule_recurrent(..., backend="apple_gpu")`.
+`tests/unit/test_apple_gpu_gated_delta_rule.py` (7 oracles, all run on Metal):
+**Metal ≡ numpy** for true delta / β+decay / output-gate / non-square head dims,
+`erase=False` ≡ the shipped linear reference, and **Metal recurrent ≡ the L2
+chunked UT-transform** (the genuine rule reached by two fully independent routes).
+
+**Numerics finding (realism, → `numeric_policy`):** the delta rule is only
+well-conditioned with **L2-normalized keys** — then `β·‖k‖²=β<1` makes
+`(I−βkkᵀ)` a contraction and f32≡f64. With unnormalized keys (`‖k‖²≫1`) the
+recurrence *expands* (eigenvalue `1−β‖k‖²<0`) and f32 legitimately diverges from
+f64 (~10% here) — genuine ill-conditioning, not a kernel defect. A production
+`gated_delta_rule` op should carry key-normalization in its contract (real models
+do), with fp32 state accumulation.
+
+### Landed 2026-06-15 — L2.1 (chunked UT-transform on Metal)
+
+`tessera_apple_gpu_gated_delta_rule_chunked_f32` — one threadgroup per (b,h), C
+threads (one per token-in-chunk), state Ŝ in threadgroup memory across the chunk
+loop.  The GEMM-shaped rows (A, W̃, output) parallelize across threads; the
+`(I+Ã)⁻¹` forward substitution + rank-1 state carry run on lane 0 (cooperative
+parallelization of those is L2.2, a perf follow-up).  Reachable via
+`gated_delta_rule_chunked(..., backend="apple_gpu")`.  Oracles (in the same test
+file): **Metal chunked ≡ numpy** across chunk sizes 1/4/8/16/32 (S=20 exercises a
+partial last chunk), **Metal chunked ≡ Metal recurrent** (two independent
+on-device kernels), output-gate, and `erase=False` ≡ the shipped linear ref.
+
+### Landed 2026-06-15 — L3 (hybrid layer schedule + dual cache)
+
+`tessera.stdlib.hybrid` — `HybridSchedule` makes `layer_types` first-class
+(`qwen3_6_schedule` = `[lin,lin,lin,full]·N`; `nemotron_schedule` = sparse
+anchors) + a reference stack that threads the **dual cache**: constant-size
+recurrent Ŝ for linear (genuine gated-delta) layers, growing KV for full-attention
+layers.  Linear layers L2-normalize keys (the L1.1 conditioning finding).
+`tests/unit/test_stdlib_hybrid.py` (9 oracles): the headline **streaming
+dual-cache decode ≡ full recompute** across prefill points and schedules
+(all-linear, every-other-anchor), schedule validation, and the Qwen3.6 full-config
+check (30 linear / 10 full at 40 layers).
+
+**Not yet done:** L2.2 (cooperative-parallel chunk kernel — perf), L3.1 (promote
+the `gated_deltanet` ODS op to the true rule — a shipped-numerics decision), and
+MoE/MTP composition into the hybrid stack (`stdlib.moe` exists; wiring is additive).
+
+### Landed 2026-06-15 — L4 (`selective_ssm` Mamba2 ODS op)
+
+`Tessera_SelectiveSsmOp` (`src/compiler/ir/TesseraOps.td`) + `SelectiveSsmOp::verify`
+(`TesseraOps.cpp`) — `tessera.selective_ssm` is now a genuine Graph IR op
+(rank-checked: rank-3 x / shape-equal delta / matching b,c / A rank-1|2 / optional
+`gate` shape-equal x / `init` state rank-3). `tessera-opt` rebuilds clean (MLIR
+22.1.6); lit fixture `tests/tessera-ir/model_class/selective_ssm.mlir` passes
+(model_class sweep 5/5). The **drift is closed**: the coverage registry's
+`graph_ir_lowering="registered"` for `selective_ssm` is now backed by a real op
+(comment corrected in `primitive_coverage.py`). The chunked-parallel SSD lowering
+(`_mamba_ssd.py::selective_ssm_parallel`) and its **chunk ≡ sequential** oracle
+(`test_mamba_ssd_gpu.py`, 12 tests) already existed and stay green.
+
+### Landed 2026-06-15 — L4.1 (hybrid SSM mixer — Nemotron expressible)
+
+`tessera.stdlib.hybrid` now takes `linear_mixer = "delta" | "ssm"`. The stack was
+refactored to per-mixer **span functions** so `hybrid_forward` (one span) and
+`hybrid_decode` (streamed spans) run identical per-layer code — the dual-cache
+oracle is meaningful for all three mixer types (delta Ŝ, SSM h[D,N], attention
+KV).  `_ssm_scan` reproduces the shipped `tessera.ops.selective_ssm` (the L4 op's
+reference) **and returns the carried state** (which the public reference does
+not), so streaming SSM decode is exact.  Nemotron is now the second flagship
+(after Qwen3.6) expressible end-to-end: `nemotron_schedule` + `linear_mixer="ssm"`
+= Mamba layers + sparse attention anchors.  `tests/unit/test_stdlib_hybrid.py`
+(+5 L4.1 oracles): `_ssm_scan ≡ selective_ssm`, Nemotron-shaped dual-cache decode
+≡ recompute (across prefill points), and an all-SSM stack.
+
+**Still open:** MoE/MTP composition into the hybrid stack (`stdlib.moe` exists;
+additive), the optional Mamba short-conv (shares the L5 LIV machinery), L2.2
+(perf), L3.1 (`gated_deltanet` ODS→true-rule), L5 (LFM2.5 LIV mixer).
 
 Sequencing: **L1 unblocks L2** (decode state is the chunk carry); **L2 is the
 keystone** (only the chunked GEMM form is tensor-core-viable for prefill — the

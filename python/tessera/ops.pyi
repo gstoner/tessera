@@ -197,6 +197,16 @@ def flash_attn(
     deterministic: Optional[Determinism] = ...,
     attn_bias: Optional[Tensor] = ...,
 ) -> Tensor: ...
+def varlen_sdpa(
+    Q: Tensor,
+    K: Tensor,
+    V: Tensor,
+    *,
+    cu_seqlens_q: Any,
+    cu_seqlens_k: Any,
+    causal: bool = ...,
+    scale: Optional[float] = ...,
+) -> Tensor: ...
 def rope(x: Tensor, theta: Tensor, *, axes: Literal["q", "k", "qk"] = ...) -> Tensor: ...
 def ntk_rope(x: Tensor, theta: Tensor, *, scale: float = ...) -> Tensor: ...
 def rope_split(x: Tensor, *, rope_dim: int) -> Tuple[Tensor, Tensor]: ...

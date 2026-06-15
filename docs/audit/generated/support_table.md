@@ -40,6 +40,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `multi_head_attention` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `power_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `retention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `varlen_sdpa` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `all_gather` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
@@ -327,7 +328,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 25 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |

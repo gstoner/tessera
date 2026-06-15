@@ -295,6 +295,7 @@ trunc,pure,,1,0,0
 unpack,movement,,1,0,0
 unsqueeze,pure,,1,0,0
 var,pure,,1,0,0
+varlen_sdpa,pure,,1,0,0
 view,pure,,1,0,0
 vlb_loss,pure,,1,0,0
 weight_norm,pure,,1,1,0

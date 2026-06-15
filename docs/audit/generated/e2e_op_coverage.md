@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 37 |
-| ``runnable_reference`` | 268 |
+| ``runnable_reference`` | 269 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **307** |
+| **total** | **308** |
 
 ## complete (37)
 
@@ -73,7 +73,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (268)
+## runnable_reference (269)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -102,6 +102,7 @@ each row into a single E2E tier.
 | ``multi_head_attention`` | attention | public | public | registered | partial | reference | ready | benchmarked |
 | ``power_attn`` | attention | public | public | registered | partial | reference | ready | none |
 | ``retention`` | attention | public | public | registered | partial | reference | ready | none |
+| ``varlen_sdpa`` | attention | public | public | registered | partial | reference | ready | none |
 | ``all_gather`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |

@@ -2931,6 +2931,15 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
     _planned("gated_deltanet", "attention", ("Kimi", "linear_attention"), references=("Gated DeltaNet",)),
     _planned("kimi_delta_attention", "attention", ("Kimi",), references=("Kimi Linear",)),
     _planned("modified_delta_attention", "attention", ("Kimi",), references=("Kimi Linear",)),
+    # Variable-length (packed-sequence) SDPA — the Cosmos-3 "two-way flat
+    # attention" substrate (cu_seqlens_q / cu_seqlens_k as first-class operands).
+    # Python reference + Apple-GPU metal_runtime lane both exist (status=partial);
+    # the FA-3 / NATTEN varlen kernels stay behind the Phase G/H backend gate.
+    _partial("varlen_sdpa", "attention", ("Cosmos", "MoT", "packed_training"),
+             references=("FlashAttention varlen", "NVIDIA Cosmos 3 §5.2.2"),
+             notes="packed cu_seqlens SDPA; reference + Apple GPU lane in "
+                   "tessera.nn.varlen, proven against dense masked flash_attn "
+                   "(tests/unit/test_varlen_sdpa.py)"),
     # ── S7: Titans/Atlas memory ─────────────────────────────────────────
     _planned("memory_read", "memory", ("Titans/Atlas",), references=("flax.nnx",)),
     _planned("memory_write", "memory", ("Titans/Atlas",), references=("flax.nnx",)),

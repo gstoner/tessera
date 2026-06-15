@@ -67,6 +67,20 @@ from .staging import (
 )
 from . import deepseek_v32, glm5, kimi_k2
 from . import moe_transformer_runtime
+from . import mixture_transformer
+from .mixture_transformer import (
+    REASONER,
+    GENERATOR,
+    MixtureTransformerConfig,
+    MixtureTransformerDimError,
+    TowerWeights,
+    cosmos_join_bias,
+    split_roles,
+    dual_stream_attention_dense,
+    dual_stream_attention_varlen,
+    synthetic_tower_weights,
+    verify_config as verify_mixture_transformer_config,
+)
 from .moe_transformer import (
     MoETransformerConfig,
     MoETransformerDimError,
@@ -89,6 +103,18 @@ __all__ = [
     "glm5",
     "kimi_k2",
     "moe_transformer_runtime",
+    "mixture_transformer",
+    "REASONER",
+    "GENERATOR",
+    "MixtureTransformerConfig",
+    "MixtureTransformerDimError",
+    "TowerWeights",
+    "cosmos_join_bias",
+    "split_roles",
+    "dual_stream_attention_dense",
+    "dual_stream_attention_varlen",
+    "synthetic_tower_weights",
+    "verify_mixture_transformer_config",
     "StagingError",
     "QuantizationPlan",
     "VisionMetadata",

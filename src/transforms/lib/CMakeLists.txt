@@ -46,6 +46,7 @@ add_library(TesseraPasses
 
   # Stage 13 — RL policy-loss compiler visibility / decomposition markers.
   RLLossDecomposePass.cpp
+  VarlenSdpaDecomposePass.cpp
 
   # Sprint V2 (2026-05-22) — layout legality skeleton (SHAPE_SYSTEM §11.2 closure).
   LayoutLegalityPass.cpp

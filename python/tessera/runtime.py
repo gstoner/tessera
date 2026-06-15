@@ -9265,6 +9265,15 @@ _FUSED_SCORE_CAP: Optional[int] = None
 _NATIVE_BF16_SUPPORTED: Optional[bool] = None
 
 
+#: Matmul-FLOP threshold (2*M*K*N) above which a matmul -> reduction chain
+#: routes to MPS-matmul + MPSGraph-reduce (compose) instead of the synthesized
+#: fused-reduction kernel.  Set from the F2d measurement: compose's ~2-dispatch
+#: overhead is amortized for any non-trivial matmul (the fused reduction does the
+#: matmul scalar / coopmat-limited), and unit-test shapes stay below it on the
+#: single fused dispatch.
+_APPLE_REDUCE_COMPOSE_MIN_FLOP = 8_000_000
+
+
 def _apple_fused_score_cap() -> int:
     """P2 (2026-06-09) — feature-table-derived per-thread cap for the
     fused stack-array MSL kernels (matmul→softmax(→matmul) / gelu /
@@ -9405,6 +9414,16 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
 
     M, K = a.shape
     N = b.shape[1]
+
+    # Perf (F2d measurement): the synthesized fused-reduction kernel does the
+    # matmul as scalar FMA (~12 GF/s) — even the coopmat reduction tops out
+    # ~92 GF/s (full-row-in-threadgroup limit).  For a non-trivial matmul, MPS
+    # matmul + MPSGraph softmax is measured 4-55x faster (Apple's optimized
+    # GEMM + reduce).  Route the matmul-heavy case to compose; keep the single
+    # fused dispatch only for tiny matmuls where 2 dispatches would dominate.
+    if 2 * M * K * N >= _APPLE_REDUCE_COMPOSE_MIN_FLOP:
+        scores = _apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+        return _apple_gpu_dispatch_mpsgraph_softmax(scores, np)
 
     if a.dtype == np.float32:
         # f32: routed through the synthesizer (Optimizing-Compiler Plan F2b +
@@ -9586,6 +9605,16 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
         raise ValueError("matmul_rmsnorm fusion requires two operands (A, B)")
     a = np.asarray(operands[0])
     b = np.asarray(operands[1])
+    # Perf (F2d measurement): route a matmul-heavy reduction to MPS matmul +
+    # MPSGraph rmsnorm (compose) — 4-55x faster than the synthesized fused
+    # kernel's scalar/coopmat-limited matmul. Tiny matmuls keep the single
+    # fused dispatch.
+    if (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
+            and 2 * a.shape[0] * a.shape[1] * b.shape[1]
+            >= _APPLE_REDUCE_COMPOSE_MIN_FLOP):
+        scores = _apple_gpu_dispatch_matmul("tessera.matmul", [a, b], np)
+        return _apple_gpu_dispatch_rowop(
+            "tessera.rmsnorm", [scores], {"eps": eps}, np)
     if not (
         a.ndim == 2 and b.ndim == 2
         and a.shape[1] == b.shape[0]

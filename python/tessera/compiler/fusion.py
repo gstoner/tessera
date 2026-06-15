@@ -553,9 +553,10 @@ _COOPMAT_REDUCTIONS: dict[str, str] = {
 
 def coopmat_reduce_eligible(region: FusedRegion, N: int) -> bool:
     """v2 covers a terminal reduction (softmax/rmsnorm) when the row fits the
-    threadgroup-memory cap."""
+    threadgroup-memory cap and N is a multiple of 8 (the simdgroup 8x8 stores)."""
     return (region.reduction in _COOPMAT_REDUCTIONS
-            and 0 < N <= SYNTH_COOPMAT_REDUCE_MAX_N)
+            and 0 < N <= SYNTH_COOPMAT_REDUCE_MAX_N
+            and N % 8 == 0)
 
 
 def synthesize_matmul_reduction_coopmat_msl(region: FusedRegion,
@@ -594,33 +595,44 @@ kernel void {_ENTRY_COOPMAT_REDUCE}(
     int brow = int(tg) * BM;
     if (brow >= M || N > MAXN) return;
     threadgroup {io} As[BM * BK];
-    threadgroup {io} Bs[BK * 8];
+    threadgroup {io} Bs[BK * 32];
     threadgroup float Cs[BM * MAXN];
 
-    // Compute the BM × N score strip, one 8-col tile at a time.
-    for (int jb = 0; jb < N; jb += 8) {{
-        simdgroup_float8x8 acc = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+    // Compute the BM × N score strip in 32-col blocks, holding 4 simdgroup
+    // accumulators per block (v2.1) — the A row-block is staged once per K-slab
+    // and reused across 4 output tiles, ~4x less A traffic than 8-col tiles.
+    // (N is a multiple of 8 by eligibility, so each 8x8 store stays in bounds.)
+    for (int jb = 0; jb < N; jb += 32) {{
+        simdgroup_float8x8 acc[4];
+        for (int j = 0; j < 4; ++j)
+            acc[j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
         for (int k0 = 0; k0 < K; k0 += BK) {{
             for (int e = int(tid); e < BM * BK; e += 32) {{
                 int r = e / BK, kk = e % BK;
                 int gr = brow + r, gk = k0 + kk;
                 As[e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
             }}
-            for (int e = int(tid); e < BK * 8; e += 32) {{
-                int kk = e / 8, c = e % 8;
+            for (int e = int(tid); e < BK * 32; e += 32) {{
+                int kk = e / 32, c = e % 32;
                 int gk = k0 + kk, gc = jb + c;
                 Bs[e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
             }}
             threadgroup_barrier(mem_flags::mem_threadgroup);
             for (int kk = 0; kk < BK; kk += 8) {{
-                {sg_in} a, b;
+                {sg_in} a;
                 simdgroup_load(a, As + kk, BK);
-                simdgroup_load(b, Bs + kk * 8, 8);
-                simdgroup_multiply_accumulate(acc, a, b, acc);
+                for (int j = 0; j < 4; ++j) {{
+                    {sg_in} b;
+                    simdgroup_load(b, Bs + kk * 32 + j * 8, 32);
+                    simdgroup_multiply_accumulate(acc[j], a, b, acc[j]);
+                }}
             }}
             threadgroup_barrier(mem_flags::mem_threadgroup);
         }}
-        simdgroup_store(acc, Cs + jb, N);   // 8 rows × 8 cols at column jb
+        for (int j = 0; j < 4; ++j) {{
+            int col = jb + j * 8;
+            if (col < N) simdgroup_store(acc[j], Cs + col, N);
+        }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }}
 

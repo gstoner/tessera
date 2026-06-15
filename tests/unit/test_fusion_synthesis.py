@@ -905,6 +905,29 @@ def test_coopmat_reduce_equals_unfused_on_metal(chain, red, has_bias, dtype, sha
                        atol=atol, rtol=atol)
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="dispatch runs on Metal.")
+def test_matmul_heavy_reduction_routes_to_compose_and_is_correct():
+    # Perf routing (F2d measurement): a matmul-heavy matmul->softmax/rmsnorm
+    # routes to MPS-matmul + MPSGraph-reduce (compose) instead of the slow
+    # synthesized fused-reduction kernel. Verify the result is still correct.
+    import numpy as np
+    from tessera.runtime import (
+        _apple_gpu_dispatch_matmul_softmax, _apple_gpu_dispatch_matmul_rmsnorm,
+        _APPLE_REDUCE_COMPOSE_MIN_FLOP,
+    )
+    M, K, N = 512, 512, 256                     # 2*M*K*N = 134M >> gate (8M)
+    assert 2 * M * K * N >= _APPLE_REDUCE_COMPOSE_MIN_FLOP
+    A = (np.random.RandomState(0).randn(M, K) * 0.3).astype(np.float32)
+    B = (np.random.RandomState(1).randn(K, N) * 0.3).astype(np.float32)
+    s = A @ B
+    out_sm = _apple_gpu_dispatch_matmul_softmax([A, B], np)
+    e = np.exp(s - s.max(-1, keepdims=True))
+    assert np.allclose(out_sm, e / e.sum(-1, keepdims=True), rtol=1e-3, atol=1e-4)
+    out_rn = _apple_gpu_dispatch_matmul_rmsnorm([A, B], 1e-5, np)
+    rms = np.sqrt(np.mean(s * s, -1, keepdims=True) + 1e-5)
+    assert np.allclose(out_rn, s / rms, rtol=1e-3, atol=1e-4)
+
+
 def test_coopmat_reduce_falls_back_above_cap():
     # N over the threadgroup cap → not eligible → scalar run_fused_region (still
     # correct). Portable (no Metal needed for the fallback contract).

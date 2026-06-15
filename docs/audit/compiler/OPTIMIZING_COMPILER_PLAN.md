@@ -202,17 +202,30 @@ on Apple — no `cp.async`, so the threadgroup prefetch doesn't overlap load wit
 compute the way it does on NVIDIA.  The real tile upgrade is 64×64 register
 blocking (`mtl4_matmul_sg_fast` hits ~80% of MPS); deferred as perf-only.
 
-**v2 (landed) — softmax/rmsnorm on the matrix units:**
+**v2 (landed) — softmax/rmsnorm coopmat reduction:**
 `synthesize_matmul_reduction_coopmat_msl` + `…_reduce_coopmat` C ABI: one
 threadgroup computes a BM-row block × the full N via simdgroup MMA into
-threadgroup memory, then reduces each row in the same kernel (no global
-round-trip).  Oracle-gated (softmax/rmsnorm, f16/f32, N ≤ 512).  Measured **7.2×**
-over the scalar reduction kernel — but ~90 GF/s, far below the pointwise coopmat
-(~1289): the BM=8 / one-simdgroup / one-thread-per-row-reduce design is the
-bottleneck.  **Not wired as the `run_fused_region` default** (a v2.1 with more
-simdgroups + a cooperative reduction, or routing small-N reductions to
-MPS-matmul + MPSGraph-reduce, is likely faster — pending a fuller comparison); it
-ships as the proven, measured `run_fused_region_coopmat_reduce` path.
+threadgroup memory, then reduces each row in the same kernel.  Oracle-gated
+(softmax/rmsnorm, f16/f32, N ≤ 512, N % 8 == 0).  Measured **7.2×** over the
+scalar reduction kernel — but ~90 GF/s.  **v2.1** (32-col blocks, 4 accumulators)
+confirmed the bottleneck is *not* A-restaging but the structural limit (full row
+in one threadgroup → BM=8, one simdgroup, serial row reduce).
+
+**The measurement that settled it (the real perf win):** MPS-matmul + MPSGraph-
+reduce (compose) is **4–9.5×** faster than coopmat-reduce and ~55× faster than
+the scalar fused kernel — Apple's optimized GEMM crushes both for the matmul.
+And the production `@jit` matmul→softmax/rmsnorm at a matmul-heavy shape was on
+the *scalar* path (measured **85 ms** at 2048×1024×256).  So:
+- **Reductions route to MPS-compose** when the matmul is non-trivial
+  (`_APPLE_REDUCE_COMPOSE_MIN_FLOP`, gated in the softmax/rmsnorm dispatchers).
+  Production `@jit` measured **85 → 2.75 ms (31×)** and **167 → 3.76 ms (44×)**.
+  Tiny matmuls keep the single fused dispatch.
+- **Pointwise stays coopmat** — measured competitive (1.8× over compose at 512³,
+  ~tie at 256-wide, only 1.37× behind MPS-compose at the very largest), and it
+  keeps the epilogue fused.
+- `run_fused_region_coopmat_reduce` stays as a proven, measured alternative but
+  is *not* the production path (compose wins for matmul-heavy; the scalar fused
+  kernel handles sub-gate tiny shapes).
 
 **Deferred (honest):**
 - **F2d v2.1 / tile upgrade** — more simdgroups + cooperative row reduction for

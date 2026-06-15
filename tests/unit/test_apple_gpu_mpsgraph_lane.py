@@ -269,27 +269,24 @@ def test_jit_tier1_ops_metal_runtime_on_darwin():
     assert _jit_silu.runtime_artifact().metadata["execution_mode"] == "metal_runtime"
 
 
-def test_native_half_fused_symbols_are_exported():
-    """The native-half fused-chain symbols must be present in the loaded
-    runtime (Darwin .mm or portable stub) so the dispatchers can prefer a
-    single fused kernel over the compose path."""
+def test_synthesized_epilogue_symbols_are_exported():
+    """Catalog retirement (Optimizing-Compiler Plan F2): the per-kernel f16/bf16
+    matmul_{gelu,rmsnorm,softmax}(_tiled) symbols are RETIRED — the synthesized
+    epilogue symbols (f32 stack + tiled + native f16) subsume the whole family.
+    The dispatchers now prefer the synthesizer over the compose path."""
     rt = R._load_apple_gpu_runtime()
     for sym in (
-        "tessera_apple_gpu_matmul_softmax_tiled_f16",
-        "tessera_apple_gpu_matmul_softmax_tiled_bf16",
-        "tessera_apple_gpu_matmul_gelu_f16",
-        "tessera_apple_gpu_matmul_gelu_bf16",
-        "tessera_apple_gpu_matmul_rmsnorm_f16",
-        "tessera_apple_gpu_matmul_rmsnorm_bf16",
+        "tessera_apple_gpu_synth_matmul_epilogue_f32",
+        "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32",
+        "tessera_apple_gpu_synth_matmul_epilogue_f16",
     ):
         assert hasattr(rt, sym), sym
-    # The ctypes loaders bind argtypes without raising.
-    assert R._apple_gpu_matmul_softmax_tiled_f16() is not None
-    assert R._apple_gpu_matmul_softmax_tiled_bf16() is not None
-    assert R._apple_gpu_matmul_gelu_f16() is not None
-    assert R._apple_gpu_matmul_gelu_bf16() is not None
-    assert R._apple_gpu_matmul_rmsnorm_f16() is not None
-    assert R._apple_gpu_matmul_rmsnorm_bf16() is not None
+    for retired in (
+        "tessera_apple_gpu_matmul_softmax_tiled_f16",
+        "tessera_apple_gpu_matmul_gelu_f16",
+        "tessera_apple_gpu_matmul_rmsnorm_bf16",
+    ):
+        assert not hasattr(rt, retired), f"retired kernel still present: {retired}"
 
 
 @pytest.mark.skipif(not DARWIN, reason="Metal device required")

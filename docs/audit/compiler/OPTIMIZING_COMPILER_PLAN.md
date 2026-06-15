@@ -179,13 +179,21 @@ the f16/bf16 MSL sources stay — the native f16/bf16 kernels reuse them via fp3
 conversion. Lit fixtures + roadmap + target-IR contract + ABI-floor audits
 (f32 families 3→2) updated; `runtime_abi` regenerated.
 
-**Honest scope:** only genuinely-subsumed *f32* kernels are retired. The native
-f16/bf16 gelu/rmsnorm/softmax kernels remain.
+**f16/bf16 retirement (landed):** with half-precision synthesis in place (`half`
+I/O + fp32 accumulators; bf16 host-converts), the **8** per-kernel f16/bf16
+symbols — `matmul_{gelu,rmsnorm,softmax}_{f16,bf16}` + `matmul_softmax_tiled_{f16,bf16}`
+— are deleted across the C ABI (.mm + stub), symbol table, freshness getattrs,
+dispatch, the C++ softmax pass (now synth for **all** dtypes), `target_ir.py`, and
+the lit/roadmap/audit surfaces. The whole `matmul_{gelu,rmsnorm,softmax}` catalog
+family is gone; one synthesized symbol set (`synth_matmul_epilogue{,_tiled,_f16}`)
+covers it. **Count-down complete** for the matmul-epilogue catalog.
 
 **Deferred (honest):**
-- **f16/bf16 retirement** — needs the synthesizer to gain native half-precision
-  emission (`half` I/O + fp32 accumulators, bf16 via fp32-convert). Once landed,
-  the shared internal f32 helpers become genuinely dead and can be deleted too.
+- **Free the dead internal helpers** — the C++ `dispatch_matmul_*_msl{,_f16}` /
+  `reference_matmul_*` / `*_via_fp32` helpers + their MSL-source constants are now
+  unreferenced (the public symbols that called them are gone). They linger as
+  `-Wunused-function` warnings (build still clean — no `-Werror`); a mechanical
+  follow-up deletes them.
 - **Runtime attention dispatch** — `discover_attention_regions` is a tested pure
   function, but is *not* dispatched from `_apple_gpu_try_synthesized_fusion`: the
   score matmul feeds the *transposed* K (operand shape `(D, Nk)`) while

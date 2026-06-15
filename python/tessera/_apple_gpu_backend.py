@@ -86,10 +86,8 @@ def _load():
         ("tessera_apple_gpu_mps_matmul_bf16", [u16, u16, u16, i32, i32, i32]),
         ("tessera_apple_gpu_softmax_bf16", [u16, u16, i32, i32]),
         ("tessera_apple_gpu_gelu_bf16", [u16, u16, i32]),
-        ("tessera_apple_gpu_matmul_softmax_bf16", [u16, u16, u16, i32, i32, i32]),
         ("tessera_apple_gpu_matmul_softmax_matmul_bf16", [u16, u16, u16, u16, i32, i32, i32, i32]),
-        ("tessera_apple_gpu_matmul_gelu_bf16", [u16, u16, u16, i32, i32, i32]),
-        ("tessera_apple_gpu_matmul_rmsnorm_bf16", [u16, u16, u16, i32, i32, i32, flt]),
+        # matmul_{softmax,gelu,rmsnorm}_bf16 RETIRED (catalog retirement, F2).
         ("tessera_apple_gpu_swiglu_bf16", [u16, u16, u16, u16, u16, i32, i32, i32, i32]),
         # Sprint 3.5 — native bf16 MPSGraph unary/binary/norm kernels.
         ("tessera_apple_gpu_mpsgraph_unary_bf16", [i32, u16, u16, i64]),
@@ -510,16 +508,9 @@ def gpu_matmul_softmax(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     b = _arr(b, "b")
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
         raise AppleGpuError(f"gpu_matmul_softmax shapes: {a.shape} @ {b.shape}")
-    M, K = int(a.shape[0]), int(a.shape[1])
-    N = int(b.shape[1])
-    if _is_bf16(a) or _is_bf16(b):
-        a, b = _to_bf16(a), _to_bf16(b)
-        out = np.zeros((M, N), _BF16)
-        _load().tessera_apple_gpu_matmul_softmax_bf16(
-            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
-        return out
-    # f32: routed through the synthesizer (F2b + tiled) — the hand-written
-    # matmul_softmax_f32 / matmul_softmax_tiled_f32 kernels are retired.
+    # All dtypes routed through the synthesizer (F2 — stack/tiled + half
+    # precision); the hand-written matmul_softmax_{f32,f16,bf16} + tiled kernels
+    # are retired.  bf16 converts to f32 inside run_fused_region.
     from tessera.compiler.fusion import FusedRegion, run_fused_region
     out, _exec = run_fused_region(FusedRegion((), reduction="softmax"), a, b)
     return out
@@ -705,15 +696,8 @@ def gpu_matmul_gelu(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         raise AppleGpuError(f"gpu_matmul_gelu shapes: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
-    if _is_bf16(a) or _is_bf16(b):
-        a, b = _to_bf16(a), _to_bf16(b)
-        out = np.zeros((M, N), _BF16)
-        _load().tessera_apple_gpu_matmul_gelu_bf16(
-            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
-        return out
-    # f32: the synthesizer (Optimizing-Compiler Plan F2a) subsumes the
-    # hand-written matmul_gelu kernel, oracle-proven bit-close — so this chain
-    # routes through it and the catalog f32 kernel is retired.
+    # All dtypes routed through the synthesizer (F2 — half precision included);
+    # the hand-written matmul_gelu_{f32,f16,bf16} kernels are retired.
     from tessera.compiler.fusion import FusedRegion, run_fused_region
     out, _exec = run_fused_region(FusedRegion(("gelu",)), a, b)
     return out
@@ -728,14 +712,8 @@ def gpu_matmul_rmsnorm(a: np.ndarray, b: np.ndarray, eps: float = 1e-5) -> np.nd
         raise AppleGpuError(f"gpu_matmul_rmsnorm shapes: {a.shape} @ {b.shape}")
     M, K = int(a.shape[0]), int(a.shape[1])
     N = int(b.shape[1])
-    if _is_bf16(a) or _is_bf16(b):
-        a, b = _to_bf16(a), _to_bf16(b)
-        out = np.zeros((M, N), _BF16)
-        _load().tessera_apple_gpu_matmul_rmsnorm_bf16(
-            _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K, float(eps))
-        return out
-    # f32: routed through the synthesizer (F2b reduction epilogue) — the
-    # hand-written matmul_rmsnorm_f32 kernel is retired.
+    # All dtypes routed through the synthesizer (F2 — half precision included);
+    # the hand-written matmul_rmsnorm_{f32,f16,bf16} kernels are retired.
     from tessera.compiler.fusion import FusedRegion, run_fused_region
     out, _exec = run_fused_region(
         FusedRegion((), reduction="rmsnorm", eps=float(eps)), a, b)

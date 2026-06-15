@@ -355,19 +355,17 @@ def _apple_gpu_kernel_msl_for_dtype(
         return (_APPLE_GPU_FLASH_ATTN_MSL_SOURCE, "flash_attn_f32",
                 _APPLE_GPU_FLASH_ATTN_MSL_CACHE_KEY, "f32")
     if kernel == "matmul_softmax":
-        if dtype == "f16":
-            return (_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE_F16, "matmul_softmax_f16",
-                    _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY_F16, "f16")
-        if dtype == "bf16":
-            return (_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE, "matmul_softmax_bf16",
-                    _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY, "bf16")
-        # f32: SYNTHESIZED (Optimizing-Compiler Plan F2 — the threadgroup-tiled
-        # synthesizer subsumes matmul_softmax_f32 / matmul_softmax_tiled_f32).
+        # SYNTHESIZED for all dtypes (Optimizing-Compiler Plan F2 — the
+        # threadgroup-tiled + half-precision synthesizer subsumes
+        # matmul_softmax_{f32,f16,bf16} + tiled variants). f16 embeds the half
+        # source; bf16 host-converts to f32, so it embeds the f32 source.
         from tessera.compiler.fusion import (
             _ENTRY, FusedRegion, synthesize_matmul_epilogue_msl,
         )
-        src = synthesize_matmul_epilogue_msl(FusedRegion((), reduction="softmax"))
-        return (src, _ENTRY, _sha256_short(src), "f32")
+        region = FusedRegion((), reduction="softmax")
+        synth_dtype = "f16" if dtype == "f16" else "f32"
+        src = synthesize_matmul_epilogue_msl(region, dtype=synth_dtype)
+        return (src, _ENTRY, _sha256_short(src), dtype)
     if kernel == "matmul_softmax_matmul":
         if dtype == "f16":
             return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16,

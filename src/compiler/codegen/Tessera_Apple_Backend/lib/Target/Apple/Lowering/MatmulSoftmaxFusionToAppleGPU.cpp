@@ -51,16 +51,14 @@ namespace apple {
 
 namespace {
 
-// Optimizing-Compiler Plan F2 (catalog retirement) — the f32 matmul->softmax
-// lowers to the generic synthesized epilogue kernel (the threadgroup-tiled
-// synthesizer now covers large N, so it subsumes matmul_softmax_f32 /
-// matmul_softmax_tiled_f32).  f16/bf16 keep their native kernels for now.
+// Optimizing-Compiler Plan F2 (catalog retirement) — matmul->softmax lowers to
+// the generic synthesized epilogue kernel for ALL dtypes.  The synthesizer now
+// covers large N (threadgroup-tiled) and half precision (f16 native I/O, bf16
+// host-convert), so it subsumes matmul_softmax_{f32,f16,bf16} + their tiled
+// variants.  The emission is symbolic (uniform (A,B,O,M,N,K) signature); the
+// runtime picks the actual f32/f16/bf16 dispatch.
 constexpr llvm::StringLiteral kSynthEpilogueF32Symbol =
     "tessera_apple_gpu_synth_matmul_epilogue_f32";
-constexpr llvm::StringLiteral kMatmulSoftmaxF16Symbol =
-    "tessera_apple_gpu_matmul_softmax_f16";
-constexpr llvm::StringLiteral kMatmulSoftmaxBF16Symbol =
-    "tessera_apple_gpu_matmul_softmax_bf16";
 
 
 
@@ -92,16 +90,9 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     if (!smTy || smTy.getRank() != 2)
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: rank-2 only");
     Type smElem = smTy.getElementType();
-    StringRef symbol;
-    bool isSynth = false;
-    if (smElem.isF32()) {
-      symbol = kSynthEpilogueF32Symbol;
-      isSynth = true;
-    } else if (smElem.isF16()) {
-      symbol = kMatmulSoftmaxF16Symbol;
-    } else if (smElem.isBF16()) {
-      symbol = kMatmulSoftmaxBF16Symbol;
-    } else {
+    StringRef symbol = kSynthEpilogueF32Symbol;   // synthesized for all dtypes
+    bool isSynth = true;
+    if (!(smElem.isF32() || smElem.isF16() || smElem.isBF16())) {
       return rewriter.notifyMatchFailure(
           softmaxOp, "fusion: f32, f16, or bf16 only in Phase 8.4.4.2");
     }

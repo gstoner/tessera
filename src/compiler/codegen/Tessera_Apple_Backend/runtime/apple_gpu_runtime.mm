@@ -6295,34 +6295,8 @@ bool dispatch_matmul_softmax_bf16_via_fp32(MetalDeviceContext &ctx,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_softmax_f16(const uint16_t* A,
-                                                     const uint16_t* B,
-                                                     uint16_t* O,
-                                                     int32_t M, int32_t N,
-                                                     int32_t K) {
-  if (N > 256) {
-    reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_msl_f16(ctx, A, B, O, M, N, K)) return;
-  reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
-}
-
-extern "C" void tessera_apple_gpu_matmul_softmax_bf16(const uint16_t* A,
-                                                      const uint16_t* B,
-                                                      uint16_t* O,
-                                                      int32_t M, int32_t N,
-                                                      int32_t K) {
-  if (N > 256) {
-    reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_bf16_via_fp32(ctx, A, B, O, M, N, K))
-    return;
-  reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
-}
+// tessera_apple_gpu_matmul_softmax_{f16,bf16} — RETIRED (catalog retirement,
+// Optimizing-Compiler Plan F2): the half-precision synthesizer subsumes them.
 
 //===---------------------------------------------------------------------===//
 // Native half-precision threadgroup-tiled matmul -> softmax (large N).
@@ -6484,35 +6458,8 @@ bool dispatch_matmul_softmax_tiled_bf16_via_fp32(MetalDeviceContext &ctx,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_softmax_tiled_f16(const uint16_t* A,
-                                                           const uint16_t* B,
-                                                           uint16_t* O,
-                                                           int32_t M, int32_t N,
-                                                           int32_t K) {
-  if (N > 8192) {
-    reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_tiled_msl_f16(ctx, A, B, O, M, N, K))
-    return;
-  reference_matmul_softmax_f16_via_fp32(A, B, O, M, N, K);
-}
-
-extern "C" void tessera_apple_gpu_matmul_softmax_tiled_bf16(const uint16_t* A,
-                                                            const uint16_t* B,
-                                                            uint16_t* O,
-                                                            int32_t M, int32_t N,
-                                                            int32_t K) {
-  if (N > 8192) {
-    reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_tiled_bf16_via_fp32(ctx, A, B, O, M, N, K))
-    return;
-  reference_matmul_softmax_bf16_via_fp32(A, B, O, M, N, K);
-}
+// tessera_apple_gpu_matmul_softmax_tiled_{f16,bf16} — RETIRED (catalog
+// retirement, F2): the tiled half-precision synthesizer subsumes them.
 
 //===---------------------------------------------------------------------===//
 // Phase 8.4.5 — Fused matmul -> softmax -> matmul (full attention block)
@@ -7806,61 +7753,12 @@ bool dispatch_matmul_rmsnorm_bf16_via_fp32(MetalDeviceContext &ctx,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_gelu_f16(const uint16_t* A,
-                                                  const uint16_t* B, uint16_t* O,
-                                                  int32_t M, int32_t N,
-                                                  int32_t K) {
-  if (N > 256) {
-    reference_matmul_gelu_f16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_gelu_msl_f16(ctx, A, B, O, M, N, K)) return;
-  reference_matmul_gelu_f16_via_fp32(A, B, O, M, N, K);
-}
-
-extern "C" void tessera_apple_gpu_matmul_gelu_bf16(const uint16_t* A,
-                                                   const uint16_t* B,
-                                                   uint16_t* O, int32_t M,
-                                                   int32_t N, int32_t K) {
-  if (N > 256) {
-    reference_matmul_gelu_bf16_via_fp32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_gelu_bf16_via_fp32(ctx, A, B, O, M, N, K)) return;
-  reference_matmul_gelu_bf16_via_fp32(A, B, O, M, N, K);
-}
-
-extern "C" void tessera_apple_gpu_matmul_rmsnorm_f16(const uint16_t* A,
-                                                     const uint16_t* B,
-                                                     uint16_t* O, int32_t M,
-                                                     int32_t N, int32_t K,
-                                                     float eps) {
-  if (N > 256) {
-    reference_matmul_rmsnorm_f16_via_fp32(A, B, O, M, N, K, eps);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_rmsnorm_msl_f16(ctx, A, B, O, M, N, K, eps))
-    return;
-  reference_matmul_rmsnorm_f16_via_fp32(A, B, O, M, N, K, eps);
-}
-
-extern "C" void tessera_apple_gpu_matmul_rmsnorm_bf16(const uint16_t* A,
-                                                      const uint16_t* B,
-                                                      uint16_t* O, int32_t M,
-                                                      int32_t N, int32_t K,
-                                                      float eps) {
-  if (N > 256) {
-    reference_matmul_rmsnorm_bf16_via_fp32(A, B, O, M, N, K, eps);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_rmsnorm_bf16_via_fp32(ctx, A, B, O, M, N, K, eps))
-    return;
-  reference_matmul_rmsnorm_bf16_via_fp32(A, B, O, M, N, K, eps);
-}
+// tessera_apple_gpu_matmul_{gelu,rmsnorm}_{f16,bf16} — RETIRED (catalog
+// retirement, Optimizing-Compiler Plan F2): the half-precision synthesizer
+// subsumes them.  This empties the last consumers of the shared internal f32
+// helpers (dispatch_matmul_{gelu,rmsnorm}_msl / reference_*_f32 / the MSL
+// sources) and the f16/bf16 via-fp32 helpers — now dead, see the namespace
+// blocks above.
 
 //===---------------------------------------------------------------------===//
 // Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the SwiGLU Performance

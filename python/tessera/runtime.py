@@ -9356,14 +9356,13 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     # memory, so N_max = threadgroup_memory_budget // 4. On every current
     # Apple arch that is 32 KB // 4 = 8192 (preserving the old constant),
     # and it auto-scales on a higher-memory SKU.
+    # All of f32/f16/bf16 now route through the synthesizer (stack + tiled +
+    # half), so the single-kernel envelope is the tiled cap for every dtype.
     tiled_n_cap = _apple_threadgroup_tiled_softmax_n_cap()
     bf16_dtype = _bfloat16_dtype()
-    if a.dtype == np.float32:
+    if a.dtype == np.float32 or a.dtype == np.float16 or (
+            bf16_dtype is not None and a.dtype == bf16_dtype):
         n_max = tiled_n_cap
-    elif a.dtype == np.float16:
-        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_f16() is not None else _apple_fused_score_cap()
-    elif bf16_dtype is not None and a.dtype == bf16_dtype:
-        n_max = tiled_n_cap if _apple_gpu_matmul_softmax_tiled_bf16() is not None else _apple_fused_score_cap()
     else:
         n_max = _apple_fused_score_cap()
 
@@ -9396,48 +9395,19 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
         out, _exec = run_fused_region(FusedRegion((), reduction="softmax"), a, b)
         return out
 
-    if a.dtype == np.float16:
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=np.float16)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=np.float16)
-        out = np.zeros((M, N), dtype=np.float16)
-        # Per-thread kernel for N<=256 (no threadgroup sync, faster);
-        # threadgroup-tiled native kernel for larger N.
-        fused_f16 = (_apple_gpu_matmul_softmax_f16() if N <= _apple_fused_score_cap()
-                     else _apple_gpu_matmul_softmax_tiled_f16())
-        if fused_f16 is not None:
-            fused_f16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-            )
-            return out
-        scores = (a.astype(np.float32) @ b.astype(np.float32))
-        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
-        return (e / np.sum(e, axis=-1, keepdims=True)).astype(np.float16)
-
+    # f16/bf16: routed through the synthesizer (F2 half-precision) — the
+    # hand-written matmul_softmax_{f16,bf16} + tiled variants are retired.
+    # f16 native half kernel, bf16 convert; both cover N<=8192.
     bf16_dtype = _bfloat16_dtype()
-    if bf16_dtype is not None and a.dtype == bf16_dtype:
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=bf16_dtype)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=bf16_dtype)
-        out = np.zeros((M, N), dtype=bf16_dtype)
-        fused_bf16 = (_apple_gpu_matmul_softmax_bf16() if N <= _apple_fused_score_cap()
-                      else _apple_gpu_matmul_softmax_tiled_bf16())
-        if fused_bf16 is not None:
-            fused_bf16(
-                a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-                ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-            )
-            return out
+    if a.dtype == np.float16 or (bf16_dtype is not None and a.dtype == bf16_dtype):
+        if N <= _apple_threadgroup_tiled_softmax_n_cap():
+            from tessera.compiler.fusion import FusedRegion, run_fused_region
+            out, ex = run_fused_region(FusedRegion((), reduction="softmax"), a, b)
+            if ex == "metal_runtime":
+                return out
         scores = (a.astype(np.float32) @ b.astype(np.float32))
         e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
-        return (e / np.sum(e, axis=-1, keepdims=True)).astype(bf16_dtype)
+        return (e / np.sum(e, axis=-1, keepdims=True)).astype(a.dtype)
 
     scores = np.matmul(a, b)
     e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
@@ -9553,38 +9523,19 @@ def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
 
 
 def _apple_gpu_matmul_gelu_fused_half(a: Any, b: Any, np: Any) -> Any:
-    """Native single fused matmul -> gelu MSL kernel for f16/bf16, N<=256.
-    Returns the result array, or None when not applicable (wrong dtype, rank,
-    N>256, or the half symbol isn't exported by the loaded runtime) so the
-    caller can fall through to the compose path."""
+    """f16/bf16 fused matmul -> gelu via the SYNTHESIZER (Optimizing-Compiler
+    Plan F2 half-precision) — the hand-written matmul_gelu_{f16,bf16} kernels are
+    retired.  f16 runs a native half kernel, bf16 converts to f32; covers N<=8192
+    (stack + tiled).  Returns the result, or None when not applicable so the
+    caller composes."""
     bf16_dtype = _bfloat16_dtype()
+    is_half = a.dtype == np.float16 or (bf16_dtype is not None and a.dtype == bf16_dtype)
     if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
-            and b.shape[1] <= _apple_fused_score_cap() and a.dtype == b.dtype):
+            and a.dtype == b.dtype and is_half and b.shape[1] <= 8192):
         return None
-    if a.dtype == np.float16:
-        fused = _apple_gpu_matmul_gelu_f16()
-        dt = np.float16
-    elif bf16_dtype is not None and a.dtype == bf16_dtype:
-        fused = _apple_gpu_matmul_gelu_bf16()
-        dt = bf16_dtype
-    else:
-        return None
-    if fused is None:
-        return None
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=dt)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=dt)
-    M, K = a.shape
-    N = b.shape[1]
-    out = np.zeros((M, N), dtype=dt)
-    fused(
-        a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-    )
-    return out
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, ex = run_fused_region(FusedRegion(("gelu",)), a, b)
+    return out if ex == "metal_runtime" else None
 
 
 def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
@@ -9672,38 +9623,18 @@ def _apple_gpu_matmul_gelu_bf16() -> Any:
 
 def _apple_gpu_matmul_rmsnorm_fused_half(a: Any, b: Any, eps: float,
                                          np: Any) -> Any:
-    """Native single fused matmul -> rmsnorm MSL kernel for f16/bf16, N<=256.
-    Returns the result array, or None when not applicable so the caller can
-    fall through to the compose path."""
+    """f16/bf16 fused matmul -> rmsnorm via the SYNTHESIZER (F2 half-precision)
+    — the hand-written matmul_rmsnorm_{f16,bf16} kernels are retired.  Covers
+    N<=8192.  Returns the result, or None when not applicable."""
     bf16_dtype = _bfloat16_dtype()
+    is_half = a.dtype == np.float16 or (bf16_dtype is not None and a.dtype == bf16_dtype)
     if not (a.ndim == 2 and b.ndim == 2 and a.shape[1] == b.shape[0]
-            and b.shape[1] <= _apple_fused_score_cap() and a.dtype == b.dtype):
+            and a.dtype == b.dtype and is_half and b.shape[1] <= 8192):
         return None
-    if a.dtype == np.float16:
-        fused = _apple_gpu_matmul_rmsnorm_f16()
-        dt = np.float16
-    elif bf16_dtype is not None and a.dtype == bf16_dtype:
-        fused = _apple_gpu_matmul_rmsnorm_bf16()
-        dt = bf16_dtype
-    else:
-        return None
-    if fused is None:
-        return None
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=dt)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=dt)
-    M, K = a.shape
-    N = b.shape[1]
-    out = np.zeros((M, N), dtype=dt)
-    fused(
-        a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        b.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16)),
-        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-        ctypes.c_float(eps),
-    )
-    return out
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, ex = run_fused_region(
+        FusedRegion((), reduction="rmsnorm", eps=float(eps)), a, b)
+    return out if ex == "metal_runtime" else None
 
 
 def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any) -> Any:
@@ -10641,33 +10572,19 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_softmax_bf16")
                 getattr(lib, "tessera_apple_gpu_gelu_f16")
                 getattr(lib, "tessera_apple_gpu_gelu_bf16")
-                # Phase 8.4.4.2 — fp16/bf16 for fused matmul_softmax + flash_attn.
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_f16")
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_bf16")
+                # flash_attn fp16/bf16 (matmul_softmax_{f16,bf16} RETIRED, F2).
                 getattr(lib, "tessera_apple_gpu_flash_attn_f16")
                 getattr(lib, "tessera_apple_gpu_flash_attn_bf16")
                 # Phase 8.4.5 — 3-op fusion (full attention block).
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
-                # matmul_softmax_tiled_f32 RETIRED (F2) — the tiled synthesizer
-                # (synth_matmul_epilogue_tiled_f32) subsumes it.
-                # Native-half tiled matmul_softmax (f16/bf16 large-N single kernel).
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f16")
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_bf16")
-                # Phase 8.4.7 — MLP block fusions. The f32 matmul_gelu /
-                # matmul_rmsnorm symbols are RETIRED (catalog retirement,
-                # Optimizing-Compiler Plan F2): the synthesized epilogue kernel
-                # subsumes them. f16/bf16 stay as native single fused kernels.
+                # Catalog retirement (F2): matmul_{gelu,rmsnorm,softmax} +
+                # tiled/half variants are all subsumed by the synthesized
+                # epilogue kernels (f32 stack + tiled + native f16).
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f32")
-                # F2b-tiled — threadgroup-tiled synthesized epilogue (large N).
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32")
-                # F2 half-precision synthesis — native f16 epilogue (stack+tiled).
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f16")
-                getattr(lib, "tessera_apple_gpu_matmul_gelu_f16")
-                getattr(lib, "tessera_apple_gpu_matmul_gelu_bf16")
-                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f16")
-                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_bf16")
                 # Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the
                 # SwiGLU Performance Plan). f32 native MSL + f16/bf16
                 # reference fallback today; native half MSL is a follow-up.

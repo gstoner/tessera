@@ -377,7 +377,7 @@ score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 sddmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
 segment_reduce,4,0,0,4,0,fp32,structural_only,unclassified — defaults to structural_only
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,36,5,2,41,0,,structural_only,unclassified — defaults to structural_only
+selective_ssm,38,5,2,43,0,,structural_only,unclassified — defaults to structural_only
 seq2seq_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'
 sgd,6,0,0,6,0,,needs_direct_test,category default for 'functional_optimizer_step'
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'

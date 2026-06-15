@@ -89,3 +89,54 @@ def test_decode_equals_forward_with_attention_anchors():
     x = rng.standard_normal((2, 9, 24))
     np.testing.assert_allclose(hy.hybrid_decode(x, w, cfg, prefill=1),
                                hy.hybrid_forward(x, w, cfg), rtol=1e-9, atol=1e-9)
+
+
+# ── L4.1 — SSM (Mamba) mixer (Nemotron) ──────────────────────────────────────
+def test_ssm_scan_matches_shipped_selective_ssm_reference():
+    """_ssm_scan (which returns the carried state) must reproduce the shipped
+    tessera.ops.selective_ssm — the L4 op's reference — so the SSM mixer is
+    anchored to ground truth, not self-consistent."""
+    from tessera import ops
+    rng = np.random.default_rng(30)
+    B, S, D, N = 2, 14, 6, 4
+    x = rng.standard_normal((B, S, D))
+    A = -np.exp(rng.standard_normal(D) * 0.1)          # negative, scalar-state
+    Bp = rng.standard_normal((B, S, N))
+    Cp = rng.standard_normal((B, S, N))
+    dt = np.log1p(np.exp(rng.standard_normal((B, S, D))))   # softplus > 0
+    y, h = hy._ssm_scan(x, A, Bp, Cp, dt)
+    ref = np.asarray(ops.selective_ssm(x, A, Bp, Cp, dt))
+    np.testing.assert_allclose(y, ref, rtol=1e-9, atol=1e-9)
+    assert h.shape == (B, D, N)
+
+
+def _nemotron_cfg(num_layers=8):
+    return hy.HybridConfig(d_model=16, num_heads=2, head_dim=8, ssm_state=4,
+                           linear_mixer=hy.SSM,
+                           schedule=hy.nemotron_schedule(num_layers, attn_period=4))
+
+
+@pytest.mark.parametrize("prefill", [1, 2, 5])
+def test_nemotron_ssm_dualcache_decode_equals_recompute(prefill):
+    """Nemotron-shaped: Mamba SSM linear layers + sparse attention anchors.
+    Streaming carries SSM state h (linear) + KV (anchors) ≡ full recompute."""
+    rng = np.random.default_rng(31)
+    cfg = _nemotron_cfg(num_layers=8)
+    assert cfg.mixer_for(0) == hy.SSM and cfg.mixer_for(3) == hy.FULL
+    w = hy.synth_weights(cfg, rng)
+    x = rng.standard_normal((2, 11, cfg.d_model))
+    np.testing.assert_allclose(hy.hybrid_decode(x, w, cfg, prefill=prefill),
+                               hy.hybrid_forward(x, w, cfg), rtol=1e-9, atol=1e-9)
+
+
+def test_all_ssm_stack_decode_equals_recompute():
+    """Pure Mamba stack (no anchors): SSM state carry alone ≡ full forward."""
+    rng = np.random.default_rng(32)
+    cfg = hy.HybridConfig(d_model=16, num_heads=2, head_dim=8, ssm_state=4,
+                          linear_mixer=hy.SSM,
+                          schedule=hy.HybridSchedule(num_layers=5, period=999))
+    assert cfg.schedule.counts()[hy.FULL] == 0
+    w = hy.synth_weights(cfg, rng)
+    x = rng.standard_normal((1, 10, 16))
+    np.testing.assert_allclose(hy.hybrid_decode(x, w, cfg, prefill=3),
+                               hy.hybrid_forward(x, w, cfg), rtol=1e-9, atol=1e-9)

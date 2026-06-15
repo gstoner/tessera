@@ -169,7 +169,7 @@ scaled execution on Apple GPU gated vs numpy.
 | **L3** ✅ | **Hybrid layer schedule** as a first-class attribute | `HybridSchedule` lowers `layer_types` literally; reference stack threads the **dual cache** (recurrent Ŝ for linear layers, KV for full layers) | **streaming dual-cache decode ≡ full recompute** + Qwen3.6 full-config schedule check |
 | **L3.1** | Promote `gated_deltanet` ODS → true rule | Decide + execute the shipped-numerics change (today's op is linear attn); wire the ODS op to the L1.1/L2.1 kernels | DESIL + existing-test migration |
 | **L4** ✅ | `selective_ssm` (Mamba2) ODS op | Materialize the op the registry falsely claimed: `Tessera_SelectiveSsmOp` + verifier; close the drift. Chunk-scan (`_mamba_ssd.py`) + chunk≡sequential oracle already existed | lit roundtrip/verifier + chunk-scan ≡ sequential-scan |
-| **L4.1** | Hybrid SSM mixer (Nemotron) | Add an `ssm` mixer to the L3 hybrid stack (Mamba layers + attention anchors + MoE); carry SSM state in the dual cache | dual-cache decode ≡ recompute with SSM layers |
+| **L4.1** ✅ | Hybrid SSM mixer (Nemotron) | `linear_mixer="ssm"` adds a Mamba SSM mixer to the L3 hybrid stack; SSM state `h[D,N]` carried in the dual cache alongside attention-anchor KV | dual-cache decode ≡ recompute with SSM layers + `_ssm_scan` ≡ shipped `selective_ssm` |
 | **L5** | LFM2.5 LIV mixer variant | `Linear→(B⊙x̃)→depthwise-causal-conv(k=3)→(C⊙z)→Linear_out` as a fused mixer over the existing `depthwise_conv1d` | vs numpy LIV ref; scaled exec |
 
 ### Landed 2026-06-15 — L0–L2 (reference tier, host-free)
@@ -244,9 +244,23 @@ MoE/MTP composition into the hybrid stack (`stdlib.moe` exists; wiring is additi
 (`_mamba_ssd.py::selective_ssm_parallel`) and its **chunk ≡ sequential** oracle
 (`test_mamba_ssd_gpu.py`, 12 tests) already existed and stay green.
 
-**Not yet done (L4.1):** wire an `ssm` mixer into the L3 hybrid stack so a
-Nemotron-shaped model (Mamba + sparse attention anchors + MoE) is expressible
-end-to-end with SSM state carried in the dual cache.
+### Landed 2026-06-15 — L4.1 (hybrid SSM mixer — Nemotron expressible)
+
+`tessera.stdlib.hybrid` now takes `linear_mixer = "delta" | "ssm"`. The stack was
+refactored to per-mixer **span functions** so `hybrid_forward` (one span) and
+`hybrid_decode` (streamed spans) run identical per-layer code — the dual-cache
+oracle is meaningful for all three mixer types (delta Ŝ, SSM h[D,N], attention
+KV).  `_ssm_scan` reproduces the shipped `tessera.ops.selective_ssm` (the L4 op's
+reference) **and returns the carried state** (which the public reference does
+not), so streaming SSM decode is exact.  Nemotron is now the second flagship
+(after Qwen3.6) expressible end-to-end: `nemotron_schedule` + `linear_mixer="ssm"`
+= Mamba layers + sparse attention anchors.  `tests/unit/test_stdlib_hybrid.py`
+(+5 L4.1 oracles): `_ssm_scan ≡ selective_ssm`, Nemotron-shaped dual-cache decode
+≡ recompute (across prefill points), and an all-SSM stack.
+
+**Still open:** MoE/MTP composition into the hybrid stack (`stdlib.moe` exists;
+additive), the optional Mamba short-conv (shares the L5 LIV machinery), L2.2
+(perf), L3.1 (`gated_deltanet` ODS→true-rule), L5 (LFM2.5 LIV mixer).
 
 Sequencing: **L1 unblocks L2** (decode state is the chunk carry); **L2 is the
 keystone** (only the chunked GEMM form is tensor-core-viable for prefill — the

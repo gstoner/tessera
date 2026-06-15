@@ -267,7 +267,7 @@ def hybrid_decode(x, weights, cfg: HybridConfig, prefill: int = 1):
     dual cache — recurrent Ŝ (delta) / h (SSM) for linear layers, KV for full
     layers.  Equals `hybrid_forward` for the same input (the oracle)."""
     B, S, Dm = x.shape
-    caches = [{} for _ in weights]
+    caches: list[dict] = [{} for _ in weights]
     out = np.zeros_like(x)
     out[:, :prefill] = _run_layers(x[:, :prefill], weights, cfg, caches)
     for t in range(prefill, S):

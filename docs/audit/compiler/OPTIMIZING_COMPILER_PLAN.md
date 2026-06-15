@@ -157,35 +157,35 @@ hardware-verified on Apple Silicon); runtime wiring in
 | F3 | ✅ | `fusion_cost`/`attention_cost` + `should_fuse_*` — analytical profitability (stack-fit hard gate, dispatch + DRAM-traffic savings); the runtime declines an over-cap fusion so large-N matmul keeps its tiled/MPS path. |
 | F4 | ✅ | `verify_synthesized_region` codegen-gated oracle — a synthesized kernel runs only after matching the unfused reference on a probe (cached per region-class). A deliberately-broken synthesizer is **rejected** (anti-cheat test, Darwin). |
 | F5 | ✅ | `autotune_matmul_epilogue` — measures synthesis variants (`broadcast`/`dot` matmul schedules) on Metal, **gated behind F3 cost + F4 oracle** (`_pick_best_variant` never picks a fast-but-wrong variant — the Sakana invariant), distilling `(region-class, shape-bucket) → best variant` into an O(1) corpus consumed by the runtime. |
+| F2b-tiled | ✅ | `synthesize_matmul_epilogue_msl_tiled` + `tessera_apple_gpu_synth_matmul_epilogue_tiled_f32` C ABI — threadgroup-tiled large-N synthesis (one row/threadgroup, 32 cooperating threads, dynamic threadgroup memory, tree reduce), lifting the fused envelope from N≤1024 to **N≤8192**. Mirrors the proven `matmul_softmax_tiled_f32` structure; `run_fused_region` picks stack→tiled→reference; F3 cost cap grows to the tiled bound. Reproduces hand-written `matmul_softmax_tiled_f32` bit-close. |
 
-### Catalog retirement (landed) — matmul_gelu_f32 + matmul_rmsnorm_f32
+### Catalog retirement (landed) — 4 f32 kernels retired
 
-The first kernels the synthesizer *retires*, end-to-end across every emission and
-dispatch surface (one symbol replaces two hand-written kernels):
-- **Tile→Apple lowering** (`MatmulGeluFusionToAppleGPU.cpp`,
-  `MatmulRMSNormFusionToAppleGPU.cpp`) + Python `driver.py` emit
-  `func.call @tessera_apple_gpu_synth_matmul_epilogue_f32` with the epilogue (and
-  eps) carried as `tessera.fusion.epilogue` / `tessera.fusion.eps` region
-  descriptors on a uniform `(A,B,O,M,N,K)` signature.
-- **Target IR** (`target_ir.py`) embeds the *synthesized* MSL source (single
-  source of truth) — the hand-written `_APPLE_GPU_MATMUL_{GELU,RMSNORM}_MSL_SOURCE`
-  constants are deleted.
-- **Runtime dispatch** (`runtime.py` + `_apple_gpu_backend.py`) routes the f32
-  matmul→gelu / matmul→rmsnorm paths through `run_fused_region`.
-- **C ABI** — the public `tessera_apple_gpu_matmul_{gelu,rmsnorm}_f32` symbols are
-  deleted from `apple_gpu_runtime.mm` + the stub; the *internal* helpers stay (the
-  native f16/bf16 kernels reuse them via fp32 conversion).
-- Lit fixtures + roadmap + ABI-floor audits updated; `runtime_abi` regenerated.
+The kernels the synthesizer *retires*, end-to-end across every emission and
+dispatch surface (one generic symbol replaces each per-kernel one):
 
-**Honest scope:** only the two genuinely-subsumed kernels are retired.
-`matmul_softmax_f32` is **kept** — it delegates to a threadgroup-tiled large-N
-kernel (`matmul_softmax_tiled_f32`, N up to 8192) that the synthesizer's
-stack-bounded (N≤1024) kernel doesn't yet have; retiring it would regress large-N
-f32 softmax. Retiring it needs F2b to gain a tiled large-N synthesis variant.
+- **matmul_gelu_f32 + matmul_rmsnorm_f32** (pointwise + reduction epilogue).
+- **matmul_softmax_f32 + matmul_softmax_tiled_f32** (after F2b-tiled lifted the
+  large-N gap that previously kept softmax out of scope).
+
+Each retirement touches: the **Tile→Apple C++ pass** (emits
+`@tessera_apple_gpu_synth_matmul_epilogue_f32` + a `tessera.fusion.epilogue`
+region descriptor on a uniform `(A,B,O,M,N,K)` signature) + **driver.py** +
+**target_ir.py** (embeds the *synthesized* source — single source of truth, the
+hand-written MSL-source constants for gelu/rmsnorm deleted) + **runtime/
+`_apple_gpu_backend` dispatch** (routes f32 through `run_fused_region`) + the
+**public C ABI symbol** deleted from the `.mm` + stub. The *internal* helpers and
+the f16/bf16 MSL sources stay — the native f16/bf16 kernels reuse them via fp32
+conversion. Lit fixtures + roadmap + target-IR contract + ABI-floor audits
+(f32 families 3→2) updated; `runtime_abi` regenerated.
+
+**Honest scope:** only genuinely-subsumed *f32* kernels are retired. The native
+f16/bf16 gelu/rmsnorm/softmax kernels remain.
 
 **Deferred (honest):**
-- **Softmax + f16/bf16 retirement** — needs the synthesizer to gain (a) a
-  threadgroup-tiled large-N variant and (b) native half-precision emission.
+- **f16/bf16 retirement** — needs the synthesizer to gain native half-precision
+  emission (`half` I/O + fp32 accumulators, bf16 via fp32-convert). Once landed,
+  the shared internal f32 helpers become genuinely dead and can be deleted too.
 - **Runtime attention dispatch** — `discover_attention_regions` is a tested pure
   function, but is *not* dispatched from `_apple_gpu_try_synthesized_fusion`: the
   score matmul feeds the *transposed* K (operand shape `(D, Nk)`) while

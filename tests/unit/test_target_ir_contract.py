@@ -113,7 +113,9 @@ def test_jit_apple_gpu_matmul_softmax_chain_emits_fused_msl_runtime_contract():
 
     assert 'target = "apple_gpu"' in fused.target_ir
     assert "tessera_apple.gpu.msl_kernel" in fused.target_ir
-    assert 'entry_point = "matmul_softmax_f32"' in fused.target_ir
+    # Optimizing-Compiler Plan F2 — f32 matmul->softmax is SYNTHESIZED (the tiled
+    # synthesizer subsumes matmul_softmax_f32 / _tiled_f32).
+    assert 'entry_point = "synth_matmul_epi"' in fused.target_ir
     assert 'fusion = "matmul_softmax"' in fused.target_ir
     assert 'execution_mode = "metal_runtime"' in fused.target_ir
 

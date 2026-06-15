@@ -66,7 +66,8 @@ def _load():
     for name, argtypes in (
         ("tessera_apple_gpu_mps_matmul_f32", [fp, fp, fp, i32, i32, i32]),
         ("tessera_apple_gpu_softmax_f32", [fp, fp, i32, i32]),
-        ("tessera_apple_gpu_matmul_softmax_f32", [fp, fp, fp, i32, i32, i32]),
+        # matmul_softmax_f32 RETIRED (catalog retirement, F2) — subsumed by the
+        # synthesized epilogue kernel (now tiled-capable for large N).
         ("tessera_apple_gpu_gelu_f32", [fp, fp, i32]),
         # Sprint 3.2 — norms, activations, attention, fused-MLP chains.
         ("tessera_apple_gpu_rmsnorm_gpu_f32", [fp, fp, fp, i32, i32, flt]),
@@ -517,8 +518,10 @@ def gpu_matmul_softmax(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         _load().tessera_apple_gpu_matmul_softmax_bf16(
             _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
         return out
-    out = np.zeros((M, N), np.float32)
-    _load().tessera_apple_gpu_matmul_softmax_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
+    # f32: routed through the synthesizer (F2b + tiled) — the hand-written
+    # matmul_softmax_f32 / matmul_softmax_tiled_f32 kernels are retired.
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, _exec = run_fused_region(FusedRegion((), reduction="softmax"), a, b)
     return out
 
 

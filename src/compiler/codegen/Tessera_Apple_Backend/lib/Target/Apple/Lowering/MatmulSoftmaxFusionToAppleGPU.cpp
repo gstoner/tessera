@@ -51,8 +51,12 @@ namespace apple {
 
 namespace {
 
-constexpr llvm::StringLiteral kMatmulSoftmaxF32Symbol =
-    "tessera_apple_gpu_matmul_softmax_f32";
+// Optimizing-Compiler Plan F2 (catalog retirement) — the f32 matmul->softmax
+// lowers to the generic synthesized epilogue kernel (the threadgroup-tiled
+// synthesizer now covers large N, so it subsumes matmul_softmax_f32 /
+// matmul_softmax_tiled_f32).  f16/bf16 keep their native kernels for now.
+constexpr llvm::StringLiteral kSynthEpilogueF32Symbol =
+    "tessera_apple_gpu_synth_matmul_epilogue_f32";
 constexpr llvm::StringLiteral kMatmulSoftmaxF16Symbol =
     "tessera_apple_gpu_matmul_softmax_f16";
 constexpr llvm::StringLiteral kMatmulSoftmaxBF16Symbol =
@@ -89,8 +93,10 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: rank-2 only");
     Type smElem = smTy.getElementType();
     StringRef symbol;
+    bool isSynth = false;
     if (smElem.isF32()) {
-      symbol = kMatmulSoftmaxF32Symbol;
+      symbol = kSynthEpilogueF32Symbol;
+      isSynth = true;
     } else if (smElem.isF16()) {
       symbol = kMatmulSoftmaxF16Symbol;
     } else if (smElem.isBF16()) {
@@ -177,7 +183,11 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     auto callOp = rewriter.create<func::CallOp>(
         loc, symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
-    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_softmax"));
+    callOp->setAttr("tessera.fusion.kernel",
+                    rewriter.getStringAttr(isSynth ? "synth_matmul_epilogue"
+                                                   : "matmul_softmax"));
+    if (isSynth)
+      callOp->setAttr("tessera.fusion.epilogue", rewriter.getStringAttr("softmax"));
     callOp->setAttr("tessera.fusion.source",
                     rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 

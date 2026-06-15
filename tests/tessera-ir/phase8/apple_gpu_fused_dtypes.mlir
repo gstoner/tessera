@@ -6,7 +6,8 @@
 // lowering passes pick the runtime symbol by input element type.
 
 // Runtime declarations: one per (kernel, dtype) pair.
-// CHECK-DAG: func.func private @tessera_apple_gpu_matmul_softmax_f32(i64, i64, i64, i32, i32, i32)
+// F2 catalog retirement: f32 matmul->softmax lowers to the synthesized epilogue.
+// CHECK-DAG: func.func private @tessera_apple_gpu_synth_matmul_epilogue_f32(i64, i64, i64, i32, i32, i32)
 // CHECK-DAG: func.func private @tessera_apple_gpu_matmul_softmax_f16(i64, i64, i64, i32, i32, i32)
 // CHECK-DAG: func.func private @tessera_apple_gpu_matmul_softmax_bf16(i64, i64, i64, i32, i32, i32)
 // CHECK-DAG: func.func private @tessera_apple_gpu_flash_attn_f32(i64, i64, i64, i64, i32, i32, i32, i32, f32, i32)
@@ -17,7 +18,8 @@
 
 func.func @fused_f32(%A: tensor<8x16xf32>, %B: tensor<16x32xf32>) -> tensor<8x32xf32> {
   // CHECK-LABEL: func.func @fused_f32
-  // CHECK:       call @tessera_apple_gpu_matmul_softmax_f32
+  // CHECK:       call @tessera_apple_gpu_synth_matmul_epilogue_f32
+  // CHECK-SAME:  tessera.fusion.epilogue = "softmax"
   // CHECK-NOT:   tessera.matmul
   // CHECK-NOT:   tessera.softmax
   %m = "tessera.matmul"(%A, %B) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>

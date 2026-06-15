@@ -9388,18 +9388,12 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     N = b.shape[1]
 
     if a.dtype == np.float32:
-        if not a.flags.c_contiguous:
-            a = np.ascontiguousarray(a, dtype=np.float32)
-        if not b.flags.c_contiguous:
-            b = np.ascontiguousarray(b, dtype=np.float32)
-        out = np.zeros((M, N), dtype=np.float32)
-        fused = _apple_gpu_matmul_softmax_f32()
-        fused(
-            a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-        )
+        # f32: routed through the synthesizer (Optimizing-Compiler Plan F2b +
+        # tiled) — the hand-written matmul_softmax_f32 / matmul_softmax_tiled_f32
+        # kernels are retired. Stack kernel for N<=1024, threadgroup-tiled for
+        # N<=8192, oracle-proven bit-close to the kernels it replaces.
+        from tessera.compiler.fusion import FusedRegion, run_fused_region
+        out, _exec = run_fused_region(FusedRegion((), reduction="softmax"), a, b)
         return out
 
     if a.dtype == np.float16:
@@ -9448,21 +9442,6 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     scores = np.matmul(a, b)
     e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
     return e / np.sum(e, axis=-1, keepdims=True)
-
-
-def _apple_gpu_matmul_softmax_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = runtime.tessera_apple_gpu_matmul_softmax_f32
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32,  # M
-        ctypes.c_int32,  # N
-        ctypes.c_int32,  # K
-    ]
-    sym.restype = None
-    return sym
 
 
 def _apple_gpu_matmul_softmax_f16() -> Any:
@@ -10650,7 +10629,7 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_flash_attn_f32")
                 getattr(lib, "tessera_apple_gpu_softmax_f32")
                 getattr(lib, "tessera_apple_gpu_gelu_f32")
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_f32")
+                # matmul_softmax_f32 RETIRED (F2) — synthesized epilogue lane.
                 # Phase 8.4.4 — require fp16/bf16 matmul symbols too. Older
                 # builds lack them; falling through forces a rebuild.
                 getattr(lib, "tessera_apple_gpu_mps_matmul_f16")
@@ -10671,8 +10650,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_matmul_bf16")
-                # Phase 8.4.6 — threadgroup-tiled matmul_softmax_f32 (lifts N constraint).
-                getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f32")
+                # matmul_softmax_tiled_f32 RETIRED (F2) — the tiled synthesizer
+                # (synth_matmul_epilogue_tiled_f32) subsumes it.
                 # Native-half tiled matmul_softmax (f16/bf16 large-N single kernel).
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_bf16")

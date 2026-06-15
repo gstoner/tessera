@@ -361,8 +361,13 @@ def _apple_gpu_kernel_msl_for_dtype(
         if dtype == "bf16":
             return (_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE, "matmul_softmax_bf16",
                     _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY, "bf16")
-        return (_APPLE_GPU_MATMUL_SOFTMAX_MSL_SOURCE, "matmul_softmax_f32",
-                _APPLE_GPU_MATMUL_SOFTMAX_MSL_CACHE_KEY, "f32")
+        # f32: SYNTHESIZED (Optimizing-Compiler Plan F2 — the threadgroup-tiled
+        # synthesizer subsumes matmul_softmax_f32 / matmul_softmax_tiled_f32).
+        from tessera.compiler.fusion import (
+            _ENTRY, FusedRegion, synthesize_matmul_epilogue_msl,
+        )
+        src = synthesize_matmul_epilogue_msl(FusedRegion((), reduction="softmax"))
+        return (src, _ENTRY, _sha256_short(src), "f32")
     if kernel == "matmul_softmax_matmul":
         if dtype == "f16":
             return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16,

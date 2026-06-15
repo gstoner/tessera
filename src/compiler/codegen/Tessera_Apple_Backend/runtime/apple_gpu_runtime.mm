@@ -6137,42 +6137,13 @@ kernel void matmul_softmax_tiled_f32(
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_softmax_tiled_f32(const float* A,
-                                                           const float* B,
-                                                           float* O,
-                                                           int32_t M,
-                                                           int32_t N,
-                                                           int32_t K) {
-  // Tiled variant — works for any N (bounded only by threadgroup memory).
-  // Phase 8.4.6 caps N at 8192 to stay within typical device threadgroup
-  // memory limits (~32KB / sizeof(float)). Larger N falls back to the
-  // reference implementation.
-  if (N > 8192) {
-    reference_matmul_softmax_f32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_softmax_tiled_msl(ctx, A, B, O, M, N, K))
-    return;
-  reference_matmul_softmax_f32(A, B, O, M, N, K);
-}
-
-extern "C" void tessera_apple_gpu_matmul_softmax_f32(const float* A,
-                                                     const float* B, float* O,
-                                                     int32_t M, int32_t N,
-                                                     int32_t K) {
-  // Phase 8.4.6 — route by N. Per-thread kernel for N <= 256 (it's faster
-  // because no threadgroup synchronization), threadgroup-tiled for larger N
-  // (lifts the per-thread stack-array limit). Reference fallback for N
-  // beyond the tiled variant's bound.
-  if (N <= 256) {
-    MetalDeviceContext &ctx = deviceContext();
-    if (ctx.ok && dispatch_matmul_softmax_msl(ctx, A, B, O, M, N, K)) return;
-    reference_matmul_softmax_f32(A, B, O, M, N, K);
-    return;
-  }
-  tessera_apple_gpu_matmul_softmax_tiled_f32(A, B, O, M, N, K);
-}
+// Optimizing-Compiler Plan F2 (catalog retirement) — the public f32
+// matmul_softmax / matmul_softmax_tiled symbols are RETIRED: the synthesizer's
+// stack (N<=1024) + threadgroup-tiled (N<=8192) kernels subsume them
+// (oracle-proven bit-close).  The internal helpers (dispatch_matmul_softmax_msl
+// / dispatch_matmul_softmax_tiled_msl / reference_matmul_softmax_f32 / the MSL
+// sources) stay — the native f16/bf16 softmax kernels reuse them via fp32
+// conversion.
 
 //===---------------------------------------------------------------------===//
 // Phase 8.4.4.2 — fp16 / bf16 fused matmul -> softmax variants.

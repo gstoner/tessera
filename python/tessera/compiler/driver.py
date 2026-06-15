@@ -850,9 +850,10 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             framework = "Metal"
             abi = "MSLComputePipelineState"
         elif chain == "matmul_softmax":
-            symbol = "tessera_apple_gpu_matmul_softmax_f32"
+            symbol = "tessera_apple_gpu_synth_matmul_epilogue_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
+            fused_epilogue = "softmax"
         elif chain == "matmul_gelu":
             symbol = "tessera_apple_gpu_synth_matmul_epilogue_f32"
             framework = "Metal"

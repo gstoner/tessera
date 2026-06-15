@@ -1245,8 +1245,11 @@ def test_apple_gpu_matmul_softmax_chain_emits_fused_msl_kernel_artifact():
 
     target_ir = fused.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
-    assert 'entry_point = "matmul_softmax_f32"' in target_ir
-    assert "kernel void matmul_softmax_f32" in target_ir
+    # Optimizing-Compiler Plan F2 — f32 matmul->softmax is SYNTHESIZED (the
+    # tiled synthesizer subsumes matmul_softmax_f32 / _tiled_f32); the fusion id
+    # stays "matmul_softmax".
+    assert 'entry_point = "synth_matmul_epi"' in target_ir
+    assert "kernel void synth_matmul_epi" in target_ir
     assert 'fusion = "matmul_softmax"' in target_ir
     assert 'execution_mode = "metal_runtime"' in target_ir
     # Exactly one msl_kernel — the fused chain collapses two ops to one
@@ -1257,7 +1260,8 @@ def test_apple_gpu_matmul_softmax_chain_emits_fused_msl_kernel_artifact():
     assert artifact.metadata["compiler_path"] == "apple_gpu_mps"
     assert artifact.metadata["runtime_status"] == "ready"
     assert artifact.metadata["execution_mode"] == "metal_runtime"
-    assert "tessera_apple_gpu_matmul_softmax_f32" in fused.compile_bundle.artifact("backend").text
+    assert ("tessera_apple_gpu_synth_matmul_epilogue_f32"
+            in fused.compile_bundle.artifact("backend").text)
 
 
 def test_apple_gpu_matmul_softmax_chain_executes_through_fused_msl_kernel():
@@ -1283,9 +1287,12 @@ def test_apple_gpu_matmul_softmax_chain_executes_through_fused_msl_kernel():
 
 
 def test_apple_gpu_matmul_softmax_fusion_runtime_shim_correctness(tmp_path):
-    """Compile the apple_gpu runtime shim from source and verify the C ABI
-    of tessera_apple_gpu_matmul_softmax_f32: signature matches the lowering
-    pass, numerical output matches numpy."""
+    """Compile the apple_gpu runtime shim from source and verify the catalog
+    retirement at the ABI level (Optimizing-Compiler Plan F2): the synthesized
+    epilogue symbols are exported and the retired matmul_softmax_f32 /
+    matmul_softmax_tiled_f32 kernels are gone.  Numerical correctness of the
+    synthesizer path is covered by test_fusion_synthesis.py (Metal) and the
+    `_executes_through_fused_msl_kernel` test below."""
 
     cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if cxx is None:
@@ -1308,28 +1315,15 @@ def test_apple_gpu_matmul_softmax_fusion_runtime_shim_correctness(tmp_path):
     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     runtime = ctypes.CDLL(str(lib))
-    fused = runtime.tessera_apple_gpu_matmul_softmax_f32
-    fused.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    fused.restype = None
-
-    rng = np.random.RandomState(47)
-    for M, K, N in ((2, 4, 4), (8, 16, 32)):
-        A = rng.randn(M, K).astype(np.float32) * 0.5
-        B = rng.randn(K, N).astype(np.float32) * 0.5
-        O = np.zeros((M, N), dtype=np.float32)
-        fused(
-            A.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            B.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            O.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            M, N, K,
-        )
-        ref = _np_matmul_softmax_reference(np, A, B)
-        np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
+    # the synthesized epilogue (stack + tiled) symbols are present.
+    for name in ("tessera_apple_gpu_synth_matmul_epilogue_f32",
+                 "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32"):
+        assert getattr(runtime, name, None) is not None, f"missing: {name}"
+    # the retired per-kernel f32 softmax symbols are gone.
+    for retired in ("tessera_apple_gpu_matmul_softmax_f32",
+                    "tessera_apple_gpu_matmul_softmax_tiled_f32"):
+        assert getattr(runtime, retired, None) is None, (
+            f"retired kernel still present: {retired}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1995,13 +1989,13 @@ def test_apple_gpu_attn_block_falls_back_when_chain_breaks():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 8.4.6: threadgroup-tiled matmul_softmax_f32 (lifts the N <= 256 cap).
+# Phase 8.4.6 + F2b-tiled: threadgroup-tiled large-N softmax (lifts N <= 256).
 #
-# When the per-thread fast-path is too narrow (N > 256), the runtime routes
-# to a threadgroup-tiled variant that allocates the score buffer in
-# threadgroup memory. One row per threadgroup; 32 threads cooperate.
-# Tests below exercise N = 512 and N = 1024 — both above the per-thread
-# bound, both within the tiled bound (8192).
+# When the per-thread fast-path is too narrow (N > 1024), the synthesizer routes
+# to a threadgroup-tiled kernel that allocates the score buffer in threadgroup
+# memory. One row per threadgroup; 32 threads cooperate. The hand-written
+# matmul_softmax_tiled_f32 is retired — the tiled synthesizer subsumes it.
+# Tests below exercise N = 512 and N = 1024, both within the tiled bound (8192).
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -2029,8 +2023,11 @@ def test_apple_gpu_matmul_softmax_tiled_path_executes_for_large_n():
 
 
 def test_apple_gpu_matmul_softmax_tiled_runtime_shim_exposes_symbol(tmp_path):
-    """Compile the apple_gpu runtime shim and verify the tiled symbol is
-    exported with the expected ABI plus correct numerical output."""
+    """Compile the apple_gpu runtime shim and verify the tiled SYNTHESIZED
+    epilogue symbol is exported (Optimizing-Compiler Plan F2 — the hand-written
+    matmul_softmax_tiled_f32 it replaces is retired).  Large-N numerical
+    correctness is covered by test_fusion_synthesis.py (Metal) and the
+    `_tiled_path_executes_for_large_n` test above."""
 
     cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if cxx is None:
@@ -2053,30 +2050,10 @@ def test_apple_gpu_matmul_softmax_tiled_runtime_shim_exposes_symbol(tmp_path):
     subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     runtime = ctypes.CDLL(str(lib))
-    sym = runtime.tessera_apple_gpu_matmul_softmax_tiled_f32
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-
-    rng = np.random.RandomState(89)
-    for M, K, N in ((4, 8, 512), (8, 16, 1024)):
-        A = rng.randn(M, K).astype(np.float32) * 0.5
-        B = rng.randn(K, N).astype(np.float32) * 0.5
-        O = np.zeros((M, N), dtype=np.float32)
-        sym(
-            A.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            B.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            O.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            M, N, K,
-        )
-        scores = A @ B
-        e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
-        ref = e / np.sum(e, axis=-1, keepdims=True)
-        np.testing.assert_allclose(O, ref, rtol=1e-4, atol=1e-5)
+    assert getattr(runtime, "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32",
+                   None) is not None
+    assert getattr(runtime, "tessera_apple_gpu_matmul_softmax_tiled_f32",
+                   None) is None      # retired
 
 
 def test_apple_gpu_matmul_softmax_small_n_still_uses_per_thread_path():

@@ -1,0 +1,146 @@
+[
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule",
+    "shape": [
+      8,
+      32,
+      256,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 67.76898,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_lane0",
+    "shape": [
+      8,
+      32,
+      256,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 51.17804,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_coop",
+    "shape": [
+      8,
+      32,
+      256,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 21.63533,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule",
+    "shape": [
+      8,
+      32,
+      512,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 137.04218,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_lane0",
+    "shape": [
+      8,
+      32,
+      512,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 106.36578,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_coop",
+    "shape": [
+      8,
+      32,
+      512,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 45.99785,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule",
+    "shape": [
+      8,
+      32,
+      1024,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 272.39365,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_lane0",
+    "shape": [
+      8,
+      32,
+      1024,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 214.69478,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  },
+  {
+    "backend": "apple_gpu",
+    "op": "gated_delta_rule_chunked_coop",
+    "shape": [
+      8,
+      32,
+      1024,
+      16
+    ],
+    "dtype": "f32",
+    "latency_ms": 93.25351,
+    "tflops": null,
+    "memory_bw_gb_s": null,
+    "device": "apple_gpu",
+    "tessera_version": "track-l"
+  }
+]

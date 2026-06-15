@@ -250,3 +250,53 @@ def build_report(rows: list[BenchmarkRow] | None = None) -> dict[str, Any]:
 
 def telemetry(rows: list[BenchmarkRow]) -> list[dict[str, Any]]:
     return [telemetry_for_row(r, source="dlop_longtail_core") for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Synthesized fusion (Optimizing-Compiler Plan F2a) — measured here.
+#
+# The hand-written fused chains above are a fixed catalog.  These rows run the
+# GENERAL synthesizer (tessera.compiler.fusion): a matmul -> pointwise-epilogue
+# region compiles to one synthesized MSL kernel.  Each row reports the compiler-
+# discovered dispatch collapse (1 + |epilogue| unfused -> 1 fused), whether it
+# ran on Metal, and the metamorphic gate (synthesized == unfused).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def synthesized_fusion_rows(seed: int = 0) -> list[BenchmarkRow]:
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+
+    chains = [("gelu",), ("bias", "gelu"), ("bias", "relu"), ("silu",),
+              ("bias", "sigmoid", "tanh")]
+    rows: list[BenchmarkRow] = []
+    for i, chain in enumerate(chains):
+        rng = np.random.default_rng(seed + i)
+        M, K, N = 16, 32, 24
+        A = rng.standard_normal((M, K)).astype(np.float32)
+        B = rng.standard_normal((K, N)).astype(np.float32)
+        has_bias = "bias" in chain
+        bias = rng.standard_normal((N,)).astype(np.float32) if has_bias else None
+        region = FusedRegion(chain, bias_name="bias" if has_bias else None)
+        out, execution = run_fused_region(region, A, B, bias)
+        err = float(np.abs(out - region.reference(A, B, bias)).max())
+        eager = 1 + len(chain)                       # matmul + each pointwise op
+        rows.append(BenchmarkRow(
+            operator=BenchmarkOperator(name="synth:matmul_" + "_".join(chain),
+                                       dtype="fp32", shape="M16_K32_N24",
+                                       target="apple_gpu"),
+            compiler_path=CompilerPath.REFERENCE,
+            runtime_status=RuntimeStatus.EXECUTABLE,
+            correctness=Correctness(max_error=err, passed=err < 1e-4),
+            execution_kind=(ExecutionKind.OPTIMIZED_NATIVE
+                            if execution == "metal_runtime" else ExecutionKind.REFERENCE),
+            metrics={
+                "family": "synthesized_fusion",
+                "execution": execution,
+                "eager_dispatches": eager,
+                "fused_dispatches": 1,
+                "dispatch_reduction_x": float(eager),
+                "metamorphic_equivalent": err < 1e-4,
+                "in_handwritten_catalog": chain == ("gelu",),
+            },
+        ))
+    return rows

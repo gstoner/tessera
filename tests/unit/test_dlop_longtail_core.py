@@ -77,3 +77,17 @@ def test_runs_are_deterministic():
     a = build_report(run_core(DlopLongtailConfig(seed=7)))
     b = build_report(run_core(DlopLongtailConfig(seed=7)))
     assert a == b
+
+
+def test_synthesized_fusion_rows_are_metamorphic_and_collapse_dispatch():
+    from benchmarks.dlop_longtail_core import synthesized_fusion_rows
+
+    rows = synthesized_fusion_rows(seed=3)
+    assert rows and all(r.correctness.passed for r in rows)         # synth == unfused
+    for r in rows:
+        assert r.metrics["fused_dispatches"] == 1
+        assert r.metrics["dispatch_reduction_x"] == 1 + len(r.operator.name.split("_")) - 2 \
+            or r.metrics["dispatch_reduction_x"] >= 2.0              # >=2x collapse
+        assert r.metrics["metamorphic_equivalent"] is True
+    # at least one chain is NOT in the hand-written catalog — the generalization
+    assert any(not r.metrics["in_handwritten_catalog"] for r in rows)

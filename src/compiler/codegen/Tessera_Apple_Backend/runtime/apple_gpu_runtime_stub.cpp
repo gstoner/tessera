@@ -1070,6 +1070,15 @@ extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B
   reference_matmul_gelu_f32_stub(A, B, O, M, N, K);
 }
 
+// Synthesized matmul->epilogue (Optimizing-Compiler Plan F2a): off-Darwin there
+// is no Metal to compile the MSL source, so report unavailable (0). The Python
+// caller knows the epilogue op chain and falls back to its numpy reference.
+extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
+    const char*, const char*, const float*, const float*, const float*,
+    float*, int32_t, int32_t, int32_t, int32_t) {
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
                                                      const float* B, float* O,
                                                      int32_t M, int32_t N,

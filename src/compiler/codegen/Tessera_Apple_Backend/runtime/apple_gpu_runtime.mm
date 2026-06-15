@@ -7313,6 +7313,68 @@ extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B
   reference_matmul_gelu_f32(A, B, O, M, N, K);
 }
 
+// Generic SYNTHESIZED matmul -> pointwise-epilogue dispatch (Optimizing-Compiler
+// Plan F2a).  Unlike the hand-written matmul_gelu/matmul_rmsnorm symbols, the MSL
+// source is *passed in* — the Python synthesizer emits one row-per-thread matmul
+// with the region's pointwise epilogue inlined, and this symbol just compiles
+// (cached) + runs it.  One synthesizer + this one dispatcher replace the catalog
+// of hand-written matmul-epilogue kernels.  Buffers: 0=A(M*K) 1=B(K*N) 2=O(M*N)
+// 3=M 4=N 5=K, and 6=bias(N) iff has_bias.  Returns 1 on GPU success, 0 if the
+// device/compile/dispatch path is unavailable (caller falls back to reference).
+extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
+    const char* msl_source, const char* entry, const float* A, const float* B,
+    const float* bias, float* O, int32_t M, int32_t N, int32_t K,
+    int32_t has_bias) {
+  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger aBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger bBytes = sizeof(float) * (NSUInteger)K * (NSUInteger)N;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+    NSUInteger biasBytes = sizeof(float) * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufB || !bufO) return 0;
+    id<MTLBuffer> bufBias = nil;
+    if (has_bias != 0 && bias) {
+      bufBias = metal_buffer_acquire_with_bytes(ctx, bias, biasBytes);
+      if (!bufBias) return 0;
+    }
+    MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
                                                      const float* B, float* O,
                                                      int32_t M, int32_t N,

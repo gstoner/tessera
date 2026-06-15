@@ -82,6 +82,7 @@ _mpsgraph_bf16_supported: Any = None
 _session_commit_count: Any = None
 _ts_dev_alloc: Any = None
 _ts_dev_upload: Any = None
+_ts_dev_upload_at: Any = None
 _ts_dev_download: Any = None
 _ts_dev_free: Any = None
 _ts_dev_nbytes: Any = None
@@ -108,7 +109,7 @@ def _bind_session_symbols() -> bool:
     global _rope_enc_bf16, _flash_attn_enc_bf16
     global _mpsgraph_bf16_supported
     global _ts_dev_alloc, _ts_dev_upload, _ts_dev_download, _ts_dev_free
-    global _ts_dev_nbytes
+    global _ts_dev_nbytes, _ts_dev_upload_at
     if _SYMBOLS_BOUND:
         return _ts_enc_begin is not None
     _SYMBOLS_BOUND = True
@@ -252,6 +253,9 @@ def _bind_session_symbols() -> bool:
     _ts_dev_upload = bind_symbol(
         "ts_dev_upload",
         (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64), None)
+    _ts_dev_upload_at = bind_symbol(
+        "ts_dev_upload_at",
+        (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64, ctypes.c_int64), None)
     _ts_dev_download = bind_symbol(
         "ts_dev_download",
         (ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64), None)
@@ -354,6 +358,21 @@ class DeviceTensor:
         _ts_dev_upload(ctypes.c_void_p(self.handle),
                        arr.ctypes.data_as(ctypes.c_void_p),
                        ctypes.c_int64(arr.nbytes))
+
+    def upload_at(self, arr: np.ndarray, offset: int) -> None:
+        """Write ``arr`` into the resident buffer at byte ``offset``, leaving the
+        rest untouched. The append primitive: a new entry uploads O(entry) bytes
+        at the tail, not the whole buffer. ``offset + arr.nbytes`` must fit."""
+        if offset < 0 or offset + arr.nbytes > self.nbytes:
+            raise ValueError(
+                f"upload_at out of range: offset {offset} + {arr.nbytes} bytes "
+                f"> device tensor size {self.nbytes}")
+        if not arr.flags["C_CONTIGUOUS"]:
+            arr = np.ascontiguousarray(arr)
+        _ts_dev_upload_at(ctypes.c_void_p(self.handle),
+                          arr.ctypes.data_as(ctypes.c_void_p),
+                          ctypes.c_int64(arr.nbytes),
+                          ctypes.c_int64(int(offset)))
 
     def download(self, dtype: np.dtype, shape: tuple[int, ...]
                  ) -> np.ndarray:

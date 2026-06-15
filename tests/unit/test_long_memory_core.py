@@ -218,8 +218,8 @@ def test_run_core_proof_levels():
     rows = run_core(LongMemoryConfig(bank_size=64, seed=14))
     ref = [r for r in rows if r.execution_kind is ExecutionKind.REFERENCE]
     gap = [r for r in rows if r.runtime_status is RuntimeStatus.MISSING_BACKEND]
-    assert len(ref) == 6 and all(r.correctness.passed for r in ref)
-    assert len(gap) == 1 and all(r.correctness.passed is None for r in gap)
+    assert len(ref) == 7 and all(r.correctness.passed for r in ref)
+    assert len(gap) == 0          # all long-memory kernels are hardware-verified
 
 
 def test_gap_rows_name_declared_gaps():
@@ -238,8 +238,8 @@ def test_gap_row_rejects_undeclared_gap():
 def test_build_report_summary():
     rows = run_core(LongMemoryConfig(bank_size=64))
     report = build_report(rows)
-    assert report["reference_passed"] == 6
-    assert report["missing_backend"] == 1
+    assert report["reference_passed"] == 7
+    assert report["missing_backend"] == 0
     assert set(report["open_gaps"]).issubset(set(MEMORY_PRIMITIVE_GAPS))
     assert "abstention_read_threshold" in report["landed_primitives"]
     assert "metadata_time_version_filter" in report["landed_primitives"]
@@ -266,7 +266,10 @@ def test_resident_state_handle_read_residency_is_partial():
     # read-residency landed (ResidentBank, HW-verified); append-residency remains
     assert "resident_state_handle" in PARTIAL_MEMORY_PRIMITIVES
     assert "resident_state_handle" not in MEMORY_PRIMITIVE_GAPS
-    assert "kv_cache_append_read" in MEMORY_PRIMITIVE_GAPS
+    # append-residency now landed too — kv_cache_append_read moved GAPS -> PARTIAL
+    assert "kv_cache_append_read" in PARTIAL_MEMORY_PRIMITIVES
+    assert "kv_cache_append_read" not in MEMORY_PRIMITIVE_GAPS
+    assert MEMORY_PRIMITIVE_GAPS == ()   # every long-memory on-device kernel landed
 
 
 def test_buckets_are_disjoint():

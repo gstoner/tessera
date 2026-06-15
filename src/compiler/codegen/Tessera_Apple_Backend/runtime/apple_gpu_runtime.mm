@@ -425,6 +425,16 @@ extern "C" void ts_dev_upload(TsDeviceTensor *t, const void *src, int64_t n) {
   if (t && src && n > 0 && n <= t->nbytes) std::memcpy([t->buf contents], src, (size_t)n);
 }
 
+// Offset write — copy `n` bytes from `src` into the resident buffer at byte
+// `offset`, leaving the rest untouched. The append primitive for a resident
+// KV/memory bank: a new entry writes O(entry) bytes at the tail, NOT a full
+// re-upload of the bank. Shared (unified-memory) storage → a direct memcpy.
+extern "C" void ts_dev_upload_at(TsDeviceTensor *t, const void *src, int64_t n,
+                                 int64_t offset) {
+  if (t && src && n > 0 && offset >= 0 && offset + n <= t->nbytes)
+    std::memcpy((char *)[t->buf contents] + (size_t)offset, src, (size_t)n);
+}
+
 extern "C" void ts_dev_download(TsDeviceTensor *t, void *dst, int64_t n) {
   if (t && dst && n > 0 && n <= t->nbytes) std::memcpy(dst, [t->buf contents], (size_t)n);
 }

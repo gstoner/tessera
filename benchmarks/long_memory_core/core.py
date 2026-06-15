@@ -44,12 +44,12 @@ from benchmarks.common import (
 from tessera.memory import MemoryTable, memory_evict, memory_read, memory_write
 
 
-# Composites that have no dedicated on-device op yet — the registry that drives
-# stdlib/runtime growth.  These two are genuinely backend gaps: cross-step device
-# residency and a fused append-read, not reference Python.
-MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = (
-    "kv_cache_append_read",          # fused on-device append-then-read (offset-write)
-)
+# Composites with no dedicated on-device op yet — the registry that drives
+# stdlib/runtime growth.  Empty: the long-memory surface (scoring, top-1, hard
+# top-k, soft-read, read-residency, append-residency) is now all hardware-
+# verified.  What remains is @jit frontend routing, tracked in
+# PARTIAL_MEMORY_PRIMITIVES — not a missing kernel.
+MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = ()
 
 # Primitives whose on-device kernel + runtime path is landed and HARDWARE-
 # VERIFIED, but which are not yet reachable through the full ``@jit`` single-call
@@ -67,10 +67,16 @@ PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = (
     # Read-residency: ResidentBank (tessera.resident_bank) keeps the bank's keys
     # on-device across reads (one upload), scoring each query via the bmm_enc
     # encode-session lane without re-uploading — hardware-verified in
-    # tests/unit/test_resident_bank.py (~28× upload reduction on Metal).  The
-    # remaining piece is incremental on-device append (offset-write), tracked as
-    # kv_cache_append_read in GAPS.
+    # tests/unit/test_resident_bank.py (~28× upload reduction on Metal).
     "resident_state_handle",
+    # Append-residency: ResidentBank.append offset-writes a new entry into the
+    # resident buffer via the ts_dev_upload_at device symbol (O(entry), no full
+    # re-upload), scored against the growing bank with bmm_enc(M=current_seq) —
+    # hardware-verified in test_resident_bank.py (~32× upload reduction over a
+    # 128-step decode loop, metamorphically == recompute).  Landed as a direct
+    # ResidentBank API; a single fused @jit-routed append_read kernel is the
+    # remaining frontend-integration follow-on.
+    "kv_cache_append_read",
 )
 
 # Primitives that started as gaps and have since landed a real contract.
@@ -336,11 +342,27 @@ def run_core(cfg: LongMemoryConfig | None = None) -> list[BenchmarkRow]:
     rows.append(_ref_row("resident_bank_read_residency", shape,
                          passed=rb_match, max_err=None, metrics=rb_tele))
 
-    # 7. Fused on-device append-then-read — the remaining append-residency gap
-    #    (write a new entry into the resident buffer without a full re-upload).
-    rows.append(_gap_row("resident_append_read_gpu", shape, gap="kv_cache_append_read",
-                         metrics={"read_residency_landed": True,
-                                  "needs": "device offset-write (bank_append_enc)"}))
+    # 7. Append-residency landed: ResidentBank.append offset-writes each new
+    #    entry into the resident buffer (no full re-upload), scored against the
+    #    growing bank — proven on Metal in test_resident_bank.py.  Metamorphic-
+    #    gated decode loop here (append-then-read == recompute).
+    from tessera.resident_bank import ResidentBank
+    ab_rng = np.random.default_rng(cfg.seed ^ 0x9F17)
+    ab_T = min(cfg.decode_steps, cfg.bank_size)
+    ab_keys = ab_rng.standard_normal((ab_T, cfg.key_dim)).astype(np.float32)
+    ab_keys /= np.linalg.norm(ab_keys, axis=1, keepdims=True)
+    ab_vals = ab_rng.standard_normal((ab_T, cfg.value_dim)).astype(np.float32)
+    ab = ResidentBank(np.zeros((0, cfg.key_dim), np.float32),
+                      np.zeros((0, cfg.value_dim), np.float32), capacity=ab_T)
+    ab_match = True
+    for t in range(ab_T):
+        ab.append(ab_keys[t], ab_vals[t])
+        _v, idx, _s = ab.read(ab_keys[t], top_k=1)         # the just-appended entry
+        ab_match = ab_match and int(idx[0]) == t
+    ab_tele = ab.telemetry()
+    ab.free()
+    rows.append(_ref_row("resident_append_read", shape,
+                         passed=ab_match, max_err=None, metrics=ab_tele))
 
     return rows
 

@@ -37,6 +37,11 @@ extern "C" int64_t ts_dev_nbytes(TsDeviceTensor* t) { return t ? t->nbytes : 0; 
 extern "C" void ts_dev_upload(TsDeviceTensor* t, const void* src, int64_t n) {
   if (t && src && n > 0 && n <= t->nbytes) std::memcpy(t->data, src, static_cast<std::size_t>(n));
 }
+extern "C" void ts_dev_upload_at(TsDeviceTensor* t, const void* src, int64_t n, int64_t offset) {
+  if (t && src && n > 0 && offset >= 0 && offset + n <= t->nbytes)
+    std::memcpy(static_cast<char*>(t->data) + static_cast<std::size_t>(offset), src,
+                static_cast<std::size_t>(n));
+}
 extern "C" void ts_dev_download(TsDeviceTensor* t, void* dst, int64_t n) {
   if (t && dst && n > 0 && n <= t->nbytes) std::memcpy(dst, t->data, static_cast<std::size_t>(n));
 }

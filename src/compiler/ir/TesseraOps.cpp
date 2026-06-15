@@ -1832,6 +1832,44 @@ LogicalResult ModifiedDeltaAttentionOp::verify() {
                                       "modified_delta_attention");
 }
 
+LogicalResult SelectiveSsmOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto bTy = dyn_cast<RankedTensorType>(getB().getType());
+  auto cTy = dyn_cast<RankedTensorType>(getC().getType());
+  auto dTy = dyn_cast<RankedTensorType>(getDelta().getType());
+  auto aTy = dyn_cast<RankedTensorType>(getA().getType());
+  // Unranked / dynamic operands — defer (consistent with the attention ops).
+  if (!xTy || !bTy || !cTy || !dTy || !aTy)
+    return success();
+  if (xTy.getRank() != 3)
+    return emitOpError("x must be rank-3 (B, S, D)");
+  if (dTy.getRank() != 3 || dTy.getShape() != xTy.getShape())
+    return emitOpError("delta must be rank-3 and shape-equal to x (B, S, D)");
+  if (bTy.getRank() != 3 || cTy.getRank() != 3)
+    return emitOpError("b and c must be rank-3 (B, S, N)");
+  if (bTy.getShape() != cTy.getShape())
+    return emitOpError("b and c must have matching shape (B, S, N)");
+  if (xTy.getShape()[0] != bTy.getShape()[0] ||
+      xTy.getShape()[1] != bTy.getShape()[1])
+    return emitOpError("x and b must share batch and sequence dims");
+  if (aTy.getRank() != 1 && aTy.getRank() != 2)
+    return emitOpError("a must be rank-1 (D) or rank-2 (D, N)");
+  int64_t D = xTy.getShape()[2];
+  if (!aTy.isDynamicDim(0) && D != ShapedType::kDynamic && aTy.getShape()[0] != D)
+    return emitOpError("a leading dim must equal x channel dim D");
+  if (auto g = getGate()) {
+    auto gTy = dyn_cast<RankedTensorType>(g.getType());
+    if (gTy && gTy.getShape() != xTy.getShape())
+      return emitOpError("gate must be shape-equal to x (B, S, D)");
+  }
+  if (auto s = getState()) {
+    auto sTy = dyn_cast<RankedTensorType>(s.getType());
+    if (sTy && sTy.getRank() != 3)
+      return emitOpError("state must be rank-3 (B, D, N)");
+  }
+  return success();
+}
+
 LogicalResult HybridAttentionOp::verify() {
   // ``pattern`` on hybrid_attention is a *free-form* model-specific hybrid
   // variant (e.g. "kimi_kda_mla", "ling_1_7_mla_lightning"), not a closed

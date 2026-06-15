@@ -29,13 +29,14 @@ fused kernel is auto-provable against its reference.
 
 Two claims that floated through the audit, both checked against the tree:
 
-1. **CLAUDE.md is honest about `selective_ssm`** — it says the op is "*pending* a
-   dedicated Mamba2 Graph IR op" and that only the closed-form *JVP* shipped. A
-   first-pass research note misquoted this as "op landed (2026-05-18)"; that quote
-   does **not** exist. Confirmed: no `selective_ssm` op in
-   `src/compiler/ir/TesseraOps.td` (it is the `1 missing` graph_ir_lowering row),
-   `gated_deltanet` *does* have an ODS op (`TesseraOps.td:1071`). Status here is
-   grounded to `file:line`, not prose.
+1. **The false "Mamba2 op landed" claim was real — in `primitive_coverage.py`,
+   not CLAUDE.md.** CLAUDE.md proper says the op is "*pending*"; but the coverage
+   registry's comment asserted *"dedicated Mamba2 Graph IR op landed (2026-05-18)
+   as `tessera.selective_ssm`"* and set `graph_ir_lowering="registered"` while **no
+   ODS op existed** in `TesseraOps.td` — registry intent that outran the compiler
+   surface (Decision #25/#26). **L4 closed this for real** (see below): the op is
+   now materialized + lit-proven, so `registered` is finally honest. (`gated_deltanet`
+   always did have its ODS op at `TesseraOps.td:1109`.)
 
 2. **The real correctness finding (now test-proven):** the shipped
    `gated_deltanet` / `kimi_delta_attention` / `modified_delta_attention`
@@ -167,7 +168,8 @@ scaled execution on Apple GPU gated vs numpy.
 | **L2.2** | Cooperative-parallel chunk kernel | Parallelize the within-chunk solve + state carry across threads (currently lane-0); tensor-core-style GEMM tiles | perf ratchet; correctness already gated |
 | **L3** ✅ | **Hybrid layer schedule** as a first-class attribute | `HybridSchedule` lowers `layer_types` literally; reference stack threads the **dual cache** (recurrent Ŝ for linear layers, KV for full layers) | **streaming dual-cache decode ≡ full recompute** + Qwen3.6 full-config schedule check |
 | **L3.1** | Promote `gated_deltanet` ODS → true rule | Decide + execute the shipped-numerics change (today's op is linear attn); wire the ODS op to the L1.1/L2.1 kernels | DESIL + existing-test migration |
-| **L4** | `selective_ssm` (Mamba2) ODS op + chunk-scan lowering | Materialize the `1 missing` op; reuse the L2 chunk machinery | chunk-scan ≡ sequential-scan |
+| **L4** ✅ | `selective_ssm` (Mamba2) ODS op | Materialize the op the registry falsely claimed: `Tessera_SelectiveSsmOp` + verifier; close the drift. Chunk-scan (`_mamba_ssd.py`) + chunk≡sequential oracle already existed | lit roundtrip/verifier + chunk-scan ≡ sequential-scan |
+| **L4.1** | Hybrid SSM mixer (Nemotron) | Add an `ssm` mixer to the L3 hybrid stack (Mamba layers + attention anchors + MoE); carry SSM state in the dual cache | dual-cache decode ≡ recompute with SSM layers |
 | **L5** | LFM2.5 LIV mixer variant | `Linear→(B⊙x̃)→depthwise-causal-conv(k=3)→(C⊙z)→Linear_out` as a fused mixer over the existing `depthwise_conv1d` | vs numpy LIV ref; scaled exec |
 
 ### Landed 2026-06-15 — L0–L2 (reference tier, host-free)
@@ -228,6 +230,23 @@ check (30 linear / 10 full at 40 layers).
 **Not yet done:** L2.2 (cooperative-parallel chunk kernel — perf), L3.1 (promote
 the `gated_deltanet` ODS op to the true rule — a shipped-numerics decision), and
 MoE/MTP composition into the hybrid stack (`stdlib.moe` exists; wiring is additive).
+
+### Landed 2026-06-15 — L4 (`selective_ssm` Mamba2 ODS op)
+
+`Tessera_SelectiveSsmOp` (`src/compiler/ir/TesseraOps.td`) + `SelectiveSsmOp::verify`
+(`TesseraOps.cpp`) — `tessera.selective_ssm` is now a genuine Graph IR op
+(rank-checked: rank-3 x / shape-equal delta / matching b,c / A rank-1|2 / optional
+`gate` shape-equal x / `init` state rank-3). `tessera-opt` rebuilds clean (MLIR
+22.1.6); lit fixture `tests/tessera-ir/model_class/selective_ssm.mlir` passes
+(model_class sweep 5/5). The **drift is closed**: the coverage registry's
+`graph_ir_lowering="registered"` for `selective_ssm` is now backed by a real op
+(comment corrected in `primitive_coverage.py`). The chunked-parallel SSD lowering
+(`_mamba_ssd.py::selective_ssm_parallel`) and its **chunk ≡ sequential** oracle
+(`test_mamba_ssd_gpu.py`, 12 tests) already existed and stay green.
+
+**Not yet done (L4.1):** wire an `ssm` mixer into the L3 hybrid stack so a
+Nemotron-shaped model (Mamba + sparse attention anchors + MoE) is expressible
+end-to-end with SSM state carried in the dual cache.
 
 Sequencing: **L1 unblocks L2** (decode state is the chunk carry); **L2 is the
 keystone** (only the chunked GEMM form is tensor-core-viable for prefill — the

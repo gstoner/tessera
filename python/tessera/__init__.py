@@ -1172,15 +1172,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                               state=None, causal: bool = True,
                               return_state: bool = False,
                               state_dtype: str = "fp32",
-                              modified: bool = False):
-        # NOTE (Track L): this recurrence is `Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t v_tᵀ`,
-        # i.e. *gated linear attention* — it omits the DeltaNet
-        # `(I − β_t k_t k_tᵀ)` erase term, so despite the name it is not the true
-        # delta rule.  The genuine gated delta rule (recurrent + chunk-parallel
-        # UT-transform) lives in `tessera.stdlib.delta_rule`, with the reduction
-        # oracle (`erase=False` ≡ this impl) in
-        # `tests/unit/test_stdlib_delta_rule.py`.  Promoting this op to the true
-        # rule is tracked as Track L L3+ (would change shipped numerics).
+                              modified: bool = False,
+                              erase: bool = False):
+        # NOTE (Track L L3.1): `erase=False` (DEFAULT, backward-compatible) is
+        # `Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t v_tᵀ` — *gated linear attention*, NOT the
+        # delta rule (it omits the DeltaNet `(I − β_t k_t k_tᵀ)` erase term).
+        # `erase=True` opts into the genuine gated delta rule
+        # (`Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t·(v_t − α_t·v̂_t)ᵀ`, `v̂_t = Ŝ_{t-1}ᵀk_t`),
+        # matching `tessera.stdlib.delta_rule.gated_delta_rule_recurrent`.  The
+        # DEFAULT is intentionally NOT flipped — that would change shipped
+        # numerics for every caller; this is an opt-in (a future major version may
+        # flip it).  Real DeltaNet usage requires L2-normalized keys (else f32 is
+        # ill-conditioned — see the L1.1 finding).
         if hasattr(Q, "_data"): Q = Q._data
         if hasattr(K, "_data"): K = K._data
         if hasattr(V, "_data"): V = V._data
@@ -1221,10 +1224,17 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             O = np.einsum("bhsd,bhde->bhse", Q, S_state)
         else:
             for t in range(S):
+                k_t = K[:, :, t, :]
+                target = V[:, :, t, :]
+                if erase:
+                    # v̂_t = Ŝ_{t-1}ᵀ k_t (from the OLD state); target = v − α·v̂.
+                    v_hat = np.einsum("bhd,bhde->bhe", k_t, S_state)
+                    a_s = (decay_arr[:, :, t][:, :, None] if decay_arr is not None else 1.0)
+                    target = target - a_s * v_hat
                 if decay_arr is not None:
                     S_state = decay_arr[:, :, t][:, :, None, None] * S_state
                 weight = 1.0 if beta_arr is None else beta_arr[:, :, t][:, :, None, None]
-                delta = np.einsum("bhd,bhe->bhde", K[:, :, t, :], V[:, :, t, :])
+                delta = np.einsum("bhd,bhe->bhde", k_t, target)
                 if modified:
                     # Kimi-style modified delta keeps the update bounded and
                     # smooth for the numpy reference path.
@@ -1241,32 +1251,37 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def gated_deltanet(Q, K, V, gate=None, beta=None, decay=None, *,
                        state=None, causal: bool = True,
                        return_state: bool = False,
-                       state_dtype: str = "fp32"):
-        """Gated DeltaNet reference recurrence."""
+                       state_dtype: str = "fp32", erase: bool = False):
+        """Gated DeltaNet recurrence.  ``erase=False`` (default) is gated linear
+        attention (backward-compatible); ``erase=True`` is the genuine DeltaNet
+        rule (L3.1) — see ``tessera.stdlib.delta_rule``."""
         return _delta_attention_impl(
             Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
             causal=causal, return_state=return_state, state_dtype=state_dtype,
+            erase=erase,
         )
 
     def kimi_delta_attention(Q, K, V, gate=None, beta=None, decay=None, *,
                              state=None, causal: bool = True,
                              return_state: bool = False,
-                             state_dtype: str = "fp32"):
-        """Kimi Delta Attention reference op."""
+                             state_dtype: str = "fp32", erase: bool = False):
+        """Kimi Delta Attention reference op.  ``erase`` as in `gated_deltanet`."""
         return _delta_attention_impl(
             Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
             causal=causal, return_state=return_state, state_dtype=state_dtype,
+            erase=erase,
         )
 
     def modified_delta_attention(Q, K, V, gate=None, beta=None, decay=None, *,
                                  state=None, causal: bool = True,
                                  return_state: bool = False,
-                                 state_dtype: str = "fp32"):
-        """Modified Delta Attention with a bounded delta update."""
+                                 state_dtype: str = "fp32", erase: bool = False):
+        """Modified Delta Attention with a bounded delta update.  ``erase`` as in
+        `gated_deltanet`."""
         return _delta_attention_impl(
             Q, K, V, gate=gate, beta=beta, decay=decay, state=state,
             causal=causal, return_state=return_state, state_dtype=state_dtype,
-            modified=True,
+            modified=True, erase=erase,
         )
 
     # ── attention_variants_plan, NSA — Native Sparse Attention primitives ───

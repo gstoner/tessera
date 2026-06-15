@@ -212,3 +212,40 @@ def test_chunk_erase_off_equals_linear_reference():
     existing = np.asarray(ops.gated_deltanet(Q, K, V, beta=beta), np.float64)
     ch = dr.gated_delta_rule_chunked(Q, K, V, beta=beta, chunk_size=8, erase=False)
     np.testing.assert_allclose(ch, existing, rtol=1e-9, atol=1e-9)
+
+
+# ── L3.1 — gated_deltanet erase opt-in (the shipped-numerics decision) ───────
+def test_gated_deltanet_default_is_backward_compatible_linear():
+    """The DEFAULT (erase=False) is unchanged — still gated linear attention."""
+    rng = _rng(14)
+    Q, K, V = _qkv(rng)
+    beta = _sig(rng.standard_normal(Q.shape[:3]))
+    decay = _sig(rng.standard_normal(Q.shape[:3]) + 1.5)
+    default = np.asarray(ops.gated_deltanet(Q, K, V, beta=beta, decay=decay), np.float64)
+    linear = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=False)
+    np.testing.assert_allclose(default, linear, rtol=1e-10, atol=1e-10)
+
+
+def test_gated_deltanet_erase_true_is_the_genuine_rule():
+    """erase=True opts into the true DeltaNet rule (matches stdlib.delta_rule)."""
+    rng = _rng(15)
+    Q, K, V = _qkv(rng)
+    beta = _sig(rng.standard_normal(Q.shape[:3]))
+    decay = _sig(rng.standard_normal(Q.shape[:3]) + 1.5)
+    erased = np.asarray(ops.gated_deltanet(Q, K, V, beta=beta, decay=decay, erase=True), np.float64)
+    genuine = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
+    np.testing.assert_allclose(erased, genuine, rtol=1e-9, atol=1e-9)
+    # ...and it is materially different from the default linear path.
+    linear = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=False)
+    assert not np.allclose(erased, linear, rtol=1e-3, atol=1e-3)
+
+
+def test_kimi_and_modified_accept_erase():
+    rng = _rng(16)
+    Q, K, V = _qkv(rng)
+    beta = _sig(rng.standard_normal(Q.shape[:3]))
+    for fn in (ops.kimi_delta_attention, ops.modified_delta_attention):
+        off = np.asarray(fn(Q, K, V, beta=beta), np.float64)
+        on = np.asarray(fn(Q, K, V, beta=beta, erase=True), np.float64)
+        assert off.shape == on.shape
+        assert not np.allclose(off, on, rtol=1e-3, atol=1e-3)   # erase changes output

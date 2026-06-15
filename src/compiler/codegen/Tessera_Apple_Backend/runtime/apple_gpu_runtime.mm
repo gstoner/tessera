@@ -8398,6 +8398,391 @@ extern "C" void tessera_apple_gpu_linear_attn_f32(const float* Q, const float* K
 }
 
 //===---------------------------------------------------------------------===//
+// Track L (L1.1) — the *genuine* gated delta rule on Metal.
+//
+// Unlike linear attention (and the composed (QKᵀ⊙mask)@V path), the DeltaNet
+// recurrence carries an erase term and cannot be expressed as a masked QKᵀ:
+//
+//   v̂_t = Ŝ_{t-1}ᵀ k_t                       (value bound to key k_t)
+//   Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t·(v_t − α_t·v̂_t)ᵀ      (erase, then write)
+//   O_t = q_tᵀ Ŝ_t                            (read after the t-th update)
+//
+// One thread per (b, h); per-thread state Ŝ[d_k, d_v]; sequential scan (decode
+// form).  β / decay are per-token scalars supplied as (B,H,S) arrays (caller
+// fills 1.0 when absent); ``erase=0`` degenerates to gated linear attention.
+// The output gate is applied host-side.  Matches
+// ``tessera.stdlib.delta_rule.gated_delta_rule_recurrent`` exactly.
+//===---------------------------------------------------------------------===//
+static bool dispatch_gated_delta_rule_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* beta, const float* decay, float* O, int32_t B, int32_t H,
+    int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  static NSString *const kKernelSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gated_delta_rule_f32(
+    device const float* Q     [[buffer(0)]],
+    device const float* K     [[buffer(1)]],
+    device const float* V     [[buffer(2)]],
+    device const float* beta  [[buffer(3)]],
+    device const float* decay [[buffer(4)]],
+    device float*       O     [[buffer(5)]],
+    constant int&       B     [[buffer(6)]],
+    constant int&       H     [[buffer(7)]],
+    constant int&       S     [[buffer(8)]],
+    constant int&       D_qk  [[buffer(9)]],
+    constant int&       D_v   [[buffer(10)]],
+    constant int&       erase [[buffer(11)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)(B * H)) return;
+    int bh = (int)gid;
+    if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) return;
+
+    float state[256];                         // Ŝ[d_qk, d_v], row-major
+    for (int i = 0; i < D_qk * D_v; ++i) state[i] = 0.0f;
+    float vhat[64];
+
+    int rqk = S * D_qk, rv = S * D_v;
+    int qb = bh * rqk, kb = qb, vb = bh * rv, ob = vb, sb = bh * S;
+
+    for (int t = 0; t < S; ++t) {
+        float a  = decay[sb + t];
+        float bt = beta[sb + t];
+        // v̂_t = Ŝ_{t-1}ᵀ k_t  (read from the OLD state, all d_v).
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += K[kb + t * D_qk + d] * state[d * D_v + e];
+            vhat[e] = acc;
+        }
+        // Ŝ_t = α·Ŝ_{t-1} + β·k_t·(v_t − α·v̂_t)ᵀ.
+        for (int d = 0; d < D_qk; ++d) {
+            float k_d = K[kb + t * D_qk + d];
+            int ro = d * D_v;
+            for (int e = 0; e < D_v; ++e) {
+                float v_e = V[vb + t * D_v + e];
+                float tgt = (erase != 0) ? (v_e - a * vhat[e]) : v_e;
+                state[ro + e] = a * state[ro + e] + bt * k_d * tgt;
+            }
+        }
+        // O_t = q_tᵀ Ŝ_t  (after the update).
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += Q[qb + t * D_qk + d] * state[d * D_v + e];
+            O[ob + t * D_v + e] = acc;
+        }
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kKernelSource, @"gated_delta_rule_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)B * H * S;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBeta, ctx, beta, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDecay, ctx, decay, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, vBytes);
+    if (!bufQ || !bufK || !bufV || !bufBeta || !bufDecay || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufBeta offset:0 atIndex:3];
+    [enc setBuffer:bufDecay offset:0 atIndex:4];
+    [enc setBuffer:bufO offset:0 atIndex:5];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&erase length:sizeof(int32_t) atIndex:11];
+
+    NSUInteger total = (NSUInteger)B * H;
+    MTLSize grid = MTLSizeMake(total, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    MTLSize tg = MTLSizeMake(tg_x, 1, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "gated_delta_rule_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], vBytes);
+    return true;
+  }
+}
+
+static void reference_gated_delta_rule_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  std::vector<float> vhat((std::size_t)D_v, 0.0f);
+  for (int32_t b = 0; b < B; ++b) {
+    for (int32_t h = 0; h < H; ++h) {
+      std::fill(state.begin(), state.end(), 0.0f);
+      int qb = (b * H + h) * S * D_qk, kb = qb;
+      int vb = (b * H + h) * S * D_v, ob = vb, sb = (b * H + h) * S;
+      for (int32_t t = 0; t < S; ++t) {
+        float a = decay[sb + t], bt = beta[sb + t];
+        for (int32_t e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int32_t d = 0; d < D_qk; ++d)
+            acc += K[kb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int32_t d = 0; d < D_qk; ++d) {
+          float k_d = K[kb + t * D_qk + d];
+          for (int32_t e = 0; e < D_v; ++e) {
+            float v_e = V[vb + t * D_v + e];
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[(std::size_t)d * D_v + e] =
+                a * state[(std::size_t)d * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int32_t e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int32_t d = 0; d < D_qk; ++d)
+            acc += Q[qb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          O[ob + t * D_v + e] = acc;
+        }
+      }
+    }
+  }
+}
+
+extern "C" void tessera_apple_gpu_gated_delta_rule_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) {
+    reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gated_delta_rule_msl(ctx, Q, K, V, beta, decay, O, B, H,
+                                              S, D_qk, D_v, erase))
+    return;
+  reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
+}
+
+//===---------------------------------------------------------------------===//
+// Track L (L2.1) — the chunk-parallel UT-transform on Metal (prefill form).
+//
+// One threadgroup per (b, h), C threads (one per token-in-chunk), state Ŝ in
+// threadgroup memory across the chunk loop.  Per chunk:
+//   A[t,j] = β_t(γ_t/γ_j)(k_tᵀk_j)  (j<t)   W̃[t] = β_t(v_t − γ_t Ŝ₀ᵀk_t)
+//   U      = (I+A)⁻¹ W̃   (forward substitution — the only non-GEMM step)
+//   O_t    = γ_t q_tᵀŜ₀ + Σ_{j≤t}(γ_t/γ_j)(q_tᵀk_j) u_j
+//   Ŝ_C    = γ_C Ŝ₀ + Σ_t (γ_C/γ_t) k_t u_tᵀ
+// The GEMM-shaped rows (A, W̃, O) parallelize across the C threads; the
+// sequential solve + rank-1 state carry run on lane 0 (cooperative-parallel
+// solve is the L2.2 perf follow-up).  Matches
+// ``tessera.stdlib.delta_rule.gated_delta_rule_chunked`` (chunk ≡ recurrent).
+//===---------------------------------------------------------------------===//
+static bool dispatch_gated_delta_rule_chunked_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* beta, const float* decay, float* O, int32_t B, int32_t H,
+    int32_t S, int32_t D_qk, int32_t D_v, int32_t Cc, int32_t erase) {
+  static NSString *const kKernelSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+#define TS_DR_MAXC 32
+#define TS_DR_MAXD 16
+
+kernel void gated_delta_rule_chunked_f32(
+    device const float* Q     [[buffer(0)]],
+    device const float* K     [[buffer(1)]],
+    device const float* V     [[buffer(2)]],
+    device const float* beta  [[buffer(3)]],
+    device const float* decay [[buffer(4)]],
+    device float*       O     [[buffer(5)]],
+    constant int&       B     [[buffer(6)]],
+    constant int&       H     [[buffer(7)]],
+    constant int&       S     [[buffer(8)]],
+    constant int&       D_qk  [[buffer(9)]],
+    constant int&       D_v   [[buffer(10)]],
+    constant int&       Cc    [[buffer(11)]],
+    constant int&       erase [[buffer(12)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint tid  [[thread_position_in_threadgroup]])
+{
+    int bh = (int)tgid;
+    if (bh >= B * H) return;
+    if (D_qk > TS_DR_MAXD || D_v > TS_DR_MAXD || Cc > TS_DR_MAXC || D_qk * D_v > 256)
+        return;
+
+    threadgroup float state[256];
+    threadgroup float Ks[TS_DR_MAXC * TS_DR_MAXD];
+    threadgroup float Qs[TS_DR_MAXC * TS_DR_MAXD];
+    threadgroup float Vs[TS_DR_MAXC * TS_DR_MAXD];
+    threadgroup float Us[TS_DR_MAXC * TS_DR_MAXD];
+    threadgroup float As[TS_DR_MAXC * TS_DR_MAXC];
+    threadgroup float gam[TS_DR_MAXC];
+    threadgroup float bet[TS_DR_MAXC];
+    threadgroup float dec[TS_DR_MAXC];
+
+    int t = (int)tid;
+    for (int i = (int)tid; i < D_qk * D_v; i += Cc) state[i] = 0.0f;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    int rqk = S * D_qk, rv = S * D_v;
+    int qb = bh * rqk, kb = qb, vb = bh * rv, ob = vb, sb = bh * S;
+
+    for (int c0 = 0; c0 < S; c0 += Cc) {
+        int Cn = min(Cc, S - c0);
+        if (t < Cn) {
+            for (int d = 0; d < D_qk; ++d) {
+                Ks[t * D_qk + d] = K[kb + (c0 + t) * D_qk + d];
+                Qs[t * D_qk + d] = Q[qb + (c0 + t) * D_qk + d];
+            }
+            for (int e = 0; e < D_v; ++e) Vs[t * D_v + e] = V[vb + (c0 + t) * D_v + e];
+            bet[t] = beta[sb + c0 + t];
+            dec[t] = decay[sb + c0 + t];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        if (t == 0) { float g = 1.0f; for (int i = 0; i < Cn; ++i) { g *= dec[i]; gam[i] = g; } }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        if (t < Cn) {
+            // A row t (strictly lower, with γ-ratio decay folding).
+            for (int j = 0; j < Cn; ++j) {
+                float a = 0.0f;
+                if (erase != 0 && j < t) {
+                    float kk = 0.0f;
+                    for (int d = 0; d < D_qk; ++d) kk += Ks[t * D_qk + d] * Ks[j * D_qk + d];
+                    a = bet[t] * (gam[t] / gam[j]) * kk;
+                }
+                As[t * Cc + j] = a;
+            }
+            // W̃[t] = β_t(v_t − γ_t Ŝ₀ᵀk_t)  (stored into Us, solved in place).
+            for (int e = 0; e < D_v; ++e) {
+                float kss = 0.0f;
+                if (erase != 0) for (int d = 0; d < D_qk; ++d) kss += Ks[t * D_qk + d] * state[d * D_v + e];
+                Us[t * D_v + e] = bet[t] * (Vs[t * D_v + e] - (erase != 0 ? gam[t] * kss : 0.0f));
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Forward substitution: U[t] = W̃[t] − Σ_{j<t} A[t,j] U[j]  (lane 0).
+        if (t == 0 && erase != 0) {
+            for (int tt = 1; tt < Cn; ++tt) {
+                for (int e = 0; e < D_v; ++e) {
+                    float acc = 0.0f;
+                    for (int j = 0; j < tt; ++j) acc += As[tt * Cc + j] * Us[j * D_v + e];
+                    Us[tt * D_v + e] -= acc;
+                }
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        if (t < Cn) {
+            for (int e = 0; e < D_v; ++e) {
+                float qstate = 0.0f;
+                for (int d = 0; d < D_qk; ++d) qstate += Qs[t * D_qk + d] * state[d * D_v + e];
+                float acc = gam[t] * qstate;
+                for (int j = 0; j <= t; ++j) {
+                    float qk = 0.0f;
+                    for (int d = 0; d < D_qk; ++d) qk += Qs[t * D_qk + d] * Ks[j * D_qk + d];
+                    acc += (gam[t] / gam[j]) * qk * Us[j * D_v + e];
+                }
+                O[ob + (c0 + t) * D_v + e] = acc;
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // State carry: Ŝ_C = γ_C Ŝ₀ + Σ_t (γ_C/γ_t) k_t u_tᵀ  (lane 0).
+        if (t == 0) {
+            float gC = gam[Cn - 1];
+            for (int d = 0; d < D_qk; ++d) {
+                for (int e = 0; e < D_v; ++e) {
+                    float s = gC * state[d * D_v + e];
+                    for (int tt = 0; tt < Cn; ++tt)
+                        s += (gC / gam[tt]) * Ks[tt * D_qk + d] * Us[tt * D_v + e];
+                    state[d * D_v + e] = s;
+                }
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+}
+)MSL";
+
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kKernelSource, @"gated_delta_rule_chunked_f32");
+    if (!pso) return false;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)B * H * S;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBeta, ctx, beta, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDecay, ctx, decay, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, vBytes);
+    if (!bufQ || !bufK || !bufV || !bufBeta || !bufDecay || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufBeta offset:0 atIndex:3];
+    [enc setBuffer:bufDecay offset:0 atIndex:4];
+    [enc setBuffer:bufO offset:0 atIndex:5];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&Cc length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&erase length:sizeof(int32_t) atIndex:12];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)B * H, 1, 1);
+    MTLSize tg = MTLSizeMake((NSUInteger)Cc, 1, 1);
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "gated_delta_rule_chunked_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], vBytes);
+    return true;
+  }
+}
+
+extern "C" void tessera_apple_gpu_gated_delta_rule_chunked_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, float* O, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t chunk, int32_t erase) {
+  // chunk ≡ recurrent, so the host fallback is the proven recurrent reference.
+  if (D_qk > 16 || D_v > 16 || chunk > 32 || chunk < 1 || D_qk * D_v > 256) {
+    reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
+    return;
+  }
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gated_delta_rule_chunked_msl(ctx, Q, K, V, beta, decay, O,
+                                                      B, H, S, D_qk, D_v, chunk, erase))
+    return;
+  reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
+}
+
+//===---------------------------------------------------------------------===//
 // attention_variants_plan, MLA-2 — DeepSeek MLA decode runtime entry.
 //
 // Today this is a host-reference path that materializes the latent c

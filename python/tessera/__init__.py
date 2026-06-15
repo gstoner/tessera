@@ -1173,6 +1173,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                               return_state: bool = False,
                               state_dtype: str = "fp32",
                               modified: bool = False):
+        # NOTE (Track L): this recurrence is `Ŝ_t = α_t·Ŝ_{t-1} + β_t·k_t v_tᵀ`,
+        # i.e. *gated linear attention* — it omits the DeltaNet
+        # `(I − β_t k_t k_tᵀ)` erase term, so despite the name it is not the true
+        # delta rule.  The genuine gated delta rule (recurrent + chunk-parallel
+        # UT-transform) lives in `tessera.stdlib.delta_rule`, with the reduction
+        # oracle (`erase=False` ≡ this impl) in
+        # `tests/unit/test_stdlib_delta_rule.py`.  Promoting this op to the true
+        # rule is tracked as Track L L3+ (would change shipped numerics).
         if hasattr(Q, "_data"): Q = Q._data
         if hasattr(K, "_data"): K = K._data
         if hasattr(V, "_data"): V = V._data

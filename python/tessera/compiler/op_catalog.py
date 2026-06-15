@@ -87,6 +87,9 @@ _SPECS = [
     OpSpec("dropout", "tessera.dropout", 1, 1, effect="random", lowering="random_mask"),
     OpSpec("qkv_projection", "tessera.qkv_projection", 2, 2, lowering="projection"),
     OpSpec("flash_attn", "tessera.flash_attn", 3, 4, effect="state", lowering="attention"),
+    # Variable-length (packed-sequence) SDPA — Cosmos-3 "two-way flat attention"
+    # IR contract. Operands: q, k, v, cu_seqlens_q, cu_seqlens_k (all required).
+    OpSpec("varlen_sdpa", "tessera.varlen_sdpa", 5, 5, effect="pure", lowering="attention"),
     # attention_variants_plan, LA-1 — linear / kernel-feature attention.
     # Returns (O, state) tuple; the runtime dispatcher unpacks both.
     OpSpec("linear_attn", "tessera.linear_attn", 3, 3, effect="state", lowering="attention"),

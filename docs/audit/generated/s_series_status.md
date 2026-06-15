@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 452 |
-| `transpose_rule` | 0 | 456 |
-| `sharding_rule` | 38 | 418 |
-| `lowering_rule` | 0 | 456 |
-| `backend_kernel` | 456 | 0 |
+| `batching_rule` | 4 | 453 |
+| `transpose_rule` | 0 | 457 |
+| `sharding_rule` | 39 | 418 |
+| `lowering_rule` | 0 | 457 |
+| `backend_kernel` | 457 | 0 |
 
 ## Per-category breakdown
 
@@ -29,7 +29,7 @@
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
-| S7 | `attention` | 25 | — | — | 11 | — | 25 |
+| S7 | `attention` | 26 | — | — | 12 | — | 26 |
 | S7 | `position_encoding` | 2 | — | — | — | — | 2 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
@@ -88,7 +88,7 @@
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 56 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 54 | 0 | 0 | 11 | 54 |
+| S7 | 55 | 0 | 0 | 12 | 55 |
 | S10 | 18 | 0 | 0 | 0 | 18 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |

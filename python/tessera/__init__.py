@@ -3965,11 +3965,22 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "top_k_routing": top_k_routing,
         "embedding": embedding,
     })
+    def varlen_sdpa(Q, K, V, *, cu_seqlens_q, cu_seqlens_k,
+                    causal=False, scale=None):
+        """Variable-length (packed-sequence) SDPA — Cosmos-3 "two-way flat
+        attention" (Graph IR op ``tessera.varlen_sdpa``). Decomposes to per-block
+        ``flash_attn`` over the packed streams; lazy-imported to avoid the
+        ``tessera.nn.varlen → tessera.ops`` import cycle."""
+        from .nn.varlen import varlen_sdpa as _impl
+        return _impl(Q, K, V, cu_seqlens_q=cu_seqlens_q,
+                     cu_seqlens_k=cu_seqlens_k, causal=causal, scale=scale)
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
 
     _ns = types.SimpleNamespace(
+        varlen_sdpa=varlen_sdpa,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,
         clifford_left_contraction=_clifford_ops_mod.clifford_left_contraction,

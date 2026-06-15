@@ -1457,6 +1457,76 @@ LogicalResult FlashAttnOp::verify() {
   return success();
 }
 
+// VarlenSdpaOp (2026-06-15) — packed-sequence SDPA with cu_seqlens as
+// first-class operands (the Cosmos-3 "two-way flat attention" IR contract).
+// Pins: positive head_dim; rank-3 packed q/k/v sharing the head axis and
+// head_dim; rank-1 integer cu_seqlens; k/v sharing total_k. The same
+// target-aware per-SM head_dim ceiling as FlashAttnOp applies.
+LogicalResult VarlenSdpaOp::verify() {
+  if (getHeadDim() <= 0)
+    return emitOpError("head_dim must be positive");
+
+  auto qT = dyn_cast<RankedTensorType>(getQ().getType());
+  auto kT = dyn_cast<RankedTensorType>(getK().getType());
+  auto vT = dyn_cast<RankedTensorType>(getV().getType());
+  if (qT && qT.getRank() != 3)
+    return emitOpError("q must be a rank-3 packed stream (H, total_q, head_dim)");
+  if (kT && kT.getRank() != 3)
+    return emitOpError("k must be a rank-3 packed stream (H, total_k, head_dim)");
+  if (vT && vT.getRank() != 3)
+    return emitOpError("v must be a rank-3 packed stream (H, total_k, head_dim)");
+
+  // q/k/v share the (folded) head axis (dim 0) and head_dim (dim 2); k and v
+  // share the packed key length (dim 1).
+  if (qT && kT && qT.hasStaticShape() && kT.hasStaticShape()) {
+    if (qT.getDimSize(0) != kT.getDimSize(0))
+      return emitOpError("q and k must share the head axis; got ")
+             << qT.getDimSize(0) << " vs " << kT.getDimSize(0);
+    if (qT.getDimSize(2) != kT.getDimSize(2))
+      return emitOpError("q and k must share head_dim; got ")
+             << qT.getDimSize(2) << " vs " << kT.getDimSize(2);
+  }
+  if (kT && vT && kT.hasStaticShape() && vT.hasStaticShape()) {
+    if (kT.getDimSize(1) != vT.getDimSize(1))
+      return emitOpError("k and v must share the packed key length (total_k); got ")
+             << kT.getDimSize(1) << " vs " << vT.getDimSize(1);
+  }
+  // head_dim attribute must agree with the q tensor's innermost dim.
+  if (qT && qT.hasStaticShape() &&
+      qT.getDimSize(2) != static_cast<int64_t>(getHeadDim()))
+    return emitOpError("head_dim attribute (")
+           << getHeadDim() << ") must match q innermost dim ("
+           << qT.getDimSize(2) << ")";
+
+  // cu_seqlens are rank-1 integer offset vectors.
+  for (auto [name, val] :
+       {std::make_pair("cu_seqlens_q", getCuSeqlensQ()),
+        std::make_pair("cu_seqlens_k", getCuSeqlensK())}) {
+    if (auto cuT = dyn_cast<RankedTensorType>(val.getType())) {
+      if (cuT.getRank() != 1)
+        return emitOpError(name) << " must be a rank-1 cu_seqlens vector";
+      if (!cuT.getElementType().isIntOrIndex())
+        return emitOpError(name) << " must have an integer element type";
+    }
+  }
+
+  // Reuse the FlashAttnOp target-aware head_dim ceiling.
+  Operation* parent = (*this)->getParentOp();
+  while (parent && !parent->hasAttr("tessera.target_sm"))
+    parent = parent->getParentOp();
+  if (parent) {
+    if (auto attr = dyn_cast<StringAttr>(parent->getAttr("tessera.target_sm"))) {
+      int64_t limit = maxHeadDimForTargetSm(attr.getValue());
+      uint64_t headDim = getHeadDim();
+      if (limit > 0 && headDim > static_cast<uint64_t>(limit))
+        return emitOpError("head_dim=")
+               << getHeadDim() << " exceeds the SM " << attr.getValue()
+               << " flash-attention kernel limit of " << limit;
+    }
+  }
+  return success();
+}
+
 // Sprint V6a (2026-05-22) — ReshapeOp: element-count-preserving.
 // Input and output may have different rank, but their static dims
 // must multiply to the same number and the element type must match.

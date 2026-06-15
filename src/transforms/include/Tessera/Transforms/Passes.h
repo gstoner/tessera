@@ -225,6 +225,11 @@ std::unique_ptr<mlir::Pass> createMSAExpandPass();
 // remain non-executable until they decompose or gain a runtime proof.
 std::unique_ptr<mlir::Pass> createRLLossDecomposePass();
 
+// varlen_sdpa → per-block flash_attn (Cosmos-3 two-way flat attention). Static
+// decomposition when cu_seqlens are constant; runtime-lowering annotation +
+// op preservation otherwise.
+std::unique_ptr<mlir::Pass> createVarlenSdpaDecomposePass();
+
 // ── Sprint V2 (2026-05-22) — LayoutLegalityPass skeleton ─────────────────
 //
 // Closes the "no LayoutLegalityPass" item in SHAPE_SYSTEM.md §11.2.

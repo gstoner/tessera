@@ -24,6 +24,7 @@ msa_sparse_attention,attention,public,public,registered,complete,partial,referen
 multi_head_attention,attention,public,public,registered,complete,partial,reference,ready,benchmarked
 power_attn,attention,public,public,registered,complete,partial,reference,ready,none
 retention,attention,public,public,registered,complete,partial,reference,ready,none
+varlen_sdpa,attention,public,public,registered,complete,partial,reference,ready,none
 all_gather,collective,public,public,registered,complete,partial,reference,ready,benchmarked
 all_reduce,collective,public,public,registered,complete,partial,reference,ready,benchmarked
 all_to_all,collective,public,public,registered,complete,partial,reference,ready,benchmarked

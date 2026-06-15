@@ -10736,6 +10736,17 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
         return _runtime_rope(np, operands[0], operands[1])
     if op_name == "tessera.flash_attn":
         return _runtime_flash_attn(np, operands[0], operands[1], operands[2], kwargs)
+    if op_name == "tessera.varlen_sdpa":
+        # Packed-sequence SDPA decomposes to per-block flash_attn (the same lane
+        # the C++ VarlenSdpaDecomposePass targets for static cu_seqlens). cu_seqlens
+        # arrive as operands 3/4 (Graph IR form) or as kwargs (eager form).
+        from .nn.varlen import varlen_sdpa as _varlen
+        cu_q = operands[3] if len(operands) > 3 else kwargs["cu_seqlens_q"]
+        cu_k = operands[4] if len(operands) > 4 else kwargs["cu_seqlens_k"]
+        return _varlen(operands[0], operands[1], operands[2],
+                       cu_seqlens_q=cu_q, cu_seqlens_k=cu_k,
+                       causal=bool(kwargs.get("causal", False)),
+                       scale=kwargs.get("scale", None))
     if op_name == "tessera.transpose":
         axes = kwargs.get("axes", None)
         if isinstance(axes, list):

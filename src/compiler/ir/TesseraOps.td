@@ -818,6 +818,44 @@ def Tessera_FlashAttnOp : Op<
   let hasVerifier = 1;
 }
 
+def Tessera_VarlenSdpaOp : Op<
+  Tessera_Dialect, "varlen_sdpa", [Pure]
+> {
+  let summary = "Variable-length (packed-sequence) scaled-dot-product attention";
+  let description = [{
+    Packed-sequence SDPA: queries, keys and values are *packed* streams of shape
+    `(H, total_q, head_dim)` / `(H, total_k, head_dim)` (heads folded into the
+    leading axis), and the `cu_seqlens_q` / `cu_seqlens_k` rank-1 integer operands
+    are the cumulative per-sample length offsets (prefix sums, first element 0).
+    Sample `i` owns query rows `[cu_q[i], cu_q[i+1])` and key rows
+    `[cu_k[i], cu_k[i+1])`; a query attends only within its own sample's key block
+    (block-diagonal), bidirectionally by default or bottom-right-aligned causal
+    when `causal` is set.
+
+    The two cu_seqlens operands are **independent** — the rectangular case
+    (`cu_seqlens_q != cu_seqlens_k`, each query block attending a longer key
+    block) is first-class, not an approximation. This is the IR contract behind
+    the NVIDIA Cosmos 3 "two-way flat attention" (§5.2.2): a causal launch over
+    the Reasoner tokens and a bidirectional launch over the interleaved
+    `[Reasoner; Generator]` key/value block. The matching additive-mask form is
+    `tessera.flash_attn` with `attn_bias`; the two are provably equal (the
+    metamorphic oracle in tests/unit/test_varlen_sdpa.py).
+
+    Lowering: the reference + Apple GPU `metal_runtime` lane decompose this into
+    per-block `flash_attn` dispatches; a fused varlen kernel (FA-3 on Hopper,
+    NATTEN/CUTLASS on Blackwell) stays behind the Phase G/H backend gate.
+  }];
+  let arguments = (ins TensorType:$q, TensorType:$k, TensorType:$v,
+                        TensorType:$cu_seqlens_q, TensorType:$cu_seqlens_k,
+                        I64Attr:$head_dim,
+                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
+                        OptionalAttr<F64Attr>:$scale,
+                        DefaultValuedAttr<BoolAttr, "false">:$causal);
+  let results = (outs TensorType:$o);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_RopeOp : Op<Tessera_Dialect, "rope", [Pure]> {
   let summary = "Rotary position embedding over the innermost dimension";
   let arguments = (ins TensorType:$x, TensorType:$theta);

@@ -165,7 +165,7 @@ scaled execution on Apple GPU gated vs numpy.
 | **L2** ✅ | **Chunked UT-transform prefill (the keystone)** | `gated_delta_rule_chunked`: chunk C, `Ã=tril(β·γ-ratio·KKᵀ,−1)`, `(I+Ã)⁻¹` via explicit forward substitution (`_forward_substitution`), WY/output as GEMM, γ-decay folding, cross-chunk state carry | **chunk ≡ recurrent** across ungated/β/fully-gated/output-gated + chunk-size-invariant (the make-or-break proof) |
 | **L1.1** ✅ | Genuine delta rule on Metal (decode form) | `tessera_apple_gpu_gated_delta_rule_f32` — per-(b,h) sequential MSL scan with the erase; `backend="apple_gpu"` on the recurrent reference | **Metal ≡ numpy** (DESIL) + Metal ≡ L2 chunked (independent routes) |
 | **L2.1** ✅ | Chunked UT-transform on Metal (prefill form) | `tessera_apple_gpu_gated_delta_rule_chunked_f32` — one threadgroup per (b,h), the within-chunk `(I+Ã)⁻¹` solve on-device; `backend="apple_gpu"` on the chunked reference | **Metal chunked ≡ numpy** (all chunk sizes incl. partial) + **Metal chunked ≡ Metal recurrent** |
-| **L2.2** 🟡 measured/deferred | Cooperative-parallel chunk kernel | **Measured first** (`benchmarks/apple_gpu/benchmark_delta_rule.py`): L2.1 chunked is already **~2.1× faster than L1.1 recurrent** across S=64–1024. Absolute times are **dispatch-bound** (≈10ms for a tiny shape), so parallelizing the lane-0 solve/state-carry would yield marginal end-to-end gain → **deferred** (not data-justified). The real lever is dispatch overhead (persistent cmd buffers / batching), a separate optimization | perf ratchet: chunked 2.1× over recurrent (measured) |
+| **L2.2** ✅ | Cooperative-parallel chunk kernel | **Measured headroom found** at high occupancy (256+ threadgroups), where L2.1's lane-0 advantage shrinks to ~1.3× over recurrent. Key insight: the within-chunk solve's **d_v columns are independent chains** → each thread owns columns and solves **barrier-free**; state carry parallelizes over cells. `coop=True` (default). | **L2.2 ≡ L2.1 ≡ numpy** (correctness) + **2.3× over L2.1 lane-0, 2.9–3.1× over recurrent** (measured, high occupancy) |
 | **L3** ✅ | **Hybrid layer schedule** as a first-class attribute | `HybridSchedule` lowers `layer_types` literally; reference stack threads the **dual cache** (recurrent Ŝ for linear layers, KV for full layers) | **streaming dual-cache decode ≡ full recompute** + Qwen3.6 full-config schedule check |
 | **L3.1** ✅ | `gated_deltanet` shipped-numerics decision | **Decision: opt-in, don't flip.** Added `erase=False` (default = current linear attn, backward-compatible) to `gated_deltanet`/`kimi_delta`/`modified_delta`; `erase=True` is the genuine rule. Flipping the default would break every caller's numerics — a future major version may. ODS `erase` attr deferred until graph→kernel honors it (no-op attr = drift) | `erase=True` ≡ `stdlib.delta_rule`; default ≡ existing; no regression |
 | **L4** ✅ | `selective_ssm` (Mamba2) ODS op | Materialize the op the registry falsely claimed: `Tessera_SelectiveSsmOp` + verifier; close the drift. Chunk-scan (`_mamba_ssd.py`) + chunk≡sequential oracle already existed | lit roundtrip/verifier + chunk-scan ≡ sequential-scan |
@@ -281,9 +281,24 @@ version may. The ODS `erase` attr is deferred until the graph→kernel path hono
 it (a no-op attr would just be new drift). Guards in `test_stdlib_delta_rule.py`;
 no regression in the existing delta/attention suites.
 
-**Still open:** L2.2 (cooperative-parallel chunk kernel — perf, needs a measured
-ratchet), graph→Metal `erase` routing (so `@jit` graphs get the true rule on GPU),
-and wiring the full blocks into the named model configs (`models/*`).
+### Landed 2026-06-15 — L2.2 + erase routing + named models
+
+**L2.2 (cooperative chunk kernel):** the L2.1 chunked kernel gained a `coop` mode
+(default on) — the within-chunk `(I+Ã)⁻¹` solve parallelizes its independent d_v
+column-chains across threads **barrier-free**, and the state carry parallelizes
+over cells. Measured (`benchmark_delta_rule.py`, high occupancy): **2.3× over L2.1
+lane-0, 2.9–3.1× over recurrent**, both modes bit-equal to numpy. The earlier
+"deferred" call was overturned by sharper data (the lane-0 cost only shows at
+high occupancy). **graph→Metal `erase` routing:** `gated_deltanet(erase=True)` on
+`@jit(target="apple_gpu")` now runs the genuine rule on Metal (the L1.1 kernel),
+not the composed linear form — verified e2e (`test_apple_gpu_delta_erase_routing.py`).
+**Named models:** `models/{qwen3_6,nemotron3,lfm2_5}.py` wire the full-block stack
+into named `config()`/`scaled_config()` factories (shapes match published configs;
+scaled instances run decode≡recompute).
+
+**Still open:** the ODS `erase` attr (deferred until lowering honors it), LatentMoE
+(distinct from standard MoE) for a weight-faithful Nemotron, and per-layer-type
+head dims / short-conv for a weight-faithful Qwen3.6.
 
 Sequencing: **L1 unblocks L2** (decode state is the chunk carry); **L2 is the
 keystone** (only the chunked GEMM form is tensor-core-viable for prefill — the

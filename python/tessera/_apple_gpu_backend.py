@@ -122,9 +122,9 @@ def _load():
         # (Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase).
         ("tessera_apple_gpu_gated_delta_rule_f32",
          [fp, fp, fp, fp, fp, fp, i32, i32, i32, i32, i32, i32]),
-        # Track L (L2.1) — chunked UT-transform prefill (+chunk arg).
+        # Track L (L2.1 + L2.2) — chunked UT-transform prefill (+chunk, +coop).
         ("tessera_apple_gpu_gated_delta_rule_chunked_f32",
-         [fp, fp, fp, fp, fp, fp, i32, i32, i32, i32, i32, i32, i32]),
+         [fp, fp, fp, fp, fp, fp, i32, i32, i32, i32, i32, i32, i32, i32]),
     ):
         try:
             sym = getattr(lib, name)
@@ -205,11 +205,14 @@ def gpu_gated_delta_rule(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
 
 def gpu_gated_delta_rule_chunked(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
                                  beta: np.ndarray, decay: np.ndarray,
-                                 chunk: int = 32, erase: bool = True) -> np.ndarray:
-    """Chunk-parallel UT-transform gated delta rule on the Apple GPU (L2.1).
+                                 chunk: int = 32, erase: bool = True,
+                                 coop: bool = True) -> np.ndarray:
+    """Chunk-parallel UT-transform gated delta rule on the Apple GPU (L2.1/L2.2).
 
     Same signature/contract as :func:`gpu_gated_delta_rule` plus ``chunk`` (the
-    within-chunk tile, ≤ 32).  chunk ≡ recurrent.
+    within-chunk tile, ≤ 32) and ``coop`` (L2.2 cooperative: column-parallel
+    within-chunk solve + cell-parallel state carry; ``False`` = L2.1 lane-0).
+    chunk ≡ recurrent for both.
     """
     lib = _load()
     Qf, Kf, Vf = _f32(Q, "Q"), _f32(K, "K"), _f32(V, "V")
@@ -221,7 +224,7 @@ def gpu_gated_delta_rule_chunked(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
         _ptr(Qf), _ptr(Kf), _ptr(Vf), _ptr(bf), _ptr(df), _ptr(O),
         ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(S),
         ctypes.c_int32(D_qk), ctypes.c_int32(D_v), ctypes.c_int32(int(chunk)),
-        ctypes.c_int32(1 if erase else 0))
+        ctypes.c_int32(1 if erase else 0), ctypes.c_int32(1 if coop else 0))
     return O
 
 

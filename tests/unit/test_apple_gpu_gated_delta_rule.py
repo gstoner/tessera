@@ -149,6 +149,20 @@ def test_metal_chunked_equals_metal_recurrent():
 
 
 @gpu
+def test_metal_chunked_coop_equals_lane0_equals_numpy():
+    """L2.2: the cooperative kernel (column-parallel solve + cell-parallel state
+    carry, default) and the L2.1 lane-0 form are both exact vs numpy."""
+    Q, K, V = _qkv(27)
+    beta = _sig(np.random.default_rng(28).standard_normal((_B, _H, _S)))
+    decay = _sig(np.random.default_rng(29).standard_normal((_B, _H, _S)) + 2.0)
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay)
+    coop = agb.gpu_gated_delta_rule_chunked(Q, K, V, beta, decay, chunk=8, coop=True)
+    lane0 = agb.gpu_gated_delta_rule_chunked(Q, K, V, beta, decay, chunk=8, coop=False)
+    np.testing.assert_allclose(np.asarray(coop), ref, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(np.asarray(lane0), ref, rtol=1e-4, atol=1e-4)
+
+
+@gpu
 def test_metal_chunked_with_output_gate_and_erase_off():
     Q, K, V = _qkv(24)
     gate = np.random.default_rng(25).standard_normal((_B, _H, _S, _D)).astype(np.float32)

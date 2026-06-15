@@ -7480,6 +7480,66 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
   }
 }
 
+// COOPERATIVE-MATRIX matmul + fused row REDUCTION (Optimizing-Compiler Plan
+// F2d-v2).  One threadgroup (one simdgroup, 32 threads) computes a BM-row block
+// × the full N via simdgroup_matrix MMA into static threadgroup memory, then
+// reduces each row (softmax/rmsnorm) — the matmul runs on the matrix units while
+// the reduction stays in one kernel.  Dispatch: 1D grid of ceil(M/8) row-blocks
+// × 32 threads.  ``elem_size`` 2=f16 / 4=f32.  Buffers as for the coopmat symbol.
+extern "C" int32_t tessera_apple_gpu_synth_matmul_reduce_coopmat(
+    const char* msl_source, const char* entry, const void* A, const void* B,
+    const void* bias, void* O, int32_t M, int32_t N, int32_t K,
+    int32_t has_bias, int32_t elem_size) {
+  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
+      (elem_size != 2 && elem_size != 4))
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger es = (NSUInteger)elem_size;
+    NSUInteger aBytes = es * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger bBytes = es * (NSUInteger)K * (NSUInteger)N;
+    NSUInteger oBytes = es * (NSUInteger)M * (NSUInteger)N;
+    NSUInteger biasBytes = es * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufB || !bufO) return 0;
+    id<MTLBuffer> bufBias = nil;
+    if (has_bias != 0 && bias) {
+      bufBias = metal_buffer_acquire_with_bytes(ctx, bias, biasBytes);
+      if (!bufBias) return 0;
+    }
+    MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
+
+    const NSUInteger BM = 8;
+    MTLSize grid = MTLSizeMake(((NSUInteger)M + BM - 1) / BM, 1, 1);
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:MTLSizeMake(32, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_reduce_coopmat"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 // Generic SYNTHESIZED attention dispatch (Optimizing-Compiler Plan F2c).  The
 // fused ``O = softmax(scale * Q @ Kᵀ) @ V`` block — one query row per thread,
 // the score row in a stack accumulator, a two-pass (max/exp-sum) softmax, then

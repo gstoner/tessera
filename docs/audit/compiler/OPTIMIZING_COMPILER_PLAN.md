@@ -188,7 +188,35 @@ the lit/roadmap/audit surfaces. The whole `matmul_{gelu,rmsnorm,softmax}` catalo
 family is gone; one synthesized symbol set (`synth_matmul_epilogue{,_tiled,_f16}`)
 covers it. **Count-down complete** for the matmul-epilogue catalog.
 
+### F2d — cooperative-matrix synthesis (landed) + v2 (reduction)
+
+The scalar synthesized matmul runs as fp32 FMA in the general ALU (~12 GF/s, ~no
+f16 speedup — the matrix units are never touched).  **F2d** emits a
+`simdgroup_matrix` matmul (f16 multiply / fp32 accumulate) with the pointwise
+epilogue fused after; `run_fused_region` prefers it for pointwise f16/f32 regions.
+Measured on M1 Max (matmul→gelu): ~13 → **1289 GF/s** f16 (~98×), **1.76×** f16/f32
+(the matrix-unit win the scalar kernel couldn't reach), epilogue still fused.
+
+**v1.1 (evaluated, reverted):** manual double-buffered K-slab prefetch was a wash
+on Apple — no `cp.async`, so the threadgroup prefetch doesn't overlap load with
+compute the way it does on NVIDIA.  The real tile upgrade is 64×64 register
+blocking (`mtl4_matmul_sg_fast` hits ~80% of MPS); deferred as perf-only.
+
+**v2 (landed) — softmax/rmsnorm on the matrix units:**
+`synthesize_matmul_reduction_coopmat_msl` + `…_reduce_coopmat` C ABI: one
+threadgroup computes a BM-row block × the full N via simdgroup MMA into
+threadgroup memory, then reduces each row in the same kernel (no global
+round-trip).  Oracle-gated (softmax/rmsnorm, f16/f32, N ≤ 512).  Measured **7.2×**
+over the scalar reduction kernel — but ~90 GF/s, far below the pointwise coopmat
+(~1289): the BM=8 / one-simdgroup / one-thread-per-row-reduce design is the
+bottleneck.  **Not wired as the `run_fused_region` default** (a v2.1 with more
+simdgroups + a cooperative reduction, or routing small-N reductions to
+MPS-matmul + MPSGraph-reduce, is likely faster — pending a fuller comparison); it
+ships as the proven, measured `run_fused_region_coopmat_reduce` path.
+
 **Deferred (honest):**
+- **F2d v2.1 / tile upgrade** — more simdgroups + cooperative row reduction for
+  v2; 64×64 register-blocked tiles for v1; both perf-only.
 - **Free the dead internal helpers** — the C++ `dispatch_matmul_*_msl{,_f16}` /
   `reference_matmul_*` / `*_via_fp32` helpers + their MSL-source constants are now
   unreferenced (the public symbols that called them are gone). They linger as

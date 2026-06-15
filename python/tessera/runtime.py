@@ -10497,6 +10497,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f16")
                 # F2d cooperative-matrix synthesis (simdgroup_matrix MMA).
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_coopmat")
+                # F2d-v2 coopmat matmul + fused row reduction.
+                getattr(lib, "tessera_apple_gpu_synth_matmul_reduce_coopmat")
                 # Phase 8.4.8 — SwiGLU MLP-block fusion (Stage 3 of the
                 # SwiGLU Performance Plan). f32 native MSL + f16/bf16
                 # reference fallback today; native half MSL is a follow-up.

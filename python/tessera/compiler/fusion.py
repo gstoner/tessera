@@ -465,6 +465,10 @@ kernel void {_ENTRY_COOPMAT}(
         for (int j = 0; j < NT; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
 
     // Cooperative K-slab staging (128 threads, zero-padded out of range).
+    // Single-buffered: manual double-buffering was measured a wash on Apple
+    // (no cp.async — the threadgroup prefetch doesn't overlap load with compute
+    // the way it does on NVIDIA), so the simpler kernel is kept.  The real tile
+    // upgrade is 64x64 register blocking (a deferred perf-only follow-up).
     for (int k0 = 0; k0 < K; k0 += BK) {{
         for (int e = int(tid); e < BM * BK; e += 128) {{
             int r = e / BK, kk = e % BK;
@@ -505,6 +509,135 @@ kernel void {_ENTRY_COOPMAT}(
 {pointwise}
             O[gr * N + gc] = ({io})v;
         }}
+    }}
+}}
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F2d-v2 — cooperative-matrix matmul + cross-tile REDUCTION (softmax/rmsnorm)
+#
+# v1 leaves reduction regions on the scalar path: a row spans ceil(N/32)
+# threadgroups, so the matmul can't both run on the matrix units AND reduce in
+# one kernel — unless one threadgroup owns a whole row-block.  This kernel does
+# exactly that: one threadgroup (one simdgroup) computes BM rows × the FULL N via
+# simdgroup MMA into threadgroup memory, applies the pointwise chain, then runs
+# the row reduction (each of BM rows by one thread) and writes O.  N is capped by
+# the threadgroup budget (BM * N fp32 scores); larger N stays on the scalar/
+# compose paths.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ENTRY_COOPMAT_REDUCE = "synth_matmul_reduce_coopmat"
+_COOPMAT_REDUCE_BM = 8
+#: Static N cap for the v2 kernel (Cs[BM*N] fp32 in threadgroup memory).
+SYNTH_COOPMAT_REDUCE_MAX_N = 512
+
+_COOPMAT_REDUCTIONS: dict[str, str] = {
+    "rmsnorm":
+        "        float _ss = 0.0f;\n"
+        "        for (int c = 0; c < N; ++c) _ss += Cs[rr * N + c] * Cs[rr * N + c];\n"
+        "        float _invr = rsqrt(_ss / float(N) + {eps}f);\n"
+        "        for (int c = 0; c < N; ++c)\n"
+        "            O[(brow + rr) * N + c] = ({io})(Cs[rr * N + c] * _invr);\n",
+    "softmax":
+        "        float _mx = -INFINITY;\n"
+        "        for (int c = 0; c < N; ++c) _mx = max(_mx, Cs[rr * N + c]);\n"
+        "        float _sm = 0.0f;\n"
+        "        for (int c = 0; c < N; ++c) {{ float e = exp(Cs[rr * N + c] - _mx);"
+        " Cs[rr * N + c] = e; _sm += e; }}\n"
+        "        float _inv = (_sm > 0.0f) ? (1.0f / _sm) : 0.0f;\n"
+        "        for (int c = 0; c < N; ++c)\n"
+        "            O[(brow + rr) * N + c] = ({io})(Cs[rr * N + c] * _inv);\n",
+}
+
+
+def coopmat_reduce_eligible(region: FusedRegion, N: int) -> bool:
+    """v2 covers a terminal reduction (softmax/rmsnorm) when the row fits the
+    threadgroup-memory cap."""
+    return (region.reduction in _COOPMAT_REDUCTIONS
+            and 0 < N <= SYNTH_COOPMAT_REDUCE_MAX_N)
+
+
+def synthesize_matmul_reduction_coopmat_msl(region: FusedRegion,
+                                            dtype: str = "f16") -> str:
+    """Emit a cooperative-matrix matmul + fused row reduction (softmax/rmsnorm).
+    One threadgroup (one simdgroup, 32 threads) computes ``BM`` rows × the full N
+    via ``simdgroup_matrix`` MMA into ``Cs`` (fp32, threadgroup), applies the
+    pointwise chain, then each of the BM rows is reduced by one thread."""
+    if region.reduction not in _COOPMAT_REDUCTIONS:
+        raise ValueError(f"coopmat reduce: unsupported reduction {region.reduction!r}")
+    io = _io_type(dtype)
+    bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
+                  if region.has_bias else "")
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    reduce_block = _COOPMAT_REDUCTIONS[region.reduction].format(io=io, eps=region.eps)
+    sg_in = f"simdgroup_matrix<{io}, 8, 8>"
+    bm = _COOPMAT_REDUCE_BM
+    maxn = SYNTH_COOPMAT_REDUCE_MAX_N
+
+    return f"""#include <metal_stdlib>
+#include <metal_simdgroup_matrix>
+using namespace metal;
+constant constexpr int BM = {bm};
+constant constexpr int BK = 16;
+constant constexpr int MAXN = {maxn};
+kernel void {_ENTRY_COOPMAT_REDUCE}(
+    device const {io}* A   [[buffer(0)]],
+    device const {io}* B   [[buffer(1)]],
+    device {io}*       O   [[buffer(2)]],
+    constant int&      M   [[buffer(3)]],
+    constant int&      N   [[buffer(4)]],
+    constant int&      K   [[buffer(5)]],
+{bias_param}    uint  tg  [[threadgroup_position_in_grid]],
+    uint  tid [[thread_index_in_threadgroup]])
+{{
+    int brow = int(tg) * BM;
+    if (brow >= M || N > MAXN) return;
+    threadgroup {io} As[BM * BK];
+    threadgroup {io} Bs[BK * 8];
+    threadgroup float Cs[BM * MAXN];
+
+    // Compute the BM × N score strip, one 8-col tile at a time.
+    for (int jb = 0; jb < N; jb += 8) {{
+        simdgroup_float8x8 acc = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+        for (int k0 = 0; k0 < K; k0 += BK) {{
+            for (int e = int(tid); e < BM * BK; e += 32) {{
+                int r = e / BK, kk = e % BK;
+                int gr = brow + r, gk = k0 + kk;
+                As[e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
+            }}
+            for (int e = int(tid); e < BK * 8; e += 32) {{
+                int kk = e / 8, c = e % 8;
+                int gk = k0 + kk, gc = jb + c;
+                Bs[e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
+            }}
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+            for (int kk = 0; kk < BK; kk += 8) {{
+                {sg_in} a, b;
+                simdgroup_load(a, As + kk, BK);
+                simdgroup_load(b, Bs + kk * 8, 8);
+                simdgroup_multiply_accumulate(acc, a, b, acc);
+            }}
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }}
+        simdgroup_store(acc, Cs + jb, N);   // 8 rows × 8 cols at column jb
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }}
+
+    // Pointwise chain in place (bias[n] indexes the column).
+    for (int e = int(tid); e < BM * N; e += 32) {{
+        int c = e % N;
+        float v = Cs[e];
+        int n = c;
+{pointwise}
+        Cs[e] = v;
+    }}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Row reduction: each of the BM rows reduced by one thread.
+    for (int rr = int(tid); rr < BM; rr += 32) {{
+        if (brow + rr < M) {{
+{reduce_block}        }}
     }}
 }}
 """
@@ -596,6 +729,61 @@ def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         bias_ptr = vp(bias_arr) if bias_arr is not None else None
         rc = sym(source, _ENTRY_COOPMAT.encode("utf-8"), vp(A), vp(B), bias_ptr,
                  vp(out), M, N, K, 1 if region.has_bias else 0, elem_size)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(A, B, bias_arr).astype(np_dt), "reference"
+
+
+def _synth_coopmat_reduce_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_matmul_reduce_coopmat", None)
+    if sym is None:
+        return None
+    vp = ctypes.c_void_p
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vp, vp, vp, vp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_fused_region_coopmat_reduce(region: FusedRegion, A: np.ndarray,
+                                    B: np.ndarray, bias: np.ndarray | None = None
+                                    ) -> tuple[np.ndarray, str]:
+    """Run a reduction region (matmul -> pointwise -> softmax/rmsnorm) via the
+    cooperative-matrix kernel (F2d-v2): the matmul runs on the matrix units and
+    the row reduction is fused in one kernel.  f16/f32 only, N within the
+    threadgroup cap; everything else falls back to the scalar
+    ``run_fused_region``.  Returns ``(output, execution)``."""
+    in_dtype = np.asarray(A).dtype
+    N = np.asarray(B).shape[1]
+    if not (coopmat_reduce_eligible(region, N)
+            and in_dtype in (np.float16, np.float32)):
+        return run_fused_region(region, A, B, bias)
+    np_dt, elem_size, dtype = ((np.float16, 2, "f16") if in_dtype == np.float16
+                               else (np.float32, 4, "f32"))
+    A = np.ascontiguousarray(A, np_dt)
+    B = np.ascontiguousarray(B, np_dt)
+    M, K = A.shape
+    K2, N = B.shape
+    if K2 != K:
+        raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
+    bias_arr = None
+    if region.has_bias:
+        if bias is None:
+            raise ValueError("region needs a bias")
+        bias_arr = np.ascontiguousarray(bias, np_dt).reshape(N)
+
+    sym = _synth_coopmat_reduce_symbol()
+    if sym is not None:
+        source = synthesize_matmul_reduction_coopmat_msl(
+            region, dtype=dtype).encode("utf-8")
+        out = np.zeros((M, N), np_dt)
+        vp = lambda a: a.ctypes.data_as(ctypes.c_void_p)
+        bias_ptr = vp(bias_arr) if bias_arr is not None else None
+        rc = sym(source, _ENTRY_COOPMAT_REDUCE.encode("utf-8"), vp(A), vp(B),
+                 bias_ptr, vp(out), M, N, K, 1 if region.has_bias else 0, elem_size)
         if rc == 1:
             return out, "metal_runtime"
     return region.reference(A, B, bias_arr).astype(np_dt), "reference"
@@ -1271,6 +1459,10 @@ __all__ = [
     "synthesize_matmul_epilogue_coopmat_msl",
     "run_fused_region_coopmat",
     "coopmat_eligible",
+    "synthesize_matmul_reduction_coopmat_msl",
+    "run_fused_region_coopmat_reduce",
+    "coopmat_reduce_eligible",
+    "SYNTH_COOPMAT_REDUCE_MAX_N",
     "AutotuneRecord",
     "autotune_matmul_epilogue",
     "best_variant_for",

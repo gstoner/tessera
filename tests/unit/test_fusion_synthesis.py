@@ -859,6 +859,66 @@ def test_coopmat_synthesis_equals_unfused_on_metal(chain, has_bias, dtype, shape
                        atol=atol, rtol=atol)
 
 
+def test_coopmat_reduce_synthesizer_structure_and_eligibility():
+    from tessera.compiler.fusion import (
+        synthesize_matmul_reduction_coopmat_msl, coopmat_reduce_eligible,
+        SYNTH_COOPMAT_REDUCE_MAX_N,
+    )
+    src = synthesize_matmul_reduction_coopmat_msl(
+        FusedRegion((), reduction="softmax"), dtype="f16")
+    assert "simdgroup_multiply_accumulate" in src      # matmul on the matrix units
+    assert "simdgroup_matrix<half, 8, 8>" in src
+    assert "exp(Cs[rr * N + c] - _mx)" in src           # fused row reduction
+    # eligibility: a terminal reduction within the N cap.
+    assert coopmat_reduce_eligible(FusedRegion((), reduction="softmax"), 256)
+    assert coopmat_reduce_eligible(FusedRegion((), reduction="rmsnorm"),
+                                   SYNTH_COOPMAT_REDUCE_MAX_N)
+    assert not coopmat_reduce_eligible(FusedRegion((), reduction="softmax"),
+                                       SYNTH_COOPMAT_REDUCE_MAX_N + 1)
+    assert not coopmat_reduce_eligible(FusedRegion(("gelu",)), 64)  # not a reduction
+
+
+_COOPMAT_REDUCE_CASES = [
+    ((), "softmax", False),
+    ((), "rmsnorm", False),
+    (("bias",), "softmax", True),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("chain,red,has_bias", _COOPMAT_REDUCE_CASES)
+@pytest.mark.parametrize("dtype", [np.float32, np.float16])
+@pytest.mark.parametrize("shape", [(64, 48, 96), (40, 128, 256), (8, 64, 512)])
+def test_coopmat_reduce_equals_unfused_on_metal(chain, red, has_bias, dtype, shape):
+    from tessera.compiler.fusion import run_fused_region_coopmat_reduce
+    M, K, N = shape
+    rng = np.random.default_rng((M * 17 + N + hash(red)) & 0xFFFF)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(dtype)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(dtype)
+    bias = (rng.standard_normal((N,)) * 0.3).astype(dtype) if has_bias else None
+    region = FusedRegion(chain, reduction=red, bias_name="bias" if has_bias else None)
+
+    out, execution = run_fused_region_coopmat_reduce(region, A, B, bias)
+    assert execution == "metal_runtime"           # matmul on matrix units + fused reduce
+    atol = 1e-3 if dtype == np.float32 else 4e-2
+    assert np.allclose(out.astype(np.float32), region.reference(A, B, bias),
+                       atol=atol, rtol=atol)
+
+
+def test_coopmat_reduce_falls_back_above_cap():
+    # N over the threadgroup cap → not eligible → scalar run_fused_region (still
+    # correct). Portable (no Metal needed for the fallback contract).
+    from tessera.compiler.fusion import (
+        run_fused_region_coopmat_reduce, SYNTH_COOPMAT_REDUCE_MAX_N,
+    )
+    big = SYNTH_COOPMAT_REDUCE_MAX_N + 64
+    A = np.random.RandomState(0).randn(8, 16).astype(np.float32)
+    B = np.random.RandomState(1).randn(16, big).astype(np.float32)
+    region = FusedRegion((), reduction="softmax")
+    out, _ex = run_fused_region_coopmat_reduce(region, A, B)
+    assert np.allclose(out, region.reference(A, B), atol=1e-4)
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
 def test_run_fused_region_prefers_coopmat_for_pointwise():
     # run_fused_region routes pointwise f16/f32 regions to coopmat; a reduction

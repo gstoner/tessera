@@ -71,6 +71,52 @@ EPILOGUE_OPS: dict[str, EpilogueOp] = {
 }
 
 
+@dataclass(frozen=True)
+class ReductionOp:
+    """A terminal *reduction* epilogue (rmsnorm/softmax): a row reduction over the
+    matmul-row accumulator ``scores[N]``, then a per-element finalize into ``O``.
+    Unlike pointwise ops, it needs the whole row — so it comes last, after any
+    pointwise chain.  ``msl`` is a block (uses ``N``/``scores``/``O``/``o_off``,
+    ``{eps}`` substituted); ``ref(x, eps)`` is the numpy ground truth."""
+
+    name: str
+    msl: str
+    ref: Callable[[np.ndarray, float], np.ndarray]
+
+
+def _rmsnorm_ref(x: np.ndarray, eps: float) -> np.ndarray:
+    return x / np.sqrt(np.mean(x ** 2, axis=-1, keepdims=True) + eps)
+
+
+def _softmax_ref(x: np.ndarray, eps: float) -> np.ndarray:
+    e = np.exp(x - x.max(-1, keepdims=True))
+    return e / e.sum(-1, keepdims=True)
+
+
+#: Terminal reduction epilogues.  Adding one here retires the corresponding
+#: hand-written matmul_<reduction> kernel.
+REDUCTION_OPS: dict[str, ReductionOp] = {
+    "rmsnorm": ReductionOp(
+        "rmsnorm",
+        "        float _ss = 0.0f;\n"
+        "        for (int n = 0; n < N; ++n) _ss += scores[n] * scores[n];\n"
+        "        float _inv = rsqrt(_ss / float(N) + {eps}f);\n"
+        "        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * _inv;",
+        _rmsnorm_ref,
+    ),
+    "softmax": ReductionOp(
+        "softmax",
+        "        float _mx = -INFINITY;\n"
+        "        for (int n = 0; n < N; ++n) _mx = max(_mx, scores[n]);\n"
+        "        float _sm = 0.0f;\n"
+        "        for (int n = 0; n < N; ++n) {{ scores[n] = exp(scores[n] - _mx);"
+        " _sm += scores[n]; }}\n"
+        "        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] / _sm;",
+        _softmax_ref,
+    ),
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # F0 — fused region
 # ─────────────────────────────────────────────────────────────────────────────
@@ -78,9 +124,12 @@ EPILOGUE_OPS: dict[str, EpilogueOp] = {
 
 @dataclass(frozen=True)
 class FusedRegion:
-    """A matmul root + an ordered pointwise epilogue chain (op names)."""
+    """A matmul root + an ordered pointwise epilogue chain + an optional terminal
+    reduction epilogue (rmsnorm/softmax).  The reduction, if present, runs last."""
 
     epilogue: tuple[str, ...]
+    reduction: str | None = None
+    eps: float = 1e-6
     a_name: str = "A"
     b_name: str = "B"
     bias_name: str | None = None
@@ -92,6 +141,10 @@ class FusedRegion:
         bias_ops = [op for op in self.epilogue if EPILOGUE_OPS[op].needs_bias]
         if len(bias_ops) > 1:
             raise ValueError("at most one bias op per region")
+        if self.reduction is not None and self.reduction not in REDUCTION_OPS:
+            raise ValueError(f"unknown reduction epilogue {self.reduction!r}")
+        if not self.epilogue and self.reduction is None:
+            raise ValueError("a region must have at least one epilogue op")
 
     @property
     def has_bias(self) -> bool:
@@ -99,8 +152,8 @@ class FusedRegion:
 
     def reference(self, A: np.ndarray, B: np.ndarray,
                   bias: np.ndarray | None = None) -> np.ndarray:
-        """The *unfused* result: matmul then each epilogue op, in numpy.  This is
-        the horizontal-oracle ground truth the synthesized kernel must match."""
+        """The *unfused* result: matmul, pointwise chain, then the reduction, in
+        numpy — the horizontal-oracle ground truth the synthesized kernel matches."""
         out = np.asarray(A, np.float32) @ np.asarray(B, np.float32)
         for op in self.epilogue:
             spec = EPILOGUE_OPS[op]
@@ -110,6 +163,8 @@ class FusedRegion:
                 out = out + np.asarray(bias, np.float32)
             else:
                 out = spec.ref(out)
+        if self.reduction is not None:
+            out = REDUCTION_OPS[self.reduction].ref(out, self.eps)
         return out.astype(np.float32)
 
 
@@ -120,13 +175,35 @@ class FusedRegion:
 
 def synthesize_matmul_epilogue_msl(region: FusedRegion) -> str:
     """Emit the MSL source for ``region`` — one row per thread, the matmul into a
-    stack accumulator, then the epilogue chain inlined per element."""
+    stack accumulator, the pointwise chain inlined, then (optionally) a terminal
+    reduction (rmsnorm/softmax) over the row."""
     bias_param = ("    device const float* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
-    body_lines = []
-    for op in region.epilogue:
-        body_lines.append(f"            {EPILOGUE_OPS[op].msl}")
-    body = "\n".join(body_lines)
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+
+    if region.reduction is None:
+        # pure pointwise: one pass, write O directly.
+        finalize = f"""    int o_off = row * N;
+    for (int n = 0; n < N; ++n) {{
+        float v = scores[n];
+{pointwise}
+        O[o_off + n] = v;
+    }}"""
+    else:
+        # pointwise modifies scores in place; then the reduction reads the whole
+        # row and writes O.
+        pw_pass = ""
+        if region.epilogue:
+            pw_pass = f"""    for (int n = 0; n < N; ++n) {{
+        float v = scores[n];
+{pointwise}
+        scores[n] = v;
+    }}
+"""
+        red = REDUCTION_OPS[region.reduction].msl.format(eps=region.eps)
+        finalize = f"""    int o_off = row * N;
+{pw_pass}{red}"""
+
     return f"""#include <metal_stdlib>
 using namespace metal;
 kernel void {_ENTRY}(
@@ -149,12 +226,7 @@ kernel void {_ENTRY}(
         int b_off = k * N;
         for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
     }}
-    int o_off = row * N;
-    for (int n = 0; n < N; ++n) {{
-        float v = scores[n];
-{body}
-        O[o_off + n] = v;
-    }}
+{finalize}
 }}
 """
 
@@ -234,6 +306,11 @@ _POINTWISE_ALIASES: dict[str, str] = {
     "tanh": "tanh", "add": "bias", "bias_add": "bias",
 }
 _MATMUL_NAMES = {"tessera.matmul", "tessera.gemm", "matmul", "gemm"}
+#: Terminal reduction epilogue op names → the REDUCTION_OPS key.
+_REDUCTION_ALIASES: dict[str, str] = {
+    "tessera.rmsnorm": "rmsnorm", "tessera.softmax": "softmax",
+    "rmsnorm": "rmsnorm", "softmax": "softmax",
+}
 
 
 def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], FusedRegion]]:
@@ -259,6 +336,7 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
             continue
         chain: list[int] = []
         epi: list[str] = []
+        reduction: str | None = None
         cur = op.output
         while True:
             if use_count.get(cur, 0) != 1:
@@ -275,16 +353,28 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
             epi.append(key)
             consumed.add(j)
             cur = nxt.output
-        if epi:
+        # a terminal reduction (rmsnorm/softmax) may close the chain — single-use.
+        if use_count.get(cur, 0) == 1:
+            consumers = by_input.get(cur, [])
+            if len(consumers) == 1:
+                j = consumers[0]
+                rkey = _REDUCTION_ALIASES.get(ops[j].name)
+                if rkey is not None:
+                    reduction = rkey
+                    chain.append(j)
+                    consumed.add(j)
+        if epi or reduction:
             a, b = op.inputs[0], op.inputs[1]
-            bias_name = None
-            regions.append((i, chain, FusedRegion(tuple(epi), a, b, bias_name)))
+            regions.append((i, chain, FusedRegion(tuple(epi), reduction=reduction,
+                                                  a_name=a, b_name=b)))
     return regions
 
 
 __all__ = [
     "EPILOGUE_OPS",
     "EpilogueOp",
+    "REDUCTION_OPS",
+    "ReductionOp",
     "FusedRegion",
     "SYNTH_MAX_N",
     "synthesize_matmul_epilogue_msl",

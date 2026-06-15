@@ -152,3 +152,145 @@ def test_fusion_collapses_dispatch_count():
     fused_dispatches = 1
     assert unfused_dispatches == 4
     assert fused_dispatches == 1
+
+
+# ── F2b: reduction epilogues (rmsnorm / softmax) ─────────────────────────────
+
+def test_reduction_region_synthesizes_a_row_reduction():
+    rms = synthesize_matmul_epilogue_msl(FusedRegion((), reduction="rmsnorm"))
+    assert "_ss += scores[n] * scores[n]" in rms       # sum-of-squares reduction
+    assert "rsqrt(_ss / float(N)" in rms
+    sm = synthesize_matmul_epilogue_msl(FusedRegion((), reduction="softmax"))
+    assert "_mx = max(_mx, scores[n])" in sm           # row max
+    assert "scores[n] / _sm" in sm                      # normalize
+
+
+def test_reduction_reference_matches_numpy():
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((4, 8)).astype(np.float32)
+    B = rng.standard_normal((8, 6)).astype(np.float32)
+    x = A @ B
+    rms = FusedRegion((), reduction="rmsnorm", eps=1e-6).reference(A, B)
+    assert np.allclose(rms, x / np.sqrt(np.mean(x ** 2, -1, keepdims=True) + 1e-6), atol=1e-5)
+    sm = FusedRegion((), reduction="softmax").reference(A, B)
+    e = np.exp(x - x.max(-1, keepdims=True))
+    assert np.allclose(sm, e / e.sum(-1, keepdims=True), atol=1e-5)
+
+
+def test_reduction_region_validation():
+    with pytest.raises(ValueError):
+        FusedRegion((), reduction="not_a_reduction")
+    with pytest.raises(ValueError):
+        FusedRegion(())                                 # empty + no reduction
+
+
+_REDUCTION_CHAINS = [
+    ((), "rmsnorm", False),                 # == hand-written matmul_rmsnorm
+    ((), "softmax", False),                 # == hand-written matmul_softmax
+    (("bias",), "rmsnorm", True),           # novel
+    (("bias", "gelu"), "softmax", True),    # novel 2-pointwise + reduction
+    (("relu",), "softmax", False),          # novel
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("chain,red,has_bias", _REDUCTION_CHAINS,
+                         ids=[f"{c}_{r}" for c, r, _ in _REDUCTION_CHAINS])
+def test_synthesized_reduction_equals_unfused_on_metal(chain, red, has_bias):
+    rng = np.random.default_rng((hash((chain, red))) & 0xFFFF)
+    M, K, N = 16, 32, 24
+    A = rng.standard_normal((M, K)).astype(np.float32)
+    B = rng.standard_normal((K, N)).astype(np.float32)
+    bias = rng.standard_normal((N,)).astype(np.float32) if has_bias else None
+    region = FusedRegion(chain, reduction=red, bias_name="bias" if has_bias else None)
+
+    out, execution = run_fused_region(region, A, B, bias)
+    assert execution == "metal_runtime"
+    assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_synthesizer_reproduces_the_handwritten_matmul_rmsnorm():
+    import ctypes
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    rt = _load_apple_gpu_runtime()
+    hw = getattr(rt, "tessera_apple_gpu_matmul_rmsnorm_f32", None)
+    if hw is None:
+        pytest.skip("hand-written matmul_rmsnorm symbol unavailable")
+    hw.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 3 + [ctypes.c_float]
+    hw.restype = None
+
+    rng = np.random.default_rng(5)
+    M, K, N = 12, 20, 16
+    A = rng.standard_normal((M, K)).astype(np.float32)
+    B = rng.standard_normal((K, N)).astype(np.float32)
+    hand = np.zeros((M, N), np.float32)
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    hw(fp(np.ascontiguousarray(A)), fp(np.ascontiguousarray(B)), fp(hand), M, N, K, 1e-6)
+
+    synth, execution = run_fused_region(FusedRegion((), reduction="rmsnorm", eps=1e-6), A, B)
+    assert execution == "metal_runtime"
+    assert np.allclose(synth, hand, atol=1e-4)
+
+
+def test_discovery_captures_terminal_reduction():
+    ops = [_Op("matmul", ("A", "B"), "m"),
+           _Op("add", ("m", "bias"), "a"),
+           _Op("rmsnorm", ("a",), "r")]
+    regions = discover_fusable_regions(ops)
+    assert len(regions) == 1
+    _mi, idx, region = regions[0]
+    assert region.epilogue == ("bias",)
+    assert region.reduction == "rmsnorm"
+    assert idx == [1, 2]
+
+
+# ── F1a: wired into the runtime per-op execution ─────────────────────────────
+
+def test_runtime_prepass_fuses_matmul_pointwise_chain():
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 16)).astype(np.float32)
+    B = rng.standard_normal((16, 12)).astype(np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+    values = {"x": A, "W": B}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1}
+    ref = FusedRegion(("gelu",)).reference(A, B)
+    assert np.allclose(values["g"], ref, atol=1e-4)
+
+
+def test_runtime_prepass_resolves_bias_and_reduction():
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(1)
+    A = rng.standard_normal((8, 16)).astype(np.float32)
+    B = rng.standard_normal((16, 12)).astype(np.float32)
+    bias = rng.standard_normal((12,)).astype(np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.add", "operands": ["%m", "%b"], "result": "%a"},
+           {"op_name": "tessera.rmsnorm", "operands": ["%a"], "result": "%r"}]
+    values = {"x": A, "W": B, "b": bias}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1, 2}
+    ref = FusedRegion(("bias",), reduction="rmsnorm").reference(A, B, bias)
+    assert np.allclose(values["r"], ref, atol=1e-4)
+
+
+def test_runtime_prepass_skips_when_intermediate_reused():
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(2)
+    A = rng.standard_normal((4, 8)).astype(np.float32)
+    B = rng.standard_normal((8, 6)).astype(np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"},
+           {"op_name": "tessera.add", "operands": ["%m", "%g"], "result": "%z"}]
+    consumed = _apple_gpu_try_synthesized_fusion(ops, {"x": A, "W": B}, np)
+    assert consumed == set()                  # m used twice → not fusible

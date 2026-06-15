@@ -2377,6 +2377,54 @@ def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any
     return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args)
 
 
+def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
+    """F1a (Optimizing-Compiler Plan) — run discovered ``matmul -> pointwise(->
+    reduction)`` regions as ONE synthesized MSL kernel.  Stores each region's
+    result in ``values`` and returns the set of op-indices it consumed (skipped
+    by the per-op loop).  Conservative: any ambiguity (non-2D operands, missing
+    values, unknown bias) skips the region and falls back to per-op dispatch."""
+    try:
+        from tessera.compiler.fusion import (
+            EPILOGUE_OPS, _Op, discover_fusable_regions, run_fused_region,
+        )
+    except Exception:                          # noqa: BLE001 - fusion optional
+        return set()
+
+    def _norm(s: Any) -> str:
+        return str(s).lstrip("%")
+
+    fops = [
+        _Op(str(o.get("op_name", "")),
+            tuple(_norm(x) for x in (o.get("operands") or [])),
+            _norm(o.get("result") or ""))
+        for o in ops
+    ]
+    consumed: set = set()
+    for mi, chain_idx, region in discover_fusable_regions(fops):
+        try:
+            a = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[0]]), np.float32)
+            b = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[1]]), np.float32)
+            if a.ndim != 2 or b.ndim != 2:
+                continue
+            bias = None
+            running = fops[mi].output
+            for pos, key in enumerate(region.epilogue):
+                op_idx = chain_idx[pos]
+                if EPILOGUE_OPS[key].needs_bias:
+                    ins = fops[op_idx].inputs
+                    bias_name = ins[1] if ins and ins[0] == running else ins[0]
+                    if bias_name not in values:
+                        raise KeyError(bias_name)
+                    bias = np.ascontiguousarray(_as_numpy(values[bias_name]), np.float32)
+                running = fops[op_idx].output
+            out, _exec = run_fused_region(region, a, b, bias)
+            values[fops[chain_idx[-1]].output] = out
+            consumed.update([mi, *chain_idx])
+        except Exception:                      # noqa: BLE001 - fall back to per-op
+            continue
+    return consumed
+
+
 def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
     """Phase 8.3 + 8.4: run an apple_gpu plan from a metadata dict directly.
 
@@ -2526,7 +2574,16 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
-    for op in ops:
+    # F1a (Optimizing-Compiler Plan) — general fusion: matmul -> pointwise(->
+    # reduction) regions execute as ONE synthesized MSL kernel instead of per-op
+    # dispatch.  Discovery is conservative (single-use intermediates) and every
+    # synthesized kernel is oracle-equivalent to the unfused chain, so the fused
+    # ops are skipped below.  Anything ambiguous falls back to per-op.
+    _fused_indices = _apple_gpu_try_synthesized_fusion(ops, values, np)
+
+    for _op_idx, op in enumerate(ops):
+        if _op_idx in _fused_indices:
+            continue                           # produced by a synthesized region
         op_name = str(op.get("op_name", ""))
         result = op.get("result")
         operand_names = [str(name) for name in op.get("operands", [])]

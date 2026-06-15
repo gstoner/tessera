@@ -1025,6 +1025,12 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
+    const char*, const char*, const void*, const void*, const void*,
+    void*, int32_t, int32_t, int32_t, int32_t, int32_t) {
+  return 0;
+}
+
 // Sprint 3.3 perf-fusion — fused pre-norm + projection (non-Darwin reference
 // parity): O = (rmsnorm(X) * gamma) @ W.  X:[M,K] gamma:[K] W:[K,N] -> O:[M,N].
 extern "C" void tessera_apple_gpu_rmsnorm_matmul_f32(const float* X,

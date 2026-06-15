@@ -397,6 +397,120 @@ kernel void {_ENTRY_TILED}(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# F2d — cooperative-matrix synthesis (simdgroup_matrix MMA + fused epilogue)
+#
+# The stack/tiled kernels do the matmul as scalar fp32 FMA in the general ALU —
+# measured ~12 GF/s and ~no f16 speedup (the matrix units are never touched).
+# This emits a `simdgroup_matrix` matmul (f16 multiply, fp32 accumulate — the
+# M-series "tensor core" path that runs ~2× for f16), stores the accumulator
+# tile to threadgroup memory, then runs the pointwise epilogue fused after.
+# Mirrors the proven hand-written `mtl4_matmul_sg` kernel (32×32 output tile,
+# 4 simdgroups / 128 threads, double-buffered K-slabs, bounds-checked).
+#
+# v1: POINTWISE epilogue only.  A terminal reduction (softmax/rmsnorm) needs a
+# cross-tile row reduction (a row spans ceil(N/32) threadgroups), so reduction
+# regions stay on the scalar tiled path until F2d-v2.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ENTRY_COOPMAT = "synth_matmul_epi_coopmat"
+
+
+def coopmat_eligible(region: FusedRegion) -> bool:
+    """v1 covers pointwise-epilogue regions (no terminal reduction)."""
+    return region.reduction is None
+
+
+def synthesize_matmul_epilogue_coopmat_msl(region: FusedRegion,
+                                           dtype: str = "f16") -> str:
+    """Emit a cooperative-matrix (``simdgroup_matrix``) matmul + fused pointwise
+    epilogue.  ``dtype`` selects the MMA input type (f16 taps the matrix units
+    at ~2×; f32 is the simdgroup f32 ceiling).  The accumulator is always fp32,
+    so the epilogue sees full-precision matmul results."""
+    if region.reduction is not None:
+        raise ValueError("coopmat v1 does not support reduction epilogues")
+    io = _io_type(dtype)
+    bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
+                  if region.has_bias else "")
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    sg_in = f"simdgroup_matrix<{io}, 8, 8>"
+
+    return f"""#include <metal_stdlib>
+#include <metal_simdgroup_matrix>
+using namespace metal;
+constant constexpr int BM = 32;
+constant constexpr int BN = 32;
+constant constexpr int BK = 16;
+constant constexpr int SG = 16;
+constant constexpr int NT = 2;
+kernel void {_ENTRY_COOPMAT}(
+    device const {io}* A   [[buffer(0)]],
+    device const {io}* B   [[buffer(1)]],
+    device {io}*       O   [[buffer(2)]],
+    constant int&      M   [[buffer(3)]],
+    constant int&      N   [[buffer(4)]],
+    constant int&      K   [[buffer(5)]],
+{bias_param}    uint2 tg  [[threadgroup_position_in_grid]],
+    uint  tid [[thread_index_in_threadgroup]],
+    uint  sgid [[simdgroup_index_in_threadgroup]])
+{{
+    int brow = int(tg.y) * BM;
+    int bcol = int(tg.x) * BN;
+    threadgroup {io} As[2][BM * BK];
+    threadgroup {io} Bs[2][BK * BN];
+    threadgroup float Cs[BM * BN];
+    int sg_row = int(sgid) / 2, sg_col = int(sgid) % 2;
+    int r0 = sg_row * SG, c0 = sg_col * SG;
+    simdgroup_float8x8 acc[NT][NT];
+    for (int i = 0; i < NT; ++i)
+        for (int j = 0; j < NT; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+
+    // Cooperative K-slab staging (128 threads, zero-padded out of range).
+    for (int k0 = 0; k0 < K; k0 += BK) {{
+        for (int e = int(tid); e < BM * BK; e += 128) {{
+            int r = e / BK, kk = e % BK;
+            int gr = brow + r, gk = k0 + kk;
+            As[0][e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
+        }}
+        for (int e = int(tid); e < BK * BN; e += 128) {{
+            int kk = e / BN, c = e % BN;
+            int gk = k0 + kk, gc = bcol + c;
+            Bs[0][e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
+        }}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (int kk = 0; kk < BK; kk += 8) {{
+            {sg_in} a[NT], b[NT];
+            for (int i = 0; i < NT; ++i)
+                simdgroup_load(a[i], As[0] + (r0 + i * 8) * BK + kk, BK);
+            for (int j = 0; j < NT; ++j)
+                simdgroup_load(b[j], Bs[0] + kk * BN + (c0 + j * 8), BN);
+            for (int i = 0; i < NT; ++i)
+                for (int j = 0; j < NT; ++j)
+                    simdgroup_multiply_accumulate(acc[i][j], a[i], b[j], acc[i][j]);
+        }}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }}
+
+    // Store the fp32 accumulator tile to threadgroup memory, then run the
+    // pointwise epilogue per element (bias[n] indexes the global column).
+    for (int i = 0; i < NT; ++i)
+        for (int j = 0; j < NT; ++j)
+            simdgroup_store(acc[i][j], Cs + (r0 + i * 8) * BN + (c0 + j * 8), BN);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (int e = int(tid); e < BM * BN; e += 128) {{
+        int r = e / BN, c = e % BN;
+        int gr = brow + r, gc = bcol + c;
+        if (gr < M && gc < N) {{
+            float v = Cs[e];
+            int n = gc;
+{pointwise}
+            O[gr * N + gc] = ({io})v;
+        }}
+    }}
+}}
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # F2a — GPU dispatch (compile + run the synthesized MSL)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -427,6 +541,64 @@ def _synth_tiled_symbol() -> Any:
                     ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
     sym.restype = ctypes.c_int32
     return sym
+
+
+def _synth_coopmat_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_matmul_epilogue_coopmat", None)
+    if sym is None:
+        return None
+    vp = ctypes.c_void_p
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vp, vp, vp, vp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
+                             bias: np.ndarray | None = None
+                             ) -> tuple[np.ndarray, str]:
+    """Run the region via the COOPERATIVE-MATRIX synthesized kernel (F2d) —
+    ``simdgroup_matrix`` MMA (f16 multiply / fp32 accumulate) with the pointwise
+    epilogue fused after.  f16/f32 inputs only; reduction regions and other
+    dtypes fall back to the scalar ``run_fused_region``.  Returns
+    ``(output, execution)``."""
+    if not coopmat_eligible(region):
+        return run_fused_region(region, A, B, bias)
+    in_dtype = np.asarray(A).dtype
+    np_dt: Any
+    if in_dtype == np.float16:
+        np_dt, elem_size, dtype = np.float16, 2, "f16"
+    elif in_dtype == np.float32:
+        np_dt, elem_size, dtype = np.float32, 4, "f32"
+    else:
+        return run_fused_region(region, A, B, bias)   # bf16/other → scalar path
+    A = np.ascontiguousarray(A, np_dt)
+    B = np.ascontiguousarray(B, np_dt)
+    M, K = A.shape
+    K2, N = B.shape
+    if K2 != K:
+        raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
+    bias_arr = None
+    if region.has_bias:
+        if bias is None:
+            raise ValueError("region needs a bias")
+        bias_arr = np.ascontiguousarray(bias, np_dt).reshape(N)
+
+    sym = _synth_coopmat_symbol()
+    if sym is not None:
+        source = synthesize_matmul_epilogue_coopmat_msl(
+            region, dtype=dtype).encode("utf-8")
+        out = np.zeros((M, N), np_dt)
+        vp = lambda a: a.ctypes.data_as(ctypes.c_void_p)
+        bias_ptr = vp(bias_arr) if bias_arr is not None else None
+        rc = sym(source, _ENTRY_COOPMAT.encode("utf-8"), vp(A), vp(B), bias_ptr,
+                 vp(out), M, N, K, 1 if region.has_bias else 0, elem_size)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(A, B, bias_arr).astype(np_dt), "reference"
 
 
 def _bf16_dtype() -> Any:
@@ -501,6 +673,13 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     type) converts to f32, runs, and converts back."""
     in_dtype = np.asarray(A).dtype
     bf16 = _bf16_dtype()
+    # F2d — pointwise regions run on the matrix units (simdgroup_matrix MMA),
+    # ~55-98x the scalar kernel and capturing the f16 throughput. Reduction
+    # regions stay on the scalar stack/tiled path (cross-tile row reduce is v2).
+    if coopmat_eligible(region) and in_dtype in (np.float16, np.float32):
+        out, ex = run_fused_region_coopmat(region, A, B, bias)
+        if ex == "metal_runtime":
+            return out, ex
     if bf16 is not None and in_dtype == bf16:
         out, ex = run_fused_region(
             region, np.asarray(A, np.float32), np.asarray(B, np.float32),
@@ -1089,6 +1268,9 @@ __all__ = [
     "SYNTH_DTYPES",
     "SYNTH_MAX_N_TILED",
     "synthesize_matmul_epilogue_msl_tiled",
+    "synthesize_matmul_epilogue_coopmat_msl",
+    "run_fused_region_coopmat",
+    "coopmat_eligible",
     "AutotuneRecord",
     "autotune_matmul_epilogue",
     "best_variant_for",

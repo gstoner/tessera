@@ -564,7 +564,10 @@ kernel void {F._ENTRY}(
 
     monkeypatch.setattr(F, "synthesize_matmul_epilogue_msl", broken_synth)
     clear_verification_cache()
-    region = FusedRegion(("gelu",))
+    # Use a REDUCTION region so it routes through the scalar synthesizer under
+    # test (pointwise regions now run on the coopmat path). The broken kernel
+    # drops the reduction → wrong → must be rejected.
+    region = FusedRegion((), reduction="rmsnorm")
     out, execution = F.run_fused_region(region, np.ones((4, 4), np.float32),
                                         np.ones((4, 4), np.float32))
     if execution != "metal_runtime":
@@ -601,10 +604,11 @@ kernel void {F._ENTRY}(
     F.clear_verification_cache()
     A = np.ones((4, 8), np.float32)
     B = np.ones((8, 6), np.float32)
+    # REDUCTION chain → scalar synthesizer path (pointwise → coopmat).
     ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
-           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+           {"op_name": "tessera.rmsnorm", "operands": ["%m"], "result": "%r"}]
     # probe whether Metal actually runs the (broken) kernel first.
-    _o, ex = F.run_fused_region(FusedRegion(("gelu",)), A, B)
+    _o, ex = F.run_fused_region(FusedRegion((), reduction="rmsnorm"), A, B)
     if ex != "metal_runtime":
         pytest.skip("Metal unavailable; oracle gate not exercised")
     F.clear_verification_cache()
@@ -800,6 +804,76 @@ def test_f16_synthesis_reproduces_handwritten_matmul_gelu_f16():
     # both use half I/O + fp32 accumulators + the same clamped-tanh gelu.
     assert np.allclose(synth.astype(np.float32), hand.astype(np.float32),
                        atol=2e-2, rtol=2e-2)
+
+
+# ── F2d cooperative-matrix synthesis (simdgroup_matrix MMA + fused epilogue) ──
+
+def test_coopmat_synthesizer_emits_simdgroup_matrix():
+    from tessera.compiler.fusion import synthesize_matmul_epilogue_coopmat_msl
+    src = synthesize_matmul_epilogue_coopmat_msl(FusedRegion(("gelu",)), dtype="f16")
+    assert "#include <metal_simdgroup_matrix>" in src
+    assert "simdgroup_multiply_accumulate" in src     # the MMA
+    assert "simdgroup_matrix<half, 8, 8>" in src       # f16 inputs
+    assert "simdgroup_float8x8 acc" in src             # fp32 accumulator
+    assert "device const half* A" in src               # half I/O
+
+
+def test_coopmat_eligibility_excludes_reductions():
+    from tessera.compiler.fusion import coopmat_eligible
+    assert coopmat_eligible(FusedRegion(("gelu",)))
+    assert coopmat_eligible(FusedRegion(("bias", "relu"), bias_name="bias"))
+    assert not coopmat_eligible(FusedRegion((), reduction="softmax"))
+    assert not coopmat_eligible(FusedRegion((), reduction="rmsnorm"))
+    # v1 rejects synthesizing a reduction coopmat kernel.
+    from tessera.compiler.fusion import synthesize_matmul_epilogue_coopmat_msl
+    with pytest.raises(ValueError):
+        synthesize_matmul_epilogue_coopmat_msl(FusedRegion((), reduction="softmax"))
+
+
+_COOPMAT_CASES = [
+    (("gelu",), False),
+    (("relu",), False),
+    (("silu",), False),
+    (("bias", "gelu"), True),
+    (("bias", "sigmoid", "tanh"), True),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("chain,has_bias", _COOPMAT_CASES)
+@pytest.mark.parametrize("dtype", [np.float32, np.float16])
+@pytest.mark.parametrize("shape", [(64, 48, 96), (128, 256, 128)])  # non-aligned + aligned
+def test_coopmat_synthesis_equals_unfused_on_metal(chain, has_bias, dtype, shape):
+    from tessera.compiler.fusion import run_fused_region_coopmat
+    M, K, N = shape
+    rng = np.random.default_rng((M * 13 + N + hash(chain)) & 0xFFFF)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(dtype)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(dtype)
+    bias = (rng.standard_normal((N,)) * 0.3).astype(dtype) if has_bias else None
+    region = FusedRegion(chain, bias_name="bias" if has_bias else None)
+
+    out, execution = run_fused_region_coopmat(region, A, B, bias)
+    assert execution == "metal_runtime"           # the simdgroup_matrix kernel ran
+    atol = 1e-4 if dtype == np.float32 else 3e-2
+    assert np.allclose(out.astype(np.float32), region.reference(A, B, bias),
+                       atol=atol, rtol=atol)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_run_fused_region_prefers_coopmat_for_pointwise():
+    # run_fused_region routes pointwise f16/f32 regions to coopmat; a reduction
+    # region still works (scalar path) — both correct.
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((96, 128)).astype(np.float16)
+    B = rng.standard_normal((128, 64)).astype(np.float16)
+    pw, ex1 = run_fused_region(FusedRegion(("gelu",)), A, B)
+    assert ex1 == "metal_runtime"
+    assert np.allclose(pw.astype(np.float32),
+                       FusedRegion(("gelu",)).reference(A, B), atol=3e-2)
+    red, ex2 = run_fused_region(FusedRegion((), reduction="softmax"), A, B)
+    assert ex2 == "metal_runtime"
+    assert np.allclose(red.astype(np.float32),
+                       FusedRegion((), reduction="softmax").reference(A, B), atol=3e-2)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")

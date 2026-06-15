@@ -186,7 +186,7 @@ gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,7,2,0,9,0,,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,33,17,1,50,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
+gelu,32,17,1,49,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
@@ -337,7 +337,7 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,55,10,2,65,0,bf16 f16 f32 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm,56,10,2,66,0,bf16 f16 f32 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,3,5,0,8,0,,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'

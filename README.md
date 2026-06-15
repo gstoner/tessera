@@ -192,6 +192,41 @@ canonical pipelines registered in `tessera-opt` today:
 | `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
 | `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
 
+### General Fusion Middle-End & Kernel Synthesis
+
+The Apple GPU backend is the proving ground for a **general fusion middle-end**:
+instead of a growing catalog of hand-written fused kernels, one *synthesizer*
+emits the kernel source for an entire family of fused regions, gated by an
+execution-derived oracle. The implementation lives in
+[`python/tessera/compiler/fusion.py`](python/tessera/compiler/fusion.py); the
+phased design is in
+[`docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md`](docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md).
+
+- **Region IR** — `FusedRegion` (a matmul root + a pointwise-epilogue chain + an
+  optional terminal reduction) and `AttentionRegion` (`softmax(scale·Q·Kᵀ)·V`)
+  capture a fusable subgraph as one schedulable unit.
+- **Discovery** — `discover_fusable_regions` grows maximal
+  `matmul → pointwise(→ reduction)` regions (single-use intermediates only) and
+  is wired into the Apple GPU runtime hot path.
+- **Synthesis** — `synthesize_matmul_epilogue_msl` emits one MSL kernel for any
+  region: a per-thread kernel (`N ≤ 1024`), a threadgroup-tiled kernel
+  (`N ≤ 8192`), and a native `half` (f16) variant; bf16 host-converts to f32.
+  The accumulator is always fp32, so the math is bit-identical across dtypes.
+- **Cost model** — `fusion_cost` / `should_fuse_*` decide profitability
+  (stack-fit, dispatch + DRAM-traffic savings); an over-cap region is left to the
+  per-op path.
+- **Codegen-gated oracle** — `verify_synthesized_region` runs each synthesized
+  kernel against the unfused reference before trusting it; a divergent
+  synthesizer is rejected (the codegen anti-silent-fallback gate).
+- **Autotune** — `autotune_matmul_epilogue` picks the fastest synthesis variant
+  that passes the oracle (perf gated behind correctness).
+
+**Catalog retirement:** the synthesizer has *replaced* the entire hand-written
+`matmul_{gelu,rmsnorm,softmax}` kernel family across f32/f16/bf16 (12 hand-written
+kernels → one synthesized symbol set, `synth_matmul_epilogue{,_tiled,_f16}`), each
+retirement proven bit-close to the kernel it replaced on Metal. The catalog
+*shrinks* as the general path absorbs it.
+
 ---
 
 ## Mathematical IR Surfaces

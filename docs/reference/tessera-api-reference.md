@@ -334,6 +334,44 @@ def flash_fwd(Q, K, V):
 Which targets are executable vs. artifact-only is tracked in
 [`docs/audit/generated/runtime_execution_matrix.md`](../audit/generated/runtime_execution_matrix.md).
 
+## Fusion Middle-End / Kernel Synthesis
+
+`tessera.compiler.fusion` is the general fusion middle-end: instead of a catalog
+of hand-written fused kernels, one *synthesizer* emits the kernel source for a
+family of fused regions, gated by an execution-derived oracle. It powers Apple
+GPU fusion today and is the prerequisite for the MLIR/LLVM lift to NVIDIA/AMD.
+Phased design + retirement status: [`docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md`](../audit/compiler/OPTIMIZING_COMPILER_PLAN.md).
+
+```python
+from tessera.compiler.fusion import (
+    FusedRegion, run_fused_region, discover_fusable_regions,
+    fusion_cost, verify_synthesized_region, autotune_matmul_epilogue,
+)
+
+# A fusable region: matmul -> bias -> gelu -> rmsnorm, captured as one unit.
+region = FusedRegion(("bias", "gelu"), reduction="rmsnorm", bias_name="bias")
+
+# Run it as ONE synthesized kernel (f32/f16 native, bf16 host-converts;
+# per-thread for N<=1024, threadgroup-tiled for N<=8192). The dtype of the
+# inputs selects the path; the output dtype follows the input.
+out, execution = run_fused_region(region, A, B, bias)   # execution: "metal_runtime" | "reference"
+```
+
+| Surface | What it does |
+|---------|--------------|
+| `FusedRegion(epilogue, reduction=None, eps=1e-6, bias_name=None)` | matmul root + ordered pointwise-epilogue chain (`EPILOGUE_OPS`: bias/relu/gelu/silu/sigmoid/tanh) + optional terminal reduction (`REDUCTION_OPS`: rmsnorm/softmax). `.reference(A, B, bias)` is the numpy oracle. |
+| `AttentionRegion(scale=1.0, causal=False)` | fused `softmax(scale·Q·Kᵀ)·V`. |
+| `discover_fusable_regions(ops)` / `discover_attention_regions(ops)` | grow maximal fusable regions from an op list (single-use intermediates only). The first is wired into the Apple GPU runtime hot path. |
+| `synthesize_matmul_epilogue_msl(region, variant="broadcast", dtype="f32")` / `…_tiled(region, dtype="f32")` / `synthesize_attention_msl(region)` | emit the MSL source. `dtype` ∈ `SYNTH_DTYPES` (`f32`/`f16`); `variant` ∈ `SYNTH_VARIANTS`. |
+| `run_fused_region(region, A, B, bias=None, variant="broadcast")` / `run_fused_attention(region, Q, K, V)` | compile (cached) + dispatch on Metal; return `(output, execution)`. |
+| `fusion_cost` / `attention_cost` → `FusionCost`; `should_fuse_region` / `should_fuse_attention` | analytical profitability (stack-fit hard gate at `SYNTH_MAX_N` / `SYNTH_MAX_N_TILED`, dispatch + DRAM-traffic savings). |
+| `verify_synthesized_region` / `verify_synthesized_attention` | codegen-gated oracle — a synthesized kernel runs only after matching the unfused reference on a probe; a divergent synthesizer is rejected. |
+| `autotune_matmul_epilogue(region, M, N, K)` / `best_variant_for(...)` | measure synthesis variants on Metal, gated behind cost + oracle; the winner is the fastest *correct* variant (perf behind correctness). |
+
+The hand-written `matmul_{gelu,rmsnorm,softmax}` kernel family (f32/f16/bf16) has
+been **retired** — the synthesizer subsumes it; see the plan doc for the
+count-down.
+
 ## Inspection
 
 The compiler exposes all four IR layers as inspectable objects on the

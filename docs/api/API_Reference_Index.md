@@ -81,6 +81,20 @@
 |--------|--------------|
 | `tessera.ops.*` (the standard operator library) | PYTHON_API_SPEC §13 · [Tessera_Standard_Operations.md](../operations/Tessera_Standard_Operations.md) |
 
+### Fusion Middle-End / Kernel Synthesis (`tessera.compiler.fusion`)
+
+| Symbol | Spec location |
+|--------|--------------|
+| `FusedRegion`, `AttentionRegion` (region IR) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `discover_fusable_regions`, `discover_attention_regions` (discovery) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `synthesize_matmul_epilogue_msl`, `synthesize_matmul_epilogue_msl_tiled`, `synthesize_attention_msl` (synthesis) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `run_fused_region`, `run_fused_attention` (dispatch) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `fusion_cost`, `attention_cost`, `should_fuse_region`, `should_fuse_attention` (F3 cost model) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `verify_synthesized_region`, `verify_synthesized_attention` (F4 codegen-gated oracle) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `autotune_matmul_epilogue`, `best_variant_for` (F5 autotune) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| `EPILOGUE_OPS`, `REDUCTION_OPS`, `SYNTH_VARIANTS`, `SYNTH_DTYPES`, `SYNTH_MAX_N`, `SYNTH_MAX_N_TILED` (vocabulary / caps) | [tessera-api-reference §Fusion Middle-End](../reference/tessera-api-reference.md) |
+| Phased design + catalog retirement status | [OPTIMIZING_COMPILER_PLAN.md](../audit/compiler/OPTIMIZING_COMPILER_PLAN.md) |
+
 ### Error Types
 
 | Symbol | Spec location |

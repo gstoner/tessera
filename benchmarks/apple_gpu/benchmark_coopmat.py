@@ -34,6 +34,7 @@ from tessera.compiler.fusion import (
     FusedRegion,
     run_fused_region,
     run_fused_region_coopmat,
+    run_fused_region_coopmat_reduce,
 )
 
 REGION = FusedRegion(("gelu",))   # pointwise → both the scalar and coopmat paths apply
@@ -57,13 +58,70 @@ def _parse_shape(spec: str) -> tuple[int, int, int]:
     return tuple(int(p) for p in parts)  # type: ignore[return-value]
 
 
+def _reduce_vs_compose(shapes: list[str], reps: int) -> list[dict[str, Any]]:
+    """F2d-v2.2 verdict harness — for each shape, time the fused coopmat-reduce
+    softmax kernel against (a) the pointwise coopmat kernel on the *identical*
+    matmul and (b) the production MPS-compose matmul->softmax path.
+
+    The (reduce / pointwise) ratio isolates the cause: the reduction phase is
+    free; the fused kernel pays 6-12x in the matmul because fusing the reduction
+    forces BM=8 / one simdgroup (the full N-wide row must stay resident in
+    threadgroup memory to be reduced).  A cooperative reduction tree can't relax
+    that, so v2.2 is structurally dominated by compose.  See OPTIMIZING_COMPILER_PLAN.md.
+    """
+    from tessera.runtime import _apple_gpu_dispatch_matmul_softmax
+    soft = FusedRegion(epilogue=(), reduction="softmax")
+    gelu = FusedRegion(epilogue=("gelu",))
+    rows: list[dict[str, Any]] = []
+    for shape in shapes:
+        M, K, N = _parse_shape(shape)
+        A = (np.random.RandomState(0).randn(M, K) * 0.3).astype(np.float16)
+        B = (np.random.RandomState(1).randn(K, N) * 0.3).astype(np.float16)
+        _o, exr = run_fused_region_coopmat_reduce(soft, A, B)
+        if exr != "metal_runtime":
+            continue
+        tr = _time(lambda: run_fused_region_coopmat_reduce(soft, A, B), reps)
+        tp = _time(lambda: run_fused_region_coopmat(gelu, A, B), reps)
+        tc = _time(lambda: _apple_gpu_dispatch_matmul_softmax([A, B], np), reps)
+        rows.append({
+            "backend": "apple_gpu", "op": "matmul_softmax", "shape": shape,
+            "dtype": "f16", "reps": reps,
+            "fused_reduce_ms": tr, "pointwise_coopmat_ms": tp, "compose_ms": tc,
+            "reduce_over_pointwise": tr / tp if tp > 0 else 0.0,
+            "compose_speedup": tr / tc if tc > 0 else 0.0,
+            "device": "apple_silicon_metal", "tessera_version": "dev",
+        })
+    return rows
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--shapes", nargs="+",
-                        default=["2048x1024x512", "2048x256x512", "2048x64x768"])
+    parser.add_argument("--shapes", nargs="+", default=None)
     parser.add_argument("--reps", type=int, default=40)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--mode", choices=("coopmat", "reduce-vs-compose"),
+                        default="coopmat",
+                        help="coopmat: scalar-vs-coopmat pointwise sweep (default). "
+                             "reduce-vs-compose: F2d-v2.2 fused-reduce vs "
+                             "pointwise-coopmat vs MPS-compose.")
     args = parser.parse_args(argv)
+
+    if args.mode == "reduce-vs-compose":
+        if sys.platform != "darwin":
+            print("apple_gpu coopmat benchmark: skipping (non-Darwin host)",
+                  file=sys.stderr)
+            return 0
+        shapes = args.shapes or ["512x512x512", "1024x256x512",
+                                 "2048x1024x256", "2048x512x128"]
+        rs = _reduce_vs_compose(shapes, args.reps)
+        output = json.dumps({"runs": rs}, indent=2, sort_keys=True)
+        if args.output is not None:
+            args.output.write_text(output)
+        else:
+            print(output)
+        return 0
+
+    args.shapes = args.shapes or ["2048x1024x512", "2048x256x512", "2048x64x768"]
 
     if sys.platform != "darwin":
         print("apple_gpu coopmat benchmark: skipping (non-Darwin host)",

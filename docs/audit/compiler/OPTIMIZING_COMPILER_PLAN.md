@@ -233,9 +233,28 @@ the *scalar* path (measured **85 ms** at 2048×1024×256).  So:
   is *not* the production path (compose wins for matmul-heavy; the scalar fused
   kernel handles sub-gate tiny shapes).
 
+**F2d-v2.2 cooperative-reduction — measured, NOT pursued (structurally dominated):**
+The hypothesis was that replacing the v2.1 serial row reduce (each of BM=8 rows
+reduced by one thread) with a cooperative multi-simdgroup reduction tree would
+let the single fused kernel beat compose.  Two measurements killed it:
+- **fused-reduce vs compose** (f16 softmax): compose wins **2.0–6.5×**
+  (512³ 4.33→1.21 ms; 2048×1024×256 10.29→1.58 ms).
+- **fused-reduce vs pointwise-coopmat on the _identical matmul_**: the reduce
+  kernel is **6–12× slower** than the 64×64 pointwise coopmat kernel.
+That second ratio is the verdict: the reduction *phase* is already free — the
+6–12× is lost in the **matmul**, because fusing the reduction forces BM=8 / one
+simdgroup so the full N-wide row stays resident in threadgroup memory to be
+reduced (`Cs[BM·MAXN]` ≈ 16 KB at BM=8, MAXN=512; BM=16 would blow the 32 KB
+budget).  A cooperative reduction tree optimizes the free phase and **cannot
+relax the BM=8 constraint that starves the matmul** — so v2.2 is structurally
+dominated by compose.  Production already routes matmul-heavy reductions to
+compose; v2.2 is closed, not deferred.  (Reproduce: the inline reduce/pointwise/
+compose harness; same shape sweep.)
+
 **Deferred (honest):**
-- **F2d v2.1 / tile upgrade** — more simdgroups + cooperative row reduction for
-  v2; 64×64 register-blocked tiles for v1; both perf-only.
+- **F2d v1.1 tile upgrade** — 64×64 register-blocked tiles for v1 pointwise
+  (landed; the per-shape 32/64 autotuner now picks the tile).  v2.2 cooperative
+  row reduction is **closed above, not deferred** (measured-dominated).
 - **Free the dead internal helpers** — the C++ `dispatch_matmul_*_msl{,_f16}` /
   `reference_matmul_*` / `*_via_fp32` helpers + their MSL-source constants are now
   unreferenced (the public symbols that called them are gone). They linger as

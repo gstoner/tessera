@@ -2607,6 +2607,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "linear_general": lambda op, a, k, np: _apple_gpu_dispatch_linear_general(a, k, np),
         "qkv_projection": lambda op, a, k, np: _apple_gpu_dispatch_qkv_projection(a, np),
         "reduce": _apple_gpu_dispatch_reduce,
+        "topk": _apple_gpu_dispatch_topk,
         "conv2d": lambda op, a, k, np: _apple_gpu_dispatch_conv2d(a, k, np),
         "conv3d": lambda op, a, k, np: _apple_gpu_dispatch_conv3d(a, k, np),
         "linalg": _apple_gpu_dispatch_linalg,

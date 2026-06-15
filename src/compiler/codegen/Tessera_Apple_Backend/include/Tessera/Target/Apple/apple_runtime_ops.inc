@@ -226,6 +226,9 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.stft")
 // lane: ssm (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.selective_ssm")
 
+// lane: topk (1 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.top_k")
+
 // lane: unary (37 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.abs")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.absolute")
@@ -271,5 +274,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 177
+// Total runtime-executable ops: 178
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

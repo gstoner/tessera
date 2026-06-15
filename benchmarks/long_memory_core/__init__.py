@@ -12,6 +12,7 @@ from .adapters import (
     run_all_adapters,
 )
 from .core import (
+    DIRECT_API_MEMORY_PRIMITIVES,
     LANDED_MEMORY_PRIMITIVES,
     MEMORY_PRIMITIVE_GAPS,
     PARTIAL_MEMORY_PRIMITIVES,
@@ -30,6 +31,7 @@ __all__ = [
     "ADAPTERS",
     "AMABenchAdapter",
     "AdapterResult",
+    "DIRECT_API_MEMORY_PRIMITIVES",
     "LANDED_MEMORY_PRIMITIVES",
     "LongBenchV2Adapter",
     "LongMemEvalAdapter",

@@ -254,31 +254,40 @@ def test_landed_contracts_are_not_also_gaps(name):
     assert name not in MEMORY_PRIMITIVE_GAPS
 
 
-def test_segmented_topk_is_partial_kernel_landed_frontend_pending():
-    # the Metal TopK kernel is landed+verified but not yet @jit-reachable —
-    # it must be in the PARTIAL bucket, not GAPS and not (fully) LANDED.
-    assert "segmented_topk_gpu" in PARTIAL_MEMORY_PRIMITIVES
-    assert "segmented_topk_gpu" not in MEMORY_PRIMITIVE_GAPS
-    assert "segmented_topk_gpu" not in LANDED_MEMORY_PRIMITIVES
-
-
-def test_resident_state_handle_read_residency_is_partial():
-    # read-residency landed (ResidentBank, HW-verified); append-residency remains
-    assert "resident_state_handle" in PARTIAL_MEMORY_PRIMITIVES
-    assert "resident_state_handle" not in MEMORY_PRIMITIVE_GAPS
-    # append-residency now landed too — kv_cache_append_read moved GAPS -> PARTIAL
-    assert "kv_cache_append_read" in PARTIAL_MEMORY_PRIMITIVES
-    assert "kv_cache_append_read" not in MEMORY_PRIMITIVE_GAPS
+def test_segmented_topk_fully_landed_via_jit():
+    # top_k now flows the full @jit pipeline to metal_runtime (rung 8) — it
+    # graduated from PARTIAL to LANDED, leaving PARTIAL empty.
+    assert "segmented_topk_gpu" in LANDED_MEMORY_PRIMITIVES
+    assert "segmented_topk_gpu" not in PARTIAL_MEMORY_PRIMITIVES
+    assert PARTIAL_MEMORY_PRIMITIVES == ()
     assert MEMORY_PRIMITIVE_GAPS == ()   # every long-memory on-device kernel landed
 
 
+def test_resident_handles_are_direct_apis_by_design():
+    # ResidentBank read/append are stateful device-handle APIs — direct by
+    # DESIGN (a mutable cross-call handle has no pure single-op Graph IR form),
+    # not @jit-routed and not a gap.
+    from benchmarks.long_memory_core import DIRECT_API_MEMORY_PRIMITIVES
+
+    assert "resident_state_handle" in DIRECT_API_MEMORY_PRIMITIVES
+    assert "kv_cache_append_read" in DIRECT_API_MEMORY_PRIMITIVES
+    assert "resident_state_handle" not in MEMORY_PRIMITIVE_GAPS
+    assert "kv_cache_append_read" not in MEMORY_PRIMITIVE_GAPS
+
+
 def test_buckets_are_disjoint():
-    gaps = set(MEMORY_PRIMITIVE_GAPS)
-    landed = set(LANDED_MEMORY_PRIMITIVES)
-    partial = set(PARTIAL_MEMORY_PRIMITIVES)
-    assert gaps.isdisjoint(landed)
-    assert gaps.isdisjoint(partial)
-    assert landed.isdisjoint(partial)
+    from benchmarks.long_memory_core import DIRECT_API_MEMORY_PRIMITIVES
+
+    sets = {
+        "gaps": set(MEMORY_PRIMITIVE_GAPS),
+        "landed": set(LANDED_MEMORY_PRIMITIVES),
+        "partial": set(PARTIAL_MEMORY_PRIMITIVES),
+        "direct_api": set(DIRECT_API_MEMORY_PRIMITIVES),
+    }
+    names = list(sets)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            assert sets[a].isdisjoint(sets[b]), f"{a} overlaps {b}"
 
 
 def test_telemetry_one_event_per_row():

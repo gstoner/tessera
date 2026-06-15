@@ -175,15 +175,13 @@ _APPLE_GPU_REDUCE_OPS = {
     "tessera.min": ("reduce", 3),   # reduce-min (alias of amin)
 }
 _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
-# NOTE: hard top-k (k>1) has a real, hardware-verified Metal dispatch
-# (`tessera_apple_gpu_mpsgraph_topk_f32` + runtime._apple_gpu_dispatch_topk),
-# but `tessera.top_k` is deliberately NOT in the runtime envelope yet: the @jit
-# AST frontend cannot emit the multi-output op into Graph IR, so it never flows
-# the Tile→Apple pipeline. Adding it here would assert a metal_runtime invariant
-# the C++ pass can't honor for an op that never reaches it. Wire the envelope
-# (here + isAppleGpuRuntimeOp in TileToApple.cpp + the runtime-ops .inc) together
-# with the frontend support, as one consistent change. Until then it stays in
-# long_memory_core.PARTIAL_MEMORY_PRIMITIVES (kernel landed, frontend pending).
+# Hard top-k (k>1) via MPSGraph's native TopK op (values + indices) — the
+# segmented_topk_gpu primitive. argmax/argmin (above) only give k==1.  The @jit
+# AST frontend now emits `tessera.top_k(%x) {k = N}` (positional scalar k → attr;
+# see graph_ir._POSITIONAL_ATTR_PARAMS), so it flows the Tile→Apple pipeline and
+# this envelope row routes it to metal_runtime (multi-output dispatch returns
+# (values, indices), like qkv_projection).
+_APPLE_GPU_TOPK_OPS = frozenset({"tessera.top_k"})
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
 # (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
 _APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
@@ -241,7 +239,8 @@ _APPLE_GPU_EBM_LOSS_OPS = frozenset({
 })
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
-    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_CONV_OPS
+    | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_TOPK_OPS
+    | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
     | _APPLE_GPU_SPECTRAL_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
@@ -284,6 +283,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put({"tessera.linear_general"}, "linear_general")
     put({"tessera.qkv_projection"}, "qkv_projection")
     put(_APPLE_GPU_REDUCE_OPS, "reduce")
+    put(_APPLE_GPU_TOPK_OPS, "topk")
     put({"tessera.conv2d"}, "conv2d")
     put({"tessera.conv3d"}, "conv3d")
     put(_APPLE_GPU_LINALG_OPS, "linalg")

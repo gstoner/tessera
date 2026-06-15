@@ -51,31 +51,24 @@ from tessera.memory import MemoryTable, memory_evict, memory_read, memory_write
 # PARTIAL_MEMORY_PRIMITIVES — not a missing kernel.
 MEMORY_PRIMITIVE_GAPS: tuple[str, ...] = ()
 
-# Primitives whose on-device kernel + runtime path is landed and HARDWARE-
-# VERIFIED, but which are not yet reachable through the full ``@jit`` single-call
-# path (a frontend-integration gap, not a kernel gap).  Distinct from GAPS (no
-# kernel) and LANDED (fully usable end-to-end).
-PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = (
-    # Hard top-k (k>1) runs on Metal via MPSGraph TopK
-    # (tessera_apple_gpu_mpsgraph_topk_f32, values+indices) through the directly-
-    # callable runtime._apple_gpu_dispatch_topk — hardware-verified in
-    # tests/unit/test_apple_gpu_topk.py.  NOT pipeline-routed: the frontend AST
-    # lowerer can't emit the multi-output `tessera.top_k` into Graph IR, so it is
-    # deliberately not in the runtime envelope (that wiring lands with the
-    # frontend).  `@jit(target="apple_gpu")(top_k)` falls back to eager today.
-    "segmented_topk_gpu",
-    # Read-residency: ResidentBank (tessera.resident_bank) keeps the bank's keys
-    # on-device across reads (one upload), scoring each query via the bmm_enc
-    # encode-session lane without re-uploading — hardware-verified in
-    # tests/unit/test_resident_bank.py (~28× upload reduction on Metal).
+# Primitives that are PURE on-device ops with a Metal kernel landed but whose
+# @jit pipeline routing was pending.  Now empty: segmented_topk_gpu graduated to
+# LANDED once the frontend learned to emit the multi-output `tessera.top_k`.
+PARTIAL_MEMORY_PRIMITIVES: tuple[str, ...] = ()
+
+# Stateful device-handle APIs — direct by DESIGN, not @jit-routed.  A ResidentBank
+# holds a persistent MTLBuffer and mutates it across decode steps; @jit traces a
+# *pure* function to a dataflow graph, so a mutable cross-call handle has no
+# honest single-op Graph IR representation (the same reason a KV-cache handle is
+# a direct API).  These are hardware-verified, fully usable runtime APIs — "not
+# @jit-routed" is the correct design, not a gap.
+DIRECT_API_MEMORY_PRIMITIVES: tuple[str, ...] = (
+    # ResidentBank read-residency: keys stay on-device across reads (one upload),
+    # scored via the bmm_enc encode-session lane — test_resident_bank.py, ~28×.
     "resident_state_handle",
-    # Append-residency: ResidentBank.append offset-writes a new entry into the
-    # resident buffer via the ts_dev_upload_at device symbol (O(entry), no full
-    # re-upload), scored against the growing bank with bmm_enc(M=current_seq) —
-    # hardware-verified in test_resident_bank.py (~32× upload reduction over a
-    # 128-step decode loop, metamorphically == recompute).  Landed as a direct
-    # ResidentBank API; a single fused @jit-routed append_read kernel is the
-    # remaining frontend-integration follow-on.
+    # ResidentBank.append offset-writes a new entry via ts_dev_upload_at (O(entry),
+    # no re-upload), scored against the growing bank — test_resident_bank.py, ~32×
+    # over a 128-step decode loop, metamorphically == recompute.
     "kv_cache_append_read",
 )
 
@@ -85,14 +78,17 @@ LANDED_MEMORY_PRIMITIVES: tuple[str, ...] = (
     # when no entry clears the score floor — the LongMemEval abstention contract.
     "abstention_read_threshold",
     # memory_read(..., prefer_recent=/recency_key=) breaks an exact-key score tie
-    # toward the newest write — the LongMemEval knowledge-update contract.  The
-    # resident-vs-recompute decode row proves the append-without-reprocess
-    # *algorithm* at reference level; cross-step residency stays a gap above.
+    # toward the newest write — the LongMemEval knowledge-update contract.
     "metadata_time_version_filter",
     # query·keysᵀ scoring + top-1 select + full-bank soft-read all execute on
-    # Metal (rung 8) — proven by tessera.compiler.memory_tasks against the
-    # Evaluator oracle.  Only HARD top-k (k>1) and residency remain gaps.
+    # Metal (rung 8) — proven by tessera.compiler.memory_tasks against the Evaluator.
     "memory_index_score_gpu",
+    # Hard top-k (k>1) — `tessera.top_k` now flows the full @jit pipeline to Metal
+    # (rung 8): the frontend emits the multi-output op (positional/closure scalar
+    # k → attribute), the Python + C++ (apple_runtime_ops.inc) envelope routes it,
+    # and runtime._apple_gpu_dispatch_topk returns (values, indices).  Proven in
+    # tests/unit/test_apple_gpu_topk.py::test_jit_top_k_routes_to_metal_runtime_at_rung8.
+    "segmented_topk_gpu",
 )
 
 
@@ -378,6 +374,7 @@ def build_report(rows: list[BenchmarkRow]) -> dict[str, Any]:
         "open_gaps": gaps,
         "landed_primitives": list(LANDED_MEMORY_PRIMITIVES),
         "partial_primitives": list(PARTIAL_MEMORY_PRIMITIVES),
+        "direct_api_primitives": list(DIRECT_API_MEMORY_PRIMITIVES),
     }
 
 

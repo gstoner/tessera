@@ -21,18 +21,46 @@ import sys
 import numpy as np
 import pytest
 
-# ── portable: top_k is intentionally NOT an envelope op (frontend-gated) ──────
+import tessera as ts
 
-def test_top_k_is_not_yet_in_the_runtime_envelope():
-    # Honest state: the Metal kernel + dispatch are landed and hardware-verified
-    # below, but top_k is NOT pipeline-routed — the @jit frontend can't emit the
-    # multi-output op, so it never reaches the Tile→Apple pass.  Claiming it in
-    # the envelope would assert a metal_runtime invariant the C++ pass can't
-    # honor.  When the frontend lands, this flips together with the C++
-    # isAppleGpuRuntimeOp + runtime-ops .inc wiring.
-    from tessera.compiler.apple_gpu_envelope import _APPLE_GPU_RUNTIME_OPS
 
-    assert "tessera.top_k" not in _APPLE_GPU_RUNTIME_OPS
+# ── portable: top_k is a routed envelope op ──────────────────────────────────
+
+def test_top_k_is_in_the_runtime_envelope():
+    from tessera.compiler.apple_gpu_envelope import (
+        APPLE_GPU_LANE_BY_OP,
+        _APPLE_GPU_RUNTIME_OPS,
+    )
+
+    assert "tessera.top_k" in _APPLE_GPU_RUNTIME_OPS
+    assert APPLE_GPU_LANE_BY_OP["tessera.top_k"] == "topk"
+
+
+def test_topk_lane_has_a_registered_handler():
+    from tessera.runtime import _apple_gpu_lane_handlers
+
+    assert "topk" in _apple_gpu_lane_handlers()
+
+
+# ── Darwin: full @jit pipeline — top_k flows to metal_runtime ────────────────
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="TopK executes on Metal.")
+def test_jit_top_k_routes_to_metal_runtime_at_rung8():
+    from tessera.compiler.evaluator import Rung, evaluate
+
+    rng = np.random.default_rng(7)
+    x = rng.standard_normal((4, 64)).astype(np.float32)
+    kk = 5
+
+    def _tk(x):
+        return ts.ops.top_k(x, kk)                      # positional scalar k
+
+    j = ts.jit(target="apple_gpu")(_tk)
+    oidx = np.argsort(x, axis=-1)[:, ::-1][:, :kk]
+    ovals = np.take_along_axis(x, oidx, axis=-1)
+    oracle = np.stack([ovals, oidx.astype(np.float32)])  # (values, indices) tuple
+    verdict = evaluate("apple_gpu", j, (x,), oracle, rtol=5e-3, atol=1e-3)
+    assert verdict.rung is Rung.HARDWARE_VERIFIED, verdict.detail
 
 
 # ── Darwin: hardware-verified Metal TopK (direct dispatch) ───────────────────

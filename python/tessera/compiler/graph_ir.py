@@ -45,6 +45,30 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
 }
 
 
+def _scalar_const_env(fn: Any) -> Dict[str, Any]:
+    """Scalar constants visible to ``fn`` — closure free vars + module globals —
+    so a positional scalar param passed by *name* (``top_k(x, k)`` with ``k`` a
+    free variable) resolves to its value as an op attribute, like a literal.
+    Only int/float/bool/str are captured (the kinds that lower to attributes)."""
+    env: Dict[str, Any] = {}
+    code = getattr(fn, "__code__", None)
+    closure = getattr(fn, "__closure__", None)
+    if code is not None and closure:
+        for name, cell in zip(code.co_freevars, closure):
+            try:
+                val = cell.cell_contents
+            except ValueError:
+                continue
+            if isinstance(val, (int, float, bool, str)):
+                env[name] = val
+    g = getattr(fn, "__globals__", None)
+    if isinstance(g, dict) and code is not None:
+        for name in code.co_names:
+            if name not in env and isinstance(g.get(name), (int, float, bool, str)):
+                env[name] = g[name]
+    return env
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # IR value types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -922,11 +946,17 @@ class _OpExtractor(ast.NodeVisitor):
     # Map from op bare name to Graph IR op name
     _OP_MAP = GRAPH_OP_MAP
 
-    def __init__(self, arg_names: List[str], arg_types: Optional[Dict[str, IRType]] = None) -> None:
+    def __init__(self, arg_names: List[str], arg_types: Optional[Dict[str, IRType]] = None,
+                 const_env: Optional[Dict[str, Any]] = None) -> None:
         self.ops: List[IROp] = []
         self.diagnostics: List[GraphIRDiagnostic] = []
         self._counter = 0
         self._arg_names = set(arg_names)
+        # Scalar constants captured from the function's closure / module globals
+        # so a positional scalar param passed by *name* (``top_k(x, k)`` where
+        # ``k`` is a free variable) resolves to its value as an attribute, like a
+        # literal does. Only int/float/bool/str are captured.
+        self._const_env: Dict[str, Any] = dict(const_env or {})
         self._value_types: Dict[str, IRType] = {f"%{name}": typ for name, typ in (arg_types or {}).items()}
         # SSA-renaming for reassigned locals (audit-fix 2026-05-31).
         # The Graph IR verifier rejects ``%c = ... %c = ...``; Python's
@@ -1528,7 +1558,9 @@ class _OpExtractor(ast.NodeVisitor):
             try:
                 literal = ast.literal_eval(arg)
             except (ValueError, TypeError, SyntaxError):
-                literal = None
+                # a positional scalar passed by name (closure / global constant)
+                if isinstance(arg, ast.Name) and arg.id in self._const_env:
+                    literal = self._const_env[arg.id]
             if literal is not None and scalar_seen < len(attr_params):
                 kwargs[attr_params[scalar_seen]] = literal
                 scalar_seen += 1
@@ -1759,7 +1791,7 @@ class GraphIRBuilder:
         except (OSError, TypeError, SyntaxError):
             return []
 
-        extractor = _OpExtractor(arg_names, arg_types)
+        extractor = _OpExtractor(arg_names, arg_types, _scalar_const_env(fn))
         # Only visit the function body (skip decorator lines)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

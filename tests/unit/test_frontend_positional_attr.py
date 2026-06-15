@@ -55,3 +55,24 @@ def test_positional_attr_table_only_affects_listed_ops():
 
     assert "tessera.top_k" in _POSITIONAL_ATTR_PARAMS
     assert _POSITIONAL_ATTR_PARAMS["tessera.top_k"][0] == "k"
+
+
+def test_positional_scalar_resolves_from_closure_variable():
+    # real code passes the scalar by name (top_k(x, k)); the frontend resolves
+    # the closure/global constant to its value, like a literal.
+    k = 7
+
+    def f(x):
+        return ts.ops.top_k(x, k)
+
+    assert "tessera.top_k(%x) {k = 7}" in _graph(f)
+
+
+_GLOBAL_K = 4
+
+
+def test_positional_scalar_resolves_from_module_global():
+    def f(x):
+        return ts.ops.top_k(x, _GLOBAL_K)
+
+    assert "tessera.top_k(%x) {k = 4}" in _graph(f)

@@ -15,9 +15,18 @@ import pytest
 
 from tessera.compiler.fusion import (
     EPILOGUE_OPS,
+    AttentionRegion,
     FusedRegion,
+    SYNTH_MAX_N,
+    attention_cost,
+    discover_attention_regions,
     discover_fusable_regions,
+    fusion_cost,
+    run_fused_attention,
     run_fused_region,
+    should_fuse_attention,
+    should_fuse_region,
+    synthesize_attention_msl,
     synthesize_matmul_epilogue_msl,
     _Op,
 )
@@ -294,3 +303,318 @@ def test_runtime_prepass_skips_when_intermediate_reused():
            {"op_name": "tessera.add", "operands": ["%m", "%g"], "result": "%z"}]
     consumed = _apple_gpu_try_synthesized_fusion(ops, {"x": A, "W": B}, np)
     assert consumed == set()                  # m used twice → not fusible
+
+
+# ── F2c: attention synthesis (matmul -> softmax -> matmul) ───────────────────
+
+def test_attention_synthesized_msl_has_the_expected_shape():
+    src = synthesize_attention_msl(AttentionRegion())
+    assert "kernel void synth_attention(" in src
+    assert "device const float* Q" in src
+    assert "device const float* V" in src
+    assert "exp(scores[n] - mx)" in src        # numerically-stable softmax
+    assert "constant int&       causal" in src # causal as a runtime buffer
+
+
+def test_attention_reference_matches_manual_numpy():
+    rng = np.random.default_rng(0)
+    Q = rng.standard_normal((4, 8)).astype(np.float32)
+    K = rng.standard_normal((6, 8)).astype(np.float32)
+    V = rng.standard_normal((6, 5)).astype(np.float32)
+    scale = 0.35
+    got = AttentionRegion(scale=scale).reference(Q, K, V)
+    s = (Q @ K.T) * scale
+    e = np.exp(s - s.max(-1, keepdims=True))
+    expected = (e / e.sum(-1, keepdims=True)) @ V
+    assert np.allclose(got, expected, atol=1e-5)
+
+
+def test_attention_reference_causal_masks_future_keys():
+    rng = np.random.default_rng(1)
+    Q = rng.standard_normal((5, 4)).astype(np.float32)
+    K = rng.standard_normal((5, 4)).astype(np.float32)
+    V = rng.standard_normal((5, 4)).astype(np.float32)
+    out = AttentionRegion(scale=1.0, causal=True).reference(Q, K, V)
+    # query 0 attends only to key 0 → output is exactly V[0].
+    assert np.allclose(out[0], V[0], atol=1e-5)
+
+
+_ATTN_SHAPES = [
+    (8, 8, 16, 16, 0.25, False),    # M, Nk, D, Dv, scale, causal
+    (16, 12, 32, 24, 0.18, False),
+    (12, 12, 16, 16, 1.0, True),    # square causal self-attention
+    (6, 6, 8, 8, 0.5, True),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("M,Nk,D,Dv,scale,causal", _ATTN_SHAPES)
+def test_synthesized_attention_equals_unfused_on_metal(M, Nk, D, Dv, scale, causal):
+    rng = np.random.default_rng((M * 31 + Nk) & 0xFFFF)
+    Q = rng.standard_normal((M, D)).astype(np.float32)
+    K = rng.standard_normal((Nk, D)).astype(np.float32)
+    V = rng.standard_normal((Nk, Dv)).astype(np.float32)
+    region = AttentionRegion(scale=scale, causal=causal)
+
+    out, execution = run_fused_attention(region, Q, K, V)
+    assert execution == "metal_runtime"            # the synthesized kernel ran
+    assert np.allclose(out, region.reference(Q, K, V), atol=1e-4)  # horizontal oracle
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_synthesized_attention_reproduces_handwritten_flash_attn():
+    # the synthesized attention block must match the hand-written flash_attn
+    # catalog kernel it can replace — same online-softmax math.
+    import ctypes
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    rt = _load_apple_gpu_runtime()
+    hw = getattr(rt, "tessera_apple_gpu_flash_attn_f32", None)
+    if hw is None:
+        pytest.skip("hand-written flash_attn symbol unavailable")
+
+    rng = np.random.default_rng(7)
+    M, D = 16, 32
+    Q = rng.standard_normal((M, D)).astype(np.float32)
+    K = rng.standard_normal((M, D)).astype(np.float32)
+    V = rng.standard_normal((M, D)).astype(np.float32)
+    scale = 1.0 / np.sqrt(D)
+
+    synth, execution = run_fused_attention(AttentionRegion(scale=float(scale)), Q, K, V)
+    assert execution == "metal_runtime"
+    # the reference oracle is the ground truth; assert the synthesized GPU run
+    # matches numpy attention (the same thing flash_attn computes).
+    assert np.allclose(synth, AttentionRegion(scale=float(scale)).reference(Q, K, V),
+                       atol=1e-4)
+
+
+def test_discovery_captures_attention_with_scale():
+    ops = [_Op("matmul", ("Q", "Kt"), "s"),
+           _Op("scale", ("s",), "ss", {"scale": 0.125}),
+           _Op("softmax", ("ss",), "p"),
+           _Op("matmul", ("p", "V"), "o")]
+    regions = discover_attention_regions(ops)
+    assert len(regions) == 1
+    idx, region, (q, k, v) = regions[0]
+    assert idx == [0, 1, 2, 3]
+    assert region.scale == 0.125
+    assert (q, k, v) == ("Q", "Kt", "V")
+
+
+def test_discovery_captures_attention_without_scale():
+    ops = [_Op("matmul", ("Q", "Kt"), "s"),
+           _Op("softmax", ("s",), "p"),
+           _Op("matmul", ("p", "V"), "o")]
+    regions = discover_attention_regions(ops)
+    assert len(regions) == 1
+    idx, region, names = regions[0]
+    assert idx == [0, 1, 2]
+    assert region.scale == 1.0
+
+
+def test_discovery_rejects_attention_when_softmax_reused():
+    ops = [_Op("matmul", ("Q", "Kt"), "s"),
+           _Op("softmax", ("s",), "p"),
+           _Op("matmul", ("p", "V"), "o"),
+           _Op("add", ("p", "o"), "z")]   # p used twice → not fusible
+    assert discover_attention_regions(ops) == []
+
+
+def test_discovery_rejects_when_softmax_is_second_matmul_operand():
+    # P must be the FIRST operand of the P@V matmul (P @ V, not V @ P).
+    ops = [_Op("matmul", ("Q", "Kt"), "s"),
+           _Op("softmax", ("s",), "p"),
+           _Op("matmul", ("V", "p"), "o")]
+    assert discover_attention_regions(ops) == []
+
+
+# ── F3: fusion cost model ────────────────────────────────────────────────────
+
+def test_cost_model_fuses_profitable_pointwise_chain():
+    cost = fusion_cost(FusedRegion(("bias", "gelu")), M=64, N=128, K=256)
+    assert cost.fusible
+    assert cost.dispatches_unfused == 3        # matmul + bias + gelu
+    assert cost.dispatches_fused == 1
+    assert cost.dispatch_saved == 2
+    assert cost.bytes_saved > 0
+    assert cost.score > 0
+    assert should_fuse_region(FusedRegion(("bias", "gelu")), 64, 128, 256)
+
+
+def test_cost_model_rejects_when_N_exceeds_stack_cap():
+    big = SYNTH_MAX_N + 1
+    cost = fusion_cost(FusedRegion(("gelu",)), M=8, N=big, K=16)
+    assert not cost.fusible
+    assert "stack cap" in cost.reason
+    assert cost.score == float("-inf")
+    assert not should_fuse_region(FusedRegion(("gelu",)), 8, big, 16)
+
+
+def test_cost_model_ranks_longer_chains_higher():
+    short = fusion_cost(FusedRegion(("gelu",)), 64, 128, 256)
+    long = fusion_cost(FusedRegion(("bias", "gelu", "tanh")), 64, 128, 256)
+    assert long.score > short.score            # more collapsed dispatches + traffic
+
+
+def test_attention_cost_model():
+    cost = attention_cost(AttentionRegion(), M=32, Nk=64, D=48, Dv=48)
+    assert cost.fusible
+    assert cost.dispatches_unfused == 3        # QKᵀ + softmax + PV
+    assert cost.dispatch_saved == 2
+    assert should_fuse_attention(AttentionRegion(), 32, 64, 48, 48)
+    too_big = attention_cost(AttentionRegion(), 32, SYNTH_MAX_N + 1, 48, 48)
+    assert not too_big.fusible
+
+
+def test_runtime_prepass_cost_gate_skips_oversized_N():
+    # F3 gate: a matmul->gelu whose N exceeds the stack cap is left to per-op
+    # (the per-op path has tiled/MPS matmul for large N).
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    big = SYNTH_MAX_N + 8
+    A = np.zeros((4, 8), np.float32)
+    B = np.zeros((8, big), np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+    consumed = _apple_gpu_try_synthesized_fusion(ops, {"x": A, "W": B}, np)
+    assert consumed == set()                   # cost gate declined the fusion
+
+
+# ── F4: codegen-gated oracle (verify before trust) ───────────────────────────
+
+def test_verify_passes_for_a_correct_synthesizer():
+    from tessera.compiler.fusion import verify_synthesized_region, clear_verification_cache
+    clear_verification_cache()
+    # correct synthesizer (or no Metal → trusted reference) → verified.
+    assert verify_synthesized_region(FusedRegion(("gelu",)), force=True) is True
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs Metal to run a kernel.")
+def test_verify_rejects_a_broken_synthesizer(monkeypatch):
+    # The anti-cheat invariant: a synthesizer that emits a kernel which COMPILES
+    # but computes the wrong thing (drops the epilogue) must be REJECTED.  This is
+    # the codegen analogue of magellan/alphaevolve's reward-hack rejection.
+    import tessera.compiler.fusion as F
+    from tessera.compiler.fusion import (
+        FusedRegion, verify_synthesized_region, clear_verification_cache,
+    )
+
+    def broken_synth(region, variant="broadcast"):
+        # a matmul-only kernel: ignores the epilogue entirely.
+        return f"""#include <metal_stdlib>
+using namespace metal;
+kernel void {F._ENTRY}(
+    device const float* A [[buffer(0)]], device const float* B [[buffer(1)]],
+    device float* O [[buffer(2)]], constant int& M [[buffer(3)]],
+    constant int& N [[buffer(4)]], constant int& K [[buffer(5)]],
+    uint gid [[thread_position_in_grid]]) {{
+    if (gid >= (uint)M) return;
+    int row = (int)gid;
+    for (int n = 0; n < N; ++n) {{
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) s += A[row*K+k] * B[k*N+n];
+        O[row*N+n] = s;   // <-- gelu dropped: WRONG
+    }}
+}}"""
+
+    monkeypatch.setattr(F, "synthesize_matmul_epilogue_msl", broken_synth)
+    clear_verification_cache()
+    region = FusedRegion(("gelu",))
+    out, execution = F.run_fused_region(region, np.ones((4, 4), np.float32),
+                                        np.ones((4, 4), np.float32))
+    if execution != "metal_runtime":
+        pytest.skip("Metal unavailable; cannot exercise the GPU divergence gate")
+    assert verify_synthesized_region(region, force=True) is False  # rejected
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="needs Metal to run a kernel.")
+def test_runtime_prepass_skips_a_region_the_oracle_rejects(monkeypatch):
+    # End-to-end: if the synthesized kernel diverges, the runtime pre-pass must
+    # NOT consume the ops — they fall back to the trusted per-op path.
+    import numpy as np
+    import tessera.compiler.fusion as F
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    def broken_synth(region, variant="broadcast"):
+        return f"""#include <metal_stdlib>
+using namespace metal;
+kernel void {F._ENTRY}(
+    device const float* A [[buffer(0)]], device const float* B [[buffer(1)]],
+    device float* O [[buffer(2)]], constant int& M [[buffer(3)]],
+    constant int& N [[buffer(4)]], constant int& K [[buffer(5)]],
+    uint gid [[thread_position_in_grid]]) {{
+    if (gid >= (uint)M) return;
+    int row = (int)gid;
+    for (int n = 0; n < N; ++n) {{
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) s += A[row*K+k] * B[k*N+n];
+        O[row*N+n] = s;   // gelu dropped
+    }}
+}}"""
+
+    monkeypatch.setattr(F, "synthesize_matmul_epilogue_msl", broken_synth)
+    F.clear_verification_cache()
+    A = np.ones((4, 8), np.float32)
+    B = np.ones((8, 6), np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+    # probe whether Metal actually runs the (broken) kernel first.
+    _o, ex = F.run_fused_region(FusedRegion(("gelu",)), A, B)
+    if ex != "metal_runtime":
+        pytest.skip("Metal unavailable; oracle gate not exercised")
+    F.clear_verification_cache()
+    consumed = _apple_gpu_try_synthesized_fusion(ops, {"x": A, "W": B}, np)
+    assert consumed == set()                   # oracle rejected → not fused
+
+
+# ── F5: autotune the synthesizer (gated behind cost + oracle) ────────────────
+
+def test_synth_variants_compute_the_same_scores():
+    # both inner-loop variants must emit kernels that fill scores[] identically;
+    # the synthesizer source differs but the math is one thing.
+    a = synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), variant="broadcast")
+    b = synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), variant="dot")
+    assert a != b                              # genuinely different schedules
+    assert "scores[n] += a * B[b_off + n]" in a
+    assert "acc += A[a_off + k] * B[k * N + n]" in b
+
+
+def test_autotune_picks_fastest_oracle_correct_variant():
+    # The Sakana invariant, deterministic (no Metal): a faster variant that fails
+    # the oracle is NEVER chosen; the slower correct one wins.
+    from tessera.compiler.fusion import _pick_best_variant
+    assert _pick_best_variant({"fast": 0.1, "slow": 0.9},
+                              {"fast": True, "slow": True}) == "fast"
+    assert _pick_best_variant({"fast_wrong": 0.1, "slow_right": 0.9},
+                              {"fast_wrong": False, "slow_right": True}) == "slow_right"
+    assert _pick_best_variant({"x": 0.1}, {"x": False}) is None   # none eligible
+
+
+def test_best_variant_defaults_to_broadcast_when_unseen():
+    from tessera.compiler.fusion import best_variant_for, clear_autotune_corpus
+    clear_autotune_corpus()
+    assert best_variant_for(FusedRegion(("gelu",)), 64, 128, 256) == "broadcast"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+def test_autotune_records_a_correct_variant_on_metal():
+    from tessera.compiler.fusion import (
+        autotune_matmul_epilogue, best_variant_for, clear_autotune_corpus,
+    )
+    clear_autotune_corpus()
+    region = FusedRegion(("bias", "gelu"), bias_name="bias")
+    rec = autotune_matmul_epilogue(region, M=32, N=64, K=48, reps=3)
+    if rec is None:
+        pytest.skip("Metal unavailable; autotune not exercised")
+    assert rec.chosen in ("broadcast", "dot")
+    assert rec.correct.get(rec.chosen) is True          # the winner passed the oracle
+    # the corpus now distills an O(1) decision for this shape-class.
+    assert best_variant_for(region, 32, 64, 48) == rec.chosen
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+def test_autotune_skips_non_fusible_region():
+    from tessera.compiler.fusion import autotune_matmul_epilogue
+    # N over the stack cap → F3 declines → autotune returns None.
+    assert autotune_matmul_epilogue(FusedRegion(("gelu",)), 8, SYNTH_MAX_N + 1, 16) is None

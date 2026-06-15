@@ -139,3 +139,33 @@ MSL for it — validated by the horizontal oracle and measured by
 `dlop_longtail_core`.  If that one family generalizes (one synthesizer replacing
 gelu/rmsnorm/bias/silu hand-written kernels), the same shape extends to reduction
 and attention, and the catalog starts shrinking instead of growing.
+
+## 6. Landed status (Apple proving ground)
+
+All code in `python/tessera/compiler/fusion.py`; guards in
+`tests/unit/test_fusion_synthesis.py` (57 tests, Metal-gated rows
+hardware-verified on Apple Silicon); runtime wiring in
+`runtime._apple_gpu_try_synthesized_fusion`.
+
+| Phase | Status | What landed |
+|-------|--------|-------------|
+| F0 | ✅ | `FusedRegion` (matmul root + pointwise chain + optional reduction); `AttentionRegion`. |
+| F1a | ✅ | `discover_fusable_regions` (matmul→pointwise→reduction, single-use intermediate) + `discover_attention_regions` (matmul→softmax→matmul); the pointwise/reduction discovery is **wired into the runtime hot path**. |
+| F2a | ✅ | `synthesize_matmul_epilogue_msl` — one synthesizer for any pointwise-epilogue chain; reproduces hand-written `matmul_gelu` bit-close. |
+| F2b | ✅ | reduction epilogues (rmsnorm/softmax) synthesized; reproduces hand-written `matmul_rmsnorm`. |
+| F2c | ✅ | `synthesize_attention_msl` + `tessera_apple_gpu_synth_attention_f32` C ABI — fused `O = softmax(scale·Q·Kᵀ)·V` (causal/non-causal), oracle-verified vs numpy attention on Metal. |
+| F3 | ✅ | `fusion_cost`/`attention_cost` + `should_fuse_*` — analytical profitability (stack-fit hard gate, dispatch + DRAM-traffic savings); the runtime declines an over-cap fusion so large-N matmul keeps its tiled/MPS path. |
+| F4 | ✅ | `verify_synthesized_region` codegen-gated oracle — a synthesized kernel runs only after matching the unfused reference on a probe (cached per region-class). A deliberately-broken synthesizer is **rejected** (anti-cheat test, Darwin). |
+| F5 | ✅ | `autotune_matmul_epilogue` — measures synthesis variants (`broadcast`/`dot` matmul schedules) on Metal, **gated behind F3 cost + F4 oracle** (`_pick_best_variant` never picks a fast-but-wrong variant — the Sakana invariant), distilling `(region-class, shape-bucket) → best variant` into an O(1) corpus consumed by the runtime. |
+
+**Deferred (honest):**
+- **Runtime attention dispatch** — `discover_attention_regions` is a tested pure
+  function, but is *not* dispatched from `_apple_gpu_try_synthesized_fusion`: the
+  score matmul feeds the *transposed* K (operand shape `(D, Nk)`) while
+  `run_fused_attention` expects `(Nk, D)`; resolving that orientation needs
+  layout-aware operand info from a Graph-IR pass, not value shapes (ambiguous when
+  `D == Nk`).  Wiring it from raw values would risk a silent transpose error.
+- **Catalog retirement** — the synthesizer now *subsumes* `matmul_gelu` /
+  `matmul_rmsnorm` / `matmul_softmax` (proven bit-close), but the hand-written
+  kernels are not yet deleted; that pass is the next concrete count-down win.
+- **F6 lift** to MLIR/LLVM for NVIDIA/ROCm — hardware-gated.

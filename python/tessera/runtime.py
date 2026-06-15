@@ -2378,14 +2378,18 @@ def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
-    """F1a (Optimizing-Compiler Plan) — run discovered ``matmul -> pointwise(->
-    reduction)`` regions as ONE synthesized MSL kernel.  Stores each region's
-    result in ``values`` and returns the set of op-indices it consumed (skipped
-    by the per-op loop).  Conservative: any ambiguity (non-2D operands, missing
-    values, unknown bias) skips the region and falls back to per-op dispatch."""
+    """F1a + F2c + F3 (Optimizing-Compiler Plan) — run discovered fusable regions
+    as ONE synthesized MSL kernel.  Covers ``matmul -> pointwise(-> reduction)``
+    chains and ``matmul -> softmax -> matmul`` attention blocks.  Stores each
+    region's result in ``values`` and returns the set of op-indices it consumed
+    (skipped by the per-op loop).  The F3 cost gate (``should_fuse_*``) leaves an
+    unprofitable region (e.g. N over the stack cap) to the per-op path, where
+    large-N matmul has tiled/MPS kernels.  Conservative: any ambiguity (non-2D
+    operands, missing values, unknown bias) skips the region."""
     try:
         from tessera.compiler.fusion import (
-            EPILOGUE_OPS, _Op, discover_fusable_regions, run_fused_region,
+            EPILOGUE_OPS, _Op, best_variant_for, discover_fusable_regions,
+            run_fused_region, should_fuse_region, verify_synthesized_region,
         )
     except Exception:                          # noqa: BLE001 - fusion optional
         return set()
@@ -2396,16 +2400,25 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     fops = [
         _Op(str(o.get("op_name", "")),
             tuple(_norm(x) for x in (o.get("operands") or [])),
-            _norm(o.get("result") or ""))
+            _norm(o.get("result") or ""),
+            dict(o.get("attributes") or o.get("attrs") or {}))
         for o in ops
     ]
     consumed: set = set()
+
+    # matmul -> pointwise(-> reduction) chains.
     for mi, chain_idx, region in discover_fusable_regions(fops):
         try:
             a = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[0]]), np.float32)
             b = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[1]]), np.float32)
             if a.ndim != 2 or b.ndim != 2:
                 continue
+            M, K = a.shape
+            N = b.shape[1]
+            if not should_fuse_region(region, M, N, K):   # F3 cost gate
+                continue
+            if not verify_synthesized_region(region):     # F4 codegen-gated oracle
+                continue                       # divergent synthesis → trust per-op
             bias = None
             running = fops[mi].output
             for pos, key in enumerate(region.epilogue):
@@ -2417,11 +2430,21 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
                         raise KeyError(bias_name)
                     bias = np.ascontiguousarray(_as_numpy(values[bias_name]), np.float32)
                 running = fops[op_idx].output
-            out, _exec = run_fused_region(region, a, b, bias)
+            variant = best_variant_for(region, M, N, K)   # F5 distilled choice
+            out, _exec = run_fused_region(region, a, b, bias, variant=variant)
             values[fops[chain_idx[-1]].output] = out
             consumed.update([mi, *chain_idx])
         except Exception:                      # noqa: BLE001 - fall back to per-op
             continue
+
+    # NOTE: attention-block discovery (matmul -> softmax -> matmul, F2c) is NOT
+    # dispatched here.  Its synthesizer is hardware-verified, but the score
+    # matmul feeds the *transposed* K (operand shape (D, Nk)) while
+    # run_fused_attention expects K as (Nk, D); resolving that orientation needs
+    # layout-aware operand info from a Graph-IR pass, not value shapes (which are
+    # ambiguous when D == Nk).  discover_attention_regions stays a tested pure
+    # function for that pass; wiring it from raw values would risk a silent
+    # transpose error.
     return consumed
 
 

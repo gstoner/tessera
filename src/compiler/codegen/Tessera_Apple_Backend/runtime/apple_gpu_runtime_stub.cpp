@@ -1079,6 +1079,12 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
+    const char*, const char*, const float*, const float*, const float*,
+    float*, int32_t, int32_t, int32_t, int32_t, float, int32_t) {
+  return 0;
+}
+
 extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
                                                      const float* B, float* O,
                                                      int32_t M, int32_t N,

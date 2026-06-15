@@ -173,13 +173,42 @@ class FusedRegion:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def synthesize_matmul_epilogue_msl(region: FusedRegion) -> str:
+#: The matmul-into-``scores[]`` inner loop, parametrized for the F5 autotuner.
+#: ``broadcast`` streams one A element across the whole N row (B read
+#: contiguously); ``dot`` accumulates each output column as a K-dot (B read
+#: strided).  Both fill ``scores[]`` identically — the oracle proves it — but
+#: have different memory access, so the fastest depends on the shape.
+SYNTH_VARIANTS = ("broadcast", "dot")
+
+
+def _matmul_body(variant: str) -> str:
+    if variant == "broadcast":
+        return """    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        float a = A[a_off + k];
+        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
+    }"""
+    if variant == "dot":
+        return """    for (int n = 0; n < N; ++n) {
+        float acc = 0.0f;
+        for (int k = 0; k < K; ++k) acc += A[a_off + k] * B[k * N + n];
+        scores[n] = acc;
+    }"""
+    raise ValueError(f"unknown synth variant {variant!r}")
+
+
+def synthesize_matmul_epilogue_msl(region: FusedRegion,
+                                   variant: str = "broadcast") -> str:
     """Emit the MSL source for ``region`` — one row per thread, the matmul into a
     stack accumulator, the pointwise chain inlined, then (optionally) a terminal
-    reduction (rmsnorm/softmax) over the row."""
+    reduction (rmsnorm/softmax) over the row.  ``variant`` selects the matmul
+    inner-loop schedule (see ``SYNTH_VARIANTS``); the F5 autotuner picks the
+    fastest one that passes the oracle."""
     bias_param = ("    device const float* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    matmul_body = _matmul_body(variant)
 
     if region.reduction is None:
         # pure pointwise: one pass, write O directly.
@@ -220,12 +249,7 @@ kernel void {_ENTRY}(
     int row = (int)gid;
     float scores[{SYNTH_MAX_N}];
     int a_off = row * K;
-    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
-    for (int k = 0; k < K; ++k) {{
-        float a = A[a_off + k];
-        int b_off = k * N;
-        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
-    }}
+{matmul_body}
 {finalize}
 }}
 """
@@ -251,11 +275,13 @@ def _synth_symbol() -> Any:
 
 
 def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
-                     bias: np.ndarray | None = None) -> tuple[np.ndarray, str]:
+                     bias: np.ndarray | None = None,
+                     variant: str = "broadcast") -> tuple[np.ndarray, str]:
     """Run the region as ONE synthesized fused kernel on Metal.  Returns
     ``(output, execution)`` where execution is ``"metal_runtime"`` (the
     synthesized kernel ran) or ``"reference"`` (numpy fallback — no Metal, N too
-    large, or compile/dispatch failed).  Either way the numbers are correct."""
+    large, or compile/dispatch failed).  Either way the numbers are correct.
+    ``variant`` selects the matmul inner-loop schedule (F5 autotuner)."""
     A = np.ascontiguousarray(A, np.float32)
     B = np.ascontiguousarray(B, np.float32)
     M, K = A.shape
@@ -270,7 +296,7 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
 
     sym = _synth_symbol()
     if sym is not None and N <= SYNTH_MAX_N:
-        source = synthesize_matmul_epilogue_msl(region).encode("utf-8")
+        source = synthesize_matmul_epilogue_msl(region, variant).encode("utf-8")
         out = np.zeros((M, N), np.float32)
         fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         bias_ptr = fp(bias_arr) if bias_arr is not None else None
@@ -279,6 +305,368 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         if rc == 1:
             return out, "metal_runtime"
     return region.reference(A, B, bias_arr), "reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F2c — attention synthesis (matmul -> softmax -> matmul)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ATTN_ENTRY = "synth_attention"
+
+
+@dataclass(frozen=True)
+class AttentionRegion:
+    """A fused scaled-dot-product-attention block ``O = softmax(scale·Q·Kᵀ)·V``.
+
+    The two matmuls + the softmax between them collapse into ONE synthesized
+    kernel (one query row per thread): the score row in a stack accumulator, a
+    numerically-stable two-pass softmax, then the ``P·V`` contraction.  ``causal``
+    masks keys ``n > m`` (decoder self-attention).  This is the same shape as the
+    hand-written ``matmul_softmax_matmul`` kernel — but synthesized, so scale /
+    causal / shape variants need no new kernel."""
+
+    scale: float = 1.0
+    causal: bool = False
+    q_name: str = "Q"
+    k_name: str = "K"
+    v_name: str = "V"
+
+    def reference(self, Q: np.ndarray, K: np.ndarray, V: np.ndarray) -> np.ndarray:
+        """The unfused result in numpy — the horizontal-oracle ground truth."""
+        Q = np.asarray(Q, np.float32)
+        K = np.asarray(K, np.float32)
+        V = np.asarray(V, np.float32)
+        scores = (Q @ K.T) * np.float32(self.scale)
+        if self.causal:
+            m = np.arange(scores.shape[0])[:, None]
+            n = np.arange(scores.shape[1])[None, :]
+            scores = np.where(n > m, np.float32(-np.inf), scores)
+        scores = scores - scores.max(-1, keepdims=True)
+        e = np.exp(scores)
+        p = e / e.sum(-1, keepdims=True)
+        return (p @ V).astype(np.float32)
+
+
+def synthesize_attention_msl(region: AttentionRegion = AttentionRegion()) -> str:
+    """Emit the MSL source for a fused attention block — one query row per thread.
+
+    The source is shape- *and* scale/causal-independent (those are runtime
+    buffers), so one cached pipeline serves every attention call."""
+    return f"""#include <metal_stdlib>
+using namespace metal;
+kernel void {_ATTN_ENTRY}(
+    device const float* Q   [[buffer(0)]],
+    device const float* K   [[buffer(1)]],
+    device const float* V   [[buffer(2)]],
+    device float*       O   [[buffer(3)]],
+    constant int&       M   [[buffer(4)]],
+    constant int&       Nk  [[buffer(5)]],
+    constant int&       D   [[buffer(6)]],
+    constant int&       Dv  [[buffer(7)]],
+    constant float&     scale  [[buffer(8)]],
+    constant int&       causal [[buffer(9)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)M) return;
+    if (Nk > {SYNTH_MAX_N}) return;
+    int m = (int)gid;
+    float scores[{SYNTH_MAX_N}];
+    int q_off = m * D;
+    float mx = -INFINITY;
+    for (int n = 0; n < Nk; ++n) {{
+        if (causal != 0 && n > m) {{ scores[n] = -INFINITY; continue; }}
+        float s = 0.0f;
+        int k_off = n * D;
+        for (int d = 0; d < D; ++d) s += Q[q_off + d] * K[k_off + d];
+        s *= scale;
+        scores[n] = s;
+        mx = max(mx, s);
+    }}
+    float sm = 0.0f;
+    for (int n = 0; n < Nk; ++n) {{
+        float e = exp(scores[n] - mx);
+        scores[n] = e;
+        sm += e;
+    }}
+    float inv = (sm > 0.0f) ? (1.0f / sm) : 0.0f;
+    int o_off = m * Dv;
+    for (int dv = 0; dv < Dv; ++dv) {{
+        float acc = 0.0f;
+        for (int n = 0; n < Nk; ++n) acc += scores[n] * V[n * Dv + dv];
+        O[o_off + dv] = acc * inv;
+    }}
+}}
+"""
+
+
+def _attn_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_attention_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_float, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
+                        V: np.ndarray) -> tuple[np.ndarray, str]:
+    """Run the attention block as ONE synthesized fused kernel on Metal.  Returns
+    ``(output, execution)`` — ``"metal_runtime"`` if the synthesized kernel ran,
+    else ``"reference"`` (numpy).  Either way the numbers are correct."""
+    Q = np.ascontiguousarray(Q, np.float32)
+    K = np.ascontiguousarray(K, np.float32)
+    V = np.ascontiguousarray(V, np.float32)
+    M, D = Q.shape
+    Nk, Dk = K.shape
+    Nv, Dv = V.shape
+    if Dk != D:
+        raise ValueError(f"Q/K head_dim mismatch: Q {Q.shape}, K {K.shape}")
+    if Nv != Nk:
+        raise ValueError(f"K/V seqlen mismatch: K {K.shape}, V {V.shape}")
+
+    sym = _attn_symbol()
+    if sym is not None and Nk <= SYNTH_MAX_N:
+        source = synthesize_attention_msl(region).encode("utf-8")
+        out = np.zeros((M, Dv), np.float32)
+        fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = sym(source, _ATTN_ENTRY.encode("utf-8"), fp(Q), fp(K), fp(V), fp(out),
+                 M, Nk, D, Dv, ctypes.c_float(region.scale),
+                 1 if region.causal else 0)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(Q, K, V), "reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F3 — fusion cost model
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class FusionCost:
+    """The analytical profitability of fusing a region into one synthesized
+    kernel.  ``fusible`` is the hard gate (does the row fit the stack
+    accumulator? is there anything to fuse?); ``score`` ranks the profitable
+    candidates by the work they save (dispatches collapsed + intermediate DRAM
+    traffic kept in registers).  A non-fusible region scores ``-inf`` so the gate
+    leaves it to the per-op path (where large-N matmul has tiled/MPS kernels)."""
+
+    fusible: bool
+    dispatches_unfused: int
+    dispatches_fused: int
+    bytes_saved: int
+    reason: str = ""
+
+    @property
+    def dispatch_saved(self) -> int:
+        return self.dispatches_unfused - self.dispatches_fused
+
+    @property
+    def score(self) -> float:
+        if not self.fusible:
+            return float("-inf")
+        # one synthesized kernel is worth at least its collapsed dispatches; the
+        # avoided intermediate round-trips (in MB) break ties between candidates.
+        return self.dispatch_saved + self.bytes_saved / (1024.0 * 1024.0)
+
+
+def fusion_cost(region: FusedRegion, M: int, N: int, K: int) -> FusionCost:
+    """Cost of fusing a ``matmul -> pointwise(-> reduction)`` region at (M,N,K)."""
+    n_chain = len(region.epilogue) + (1 if region.reduction is not None else 0)
+    unfused = 1 + n_chain                      # the matmul + each epilogue dispatch
+    if N > SYNTH_MAX_N:
+        return FusionCost(False, unfused, unfused, 0,
+                          f"N={N} exceeds per-thread stack cap {SYNTH_MAX_N}")
+    if n_chain == 0:
+        return FusionCost(False, unfused, unfused, 0, "nothing to fuse")
+    # each unfused epilogue writes then re-reads an M×N intermediate; fusion keeps
+    # it in the per-thread accumulator.
+    bytes_saved = 2 * n_chain * M * N * 4
+    return FusionCost(True, unfused, 1, bytes_saved)
+
+
+def attention_cost(region: AttentionRegion, M: int, Nk: int, D: int,
+                   Dv: int) -> FusionCost:
+    """Cost of fusing a ``matmul -> softmax -> matmul`` attention block."""
+    unfused = 3                                # QKᵀ + softmax + PV
+    if Nk > SYNTH_MAX_N:
+        return FusionCost(False, unfused, unfused, 0,
+                          f"Nk={Nk} exceeds per-thread stack cap {SYNTH_MAX_N}")
+    bytes_saved = 2 * M * Nk * 4               # the score matrix, kept in registers
+    return FusionCost(True, unfused, 1, bytes_saved)
+
+
+def should_fuse_region(region: FusedRegion, M: int, N: int, K: int) -> bool:
+    return fusion_cost(region, M, N, K).score > 0.0
+
+
+def should_fuse_attention(region: AttentionRegion, M: int, Nk: int, D: int,
+                          Dv: int) -> bool:
+    return attention_cost(region, M, Nk, D, Dv).score > 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F4 — codegen-gated oracle (verify a synthesized kernel before trusting it)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Cache of per-region-class verification verdicts (one probe per shape-class).
+_VERIFY_CACHE: dict[Any, bool] = {}
+
+
+def clear_verification_cache() -> None:
+    _VERIFY_CACHE.clear()
+
+
+def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
+                              atol: float = 1e-3, force: bool = False) -> bool:
+    """Codegen-gated oracle: run the *synthesized* kernel for ``region`` on a small
+    probe and compare it to the unfused numpy reference.  Returns ``True`` only if
+    the GPU result matches (a correct synthesizer) — or if no synthesized kernel
+    ran (no Metal: the reference path is trusted by construction).  Returns
+    ``False`` when a kernel ran and *diverged* — a synthesizer bug — so the caller
+    falls back to the trusted per-op path.  This is the codegen analogue of the
+    magellan/alphaevolve reward-hack rejection: a faster-but-wrong kernel is
+    refused.  Verdicts are cached per region-class; pass ``force`` to re-probe."""
+    key = ("R", region.epilogue, region.reduction, region.has_bias,
+           round(region.eps, 9))
+    if not force and key in _VERIFY_CACHE:
+        return _VERIFY_CACHE[key]
+    rng = np.random.default_rng(seed)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    bias = (rng.standard_normal((16,)).astype(np.float32)
+            if region.has_bias else None)
+    out, execution = run_fused_region(region, A, B, bias)
+    if execution != "metal_runtime":
+        verdict = True                         # no synthesized kernel to distrust
+    else:
+        verdict = bool(np.allclose(out, region.reference(A, B, bias), atol=atol))
+    _VERIFY_CACHE[key] = verdict
+    return verdict
+
+
+def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
+                                 atol: float = 1e-3, force: bool = False) -> bool:
+    """Codegen-gated oracle for a synthesized attention block (see
+    ``verify_synthesized_region``)."""
+    key = ("A", round(region.scale, 9), region.causal)
+    if not force and key in _VERIFY_CACHE:
+        return _VERIFY_CACHE[key]
+    rng = np.random.default_rng(seed)
+    Q = rng.standard_normal((8, 16)).astype(np.float32)
+    K = rng.standard_normal((8, 16)).astype(np.float32)
+    V = rng.standard_normal((8, 16)).astype(np.float32)
+    out, execution = run_fused_attention(region, Q, K, V)
+    if execution != "metal_runtime":
+        verdict = True
+    else:
+        verdict = bool(np.allclose(out, region.reference(Q, K, V), atol=atol))
+    _VERIFY_CACHE[key] = verdict
+    return verdict
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F5 — autotune the synthesizer (gated behind F3 cost + F4 oracle)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class AutotuneRecord:
+    """The outcome of autotuning a region at a shape: per-variant latency +
+    oracle verdict, and the chosen variant.  ``chosen`` is the fastest variant
+    that *passed the oracle* — a fast-but-wrong variant is never chosen (the
+    Sakana invariant, enforced by ``_pick_best_variant``)."""
+
+    chosen: str | None
+    latencies_ms: dict[str, float]
+    correct: dict[str, bool]
+
+
+def _pick_best_variant(latencies_ms: dict[str, float],
+                       correct: dict[str, bool]) -> str | None:
+    """F5's gate: the fastest variant *among those that pass the oracle*.  A
+    faster variant that fails correctness is excluded — perf is gated behind
+    correctness, never traded for it."""
+    eligible = {v: t for v, t in latencies_ms.items() if correct.get(v, False)}
+    if not eligible:
+        return None
+    return min(eligible, key=lambda v: eligible[v])
+
+
+def _shape_bucket(n: int) -> int:
+    """Coarsen a dimension to a power-of-two bucket so the corpus generalizes
+    across nearby shapes instead of memorizing every exact size."""
+    b = 1
+    while b < n:
+        b *= 2
+    return b
+
+
+def _corpus_key(region: FusedRegion, M: int, N: int, K: int) -> tuple:
+    return (region.epilogue, region.reduction, region.has_bias,
+            _shape_bucket(M), _shape_bucket(N), _shape_bucket(K))
+
+
+#: Distilled best-variant decisions, keyed by (region-class, shape-bucket).
+_AUTOTUNE_CORPUS: dict[tuple, str] = {}
+
+
+def clear_autotune_corpus() -> None:
+    _AUTOTUNE_CORPUS.clear()
+
+
+def autotune_matmul_epilogue(region: FusedRegion, M: int, N: int, K: int, *,
+                             variants: tuple[str, ...] = SYNTH_VARIANTS,
+                             reps: int = 5, seed: int = 0
+                             ) -> AutotuneRecord | None:
+    """Measure each synthesis ``variant`` at (M,N,K) and record the fastest one
+    that passes the oracle.  Returns ``None`` when the region is not fusible (F3)
+    or no variant ran on Metal.  Every measured variant is checked against the
+    numpy reference (F4) before its latency is allowed to count."""
+    import time
+
+    if not should_fuse_region(region, M, N, K):          # F3 cost gate
+        return None
+    rng = np.random.default_rng(seed)
+    A = rng.standard_normal((M, K)).astype(np.float32)
+    B = rng.standard_normal((K, N)).astype(np.float32)
+    bias = (rng.standard_normal((N,)).astype(np.float32)
+            if region.has_bias else None)
+    ref = region.reference(A, B, bias)
+
+    latencies: dict[str, float] = {}
+    correct: dict[str, bool] = {}
+    for var in variants:
+        out, execution = run_fused_region(region, A, B, bias, variant=var)
+        if execution != "metal_runtime":
+            continue                            # no Metal → can't measure this one
+        ok = bool(np.allclose(out, ref, atol=1e-3))       # F4 oracle gate
+        correct[var] = ok
+        if not ok:
+            continue                            # fast-but-wrong excluded
+        best = float("inf")
+        for _ in range(max(1, reps)):
+            t0 = time.perf_counter()
+            run_fused_region(region, A, B, bias, variant=var)
+            best = min(best, time.perf_counter() - t0)
+        latencies[var] = best * 1e3
+    if not correct:
+        return None                             # nothing ran on Metal
+    chosen = _pick_best_variant(latencies, correct)
+    if chosen is not None:
+        _AUTOTUNE_CORPUS[_corpus_key(region, M, N, K)] = chosen
+    return AutotuneRecord(chosen, latencies, correct)
+
+
+def best_variant_for(region: FusedRegion, M: int, N: int, K: int) -> str:
+    """The distilled best variant for this region/shape from the autotune corpus,
+    or the default ``"broadcast"`` when unseen — an O(1) lookup, no measurement."""
+    return _AUTOTUNE_CORPUS.get(_corpus_key(region, M, N, K), "broadcast")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -370,14 +758,102 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
     return regions
 
 
+_SOFTMAX_NAMES = {"tessera.softmax", "softmax"}
+_SCALE_NAMES = {"tessera.mul", "tessera.scale", "mul", "scale"}
+
+
+def discover_attention_regions(
+    ops: list[_Op],
+) -> list[tuple[list[int], AttentionRegion, tuple[str, str, str]]]:
+    """Find ``matmul(Q,Kᵀ) -> [scale] -> softmax -> matmul(P,V)`` regions.
+
+    Returns ``([op_indices], AttentionRegion, (q_value, k_value, v_value))`` per
+    region.  All intermediates must be single-use (else fusing drops a value
+    another op reads).  An optional scalar-multiply between the score matmul and
+    the softmax sets ``region.scale`` when its factor is a constant attribute."""
+    use_count: dict[str, int] = {}
+    for op in ops:
+        for v in op.inputs:
+            use_count[v] = use_count.get(v, 0) + 1
+    by_input: dict[str, list[int]] = {}
+    for i, op in enumerate(ops):
+        for v in op.inputs:
+            by_input.setdefault(v, []).append(i)
+
+    def sole_consumer(val: str) -> int | None:
+        if use_count.get(val, 0) != 1:
+            return None
+        cons = by_input.get(val, [])
+        return cons[0] if len(cons) == 1 else None
+
+    regions: list[tuple[list[int], AttentionRegion, tuple[str, str, str]]] = []
+    consumed: set[int] = set()
+    for i, op in enumerate(ops):
+        if i in consumed or op.name not in _MATMUL_NAMES or len(op.inputs) < 2:
+            continue
+        q_val, k_val = op.inputs[0], op.inputs[1]
+        chain = [i]
+        scale = 1.0
+        cur = op.output
+
+        j = sole_consumer(cur)
+        if j is None:
+            continue
+        # optional scalar-multiply applying the attention scale.
+        if ops[j].name in _SCALE_NAMES:
+            factor = ops[j].attrs.get("scale", ops[j].attrs.get("factor"))
+            if isinstance(factor, (int, float)):
+                scale = float(factor)
+            chain.append(j)
+            consumed.add(j)
+            cur = ops[j].output
+            j = sole_consumer(cur)
+            if j is None:
+                continue
+        if ops[j].name not in _SOFTMAX_NAMES:
+            continue
+        chain.append(j)
+        consumed.add(j)
+        cur = ops[j].output
+
+        j = sole_consumer(cur)
+        if j is None or ops[j].name not in _MATMUL_NAMES or len(ops[j].inputs) < 2:
+            continue
+        # the softmax result must be the FIRST operand of the P@V matmul.
+        if ops[j].inputs[0] != cur:
+            continue
+        v_val = ops[j].inputs[1]
+        chain.append(j)
+        consumed.add(j)
+        regions.append((chain, AttentionRegion(scale=scale), (q_val, k_val, v_val)))
+    return regions
+
+
 __all__ = [
     "EPILOGUE_OPS",
     "EpilogueOp",
     "REDUCTION_OPS",
     "ReductionOp",
     "FusedRegion",
+    "AttentionRegion",
+    "FusionCost",
+    "fusion_cost",
+    "attention_cost",
+    "should_fuse_region",
+    "should_fuse_attention",
+    "verify_synthesized_region",
+    "verify_synthesized_attention",
+    "clear_verification_cache",
+    "SYNTH_VARIANTS",
+    "AutotuneRecord",
+    "autotune_matmul_epilogue",
+    "best_variant_for",
+    "clear_autotune_corpus",
     "SYNTH_MAX_N",
     "synthesize_matmul_epilogue_msl",
+    "synthesize_attention_msl",
     "run_fused_region",
+    "run_fused_attention",
     "discover_fusable_regions",
+    "discover_attention_regions",
 ]

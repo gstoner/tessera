@@ -7375,6 +7375,67 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
   }
 }
 
+// Generic SYNTHESIZED attention dispatch (Optimizing-Compiler Plan F2c).  The
+// fused ``O = softmax(scale * Q @ Kᵀ) @ V`` block — one query row per thread,
+// the score row in a stack accumulator, a two-pass (max/exp-sum) softmax, then
+// the P @ V contraction.  Like the matmul-epilogue symbol, the MSL *source* is
+// passed in: one synthesizer emits the kernel (causal/non-causal, any scale),
+// this symbol compiles (cached) + runs it.  Buffers: 0=Q(M*D) 1=K(Nk*D)
+// 2=V(Nk*Dv) 3=O(M*Dv), scalars 4=M 5=Nk 6=D 7=Dv 8=scale 9=causal.  Returns 1
+// on GPU success, 0 if the device/compile/dispatch path is unavailable.
+extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
+    const char* msl_source, const char* entry, const float* Q, const float* K,
+    const float* V, float* O, int32_t M, int32_t Nk, int32_t D, int32_t Dv,
+    float scale, int32_t causal) {
+  if (!msl_source || !entry || !Q || !K || !V || !O || M <= 0 || Nk <= 0 ||
+      D <= 0 || Dv <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)D;
+    NSUInteger kBytes = sizeof(float) * (NSUInteger)Nk * (NSUInteger)D;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)Nk * (NSUInteger)Dv;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)Dv;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&Nk length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Dv length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&scale length:sizeof(float) atIndex:8];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:9];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_attention"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
                                                      const float* B, float* O,
                                                      int32_t M, int32_t N,

@@ -441,11 +441,20 @@ def test_cost_model_fuses_profitable_pointwise_chain():
     assert should_fuse_region(FusedRegion(("bias", "gelu")), 64, 128, 256)
 
 
-def test_cost_model_rejects_when_N_exceeds_stack_cap():
-    big = SYNTH_MAX_N + 1
+def test_cost_model_fuses_between_stack_and_tiled_caps():
+    from tessera.compiler.fusion import SYNTH_MAX_N_TILED
+    # N over the stack cap but within the tiled cap is still fusible (tiled path).
+    mid = SYNTH_MAX_N + 1
+    assert mid <= SYNTH_MAX_N_TILED
+    assert should_fuse_region(FusedRegion(("gelu",)), 8, mid, 16)
+
+
+def test_cost_model_rejects_when_N_exceeds_tiled_cap():
+    from tessera.compiler.fusion import SYNTH_MAX_N_TILED
+    big = SYNTH_MAX_N_TILED + 1
     cost = fusion_cost(FusedRegion(("gelu",)), M=8, N=big, K=16)
     assert not cost.fusible
-    assert "stack cap" in cost.reason
+    assert "tiled threadgroup cap" in cost.reason
     assert cost.score == float("-inf")
     assert not should_fuse_region(FusedRegion(("gelu",)), 8, big, 16)
 
@@ -467,12 +476,13 @@ def test_attention_cost_model():
 
 
 def test_runtime_prepass_cost_gate_skips_oversized_N():
-    # F3 gate: a matmul->gelu whose N exceeds the stack cap is left to per-op
-    # (the per-op path has tiled/MPS matmul for large N).
+    # F3 gate: a matmul->gelu whose N exceeds even the TILED cap is left to
+    # per-op (the per-op path has MPS matmul + MPSGraph epilogue for huge N).
     import numpy as np
+    from tessera.compiler.fusion import SYNTH_MAX_N_TILED
     from tessera.runtime import _apple_gpu_try_synthesized_fusion
 
-    big = SYNTH_MAX_N + 8
+    big = SYNTH_MAX_N_TILED + 8
     A = np.zeros((4, 8), np.float32)
     B = np.zeros((8, big), np.float32)
     ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
@@ -615,6 +625,79 @@ def test_autotune_records_a_correct_variant_on_metal():
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
 def test_autotune_skips_non_fusible_region():
-    from tessera.compiler.fusion import autotune_matmul_epilogue
-    # N over the stack cap → F3 declines → autotune returns None.
-    assert autotune_matmul_epilogue(FusedRegion(("gelu",)), 8, SYNTH_MAX_N + 1, 16) is None
+    from tessera.compiler.fusion import autotune_matmul_epilogue, SYNTH_MAX_N_TILED
+    # N over the TILED cap → F3 declines → autotune returns None.
+    assert autotune_matmul_epilogue(FusedRegion(("gelu",)), 8, SYNTH_MAX_N_TILED + 1, 16) is None
+
+
+# ── F2b-tiled: threadgroup-tiled synthesis for large N ───────────────────────
+
+def test_tiled_synthesizer_has_threadgroup_structure():
+    from tessera.compiler.fusion import synthesize_matmul_epilogue_msl_tiled
+    src = synthesize_matmul_epilogue_msl_tiled(FusedRegion((), reduction="softmax"))
+    assert "kernel void synth_matmul_epi_tiled(" in src
+    assert "threadgroup float* tg_scores [[threadgroup(0)]]" in src
+    assert "threadgroup float tg_red[32]" in src          # cooperative reduction scratch
+    assert "threadgroup_barrier(mem_flags::mem_threadgroup)" in src
+    assert "n += T" in src                                 # strided cooperative loop
+
+
+def test_tiled_pure_pointwise_omits_reduction_scratch():
+    from tessera.compiler.fusion import synthesize_matmul_epilogue_msl_tiled
+    src = synthesize_matmul_epilogue_msl_tiled(FusedRegion(("gelu",)))
+    assert "tg_red" not in src                             # no reduction → no scratch
+    assert "O[o_off + n] = v;" in src                      # writes O directly
+
+
+_TILED_CASES = [
+    (("gelu",), None, False),
+    (("bias", "relu"), None, True),
+    ((), "softmax", False),
+    ((), "rmsnorm", False),
+    (("bias",), "softmax", True),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("chain,red,has_bias", _TILED_CASES)
+@pytest.mark.parametrize("N", [2048, 4096])
+def test_tiled_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
+    # N is well over the stack cap (1024): run_fused_region must route to the
+    # threadgroup-tiled kernel and still match the unfused reference.
+    rng = np.random.default_rng((N * 7 + hash((chain, red))) & 0xFFFF)
+    M, K = 12, 48
+    A = rng.standard_normal((M, K)).astype(np.float32)
+    B = rng.standard_normal((K, N)).astype(np.float32)
+    bias = rng.standard_normal((N,)).astype(np.float32) if has_bias else None
+    region = FusedRegion(chain, reduction=red, bias_name="bias" if has_bias else None)
+
+    out, execution = run_fused_region(region, A, B, bias)
+    assert execution == "metal_runtime"            # the tiled kernel ran
+    assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)  # oracle
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_tiled_synthesis_reproduces_handwritten_matmul_softmax_tiled():
+    # the synthesized tiled softmax must match the hand-written tiled kernel it
+    # will replace — same cooperative online-softmax math.
+    import ctypes
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    rt = _load_apple_gpu_runtime()
+    hw = getattr(rt, "tessera_apple_gpu_matmul_softmax_tiled_f32", None)
+    if hw is None:
+        pytest.skip("hand-written matmul_softmax_tiled symbol unavailable")
+    hw.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [ctypes.c_int32] * 3
+    hw.restype = None
+
+    rng = np.random.default_rng(9)
+    M, K, N = 8, 32, 2048
+    A = rng.standard_normal((M, K)).astype(np.float32)
+    B = rng.standard_normal((K, N)).astype(np.float32)
+    hand = np.zeros((M, N), np.float32)
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    hw(fp(np.ascontiguousarray(A)), fp(np.ascontiguousarray(B)), fp(hand), M, N, K)
+
+    synth, execution = run_fused_region(FusedRegion((), reduction="softmax"), A, B)
+    assert execution == "metal_runtime"
+    assert np.allclose(synth, hand, atol=1e-4)     # synthesized == hand-written

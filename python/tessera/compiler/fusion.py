@@ -256,6 +256,124 @@ kernel void {_ENTRY}(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# F2b-tiled — threadgroup-tiled synthesis for large N (the stack kernel caps at
+# SYNTH_MAX_N; this lifts it to SYNTH_MAX_N_TILED via dynamic threadgroup memory)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Large-N cap for the tiled kernel: one row of N fp32 scores lives in dynamic
+#: threadgroup memory (32 KB budget on current Apple arches → 8192 floats),
+#: mirroring the hand-written ``matmul_softmax_tiled_f32`` envelope it retires.
+SYNTH_MAX_N_TILED = 8192
+_ENTRY_TILED = "synth_matmul_epi_tiled"
+_TILED_THREADS = 32
+
+#: Cooperative (tree-reduce over ``_TILED_THREADS`` partials) reduction blocks —
+#: the tiled analogue of REDUCTION_OPS' serial blocks.  ``{eps}`` is substituted.
+_TILED_REDUCTIONS: dict[str, str] = {
+    "rmsnorm":
+        "    float _local = 0.0f;\n"
+        "    for (int n = lid_i; n < N; n += T) _local += tg_scores[n] * tg_scores[n];\n"
+        "    tg_red[lid_i] = _local;\n"
+        "    threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    for (int stride = T / 2; stride > 0; stride >>= 1) {{\n"
+        "        if (lid_i < stride) tg_red[lid_i] += tg_red[lid_i + stride];\n"
+        "        threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    }}\n"
+        "    float _inv = rsqrt(tg_red[0] / float(N) + {eps}f);\n"
+        "    int o_off = row * N;\n"
+        "    for (int n = lid_i; n < N; n += T) O[o_off + n] = tg_scores[n] * _inv;\n",
+    "softmax":
+        "    float _lmax = -INFINITY;\n"
+        "    for (int n = lid_i; n < N; n += T) _lmax = max(_lmax, tg_scores[n]);\n"
+        "    tg_red[lid_i] = _lmax;\n"
+        "    threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    for (int stride = T / 2; stride > 0; stride >>= 1) {{\n"
+        "        if (lid_i < stride) tg_red[lid_i] = max(tg_red[lid_i], tg_red[lid_i + stride]);\n"
+        "        threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    }}\n"
+        "    float _mx = tg_red[0];\n"
+        "    threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    float _lsum = 0.0f;\n"
+        "    for (int n = lid_i; n < N; n += T) {{ float e = exp(tg_scores[n] - _mx);"
+        " tg_scores[n] = e; _lsum += e; }}\n"
+        "    tg_red[lid_i] = _lsum;\n"
+        "    threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    for (int stride = T / 2; stride > 0; stride >>= 1) {{\n"
+        "        if (lid_i < stride) tg_red[lid_i] += tg_red[lid_i + stride];\n"
+        "        threadgroup_barrier(mem_flags::mem_threadgroup);\n"
+        "    }}\n"
+        "    float _sm = tg_red[0];\n"
+        "    int o_off = row * N;\n"
+        "    if (_sm == 0.0f) {{ for (int n = lid_i; n < N; n += T) O[o_off + n] = 0.0f; }}\n"
+        "    else {{ float _inv = 1.0f / _sm;"
+        " for (int n = lid_i; n < N; n += T) O[o_off + n] = tg_scores[n] * _inv; }}\n",
+}
+
+
+def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion) -> str:
+    """Emit a THREADGROUP-TILED MSL kernel for ``region`` — one row per
+    threadgroup, ``_TILED_THREADS`` threads cooperating, the row of scores in
+    dynamic threadgroup memory (no per-thread stack), so N can reach
+    ``SYNTH_MAX_N_TILED``.  Mirrors the proven hand-written
+    ``matmul_softmax_tiled_f32`` structure, generalized over the epilogue +
+    reduction vocabulary."""
+    bias_param = ("    device const float* bias [[buffer(6)]],\n"
+                  if region.has_bias else "")
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+
+    if region.reduction is None:
+        # pure pointwise: cooperative epilogue writes O directly, no reduction.
+        body = f"""    int o_off = row * N;
+    for (int n = lid_i; n < N; n += T) {{
+        float v = tg_scores[n];
+{pointwise}
+        O[o_off + n] = v;
+    }}"""
+        red_scratch = ""
+    else:
+        pw_pass = ""
+        if region.epilogue:
+            pw_pass = f"""    for (int n = lid_i; n < N; n += T) {{
+        float v = tg_scores[n];
+{pointwise}
+        tg_scores[n] = v;
+    }}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+"""
+        red = _TILED_REDUCTIONS[region.reduction].format(eps=region.eps)
+        body = pw_pass + red
+        red_scratch = f"    threadgroup float tg_red[{_TILED_THREADS}];\n"
+
+    return f"""#include <metal_stdlib>
+using namespace metal;
+#define T {_TILED_THREADS}
+kernel void {_ENTRY_TILED}(
+    device const float* A   [[buffer(0)]],
+    device const float* B   [[buffer(1)]],
+    device float*       O   [[buffer(2)]],
+    constant int&       M   [[buffer(3)]],
+    constant int&       N   [[buffer(4)]],
+    constant int&       K   [[buffer(5)]],
+{bias_param}    threadgroup float* tg_scores [[threadgroup(0)]],
+    uint tg_pos [[threadgroup_position_in_grid]],
+    uint lid    [[thread_position_in_threadgroup]])
+{{
+    int row = (int)tg_pos;
+    if (row >= M) return;
+    int lid_i = (int)lid;
+{red_scratch}    int a_off = row * K;
+    for (int n = lid_i; n < N; n += T) {{
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) s += A[a_off + k] * B[k * N + n];
+        tg_scores[n] = s;
+    }}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+{body}
+}}
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # F2a — GPU dispatch (compile + run the synthesized MSL)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -264,6 +382,20 @@ def _synth_symbol() -> Any:
     from tessera.runtime import _load_apple_gpu_runtime
     rt = _load_apple_gpu_runtime()
     sym = getattr(rt, "tessera_apple_gpu_synth_matmul_epilogue_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                    ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _synth_tiled_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32", None)
     if sym is None:
         return None
     sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
@@ -294,16 +426,30 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
             raise ValueError("region needs a bias")
         bias_arr = np.ascontiguousarray(bias, np.float32).reshape(N)
 
+    fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    bias_ptr = fp(bias_arr) if bias_arr is not None else None
+    has_bias = 1 if region.has_bias else 0
+
     sym = _synth_symbol()
     if sym is not None and N <= SYNTH_MAX_N:
         source = synthesize_matmul_epilogue_msl(region, variant).encode("utf-8")
         out = np.zeros((M, N), np.float32)
-        fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        bias_ptr = fp(bias_arr) if bias_arr is not None else None
         rc = sym(source, _ENTRY.encode("utf-8"), fp(A), fp(B), bias_ptr, fp(out),
-                 M, N, K, 1 if region.has_bias else 0)
+                 M, N, K, has_bias)
         if rc == 1:
             return out, "metal_runtime"
+
+    # Large N (over the per-thread stack cap): the threadgroup-tiled kernel keeps
+    # the score row in dynamic threadgroup memory, lifting the bound to ~8192.
+    tiled = _synth_tiled_symbol()
+    if tiled is not None and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED:
+        source = synthesize_matmul_epilogue_msl_tiled(region).encode("utf-8")
+        out = np.zeros((M, N), np.float32)
+        rc = tiled(source, _ENTRY_TILED.encode("utf-8"), fp(A), fp(B), bias_ptr,
+                   fp(out), M, N, K, has_bias)
+        if rc == 1:
+            return out, "metal_runtime"
+
     return region.reference(A, B, bias_arr), "reference"
 
 
@@ -479,9 +625,9 @@ def fusion_cost(region: FusedRegion, M: int, N: int, K: int) -> FusionCost:
     """Cost of fusing a ``matmul -> pointwise(-> reduction)`` region at (M,N,K)."""
     n_chain = len(region.epilogue) + (1 if region.reduction is not None else 0)
     unfused = 1 + n_chain                      # the matmul + each epilogue dispatch
-    if N > SYNTH_MAX_N:
+    if N > SYNTH_MAX_N_TILED:                   # beyond even the tiled kernel
         return FusionCost(False, unfused, unfused, 0,
-                          f"N={N} exceeds per-thread stack cap {SYNTH_MAX_N}")
+                          f"N={N} exceeds tiled threadgroup cap {SYNTH_MAX_N_TILED}")
     if n_chain == 0:
         return FusionCost(False, unfused, unfused, 0, "nothing to fuse")
     # each unfused epilogue writes then re-reads an M×N intermediate; fusion keeps
@@ -845,6 +991,8 @@ __all__ = [
     "verify_synthesized_attention",
     "clear_verification_cache",
     "SYNTH_VARIANTS",
+    "SYNTH_MAX_N_TILED",
+    "synthesize_matmul_epilogue_msl_tiled",
     "AutotuneRecord",
     "autotune_matmul_epilogue",
     "best_variant_for",

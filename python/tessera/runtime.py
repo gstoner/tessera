@@ -10681,6 +10681,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Optimizing-Compiler Plan F2): the synthesized epilogue kernel
                 # subsumes them. f16/bf16 stay as native single fused kernels.
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f32")
+                # F2b-tiled — threadgroup-tiled synthesized epilogue (large N).
+                getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_bf16")
                 getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f16")

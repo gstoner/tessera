@@ -12,13 +12,16 @@ carry a growing KV cache.  Step-by-step decode equals a full recompute only if
 all of them are threaded correctly.
 
 This module makes the schedule first-class (`HybridSchedule`) and the linear-slot
-mixer pluggable (`linear_mixer = "delta" | "ssm"`).  The stack is built from
-per-mixer **span functions** that handle a token-span of any length carrying
-their own cache, so `hybrid_forward` (one span) and `hybrid_decode` (streamed
-spans) run identical per-layer code — the oracle (`tests/unit/test_stdlib_hybrid.py`)
-is **streaming dual-cache decode ≡ full recompute**.  Delta layers L2-normalize
-keys (the L1.1 conditioning finding); the SSM step reproduces
-`tessera.ops.selective_ssm` (the L4 op) and returns the carried state.
+mixer pluggable (`linear_mixer = "delta" | "ssm" | "liv"`), the FFN pluggable
+(`ffn = "dense" | "moe"`), and ships a graph-level MTP draft head — i.e. full
+model blocks, not just mixers.  The stack is built from per-mixer **span
+functions** that handle a token-span of any length carrying their own cache, so
+`hybrid_forward` (one span) and `hybrid_decode` (streamed spans) run identical
+per-layer code — the oracle (`tests/unit/test_stdlib_hybrid.py`) is **streaming
+dual-cache decode ≡ full recompute**.  Delta layers L2-normalize keys (the L1.1
+conditioning finding); the SSM step reproduces `tessera.ops.selective_ssm` (the
+L4 op); LIV is the LFM2.5 double-gated causal short-conv (constant conv state);
+MoE uses exact per-token routing; MTP self-speculation is lossless (== AR).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ LINEAR = "linear"
 FULL = "full"
 DELTA = "delta"
 SSM = "ssm"
+LIV = "liv"     # LFM2.5 Linear Input-Varying gated short convolution
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -91,15 +95,20 @@ class HybridConfig:
     head_dim: int
     schedule: HybridSchedule
     ffn_mult: int = 2
-    linear_mixer: str = DELTA   # "delta" (Qwen3.6) | "ssm" (Nemotron/Mamba)
+    linear_mixer: str = DELTA   # "delta" (Qwen3.6) | "ssm" (Nemotron) | "liv" (LFM2.5)
     ssm_state: int = 8          # SSM state dim N (scalar-state config)
+    conv_kernel: int = 3        # LIV depthwise causal conv width
+    ffn: str = "dense"          # "dense" SwiGLU | "moe" (routed experts + shared)
+    num_experts: int = 8        # MoE: total routed experts
+    top_k: int = 2              # MoE: experts activated per token
+    shared_expert: bool = True  # MoE: always-on shared expert (DeepSeek/Qwen style)
 
     @property
     def inner(self) -> int:
         return self.num_heads * self.head_dim
 
     def mixer_for(self, i: int) -> str:
-        """One of ``full`` / ``delta`` / ``ssm`` for layer ``i``."""
+        """One of ``full`` / ``delta`` / ``ssm`` / ``liv`` for layer ``i``."""
         if self.schedule.is_full(i):
             return FULL
         return self.linear_mixer
@@ -116,10 +125,23 @@ def synth_weights(cfg: HybridConfig, rng) -> list[dict]:
             n1=rng.standard_normal(Dm) * 0.1 + 1.0,
             n2=rng.standard_normal(Dm) * 0.1 + 1.0,
             wo=rng.standard_normal((inner, Dm)) / np.sqrt(inner),
-            wg=rng.standard_normal((Dm, ff)) * s,
-            wu=rng.standard_normal((Dm, ff)) * s,
-            wd=rng.standard_normal((ff, Dm)) / np.sqrt(ff),
         )
+        # FFN — dense SwiGLU or routed MoE (+ optional shared expert).
+        if cfg.ffn == "moe":
+            E, fe = cfg.num_experts, ff
+            se = 1.0 / np.sqrt(Dm)
+            w.update(w_router=rng.standard_normal((Dm, E)) * se,
+                     e_gate=rng.standard_normal((E, Dm, fe)) * se,
+                     e_up=rng.standard_normal((E, Dm, fe)) * se,
+                     e_down=rng.standard_normal((E, fe, Dm)) / np.sqrt(fe))
+            if cfg.shared_expert:
+                w.update(s_gate=rng.standard_normal((Dm, fe)) * se,
+                         s_up=rng.standard_normal((Dm, fe)) * se,
+                         s_down=rng.standard_normal((fe, Dm)) / np.sqrt(fe))
+        else:
+            w.update(wg=rng.standard_normal((Dm, ff)) * s,
+                     wu=rng.standard_normal((Dm, ff)) * s,
+                     wd=rng.standard_normal((ff, Dm)) / np.sqrt(ff))
         mixer = cfg.mixer_for(i)
         if mixer == FULL:
             w.update(wq=rng.standard_normal((Dm, inner)) * s,
@@ -131,13 +153,21 @@ def synth_weights(cfg: HybridConfig, rng) -> list[dict]:
                      wv=rng.standard_normal((Dm, inner)) * s,
                      wbeta=rng.standard_normal((Dm, cfg.num_heads)) * s,
                      wdecay=rng.standard_normal((Dm, cfg.num_heads)) * s)
-        else:  # SSM
+        elif mixer == SSM:
             w.update(w_x=rng.standard_normal((Dm, inner)) * s,
                      w_b=rng.standard_normal((Dm, N)) * s,
                      w_c=rng.standard_normal((Dm, N)) * s,
                      w_dt=rng.standard_normal((Dm, inner)) * s,
                      dt_bias=rng.standard_normal(inner) * 0.1 - 1.0,
                      a_log=rng.standard_normal(inner) * 0.1)   # A = -exp(a_log) < 0
+        else:  # LIV — double-gated short conv (LFM2.5)
+            k = cfg.conv_kernel
+            w.update(w_bg=rng.standard_normal((Dm, inner)) * s,
+                     w_xt=rng.standard_normal((Dm, inner)) * s,
+                     w_cg=rng.standard_normal((Dm, inner)) * s,
+                     w_conv=rng.standard_normal((inner, k)) * (1.0 / np.sqrt(k)),
+                     b_conv=rng.standard_normal(inner) * 0.1,
+                     w_out=rng.standard_normal((inner, Dm)) / np.sqrt(inner))
         layers.append(w)
     return layers
 
@@ -150,6 +180,20 @@ def _swiglu(x, w):
     g = x @ w["wg"]
     u = x @ w["wu"]
     return (g / (1.0 + np.exp(-g)) * u) @ w["wd"]
+
+
+def _ffn(h, w, cfg):
+    """Per-token FFN — dense SwiGLU or routed MoE.  MoE uses exact (no-capacity-
+    drop) routing so it is purely per-token → streaming decode ≡ recompute."""
+    if cfg.ffn != "moe":
+        return _swiglu(h, w)
+    from . import moe as _moe
+    B, S, Dm = h.shape
+    shared = ((w["s_gate"], w["s_up"], w["s_down"]) if cfg.shared_expert else None)
+    r = _moe.moe_forward(h.reshape(B * S, Dm), w["w_router"], w["e_gate"],
+                         w["e_up"], w["e_down"], top_k=cfg.top_k, shared=shared,
+                         capacity_factor=None, normalize=True)
+    return np.asarray(r.y).reshape(B, S, Dm)
 
 
 def _softplus(x):
@@ -218,7 +262,7 @@ def _delta_span(x, w, cfg, cache):
         return_state=True, state_dtype="fp64")
     cache["S"] = st
     x = x + _merge(np.asarray(o), w["wo"])
-    return x + _swiglu(_rmsnorm(x, w["n2"]), w)
+    return x + _ffn(_rmsnorm(x, w["n2"]), w, cfg)
 
 
 def _ssm_span(x, w, cfg, cache):
@@ -232,7 +276,38 @@ def _ssm_span(x, w, cfg, cache):
     y, hnew = _ssm_scan(x_ssm, A, Bp, Cp, dt, h0=cache.get("H"))
     cache["H"] = hnew
     x = x + y @ w["wo"]                          # y [B,S,inner] -> [B,S,Dm]
-    return x + _swiglu(_rmsnorm(x, w["n2"]), w)
+    return x + _ffn(_rmsnorm(x, w["n2"]), w, cfg)
+
+
+def _causal_dwconv(y, w_conv, b_conv, state):
+    """Per-channel causal depthwise conv1d over the sequence axis.
+
+    y : [B, L, C]   w_conv : [C, k]   b_conv : [C]   state : [B, k-1, C] | None
+    Returns (z [B, L, C], new_state [B, k-1, C]) — new_state is the last k-1
+    inputs, the constant-size carry that makes streaming ≡ full.
+    """
+    B, L, C = y.shape
+    k = w_conv.shape[1]
+    pad = np.zeros((B, k - 1, C)) if state is None else state
+    yp = np.concatenate([pad, y], axis=1)               # [B, k-1+L, C]
+    z = np.broadcast_to(b_conv, (B, L, C)).astype(np.float64).copy()
+    for i in range(k):
+        z += w_conv[:, i] * yp[:, i:i + L, :]           # per-channel tap i
+    return z, yp[:, L:, :]
+
+
+def _liv_span(x, w, cfg, cache):
+    """LFM2.5 LIV: (B,C,x̃)=Linear(h); y=B⊙x̃; z=DWConv_k(y); o=Linear_out(C⊙z)."""
+    h = _rmsnorm(x, w["n1"])
+    Bg = h @ w["w_bg"]
+    xt = h @ w["w_xt"]
+    Cg = h @ w["w_cg"]
+    y = Bg * xt
+    z, new_state = _causal_dwconv(y, w["w_conv"], w["b_conv"], cache.get("CONV"))
+    cache["CONV"] = new_state
+    o = Cg * z
+    x = x + o @ w["w_out"]
+    return x + _ffn(_rmsnorm(x, w["n2"]), w, cfg)
 
 
 def _full_span(x, w, cfg, cache):
@@ -245,10 +320,10 @@ def _full_span(x, w, cfg, cache):
     cache["V"] = v if cache.get("V") is None else np.concatenate([cache["V"], v], axis=2)
     o = _causal_attention(q, cache["K"], cache["V"])
     x = x + _merge(o, w["wo"])
-    return x + _swiglu(_rmsnorm(x, w["n2"]), w)
+    return x + _ffn(_rmsnorm(x, w["n2"]), w, cfg)
 
 
-_SPAN = {DELTA: _delta_span, SSM: _ssm_span, FULL: _full_span}
+_SPAN = {DELTA: _delta_span, SSM: _ssm_span, LIV: _liv_span, FULL: _full_span}
 
 
 def _run_layers(x_span, weights, cfg, caches):
@@ -273,3 +348,79 @@ def hybrid_decode(x, weights, cfg: HybridConfig, prefill: int = 1):
     for t in range(prefill, S):
         out[:, t:t + 1] = _run_layers(x[:, t:t + 1], weights, cfg, caches)
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-Token Prediction (MTP) — a graph-level draft head (Nemotron/Qwen3.6/Mellum2)
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class HybridLM:
+    """A hybrid backbone + tied embedding LM head + a shared-weight MTP draft
+    head.  The MTP head predicts token t+2 from the backbone hidden h_t and the
+    embedding of the (verified) token t+1 — the draft head is part of the model
+    graph, not an external serving hack.  Greedy self-speculation is **lossless**
+    (decode output == autoregressive) by construction."""
+    cfg: HybridConfig
+    layers: list[dict]
+    embed: np.ndarray        # [V, Dm] (tied: logits = h @ embedᵀ)
+    mtp: dict                # {"w_in": [2*Dm, Dm], "n": [Dm]}
+
+
+def synth_lm_weights(cfg: HybridConfig, vocab_size: int, rng) -> HybridLM:
+    Dm = cfg.d_model
+    s = 1.0 / np.sqrt(Dm)
+    return HybridLM(
+        cfg=cfg, layers=synth_weights(cfg, rng),
+        embed=rng.standard_normal((vocab_size, Dm)) * 0.1,
+        mtp={"w_in": rng.standard_normal((2 * Dm, Dm)) * s,
+             "n": rng.standard_normal(Dm) * 0.1 + 1.0})
+
+
+def _backbone_hidden(ids, lm: HybridLM):
+    return hybrid_forward(lm.embed[ids], lm.layers, lm.cfg)   # [B,S,Dm]
+
+
+def _lm_logits(h, lm: HybridLM):
+    return h @ lm.embed.T                                     # [...,V]
+
+
+def mtp_draft_logits(h_t, next_ids, lm: HybridLM):
+    """Draft logits for token t+2 from backbone hidden h_t [B,Dm] and the token
+    t+1 (next_ids [B])."""
+    z = np.concatenate([h_t, lm.embed[next_ids]], axis=-1) @ lm.mtp["w_in"]
+    z = _rmsnorm(z, lm.mtp["n"])
+    return _lm_logits(z, lm)
+
+
+def greedy_generate(lm: HybridLM, prompt_ids, n: int):
+    """Plain greedy autoregressive decode (the reference). prompt_ids [B,P]."""
+    ids = np.asarray(prompt_ids)
+    for _ in range(n):
+        h = _backbone_hidden(ids, lm)
+        nxt = np.argmax(_lm_logits(h[:, -1], lm), axis=-1)
+        ids = np.concatenate([ids, nxt[:, None]], axis=1)
+    return ids
+
+
+def mtp_speculative_generate(lm: HybridLM, prompt_ids, n: int):
+    """Greedy self-speculative decode using the MTP draft head.  Each round emits
+    the backbone's verified token, then *speculates* the next via the MTP head and
+    verifies it against the backbone — accepting only on a match.  Returns
+    ``(ids, accepted)``; ``ids`` is **identical to greedy_generate** (lossless),
+    ``accepted`` counts MTP hits (a trained head saves backbone steps)."""
+    ids = np.asarray(prompt_ids)
+    target = ids.shape[1] + n
+    accepted = 0
+    while ids.shape[1] < target:
+        h = _backbone_hidden(ids, lm)
+        t1 = np.argmax(_lm_logits(h[:, -1], lm), axis=-1)     # verified next token
+        ids = np.concatenate([ids, t1[:, None]], axis=1)
+        if ids.shape[1] >= target:
+            break
+        draft = np.argmax(mtp_draft_logits(h[:, -1], t1, lm), axis=-1)
+        h2 = _backbone_hidden(ids, lm)                        # verify pass
+        t2 = np.argmax(_lm_logits(h2[:, -1], lm), axis=-1)
+        if bool(np.all(draft == t2)):
+            accepted += 1                                     # MTP would skip a step
+        ids = np.concatenate([ids, t2[:, None]], axis=1)      # always the verified token
+    return ids[:, :target], accepted

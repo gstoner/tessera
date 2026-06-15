@@ -7403,6 +7403,73 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
   }
 }
 
+// Half-precision SYNTHESIZED matmul -> epilogue (Optimizing-Compiler Plan F2 —
+// half-precision synthesis).  Identical to the f32 symbols but with half I/O
+// (uint16_t bit pattern); the synthesized MSL declares ``half`` I/O with fp32
+// accumulators, so the math is bit-for-bit the f32 kernel.  ``is_tiled``
+// selects the threadgroup-tiled dispatch (one threadgroup per row, 32 threads,
+// dynamic fp32 ``tg_scores`` of N floats); otherwise the per-thread dispatch.
+extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
+    const char* msl_source, const char* entry, const uint16_t* A,
+    const uint16_t* B, const uint16_t* bias, uint16_t* O, int32_t M, int32_t N,
+    int32_t K, int32_t has_bias, int32_t is_tiled) {
+  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger aBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger bBytes = sizeof(uint16_t) * (NSUInteger)K * (NSUInteger)N;
+    NSUInteger oBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)N;
+    NSUInteger biasBytes = sizeof(uint16_t) * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, B, bBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufB || !bufO) return 0;
+    id<MTLBuffer> bufBias = nil;
+    if (has_bias != 0 && bias) {
+      bufBias = metal_buffer_acquire_with_bytes(ctx, bias, biasBytes);
+      if (!bufBias) return 0;
+    }
+    MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufB offset:0 atIndex:1];
+    [enc setBuffer:bufO offset:0 atIndex:2];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:3];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
+
+    if (is_tiled != 0) {
+      [enc setThreadgroupMemoryLength:(sizeof(float) * (NSUInteger)N) atIndex:0];
+      MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+      MTLSize tg = MTLSizeMake(32, 1, 1);
+      [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+    } else {
+      MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+      NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                             pso.maxTotalThreadsPerThreadgroup);
+      if (tg_x == 0) tg_x = 1;
+      [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    }
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue_f16"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 // Generic SYNTHESIZED attention dispatch (Optimizing-Compiler Plan F2c).  The
 // fused ``O = softmax(scale * Q @ Kᵀ) @ V`` block — one query row per thread,
 // the score row in a stack accumulator, a two-pass (max/exp-sum) softmax, then

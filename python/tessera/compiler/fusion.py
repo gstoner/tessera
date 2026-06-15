@@ -198,14 +198,34 @@ def _matmul_body(variant: str) -> str:
     raise ValueError(f"unknown synth variant {variant!r}")
 
 
+#: Synthesizer I/O dtypes.  f16 emits a native ``half``-I/O kernel (fp32
+#: accumulators throughout); f32 is the default.  bf16 has no MSL kernel — it
+#: reuses the f32 kernel via host-side fp32 conversion (the 8.4.4.x convention),
+#: handled in ``run_fused_region``.
+SYNTH_DTYPES = ("f32", "f16")
+
+
+def _io_type(dtype: str) -> str:
+    if dtype == "f32":
+        return "float"
+    if dtype == "f16":
+        return "half"
+    raise ValueError(f"synthesizer dtype must be f32 or f16, got {dtype!r}")
+
+
 def synthesize_matmul_epilogue_msl(region: FusedRegion,
-                                   variant: str = "broadcast") -> str:
+                                   variant: str = "broadcast",
+                                   dtype: str = "f32") -> str:
     """Emit the MSL source for ``region`` — one row per thread, the matmul into a
     stack accumulator, the pointwise chain inlined, then (optionally) a terminal
     reduction (rmsnorm/softmax) over the row.  ``variant`` selects the matmul
     inner-loop schedule (see ``SYNTH_VARIANTS``); the F5 autotuner picks the
-    fastest one that passes the oracle."""
-    bias_param = ("    device const float* bias [[buffer(6)]],\n"
+    fastest one that passes the oracle.  ``dtype`` selects the I/O type — f16
+    emits ``half`` I/O with fp32 accumulators (MSL's implicit half↔float
+    conversions keep the body identical); the ``scores`` accumulator is always
+    fp32, so the math is bit-for-bit the same as f32."""
+    io = _io_type(dtype)
+    bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
     matmul_body = _matmul_body(variant)
@@ -236,9 +256,9 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
     return f"""#include <metal_stdlib>
 using namespace metal;
 kernel void {_ENTRY}(
-    device const float* A   [[buffer(0)]],
-    device const float* B   [[buffer(1)]],
-    device float*       O   [[buffer(2)]],
+    device const {io}* A   [[buffer(0)]],
+    device const {io}* B   [[buffer(1)]],
+    device {io}*       O   [[buffer(2)]],
     constant int&       M   [[buffer(3)]],
     constant int&       N   [[buffer(4)]],
     constant int&       K   [[buffer(5)]],
@@ -310,14 +330,17 @@ _TILED_REDUCTIONS: dict[str, str] = {
 }
 
 
-def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion) -> str:
+def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
+                                         dtype: str = "f32") -> str:
     """Emit a THREADGROUP-TILED MSL kernel for ``region`` — one row per
     threadgroup, ``_TILED_THREADS`` threads cooperating, the row of scores in
     dynamic threadgroup memory (no per-thread stack), so N can reach
     ``SYNTH_MAX_N_TILED``.  Mirrors the proven hand-written
     ``matmul_softmax_tiled_f32`` structure, generalized over the epilogue +
-    reduction vocabulary."""
-    bias_param = ("    device const float* bias [[buffer(6)]],\n"
+    reduction vocabulary.  ``dtype`` selects the I/O type (the ``tg_scores``
+    accumulator stays fp32 regardless)."""
+    io = _io_type(dtype)
+    bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
 
@@ -348,9 +371,9 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion) -> str:
 using namespace metal;
 #define T {_TILED_THREADS}
 kernel void {_ENTRY_TILED}(
-    device const float* A   [[buffer(0)]],
-    device const float* B   [[buffer(1)]],
-    device float*       O   [[buffer(2)]],
+    device const {io}* A   [[buffer(0)]],
+    device const {io}* B   [[buffer(1)]],
+    device {io}*       O   [[buffer(2)]],
     constant int&       M   [[buffer(3)]],
     constant int&       N   [[buffer(4)]],
     constant int&       K   [[buffer(5)]],
@@ -406,6 +429,66 @@ def _synth_tiled_symbol() -> Any:
     return sym
 
 
+def _bf16_dtype() -> Any:
+    try:
+        import ml_dtypes
+        return ml_dtypes.bfloat16
+    except Exception:                          # noqa: BLE001 - optional dependency
+        return None
+
+
+def _synth_f16_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_matmul_epilogue_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, u16, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
+                          bias: np.ndarray | None,
+                          variant: str) -> tuple[np.ndarray, str]:
+    """f16 path — native ``half``-I/O kernel (fp32 accumulators), stack for
+    N<=1024 and threadgroup-tiled for N<=8192.  Reference (f32 math, cast to
+    f16) when Metal/the symbol is unavailable."""
+    A = np.ascontiguousarray(A, np.float16)
+    B = np.ascontiguousarray(B, np.float16)
+    M, K = A.shape
+    K2, N = B.shape
+    if K2 != K:
+        raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
+    bias_arr = None
+    if region.has_bias:
+        if bias is None:
+            raise ValueError("region needs a bias")
+        bias_arr = np.ascontiguousarray(bias, np.float16).reshape(N)
+    u16p = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    bias_ptr = u16p(bias_arr) if bias_arr is not None else None
+    has_bias = 1 if region.has_bias else 0
+
+    sym = _synth_f16_symbol()
+    if sym is not None and N <= SYNTH_MAX_N_TILED:
+        is_tiled = 0 if N <= SYNTH_MAX_N else 1
+        if is_tiled:
+            source = synthesize_matmul_epilogue_msl_tiled(region, dtype="f16")
+            entry = _ENTRY_TILED
+        else:
+            source = synthesize_matmul_epilogue_msl(region, variant, dtype="f16")
+            entry = _ENTRY
+        out = np.zeros((M, N), np.float16)
+        rc = sym(source.encode("utf-8"), entry.encode("utf-8"), u16p(A), u16p(B),
+                 bias_ptr, u16p(out), M, N, K, has_bias, is_tiled)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(A, B, bias_arr).astype(np.float16), "reference"
+
+
 def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
                      bias: np.ndarray | None = None,
                      variant: str = "broadcast") -> tuple[np.ndarray, str]:
@@ -413,7 +496,19 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     ``(output, execution)`` where execution is ``"metal_runtime"`` (the
     synthesized kernel ran) or ``"reference"`` (numpy fallback — no Metal, N too
     large, or compile/dispatch failed).  Either way the numbers are correct.
-    ``variant`` selects the matmul inner-loop schedule (F5 autotuner)."""
+    ``variant`` selects the matmul inner-loop schedule (F5 autotuner).  The
+    output dtype follows the input: f16 runs a native half kernel; bf16 (no MSL
+    type) converts to f32, runs, and converts back."""
+    in_dtype = np.asarray(A).dtype
+    bf16 = _bf16_dtype()
+    if bf16 is not None and in_dtype == bf16:
+        out, ex = run_fused_region(
+            region, np.asarray(A, np.float32), np.asarray(B, np.float32),
+            None if bias is None else np.asarray(bias, np.float32), variant)
+        return out.astype(bf16), ex
+    if in_dtype == np.float16:
+        return _run_fused_region_f16(region, A, B, bias, variant)
+
     A = np.ascontiguousarray(A, np.float32)
     B = np.ascontiguousarray(B, np.float32)
     M, K = A.shape
@@ -991,6 +1086,7 @@ __all__ = [
     "verify_synthesized_attention",
     "clear_verification_cache",
     "SYNTH_VARIANTS",
+    "SYNTH_DTYPES",
     "SYNTH_MAX_N_TILED",
     "synthesize_matmul_epilogue_msl_tiled",
     "AutotuneRecord",

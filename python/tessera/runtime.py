@@ -10662,6 +10662,8 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f32")
                 # F2b-tiled — threadgroup-tiled synthesized epilogue (large N).
                 getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_tiled_f32")
+                # F2 half-precision synthesis — native f16 epilogue (stack+tiled).
+                getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_bf16")
                 getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f16")

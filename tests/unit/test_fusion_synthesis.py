@@ -28,6 +28,7 @@ from tessera.compiler.fusion import (
     should_fuse_region,
     synthesize_attention_msl,
     synthesize_matmul_epilogue_msl,
+    synthesize_matmul_epilogue_msl_tiled,
     _Op,
 )
 
@@ -674,6 +675,98 @@ def test_tiled_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
     out, execution = run_fused_region(region, A, B, bias)
     assert execution == "metal_runtime"            # the tiled kernel ran
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)  # oracle
+
+
+# ── F2 half-precision synthesis (f16 native + bf16 convert) ──────────────────
+
+def test_f16_synthesizer_emits_half_io():
+    a = synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="f16")
+    assert "device const half* A" in a
+    assert "device half*       O" in a
+    assert "float scores[" in a                # fp32 accumulator stays
+    f32 = synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="f32")
+    assert "device const float* A" in f32
+
+
+def test_f16_tiled_synthesizer_emits_half_io_with_fp32_scratch():
+    src = synthesize_matmul_epilogue_msl_tiled(FusedRegion((), reduction="softmax"),
+                                               dtype="f16")
+    assert "device const half* A" in src
+    assert "threadgroup float* tg_scores" in src   # accumulator stays fp32
+
+
+def test_synthesizer_rejects_unknown_dtype():
+    with pytest.raises(ValueError):
+        synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="bf16")
+
+
+_HALF_CASES = [
+    (("gelu",), None, False),
+    (("bias", "silu"), None, True),
+    ((), "softmax", False),
+    ((), "rmsnorm", False),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("chain,red,has_bias", _HALF_CASES)
+@pytest.mark.parametrize("N", [64, 2048])      # stack + tiled
+def test_f16_synthesis_equals_unfused_on_metal(chain, red, has_bias, N):
+    rng = np.random.default_rng((N + hash((chain, red))) & 0xFFFF)
+    M, K = 8, 32
+    A = rng.standard_normal((M, K)).astype(np.float16)
+    B = rng.standard_normal((K, N)).astype(np.float16)
+    bias = rng.standard_normal((N,)).astype(np.float16) if has_bias else None
+    region = FusedRegion(chain, reduction=red, bias_name="bias" if has_bias else None)
+
+    out, execution = run_fused_region(region, A, B, bias)
+    assert execution == "metal_runtime"
+    assert out.dtype == np.float16
+    ref = region.reference(A, B, bias)         # fp32 math (the oracle)
+    assert np.allclose(out.astype(np.float32), ref, atol=2e-2, rtol=2e-2)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_bf16_synthesis_converts_and_runs_on_metal():
+    bf16 = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(11)
+    M, K, N = 8, 16, 64
+    A = rng.standard_normal((M, K)).astype(bf16)
+    B = rng.standard_normal((K, N)).astype(bf16)
+    region = FusedRegion((), reduction="softmax")
+
+    out, execution = run_fused_region(region, A, B)
+    assert execution == "metal_runtime"        # f32 kernel ran under the hood
+    assert out.dtype == bf16
+    ref = region.reference(A.astype(np.float32), B.astype(np.float32))
+    assert np.allclose(out.astype(np.float32), ref, atol=3e-2, rtol=3e-2)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_f16_synthesis_reproduces_handwritten_matmul_gelu_f16():
+    import ctypes
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    rt = _load_apple_gpu_runtime()
+    hw = getattr(rt, "tessera_apple_gpu_matmul_gelu_f16", None)
+    if hw is None:
+        pytest.skip("hand-written matmul_gelu_f16 symbol unavailable")
+    hw.argtypes = [ctypes.POINTER(ctypes.c_uint16)] * 3 + [ctypes.c_int32] * 3
+    hw.restype = None
+
+    rng = np.random.default_rng(13)
+    M, K, N = 8, 16, 32
+    A = rng.standard_normal((M, K)).astype(np.float16)
+    B = rng.standard_normal((K, N)).astype(np.float16)
+    hand = np.zeros((M, N), np.float16)
+    u16 = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    hw(u16(np.ascontiguousarray(A)), u16(np.ascontiguousarray(B)), u16(hand), M, N, K)
+
+    synth, execution = run_fused_region(FusedRegion(("gelu",)), A, B)
+    assert execution == "metal_runtime"
+    # both use half I/O + fp32 accumulators + the same clamped-tanh gelu.
+    assert np.allclose(synth.astype(np.float32), hand.astype(np.float32),
+                       atol=2e-2, rtol=2e-2)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")

@@ -725,12 +725,20 @@ def _synth_coopmat_symbol() -> Any:
     return sym
 
 
-def coopmat_tile_for(M: int, N: int, K: int) -> int:
-    """Pick the coopmat output-tile size by shape.  Measured on M1 Max: the 64x64
-    register-blocked kernel (8 simdgroups, 256 threads, 8 accumulators) wins for
-    large-N matmuls (1.42x at 2048x1024x512, where it also beats MPS-compose
-    1.18x) and ties the 32x32 for small/narrow ones — so gate 64 on a wide,
-    deep matmul; the 32x32 (less per-threadgroup overhead) handles the rest."""
+def coopmat_tile_for(M: int, N: int, K: int,
+                     region: FusedRegion | None = None) -> int:
+    """Pick the coopmat output-tile size for (M,N,K).  An autotuned decision in
+    ``_COOPMAT_TILE_CORPUS`` (per region-class × shape-bucket, from
+    ``autotune_coopmat_tile``) wins when present; otherwise the shape heuristic.
+
+    Heuristic (measured on M1 Max): the 64x64 register-blocked kernel (8
+    simdgroups, 256 threads, 8 accumulators) wins for large-N matmuls (1.42x at
+    2048x1024x512, where it also beats MPS-compose 1.18x) and ties the 32x32 for
+    small/narrow ones — so gate 64 on a wide, deep matmul."""
+    if region is not None:
+        tuned = _COOPMAT_TILE_CORPUS.get(_corpus_key(region, M, N, K))
+        if tuned is not None:
+            return tuned
     if M >= 128 and N >= 384 and K >= 128:
         return 64
     return 32
@@ -762,7 +770,7 @@ def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     if K2 != K:
         raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
     if tile is None:
-        tile = coopmat_tile_for(M, N, K)
+        tile = coopmat_tile_for(M, N, K, region)
     bias_arr = None
     if region.has_bias:
         if bias is None:
@@ -1326,6 +1334,59 @@ def best_variant_for(region: FusedRegion, M: int, N: int, K: int) -> str:
     return _AUTOTUNE_CORPUS.get(_corpus_key(region, M, N, K), "broadcast")
 
 
+#: Distilled best coopmat *tile* (32/64) per (region-class, shape-bucket).
+_COOPMAT_TILE_CORPUS: dict[tuple, int] = {}
+
+
+def clear_coopmat_tile_corpus() -> None:
+    _COOPMAT_TILE_CORPUS.clear()
+
+
+def autotune_coopmat_tile(region: FusedRegion, M: int, N: int, K: int, *,
+                          dtype: str = "f16", reps: int = 5, seed: int = 0
+                          ) -> dict[int, float]:
+    """Measure the 32x32 vs 64x64 coopmat tile at (M,N,K) and record the faster
+    one that passes the oracle (perf gated behind correctness — the Sakana
+    invariant).  Returns ``{tile: latency_ms}`` for the tiles that ran on Metal;
+    the winner is stored in ``_COOPMAT_TILE_CORPUS`` so ``coopmat_tile_for``
+    becomes an O(1) tuned lookup.  Returns ``{}`` when the region is not coopmat-
+    eligible or no tile ran on Metal."""
+    import time
+
+    if not coopmat_eligible(region):
+        return {}
+    np_dt = np.float16 if dtype == "f16" else np.float32
+    rng = np.random.default_rng(seed)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(np_dt)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(np_dt)
+    bias = ((rng.standard_normal((N,)) * 0.3).astype(np_dt)
+            if region.has_bias else None)
+    ref = region.reference(A, B, bias)
+
+    latencies: dict[int, float] = {}
+    correct: dict[int, bool] = {}
+    for tile in SYNTH_COOPMAT_TILES:
+        out, execution = run_fused_region_coopmat(region, A, B, bias, tile=tile)
+        if execution != "metal_runtime":
+            continue
+        atol = 1e-3 if np_dt == np.float32 else 3e-2
+        ok = bool(np.allclose(out.astype(np.float32), ref, atol=atol, rtol=atol))
+        correct[tile] = ok
+        if not ok:
+            continue                            # fast-but-wrong excluded
+        best = float("inf")
+        for _ in range(max(1, reps)):
+            t0 = time.perf_counter()
+            run_fused_region_coopmat(region, A, B, bias, tile=tile)
+            best = min(best, time.perf_counter() - t0)
+        latencies[tile] = best * 1e3
+    eligible = {t: ms for t, ms in latencies.items() if correct.get(t, False)}
+    if eligible:
+        winner = min(eligible, key=lambda t: eligible[t])
+        _COOPMAT_TILE_CORPUS[_corpus_key(region, M, N, K)] = winner
+    return latencies
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # F1a — region discovery
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1511,6 +1572,8 @@ __all__ = [
     "coopmat_tile_for",
     "coopmat_threads",
     "SYNTH_COOPMAT_TILES",
+    "autotune_coopmat_tile",
+    "clear_coopmat_tile_corpus",
     "synthesize_matmul_reduction_coopmat_msl",
     "run_fused_region_coopmat_reduce",
     "coopmat_reduce_eligible",

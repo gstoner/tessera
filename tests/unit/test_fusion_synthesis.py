@@ -841,6 +841,38 @@ def test_coopmat_tile_selection_by_shape():
     assert coopmat_tile_for(64, 96, 48) == 32          # small → 32x32
 
 
+def test_coopmat_tile_corpus_overrides_heuristic():
+    # An autotuned tile decision in the corpus wins over the shape heuristic.
+    from tessera.compiler.fusion import (
+        coopmat_tile_for, clear_coopmat_tile_corpus, _COOPMAT_TILE_CORPUS,
+        _corpus_key,
+    )
+    clear_coopmat_tile_corpus()
+    region = FusedRegion(("gelu",))
+    M, N, K = 2048, 256, 1024
+    assert coopmat_tile_for(M, N, K, region) == 32          # heuristic: narrow N
+    _COOPMAT_TILE_CORPUS[_corpus_key(region, M, N, K)] = 64  # autotuner said 64
+    assert coopmat_tile_for(M, N, K, region) == 64          # corpus overrides
+    clear_coopmat_tile_corpus()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="autotune measures on Metal.")
+def test_autotune_coopmat_tile_picks_a_correct_winner():
+    from tessera.compiler.fusion import (
+        autotune_coopmat_tile, coopmat_tile_for, clear_coopmat_tile_corpus,
+    )
+    clear_coopmat_tile_corpus()
+    region = FusedRegion(("gelu",))
+    M, N, K = 512, 512, 512
+    lat = autotune_coopmat_tile(region, M, N, K, reps=4)
+    if not lat:
+        pytest.skip("Metal unavailable; autotune not exercised")
+    winner = coopmat_tile_for(M, N, K, region)
+    assert winner in (32, 64)
+    assert lat[winner] == min(lat.values())     # the recorded tile is the fastest
+    clear_coopmat_tile_corpus()
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
 @pytest.mark.parametrize("dtype", [np.float32, np.float16])
 def test_coopmat_64_tile_equals_unfused_on_metal(dtype):

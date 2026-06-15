@@ -3975,6 +3975,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return _impl(Q, K, V, cu_seqlens_q=cu_seqlens_q,
                      cu_seqlens_k=cu_seqlens_k, causal=causal, scale=scale)
 
+    # Register varlen_sdpa as a reference op so it appears in
+    # tessera.ops.registry.list() (keeps the op-catalog ↔ registry invariant in
+    # test_operator_registry_foundation consistent with its OP_SPECS entry).
+    references["varlen_sdpa"] = varlen_sdpa
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")

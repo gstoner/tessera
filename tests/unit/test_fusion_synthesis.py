@@ -292,6 +292,39 @@ def test_runtime_prepass_resolves_bias_and_reduction():
     assert np.allclose(values["r"], ref, atol=1e-4)
 
 
+def test_runtime_prepass_preserves_f16_dtype():
+    # P2 regression pin: the generic metadata fuser must preserve a half input
+    # dtype (run_fused_region is dtype-aware) rather than upcasting to f32.
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 16)).astype(np.float16)
+    B = rng.standard_normal((16, 12)).astype(np.float16)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%x", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+    values = {"x": A, "W": B}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1}
+    assert values["g"].dtype == np.float16          # dtype preserved, not f32
+
+
+def test_target_ir_matmul_epilogue_is_dtype_aware():
+    # P1 regression pin: matmul_gelu / matmul_rmsnorm Target IR must emit half
+    # I/O for f16 (not always f32), matching the matmul_softmax branch.
+    from tessera.compiler.target_ir import _apple_gpu_kernel_msl_for_dtype as info
+    for kernel in ("matmul_gelu", "matmul_rmsnorm", "matmul_softmax"):
+        f16_src, _e, _c, f16_attr = info(kernel, "f16")
+        assert "device const half* A" in f16_src, kernel
+        assert f16_attr == "f16", kernel
+        f32_src, _e, _c, f32_attr = info(kernel, "f32")
+        assert "device const float* A" in f32_src, kernel
+        assert f32_attr == "f32", kernel
+        # bf16 host-converts → f32 source but the bf16 marker is preserved.
+        _bsrc, _e, _c, bf16_attr = info(kernel, "bf16")
+        assert bf16_attr == "bf16", kernel
+
+
 def test_runtime_prepass_skips_when_intermediate_reused():
     import numpy as np
     from tessera.runtime import _apple_gpu_try_synthesized_fusion

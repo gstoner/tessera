@@ -379,18 +379,19 @@ def _apple_gpu_kernel_msl_for_dtype(
                 "matmul_softmax_matmul_f32",
                 _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY, "f32")
     if kernel in ("matmul_gelu", "matmul_rmsnorm"):
-        # Optimizing-Compiler Plan F2 (catalog retirement) — the matmul-epilogue
-        # MSL is now SYNTHESIZED from one generator (single source of truth),
-        # not a hand-written constant. The Target IR embeds the synthesized
-        # source + the generic synth entry point; the runtime executes the same
-        # synthesizer. f32 only this phase.
+        # Optimizing-Compiler Plan F2 (catalog retirement + half precision) —
+        # the matmul-epilogue MSL is SYNTHESIZED from one generator (single
+        # source of truth). The Target IR embeds the synthesized source for the
+        # requested dtype: f16 embeds the half source; bf16 host-converts to f32,
+        # so it embeds the f32 source (matching the matmul_softmax branch above).
         from tessera.compiler.fusion import (
             _ENTRY, FusedRegion, synthesize_matmul_epilogue_msl,
         )
         region = (FusedRegion(("gelu",)) if kernel == "matmul_gelu"
                   else FusedRegion((), reduction="rmsnorm"))
-        src = synthesize_matmul_epilogue_msl(region)
-        return (src, _ENTRY, _sha256_short(src), "f32")
+        synth_dtype = "f16" if dtype == "f16" else "f32"
+        src = synthesize_matmul_epilogue_msl(region, dtype=synth_dtype)
+        return (src, _ENTRY, _sha256_short(src), dtype)
     raise ValueError(f"unknown apple_gpu kernel: {kernel!r}")
 
 

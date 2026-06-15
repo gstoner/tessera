@@ -2377,6 +2377,21 @@ def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any
     return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args)
 
 
+def _apple_gpu_synth_fusion_dtype(a: Any, b: Any, np: Any) -> Any:
+    """The common dtype for a discovered matmul-epilogue chain: a half dtype
+    when BOTH operands share it (``run_fused_region`` runs the f16 native kernel
+    / converts bf16), else f32.  Preserves the input precision now that
+    ``run_fused_region`` is dtype-aware (rather than forcing f32)."""
+    bf16 = _bfloat16_dtype()
+    da, db = np.asarray(a).dtype, np.asarray(b).dtype
+    if da == db:
+        if da == np.float16:
+            return np.float16
+        if bf16 is not None and da == bf16:
+            return bf16
+    return np.float32
+
+
 def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     """F1a + F2c + F3 (Optimizing-Compiler Plan) — run discovered fusable regions
     as ONE synthesized MSL kernel.  Covers ``matmul -> pointwise(-> reduction)``
@@ -2409,8 +2424,13 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     # matmul -> pointwise(-> reduction) chains.
     for mi, chain_idx, region in discover_fusable_regions(fops):
         try:
-            a = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[0]]), np.float32)
-            b = np.ascontiguousarray(_as_numpy(values[fops[mi].inputs[1]]), np.float32)
+            a_raw = _as_numpy(values[fops[mi].inputs[0]])
+            b_raw = _as_numpy(values[fops[mi].inputs[1]])
+            # Preserve the input precision (run_fused_region is dtype-aware:
+            # f16 native kernel, bf16 host-convert, f32 default).
+            fuse_dt = _apple_gpu_synth_fusion_dtype(a_raw, b_raw, np)
+            a = np.ascontiguousarray(a_raw, fuse_dt)
+            b = np.ascontiguousarray(b_raw, fuse_dt)
             if a.ndim != 2 or b.ndim != 2:
                 continue
             M, K = a.shape
@@ -2428,7 +2448,7 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
                     bias_name = ins[1] if ins and ins[0] == running else ins[0]
                     if bias_name not in values:
                         raise KeyError(bias_name)
-                    bias = np.ascontiguousarray(_as_numpy(values[bias_name]), np.float32)
+                    bias = np.ascontiguousarray(_as_numpy(values[bias_name]), fuse_dt)
                 running = fops[op_idx].output
             variant = best_variant_for(region, M, N, K)   # F5 distilled choice
             out, _exec = run_fused_region(region, a, b, bias, variant=variant)
@@ -9414,64 +9434,8 @@ def _apple_gpu_dispatch_matmul_softmax(operands: list[Any], np: Any) -> Any:
     return e / np.sum(e, axis=-1, keepdims=True)
 
 
-def _apple_gpu_matmul_softmax_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_f16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
-
-
-def _apple_gpu_matmul_softmax_bf16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_bf16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
-
-
-def _apple_gpu_matmul_softmax_tiled_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_tiled_f16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
-
-
-def _apple_gpu_matmul_softmax_tiled_bf16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_softmax_tiled_bf16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
+# matmul_softmax_{f16,bf16} + tiled loaders RETIRED (catalog retirement, F2) —
+# the synthesizer handles f16/bf16 via run_fused_region.
 
 
 def _apple_gpu_dispatch_gelu_gpu(x: Any, np: Any) -> Any:
@@ -9591,34 +9555,8 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
     return out
 
 
-def _apple_gpu_matmul_gelu_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_gelu_f16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
-
-
-def _apple_gpu_matmul_gelu_bf16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_gelu_bf16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
+# matmul_gelu_{f16,bf16} loaders RETIRED (catalog retirement, F2) — the
+# synthesizer handles f16/bf16 via run_fused_region.
 
 
 def _apple_gpu_matmul_rmsnorm_fused_half(a: Any, b: Any, eps: float,
@@ -9679,36 +9617,8 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
     return out
 
 
-def _apple_gpu_matmul_rmsnorm_f16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_rmsnorm_f16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-        ctypes.c_float,
-    ]
-    sym.restype = None
-    return sym
-
-
-def _apple_gpu_matmul_rmsnorm_bf16() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = getattr(runtime, "tessera_apple_gpu_matmul_rmsnorm_bf16", None)
-    if sym is None:
-        return None
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.POINTER(ctypes.c_uint16),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-        ctypes.c_float,
-    ]
-    sym.restype = None
-    return sym
+# matmul_rmsnorm_{f16,bf16} loaders RETIRED (catalog retirement, F2) — the
+# synthesizer handles f16/bf16 via run_fused_region.
 
 
 def _apple_gpu_dispatch_swiglu(x: Any, wg: Any, wu: Any, wd: Any, np: Any) -> Any:

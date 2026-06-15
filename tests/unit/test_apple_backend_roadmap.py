@@ -2111,11 +2111,15 @@ def test_apple_gpu_matmul_gelu_chain_emits_fused_msl_kernel():
 
     target_ir = mlp.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
-    assert 'entry_point = "matmul_gelu_f32"' in target_ir
+    # Optimizing-Compiler Plan F2 — the matmul->gelu MSL is now SYNTHESIZED, so
+    # the Target IR carries the generic synth entry point; the fusion id (which
+    # chain was matched) stays "matmul_gelu".
+    assert 'entry_point = "synth_matmul_epi"' in target_ir
     assert 'fusion = "matmul_gelu"' in target_ir
     # Exactly one fused emission.
     assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
-    assert "tessera_apple_gpu_matmul_gelu_f32" in mlp.compile_bundle.artifact("backend").text
+    assert ("tessera_apple_gpu_synth_matmul_epilogue_f32"
+            in mlp.compile_bundle.artifact("backend").text)
 
 
 def test_apple_gpu_matmul_gelu_executes_through_fused_msl_kernel():
@@ -2144,10 +2148,12 @@ def test_apple_gpu_matmul_rmsnorm_chain_emits_fused_msl_kernel():
 
     target_ir = norm.target_ir
     assert "tessera_apple.gpu.msl_kernel" in target_ir
-    assert 'entry_point = "matmul_rmsnorm_f32"' in target_ir
+    # Optimizing-Compiler Plan F2 — synthesized matmul->rmsnorm.
+    assert 'entry_point = "synth_matmul_epi"' in target_ir
     assert 'fusion = "matmul_rmsnorm"' in target_ir
     assert target_ir.count('"tessera_apple.gpu.msl_kernel"') == 1
-    assert "tessera_apple_gpu_matmul_rmsnorm_f32" in norm.compile_bundle.artifact("backend").text
+    assert ("tessera_apple_gpu_synth_matmul_epilogue_f32"
+            in norm.compile_bundle.artifact("backend").text)
 
 
 def test_apple_gpu_matmul_rmsnorm_executes_through_fused_msl_kernel():
@@ -2170,8 +2176,9 @@ def test_apple_gpu_matmul_rmsnorm_executes_through_fused_msl_kernel():
 
 
 def test_apple_gpu_mlp_fusion_runtime_shim_exposes_symbols(tmp_path):
-    """Compile the apple_gpu runtime shim and verify both new MLP-block
-    fusion symbols are exported."""
+    """Compile the apple_gpu runtime shim and verify the generic synthesized
+    matmul-epilogue symbol is exported (Optimizing-Compiler Plan F2 — the
+    per-epilogue matmul_gelu_f32 / matmul_rmsnorm_f32 kernels are retired)."""
 
     cxx = shutil.which("c++") or shutil.which("clang++") or shutil.which("g++")
     if cxx is None:
@@ -2195,11 +2202,15 @@ def test_apple_gpu_mlp_fusion_runtime_shim_exposes_symbols(tmp_path):
 
     runtime = ctypes.CDLL(str(lib))
     for name in (
-        "tessera_apple_gpu_matmul_gelu_f32",
-        "tessera_apple_gpu_matmul_rmsnorm_f32",
+        "tessera_apple_gpu_synth_matmul_epilogue_f32",
     ):
         sym = getattr(runtime, name, None)
         assert sym is not None, f"missing C ABI symbol: {name}"
+    # the retired per-epilogue f32 kernels must be gone.
+    for retired in ("tessera_apple_gpu_matmul_gelu_f32",
+                    "tessera_apple_gpu_matmul_rmsnorm_f32"):
+        assert getattr(runtime, retired, None) is None, (
+            f"retired kernel still present: {retired}")
 
 
 def test_apple_gpu_native_half_fused_runtime_shim(tmp_path):

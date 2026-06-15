@@ -40,8 +40,11 @@ namespace apple {
 
 namespace {
 
-constexpr llvm::StringLiteral kMatmulGeluF32Symbol =
-    "tessera_apple_gpu_matmul_gelu_f32";
+// Optimizing-Compiler Plan F2a — matmul -> gelu lowers to the generic
+// SYNTHESIZED epilogue kernel (the epilogue carried as a region descriptor
+// attribute), retiring the per-epilogue hand-written matmul_gelu_f32 kernel.
+constexpr llvm::StringLiteral kSynthEpilogueF32Symbol =
+    "tessera_apple_gpu_synth_matmul_epilogue_f32";
 
 
 
@@ -132,12 +135,14 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
 
     FunctionType fnTy = FunctionType::get(
         ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kMatmulGeluF32Symbol, fnTy);
+    ensureExternalDecl(mod, kSynthEpilogueF32Symbol, fnTy);
 
     auto callOp = rewriter.create<func::CallOp>(
-        loc, kMatmulGeluF32Symbol, TypeRange{},
+        loc, kSynthEpilogueF32Symbol, TypeRange{},
         ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
-    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_gelu"));
+    callOp->setAttr("tessera.fusion.kernel",
+                    rewriter.getStringAttr("synth_matmul_epilogue"));
+    callOp->setAttr("tessera.fusion.epilogue", rewriter.getStringAttr("gelu"));
     callOp->setAttr("tessera.fusion.source",
                     rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 

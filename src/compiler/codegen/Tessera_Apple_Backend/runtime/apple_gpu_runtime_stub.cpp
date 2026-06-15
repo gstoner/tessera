@@ -1064,11 +1064,10 @@ inline void reference_matmul_rmsnorm_f32_stub(const float* A, const float* B,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B,
-                                                  float* O, int32_t M,
-                                                  int32_t N, int32_t K) {
-  reference_matmul_gelu_f32_stub(A, B, O, M, N, K);
-}
+// tessera_apple_gpu_matmul_gelu_f32 / _matmul_rmsnorm_f32 — RETIRED (catalog
+// retirement, Optimizing-Compiler Plan F2): subsumed by the synthesized
+// epilogue symbol below.  The *_stub helpers stay — the f16/bf16 stub kernels
+// reuse them via fp32 conversion.
 
 // Synthesized matmul->epilogue (Optimizing-Compiler Plan F2a): off-Darwin there
 // is no Metal to compile the MSL source, so report unavailable (0). The Python
@@ -1083,13 +1082,6 @@ extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
     const char*, const char*, const float*, const float*, const float*,
     float*, int32_t, int32_t, int32_t, int32_t, float, int32_t) {
   return 0;
-}
-
-extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
-                                                     const float* B, float* O,
-                                                     int32_t M, int32_t N,
-                                                     int32_t K, float eps) {
-  reference_matmul_rmsnorm_f32_stub(A, B, O, M, N, K, eps);
 }
 
 // Sprint 3.3 perf-fusion — fused pre-norm + projection (non-Darwin reference

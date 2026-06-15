@@ -375,14 +375,19 @@ def _apple_gpu_kernel_msl_for_dtype(
         return (_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE,
                 "matmul_softmax_matmul_f32",
                 _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY, "f32")
-    if kernel == "matmul_gelu":
-        # Phase 8.4.7 — f32 only this phase. f16/bf16 mirror the existing
-        # Phase 8.4.4.x pattern via fp32-conversion at the runtime boundary.
-        return (_APPLE_GPU_MATMUL_GELU_MSL_SOURCE, "matmul_gelu_f32",
-                _APPLE_GPU_MATMUL_GELU_MSL_CACHE_KEY, "f32")
-    if kernel == "matmul_rmsnorm":
-        return (_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE, "matmul_rmsnorm_f32",
-                _APPLE_GPU_MATMUL_RMSNORM_MSL_CACHE_KEY, "f32")
+    if kernel in ("matmul_gelu", "matmul_rmsnorm"):
+        # Optimizing-Compiler Plan F2 (catalog retirement) — the matmul-epilogue
+        # MSL is now SYNTHESIZED from one generator (single source of truth),
+        # not a hand-written constant. The Target IR embeds the synthesized
+        # source + the generic synth entry point; the runtime executes the same
+        # synthesizer. f32 only this phase.
+        from tessera.compiler.fusion import (
+            _ENTRY, FusedRegion, synthesize_matmul_epilogue_msl,
+        )
+        region = (FusedRegion(("gelu",)) if kernel == "matmul_gelu"
+                  else FusedRegion((), reduction="rmsnorm"))
+        src = synthesize_matmul_epilogue_msl(region)
+        return (src, _ENTRY, _sha256_short(src), "f32")
     raise ValueError(f"unknown apple_gpu kernel: {kernel!r}")
 
 
@@ -599,78 +604,10 @@ _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16 = (
 _APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_CACHE_KEY_F16 = _sha256_short(_APPLE_GPU_MATMUL_SOFTMAX_MATMUL_MSL_SOURCE_F16)
 
 
-# Phase 8.4.7 — fused matmul -> gelu kernel. tanh-approximation gelu
-# applied pointwise to the row of (A @ B); float accumulator throughout.
-_APPLE_GPU_MATMUL_GELU_MSL_SOURCE = (
-    "#include <metal_stdlib>\n"
-    "using namespace metal;\n"
-    "kernel void matmul_gelu_f32(\n"
-    "    device const float* A   [[buffer(0)]],\n"
-    "    device const float* B   [[buffer(1)]],\n"
-    "    device float*       O   [[buffer(2)]],\n"
-    "    constant int&       M   [[buffer(3)]],\n"
-    "    constant int&       N   [[buffer(4)]],\n"
-    "    constant int&       K   [[buffer(5)]],\n"
-    "    uint gid [[thread_position_in_grid]])\n"
-    "{\n"
-    "    if (gid >= (uint)M) return;\n"
-    "    if (N > 256) return;\n"
-    "    int row = (int)gid;\n"
-    "    float scores[256];\n"
-    "    int a_off = row * K;\n"
-    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
-    "    for (int k = 0; k < K; ++k) {\n"
-    "        float a = A[a_off + k];\n"
-    "        int b_off = k * N;\n"
-    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
-    "    }\n"
-    "    int o_off = row * N;\n"
-    "    for (int n = 0; n < N; ++n) {\n"
-    "        float v = scores[n];\n"
-    "        float t = 0.7978845608028654f * (v + 0.044715f * v * v * v);\n"
-    "        O[o_off + n] = 0.5f * v * (1.0f + tanh(t));\n"
-    "    }\n"
-    "}\n"
-)
-_APPLE_GPU_MATMUL_GELU_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_GELU_MSL_SOURCE)
-
-
-# Phase 8.4.7 — fused matmul -> rmsnorm kernel. RMSNorm: y = x / sqrt(
-# mean(x^2) + eps). The eps is passed as a separate runtime arg so the
-# IR-level constant doesn't have to bake in the rmsnorm vs rmsnorm_safe
-# default difference.
-_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE = (
-    "#include <metal_stdlib>\n"
-    "using namespace metal;\n"
-    "kernel void matmul_rmsnorm_f32(\n"
-    "    device const float* A   [[buffer(0)]],\n"
-    "    device const float* B   [[buffer(1)]],\n"
-    "    device float*       O   [[buffer(2)]],\n"
-    "    constant int&       M   [[buffer(3)]],\n"
-    "    constant int&       N   [[buffer(4)]],\n"
-    "    constant int&       K   [[buffer(5)]],\n"
-    "    constant float&     eps [[buffer(6)]],\n"
-    "    uint gid [[thread_position_in_grid]])\n"
-    "{\n"
-    "    if (gid >= (uint)M) return;\n"
-    "    if (N > 256) return;\n"
-    "    int row = (int)gid;\n"
-    "    float scores[256];\n"
-    "    int a_off = row * K;\n"
-    "    for (int n = 0; n < N; ++n) scores[n] = 0.0f;\n"
-    "    for (int k = 0; k < K; ++k) {\n"
-    "        float a = A[a_off + k];\n"
-    "        int b_off = k * N;\n"
-    "        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];\n"
-    "    }\n"
-    "    float sumsq = 0.0f;\n"
-    "    for (int n = 0; n < N; ++n) sumsq += scores[n] * scores[n];\n"
-    "    float inv_rms = 1.0f / sqrt(sumsq / float(N) + eps);\n"
-    "    int o_off = row * N;\n"
-    "    for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * inv_rms;\n"
-    "}\n"
-)
-_APPLE_GPU_MATMUL_RMSNORM_MSL_CACHE_KEY = _sha256_short(_APPLE_GPU_MATMUL_RMSNORM_MSL_SOURCE)
+# Optimizing-Compiler Plan F2 (catalog retirement) — the matmul -> gelu and
+# matmul -> rmsnorm MSL kernels are no longer hand-written constants here; they
+# are synthesized by tessera.compiler.fusion.synthesize_matmul_epilogue_msl
+# (single source of truth) and embedded by _apple_gpu_msl_kernel_info above.
 
 
 def _diagnostic_level(severity: str) -> DiagnosticLevel:

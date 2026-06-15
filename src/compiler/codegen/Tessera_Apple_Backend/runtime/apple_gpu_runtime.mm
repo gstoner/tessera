@@ -7301,17 +7301,13 @@ inline void reference_matmul_rmsnorm_f32(const float* A, const float* B,
 
 } // namespace
 
-extern "C" void tessera_apple_gpu_matmul_gelu_f32(const float* A, const float* B,
-                                                  float* O, int32_t M,
-                                                  int32_t N, int32_t K) {
-  if (N > 256) {
-    reference_matmul_gelu_f32(A, B, O, M, N, K);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_gelu_msl(ctx, A, B, O, M, N, K)) return;
-  reference_matmul_gelu_f32(A, B, O, M, N, K);
-}
+// Optimizing-Compiler Plan F2 (catalog retirement) — the public f32
+// matmul_gelu / matmul_rmsnorm symbols are RETIRED: the generic synthesized
+// epilogue kernel below (tessera_apple_gpu_synth_matmul_epilogue_f32) subsumes
+// them (oracle-proven bit-close, GPU-covered to N<=1024).  The internal helpers
+// (dispatch_matmul_gelu_msl / reference_matmul_gelu_f32 / the MSL sources) stay
+// — the native f16/bf16 gelu/rmsnorm kernels still reuse them via fp32
+// conversion.
 
 // Generic SYNTHESIZED matmul -> pointwise-epilogue dispatch (Optimizing-Compiler
 // Plan F2a).  Unlike the hand-written matmul_gelu/matmul_rmsnorm symbols, the MSL
@@ -7436,18 +7432,8 @@ extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
   }
 }
 
-extern "C" void tessera_apple_gpu_matmul_rmsnorm_f32(const float* A,
-                                                     const float* B, float* O,
-                                                     int32_t M, int32_t N,
-                                                     int32_t K, float eps) {
-  if (N > 256) {
-    reference_matmul_rmsnorm_f32(A, B, O, M, N, K, eps);
-    return;
-  }
-  MetalDeviceContext &ctx = deviceContext();
-  if (ctx.ok && dispatch_matmul_rmsnorm_msl(ctx, A, B, O, M, N, K, eps)) return;
-  reference_matmul_rmsnorm_f32(A, B, O, M, N, K, eps);
-}
+// tessera_apple_gpu_matmul_rmsnorm_f32 — RETIRED (see the F2 note above); the
+// synthesized epilogue kernel subsumes it.
 
 //===---------------------------------------------------------------------===//
 // Native half-precision matmul -> gelu / matmul -> rmsnorm (per-thread, N<=256).

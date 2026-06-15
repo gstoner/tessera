@@ -9639,48 +9639,26 @@ def _apple_gpu_dispatch_matmul_gelu(operands: list[Any], np: Any) -> Any:
         scores = np.matmul(a, b)
         return 0.5 * scores * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) *
                                               (scores + 0.044715 * scores ** 3)))
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=np.float32)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=np.float32)
-    M, K = a.shape
-    N = b.shape[1]
-    out = np.zeros((M, N), dtype=np.float32)
-    fused = _apple_gpu_matmul_gelu_f32()
-    # Apple plan phase D — emit a unified JitBridgeRoute so the
-    # generic-tensor lane's proof envelope matches GA/EBM/M7.
+    # f32: routed through the synthesizer (Optimizing-Compiler Plan F2a) — the
+    # hand-written matmul_gelu_f32 kernel is retired. One row-per-thread matmul
+    # with the gelu epilogue inlined, oracle-proven bit-close, GPU-covered to
+    # N<=1024 (a strict superset of the old N<=256 kernel).
     import time as _time
+
     from tessera.compiler import jit_bridge as _bridge
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
     _t0 = _time.perf_counter_ns()
-    fused(
-        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-    )
+    out, _exec = run_fused_region(FusedRegion(("gelu",)), a, b)
     _latency_ms = (_time.perf_counter_ns() - _t0) / 1e6
     _bridge.record_driver_route(
         op_name="matmul_gelu",
         target="apple_gpu",
-        status="fused",
-        symbol="tessera_apple_gpu_matmul_gelu_f32",
+        status="fused" if _exec == "metal_runtime" else "reference",
+        symbol="tessera_apple_gpu_synth_matmul_epilogue_f32",
         latency_ms=_latency_ms,
         args_summary=_bridge.shaped_summary(a, b),
     )
     return out
-
-
-def _apple_gpu_matmul_gelu_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = runtime.tessera_apple_gpu_matmul_gelu_f32
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-    ]
-    sym.restype = None
-    return sym
 
 
 def _apple_gpu_matmul_gelu_f16() -> Any:
@@ -9782,36 +9760,13 @@ def _apple_gpu_dispatch_matmul_rmsnorm(operands: list[Any], eps: float, np: Any)
         scores = np.matmul(a, b)
         rms = np.sqrt(np.mean(scores * scores, axis=-1, keepdims=True) + eps)
         return scores / rms
-    if not a.flags.c_contiguous:
-        a = np.ascontiguousarray(a, dtype=np.float32)
-    if not b.flags.c_contiguous:
-        b = np.ascontiguousarray(b, dtype=np.float32)
-    M, K = a.shape
-    N = b.shape[1]
-    out = np.zeros((M, N), dtype=np.float32)
-    fused = _apple_gpu_matmul_rmsnorm_f32()
-    fused(
-        a.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        ctypes.c_int32(M), ctypes.c_int32(N), ctypes.c_int32(K),
-        ctypes.c_float(eps),
-    )
+    # f32: routed through the synthesizer (Optimizing-Compiler Plan F2b
+    # reduction epilogue) — the hand-written matmul_rmsnorm_f32 kernel is
+    # retired (oracle-proven bit-close, GPU-covered to N<=1024).
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, _exec = run_fused_region(
+        FusedRegion((), reduction="rmsnorm", eps=float(eps)), a, b)
     return out
-
-
-def _apple_gpu_matmul_rmsnorm_f32() -> Any:
-    runtime = _load_apple_gpu_runtime()
-    sym = runtime.tessera_apple_gpu_matmul_rmsnorm_f32
-    sym.argtypes = [
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.POINTER(ctypes.c_float),
-        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-        ctypes.c_float,
-    ]
-    sym.restype = None
-    return sym
 
 
 def _apple_gpu_matmul_rmsnorm_f16() -> Any:
@@ -10721,10 +10676,11 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # Native-half tiled matmul_softmax (f16/bf16 large-N single kernel).
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_softmax_tiled_bf16")
-                # Phase 8.4.7 — MLP block fusions (matmul -> gelu, matmul -> rmsnorm).
-                getattr(lib, "tessera_apple_gpu_matmul_gelu_f32")
-                getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f32")
-                # Native-half MLP-block fusions (f16/bf16 single fused kernel).
+                # Phase 8.4.7 — MLP block fusions. The f32 matmul_gelu /
+                # matmul_rmsnorm symbols are RETIRED (catalog retirement,
+                # Optimizing-Compiler Plan F2): the synthesized epilogue kernel
+                # subsumes them. f16/bf16 stay as native single fused kernels.
+                getattr(lib, "tessera_apple_gpu_synth_matmul_epilogue_f32")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_f16")
                 getattr(lib, "tessera_apple_gpu_matmul_gelu_bf16")
                 getattr(lib, "tessera_apple_gpu_matmul_rmsnorm_f16")

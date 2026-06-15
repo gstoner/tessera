@@ -4,10 +4,11 @@ Apple follow-up #1 (2026-05-20): the second generic-tensor canonical
 to dispatch the real fused MSL kernel on Darwin (after
 ``matmul_softmax_matmul``).  Mirrors the same Phase E pattern:
 
-* On Darwin within envelope (N ≤ 256): dispatch
-  ``tessera_apple_gpu_matmul_gelu_f32`` via the runtime shim, emit
-  a unified ``JitBridgeRoute`` (``context="driver"``), report
-  ``fallback_reason = None``.
+* On Darwin within envelope: dispatch the SYNTHESIZED matmul-epilogue
+  kernel ``tessera_apple_gpu_synth_matmul_epilogue_f32`` via the runtime
+  shim (Optimizing-Compiler Plan F2 — the per-epilogue ``matmul_gelu_f32``
+  kernel is retired), emit a unified ``JitBridgeRoute``
+  (``context="driver"``), report ``fallback_reason = None``.
 * On Darwin outside envelope: numpy fallback with a precise
   ``REFERENCE_FORCED`` note.
 * On non-Darwin: ``NON_DARWIN_HOST`` fallback.
@@ -130,7 +131,8 @@ def _target_decision_for_host(
         (e for e in gelu_entries if e.target == "apple_gpu"), None,
     )
     base_note = (
-        "fused 2-op MSL kernel tessera_apple_gpu_matmul_gelu_f32 "
+        "fused 2-op synthesized MSL kernel "
+        "tessera_apple_gpu_synth_matmul_epilogue_f32 (epilogue=gelu) "
         f"(matmul status={apple_matmul.status if apple_matmul else '?'}; "
         f"gelu status={apple_gelu.status if apple_gelu else '?'})"
     )

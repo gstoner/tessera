@@ -153,10 +153,11 @@ CANONICAL_PROGRAMS: tuple[CanonicalProgram, ...] = (
         run=_run_matmul_gelu,
         status="shipped",
         description=(
-            "O = gelu(A @ B) — dispatches the fused 2-op MSL kernel "
-            "``tessera_apple_gpu_matmul_gelu_f32`` on Darwin within "
-            "envelope (N ≤ 256).  Emits a unified JitBridgeRoute via "
-            "the same proof-route plumbing as matmul_softmax_matmul."
+            "O = gelu(A @ B) — dispatches the synthesized fused matmul-"
+            "epilogue kernel ``tessera_apple_gpu_synth_matmul_epilogue_f32`` "
+            "(epilogue=gelu) on Darwin within envelope.  Emits a unified "
+            "JitBridgeRoute via the same proof-route plumbing as "
+            "matmul_softmax_matmul."
         ),
     ),
     # Apple follow-up #2 (2026-05-20) — Visual Complex canonical

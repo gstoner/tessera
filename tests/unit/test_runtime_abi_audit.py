@@ -109,8 +109,11 @@ _APPLE_GPU_SENTINEL_FAMILIES = (
     ("matmul_softmax_matmul", 3),        # 3-op fusion (full attention)
     ("swiglu", 3),
     ("matmul_softmax_tiled", 3),         # f32 + native-half (f16/bf16) tiled
-    ("matmul_gelu", 3),                  # MLP block fusion, f32/f16/bf16
-    ("matmul_rmsnorm", 3),
+    # matmul_gelu / matmul_rmsnorm: f32 RETIRED (catalog retirement,
+    # Optimizing-Compiler Plan F2) — the synthesized epilogue kernel
+    # (synth_matmul_epilogue) covers f32; the native f16/bf16 kernels remain.
+    ("matmul_gelu", 2),                  # MLP block fusion, f16/bf16 native
+    ("matmul_rmsnorm", 2),
     ("mla_decode", 1),
     ("native_sparse_attn", 1),
     ("linear_attn", 1),

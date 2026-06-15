@@ -74,8 +74,9 @@ def _load():
         ("tessera_apple_gpu_mpsgraph_unary_f32", [i32, fp, fp, i64]),
         ("tessera_apple_gpu_mpsgraph_binary_f32", [i32, fp, fp, fp, i64]),
         ("tessera_apple_gpu_matmul_softmax_matmul_f32", [fp, fp, fp, fp, i32, i32, i32, i32]),
-        ("tessera_apple_gpu_matmul_gelu_f32", [fp, fp, fp, i32, i32, i32]),
-        ("tessera_apple_gpu_matmul_rmsnorm_f32", [fp, fp, fp, i32, i32, i32, flt]),
+        # matmul_gelu_f32 / matmul_rmsnorm_f32 RETIRED (catalog retirement,
+        # Optimizing-Compiler Plan F2) — subsumed by the synthesized epilogue
+        # kernel (tessera_apple_gpu_synth_matmul_epilogue_f32).
         # Sprint 3.3 follow-on — fused SwiGLU MLP block.
         ("tessera_apple_gpu_swiglu_f32", [fp, fp, fp, fp, fp, i32, i32, i32, i32]),
         # Sprint 3.3 perf-fusion — fused pre-norm + projection.
@@ -707,8 +708,11 @@ def gpu_matmul_gelu(a: np.ndarray, b: np.ndarray) -> np.ndarray:
         _load().tessera_apple_gpu_matmul_gelu_bf16(
             _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K)
         return out
-    out = np.zeros((M, N), np.float32)
-    _load().tessera_apple_gpu_matmul_gelu_f32(_ptr(a), _ptr(b), _ptr(out), M, N, K)
+    # f32: the synthesizer (Optimizing-Compiler Plan F2a) subsumes the
+    # hand-written matmul_gelu kernel, oracle-proven bit-close — so this chain
+    # routes through it and the catalog f32 kernel is retired.
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, _exec = run_fused_region(FusedRegion(("gelu",)), a, b)
     return out
 
 
@@ -727,9 +731,11 @@ def gpu_matmul_rmsnorm(a: np.ndarray, b: np.ndarray, eps: float = 1e-5) -> np.nd
         _load().tessera_apple_gpu_matmul_rmsnorm_bf16(
             _u16ptr(a), _u16ptr(b), _u16ptr(out), M, N, K, float(eps))
         return out
-    out = np.zeros((M, N), np.float32)
-    _load().tessera_apple_gpu_matmul_rmsnorm_f32(
-        _ptr(a), _ptr(b), _ptr(out), M, N, K, float(eps))
+    # f32: routed through the synthesizer (F2b reduction epilogue) — the
+    # hand-written matmul_rmsnorm_f32 kernel is retired.
+    from tessera.compiler.fusion import FusedRegion, run_fused_region
+    out, _exec = run_fused_region(
+        FusedRegion((), reduction="rmsnorm", eps=float(eps)), a, b)
     return out
 
 

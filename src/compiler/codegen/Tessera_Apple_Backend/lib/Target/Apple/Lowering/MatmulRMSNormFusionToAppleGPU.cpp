@@ -43,8 +43,14 @@ namespace apple {
 
 namespace {
 
-constexpr llvm::StringLiteral kMatmulRMSNormF32Symbol =
-    "tessera_apple_gpu_matmul_rmsnorm_f32";
+// Optimizing-Compiler Plan F2b — matmul -> rmsnorm lowers to the generic
+// SYNTHESIZED epilogue kernel (epilogue + eps carried as region-descriptor
+// attributes), retiring the per-epilogue hand-written matmul_rmsnorm_f32
+// kernel.  The symbolic call uses the uniform (A,B,O,M,N,K) signature shared
+// with matmul_gelu so a module with both fusions declares one consistent
+// external symbol.
+constexpr llvm::StringLiteral kSynthEpilogueF32Symbol =
+    "tessera_apple_gpu_synth_matmul_epilogue_f32";
 
 
 
@@ -144,17 +150,18 @@ struct LowerMatmulRMSNormPatternBase : public RewritePattern {
     Value Mv = rewriter.create<arith::ConstantIntOp>(loc, M, 32);
     Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
     Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
-    Value epsV = rewriter.create<arith::ConstantOp>(
-        loc, f32Ty, rewriter.getF32FloatAttr(eps));
 
     FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty, f32Ty}, {});
-    ensureExternalDecl(mod, kMatmulRMSNormF32Symbol, fnTy);
+        ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
+    ensureExternalDecl(mod, kSynthEpilogueF32Symbol, fnTy);
 
     auto callOp = rewriter.create<func::CallOp>(
-        loc, kMatmulRMSNormF32Symbol, TypeRange{},
-        ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv, epsV});
-    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("matmul_rmsnorm"));
+        loc, kSynthEpilogueF32Symbol, TypeRange{},
+        ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
+    callOp->setAttr("tessera.fusion.kernel",
+                    rewriter.getStringAttr("synth_matmul_epilogue"));
+    callOp->setAttr("tessera.fusion.epilogue", rewriter.getStringAttr("rmsnorm"));
+    callOp->setAttr("tessera.fusion.eps", rewriter.getF32FloatAttr(eps));
     callOp->setAttr("tessera.fusion.source",
                     rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
 

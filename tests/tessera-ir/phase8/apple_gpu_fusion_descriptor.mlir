@@ -31,22 +31,26 @@ func.func @rediscovered(%A: tensor<8x16xf32>, %B: tensor<16x32xf32>,
   return %o : tensor<8x8xf32>
 }
 
-// matmul→gelu: descriptor-driven.
+// matmul→gelu: descriptor-driven. Optimizing-Compiler Plan F2 — lowers to the
+// generic synthesized epilogue kernel, the epilogue in tessera.fusion.epilogue.
 // CHECK-LABEL: func.func @gelu_descriptor
 func.func @gelu_descriptor(%A: tensor<8x16xf32>, %B: tensor<16x32xf32>) -> tensor<8x32xf32> {
-  // CHECK: call @tessera_apple_gpu_matmul_gelu_f32
-  // CHECK-SAME: tessera.fusion.kernel = "matmul_gelu"
+  // CHECK: call @tessera_apple_gpu_synth_matmul_epilogue_f32
+  // CHECK-SAME: tessera.fusion.epilogue = "gelu"
+  // CHECK-SAME: tessera.fusion.kernel = "synth_matmul_epilogue"
   // CHECK-SAME: tessera.fusion.source = "descriptor"
   %m = "tessera.matmul"(%A, %B) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %g = "tessera.gelu"(%m) {tessera.fusion.intent = "matmul_gelu"} : (tensor<8x32xf32>) -> tensor<8x32xf32>
   return %g : tensor<8x32xf32>
 }
 
-// matmul→rmsnorm: re-discovered (no intent).
+// matmul→rmsnorm: re-discovered (no intent). The eps rides as a region
+// descriptor (tessera.fusion.eps) since the call signature is uniform.
 // CHECK-LABEL: func.func @rmsnorm_rediscovered
 func.func @rmsnorm_rediscovered(%A: tensor<8x16xf32>, %B: tensor<16x32xf32>) -> tensor<8x32xf32> {
-  // CHECK: call @tessera_apple_gpu_matmul_rmsnorm_f32
-  // CHECK-SAME: tessera.fusion.kernel = "matmul_rmsnorm"
+  // CHECK: call @tessera_apple_gpu_synth_matmul_epilogue_f32
+  // CHECK-SAME: tessera.fusion.epilogue = "rmsnorm"
+  // CHECK-SAME: tessera.fusion.kernel = "synth_matmul_epilogue"
   // CHECK-SAME: tessera.fusion.source = "rediscovered"
   %m = "tessera.matmul"(%A, %B) : (tensor<8x16xf32>, tensor<16x32xf32>) -> tensor<8x32xf32>
   %r = "tessera.rmsnorm"(%m) : (tensor<8x32xf32>) -> tensor<8x32xf32>

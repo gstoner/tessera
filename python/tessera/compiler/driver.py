@@ -835,6 +835,12 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         # is in the plan. Single-op cases route to one of the per-op kernels;
         # recognized fusion chains route to a fused kernel (Phase 8.4.3).
         chain = _apple_gpu_chain_kind(cpu_plan)
+        # Optimizing-Compiler Plan F2 — matmul -> {gelu, rmsnorm} fuse via the
+        # generic SYNTHESIZED epilogue kernel (one symbol, the epilogue carried
+        # as a region descriptor) rather than a per-epilogue hand-written kernel.
+        # matmul_softmax keeps its named kernel (its large-N threadgroup-tiled
+        # path is not yet in the synthesizer).
+        fused_epilogue = None
         if chain == "swiglu":
             symbol = "tessera_apple_gpu_swiglu_f32"
             framework = "Metal"
@@ -848,13 +854,15 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             framework = "Metal"
             abi = "MSLComputePipelineState"
         elif chain == "matmul_gelu":
-            symbol = "tessera_apple_gpu_matmul_gelu_f32"
+            symbol = "tessera_apple_gpu_synth_matmul_epilogue_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
+            fused_epilogue = "gelu"
         elif chain == "matmul_rmsnorm":
-            symbol = "tessera_apple_gpu_matmul_rmsnorm_f32"
+            symbol = "tessera_apple_gpu_synth_matmul_epilogue_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
+            fused_epilogue = "rmsnorm"
         elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",
                        "matmul_bias_silu"}:
             # P6 — linear+bias(+act) fused via the MPP matmul2d epilogue (f16/bf16).
@@ -892,17 +900,20 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
                 symbol = "tessera_apple_gpu_unknown"
                 framework = "Metal"
                 abi = "unknown"
-        text = "\n".join([
+        descriptor_line = (f'    fused_epilogue = "{fused_epilogue}",'
+                           if fused_epilogue is not None else None)
+        text = "\n".join(line for line in [
             'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
             '  "tessera_apple.gpu.runtime_pipeline"() {',
             '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
             f'    symbol = "{symbol}",',
+            descriptor_line,
             f'    framework = "{framework}",',
             f'    abi = "{abi}",',
             '    dtype = "f32"',
             '  } : () -> ()',
             "}",
-        ])
+        ] if line is not None)
         return LoweringArtifact("backend", text)
     return None
 

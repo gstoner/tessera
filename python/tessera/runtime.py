@@ -6423,28 +6423,36 @@ def _apple_gpu_dispatch_hybrid_attn(op_name: str, operands: list[Any],
 
 def _apple_gpu_delta_true_rule(Q, K, V, beta, decay, gate, np: Any, out_dtype) -> Any:
     """Track L L3.1 graph→Metal routing — the *genuine* gated delta rule (with
-    the erase term) for the runtime path.  Routes to the L1.1 MSL kernel
-    (`tessera_apple_gpu_gated_delta_rule_f32`) when in-envelope, else the numpy
-    genuine reference.  Always returns a correct true-rule result (never the
-    composed linear form).  The kernel has no output gate (applied here); the
-    numpy reference applies it internally."""
+    the erase term) for the runtime path.  Multi-token (prefill) calls take the
+    faster **chunked UT-transform** kernel (L2.1/L2.2 coop, D_v ≤ 16); otherwise
+    the recurrent L1.1 kernel (D_v ≤ 64); otherwise the numpy genuine reference.
+    Always a correct true-rule result (never the composed linear form).  Both
+    kernels lack an output gate (applied here); the numpy reference applies it
+    internally."""
     B, H, S, Dqk = Q.shape
     Dv = V.shape[-1]
     O = None
     try:
         from tessera import _apple_gpu_backend as agb
-        if agb.is_available() and Dqk <= 16 and Dv <= 64 and Dqk * Dv <= 256:
+        if agb.is_available() and Dqk <= 16 and Dqk * Dv <= 256:
             ones = np.ones((B, H, S), np.float32)
             bA = ones if beta is None else np.ascontiguousarray(np.asarray(beta, np.float32))
             dA = ones if decay is None else np.ascontiguousarray(np.asarray(decay, np.float32))
-            O = agb.gpu_gated_delta_rule(
-                np.ascontiguousarray(Q.astype(np.float32)),
-                np.ascontiguousarray(K.astype(np.float32)),
-                np.ascontiguousarray(V.astype(np.float32)), bA, dA, erase=True)
-            O = np.asarray(O, np.float64)
-            if gate is not None:
-                g = 1.0 / (1.0 + np.exp(-np.asarray(gate, np.float64)))
-                O = O * np.broadcast_to(g, O.shape)
+            Qf = np.ascontiguousarray(Q.astype(np.float32))
+            Kf = np.ascontiguousarray(K.astype(np.float32))
+            Vf = np.ascontiguousarray(V.astype(np.float32))
+            if S > 1 and Dv <= 16:
+                # Prefill: the chunked UT-transform (coop) is ~2-3× the recurrent
+                # kernel; chunk ≡ recurrent so the result is identical.
+                O = agb.gpu_gated_delta_rule_chunked(
+                    Qf, Kf, Vf, bA, dA, chunk=min(32, S), erase=True)
+            elif Dv <= 64:
+                O = agb.gpu_gated_delta_rule(Qf, Kf, Vf, bA, dA, erase=True)
+            if O is not None:
+                O = np.asarray(O, np.float64)
+                if gate is not None:
+                    g = 1.0 / (1.0 + np.exp(-np.asarray(gate, np.float64)))
+                    O = O * np.broadcast_to(g, O.shape)
     except Exception:  # noqa: BLE001 — any Metal miss → numpy genuine reference
         O = None
     if O is None:

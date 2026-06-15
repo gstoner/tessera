@@ -88,3 +88,66 @@ def test_jit_path_threads_erase_end_to_end():
     y = np.asarray(_delta_true(Q, K, V, beta, decay))
     ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
     np.testing.assert_allclose(y, ref, rtol=1e-4, atol=1e-4)
+
+
+def test_jit_emits_erase_attribute_in_graph_ir():
+    """item 1: erase is first-class — the @jit graph IR text carries it (not just
+    a Python kwarg).  Paired with the ODS attr (`gated_deltanet_erase.mlir`)."""
+    art = _delta_true.runtime_artifact()
+    txt = str(getattr(art, "graph_ir", "") or "")
+    if not txt:
+        txt = str(getattr(_delta_true, "to_mlir", lambda: "")())
+    assert "gated_deltanet" in txt and "erase" in txt
+
+
+# ── item 2: kimi_delta_attention(erase=True) also routes to the genuine kernel ──
+def test_kimi_delta_erase_routes_to_genuine_rule():
+    """kimi_delta_attention is modified=False, so erase=True routes to the same
+    genuine DeltaNet kernel (its numpy reference is the genuine rule too)."""
+    Q, K, V = _qkv(11)
+    beta, decay = _bd(12)
+    out = R._apple_gpu_dispatch_delta_attn(
+        "tessera.kimi_delta_attention", [Q, K, V],
+        {"beta": beta, "decay": decay, "causal": True, "erase": True}, np)
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
+    np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-4, atol=1e-4)
+
+
+def test_kimi_delta_default_is_linear():
+    Q, K, V = _qkv(13)
+    beta, decay = _bd(14)
+    out = R._apple_gpu_dispatch_delta_attn(
+        "tessera.kimi_delta_attention", [Q, K, V],
+        {"beta": beta, "decay": decay, "causal": True}, np)
+    lin = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=False)
+    np.testing.assert_allclose(np.asarray(out), lin, rtol=1e-4, atol=1e-4)
+
+
+# ── item 3: prefill routes to the chunked kernel; both envelopes stay correct ──
+@gpu
+def test_prefill_chunked_envelope_dv16_is_correct():
+    """S>1, D_v≤16 → the faster chunked (L2.2 coop) kernel; chunk ≡ recurrent."""
+    Q, K, V = _qkv(15)   # D_v = 16
+    beta, decay = _bd(16)
+    out = R._apple_gpu_dispatch_delta_attn(
+        "tessera.gated_deltanet", [Q, K, V],
+        {"beta": beta, "decay": decay, "causal": True, "erase": True}, np)
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
+    np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-4, atol=1e-4)
+
+
+@gpu
+def test_recurrent_envelope_dv32_is_correct():
+    """D_v=32 (>16, ≤64) is outside the chunked envelope → recurrent kernel."""
+    rng = np.random.default_rng(17)
+    B, H, S, Dqk, Dv = 2, 2, 12, 8, 32           # Dqk*Dv = 256 (in recurrent env)
+    Q = _normalize(rng.standard_normal((B, H, S, Dqk))).astype(np.float32)
+    K = _normalize(rng.standard_normal((B, H, S, Dqk))).astype(np.float32)
+    V = rng.standard_normal((B, H, S, Dv)).astype(np.float32)
+    beta = (1.0 / (1.0 + np.exp(-rng.standard_normal((B, H, S))))).astype(np.float32)
+    decay = (1.0 / (1.0 + np.exp(-(rng.standard_normal((B, H, S)) + 2)))).astype(np.float32)
+    out = R._apple_gpu_dispatch_delta_attn(
+        "tessera.gated_deltanet", [Q, K, V],
+        {"beta": beta, "decay": decay, "causal": True, "erase": True}, np)
+    ref = dr.gated_delta_rule_recurrent(Q, K, V, beta=beta, decay=decay, erase=True)
+    np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-4, atol=1e-4)

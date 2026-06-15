@@ -1100,7 +1100,12 @@ class Tessera_DeltaAttentionOp<string mnemonic, string summaryText>
                         Optional<TensorType>:$state,
                         DefaultValuedAttr<BoolAttr, "true">:$causal,
                         DefaultValuedAttr<BoolAttr, "false">:$return_state,
-                        DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype);
+                        DefaultValuedAttr<StrAttr, "\"fp32\"">:$state_dtype,
+                        // Track L L3.1 — `erase=false` (default) is gated linear
+                        // attention (backward-compatible); `erase=true` is the
+                        // genuine DeltaNet `(I − β k kᵀ)` rule.  The runtime
+                        // honors this (apple_gpu routes to the genuine kernel).
+                        DefaultValuedAttr<BoolAttr, "false">:$erase);
   let results = (outs TensorType:$o);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

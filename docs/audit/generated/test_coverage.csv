@@ -254,7 +254,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,321,158,15,479,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,322,158,15,480,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -319,7 +319,7 @@ power_attn,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 ppo_policy_loss,8,11,0,19,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'rl_loss'
 prod,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 psum,2,0,0,2,0,,needs_direct_test,category default for 'collective'
-qkv_projection,6,0,0,6,0,fp32,structural_only,unclassified — defaults to structural_only
+qkv_projection,7,0,0,7,0,fp32,structural_only,unclassified — defaults to structural_only
 qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 quantize_fp4,8,0,1,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
 quantize_fp6,7,0,1,7,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
@@ -432,7 +432,7 @@ tokenizer_byte,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
-top_k,5,0,0,5,0,,structural_only,unclassified — defaults to structural_only
+top_k,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 transpose,12,18,0,30,0,fp32,needs_direct_test,category default for 'layout_transform'
 tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'

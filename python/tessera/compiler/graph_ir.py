@@ -34,6 +34,17 @@ from .legality import TensorContract, check_op_legality
 from .op_catalog import GRAPH_OP_MAP, graph_name_for
 
 
+# Ops that take trailing *scalar* parameters positionally (a tensor operand plus
+# scalars like k / axis).  When such an arg is a literal, the AST frontend binds
+# it to the named attribute here instead of emitting a bogus operand — so e.g.
+# ``top_k(x, 5)`` lowers to ``tessera.top_k(%x) {k = 5}`` exactly like the kwarg
+# form ``top_k(x, k=5)``.  Order = the positional scalar params after the
+# operands.  Tensor positional args are unaffected (they still emit as operands).
+_POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    "tessera.top_k": ("k", "axis"),
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # IR value types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1497,14 +1508,36 @@ class _OpExtractor(ast.NodeVisitor):
 
         operands = []
         operand_types = []
+        kwargs: Dict[str, Any] = {}
+        # Positional scalar-literal args become attributes, not operands. Many
+        # ops take a tensor + a scalar parameter positionally (top_k(x, k),
+        # argmax(x, axis), ...); without this they'd be emitted as a bogus "%?"
+        # operand and the op (and the whole graph) would be dropped. The op's
+        # trailing scalar param names are listed in _POSITIONAL_ATTR_PARAMS; a
+        # scalar positional arg binds to the next unused name. (Tensor args still
+        # emit as operands; kwargs below still win for explicitly-named params.)
+        attr_params = _POSITIONAL_ATTR_PARAMS.get(mlir_name, ())
+        scalar_seen = 0
         for arg in call.args:
             operand = self._emit_expr(arg)
-            operands.append(operand if operand else "%?")
-            operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
+            if operand is not None and self._is_defined_value(operand):
+                operands.append(operand)
+                operand_types.append(str(self._value_types.get(operand, TENSOR_OPAQUE)))
+                continue
+            literal: Any = None
+            try:
+                literal = ast.literal_eval(arg)
+            except (ValueError, TypeError, SyntaxError):
+                literal = None
+            if literal is not None and scalar_seen < len(attr_params):
+                kwargs[attr_params[scalar_seen]] = literal
+                scalar_seen += 1
+            else:
+                operands.append(operand if operand else "%?")
+                operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
 
         result_type = _infer_result_type(mlir_name, [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands])
 
-        kwargs = {}
         for kw in call.keywords:
             if kw.arg is None:
                 continue

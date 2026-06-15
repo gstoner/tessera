@@ -38,27 +38,32 @@ def main() -> int:
         print("apple_gpu runtime unavailable — skipping")
         return 0
 
-    B, H, D = 2, 8, 16
+    # B*H = 256 threadgroups → high GPU occupancy (where the lane-0 serial
+    # sections cost the most; L2.2 cooperative parallelization wins here).
+    B, H, D = 8, 32, 16
     chunk = 32
     rng = np.random.default_rng(0)
     rows = []
-    print(f"{'shape (B,H,S,D)':>20} | {'recurrent ms':>12} | {'chunked ms':>12} | {'speedup':>8}")
-    print("-" * 64)
-    for S in (64, 128, 256, 512, 1024):
+    print(f"{'shape (B,H,S,D)':>20} | {'recur ms':>9} | {'L2.1 ms':>9} | "
+          f"{'L2.2 ms':>9} | {'L2.2/rec':>8} | {'L2.2/L2.1':>9}")
+    print("-" * 78)
+    for S in (256, 512, 1024):
         Q = _normalize(rng.standard_normal((B, H, S, D))).astype(np.float32)
         K = _normalize(rng.standard_normal((B, H, S, D))).astype(np.float32)
         V = rng.standard_normal((B, H, S, D)).astype(np.float32)
         beta = (1.0 / (1.0 + np.exp(-rng.standard_normal((B, H, S))))).astype(np.float32)
         decay = (1.0 / (1.0 + np.exp(-(rng.standard_normal((B, H, S)) + 2)))).astype(np.float32)
-        ones = np.ones((B, H, S), np.float32)
-        del ones
 
         rec_ms = _bench(lambda: agb.gpu_gated_delta_rule(Q, K, V, beta, decay, erase=True))
-        chk_ms = _bench(lambda: agb.gpu_gated_delta_rule_chunked(Q, K, V, beta, decay,
-                                                                 chunk=chunk, erase=True))
-        speedup = rec_ms / chk_ms if chk_ms else float("nan")
-        print(f"{f'({B},{H},{S},{D})':>20} | {rec_ms:12.4f} | {chk_ms:12.4f} | {speedup:7.2f}x")
-        for op, ms in (("gated_delta_rule", rec_ms), ("gated_delta_rule_chunked", chk_ms)):
+        l21_ms = _bench(lambda: agb.gpu_gated_delta_rule_chunked(
+            Q, K, V, beta, decay, chunk=chunk, erase=True, coop=False))
+        l22_ms = _bench(lambda: agb.gpu_gated_delta_rule_chunked(
+            Q, K, V, beta, decay, chunk=chunk, erase=True, coop=True))
+        print(f"{f'({B},{H},{S},{D})':>20} | {rec_ms:9.3f} | {l21_ms:9.3f} | "
+              f"{l22_ms:9.3f} | {rec_ms/l22_ms:7.2f}x | {l21_ms/l22_ms:8.2f}x")
+        for op, ms in (("gated_delta_rule", rec_ms),
+                       ("gated_delta_rule_chunked_lane0", l21_ms),
+                       ("gated_delta_rule_chunked_coop", l22_ms)):
             rows.append({"backend": "apple_gpu", "op": op, "shape": [B, H, S, D],
                          "dtype": "f32", "latency_ms": round(ms, 5),
                          "tflops": None, "memory_bw_gb_s": None,

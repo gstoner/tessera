@@ -6421,15 +6421,48 @@ def _apple_gpu_dispatch_hybrid_attn(op_name: str, operands: list[Any],
     return None
 
 
+def _apple_gpu_delta_true_rule(Q, K, V, beta, decay, gate, np: Any, out_dtype) -> Any:
+    """Track L L3.1 graph→Metal routing — the *genuine* gated delta rule (with
+    the erase term) for the runtime path.  Routes to the L1.1 MSL kernel
+    (`tessera_apple_gpu_gated_delta_rule_f32`) when in-envelope, else the numpy
+    genuine reference.  Always returns a correct true-rule result (never the
+    composed linear form).  The kernel has no output gate (applied here); the
+    numpy reference applies it internally."""
+    B, H, S, Dqk = Q.shape
+    Dv = V.shape[-1]
+    O = None
+    try:
+        from tessera import _apple_gpu_backend as agb
+        if agb.is_available() and Dqk <= 16 and Dv <= 64 and Dqk * Dv <= 256:
+            ones = np.ones((B, H, S), np.float32)
+            bA = ones if beta is None else np.ascontiguousarray(np.asarray(beta, np.float32))
+            dA = ones if decay is None else np.ascontiguousarray(np.asarray(decay, np.float32))
+            O = agb.gpu_gated_delta_rule(
+                np.ascontiguousarray(Q.astype(np.float32)),
+                np.ascontiguousarray(K.astype(np.float32)),
+                np.ascontiguousarray(V.astype(np.float32)), bA, dA, erase=True)
+            O = np.asarray(O, np.float64)
+            if gate is not None:
+                g = 1.0 / (1.0 + np.exp(-np.asarray(gate, np.float64)))
+                O = O * np.broadcast_to(g, O.shape)
+    except Exception:  # noqa: BLE001 — any Metal miss → numpy genuine reference
+        O = None
+    if O is None:
+        from tessera.stdlib.delta_rule import gated_delta_rule_recurrent
+        O = np.asarray(gated_delta_rule_recurrent(
+            Q, K, V, beta=beta, decay=decay, gate=gate, erase=True), np.float64)
+    return O.astype(out_dtype)
+
+
 def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any],
                                    kwargs: dict, np: Any) -> Any:
     """Delta-rule attention family (Sub-sprint D) — gated_deltanet,
-    kimi_delta_attention, modified_delta_attention.  Each sequential delta
-    recurrence is algebraically the quadratic form O = (QKᵀ ⊙ mask) @ V where
-    the mask carries a per-token *column* weight c_r = β_r·decay_ratio
-    [/(1+‖K_r‖‖V_r‖) for the modified rule], plus an optional output gate.
-    Two GPU batched matmuls + a host-constructed mask + a GPU mask multiply;
-    returns None for the (rare) return_state path so it falls back to numpy."""
+    kimi_delta_attention, modified_delta_attention.  Default (``erase=False``)
+    is gated *linear* attention, expressible as the quadratic form
+    O = (QKᵀ ⊙ mask) @ V — two GPU batched matmuls + a host-constructed mask +
+    a GPU mask multiply.  ``erase=True`` (L3.1) routes to the genuine DeltaNet
+    rule via `_apple_gpu_delta_true_rule` instead.  Returns None for the (rare)
+    return_state path so it falls back to numpy."""
     short = str(op_name)
     if kwargs.get("return_state"):
         return None
@@ -6446,6 +6479,11 @@ def _apple_gpu_dispatch_delta_attn(op_name: str, operands: list[Any],
     beta = kwargs.get("beta")
     decay = kwargs.get("decay")
     gate = kwargs.get("gate")
+
+    # L3.1 — the genuine delta rule (with erase) routes to the L1.1 kernel.
+    # The `modified` (Kimi bounded) variant has no fused kernel → numpy.
+    if kwargs.get("erase") and not modified:
+        return _apple_gpu_delta_true_rule(Q, K, V, beta, decay, gate, np, out_dtype)
 
     Kf = K.astype(np.float64)
     Vf = V.astype(np.float64)

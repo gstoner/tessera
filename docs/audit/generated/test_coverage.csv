@@ -183,7 +183,7 @@ focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
 fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,6,0,8,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
-gated_deltanet,15,2,0,17,0,fp64,needs_direct_test,category default for 'attention'
+gated_deltanet,19,2,0,21,0,fp64,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 gelu,32,17,1,49,0,bf16 f16 f32 fp16 fp32,covered_by_family,category default for 'elementwise'

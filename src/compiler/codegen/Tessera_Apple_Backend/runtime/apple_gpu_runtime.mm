@@ -8594,7 +8594,8 @@ extern "C" void tessera_apple_gpu_gated_delta_rule_f32(
 static bool dispatch_gated_delta_rule_chunked_msl(
     MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
     const float* beta, const float* decay, float* O, int32_t B, int32_t H,
-    int32_t S, int32_t D_qk, int32_t D_v, int32_t Cc, int32_t erase) {
+    int32_t S, int32_t D_qk, int32_t D_v, int32_t Cc, int32_t erase,
+    int32_t coop) {
   static NSString *const kKernelSource = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
@@ -8616,6 +8617,7 @@ kernel void gated_delta_rule_chunked_f32(
     constant int&       D_v   [[buffer(10)]],
     constant int&       Cc    [[buffer(11)]],
     constant int&       erase [[buffer(12)]],
+    constant int&       coop  [[buffer(13)]],
     uint tgid [[threadgroup_position_in_grid]],
     uint tid  [[thread_position_in_threadgroup]])
 {
@@ -8677,13 +8679,26 @@ kernel void gated_delta_rule_chunked_f32(
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
-        // Forward substitution: U[t] = W̃[t] − Σ_{j<t} A[t,j] U[j]  (lane 0).
-        if (t == 0 && erase != 0) {
-            for (int tt = 1; tt < Cn; ++tt) {
-                for (int e = 0; e < D_v; ++e) {
-                    float acc = 0.0f;
-                    for (int j = 0; j < tt; ++j) acc += As[tt * Cc + j] * Us[j * D_v + e];
-                    Us[tt * D_v + e] -= acc;
+        // Forward substitution: U[t] = W̃[t] − Σ_{j<t} A[t,j] U[j].
+        // The d_v columns are INDEPENDENT chains (U[t][e] depends only on
+        // U[j<t][e], same e), so coop=1 lets each thread own columns and solve
+        // them barrier-free (L2.2); coop=0 runs the lane-0 serial form (L2.1).
+        if (erase != 0) {
+            if (coop != 0) {
+                for (int e = (int)tid; e < D_v; e += Cc) {
+                    for (int tt = 1; tt < Cn; ++tt) {
+                        float acc = 0.0f;
+                        for (int j = 0; j < tt; ++j) acc += As[tt * Cc + j] * Us[j * D_v + e];
+                        Us[tt * D_v + e] -= acc;
+                    }
+                }
+            } else if (t == 0) {
+                for (int tt = 1; tt < Cn; ++tt) {
+                    for (int e = 0; e < D_v; ++e) {
+                        float acc = 0.0f;
+                        for (int j = 0; j < tt; ++j) acc += As[tt * Cc + j] * Us[j * D_v + e];
+                        Us[tt * D_v + e] -= acc;
+                    }
                 }
             }
         }
@@ -8704,15 +8719,27 @@ kernel void gated_delta_rule_chunked_f32(
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
-        // State carry: Ŝ_C = γ_C Ŝ₀ + Σ_t (γ_C/γ_t) k_t u_tᵀ  (lane 0).
-        if (t == 0) {
+        // State carry: Ŝ_C = γ_C Ŝ₀ + Σ_t (γ_C/γ_t) k_t u_tᵀ.  The (d,e) cells
+        // are independent → coop=1 strides them across threads (L2.2); coop=0
+        // runs the lane-0 serial form (L2.1).
+        {
             float gC = gam[Cn - 1];
-            for (int d = 0; d < D_qk; ++d) {
-                for (int e = 0; e < D_v; ++e) {
-                    float s = gC * state[d * D_v + e];
+            if (coop != 0) {
+                for (int idx = (int)tid; idx < D_qk * D_v; idx += Cc) {
+                    int d = idx / D_v, e = idx - d * D_v;
+                    float s = gC * state[idx];
                     for (int tt = 0; tt < Cn; ++tt)
                         s += (gC / gam[tt]) * Ks[tt * D_qk + d] * Us[tt * D_v + e];
-                    state[d * D_v + e] = s;
+                    state[idx] = s;
+                }
+            } else if (t == 0) {
+                for (int d = 0; d < D_qk; ++d) {
+                    for (int e = 0; e < D_v; ++e) {
+                        float s = gC * state[d * D_v + e];
+                        for (int tt = 0; tt < Cn; ++tt)
+                            s += (gC / gam[tt]) * Ks[tt * D_qk + d] * Us[tt * D_v + e];
+                        state[d * D_v + e] = s;
+                    }
                 }
             }
         }
@@ -8754,6 +8781,7 @@ kernel void gated_delta_rule_chunked_f32(
     [enc setBytes:&D_v length:sizeof(int32_t) atIndex:10];
     [enc setBytes:&Cc length:sizeof(int32_t) atIndex:11];
     [enc setBytes:&erase length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&coop length:sizeof(int32_t) atIndex:13];
 
     MTLSize grid = MTLSizeMake((NSUInteger)B * H, 1, 1);
     MTLSize tg = MTLSizeMake((NSUInteger)Cc, 1, 1);
@@ -8769,7 +8797,7 @@ kernel void gated_delta_rule_chunked_f32(
 extern "C" void tessera_apple_gpu_gated_delta_rule_chunked_f32(
     const float* Q, const float* K, const float* V, const float* beta,
     const float* decay, float* O, int32_t B, int32_t H, int32_t S,
-    int32_t D_qk, int32_t D_v, int32_t chunk, int32_t erase) {
+    int32_t D_qk, int32_t D_v, int32_t chunk, int32_t erase, int32_t coop) {
   // chunk ≡ recurrent, so the host fallback is the proven recurrent reference.
   if (D_qk > 16 || D_v > 16 || chunk > 32 || chunk < 1 || D_qk * D_v > 256) {
     reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
@@ -8777,7 +8805,7 @@ extern "C" void tessera_apple_gpu_gated_delta_rule_chunked_f32(
   }
   MetalDeviceContext &ctx = deviceContext();
   if (ctx.ok && dispatch_gated_delta_rule_chunked_msl(ctx, Q, K, V, beta, decay, O,
-                                                      B, H, S, D_qk, D_v, chunk, erase))
+                                                      B, H, S, D_qk, D_v, chunk, erase, coop))
     return;
   reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
 }

@@ -1245,7 +1245,8 @@ extern "C" void tessera_apple_gpu_gated_delta_rule_f32(
 extern "C" void tessera_apple_gpu_gated_delta_rule_chunked_f32(
     const float* Q, const float* K, const float* V, const float* beta,
     const float* decay, float* O, int32_t B, int32_t H, int32_t S,
-    int32_t D_qk, int32_t D_v, int32_t /*chunk*/, int32_t erase) {
+    int32_t D_qk, int32_t D_v, int32_t /*chunk*/, int32_t erase,
+    int32_t /*coop*/) {
   tessera_apple_gpu_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S,
                                          D_qk, D_v, erase);
 }

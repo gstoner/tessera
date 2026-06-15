@@ -420,14 +420,37 @@ def coopmat_eligible(region: FusedRegion) -> bool:
     return region.reduction is None
 
 
+#: Coopmat tile configs: tile -> (BM, BN, SGCOLS, NR, NC, THREADS).
+#: 32x32 = a 2x2 simdgroup grid (128 threads), each owning a 2x2 array of 8x8
+#: accumulators.  64x64 = a 2x4 grid (256 threads), each owning a 4x2 array (8
+#: accumulators) — the mtl4_matmul_sg_fast register-blocked structure, more
+#: arithmetic intensity per threadgroup (~80% of MPS vs the 32x32's ~45%).
+SYNTH_COOPMAT_TILES = (32, 64)
+_COOPMAT_TILE_CFG: dict[int, tuple[int, int, int, int, int, int]] = {
+    32: (32, 32, 2, 2, 2, 128),
+    64: (64, 64, 4, 4, 2, 256),
+}
+
+
+def coopmat_threads(tile: int) -> int:
+    return _COOPMAT_TILE_CFG[tile][5]
+
+
 def synthesize_matmul_epilogue_coopmat_msl(region: FusedRegion,
-                                           dtype: str = "f16") -> str:
+                                           dtype: str = "f16",
+                                           tile: int = 32) -> str:
     """Emit a cooperative-matrix (``simdgroup_matrix``) matmul + fused pointwise
     epilogue.  ``dtype`` selects the MMA input type (f16 taps the matrix units
-    at ~2×; f32 is the simdgroup f32 ceiling).  The accumulator is always fp32,
-    so the epilogue sees full-precision matmul results."""
+    at ~2×; f32 is the simdgroup f32 ceiling).  ``tile`` selects the output-tile
+    size (32 or 64); 64x64 register-blocks 8 accumulators per simdgroup for more
+    arithmetic intensity.  The accumulator is always fp32, so the epilogue sees
+    full-precision matmul results.  Staging is bounds-checked, so arbitrary
+    shapes work (no alignment requirement)."""
     if region.reduction is not None:
         raise ValueError("coopmat v1 does not support reduction epilogues")
+    if tile not in _COOPMAT_TILE_CFG:
+        raise ValueError(f"coopmat tile must be one of {SYNTH_COOPMAT_TILES}, got {tile}")
+    BM, BN, SGCOLS, NR, NC, THREADS = _COOPMAT_TILE_CFG[tile]
     io = _io_type(dtype)
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
@@ -437,11 +460,13 @@ def synthesize_matmul_epilogue_coopmat_msl(region: FusedRegion,
     return f"""#include <metal_stdlib>
 #include <metal_simdgroup_matrix>
 using namespace metal;
-constant constexpr int BM = 32;
-constant constexpr int BN = 32;
+constant constexpr int BM = {BM};
+constant constexpr int BN = {BN};
 constant constexpr int BK = 16;
-constant constexpr int SG = 16;
-constant constexpr int NT = 2;
+constant constexpr int SGCOLS = {SGCOLS};
+constant constexpr int NR = {NR};
+constant constexpr int NC = {NC};
+constant constexpr int THREADS = {THREADS};
 kernel void {_ENTRY_COOPMAT}(
     device const {io}* A   [[buffer(0)]],
     device const {io}* B   [[buffer(1)]],
@@ -455,40 +480,38 @@ kernel void {_ENTRY_COOPMAT}(
 {{
     int brow = int(tg.y) * BM;
     int bcol = int(tg.x) * BN;
-    threadgroup {io} As[2][BM * BK];
-    threadgroup {io} Bs[2][BK * BN];
+    threadgroup {io} As[BM * BK];
+    threadgroup {io} Bs[BK * BN];
     threadgroup float Cs[BM * BN];
-    int sg_row = int(sgid) / 2, sg_col = int(sgid) % 2;
-    int r0 = sg_row * SG, c0 = sg_col * SG;
-    simdgroup_float8x8 acc[NT][NT];
-    for (int i = 0; i < NT; ++i)
-        for (int j = 0; j < NT; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
+    int sg_row = int(sgid) / SGCOLS, sg_col = int(sgid) % SGCOLS;
+    int r0 = sg_row * (NR * 8), c0 = sg_col * (NC * 8);
+    simdgroup_float8x8 acc[NR][NC];
+    for (int i = 0; i < NR; ++i)
+        for (int j = 0; j < NC; ++j) acc[i][j] = make_filled_simdgroup_matrix<float, 8, 8>(0.0f);
 
-    // Cooperative K-slab staging (128 threads, zero-padded out of range).
-    // Single-buffered: manual double-buffering was measured a wash on Apple
-    // (no cp.async — the threadgroup prefetch doesn't overlap load with compute
-    // the way it does on NVIDIA), so the simpler kernel is kept.  The real tile
-    // upgrade is 64x64 register blocking (a deferred perf-only follow-up).
+    // Cooperative K-slab staging (THREADS threads, zero-padded out of range).
+    // Single-buffered: double-buffering was measured a wash on Apple (no
+    // cp.async).  The throughput lever is the tile size / accumulator count.
     for (int k0 = 0; k0 < K; k0 += BK) {{
-        for (int e = int(tid); e < BM * BK; e += 128) {{
+        for (int e = int(tid); e < BM * BK; e += THREADS) {{
             int r = e / BK, kk = e % BK;
             int gr = brow + r, gk = k0 + kk;
-            As[0][e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
+            As[e] = (gr < M && gk < K) ? A[gr * K + gk] : ({io})0;
         }}
-        for (int e = int(tid); e < BK * BN; e += 128) {{
+        for (int e = int(tid); e < BK * BN; e += THREADS) {{
             int kk = e / BN, c = e % BN;
             int gk = k0 + kk, gc = bcol + c;
-            Bs[0][e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
+            Bs[e] = (gk < K && gc < N) ? B[gk * N + gc] : ({io})0;
         }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
         for (int kk = 0; kk < BK; kk += 8) {{
-            {sg_in} a[NT], b[NT];
-            for (int i = 0; i < NT; ++i)
-                simdgroup_load(a[i], As[0] + (r0 + i * 8) * BK + kk, BK);
-            for (int j = 0; j < NT; ++j)
-                simdgroup_load(b[j], Bs[0] + kk * BN + (c0 + j * 8), BN);
-            for (int i = 0; i < NT; ++i)
-                for (int j = 0; j < NT; ++j)
+            {sg_in} a[NR], b[NC];
+            for (int i = 0; i < NR; ++i)
+                simdgroup_load(a[i], As + (r0 + i * 8) * BK + kk, BK);
+            for (int j = 0; j < NC; ++j)
+                simdgroup_load(b[j], Bs + kk * BN + (c0 + j * 8), BN);
+            for (int i = 0; i < NR; ++i)
+                for (int j = 0; j < NC; ++j)
                     simdgroup_multiply_accumulate(acc[i][j], a[i], b[j], acc[i][j]);
         }}
         threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -496,11 +519,11 @@ kernel void {_ENTRY_COOPMAT}(
 
     // Store the fp32 accumulator tile to threadgroup memory, then run the
     // pointwise epilogue per element (bias[n] indexes the global column).
-    for (int i = 0; i < NT; ++i)
-        for (int j = 0; j < NT; ++j)
+    for (int i = 0; i < NR; ++i)
+        for (int j = 0; j < NC; ++j)
             simdgroup_store(acc[i][j], Cs + (r0 + i * 8) * BN + (c0 + j * 8), BN);
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    for (int e = int(tid); e < BM * BN; e += 128) {{
+    for (int e = int(tid); e < BM * BN; e += THREADS) {{
         int r = e / BN, c = e % BN;
         int gr = brow + r, gc = bcol + c;
         if (gr < M && gc < N) {{
@@ -697,19 +720,31 @@ def _synth_coopmat_symbol() -> Any:
     vp = ctypes.c_void_p
     sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vp, vp, vp, vp,
                     ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-                    ctypes.c_int32]
+                    ctypes.c_int32, ctypes.c_int32]
     sym.restype = ctypes.c_int32
     return sym
 
 
+def coopmat_tile_for(M: int, N: int, K: int) -> int:
+    """Pick the coopmat output-tile size by shape.  Measured on M1 Max: the 64x64
+    register-blocked kernel (8 simdgroups, 256 threads, 8 accumulators) wins for
+    large-N matmuls (1.42x at 2048x1024x512, where it also beats MPS-compose
+    1.18x) and ties the 32x32 for small/narrow ones — so gate 64 on a wide,
+    deep matmul; the 32x32 (less per-threadgroup overhead) handles the rest."""
+    if M >= 128 and N >= 384 and K >= 128:
+        return 64
+    return 32
+
+
 def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
-                             bias: np.ndarray | None = None
+                             bias: np.ndarray | None = None, tile: int | None = None
                              ) -> tuple[np.ndarray, str]:
     """Run the region via the COOPERATIVE-MATRIX synthesized kernel (F2d) —
     ``simdgroup_matrix`` MMA (f16 multiply / fp32 accumulate) with the pointwise
-    epilogue fused after.  f16/f32 inputs only; reduction regions and other
-    dtypes fall back to the scalar ``run_fused_region``.  Returns
-    ``(output, execution)``."""
+    epilogue fused after.  ``tile`` (32/64) selects the output-tile size; when
+    ``None`` it is chosen by shape (``coopmat_tile_for``).  f16/f32 inputs only;
+    reduction regions and other dtypes fall back to the scalar
+    ``run_fused_region``.  Returns ``(output, execution)``."""
     if not coopmat_eligible(region):
         return run_fused_region(region, A, B, bias)
     in_dtype = np.asarray(A).dtype
@@ -726,6 +761,8 @@ def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     K2, N = B.shape
     if K2 != K:
         raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
+    if tile is None:
+        tile = coopmat_tile_for(M, N, K)
     bias_arr = None
     if region.has_bias:
         if bias is None:
@@ -735,12 +772,12 @@ def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     sym = _synth_coopmat_symbol()
     if sym is not None:
         source = synthesize_matmul_epilogue_coopmat_msl(
-            region, dtype=dtype).encode("utf-8")
+            region, dtype=dtype, tile=tile).encode("utf-8")
         out = np.zeros((M, N), np_dt)
         vp = lambda a: a.ctypes.data_as(ctypes.c_void_p)
         bias_ptr = vp(bias_arr) if bias_arr is not None else None
         rc = sym(source, _ENTRY_COOPMAT.encode("utf-8"), vp(A), vp(B), bias_ptr,
-                 vp(out), M, N, K, 1 if region.has_bias else 0, elem_size)
+                 vp(out), M, N, K, 1 if region.has_bias else 0, elem_size, tile)
         if rc == 1:
             return out, "metal_runtime"
     return region.reference(A, B, bias_arr).astype(np_dt), "reference"
@@ -1471,6 +1508,9 @@ __all__ = [
     "synthesize_matmul_epilogue_coopmat_msl",
     "run_fused_region_coopmat",
     "coopmat_eligible",
+    "coopmat_tile_for",
+    "coopmat_threads",
+    "SYNTH_COOPMAT_TILES",
     "synthesize_matmul_reduction_coopmat_msl",
     "run_fused_region_coopmat_reduce",
     "coopmat_reduce_eligible",

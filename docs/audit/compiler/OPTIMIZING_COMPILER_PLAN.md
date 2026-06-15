@@ -197,10 +197,16 @@ epilogue fused after; `run_fused_region` prefers it for pointwise f16/f32 region
 Measured on M1 Max (matmul→gelu): ~13 → **1289 GF/s** f16 (~98×), **1.76×** f16/f32
 (the matrix-unit win the scalar kernel couldn't reach), epilogue still fused.
 
-**v1.1 (evaluated, reverted):** manual double-buffered K-slab prefetch was a wash
-on Apple — no `cp.async`, so the threadgroup prefetch doesn't overlap load with
-compute the way it does on NVIDIA.  The real tile upgrade is 64×64 register
-blocking (`mtl4_matmul_sg_fast` hits ~80% of MPS); deferred as perf-only.
+**v1.1 — tile upgrade (landed):** double-buffering was a wash on Apple (no
+`cp.async`).  The real lever is the **64×64 register-blocked tile** (8 simdgroups,
+256 threads, `acc[4][2]` = 8 accumulators per simdgroup — the `mtl4_matmul_sg_fast`
+structure), selected by shape (`coopmat_tile_for`: 64 for wide+deep matmuls, 32
+otherwise).  Measured on M1 Max (matmul→gelu f16): at **2048×1024×512** — the one
+shape where MPS-compose previously edged coopmat 1.37× — the 64×64 kernel is
+**1.42× over 32×32 (1127 → 1600 GF/s) and now beats MPS-compose 1.18×**.  At
+1024×1024×1024: 1808 GF/s (1.15× over MPS).  For small/narrow shapes the 32×32
+kernel ties and both crush MPS (1.9× at 512³).  So **coopmat now beats MPS-compose
+across the board for pointwise** (1.15–1.96×) — the gap is closed and reversed.
 
 **v2 (landed) — softmax/rmsnorm coopmat reduction:**
 `synthesize_matmul_reduction_coopmat_msl` + `…_reduce_coopmat` C ABI: one

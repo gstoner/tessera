@@ -818,6 +818,46 @@ def test_coopmat_synthesizer_emits_simdgroup_matrix():
     assert "device const half* A" in src               # half I/O
 
 
+def test_coopmat_64_tile_synthesizes_8_accumulators():
+    from tessera.compiler.fusion import (
+        synthesize_matmul_epilogue_coopmat_msl, coopmat_threads, SYNTH_COOPMAT_TILES,
+    )
+    assert SYNTH_COOPMAT_TILES == (32, 64)
+    src64 = synthesize_matmul_epilogue_coopmat_msl(
+        FusedRegion(("gelu",)), dtype="f16", tile=64)
+    assert "constant constexpr int BM = 64;" in src64
+    assert "constant constexpr int NR = 4;" in src64       # 4x2 = 8 accumulators
+    assert "constant constexpr int THREADS = 256;" in src64
+    assert coopmat_threads(64) == 256 and coopmat_threads(32) == 128
+    with pytest.raises(ValueError):
+        synthesize_matmul_epilogue_coopmat_msl(FusedRegion(("gelu",)), tile=48)
+
+
+def test_coopmat_tile_selection_by_shape():
+    from tessera.compiler.fusion import coopmat_tile_for
+    assert coopmat_tile_for(2048, 1024, 512) == 64     # large-N → 64x64
+    assert coopmat_tile_for(1024, 1024, 1024) == 64
+    assert coopmat_tile_for(2048, 256, 1024) == 32     # narrow N → 32x32
+    assert coopmat_tile_for(64, 96, 48) == 32          # small → 32x32
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("dtype", [np.float32, np.float16])
+def test_coopmat_64_tile_equals_unfused_on_metal(dtype):
+    from tessera.compiler.fusion import run_fused_region_coopmat
+    M, K, N = 192, 256, 448                            # large-N → 64x64 path + non-aligned
+    rng = np.random.default_rng(7)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(dtype)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(dtype)
+    region = FusedRegion(("bias", "gelu"), bias_name="bias")
+    bias = (rng.standard_normal((N,)) * 0.3).astype(dtype)
+    out, ex = run_fused_region_coopmat(region, A, B, bias, tile=64)
+    assert ex == "metal_runtime"
+    atol = 1e-4 if dtype == np.float32 else 3e-2
+    assert np.allclose(out.astype(np.float32), region.reference(A, B, bias),
+                       atol=atol, rtol=atol)
+
+
 def test_coopmat_eligibility_excludes_reductions():
     from tessera.compiler.fusion import coopmat_eligible
     assert coopmat_eligible(FusedRegion(("gelu",)))

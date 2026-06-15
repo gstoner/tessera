@@ -7428,9 +7428,9 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     const char* msl_source, const char* entry, const void* A, const void* B,
     const void* bias, void* O, int32_t M, int32_t N, int32_t K,
-    int32_t has_bias, int32_t elem_size) {
+    int32_t has_bias, int32_t elem_size, int32_t tile_dim) {
   if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
-      (elem_size != 2 && elem_size != 4))
+      (elem_size != 2 && elem_size != 4) || (tile_dim != 32 && tile_dim != 64))
     return 0;
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok) return 0;
@@ -7468,10 +7468,11 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
     if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
 
-    const NSUInteger TILE = 32;
+    const NSUInteger TILE = (NSUInteger)tile_dim;        // 32 or 64
+    const NSUInteger THREADS = (tile_dim == 64) ? 256 : 128;
     MTLSize grid = MTLSizeMake(((NSUInteger)N + TILE - 1) / TILE,
                                ((NSUInteger)M + TILE - 1) / TILE, 1);
-    [enc dispatchThreadgroups:grid threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+    [enc dispatchThreadgroups:grid threadsPerThreadgroup:MTLSizeMake(THREADS, 1, 1)];
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_matmul_epilogue_coopmat"))
       return 0;

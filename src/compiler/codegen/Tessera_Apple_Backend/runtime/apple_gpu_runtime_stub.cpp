@@ -1027,7 +1027,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
 
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     const char*, const char*, const void*, const void*, const void*,
-    void*, int32_t, int32_t, int32_t, int32_t, int32_t) {
+    void*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
   return 0;
 }
 

@@ -395,6 +395,45 @@ def test_synthesized_attention_equals_unfused_on_metal(M, Nk, D, Dv, scale, caus
     assert np.allclose(out, region.reference(Q, K, V), atol=1e-4)  # horizontal oracle
 
 
+def test_online_attention_msl_streams_keys_without_a_score_array():
+    # M2: the online kernel holds only acc[head_dim] + running max/sum — NO
+    # scores[Nk] array — so Nk is unbounded. Structural guard on the source.
+    from tessera.compiler.fusion import SYNTH_MAX_D, synthesize_attention_online_msl
+
+    src = synthesize_attention_online_msl(AttentionRegion(causal=True))
+    assert f"acc[{SYNTH_MAX_D}]" in src           # head_dim-bounded accumulator
+    assert "scores[" not in src                   # NO Nk-sized score array
+    assert "run_max" in src and "run_sum" in src  # online softmax stats
+    assert "break" in src                         # causal early-exit
+
+
+# Large Nk (> SYNTH_MAX_N) — only the online kernel can reach these; the
+# materialized kernel would fall to the numpy reference.
+_ATTN_LARGE_N = [
+    (8, 2048, 64, 64, False),     # M, Nk, D, Dv, causal — Nk = 2x the cap
+    (16, 4096, 128, 128, False),  # 4x the cap, head_dim 128
+    (32, 2048, 64, 64, True),     # large causal
+    (4, 1536, 256, 256, False),   # head_dim at the SYNTH_MAX_D boundary
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("M,Nk,D,Dv,causal", _ATTN_LARGE_N)
+def test_online_attention_large_n_equals_unfused_on_metal(M, Nk, D, Dv, causal):
+    from tessera.compiler.fusion import SYNTH_MAX_N
+
+    assert Nk > SYNTH_MAX_N, "this test must exercise the online (large-Nk) path"
+    rng = np.random.default_rng((M * 131 + Nk) & 0xFFFF)
+    Q = rng.standard_normal((M, D)).astype(np.float32)
+    K = rng.standard_normal((Nk, D)).astype(np.float32)
+    V = rng.standard_normal((Nk, Dv)).astype(np.float32)
+    region = AttentionRegion(scale=1.0 / np.sqrt(D), causal=causal)
+
+    out, execution = run_fused_attention(region, Q, K, V)
+    assert execution == "metal_runtime"            # online kernel ran (not reference)
+    assert np.allclose(out, region.reference(Q, K, V), atol=1e-4)  # horizontal oracle
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
 def test_synthesized_attention_reproduces_handwritten_flash_attn():
     # the synthesized attention block must match the hand-written flash_attn

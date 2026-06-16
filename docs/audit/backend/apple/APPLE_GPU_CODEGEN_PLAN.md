@@ -95,8 +95,20 @@ runs (`metal_runtime`), bf16-precision-correct. Guard:
   `_apple_gpu_try_synthesized_fusion`** (oracle- + cost-gated). This fixed a
   *pre-existing correctness gap*: canonical `softmax(Q·Kᵀ)·V` (`transpose_b=True`)
   was computing `Q·K` — now correct across shapes incl. the ambiguous D==Nk case.
-  Guards: `tests/unit/test_fusion_attention_orientation.py` (8). *Follow-on:*
-  route large-N/scale/causal attention to the synthesizer; f16/bf16 attention.
+  Guards: `tests/unit/test_fusion_attention_orientation.py` (8).
+  **Large-N (online-softmax) attention ✅ landed (2026-06-16).** The materialized
+  kernel caps at `scores[SYNTH_MAX_N]` (Nk ≤ 1024) → large-context attention fell
+  to numpy. Added `synthesize_attention_online_msl` — a flash-attention-style
+  kernel that streams keys in one pass holding only a running max/denominator + an
+  `acc[SYNTH_MAX_D]` (head_dim ≤ 256) accumulator, **no `scores[Nk]` array**, so
+  Nk is unbounded (causal early-exits at `n > m`). It rides the **existing**
+  `tessera_apple_gpu_synth_attention_f32` symbol (which takes the MSL source +
+  entry as parameters) — **no new runtime symbol, no `.mm` rebuild**.
+  `run_fused_attention` routes Nk ≤ SYNTH_MAX_N → materialized, else (head_dim ≤
+  SYNTH_MAX_D) → online, else reference. Verified on M1 Max: Nk = 2048/4096 + the
+  head_dim=256 boundary + large causal all run `metal_runtime` at fp32 tol (~2.5e-7
+  vs numpy). Guards: 6 new cases in `tests/unit/test_fusion_synthesis.py` (structural
+  + large-Nk-on-Metal). *Follow-on:* f16/bf16 attention; scale-variant coopmat.
 - Boundary rule: **synthesize MSL** for memory-bound fusable glue; **keep MPSGraph**
   for compute-bound primitives Apple ships a tuned kernel for (large-N GEMM, bmm,
   reductions). Never displace a working MPSGraph call — only the numpy/reference

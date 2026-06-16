@@ -36,6 +36,13 @@ import numpy as np
 SYNTH_MAX_N = 1024
 _ENTRY = "synth_matmul_epi"
 
+#: Cap on head_dim for the ONLINE-softmax attention kernel (M2): it streams keys
+#: with no ``scores[Nk]`` array, keeping only an ``acc[head_dim]`` accumulator —
+#: so it trades the SYNTH_MAX_N key cap for a head_dim cap, and handles Nk far
+#: beyond SYNTH_MAX_N (the large-context / long-sequence attention case). Matches
+#: the hand-written flash-attn kernel's head_dim envelope.
+SYNTH_MAX_D = 256
+
 
 @dataclass(frozen=True)
 class EpilogueOp:
@@ -1479,6 +1486,7 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ATTN_ENTRY = "synth_attention"
+_ATTN_ONLINE_ENTRY = "synth_attention_online"
 
 
 @dataclass(frozen=True)
@@ -1582,6 +1590,65 @@ kernel void {_ATTN_ENTRY}(
 """
 
 
+def synthesize_attention_online_msl(region: AttentionRegion = AttentionRegion()) -> str:
+    """Emit MSL for a fused attention block using ONLINE softmax — flash-attention
+    style. One query row per thread; keys are streamed in a single pass holding
+    only a running max ``m``, running denominator ``l``, and an ``acc[head_dim]``
+    output accumulator (no ``scores[Nk]`` array). This lifts the SYNTH_MAX_N key
+    cap entirely (Nk unbounded) at the cost of a head_dim ≤ SYNTH_MAX_D bound — the
+    large-context attention case the materialized kernel can't reach.
+
+    Same C-ABI buffer layout / entry signature as the materialized kernel, so it
+    rides the existing ``tessera_apple_gpu_synth_attention_f32`` symbol (which
+    takes the MSL source + entry name as parameters) — no new runtime symbol.
+    Shape / scale / causal are runtime buffers, so one cached pipeline serves
+    every call. fp32 accumulators throughout."""
+    return f"""#include <metal_stdlib>
+using namespace metal;
+kernel void {_ATTN_ONLINE_ENTRY}(
+    device const float* Q   [[buffer(0)]],
+    device const float* K   [[buffer(1)]],
+    device const float* V   [[buffer(2)]],
+    device float*       O   [[buffer(3)]],
+    constant int&       M   [[buffer(4)]],
+    constant int&       Nk  [[buffer(5)]],
+    constant int&       D   [[buffer(6)]],
+    constant int&       Dv  [[buffer(7)]],
+    constant float&     scale  [[buffer(8)]],
+    constant int&       causal [[buffer(9)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)M) return;
+    if (Dv > {SYNTH_MAX_D}) return;
+    int m = (int)gid;
+    int q_off = m * D;
+    float acc[{SYNTH_MAX_D}];
+    for (int d = 0; d < Dv; ++d) acc[d] = 0.0f;
+    float run_max = -INFINITY;
+    float run_sum = 0.0f;
+    for (int n = 0; n < Nk; ++n) {{
+        // causal: every key n > m is masked, and so is every later key — stop.
+        if (causal != 0 && n > m) break;
+        float s = 0.0f;
+        int k_off = n * D;
+        for (int d = 0; d < D; ++d) s += Q[q_off + d] * K[k_off + d];
+        s *= scale;
+        float new_max = max(run_max, s);
+        // first key: run_max = -inf -> corr = exp(-inf) = 0 (acc/sum start at 0).
+        float corr = exp(run_max - new_max);
+        float p = exp(s - new_max);
+        run_sum = run_sum * corr + p;
+        int v_off = n * Dv;
+        for (int d = 0; d < Dv; ++d) acc[d] = acc[d] * corr + p * V[v_off + d];
+        run_max = new_max;
+    }}
+    float inv = (run_sum > 0.0f) ? (1.0f / run_sum) : 0.0f;
+    int o_off = m * Dv;
+    for (int d = 0; d < Dv; ++d) O[o_off + d] = acc[d] * inv;
+}}
+"""
+
+
 def _attn_symbol() -> Any:
     from tessera.runtime import _load_apple_gpu_runtime
     rt = _load_apple_gpu_runtime()
@@ -1615,12 +1682,23 @@ def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
     if Nv != Nk:
         raise ValueError(f"K/V seqlen mismatch: K {K.shape}, V {V.shape}")
 
+    # Two synthesized kernels, same C-ABI symbol (it takes the MSL source + entry
+    # as params): the materialized-scores kernel for Nk ≤ SYNTH_MAX_N (no head_dim
+    # cap), and the ONLINE-softmax kernel for larger Nk (M2 — Nk unbounded, but
+    # head_dim ≤ SYNTH_MAX_D). Beyond both caps, fall to the numpy reference.
     sym = _attn_symbol()
+    source: bytes | None = None
+    entry = b""
     if sym is not None and Nk <= SYNTH_MAX_N:
         source = synthesize_attention_msl(region).encode("utf-8")
+        entry = _ATTN_ENTRY.encode("utf-8")
+    elif sym is not None and Dv <= SYNTH_MAX_D:
+        source = synthesize_attention_online_msl(region).encode("utf-8")
+        entry = _ATTN_ONLINE_ENTRY.encode("utf-8")
+    if sym is not None and source is not None:
         out = np.zeros((M, Dv), np.float32)
         fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = sym(source, _ATTN_ENTRY.encode("utf-8"), fp(Q), fp(K), fp(V), fp(out),
+        rc = sym(source, entry, fp(Q), fp(K), fp(V), fp(out),
                  M, Nk, D, Dv, ctypes.c_float(region.scale),
                  1 if region.causal else 0)
         if rc == 1:
@@ -2254,8 +2332,10 @@ __all__ = [
     "autotune_matmul_epilogue",
     "clear_autotune_corpus",
     "SYNTH_MAX_N",
+    "SYNTH_MAX_D",
     "synthesize_matmul_epilogue_msl",
     "synthesize_attention_msl",
+    "synthesize_attention_online_msl",
     "run_fused_region",
     "run_fused_attention",
     "discover_fusable_regions",

@@ -251,15 +251,20 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   via `ExecutionEngineOptions.sharedLibPaths` so the DPS-copy `memrefCopy` symbol
   resolves. **Required registrations** (the hard-won set): `TilingInterface` on
   linalg+tensor, the linalg transform-dialect extension, the `vector`/`ub` dialects
-  + vector bufferization models. **Result:** matmul programs with all dims ≤ 256
-  (`TESSERA_JIT_VECTORIZE_MAXDIM`) vectorize at **~30 GFLOP/s** (128³) — ~13× the
-  2.3 GFLOP/s scalar — correct vs numpy; larger programs stay on the scalar JIT
-  lane (a **size guard** — the vectorized form runtime-crashes at large N, and
-  `vectorize_children` over-vectorizes untiled elementwise ops). Default path (lane
-  off) byte-identical; 25 CPU-JIT tests green incl. the gated-lane guard.
-  *Follow-ons:* harden the large-N runtime crash + raise the envelope; vectorize
-  only the matmul tile (not the whole func) to avoid the elementwise blow-up; tune
-  tile sizes. Scope honesty: won't match hand-tuned Accelerate BLAS, and the
+  + vector bufferization models. **Result:** matmul programs with all dims ≤ 2048
+  (`TESSERA_JIT_VECTORIZE_MAXDIM`, default raised 256→2048 on 2026-06-16) vectorize
+  at **~40-46 GFLOP/s** (512³–1024³, ~30 at 128³) — ~13-20× the 2.3 GFLOP/s scalar
+  — correct vs numpy; larger programs stay on the scalar JIT lane.
+  **Large-N hardened (2026-06-16):** the earlier large-N failure was a *compile-time*
+  explosion, not a crash — `vectorize_children` over-vectorized the **untiled**
+  elementwise epilogue into a giant `vector<MxN>` that LLVM unrolled into M·N scalar
+  ops. The transform now also tiles the 2D elementwise/fill/generic ops (`[8,16]`)
+  before vectorizing the func, bounding every vector by the tile sizes; `MAXDIM` is
+  now a compile-time safety valve (many tiles ⇒ long-but-finite compile), not a
+  crash clamp. Default path (lane off) byte-identical; 25 CPU-JIT tests green incl.
+  the gated-lane guard (now pins `MAXDIM=128` to exercise the scalar fallback).
+  *Follow-ons:* tune tile sizes. Scope honesty: won't match hand-tuned Accelerate
+  BLAS, and the
   **single-GEMM hot path already routes to Accelerate** (`_native_cpu_fast_call`);
   this lane targets multi-op programs that contain a small/medium GEMM. *Next on
   this thread:* swap the pipeline bottom `linalg→loops→LLVM` for

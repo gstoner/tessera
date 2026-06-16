@@ -283,9 +283,13 @@ oracle. Open work, by leverage:
    ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,
    fast-math) are *measured* insufficient (see `COMPILER_AUDIT.md` Phase 4). The
    real fix is register-tile `linalg.matmul` → `linalg::vectorize` → `vector→LLVM`.
-   **Needs a stable env** (rebuild→measure→tune iteration); risk of slower/wrong
-   code if mis-configured. Won't match BLAS; the single-GEMM hot path already
-   routes to Accelerate, so this targets multi-op-with-GEMM programs.
+   **Attempted 2026-06-16** — full gated lane built + linked, but the tiling step
+   segfaults (both `linalg::tileLinalgOp` and `scf::tileUsingSCF` crash on the
+   matmul in the MLIR-22 pre-bufferize context); reverted. **Concrete next step:**
+   reproduce the tiling crash in a standalone `tessera-opt` lit harness (bare
+   `linalg.matmul` + `scf::tileUsingSCF`), isolate op-state vs MLIR-22 bug, then
+   wire into the JIT once stable. Won't match BLAS; the single-GEMM hot path
+   already routes to Accelerate, so this targets multi-op-with-GEMM programs.
 2. **M4 compose pointwise+matmul → one kernel; whole-program `graph_ir→MSL`
    (HF — larger codegen).** Fuse a pointwise epilogue/prologue *into* the matmul
    or norm kernel (today they are separate dispatches), then the general

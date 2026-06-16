@@ -234,14 +234,30 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   (target-aware codegen; `fast` matches Tessera's documented fast-math GEMM
   contract) and prerequisites for vectorization — but the **real lever is an MLIR
   `linalg→vector` tiling+vectorization pipeline** (register-tile the matmul →
-  `linalg::vectorize` → `vector→LLVM`), a focused multi-step effort. Scope honesty:
+  `linalg::vectorize` → `vector→LLVM`), a focused multi-step effort.
+  **`linalg→vector` attempt (2026-06-16) — diagnosed deeper, reverted.** Built the
+  full gated lane (`TESSERA_JIT_VECTORIZE`): tile each `linalg.matmul` on tensors
+  (pre-bufferize) so vectorize emits a `vector.contract` with a **register** (not
+  memory) accumulator → vectorize → `populateVectorContractLoweringPatterns`
+  (OuterProduct) + transfer lowering → `ConvertVectorToLLVM`; all libs wired
+  (`MLIRVectorToLLVMPass`/`MLIRVectorTransforms`/`MLIRSCFTransforms`/
+  `MLIRTilingInterface`), compiled + linked clean. **Blocker:** the tiling step
+  segfaults internally — *both* `linalg::tileLinalgOp` (legacy) and
+  `scf::tileUsingSCF` (modern TilingInterface) crash on the matmul in this MLIR-22
+  pre-bufferization context (instrumented: "matmuls found: 1" then a crash inside
+  the tiling call). Reverted the experiment (a segfaulting lane shouldn't ship even
+  gated). **Next focused session:** reproduce the tiling crash in a standalone
+  `tessera-opt` lit harness (a bare `linalg.matmul` + `scf::tileUsingSCF`), *not*
+  in the JIT — determine if it's an op-state precondition (the matmul needs a
+  specific form / the rewriter needs different setup) or an MLIR-22 bug; only wire
+  it into the JIT once stable in isolation. Scope honesty:
   even done well it won't match hand-tuned Accelerate BLAS, and the **single-GEMM
   hot path already routes to Accelerate** (`_native_cpu_fast_call`); this affects
   multi-op programs that contain a GEMM. AMX is only reachable via Accelerate
   (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane. *Next on this thread:*
-  the `linalg→vector` GEMM pipeline → then swap the pipeline bottom
-  `linalg→loops→LLVM` for `linalg→gpu→NVVM/ROCDL` (**emission HF**, the
-  `tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
+  the `linalg→vector` GEMM pipeline (tiling-crash isolation first) → then swap the
+  pipeline bottom `linalg→loops→LLVM` for `linalg→gpu→NVVM/ROCDL` (**emission HF**,
+  the `tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
 - **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /
   async overlap (HG); real 1F1B ordering (HF); collective↔compute overlap via the
   unused `ChunkPlanner`/`CollectiveScheduler` (plan HF, measurement HG); GPU MMA

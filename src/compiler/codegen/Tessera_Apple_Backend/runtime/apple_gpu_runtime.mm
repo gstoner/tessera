@@ -8006,11 +8006,18 @@ extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f16(
 // in a single dispatch (one thread per element). Variable input arity:
 // ``inputs[0..n-1]`` bind to buffers 0..n-1, the output to buffer n, and the
 // element count N to buffer n+1. ``elem_bytes`` selects f32 (4) vs 16-bit (2).
+// M4 (2026-06-16): per-input element counts + a broadcast modulus ``cols``. A
+// full input has ``in_counts[i] == n_elements`` and the MSL indexes it ``[gid]``;
+// a per-feature broadcast input (bias/scale) has ``in_counts[i] == cols`` and the
+// MSL indexes it ``[gid % cols]`` (the kernel reads ``cols`` from buffer
+// n_inputs+2). This lets the pointwise emitter fuse per-feature bias/scale (which
+// are ubiquitous) instead of bailing on the shape mismatch.
 static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
-                                    const void *const *inputs, int32_t n_inputs,
-                                    void *out, int32_t n_elements,
+                                    const void *const *inputs,
+                                    const int32_t *in_counts, int32_t n_inputs,
+                                    void *out, int32_t n_elements, int32_t cols,
                                     NSUInteger elem_bytes) {
-  if (!msl_source || !entry || !inputs || !out || n_inputs <= 0 ||
+  if (!msl_source || !entry || !inputs || !in_counts || !out || n_inputs <= 0 ||
       n_elements <= 0)
     return 0;
   MetalDeviceContext &ctx = deviceContext();
@@ -8020,7 +8027,7 @@ static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
         ctx, [NSString stringWithUTF8String:msl_source],
         [NSString stringWithUTF8String:entry]);
     if (!pso) return 0;
-    NSUInteger bytes = elem_bytes * (NSUInteger)n_elements;
+    NSUInteger outBytes = elem_bytes * (NSUInteger)n_elements;
     // Variable buffer count → a vector of move-only guards releases every
     // buffer on any exit path (success / early return).
     std::vector<MetalBufferGuard> guards;
@@ -8028,13 +8035,15 @@ static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
     std::vector<id<MTLBuffer>> ins;
     ins.reserve((size_t)n_inputs);
     for (int32_t i = 0; i < n_inputs; ++i) {
-      id<MTLBuffer> b = metal_buffer_acquire_with_bytes(ctx, inputs[i], bytes);
-      guards.emplace_back(ctx, b, bytes);
+      if (in_counts[i] <= 0) return 0;
+      NSUInteger ib = elem_bytes * (NSUInteger)in_counts[i];  // full=n, bcast=cols
+      id<MTLBuffer> b = metal_buffer_acquire_with_bytes(ctx, inputs[i], ib);
+      guards.emplace_back(ctx, b, ib);
       if (!b) return 0;
       ins.push_back(b);
     }
-    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, bytes);
-    guards.emplace_back(ctx, bufO, bytes);
+    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, outBytes);
+    guards.emplace_back(ctx, bufO, outBytes);
     if (!bufO) return 0;
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
@@ -8045,6 +8054,10 @@ static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
     [enc setBuffer:bufO offset:0 atIndex:(NSUInteger)n_inputs];
     [enc setBytes:&n_elements length:sizeof(int32_t)
           atIndex:(NSUInteger)(n_inputs + 1)];
+    // Broadcast modulus at n_inputs+2. Harmless when the MSL omits it (no
+    // broadcast input) — Metal ignores a binding the kernel does not declare.
+    [enc setBytes:&cols length:sizeof(int32_t)
+          atIndex:(NSUInteger)(n_inputs + 2)];
     MTLSize grid = MTLSizeMake((NSUInteger)n_elements, 1, 1);
     NSUInteger tg = std::min<NSUInteger>((NSUInteger)n_elements,
                                          pso.maxTotalThreadsPerThreadgroup);
@@ -8053,23 +8066,25 @@ static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
     [enc endEncoding];
     if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_pointwise"))
       return 0;
-    std::memcpy(out, [bufO contents], bytes);
+    std::memcpy(out, [bufO contents], outBytes);
     return 1;
   }
 }
 
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_f32(
     const char *msl_source, const char *entry, const void *const *inputs,
-    int32_t n_inputs, void *out, int32_t n_elements) {
-  return synth_pointwise_impl(msl_source, entry, inputs, n_inputs, out,
-                              n_elements, sizeof(float));
+    const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
+    int32_t cols) {
+  return synth_pointwise_impl(msl_source, entry, inputs, in_counts, n_inputs,
+                              out, n_elements, cols, sizeof(float));
 }
 
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
     const char *msl_source, const char *entry, const void *const *inputs,
-    int32_t n_inputs, void *out, int32_t n_elements) {
-  return synth_pointwise_impl(msl_source, entry, inputs, n_inputs, out,
-                              n_elements, sizeof(uint16_t));
+    const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
+    int32_t cols) {
+  return synth_pointwise_impl(msl_source, entry, inputs, in_counts, n_inputs,
+                              out, n_elements, cols, sizeof(uint16_t));
 }
 
 // Generic SYNTHESIZED matmul -> pointwise(-> reduction) dispatch, THREADGROUP-

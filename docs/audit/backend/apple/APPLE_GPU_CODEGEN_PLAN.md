@@ -219,10 +219,20 @@ genuinely fuses on Metal; broadcast/unsupported fall to per-op). **Verified on M
 Max**: `gelu(add(mul(x,a),b))` runs as one kernel, fp32-exact; f16 native; chains
 + diamonds + matmul-bounded tails covered. Guard:
 `tests/unit/test_pointwise_graph_fusion.py` (10).
-*Follow-ons:* broadcast operands (per-feature bias/scale); compose pointwise with
-the matmul/reduction synthesizers into a single whole-graph kernel; the bigger
-`graph_ir → MSL` whole-program emitter (or retarget the CPU JIT's
-`tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+**Broadcast operands ✅ landed (2026-06-16).** The emitter was same-shape only —
+a per-feature bias/scale (shape `(cols,)`/`(1,cols)`) bailed the whole region to
+numpy. Now `run_pointwise_graph` classifies each input as full (`in[gid]`) or
+last-dim-aligned broadcast (`in[gid % cols]`), and the synthesizer bakes the
+per-input indexing + a `cols` modulus buffer. The runtime ABI gained per-input
+element counts (`in_counts[]`, so a broadcast input allocates `cols` not `n`) +
+the `cols` constant — `synth_pointwise_impl` + both exported symbols + the stub.
+Per-row `(rows,1)` / internal broadcast correctly **declines** to the reference
+(never mis-indexes). Verified on M1 Max: `relu(x*scale+bias)` with per-feature
+scale+bias fuses in one kernel (~4.8e-7 vs numpy); all-full path unchanged.
+Guards: 4 new cases in `tests/unit/test_pointwise_graph_fusion.py`.
+*Follow-ons:* compose pointwise with the matmul/reduction synthesizers into a
+single whole-graph kernel; the bigger `graph_ir → MSL` whole-program emitter (or
+retarget the CPU JIT's `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 
 ### M5 — Displace the dispatcher lane-by-lane (HF, Evaluator-gated) — **gate landed (2026-06-16)**
 Migrate op families from name→MPS/MSL dispatch to synthesizer codegen one at a

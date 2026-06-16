@@ -8,6 +8,8 @@ See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M4).
 
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 import pytest
 
@@ -90,6 +92,52 @@ def test_run_pointwise_dag_matches_numpy():
     assert ex in ("metal_runtime", "reference")
     np.testing.assert_allclose(np.asarray(out), _gelu(x * a + b),
                                rtol=1e-5, atol=1e-5)
+
+
+# ── M4 broadcast operands (per-feature bias/scale) ──────────────────────────
+def test_synthesizer_broadcast_input_indexes_modulo_cols():
+    # A broadcast input must read in{i}[gid % C], a full input in{i}[gid]; the
+    # cols-modulus buffer is declared iff some input is broadcast.
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("x", "s"), "m"), ("add", ("m", "bias"), "o")),
+        inputs=("x", "s", "bias"), output="o")
+    src = F.synthesize_pointwise_graph_msl(region, "f32", (False, True, True))
+    assert "in0[gid]" in src                  # x is full
+    assert "in1[gid % (uint)C]" in src        # scale broadcasts
+    assert "in2[gid % (uint)C]" in src        # bias broadcasts
+    assert "constant int&       C" in src     # cols buffer declared
+    # No-broadcast emission has no C buffer (regression on the original path).
+    full = F.synthesize_pointwise_graph_msl(region, "f32")
+    assert "% (uint)C" not in full and "constant int&       C" not in full
+
+
+@pytest.mark.parametrize("bias_shape", [(64,), (1, 64)])
+def test_run_pointwise_per_feature_bias_scale_on_metal(bias_shape):
+    # relu(x * scale + bias) with per-feature scale/bias — the ubiquitous case.
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("x", "s"), "m"), ("add", ("m", "b"), "t"),
+             ("relu", ("t",), "o")),
+        inputs=("x", "s", "b"), output="o")
+    x = _RNG.standard_normal((32, 64)).astype(np.float32)
+    s = _RNG.standard_normal(bias_shape).astype(np.float32)
+    b = _RNG.standard_normal(bias_shape).astype(np.float32)
+    out, ex = F.run_pointwise_graph(region, [x, s, b])
+    ref = np.maximum(x * s + b, 0.0)
+    np.testing.assert_allclose(np.asarray(out), ref, rtol=1e-5, atol=1e-5)
+    if sys.platform == "darwin":
+        assert ex == "metal_runtime"           # broadcast fused on Metal
+
+
+def test_run_pointwise_per_row_broadcast_declines_to_reference():
+    # (rows,1) broadcast is NOT last-dim-aligned → must decline (never mis-index).
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("x", "s"), "m"), ("gelu", ("m",), "o")),
+        inputs=("x", "s"), output="o")
+    x = _RNG.standard_normal((32, 64)).astype(np.float32)
+    s = _RNG.standard_normal((32, 1)).astype(np.float32)
+    out, ex = F.run_pointwise_graph(region, [x, s])
+    assert ex == "reference"
+    np.testing.assert_allclose(np.asarray(out), _gelu(x * s), rtol=1e-5, atol=1e-5)
 
 
 # ── end-to-end @jit(apple_gpu) ──────────────────────────────────────────────

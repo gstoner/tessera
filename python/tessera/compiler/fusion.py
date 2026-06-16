@@ -1328,32 +1328,45 @@ class PointwiseGraphRegion:
 
 
 def synthesize_pointwise_graph_msl(region: PointwiseGraphRegion,
-                                   dtype: str = "f32") -> str:
+                                   dtype: str = "f32",
+                                   broadcast: tuple[bool, ...] | None = None
+                                   ) -> str:
     """Emit ONE MSL kernel computing the whole pointwise DAG per element. Each
     external input is a `device const <io>*` buffer (indices 0..k-1); the output
-    is buffer k. fp32 temps throughout; the store goes through `ST(...)`."""
+    is buffer k. fp32 temps throughout; the store goes through `ST(...)`.
+
+    ``broadcast`` (per-input, aligned with ``region.inputs``) marks per-feature
+    operands (bias/scale): a broadcast input is indexed ``[gid % C]`` (C = the
+    last-dim width, buffer k+2) instead of ``[gid]``, so a length-``cols`` vector
+    fuses in place. ``None`` ⇒ all full (the original same-shape behavior)."""
     io = _io_type(dtype)
+    n_in = len(region.inputs)
+    bc = tuple(broadcast) if broadcast is not None else (False,) * n_in
     params = "".join(
         f"    device const {io}* in{i} [[buffer({i})]],\n"
-        for i in range(len(region.inputs)))
-    out_buf = len(region.inputs)
-    # value-id → MSL temp expression (input load or a prior op's temp var).
-    temp: dict[str, str] = {v: f"float(in{i}[gid])"
-                            for i, v in enumerate(region.inputs)}
+        for i in range(n_in))
+    out_buf = n_in
+    # value-id → MSL temp expression: broadcast inputs index [gid % C], full [gid].
+    temp: dict[str, str] = {
+        v: f"float(in{i}[{'gid % (uint)C' if bc[i] else 'gid'}])"
+        for i, v in enumerate(region.inputs)}
     lines = []
-    for n, (key, ins, out) in enumerate(region.ops):
+    for k, (key, ins, out) in enumerate(region.ops):
         _arity, expr, _ref = POINTWISE_OPS[key]
         operands = [temp[i] for i in ins]
-        lines.append(f"    float t{n} = {expr.format(*operands)};")
-        temp[out] = f"t{n}"
+        lines.append(f"    float t{k} = {expr.format(*operands)};")
+        temp[out] = f"t{k}"
     body = "\n".join(lines)
+    # Declare the broadcast-modulus buffer only when some input needs it.
+    cols_param = (f"    constant int&       C   [[buffer({out_buf + 2})]],\n"
+                  if any(bc) else "")
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
 kernel void {_PW_ENTRY}(
 {params}    device {io}*       O   [[buffer({out_buf})]],
     constant int&       N   [[buffer({out_buf + 1})]],
-    uint gid [[thread_position_in_grid]])
+{cols_param}    uint gid [[thread_position_in_grid]])
 {{
     if (gid >= (uint)N) return;
 {body}
@@ -1449,33 +1462,69 @@ def _synth_pointwise_symbol(dtype: str) -> Any:
     if sym is None:
         return None
     vpp = ctypes.POINTER(ctypes.c_void_p)
-    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vpp, ctypes.c_int32,
-                    ctypes.c_void_p, ctypes.c_int32]
+    ip = ctypes.POINTER(ctypes.c_int32)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vpp, ip, ctypes.c_int32,
+                    ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
     sym.restype = ctypes.c_int32
     return sym
 
 
+def _is_trailing_feature(a_shape: tuple[int, ...],
+                         out_shape: tuple[int, ...]) -> bool:
+    """True when ``a`` broadcasts to ``out`` purely along the *last* axis — its
+    last dim equals out's last dim and every other dim is 1 (e.g. ``(cols,)`` /
+    ``(1, cols)`` against ``(rows, cols)``). Exactly the case where flat index
+    ``gid % cols`` selects the right element, so the GPU kernel can broadcast it.
+    Per-row / internal broadcast (e.g. ``(rows, 1)``) returns False → reference."""
+    if not a_shape or not out_shape:
+        return False
+    if a_shape[-1] != out_shape[-1]:
+        return False
+    return all(d == 1 for d in a_shape[:-1])
+
+
 def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
                         ) -> tuple[np.ndarray, str]:
-    """Run the pointwise DAG as ONE Metal kernel. Same-shape f32/f16 inputs.
-    Returns ``(out, "metal_runtime")`` on GPU success, else the numpy reference."""
+    """Run the pointwise DAG as ONE Metal kernel. f32/f16 inputs; per-feature
+    broadcast operands (bias/scale, shape ``(cols,)``/``(1,cols)``) fuse in place
+    via ``gid % cols`` indexing (M4). Returns ``(out, "metal_runtime")`` on GPU
+    success, else the numpy reference."""
     in_dtype = np.asarray(arrays[0]).dtype
     elem = "f16" if in_dtype == np.float16 else "f32"
     npdt = np.float16 if elem == "f16" else np.float32
     arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
-    shape = arrs[0].shape
-    if any(a.shape != shape for a in arrs):
+    try:
+        out_shape = np.broadcast_shapes(*[a.shape for a in arrs])
+    except ValueError:                          # incompatible shapes
         return region.reference(*arrays).astype(npdt), "reference"
-    n = int(np.prod(shape)) if shape else 1
+    n = int(np.prod(out_shape)) if out_shape else 1
+    cols = int(out_shape[-1]) if out_shape else 1
+
+    # Classify each input: full (index [gid]) or per-feature broadcast ([gid%C]).
+    # Anything else (per-row / internal broadcast) bails to the numpy reference.
+    bc: list[bool] = []
+    counts: list[int] = []
+    for a in arrs:
+        if a.shape == out_shape or a.size == n:
+            bc.append(False)
+            counts.append(int(a.size))
+        elif a.size == cols and _is_trailing_feature(a.shape, out_shape):
+            bc.append(True)
+            counts.append(cols)
+        else:
+            return region.reference(*arrays).astype(npdt), "reference"
+
     sym = _synth_pointwise_symbol(elem)
     if sym is not None and len(arrs) <= _PW_MAX_INPUTS:
-        ptr_t = ctypes.c_void_p
-        in_ptrs = (ptr_t * len(arrs))(*[a.ctypes.data for a in arrs])
-        out = np.zeros(shape, npdt)
-        rc = sym(synthesize_pointwise_graph_msl(region, elem).encode("utf-8"),
+        in_ptrs = (ctypes.c_void_p * len(arrs))(*[a.ctypes.data for a in arrs])
+        count_arr = (ctypes.c_int32 * len(arrs))(*counts)
+        out = np.zeros(out_shape, npdt)
+        rc = sym(synthesize_pointwise_graph_msl(
+                     region, elem, tuple(bc)).encode("utf-8"),
                  _PW_ENTRY.encode("utf-8"),
                  ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
-                 len(arrs), out.ctypes.data, n)
+                 ctypes.cast(count_arr, ctypes.POINTER(ctypes.c_int32)),
+                 len(arrs), out.ctypes.data, n, cols)
         if rc == 1:
             return out, "metal_runtime"
     return region.reference(*arrays).astype(npdt), "reference"

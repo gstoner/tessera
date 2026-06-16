@@ -414,13 +414,13 @@ state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 stft,5,0,0,5,0,,needs_direct_test,category default for 'spectral'
-sub,8,4,0,12,0,bf16 f16,covered_by_family,category default for 'elementwise'
+sub,8,4,0,12,0,bf16 f16 f32,covered_by_family,category default for 'elementwise'
 sum,4,0,0,4,0,f32,needs_direct_test,category default for 'stable_reduction'
 svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-tanh,4,0,1,4,0,bf16 f16,covered_by_family,category default for 'elementwise'
+tanh,4,0,1,4,0,bf16 f16 f32,covered_by_family,category default for 'elementwise'
 tile,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tile_view,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
 tiny_attention_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'

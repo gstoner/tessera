@@ -185,14 +185,36 @@ def test_multi_op_mlp_chain_matches_numpy():
     np.testing.assert_allclose(got, _gelu(x @ w + b), rtol=1e-4, atol=1e-5)
 
 
-def test_f64_falls_back_to_numpy_correctly():
-    # f64 is native on M1 Max but not yet wired into the GraphFn boundary table
-    # → numpy fallback (still correct).
+def test_f64_runs_through_jit_at_exact_precision():
+    # f64 is wired into the GraphFn boundary table (2026-06-16): it accumulates
+    # in f64 throughout (the matmul/reduce low-precision-→f32 rule never fires),
+    # so it is the exact-precision lane for gradient-checking / validation.
     fn = ts.jit(target="cpu")(_gel)
     x = _f32(4, 8).astype(np.float64)
     got, used_jit = _ran_through_jit(fn, x)
-    assert not used_jit, "f64 must NOT route through the jit lane today"
-    np.testing.assert_allclose(got, _gelu(x), rtol=1e-4, atol=1e-5)
+    assert used_jit, "f64 must route through the jit lane"
+    assert got.dtype == np.float64
+    np.testing.assert_allclose(got, _gelu(x), rtol=1e-6, atol=1e-12)
+
+
+def test_f64_gemm_is_exact_over_k():
+    # The f64 lane's K-reduction accumulates in f64 (not f32), so a GEMM matches
+    # numpy to ~machine epsilon — far tighter than the f32 lane's ~1e-6. A 2-op
+    # program (matmul + add) routes through the general tessera_jit lane (a lone
+    # rank-2 GEMM takes the f32-only Accelerate fast path, so we pair it with an
+    # add). If the K-reduction were f32-emulated the error would be ~1e-6 even
+    # after the f64 add — this distinguishes real f64 codegen from emulation.
+    def prog(a, b, c):
+        return ts.ops.add(ts.ops.matmul(a, b), c)
+
+    fn = ts.jit(target="cpu")(prog)
+    rng = np.random.default_rng(7)
+    a = rng.standard_normal((6, 32)).astype(np.float64)
+    b = rng.standard_normal((32, 5)).astype(np.float64)
+    c = rng.standard_normal((6, 5)).astype(np.float64)
+    got, used_jit = _ran_through_jit(fn, a, b, c)
+    assert used_jit and got.dtype == np.float64
+    np.testing.assert_allclose(got, a @ b + c, rtol=0, atol=1e-12)
 
 
 # Apple M1 Max native NEON dtypes for the lane: f32 + f16 (ARMv8.2-A FP16).

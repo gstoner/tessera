@@ -211,8 +211,18 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   accumulate in f32 then truncate to storage (`TesseraToLinalgPass`, ABI §12.5 —
   already in the C++). Required adding `f16` to the `_jit_boundary` C-ABI dtype
   table (raw 16-bit at the boundary, like bf16) and making `_jit_unary` elem-aware
-  (was f32-only while `_jit_binary` already used `_resolve_elem`). f64 is native on
-  M1 but not yet wired → numpy fallback. matmul perf note: AMX is only reachable
+  (was f32-only while `_jit_binary` already used `_resolve_elem`). **f64 wired into
+  the lane (2026-06-16)** — three contained table entries (`_elem_for` in `jit.py`,
+  `_DTYPE_TABLE` + `_ELEM_TO_NP` in `_jit_boundary.py`; the C++ `TesseraToLinalgPass`
+  and the whole tessera_jit LLVM pipeline were already f64-clean — `isa<FloatType>`
+  includes f64 and the low-precision-→f32 accumulate rule never fires, so f64
+  accumulates in f64 throughout). This is the **exact-precision lane** for
+  gradient-checking / numerical validation (verified ~1.8e-15 GEMM error vs f32's
+  ~1e-6). A lone rank-2 f64 GEMM still takes the numpy reference (the Accelerate
+  `native_cpu` fast path is f32-only and numpy f64 matmul is already exact f64);
+  multi-op f64 programs route through real f64 codegen. Guards:
+  `test_f64_runs_through_jit_at_exact_precision` + `test_f64_gemm_is_exact_over_k`.
+  matmul perf note: AMX is only reachable
   via Accelerate (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane; the
   tessera_jit `linalg→loops→LLVM` matmul targets NEON, with tiling/vectorize before
   LLVM as the perf follow-on. *Next on this thread:* tiling/vectorize before LLVM

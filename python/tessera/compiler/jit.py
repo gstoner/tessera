@@ -763,8 +763,13 @@ class JitFn:
         def _elem_for(dt) -> str | None:
             # M1 Max NEON: f32 + f16 (ARMv8.2-A FP16) are native; bf16 is
             # correct but emulated via f32 in-kernel (M1 predates ARMv8.6 BF16).
+            # f64 accumulates in f64 throughout (the TesseraToLinalg matmul/reduce
+            # low-precision-→f32 rule does not fire) — the exact-precision lane for
+            # gradient-checking / numerical validation against the numpy reference.
             if dt == np.float32:
                 return "f32"
+            if dt == np.float64:
+                return "f64"
             if dt == np.float16:
                 return "f16"
             if _BF16 is not None and dt == _BF16:

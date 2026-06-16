@@ -155,6 +155,7 @@ def compile_count() -> int:
 # reductions accumulate in f32 inside the kernel (TesseraToLinalgPass, ABI §12.5).
 _DTYPE_TABLE: dict[str, tuple[Any, Any, str]] = {
     "f32": (np.float32, ctypes.c_float, "f32"),
+    "f64": (np.float64, ctypes.c_double, "f64"),
     "f16": (np.float16, ctypes.c_uint16, "f16"),
 }
 
@@ -861,7 +862,8 @@ def jit_gelu(a: np.ndarray) -> np.ndarray:
 # already supports this (markCInterface + the DPS rewrite walk every function);
 # GraphFn is just the Python surface to express the graph.
 
-_ELEM_TO_NP: dict[str, Any] = {"f32": np.float32, "f16": np.float16}
+_ELEM_TO_NP: dict[str, Any] = {
+    "f32": np.float32, "f64": np.float64, "f16": np.float16}
 if _BF16 is not None:
     _ELEM_TO_NP["bf16"] = _BF16
 

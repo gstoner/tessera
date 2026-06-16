@@ -46,6 +46,20 @@ target_link_libraries(tessera_jit PRIVATE
   MLIRControlFlowToLLVM
   MLIRSCFToControlFlow
   MLIRReconcileUnrealizedCasts
+  # Phase 4 opt-in linalg→vector GEMM lane (transform-interpreter driven).
+  MLIRVectorDialect
+  MLIRVectorTransforms
+  MLIRVectorToLLVMPass
+  MLIRTransformDialect
+  MLIRTransformDialectInterfaces
+  MLIRTransformDialectTransforms
+  MLIRTransformDialectUtils
+  MLIRLinalgTransformOps
+  MLIRUBDialect
+  MLIRUBToLLVM
+  MLIRVectorToSCF
+  MLIRAffineDialect
+  MLIRAffineToStandard
 )
 
 # Execution + LLVM-IR translation: link the static .a FILES directly via

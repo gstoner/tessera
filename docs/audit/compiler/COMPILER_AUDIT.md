@@ -235,40 +235,36 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   contract) and prerequisites for vectorization — but the **real lever is an MLIR
   `linalg→vector` tiling+vectorization pipeline** (register-tile the matmul →
   `linalg::vectorize` → `vector→LLVM`), a focused multi-step effort.
-  **`linalg→vector` — two attempts (2026-06-16), root cause narrowed, reverted.**
-  Built the full gated lane (`TESSERA_JIT_VECTORIZE`): tile each `linalg.matmul`
-  on tensors (pre-bufferize) so vectorize emits a `vector.contract` with a
-  **register** (not memory) accumulator → `linalg::vectorize` →
-  `populateVectorContractLoweringPatterns` (OuterProduct) + transfer lowering →
-  `ConvertVectorToLLVM`; all libs wired, compiled + linked clean. **Diagnosis
-  (this attempt went much deeper):** (1) **MLIR-22 tiling is NOT broken** —
-  `scf::tileUsingSCF` tiles the *identical* `linalg.matmul<64x64>` perfectly via
-  `mlir-opt --transform-interpreter` (`transform.structured.tile_using_for
-  tile_sizes [8,16,16]` → clean `scf.for` nest + `extract_slice` + inner matmul
-  with a tensor iter_arg accumulator). (2) The JIT's *direct* `scf::tileUsingSCF`
-  call null-derefs (`EXC_BAD_ACCESS address=0x2c`, inside `tileUsingSCF`). (3)
-  Added the registrations the transform interpreter implies —
-  `linalg::registerTilingInterfaceExternalModels`,
-  `tensor::registerTilingInterfaceExternalModels`, the `affine` dialect,
-  `arith`/`tensor` `registerValueBoundsOpInterfaceExternalModels` — **necessary
-  but NOT sufficient**: a clean build with all of them still null-derefs. So the
-  blocker is the **call mechanism**, not registrations: the transform
-  interpreter's wrapper (its `TransformRewriter` + state) does setup the bare
-  `IRRewriter` direct call lacks. **Concrete next step (clear, lower-risk):**
-  drive the tiling via the **transform interpreter** (the proven path) instead of
-  the direct C++ API — parse the `transform.structured.tile_using_for` sequence +
-  `transform.structured.vectorize`, run `transform::applyTransforms`. (Register
-  the transform dialect + linalg/transform extensions; mind the archive-vs-target
-  link rule in `CMakeLists.txt` to avoid the MLIR-aggregate-dylib coexistence
-  segfault.) Reverted the direct-call experiment (a segfaulting lane shouldn't
-  ship even gated). Scope honesty:
-  even done well it won't match hand-tuned Accelerate BLAS, and the **single-GEMM
-  hot path already routes to Accelerate** (`_native_cpu_fast_call`); this affects
-  multi-op programs that contain a GEMM. AMX is only reachable via Accelerate
-  (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane. *Next on this thread:*
-  the `linalg→vector` GEMM pipeline (tiling-crash isolation first) → then swap the
-  pipeline bottom `linalg→loops→LLVM` for `linalg→gpu→NVVM/ROCDL` (**emission HF**,
-  the `tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
+  **`linalg→vector` GEMM lane ✅ LANDED (gated, 2026-06-16) — ~13× over scalar.**
+  After two direct-`scf::tileUsingSCF` attempts null-derefed, the **transform
+  interpreter** is the working path (it tiles the identical op cleanly under
+  `mlir-opt`). The lane (`tools/tessera-jit/tessera_jit.cpp`, opt-in via
+  `TESSERA_JIT_VECTORIZE`): run a parsed `transform.named_sequence`
+  (`tile_using_for [8,16,16]` → `vectorize_children_and_apply_patterns`) via
+  `transform::applyTransformNamedSequence` on the tensor-level IR before
+  bufferization (so the K-reduction accumulates in a **register** iter_arg, not
+  the memref accumulator that blocked LLVM's vectorizer); then post-bufferize lower
+  the vectors (`reduction_to_contract` → contract `OuterProduct` → broadcast /
+  shape_cast; **NOT** transfer→`vector.load`, which strands the strided-subview
+  load) + `ExpandStridedMetadata` FIRST + `ConvertVectorToSCF` + `ConvertVectorToLLVM`
+  + `UBToLLVM` (vectorize emits `ub.poison`); load MLIR's `libmlir_c_runner_utils`
+  via `ExecutionEngineOptions.sharedLibPaths` so the DPS-copy `memrefCopy` symbol
+  resolves. **Required registrations** (the hard-won set): `TilingInterface` on
+  linalg+tensor, the linalg transform-dialect extension, the `vector`/`ub` dialects
+  + vector bufferization models. **Result:** matmul programs with all dims ≤ 256
+  (`TESSERA_JIT_VECTORIZE_MAXDIM`) vectorize at **~30 GFLOP/s** (128³) — ~13× the
+  2.3 GFLOP/s scalar — correct vs numpy; larger programs stay on the scalar JIT
+  lane (a **size guard** — the vectorized form runtime-crashes at large N, and
+  `vectorize_children` over-vectorizes untiled elementwise ops). Default path (lane
+  off) byte-identical; 25 CPU-JIT tests green incl. the gated-lane guard.
+  *Follow-ons:* harden the large-N runtime crash + raise the envelope; vectorize
+  only the matmul tile (not the whole func) to avoid the elementwise blow-up; tune
+  tile sizes. Scope honesty: won't match hand-tuned Accelerate BLAS, and the
+  **single-GEMM hot path already routes to Accelerate** (`_native_cpu_fast_call`);
+  this lane targets multi-op programs that contain a small/medium GEMM. *Next on
+  this thread:* swap the pipeline bottom `linalg→loops→LLVM` for
+  `linalg→gpu→NVVM/ROCDL` (**emission HF**, the `tsrRegisterGpuLauncher` →
+  `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
 - **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /
   async overlap (HG); real 1F1B ordering (HF); collective↔compute overlap via the
   unused `ChunkPlanner`/`CollectiveScheduler` (plan HF, measurement HG); GPU MMA

@@ -314,18 +314,16 @@ oracle. Open work, by leverage:
    ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,
    fast-math) are *measured* insufficient (see `COMPILER_AUDIT.md` Phase 4). The
    real fix is register-tile `linalg.matmul` → `linalg::vectorize` → `vector→LLVM`.
-   **Attempted twice 2026-06-16, root cause narrowed.** MLIR-22 tiling is NOT
-   broken — `scf::tileUsingSCF` tiles the identical matmul perfectly via
-   `mlir-opt --transform-interpreter`. The JIT's *direct* `scf::tileUsingSCF`
-   null-derefs even after adding every registration the transform interpreter
-   implies (TilingInterface linalg+tensor, affine, ValueBounds arith+tensor) — so
-   the blocker is the **call mechanism**, not registrations. **Concrete next
-   step:** drive tiling via the **transform interpreter** (proven path) —
-   `transform.structured.tile_using_for [8,16,16]` + `transform.structured.vectorize`
-   run through `transform::applyTransforms` — instead of the direct C++ API. See
-   `COMPILER_AUDIT.md` Phase 4 for the full diagnosis. Won't match BLAS; the
-   single-GEMM hot path already routes to Accelerate, so this targets
-   multi-op-with-GEMM programs.
+   ✅ **LANDED gated (2026-06-16) — ~13× over scalar.** The direct
+   `scf::tileUsingSCF` null-derefed; the **transform interpreter** is the working
+   path. Lane (opt-in `TESSERA_JIT_VECTORIZE`): `tile_using_for [8,16,16]` +
+   `vectorize_children_and_apply_patterns` via `applyTransformNamedSequence`
+   (register vector iter_arg accumulator), full vector→LLVM lowering chain +
+   `libmlir_c_runner_utils` for `memrefCopy`. Matmuls with dims ≤ 256 vectorize at
+   **~30 GFLOP/s** (~13× the 2.3 scalar), correct; larger stay scalar (size guard —
+   large-N runtime crash). Default path unaffected. *Follow-ons:* harden the large-N
+   crash + raise the envelope; vectorize only the matmul tile. See `COMPILER_AUDIT.md`
+   Phase 4. Won't match BLAS; single-GEMM hot path already uses Accelerate.
 2. **M4 compose pointwise+matmul — core done; residual + whole-program remain
    (HF).** ✅ matmul → multi-op pointwise chain + bias + terminal norm is already
    one kernel (confirmed 2026-06-16). Remaining: (a) **full-tensor residual add**

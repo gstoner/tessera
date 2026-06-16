@@ -50,6 +50,23 @@
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
+// Phase 4 linalg→vector GEMM lane (opt-in via TESSERA_JIT_VECTORIZE). Tiling +
+// vectorization is driven by the TRANSFORM INTERPRETER (a proven path — the
+// direct scf::tileUsingSCF C++ call null-derefs; see COMPILER_AUDIT Phase 4),
+// then the resulting vector ops are lowered to LLVM.
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Dialect/Vector/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
+#include "mlir/Dialect/Vector/Transforms/VectorTransforms.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVMPass.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Dialect/Transform/IR/TransformDialect.h"
+#include "mlir/Dialect/Transform/Interfaces/TransformInterfaces.h"
+#include "mlir/Dialect/Transform/Transforms/TransformInterpreterUtils.h"
+#include "mlir/Dialect/Linalg/TransformOps/DialectExtension.h"
+#include "mlir/Dialect/Linalg/Transforms/TilingInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/IR/TensorTilingInterfaceImpl.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser/Parser.h"
@@ -183,17 +200,131 @@ void markCInterface(ModuleOp module) {
   }
 }
 
+// Phase 4 (2026-06-16) — opt-in linalg→vector GEMM lane via the transform
+// interpreter. Tiling each `linalg.matmul` to small static tiles makes the
+// vectorizer emit a `vector.contract` whose K-reduction accumulates in a VECTOR
+// REGISTER (the scf.for tensor iter_arg) rather than the memref C[i,j] reloaded
+// every k-iteration — the memory accumulator that blocked LLVM's loop vectorizer
+// (scalar ConvertLinalgToLoops ran ~2 GFLOP/s, ~50x off Accelerate). The direct
+// scf::tileUsingSCF C++ call null-derefs in this context; the transform
+// interpreter is the proven path (it tiles the identical op cleanly under
+// mlir-opt). Runs on TENSORS before bufferization. Best-effort: a transform
+// failure leaves the matmul as linalg → the scalar loop lowering (always
+// correct).
+static const char *kTileVectorizeTransform = R"MLIR(
+module attributes {transform.with_named_sequence} {
+  transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
+    %mm = transform.structured.match ops{["linalg.matmul"]} in %arg0 : (!transform.any_op) -> !transform.any_op
+    %tiled, %l0, %l1, %l2 = transform.structured.tile_using_for %mm tile_sizes [8, 16, 16]
+        : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
+    // vectorize_children_and_apply_patterns produces the contract→outerproduct
+    // (efficient fma) form (~7x the multi_reduction `vectorize` gives). It also
+    // vectorizes untiled elementwise ops in the func, so the caller guards the
+    // lane to a size envelope where those stay small enough.
+    %func = transform.structured.match ops{["func.func"]} in %arg0 : (!transform.any_op) -> !transform.any_op
+    %v = transform.structured.vectorize_children_and_apply_patterns %func : (!transform.any_op) -> !transform.any_op
+    transform.yield
+  }
+}
+)MLIR";
+
+// The vectorized lane is correct + fast within a size envelope but crashes at
+// runtime for large dims (vectorize_children unrolls untiled elementwise ops; the
+// tiled matmul's vector code also grows). Until that's hardened, only engage the
+// lane when every linalg op's static dims are within this bound. Override via
+// TESSERA_JIT_VECTORIZE_MAXDIM.
+static int64_t vectorizeMaxDim() {
+  if (const char *e = ::getenv("TESSERA_JIT_VECTORIZE_MAXDIM"))
+    return std::strtoll(e, nullptr, 10);
+  return 256;
+}
+
+static bool withinVectorizeEnvelope(ModuleOp module) {
+  int64_t maxDim = vectorizeMaxDim();
+  bool ok = true;
+  module.walk([&](linalg::LinalgOp op) {
+    for (Value v : op->getOperands()) {
+      if (auto t = dyn_cast<RankedTensorType>(v.getType()))
+        for (int64_t d : t.getShape())
+          if (ShapedType::isStatic(d) && d > maxDim)
+            ok = false;
+    }
+  });
+  return ok;
+}
+
+static LogicalResult tileAndVectorizeLinalg(ModuleOp module) {
+  MLIRContext *ctx = module.getContext();
+  // Parse the transform sequence in the payload's context (so the transform
+  // dialect + extensions resolve against the same registry).
+  OwningOpRef<ModuleOp> transformModule =
+      parseSourceString<ModuleOp>(kTileVectorizeTransform, ctx);
+  if (!transformModule)
+    return failure();
+  Operation *transformRoot =
+      transform::detail::findTransformEntryPoint(module, *transformModule);
+  if (!transformRoot)
+    return failure();
+  transform::TransformOptions options;
+  return transform::applyTransformNamedSequence(module, transformRoot,
+                                                *transformModule, options);
+}
+
+// Lower the vector.contract (→ outerproduct/fma) + transfer ops emitted by the
+// vectorizer. Run AFTER bufferization so the transfers are memref-based (lowering
+// them pre-bufferize on tensor values leaves unrealized_conversion_casts that
+// fail LLVM translation).
+static LogicalResult lowerVectorOps(ModuleOp module) {
+  RewritePatternSet patterns(module.getContext());
+  // RAISE the vectorizer's multiply + multi_reduction back to vector.contract,
+  // then lower contract → outerproduct → fma (the efficient form). Without the
+  // raise, multi_reduction lowers to many scalar reduces (~5 GFLOP/s); with it,
+  // the outerproduct fma path is ~7x faster.
+  vector::populateVectorReductionToContractPatterns(patterns);
+  vector::populateVectorContractLoweringPatterns(
+      patterns, vector::VectorContractLowering::OuterProduct);
+  // Any multi_reduction the raise didn't catch still needs lowering.
+  vector::populateVectorMultiReductionLoweringPatterns(
+      patterns, vector::VectorMultiReductionLowering::InnerReduction);
+  vector::populateVectorBroadcastLoweringPatterns(patterns);
+  // NB: do NOT run populateVectorTransferLoweringPatterns — it rewrites
+  // transfer_read→vector.load on the *strided* tile subview, which then can't
+  // lower to LLVM. Leave transfers for ConvertVectorToSCF (pm2), which loops over
+  // the strides cleanly.
+  // multi_reduction lowering lifts to 2-D via vector.shape_cast — lower those
+  // (and any vector.transpose) so only 1-D vector ops reach ConvertVectorToLLVM.
+  vector::populateVectorShapeCastLoweringPatterns(patterns);
+  vector::populateVectorTransposeLoweringPatterns(
+      patterns, vector::VectorTransposeLowering::EltWise);
+  return applyPatternsGreedily(module, std::move(patterns));
+}
+
 LogicalResult buildAndRunPipeline(ModuleOp module) {
-  // Stage 1: tessera → linalg → bufferized memref form, identity boundary layout.
-  PassManager pm1(module->getContext());
-  maybeTrace(pm1);
+  // Stage 1a: tessera → linalg (tensors).
+  PassManager pm1a(module->getContext());
+  maybeTrace(pm1a);
   // Phase 1 (front-to-back closure plan): canonicalize the Tessera dialect
   // *before* lowering, so per-op folders/canonicalizers (identity cast,
   // transpose-of-transpose, …) + CSE bite on the executed CPU path. This is
   // what makes the Graph-IR optimizations observable end-to-end through the JIT.
-  pm1.addPass(createCanonicalizerPass());
-  pm1.addPass(createCSEPass());
-  pm1.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
+  pm1a.addPass(createCanonicalizerPass());
+  pm1a.addPass(createCSEPass());
+  pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
+  if (failed(pm1a.run(module)))
+    return failure();
+
+  // Stage 1b (opt-in): tile + vectorize on tensors, before bufferization. Only
+  // within the safe size envelope — larger programs stay on the scalar lane.
+  bool vectorized = false;
+  if (::getenv("TESSERA_JIT_VECTORIZE") && withinVectorizeEnvelope(module)) {
+    if (failed(tileAndVectorizeLinalg(module)))
+      return failure();
+    vectorized = true;
+  }
+
+  // Stage 1c: tensor.empty → alloc_tensor, then one-shot bufferize.
+  PassManager pm1(module->getContext());
+  maybeTrace(pm1);
   // tensor.empty (DPS init) has no buffer semantics on its own; convert to
   // alloc_tensor so one-shot-bufferize can place it.
   pm1.nest<func::FuncOp>().addPass(
@@ -214,6 +345,13 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Stage 1.5: explicit DPS rewrite (every function in the module).
   if (failed(rewriteResultsToOutParams(module)))
     return failure();
+
+  // Stage 1.6 (opt-in lane): lower vector.contract/transfer now that bufferize
+  // has made the transfers memref-based. Only when the lane actually engaged.
+  if (vectorized) {
+    if (failed(lowerVectorOps(module)))
+      return failure();
+  }
 
   // Stage 2a: linalg → scalar scf loops (this is where the matmul's
   // arith.mulf/addf reduction body is created).
@@ -239,11 +377,25 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
       op->setAttr("fastmath", fmFast);
   });
 
-  // Stage 2b: memref/loops → LLVM dialect.
+  // Stage 2b: memref/loops/vector → LLVM dialect.
   PassManager pm2(module->getContext());
   maybeTrace(pm2);
-  pm2.addPass(createSCFToControlFlowPass());
+  // Vector ops (from the opt-in linalg→vector lane) → LLVM. No-op when the lane
+  // is off (no vector ops present).
+  // Remaining vector.transfer ops (broadcast/permutation forms the pattern
+  // lowering left) → scf loops + simple loads. Safety net before VectorToLLVM.
+  // Expand strided metadata FIRST so the tile subviews (memref<..., strided<...>>
+  // from the tiling's extract_slice) become plain base+offset arith — otherwise
+  // vector.load/store on a strided memref can't lower and leaves casts.
   pm2.addPass(memref::createExpandStridedMetadataPass());
+  // Remaining vector.transfer ops (broadcast/permutation forms the pattern
+  // lowering left) → scf loops + simple loads.
+  pm2.addPass(createConvertVectorToSCFPass());
+  pm2.addPass(createLowerAffinePass());  // VectorToSCF emits affine.apply/min
+  pm2.addPass(createConvertVectorToLLVMPass());
+  // Vectorization emits `ub.poison` for padding lanes → lower to LLVM poison.
+  pm2.addPass(createUBToLLVMConversionPass());
+  pm2.addPass(createSCFToControlFlowPass());
   pm2.addPass(createConvertMathToLLVMPass());
   pm2.addPass(createArithToLLVMConversionPass());
   pm2.addPass(createConvertControlFlowToLLVMPass());
@@ -272,7 +424,8 @@ void *tessera_jit_compile(const char *mlir_text) {
                   tensor::TensorDialect, linalg::LinalgDialect,
                   math::MathDialect, memref::MemRefDialect,
                   bufferization::BufferizationDialect, cf::ControlFlowDialect,
-                  LLVM::LLVMDialect>();
+                  vector::VectorDialect, transform::TransformDialect,
+                  ub::UBDialect, LLVM::LLVMDialect>();
   registerBuiltinDialectTranslation(registry);
   registerLLVMDialectTranslation(registry);
 
@@ -282,8 +435,19 @@ void *tessera_jit_compile(const char *mlir_text) {
   linalg::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
   scf::registerBufferizableOpInterfaceExternalModels(registry);
+  vector::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
+  // Transform-dialect extension: the linalg/structured transform ops
+  // (transform.structured.tile_using_for / vectorize / match) used by the opt-in
+  // linalg→vector lane.
+  linalg::registerTransformDialectExtension(registry);
+  // TilingInterface external models on the PAYLOAD ops — the transform extension
+  // provides the transform *ops*, but tile_using_for needs linalg.matmul (and the
+  // tensor slice ops) to *implement* TilingInterface, else it errors "only ops
+  // implementing TilingInterface are supported" and the lane falls back to numpy.
+  linalg::registerTilingInterfaceExternalModels(registry);
+  tensor::registerTilingInterfaceExternalModels(registry);
 
   jm->ctx = std::make_unique<MLIRContext>(registry);
   jm->ctx->disableMultithreading();
@@ -324,6 +488,20 @@ void *tessera_jit_compile(const char *mlir_text) {
   opts.transformer = makeOptimizingTransformer(/*optLevel=*/3,
                                                /*sizeLevel=*/0,
                                                /*targetMachine=*/hostTM.get());
+  // The opt-in vectorize lane's DPS out-param copy can lower memref.copy to the
+  // generic `memrefCopy` runtime helper (between different-layout memrefs). Load
+  // MLIR's C runner utils so that symbol resolves. Default to the Homebrew LLVM
+  // path (the build pin); overridable via TESSERA_MLIR_RUNNER_UTILS. Only loaded
+  // when the lane is on, so normal compiles are unaffected.
+  static const std::string kRunnerUtils = [] {
+    if (const char *e = ::getenv("TESSERA_MLIR_RUNNER_UTILS"))
+      return std::string(e);
+    return std::string("/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib");
+  }();
+  SmallVector<StringRef> sharedLibs;
+  if (::getenv("TESSERA_JIT_VECTORIZE"))
+    sharedLibs.push_back(kRunnerUtils);
+  opts.sharedLibPaths = sharedLibs;
   auto expectedEngine = ExecutionEngine::create(*jm->module, opts);
   if (!expectedEngine) {
     setError("tessera_jit: ExecutionEngine::create failed");

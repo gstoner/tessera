@@ -16,6 +16,9 @@ the body to build the graph, and a lambda would fall through to eager Python.
 
 from __future__ import annotations
 
+import os
+import sys
+
 import numpy as np
 import pytest
 
@@ -307,3 +310,32 @@ def test_unsupported_op_falls_back_without_jit():
     got = np.asarray(fn(x))
     assert jb.invocation_count() == n0, "unsupported op must not invoke the jit"
     np.testing.assert_allclose(got, x.mean(-1), rtol=1e-5, atol=1e-5)
+
+
+# ── opt-in linalg→vector GEMM lane (TESSERA_JIT_VECTORIZE) ────────────────────
+_RUNNER_UTILS = "/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib"
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin" or not os.path.exists(_RUNNER_UTILS),
+    reason="vectorize lane needs Darwin + MLIR C runner utils dylib")
+def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
+    # The opt-in transform-interpreter tile+vectorize lane: within the size
+    # envelope (<=256) the matmul is register-tiled + vectorized (fast); outside
+    # it stays on the scalar JIT path. BOTH must be correct + crash-free, and the
+    # default (lane off) path is covered by every other test here.
+    monkeypatch.setenv("TESSERA_JIT_VECTORIZE", "1")
+
+    def prog(a, b, c):
+        return ts.ops.add(ts.ops.matmul(a, b), c)
+
+    fn = ts.jit(target="cpu")(prog)
+    rng = np.random.default_rng(0)
+    for S in (64, 96, 384):              # in-envelope (vectorized) + out (scalar)
+        a = rng.standard_normal((S, S)).astype(np.float32)
+        b = rng.standard_normal((S, S)).astype(np.float32)
+        c = rng.standard_normal((S, S)).astype(np.float32)
+        n0 = jb.invocation_count()
+        out = np.asarray(fn(a, b, c))
+        assert jb.invocation_count() == n0 + 1, f"S={S} must run through the jit"
+        np.testing.assert_allclose(out, a @ b + c, rtol=1e-3, atol=1e-3)

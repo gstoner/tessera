@@ -135,6 +135,113 @@ def format_for_dtype(dtype: str) -> LowPrecisionFormat | None:
     return LowPrecisionFormat(str(dtype), element, layout)
 
 
+# ── Metal bridge: the macOS 27.0 MTLTensorDataType + auxiliary-plane mapping ──
+#
+# Grounded in the macOS 27.0 SDK doc dump (Decision #27, authority tier 2). The
+# low-precision element types (float8e4m3/float8e5m2/float4e2m1) and the MX
+# shared-exponent scale type (float8ue8m0) land in macOS 27.0, alongside the
+# multi-plane tensor machinery (MTLTensorAuxiliaryPlaneDescriptor.blockFactors /
+# auxiliaryPlanes / MTLTensorBufferAttachments) — which is exactly the runtime
+# representation of a ScaleLayout: one *data* plane in the element dtype plus one
+# *auxiliary* scale plane whose ``blockFactors`` say how many data elements share
+# one scale. This bridge validates that Tessera's hardware-free contract maps 1:1
+# onto the concrete API and gives the future runtime its construction recipe.
+#
+# This machine is macOS 26.5 (SDK tops out at Int4/UInt4 @ 26.4 — no float8/float4
+# /e8m0, no auxiliaryPlanes), so the *execution* path stays gated on a 27.0 SDK;
+# the mapping itself is hardware-free and unit-testable now.
+#
+# The doc dump gives the Swift case names (``.float8e4m3`` …); ``mtl_symbol`` is
+# the conventional ObjC enum spelling derived from them (not separately verified).
+
+@dataclass(frozen=True)
+class MetalTensorType:
+    """A Tessera dtype's image under ``MTLTensorDataType``. ``min_macos`` is the
+    SDK version that first exposes it (``"27.0"`` for fp8/fp4/e8m0; ``"26.4"`` for
+    int4/uint4; ``"26.0"`` for the long-standing int8/float types)."""
+
+    tessera_dtype: str
+    swift_case: str           # authoritative from the 27.0 doc dump
+    mtl_symbol: str           # conventional ObjC MTLTensorDataType* spelling
+    min_macos: str
+
+
+#: Tessera element/scale dtype name → its MTLTensorDataType image + availability.
+_MTL_TENSOR_DATA_TYPE: dict[str, MetalTensorType] = {
+    "fp8_e4m3": MetalTensorType("fp8_e4m3", "float8e4m3", "MTLTensorDataTypeFloat8E4M3", "27.0"),
+    "fp8_e5m2": MetalTensorType("fp8_e5m2", "float8e5m2", "MTLTensorDataTypeFloat8E5M2", "27.0"),
+    "fp4_e2m1": MetalTensorType("fp4_e2m1", "float4e2m1", "MTLTensorDataTypeFloat4E2M1", "27.0"),
+    "e8m0":     MetalTensorType("e8m0", "float8ue8m0", "MTLTensorDataTypeFloat8UE8M0", "27.0"),
+    "int8":     MetalTensorType("int8", "int8", "MTLTensorDataTypeInt8", "26.0"),
+    "int4":     MetalTensorType("int4", "int4", "MTLTensorDataTypeInt4", "26.4"),
+    "uint4":    MetalTensorType("uint4", "uint4", "MTLTensorDataTypeUInt4", "26.4"),
+    "int2":     MetalTensorType("int2", "int2", "MTLTensorDataTypeInt2", "27.0"),
+    "uint2":    MetalTensorType("uint2", "uint2", "MTLTensorDataTypeUInt2", "27.0"),
+    "fp32":     MetalTensorType("fp32", "float32", "MTLTensorDataTypeFloat32", "26.0"),
+}
+
+
+@dataclass(frozen=True)
+class MetalAuxiliaryPlane:
+    """An MTLTensorAuxiliaryPlaneDescriptor for a scale plane: ``data_type`` is the
+    scale's MTLTensorDataType symbol, ``block_factors`` is the per-axis
+    MTLTensorExtents (data-plane elements per scale element — ``block_size`` on
+    the scale axis, ``1`` elsewhere), ``scale_shape`` is the plane's logical
+    shape."""
+
+    data_type: str
+    block_factors: tuple[int, ...]
+    scale_shape: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MetalPlanePlan:
+    """The multi-plane MTLTensor construction recipe for a microscaled format:
+    one data plane (element dtype) + zero-or-one auxiliary scale plane.
+    ``min_macos`` is the highest SDK version any required type/feature needs."""
+
+    element: MetalTensorType
+    aux_planes: tuple[MetalAuxiliaryPlane, ...]
+    min_macos: str
+
+
+def _max_macos(*versions: str) -> str:
+    return max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
+
+
+def mtl_tensor_data_type(dtype: str) -> MetalTensorType | None:
+    """The MTLTensorDataType image of a Tessera element/scale dtype, or None if
+    the dtype has no Metal tensor type."""
+    return _MTL_TENSOR_DATA_TYPE.get(str(dtype).lower())
+
+
+def metal_plane_plan(fmt: LowPrecisionFormat,
+                     data_shape: tuple[int, ...]) -> MetalPlanePlan | None:
+    """Map a :class:`LowPrecisionFormat` onto its macOS 27.0 multi-plane MTLTensor
+    layout. A per-tensor format (``block_size == 0``) needs no auxiliary plane
+    (the scalar scale is applied in-kernel); a block-scaled (MX/NVFP4) format
+    gets one scale plane whose ``blockFactors`` encode the block size on the scale
+    axis. Returns None if any dtype lacks a Metal image."""
+    elem = mtl_tensor_data_type(fmt.element)
+    if elem is None:
+        return None
+    layout = fmt.layout
+    if layout.block_size == 0:
+        return MetalPlanePlan(elem, (), elem.min_macos)
+    scale = mtl_tensor_data_type(layout.scale_dtype)
+    if scale is None:
+        return None
+    rank = len(data_shape)
+    ax = layout.axis if layout.axis >= 0 else rank + layout.axis
+    block_factors = tuple(layout.block_size if i == ax else 1 for i in range(rank))
+    plane = MetalAuxiliaryPlane(scale.mtl_symbol, block_factors,
+                                layout.scale_shape(data_shape))
+    # an auxiliary scale plane itself requires the 27.0 multi-plane machinery
+    return MetalPlanePlan(
+        elem, (plane,),
+        _max_macos(elem.min_macos, scale.min_macos, "27.0"))
+
+
 def _elem_amax(fmt: LowPrecisionFormat) -> float:
     """Largest finite magnitude representable by the element dtype."""
     if fmt.element in _INTEGER_ELEMENTS:

@@ -104,14 +104,25 @@ runs (`metal_runtime`), bf16-precision-correct. Guard:
 
 ### M3 — Low-precision (FP8 / FP4 / MX) contract — compiler side ✅ (2026-06-15); execution toolchain-gated
 **Toolchain grounding (Decision #27, exhaustive).** The macOS **26.5 CLT SDK** on
-this machine exposes `MTLTensorDataType` only up to f32/f16/bf16/int8-32 — **no
-FP8 (E4M3/E5M2), FP4 (E2M1), or MX (UE8M0)** in Metal, MPS, MPSGraph, or any
-installed SDK (only internal CoreML/MIL `.tbd`s mention them); the MTL4 ML
-encoder runs a *precompiled* network, not composable tensor ops. The feature-set
-PDF describes a Metal newer than the installed toolchain. So **real-silicon
-FP8/FP4 execution is toolchain-gated** (not hardware — the M1 Max GPU likely
-supports it; there's just no public API to drive it here). It plugs in beneath
-the contract below when a Metal SDK exposes the formats.
+this machine exposes `MTLTensorDataType` only up to f32/f16/bf16/int8-32 **+
+Int4/UInt4 (`@26.4`)** — **no FP8 (E4M3/E5M2), FP4 (E2M1), or MX (UE8M0)**, and
+**no multi-plane/auxiliary-plane machinery**, in Metal, MPS, MPSGraph, or any
+installed SDK. So **real-silicon FP8/FP4 execution is toolchain-gated** (not
+hardware — the M1 Max GPU likely supports it; there's just no public API to drive
+it here on 26.5).
+
+**The unlock is concrete and dated: macOS 27.0 (Decision #27, doc dump 2026-06-16).**
+The 27.0 SDK ships exactly the types the contract anticipated —
+`MTLTensorDataType.{float8e4m3, float8e5m2, float4e2m1, float8ue8m0, int2, uint2}`
+— **plus the multi-plane tensor machinery that is the runtime image of a
+`ScaleLayout`**: `MTLTensorAuxiliaryPlaneDescriptor.blockFactors` ("data-plane
+elements per scale element"), `MTLTensorDescriptor.auxiliaryPlanes`,
+`MTLTensorBufferAttachments` (per-plane backing storage), and per-plane
+`getBytes/replace(...plane:)`. A microscaled tensor = one data plane (element
+dtype) + one auxiliary scale plane (`float8ue8m0` for MX / `float8e4m3` for NVFP4)
+whose `blockFactors` encode the block size. This validates the hardware-free
+design 1:1 and dates the execution gate (a 27.0-beta SDK on this M1 Max, no new
+silicon).
 
 **The compiler-side contract landed (hardware-free).** `compiler/microscaling.py`
 — the **scale layout as a first-class operand** (the DeepGEMM extraction): a
@@ -140,8 +151,18 @@ fp32 within the format grid.
   Metal lane agree — the contract executes correctly on hardware for the one
   low-precision dtype this SDK exposes.
 
-Guard: `tests/unit/test_microscaling.py` (29). *Follow-on:* the Metal MTLTensor +
-ML-encoder lowering for FP8/FP4 when a Metal SDK exposes those tensor formats.
+**Metal bridge landed (hardware-free, 2026-06-16):** `microscaling.py` now maps
+the contract onto the concrete 27.0 API — `mtl_tensor_data_type(dtype)` →
+`MetalTensorType(swift_case, mtl_symbol, min_macos)` (fp8/fp4/e8m0 → `27.0`;
+int4/uint4 → `26.4`; int8/f32 → `26.0`), and `metal_plane_plan(fmt, shape)` →
+`MetalPlanePlan(element, aux_planes, min_macos)` emitting the multi-plane recipe
+(per-tensor int8 → no aux plane @ `26.0`; MX/NVFP4 → one scale plane with
+`block_factors`/`scale_shape` @ `27.0`). The `scale_shape` round-trips the
+contract's own `ScaleLayout.scale_shape` (one source of truth). Guards:
+`tests/unit/test_microscaling.py` (29) + `test_microscaling_metal_bridge.py` (7).
+*Follow-on:* the runtime-side MTLTensor construction + ML-encoder/MSL lowering for
+FP8/FP4 once a macOS 27.0 SDK is installed — the Python bridge gives it the exact
+per-plane dtype + blockFactors target.
 
 ### M4 — Whole-graph MSL emitter (the GPU `tessera_jit`) — **first cut landed (2026-06-15)**
 The GPU analogue of the CPU `run_graph_ops`/`tessera_jit` lane: emit ONE Metal

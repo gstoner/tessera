@@ -217,10 +217,17 @@ module attributes {transform.with_named_sequence} {
     %mm = transform.structured.match ops{["linalg.matmul"]} in %arg0 : (!transform.any_op) -> !transform.any_op
     %tiled, %l0, %l1, %l2 = transform.structured.tile_using_for %mm tile_sizes [8, 16, 16]
         : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
+    // ALSO tile the 2-D elementwise/fill ops (the matmul-output `add` + the C
+    // init) — otherwise vectorize_children materializes a giant vector<MxN> for
+    // them that LLVM unrolls into M·N scalar ops (compile time blows up: ~22s at
+    // 256, unbounded beyond). Tiling them too keeps every vector bounded.
+    %ew = transform.structured.match ops{["linalg.generic", "linalg.fill", "linalg.elementwise"]} in %arg0 : (!transform.any_op) -> !transform.any_op
+    %te, %e0, %e1 = transform.structured.tile_using_for %ew tile_sizes [8, 16]
+        : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op)
     // vectorize_children_and_apply_patterns produces the contract→outerproduct
-    // (efficient fma) form (~7x the multi_reduction `vectorize` gives). It also
-    // vectorizes untiled elementwise ops in the func, so the caller guards the
-    // lane to a size envelope where those stay small enough.
+    // (efficient fma) form (~7x the multi_reduction `vectorize` gives). Must
+    // target an isolated-from-above op (the func), not a loop — fine now that
+    // every linalg op is tiled to bounded sizes.
     %func = transform.structured.match ops{["func.func"]} in %arg0 : (!transform.any_op) -> !transform.any_op
     %v = transform.structured.vectorize_children_and_apply_patterns %func : (!transform.any_op) -> !transform.any_op
     transform.yield
@@ -228,15 +235,16 @@ module attributes {transform.with_named_sequence} {
 }
 )MLIR";
 
-// The vectorized lane is correct + fast within a size envelope but crashes at
-// runtime for large dims (vectorize_children unrolls untiled elementwise ops; the
-// tiled matmul's vector code also grows). Until that's hardened, only engage the
-// lane when every linalg op's static dims are within this bound. Override via
-// TESSERA_JIT_VECTORIZE_MAXDIM.
+// Engage the lane only when every linalg op's static dims are within this bound.
+// The earlier large-N runtime crash was the untiled elementwise ops blowing up
+// into giant unrolled vectors; that's fixed (the transform tiles those too), so
+// this is now purely a compile-time safety valve — a very large matmul has many
+// tiles and a long (but finite) compile. 2048 covers typical transformer layer
+// dims; override via TESSERA_JIT_VECTORIZE_MAXDIM for larger.
 static int64_t vectorizeMaxDim() {
   if (const char *e = ::getenv("TESSERA_JIT_VECTORIZE_MAXDIM"))
     return std::strtoll(e, nullptr, 10);
-  return 256;
+  return 2048;
 }
 
 static bool withinVectorizeEnvelope(ModuleOp module) {

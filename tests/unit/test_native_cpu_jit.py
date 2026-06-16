@@ -321,9 +321,10 @@ _RUNNER_UTILS = "/opt/homebrew/opt/llvm/lib/libmlir_c_runner_utils.dylib"
     reason="vectorize lane needs Darwin + MLIR C runner utils dylib")
 def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
     # The opt-in transform-interpreter tile+vectorize lane: within the size
-    # envelope (<=256) the matmul is register-tiled + vectorized (fast); outside
-    # it stays on the scalar JIT path. BOTH must be correct + crash-free, and the
-    # default (lane off) path is covered by every other test here.
+    # envelope (default <=2048) the matmul + elementwise epilogue are register-
+    # tiled + vectorized (fast); outside it stays on the scalar JIT path. BOTH must
+    # be correct + crash-free. To exercise the out-of-envelope guard without
+    # compiling a giant matmul, we pin a tiny MAXDIM and check a size just past it.
     monkeypatch.setenv("TESSERA_JIT_VECTORIZE", "1")
 
     def prog(a, b, c):
@@ -331,7 +332,8 @@ def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
 
     fn = ts.jit(target="cpu")(prog)
     rng = np.random.default_rng(0)
-    for S in (64, 96, 384):              # in-envelope (vectorized) + out (scalar)
+    # In-envelope (vectorized): a spread of sizes incl. non-square / remainder peel.
+    for S in (64, 96, 384):
         a = rng.standard_normal((S, S)).astype(np.float32)
         b = rng.standard_normal((S, S)).astype(np.float32)
         c = rng.standard_normal((S, S)).astype(np.float32)
@@ -339,3 +341,16 @@ def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
         out = np.asarray(fn(a, b, c))
         assert jb.invocation_count() == n0 + 1, f"S={S} must run through the jit"
         np.testing.assert_allclose(out, a @ b + c, rtol=1e-3, atol=1e-3)
+
+    # Out-of-envelope (scalar JIT fallback): pin MAXDIM=128 and run a 256 program.
+    # Still routes through the jit, still correct — just no vectorize transform.
+    monkeypatch.setenv("TESSERA_JIT_VECTORIZE_MAXDIM", "128")
+    fn2 = ts.jit(target="cpu")(prog)
+    S = 256
+    a = rng.standard_normal((S, S)).astype(np.float32)
+    b = rng.standard_normal((S, S)).astype(np.float32)
+    c = rng.standard_normal((S, S)).astype(np.float32)
+    n0 = jb.invocation_count()
+    out = np.asarray(fn2(a, b, c))
+    assert jb.invocation_count() == n0 + 1, "out-of-envelope must still run the jit"
+    np.testing.assert_allclose(out, a @ b + c, rtol=1e-3, atol=1e-3)

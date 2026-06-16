@@ -35,6 +35,188 @@ multiple root audit documents and compiler archive files.
 > silicon need a Linux/CUDA runner). Research-backed
 > (DESIL/PolyJuice/Mirage/TensorBench/Magellan/AlphaEvolve/BaCO/TLP).
 
+## Library → Optimizing Compiler: front-to-back closure plan (2026-06-15)
+
+A front-to-back audit of every IR level framed by one question: *where is Tessera
+still a library/dispatcher, and what does each layer need to become an optimizing
+compiler?* This section is the strategic spine; the per-item status lives in
+**Still Open** / **Next Work** below (cross-referenced, not duplicated).
+
+### The central finding — two disconnected worlds, one half-closed seam
+
+The executed path and the C++ MLIR optimizer are largely **disconnected**:
+
+- `tessera-opt`'s optimized IR is run for **validation only** — its stdout is
+  hashed for provenance and discarded (`driver.py` `_try_validate_with_tessera_opt`,
+  ~`:955/:970`). Execution dispatches off the **in-memory Python `GraphIRModule`**
+  (`jit.py` `recognize(self.graph_ir)`), so the C++ fusion/canonicalize/CSE passes
+  do not reach runtime.
+- Consequence: fusion logic exists **twice** — real C++ rewrites the executor
+  ignores (`SwigluFusion`/`MLAFusion`) *and* the Python path's own derivation.
+  The seam is **half-closed already**: `canonical_compile._derive_fusion_groups`
+  carries `fusion_groups`, the executor reads them (`runtime.py` ~`:2343`), and
+  `stamp_fusion_intents` stamps `tessera.fusion.intent` for 4 chains (see the
+  "Fusion intent is too late" item). But it is **advisory** — every dispatch
+  branch is still `if fused_kernel=="X" OR _structural_rematcher(ops)`. Closing
+  the seam = promote advisory → **authoritative** and delete the re-matchers.
+
+Two facts make the transition cheaper than it looks:
+
+1. **The seam mechanism half-exists** (above) — Phase 0 finishes it, it doesn't
+   invent it.
+2. **The real K-reduction GEMM loop already exists and executes** — in the
+   `tessera_jit`/linalg lane (`tessera.matmul → linalg.matmul → linalg-to-loops`,
+   `TesseraToLinalgPass.cpp` ~`:369`). The Tile-IR hand-rolled nest (`TilingPass.cpp`)
+   stopped at M/N blocking with no K loop. **Converge the lanes** rather than
+   finish the hand-roll. This is the template: drive Schedule/Tile IR through the
+   already-executing linalg→loops spine; reserve hand-emitted Tile IR for the
+   GPU-only ops (wgmma/async/mbarrier) linalg can't express.
+
+### Per-IR scorecard (what's real vs. dispatcher)
+
+| IR level | Real today | Dispatcher / stub | Primary gap to close |
+|---|---|---|---|
+| **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. No IR-optimization step between emission and execution. | Component-aware multi-op metadata (mostly landed); carry fusion/strategy as authoritative. |
+| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Zero `hasFolder`/`hasCanonicalizer`** on any op. No constant folding / general DCE-CSE on the executed path. `LayoutLegalityPass` is verify-only (no assignment). ~5 passes are attribute-stamp-only. | Folders/canonicalizers; effect interfaces on the 8 non-pure ops; `LayoutAssignmentPass`. |
+| **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. | Pipeline insertion is annotation-only (no real 1F1B order). OptimizerShard is pure attrs. No collective overlap (`ChunkPlanner`/`CollectiveScheduler` exist but are never invoked). | Real 1F1B ordering; wire the collective planners. |
+| **Tile IR (FA-4)** | `TilingPass` emits real `scf.for` M/N nests; `NVTMADescriptorPass` is a genuine hoist/dedup. | M/N blocking only — **no K-reduction loop**, fixed 16×16. **Flash-attn is straight-line** (no `scf.for` over KV; online-softmax is whole-tensor ops). WarpSpec emits no queues/mbarriers. WGMMA → hardcoded `m64n64k16`. | Converge GEMM to linalg K-loop; streaming flash-attn loop; autotuner→IR. |
+| **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
+| **Target IR / runtime** | x86 AMX real end-to-end. Apple GPU executes via MPS/MPSGraph + ~30 hand-written fused MSL. `fusion.py` synthesizer is **real runtime MSL codegen** for matmul-epilogue regions. `tessera_jit` is a real MLIR→LLVM CPU JIT (~17 op classes). | Apple lane is a name→lane→ctypes **dispatcher** (`apple_gpu_envelope.py`; longest-chain cascade in `runtime.py` ~`:2471`). ~87% of ops execute via the numpy reference interpreter. NVIDIA/ROCm emit artifacts only. | Close the seam; generalize the synthesizer; grow `tessera_jit` to default CPU, then retarget its spine to GPU. |
+
+### The phased plan
+
+`HF` = hardware-free (lands on this Mac); `HG` = hardware-gated. Phase 0 is the
+keystone; once it lands, Phases 1/2/4 largely parallelize. Everything through
+Phase 4 is HF; only GPU launch + silicon-perf is gated.
+
+- **Phase 0 — Close the seam (keystone, HF).** Finish the half-built carry-intent
+  mechanism. **(a) Landed (2026-06-15)** — each `known_chain` fusion group now
+  carries a `dispatch` roles sub-dict (`a`/`b`/`c`/`x`/`wg`/`wu`/`wd`/`out` +
+  scalar `eps`), resolved once from Graph-IR operand order in
+  `canonical_compile._chain_dispatch_roles` — killing the value-shape guessing the
+  re-matchers do inline. Strictly additive (a group carries no `dispatch` when
+  roles don't resolve, so the executor path is unchanged); JSON round-trips into
+  `fn.runtime_artifact().metadata`. Guard: `tests/unit/test_fusion_dispatch_roles.py`
+  (5). **(b) Landed (2026-06-15)** — `_execute_apple_gpu_mps_metadata` now resolves
+  a whole-program authoritative plan (`_apple_gpu_resolve_authoritative_plan`,
+  reading both `fusion_groups` and the `canonical_fusion_groups` the `@jit`
+  artifact actually stamps) and dispatches off the carried roles via
+  `_APPLE_GPU_FUSION_DISPATCH` — no per-invoke re-matching, no value-shape
+  guessing. Falls through to the structural cascade only when roles don't resolve
+  (legacy safety). This surfaced a latent gap: the executor read a bare
+  `fusion_groups` key the real artifact never set (it sets
+  `canonical_fusion_groups`), so the re-matchers — not the carried intent — were
+  what actually fired in production; the authoritative path closes that.
+  **(c) Landed (2026-06-15)** — proved authoritative ≡ re-matcher (horizontal
+  oracle, `tests/unit/test_fusion_authoritative_dispatch.py`, 12) then **deleted**
+  the four `_apple_gpu_metadata_is_*_chain` re-matchers. Closed the one subsumption
+  gap first (`matmul→rmsnorm_safe` is now a known_chain so authoritative dispatch
+  covers it). The `fused_kernel == "X"` branches remain only for bare-`fusion_groups`
+  metadata (hand-built / pre-`dispatch` legacy); truly-legacy no-metadata artifacts
+  now run correctly per-op instead of via a re-discovered fuse. Full apple_gpu +
+  canonical + fusion sweep: 2255 passed / 0 failed. **Seam closed — one fusion
+  recognizer (the compiler), carried across to the executor.** Extends **Still
+  Open → "Fusion intent is too late"** and **Next Work #3**.
+- **Phase 1 — Make carried IR worth carrying (Graph-IR quality, HF, parallel).**
+  **First increment landed (2026-06-15), observable end-to-end on the executed CPU
+  JIT lane.** The tessera_jit pipeline had **no canonicalizer**; added
+  `createCanonicalizerPass()` + `createCSEPass()` to `pm1` *before* `TesseraToLinalg`
+  (`tools/tessera-jit/tessera_jit.cpp`), so Tessera per-op folders now bite on the
+  executed path. Shipped the first two folders: `TransposeOp::getCanonicalizationPatterns`
+  (`transpose(transpose(x)) → x`, a no-perm transpose is its own inverse) and
+  `CastOp::fold` (identity `cast(x): T→T → x`, only when no `numeric_policy`), via
+  `hasCanonicalizer`/`hasFolder` in `TesseraOps.td` + bodies in `TesseraOps.cpp`.
+  Proven end-to-end: `@jit(target="cpu")` `transpose(transpose(x))` folds to
+  `return %arg0` in the JIT trace and returns `x` exactly. Also registered the
+  upstream `canonicalize`/`cse` passes in `tessera-opt` (`registerTransformsPasses`)
+  so folders are lit-inspectable. Guards: lit `tests/tessera-ir/phase2/graph_ir_folders.mlir`
+  (folders + negative cases + **DCE** of a dead pure op + **CSE** of duplicate
+  matmuls — the shared-QKV-projection pattern) + `tests/unit/test_native_cpu_jit.py`.
+  **CSE + DCE verified firing end-to-end on the executed CPU JIT path** (duplicate
+  `matmul` → 1; dead `gelu` → eliminated; confirmed in the JIT trace) — these, not
+  the rare algebraic folds, are the high-value Phase 1 wins, and they are now live.
+  *Remaining Phase 1 (lower priority):* more Tier-A folders (`add(x,0)`/`mul(x,1)`/
+  `matmul·I` — need constant-operand handling; rarely appear in real graphs),
+  migrate the 5 `CanonicalizeTesseraIR` patterns to per-op hooks (only those whose
+  output the CPU JIT can lower — `fused_epilogue`/`conv` ones would break it),
+  effect interfaces on the 8 non-pure ops, `LayoutAssignmentPass` v1.
+  *Flash-attn streaming is NOT a CPU-lane item* — the CPU JIT is a rank-2 simple-op
+  lane; flash-attn (rank-4, batched) belongs to the Apple GPU work, where the
+  streaming online-softmax kernel already exists as hand-written MSL
+  (`kFlashAttnF32Source`). Extends **Still Open → "Layout and binding contracts"**.
+- **Phase 2 — Real codegen in the executed path (linalg spine, HF).** **GEMM-lane
+  convergence achieved + proven on the executed CPU JIT lane (2026-06-15).** Phase 4
+  built the CPU JIT matmul on `linalg.matmul`, so the executed GEMM already lowers
+  `tessera.matmul → linalg.fill + linalg.matmul → ConvertLinalgToLoops` into a real
+  **M×N×K** loop nest with the K-reduction inner loop (`scf.for` over K + `mulf`/`addf`
+  accumulate) — verified in the JIT trace and guarded by an exactly-representable
+  GEMM equivalence test. The hand-rolled Tile-IR `TilingPass` (M/N blocking, no
+  K-loop) is the separate **x86/validation** lane, not the executed path; converging
+  *it* to linalg is the remaining, lower-priority item. *Remaining Phase 2:*
+  flash-attn streaming (wrap the attn ops in `scf.for` over KV with `(m,l,acc)`
+  iter_args — `OnlineSoftmaxOp` ODS is already iter_args-shaped; only the loop
+  wrapper + `kv_offset` threading is missing); generalize the `fusion.py` synthesizer
+  (`elementwise_only` + `norm_chain` region kinds; grow `EPILOGUE_OPS`) and displace
+  the numpy interpreter lane-by-lane, **elementwise first**, Evaluator-gated — never
+  displacing a working MPSGraph call.
+- **Phase 3 — Close the optimizing loop (HF on Apple/CPU).** Autotuner write-path
+  (`apply_to_op()` stamps `tessera.tile_*`/`tile_q`/`tile_kv`); swap `_mock_latency`
+  for `flywheel` measured latency on Apple/CPU; keep the roofline mock as the honest
+  NVIDIA/ROCm fallback.
+- **Phase 4 — Grow `tessera_jit` toward default CPU (HF), then GPU spine.**
+  **Brought forward (2026-06-15) — the keystone landed: the tessera_jit MLIR→LLVM
+  lane is now the executed CPU path** for the covered f32 op set, so the C++ IR
+  optimizations finally reach execution (closing the remaining seam for the CPU
+  lane). `@jit(target="cpu")` now translates the executed `GraphIRModule` op-list
+  into a whole-graph `GraphFn` (`_jit_boundary.run_graph_ops`) and runs it through
+  `tessera_jit` (`tessera-to-linalg → one-shot-bufferize → linalg-to-loops → LLVM`,
+  optLevel=2) **before** the numpy reference interpreter (`JitFn._try_tessera_jit_call`,
+  tried in the CPU `__call__` branch). Covered set = `_JIT_GRAPH_OPS` (matmul,
+  add/sub/mul/div, relu/sigmoid/tanh/silu/gelu, softmax, rmsnorm, layer_norm,
+  transpose, select, masked_fill); anything else / non-f32 / unsupported rank falls
+  back to numpy (correctness preserved — a fallback handles "couldn't run", never
+  "ran wrong"). `TESSERA_DISABLE_CPU_JIT` is the kill-switch. Proof-of-execution via
+  `_jit_boundary.invocation_count` (a silent numpy fallback can't masquerade).
+  Guard: `tests/unit/test_native_cpu_jit.py` (per-op numpy equivalence + counter +
+  fallbacks); 1929-test CPU/jit/ops sweep green. **Dtype breadth landed
+  (2026-06-15), grounded in Apple M1 Max hardware:** the lane now routes **f32**,
+  **f16** (native NEON, ARMv8.2-A FP16), and **bf16** (correct but emulated via f32
+  in-kernel — M1 predates ARMv8.6 BFloat16), per-arg dtype detection in
+  `_try_tessera_jit_call` (mixed dtypes → numpy fallback). matmul/reductions
+  accumulate in f32 then truncate to storage (`TesseraToLinalgPass`, ABI §12.5 —
+  already in the C++). Required adding `f16` to the `_jit_boundary` C-ABI dtype
+  table (raw 16-bit at the boundary, like bf16) and making `_jit_unary` elem-aware
+  (was f32-only while `_jit_binary` already used `_resolve_elem`). f64 is native on
+  M1 but not yet wired → numpy fallback. matmul perf note: AMX is only reachable
+  via Accelerate (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane; the
+  tessera_jit `linalg→loops→LLVM` matmul targets NEON, with tiling/vectorize before
+  LLVM as the perf follow-on. *Next on this thread:* tiling/vectorize before LLVM
+  (NEON: 4×f32 / 8×f16 per 128-bit reg) → widen `TesseraToLinalgPass` op coverage
+  (reductions, batched_gemm) → f64 boundary → then swap the pipeline bottom
+  `linalg→loops→LLVM` for `linalg→gpu→NVVM/ROCDL` (**emission HF**, the
+  `tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
+- **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /
+  async overlap (HG); real 1F1B ordering (HF); collective↔compute overlap via the
+  unused `ChunkPlanner`/`CollectiveScheduler` (plan HF, measurement HG); GPU MMA
+  register accumulator (HG).
+
+**Dependency spine:** Phase 0 is the keystone and is small because the mechanism
+half-exists. Phases 1, 2, 4 parallelize after it. Through Phase 4 is entirely
+hardware-free on this Mac; only the GPU launch + silicon-perf items are gated.
+Detailed per-layer evidence (file:line) was captured in the 2026-06-15 deep-dive
+agents and feeds the Still Open / Next Work items below.
+
+**Status (2026-06-15):** Phase 0 (seam) **closed**; C++ Target IR consume-side
+**reviewed + parity-guarded**; **Phase 4's keystone brought forward and landed** —
+the tessera_jit MLIR→LLVM lane is the executed CPU path for the covered f32 op set.
+This re-prioritizes Phases 1–2: with the C++ codegen lane now *executing*, the C++
+Graph-IR folders/canonicalizers + effect interfaces (Phase 1) and the linalg
+GEMM-convergence + flash-attn streaming (Phase 2) now **reach execution** through
+the CPU JIT lane rather than only the discarded validation pipeline — so they are
+worth building next, with measurable end-to-end impact. The immediate Phase-4
+follow-ons (dtype breadth, wider `TesseraToLinalgPass` coverage, tiling before
+LLVM) compound directly on this lane.
+
 ## Autodiff v1 tape — gaps closed (2026-06-13)
 
 Surfaced while building the agent-native MoE training stack (`tessera.train`,
@@ -191,7 +373,12 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   `tests/tessera-ir/phase2/layout_conv_flashattn_accept_set.mlir`; Python:
   `tests/unit/test_layout_legality_extended.py`. Still open: dtype / aliasing /
   buffer-binding contracts, and wiring `LayoutLegalityPass` into the named
-  pipelines (it's still registered standalone).
+  pipelines (it's still registered standalone). **Phase 1** of the closure plan
+  adds the missing *assignment* half — `LayoutAssignmentPass` (seed kernel layouts
+  → propagate through pointwise → insert `cast{layout}`), with the legality pass
+  reused as its verifier. Phase 1 also covers the Graph-IR `hasFolder`/
+  `hasCanonicalizer` gap (zero today) and effect interfaces on the 8 non-pure ops
+  to make generic CSE/DCE sound.
 - **Complete claims need fixtures.** A completed backend claim should resolve to
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the
@@ -250,8 +437,32 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
 2. ~~Gate whole programs and component ops separately.~~ **Landed 2026-06-02**
    — `program_executable` + `component_blockers` gate the whole program
    component-by-component alongside the primary-op `executable` answer.
-3. Make Target IR emit backend descriptors rather than embedding/rediscovering
-   large Apple-specific fusion/runtime decisions.
+3. ~~Make Target IR emit backend descriptors rather than embedding/rediscovering
+   large Apple-specific fusion/runtime decisions.~~ **Landed as Phase 0
+   (2026-06-15)** — the apple_gpu executor is now authoritative over carried
+   fusion roles (`dispatch` on each `known_chain` group) and the four structural
+   re-matchers are deleted. Fusion is recognized once (the compiler) and carried
+   across the seam to the executor; the executor no longer re-discovers it. See
+   the Phase 0a/0b/0c entries in the front-to-back closure plan above.
+   **C++ Target IR consume-side reviewed + parity-guarded (2026-06-15).** Unlike
+   the Python executor (whose re-matchers were pure duplication and were deleted),
+   the C++ Apple fusion passes *must* walk the def-use graph to collect operand
+   `Value`s for codegen — that walk is intrinsic, not deletable. The chain passes
+   already consume `tessera.fusion.intent` (source `"descriptor"` vs
+   `"rediscovered"`, with a Decision-#21 mismatch warning) and the 2-op chains in
+   fact lower through the *generic* `synth_matmul_epilogue` synthesizer (F2b), not
+   per-pattern hand-kernels. Added a **producer-covers-consumer parity guard**
+   (`tests/unit/test_apple_fusion_parity.py`, the C++ analogue of the 0c oracle):
+   every producer-stamped chain lowers `source="descriptor"`, never
+   `rediscovered`. This caught + fixed a real cross-representation drift Phase 0c
+   introduced — `matmul→rmsnorm_safe` is a distinct producer kernel but the C++
+   reads a single `"matmul_rmsnorm"` intent for both variants, so
+   `stamp_fusion_intents` now maps it via `_FUSION_INTENT_NAME`. Note the C++ Apple
+   passes run in lit/validation, **not on the execution path** (that is the Python
+   runtime, closed in 0a–0c); their value today is IR auditability + keeping the
+   two fusion recognizers in sync for when real codegen eventually routes through
+   compiled IR (Phase 4). *Next on this thread:* extend descriptors to NVIDIA/ROCm
+   when those backends light up.
 4. Require fixture-backed numerical proof before conformance cells become
    complete.
 5. Update specs to point at dashboards and this audit instead of old root audit

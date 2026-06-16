@@ -55,13 +55,25 @@ def test_jit_matmul_executed_the_compiled_function():
         (np.ones((4, 8), np.float32), np.ones((7, 3), np.float32)),
         # Rank-3: matmul is rank-2 only in Phase 1 (batched matmul is a later slice).
         (np.ones((2, 4, 8), np.float32), np.ones((2, 8, 3), np.float32)),
-        # f16: outside the Phase 1 f32 envelope.
-        (np.ones((4, 4), np.float16), np.ones((4, 4), np.float16)),
     ],
 )
 def test_jit_matmul_rejects_out_of_envelope(a, b):
     with pytest.raises(jb.TesseraJitError):
         jb.jit_matmul(a, b)
+
+
+def test_jit_matmul_f16_now_executes():
+    # Phase 4: f16 is native on M1 Max NEON (ARMv8.2-A FP16) and is now in the
+    # boundary table — matmul accumulates in f32 then truncates (ABI §12.5).
+    a = np.eye(4, dtype=np.float16)
+    b = (np.arange(16, dtype=np.float32).reshape(4, 4)).astype(np.float16)
+    before = jb.invocation_count()
+    out = jb.jit_matmul(a, b)
+    assert jb.invocation_count() == before + 1
+    assert np.asarray(out).dtype == np.float16
+    np.testing.assert_allclose(
+        np.asarray(out).astype(np.float32), b.astype(np.float32),
+        rtol=1e-2, atol=1e-2)
 
 
 # ── Binary elementwise family expansion ────────────────────────────────────

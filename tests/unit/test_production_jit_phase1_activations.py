@@ -60,6 +60,15 @@ def test_relu_zeros_negatives_exactly():
     np.testing.assert_array_equal(jb.jit_relu(x), np.array([0, 0, 0, 0.5, 2.0], np.float32))
 
 
-def test_activation_rejects_non_f32():
+def test_activation_f16_now_executes():
+    # Phase 4: f16 is native on M1 Max NEON (ARMv8.2-A FP16) and supported.
+    before = jb.invocation_count()
+    out = jb.jit_gelu(np.ones((4,), dtype=np.float16))
+    assert jb.invocation_count() == before + 1
+    assert np.asarray(out).dtype == np.float16
+
+
+def test_activation_rejects_unsupported_dtype():
+    # f64 is native on M1 but not yet wired into the boundary table → reject.
     with pytest.raises(jb.TesseraJitError):
-        jb.jit_gelu(np.ones((4,), dtype=np.float16))
+        jb.jit_gelu(np.ones((4,), dtype=np.float64))

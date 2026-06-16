@@ -42,6 +42,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Transforms/Passes.h"  // createCanonicalizerPass / CSE
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -185,6 +186,12 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Stage 1: tessera → linalg → bufferized memref form, identity boundary layout.
   PassManager pm1(module->getContext());
   maybeTrace(pm1);
+  // Phase 1 (front-to-back closure plan): canonicalize the Tessera dialect
+  // *before* lowering, so per-op folders/canonicalizers (identity cast,
+  // transpose-of-transpose, …) + CSE bite on the executed CPU path. This is
+  // what makes the Graph-IR optimizations observable end-to-end through the JIT.
+  pm1.addPass(createCanonicalizerPass());
+  pm1.addPass(createCSEPass());
   pm1.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
   // tensor.empty (DPS init) has no buffer semantics on its own; convert to
   // alloc_tensor so one-shot-bufferize can place it.

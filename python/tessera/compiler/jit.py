@@ -264,6 +264,10 @@ def _resolve_source_text(
 # package" (fall back to the normal path) from a legitimate ``None`` result.
 _PKG_FALLBACK: Any = object()
 
+# Phase 4 sentinel — "couldn't route this CPU call through the tessera_jit
+# MLIR→LLVM lane" (fall back to the numpy reference plan).
+_JIT_FALLBACK: Any = object()
+
 
 def _resolve_dispatch_via_package(value: "bool | str | None",
                                   target_kind: Optional[str]) -> "bool | str":
@@ -611,6 +615,13 @@ class JitFn:
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)
+                # Phase 4 — run the whole graph through the tessera_jit MLIR→LLVM
+                # lane (real codegen) for the covered f32 op set, before the numpy
+                # reference plan. A fallback sentinel means the graph is outside
+                # the lane (unsupported op / non-f32 / rank) → numpy.
+                jit_result = self._try_tessera_jit_call(args, kwargs)
+                if jit_result is not _JIT_FALLBACK:
+                    return jit_result
                 return self.cpu_plan.execute(args, kwargs, self.arg_names)
             if (
                 self.cpu_plan is not None
@@ -714,6 +725,73 @@ class JitFn:
         # ConstraintSolver.check raises TesseraConstraintError on violation.
         self.constraints.check(resolved)
         cache.add(cache_key)
+
+    def _try_tessera_jit_call(self, args: Tuple[Any, ...],
+                              kwargs: Dict[str, Any]) -> Any:
+        """Phase 4 — run the whole CPU graph through the tessera_jit MLIR→LLVM
+        lane (tessera-to-linalg → bufferize → loops → LLVM, optLevel=2), making
+        the real compiler the executed path for the covered f32 op set instead
+        of the numpy reference interpreter.
+
+        Returns ``_JIT_FALLBACK`` (defer to numpy) when the graph is outside the
+        lane: keyword args (graph args are positional), an unsupported op, a
+        non-f32 input, or a shape/rank the GraphFn builder rejects. Correctness
+        of the covered ops is proven by the equivalence tests in
+        ``tests/unit/test_native_cpu_jit.py`` — a fallback handles "couldn't
+        run", never "ran wrong"."""
+        import os
+        if os.environ.get("TESSERA_DISABLE_CPU_JIT"):
+            return _JIT_FALLBACK
+        if kwargs:                              # graph args are positional
+            return _JIT_FALLBACK
+        try:
+            metadata = self.runtime_artifact().metadata or {}
+        except Exception:                       # noqa: BLE001 — defer to numpy
+            return _JIT_FALLBACK
+        ops = metadata.get("ops") or []
+        arg_names = list(metadata.get("arg_names") or [])
+        if not ops or len(args) != len(arg_names):
+            return _JIT_FALLBACK
+
+        from .._jit_boundary import (
+            _BF16, UnsupportedJitOp, graph_ops_supported, run_graph_ops)
+        if not graph_ops_supported(ops):
+            return _JIT_FALLBACK
+
+        import numpy as np
+
+        def _elem_for(dt) -> str | None:
+            # M1 Max NEON: f32 + f16 (ARMv8.2-A FP16) are native; bf16 is
+            # correct but emulated via f32 in-kernel (M1 predates ARMv8.6 BF16).
+            if dt == np.float32:
+                return "f32"
+            if dt == np.float16:
+                return "f16"
+            if _BF16 is not None and dt == _BF16:
+                return "bf16"
+            return None
+
+        elem: str | None = None
+        arrays: Dict[str, Any] = {}
+        for name, value in zip(arg_names, args):
+            arr = np.asarray(value)
+            this_elem = _elem_for(arr.dtype)
+            if this_elem is None:               # unsupported dtype → numpy
+                return _JIT_FALLBACK
+            if elem is None:
+                elem = this_elem
+            elif this_elem != elem:             # mixed dtype → numpy
+                return _JIT_FALLBACK
+            arrays[name] = np.ascontiguousarray(arr)
+
+        try:
+            result = run_graph_ops(
+                arg_names, ops, metadata.get("output_name"), arrays,
+                elem=elem or "f32")
+        except (UnsupportedJitOp, TesseraJitError):
+            return _JIT_FALLBACK
+        self.last_fallback_reason = None
+        return result
 
     def _native_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Dispatch eligible CPU rank-2 f32 GEMM through the native runtime ABI.

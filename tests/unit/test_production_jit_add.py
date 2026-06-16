@@ -59,8 +59,9 @@ def test_jit_add_is_destination_passing_writes_into_fresh_output():
 @pytest.mark.parametrize(
     "a, b",
     [
-        # f16 — dtype outside the f32-only Phase 1 envelope (bf16/f16 land later).
-        (np.ones((4, 4), np.float16), np.ones((4, 4), np.float16)),
+        # f64 — dtype outside the f32/f16/bf16 boundary table (native on M1 but
+        # not yet wired; f16 is now supported, see test below).
+        (np.ones((4, 4), np.float64), np.ones((4, 4), np.float64)),
         # Shape mismatch — elementwise requires equal shapes.
         (np.ones((4, 8), np.float32), np.ones((8, 4), np.float32)),
         # Scalar (rank-0) — Phase 1 boundary requires rank >= 1.
@@ -74,11 +75,24 @@ def test_jit_add_rejects_out_of_envelope_instead_of_falling_back(a, b):
     return the right number while bypassing the compiled lane entirely.
 
     Note: Phase 1 generalized the elementwise lowering, so rank-3+ adds now
-    legitimately execute through the lane (previously a Phase 0 envelope guard).
-    Negatives here are dtype + shape-mismatch + rank-0, which Phase 1 still rejects.
+    legitimately execute through the lane (previously a Phase 0 envelope guard);
+    Phase 4 added f16 to the boundary. Negatives here are unsupported-dtype +
+    shape-mismatch + rank-0, which the boundary still rejects.
     """
     with pytest.raises(jb.TesseraJitError):
         jb.jit_add(np.asarray(a), np.asarray(b))
+
+
+def test_jit_add_f16_now_executes():
+    # Phase 4: f16 (native M1 Max NEON, ARMv8.2-A FP16) is in the boundary table.
+    a = np.ones((4, 4), np.float16)
+    b = (2.0 * np.ones((4, 4))).astype(np.float16)
+    before = jb.invocation_count()
+    out = jb.jit_add(a, b)
+    assert jb.invocation_count() == before + 1
+    assert np.asarray(out).dtype == np.float16
+    np.testing.assert_array_equal(np.asarray(out).astype(np.float32),
+                                  np.full((4, 4), 3.0, np.float32))
 
 
 def test_jit_add_phase1_higher_rank_now_executes():

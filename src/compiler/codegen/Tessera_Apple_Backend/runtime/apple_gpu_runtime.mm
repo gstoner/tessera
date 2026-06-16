@@ -1355,17 +1355,38 @@ id<MTLComputePipelineState> compile_msl_kernel(MetalDeviceContext &ctx,
 
   NSError *error = nil;
   MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
-  opts.languageVersion = MTLLanguageVersion3_0;
+  // MSL 3.1 (Metal 3.1 / Apple6+) is the floor for the `bfloat` scalar type the
+  // synthesizer emits for native bf16 kernels. Was 3.0, which silently rejected
+  // `bfloat` source (the norm_chain bf16 compile failure).
+  opts.languageVersion = MTLLanguageVersion3_1;
   id<MTLLibrary> library = [ctx.device newLibraryWithSource:source
                                                     options:opts
                                                       error:&error];
-  if (!library) return nil;
+  if (!library) {
+    // Surface the swallowed compile error so the Python lane (and tests) can see
+    // *why* a synthesized kernel didn't compile, instead of a silent fallback.
+    ts_set_last_gpu_error(
+        3, "msl_compile",
+        error ? [[error localizedDescription] UTF8String]
+              : "newLibraryWithSource returned nil");
+    return nil;
+  }
   id<MTLFunction> fn = [library newFunctionWithName:entry_point];
-  if (!fn) return nil;
+  if (!fn) {
+    ts_set_last_gpu_error(3, "msl_compile",
+                          "entry point not found in compiled library");
+    return nil;
+  }
 
   id<MTLComputePipelineState> pso =
       [ctx.device newComputePipelineStateWithFunction:fn error:&error];
-  if (!pso) return nil;
+  if (!pso) {
+    ts_set_last_gpu_error(
+        3, "msl_pipeline",
+        error ? [[error localizedDescription] UTF8String]
+              : "newComputePipelineStateWithFunction failed");
+    return nil;
+  }
 
   std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
   // Re-check under the lock in case another thread compiled the same kernel
@@ -7712,6 +7733,214 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
   }
+}
+
+// SYNTHESIZED norm_chain dispatch (Apple-GPU codegen plan M2).  Non-matmul-
+// rooted: a row-reduction region `norm(X [+ residual])` (the pre-norm transformer
+// pattern) fused into ONE kernel.  The MSL source is passed in; one row per
+// thread.  Buffers: 0=X 1=O 2=M 3=N, 4=residual(M,N) iff has_residual.  Returns
+// 1 on GPU success, else 0 (caller falls back to the numpy reference).
+extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f32(
+    const char* msl_source, const char* entry, const float* X,
+    const float* residual, float* O, int32_t M, int32_t N,
+    int32_t has_residual, const float* gamma, const float* beta,
+    int32_t has_weight, int32_t has_bias) {
+  if (!msl_source || !entry || !X || !O || M <= 0 || N <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+    NSUInteger fBytes = sizeof(float) * (NSUInteger)N;  // per-feature γ/β
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, xBytes);
+    if (!bufX || !bufO) return 0;
+    id<MTLBuffer> bufRes = nil;
+    if (has_residual != 0 && residual) {
+      bufRes = metal_buffer_acquire_with_bytes(ctx, residual, xBytes);
+      if (!bufRes) return 0;
+    }
+    MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? xBytes : 0);
+    id<MTLBuffer> bufG = nil;
+    if (has_weight != 0 && gamma) {
+      bufG = metal_buffer_acquire_with_bytes(ctx, gamma, fBytes);
+      if (!bufG) return 0;
+    }
+    MetalBufferGuard gGuard(ctx, bufG, has_weight != 0 ? fBytes : 0);
+    id<MTLBuffer> bufB = nil;
+    if (has_bias != 0 && beta) {
+      bufB = metal_buffer_acquire_with_bytes(ctx, beta, fBytes);
+      if (!bufB) return 0;
+    }
+    MetalBufferGuard bGuard(ctx, bufB, has_bias != 0 ? fBytes : 0);
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:3];
+    if (has_residual != 0 && bufRes) [enc setBuffer:bufRes offset:0 atIndex:4];
+    if (has_weight != 0 && bufG) [enc setBuffer:bufG offset:0 atIndex:5];
+    if (has_bias != 0 && bufB) [enc setBuffer:bufB offset:0 atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_norm_chain"))
+      return 0;
+    std::memcpy(O, [bufO contents], xBytes);
+    return 1;
+  }
+}
+
+// SYNTHESIZED norm_chain, 16-bit I/O (M2 dtype breadth).  Raw uint16 storage —
+// the passed MSL source's element type (`half` or native `bfloat`) gives the
+// bits meaning, fp32 accumulators inside.  One symbol serves f16 AND bf16, like
+// the matmul-epilogue f16 path.  Buffers: 0=X 1=O 2=M 3=N, 4=residual iff
+// has_residual.  Returns 1 on GPU success, else 0.
+extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f16(
+    const char* msl_source, const char* entry, const uint16_t* X,
+    const uint16_t* residual, uint16_t* O, int32_t M, int32_t N,
+    int32_t has_residual, const uint16_t* gamma, const uint16_t* beta,
+    int32_t has_weight, int32_t has_bias) {
+  if (!msl_source || !entry || !X || !O || M <= 0 || N <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger xBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)N;
+    NSUInteger fBytes = sizeof(uint16_t) * (NSUInteger)N;  // per-feature γ/β
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, xBytes);
+    if (!bufX || !bufO) return 0;
+    id<MTLBuffer> bufRes = nil;
+    if (has_residual != 0 && residual) {
+      bufRes = metal_buffer_acquire_with_bytes(ctx, residual, xBytes);
+      if (!bufRes) return 0;
+    }
+    MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? xBytes : 0);
+    id<MTLBuffer> bufG = nil;
+    if (has_weight != 0 && gamma) {
+      bufG = metal_buffer_acquire_with_bytes(ctx, gamma, fBytes);
+      if (!bufG) return 0;
+    }
+    MetalBufferGuard gGuard(ctx, bufG, has_weight != 0 ? fBytes : 0);
+    id<MTLBuffer> bufB = nil;
+    if (has_bias != 0 && beta) {
+      bufB = metal_buffer_acquire_with_bytes(ctx, beta, fBytes);
+      if (!bufB) return 0;
+    }
+    MetalBufferGuard bGuard(ctx, bufB, has_bias != 0 ? fBytes : 0);
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufO offset:0 atIndex:1];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:2];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:3];
+    if (has_residual != 0 && bufRes) [enc setBuffer:bufRes offset:0 atIndex:4];
+    if (has_weight != 0 && bufG) [enc setBuffer:bufG offset:0 atIndex:5];
+    if (has_bias != 0 && bufB) [enc setBuffer:bufB offset:0 atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_norm_chain_f16"))
+      return 0;
+    std::memcpy(O, [bufO contents], xBytes);
+    return 1;
+  }
+}
+
+// SYNTHESIZED whole-graph POINTWISE kernel (M4 — the GPU `tessera_jit`
+// foundation). One Metal kernel computes an arbitrary same-shape elementwise DAG
+// in a single dispatch (one thread per element). Variable input arity:
+// ``inputs[0..n-1]`` bind to buffers 0..n-1, the output to buffer n, and the
+// element count N to buffer n+1. ``elem_bytes`` selects f32 (4) vs 16-bit (2).
+static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
+                                    const void *const *inputs, int32_t n_inputs,
+                                    void *out, int32_t n_elements,
+                                    NSUInteger elem_bytes) {
+  if (!msl_source || !entry || !inputs || !out || n_inputs <= 0 ||
+      n_elements <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, [NSString stringWithUTF8String:msl_source],
+        [NSString stringWithUTF8String:entry]);
+    if (!pso) return 0;
+    NSUInteger bytes = elem_bytes * (NSUInteger)n_elements;
+    // Variable buffer count → a vector of move-only guards releases every
+    // buffer on any exit path (success / early return).
+    std::vector<MetalBufferGuard> guards;
+    guards.reserve((size_t)n_inputs + 1);
+    std::vector<id<MTLBuffer>> ins;
+    ins.reserve((size_t)n_inputs);
+    for (int32_t i = 0; i < n_inputs; ++i) {
+      id<MTLBuffer> b = metal_buffer_acquire_with_bytes(ctx, inputs[i], bytes);
+      guards.emplace_back(ctx, b, bytes);
+      if (!b) return 0;
+      ins.push_back(b);
+    }
+    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, bytes);
+    guards.emplace_back(ctx, bufO, bytes);
+    if (!bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    for (int32_t i = 0; i < n_inputs; ++i)
+      [enc setBuffer:ins[(size_t)i] offset:0 atIndex:(NSUInteger)i];
+    [enc setBuffer:bufO offset:0 atIndex:(NSUInteger)n_inputs];
+    [enc setBytes:&n_elements length:sizeof(int32_t)
+          atIndex:(NSUInteger)(n_inputs + 1)];
+    MTLSize grid = MTLSizeMake((NSUInteger)n_elements, 1, 1);
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)n_elements,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_pointwise"))
+      return 0;
+    std::memcpy(out, [bufO contents], bytes);
+    return 1;
+  }
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_f32(
+    const char *msl_source, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t n_elements) {
+  return synth_pointwise_impl(msl_source, entry, inputs, n_inputs, out,
+                              n_elements, sizeof(float));
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
+    const char *msl_source, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t n_elements) {
+  return synth_pointwise_impl(msl_source, entry, inputs, n_inputs, out,
+                              n_elements, sizeof(uint16_t));
 }
 
 // Generic SYNTHESIZED matmul -> pointwise(-> reduction) dispatch, THREADGROUP-

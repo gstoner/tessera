@@ -164,6 +164,13 @@ class FusedRegion:
     # pointwise chain — the transformer ``x + sublayer(x)`` pattern (per-element,
     # distinct from the per-feature ``bias``). v1 is non-reduction only.
     residual: bool = False
+    # M4 prologue: a pure-pointwise chain applied *elementwise to the A operand*
+    # before the contraction — ``matmul(act(A), B)`` (e.g. project a GeLU'd
+    # activation). Each op is the same EPILOGUE_OPS vocabulary minus bias, baked
+    # into the kernel source at the A-load site (so NO extra buffer / ABI arg).
+    # Because it acts per-element of A before the K-sum, it equals applying the
+    # op to A then contracting — exact for any pointwise op.
+    prologue: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for op in self.epilogue:
@@ -172,12 +179,19 @@ class FusedRegion:
         bias_ops = [op for op in self.epilogue if EPILOGUE_OPS[op].needs_bias]
         if len(bias_ops) > 1:
             raise ValueError("at most one bias op per region")
+        for op in self.prologue:
+            if op not in EPILOGUE_OPS:
+                raise ValueError(f"unknown prologue op {op!r}")
+            if EPILOGUE_OPS[op].needs_bias:
+                raise ValueError(f"prologue op {op!r} cannot need a bias")
         if self.reduction is not None and self.reduction not in REDUCTION_OPS:
             raise ValueError(f"unknown reduction epilogue {self.reduction!r}")
         if self.residual and self.reduction is not None:
             raise ValueError("residual + reduction not supported (v1)")
-        if not self.epilogue and self.reduction is None and not self.residual:
-            raise ValueError("a region must have an epilogue op, reduction, or residual")
+        if (not self.epilogue and self.reduction is None and not self.residual
+                and not self.prologue):
+            raise ValueError(
+                "a region must have a prologue, epilogue op, reduction, or residual")
 
     @property
     def has_bias(self) -> bool:
@@ -187,13 +201,20 @@ class FusedRegion:
     def has_residual(self) -> bool:
         return self.residual
 
+    @property
+    def has_prologue(self) -> bool:
+        return bool(self.prologue)
+
     def reference(self, A: np.ndarray, B: np.ndarray,
                   bias: np.ndarray | None = None,
                   residual: np.ndarray | None = None) -> np.ndarray:
         """The *unfused* result: matmul, pointwise chain, optional residual add,
         then the reduction, in numpy — the horizontal-oracle ground truth the
         synthesized kernel matches."""
-        out = np.asarray(A, np.float32) @ np.asarray(B, np.float32)
+        a = np.asarray(A, np.float32)
+        for op in self.prologue:
+            a = EPILOGUE_OPS[op].ref(a)          # pointwise on A before contraction
+        out = a @ np.asarray(B, np.float32)
         for op in self.epilogue:
             spec = EPILOGUE_OPS[op]
             if spec.needs_bias:
@@ -224,20 +245,48 @@ class FusedRegion:
 SYNTH_VARIANTS = ("broadcast", "dot")
 
 
-def _matmul_body(variant: str) -> str:
+def _prologue_msl(region: "FusedRegion", indent: str) -> str:
+    """MSL that transforms the loaded A element ``a`` in place — each prologue op
+    wrapped as ``{ float v = a; <op.msl>; a = v; }`` so the EPILOGUE_OPS bodies
+    (which operate on ``v``) are reused verbatim.  Empty when no prologue."""
+    return "".join(
+        f"{indent}{{ float v = a; {EPILOGUE_OPS[op].msl} a = v; }}\n"
+        for op in region.prologue)
+
+
+def _matmul_body(variant: str, prologue: str = "") -> str:
+    # ``prologue`` (possibly empty) transforms the loaded A element ``a`` before
+    # the multiply — ``matmul(act(A), B)``.  When empty, the bodies are the
+    # original byte-identical forms so existing kernels are unperturbed.
     if variant == "broadcast":
-        return """    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+        if not prologue:
+            return """    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
     for (int k = 0; k < K; ++k) {
         float a = A[a_off + k];
         int b_off = k * N;
         for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
     }"""
+        return f"""    for (int n = 0; n < N; ++n) scores[n] = 0.0f;
+    for (int k = 0; k < K; ++k) {{
+        float a = A[a_off + k];
+{prologue}        int b_off = k * N;
+        for (int n = 0; n < N; ++n) scores[n] += a * B[b_off + n];
+    }}"""
     if variant == "dot":
-        return """    for (int n = 0; n < N; ++n) {
+        if not prologue:
+            return """    for (int n = 0; n < N; ++n) {
         float acc = 0.0f;
         for (int k = 0; k < K; ++k) acc += A[a_off + k] * B[k * N + n];
         scores[n] = acc;
     }"""
+        return f"""    for (int n = 0; n < N; ++n) {{
+        float acc = 0.0f;
+        for (int k = 0; k < K; ++k) {{
+            float a = A[a_off + k];
+{prologue}            acc += a * B[k * N + n];
+        }}
+        scores[n] = acc;
+    }}"""
     raise ValueError(f"unknown synth variant {variant!r}")
 
 
@@ -282,7 +331,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
     residual_add = ("        v += float(residual[o_off + n]);\n"
                     if region.has_residual else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
-    matmul_body = _matmul_body(variant)
+    matmul_body = _matmul_body(variant, _prologue_msl(region, "        "))
 
     if region.reduction is None:
         # pure pointwise (+ optional residual): one pass, write O directly.
@@ -399,6 +448,25 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
                   if region.has_bias else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
 
+    # M4 prologue: transform the loaded A element before the multiply. Empty form
+    # keeps the original single-line accumulate byte-identical.
+    if region.has_prologue:
+        pro = _prologue_msl(region, "            ")
+        matmul_loop = f"""    for (int n = lid_i; n < N; n += T) {{
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) {{
+            float a = A[a_off + k];
+{pro}            s += a * B[k * N + n];
+        }}
+        tg_scores[n] = s;
+    }}"""
+    else:
+        matmul_loop = """    for (int n = lid_i; n < N; n += T) {
+        float s = 0.0f;
+        for (int k = 0; k < K; ++k) s += A[a_off + k] * B[k * N + n];
+        tg_scores[n] = s;
+    }"""
+
     if region.reduction is None:
         # pure pointwise: cooperative epilogue writes O directly, no reduction.
         body = f"""    int o_off = row * N;
@@ -441,11 +509,7 @@ kernel void {_ENTRY_TILED}(
     if (row >= M) return;
     int lid_i = (int)lid;
 {red_scratch}    int a_off = row * K;
-    for (int n = lid_i; n < N; n += T) {{
-        float s = 0.0f;
-        for (int k = 0; k < K; ++k) s += A[a_off + k] * B[k * N + n];
-        tg_scores[n] = s;
-    }}
+{matmul_loop}
     threadgroup_barrier(mem_flags::mem_threadgroup);
 {body}
 }}
@@ -472,10 +536,11 @@ _ENTRY_COOPMAT = "synth_matmul_epi_coopmat"
 
 
 def coopmat_eligible(region: FusedRegion) -> bool:
-    """v1 covers pointwise-epilogue regions (no terminal reduction). Residual
-    regions route to the scalar kernel (the coopmat kernel has no residual
-    buffer)."""
-    return region.reduction is None and not region.has_residual
+    """v1 covers pointwise-epilogue regions (no terminal reduction). Residual and
+    prologue regions route to the scalar kernel (the coopmat kernel has no
+    residual buffer and no per-element A-load hook for an input prologue)."""
+    return (region.reduction is None and not region.has_residual
+            and not region.has_prologue)
 
 
 #: Coopmat tile configs: tile -> (BM, BN, SGCOLS, NR, NC, THREADS).

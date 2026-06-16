@@ -94,6 +94,79 @@ def test_residual_fusion_equals_unfused_on_metal(epi):
     assert np.allclose(out, region.reference(A, B, bias, R), atol=1e-4)
 
 
+# ── M4 prologue: pointwise on the A operand before the contraction ───────────
+
+def test_prologue_region_emits_per_element_a_transform_no_extra_buffer():
+    # matmul(relu(A), B): the prologue bakes into the kernel SOURCE at the A-load
+    # site (no new buffer / ABI arg, unlike residual).
+    src = synthesize_matmul_epilogue_msl(FusedRegion((), prologue=("relu",)))
+    assert "{ float v = a; v = max(v, 0.0f); a = v; }" in src
+    assert "buffer(7)" not in src                     # no prologue buffer
+    # no-prologue region keeps the original (no A-element hoist).
+    assert "{ float v = a;" not in synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)))
+
+
+def test_prologue_region_validation():
+    FusedRegion((), prologue=("relu",))                # prologue-only ok
+    FusedRegion(("gelu",), prologue=("silu",), reduction="softmax")  # ok
+    with pytest.raises(ValueError):
+        FusedRegion((), prologue=("not_a_real_op",))
+    with pytest.raises(ValueError):
+        FusedRegion((), prologue=("bias",))            # prologue can't need a bias
+    with pytest.raises(ValueError):
+        FusedRegion(())                                # empty region still invalid
+
+
+def test_prologue_region_reference_matches_numpy():
+    region = FusedRegion(("gelu",), prologue=("relu",))
+    rng = np.random.default_rng(0)
+    a, b = rng.standard_normal((4, 8)), rng.standard_normal((8, 6))
+    ab = np.maximum(a, 0.0) @ b                         # relu prologue, then matmul
+    g = 0.5 * ab * (1.0 + np.tanh(np.sqrt(2 / np.pi)
+                                  * (ab + 0.044715 * ab ** 3)))
+    np.testing.assert_allclose(region.reference(a, b), g, rtol=1e-5, atol=1e-5)
+
+
+def test_prologue_region_declines_coopmat():
+    from tessera.compiler.fusion import coopmat_eligible
+    assert not coopmat_eligible(FusedRegion((), prologue=("relu",)))
+    assert coopmat_eligible(FusedRegion(("relu",)))    # epilogue still eligible
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("pro,epi,red", [
+    (("relu",), (), None),                  # matmul(relu(A), B)
+    (("silu",), ("gelu",), None),           # prologue + epilogue
+    (("tanh",), ("bias", "relu"), None),    # prologue + bias-epilogue
+    (("relu",), (), "softmax"),             # prologue + terminal reduction
+])
+def test_prologue_fusion_equals_unfused_on_metal(pro, epi, red):
+    from tessera.compiler.fusion import run_fused_region
+    rng = np.random.default_rng(hash((pro, epi, red)) & 0xFFFF)
+    M, K, N = 16, 32, 48
+    region = FusedRegion(epi, prologue=pro, reduction=red)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(np.float32)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(np.float32)
+    bias = (rng.standard_normal((N,)) * 0.3).astype(np.float32) if region.has_bias else None
+    out, ex = run_fused_region(region, A, B, bias)
+    assert ex == "metal_runtime"                        # fused in one kernel
+    assert np.allclose(out, region.reference(A, B, bias), atol=1e-4)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_prologue_tiled_large_n_equals_unfused_on_metal():
+    # large-N routes to the tiled kernel; the prologue must thread through it too.
+    from tessera.compiler.fusion import run_fused_region
+    rng = np.random.default_rng(7)
+    M, K, N = 4, 8, 2048
+    region = FusedRegion((), prologue=("relu",), reduction="softmax")
+    A = (rng.standard_normal((M, K)) * 0.3).astype(np.float32)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(np.float32)
+    out, ex = run_fused_region(region, A, B)
+    assert ex == "metal_runtime"
+    assert np.allclose(out, region.reference(A, B), atol=1e-4)
+
+
 def test_region_validation():
     with pytest.raises(ValueError):
         FusedRegion(("not_a_real_op",))

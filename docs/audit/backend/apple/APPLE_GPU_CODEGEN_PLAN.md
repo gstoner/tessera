@@ -313,10 +313,10 @@ the last axis correctly dropped. Guards: 7 new cases in
 
 ## Deferred backlog (single source — the scattered *Follow-on:* notes above)
 
-As of 2026-06-16 the synthesizer covers matmul-epilogue, `norm_chain` (+affine,
-f16/bf16), attention (f32/f16/bf16 × materialized/online × causal), and pointwise
-DAGs (with per-feature broadcast) — all Evaluator-gated via the M5 displacement
-oracle. Open work, by leverage:
+As of 2026-06-16 the synthesizer covers matmul-epilogue (+ residual + A-operand
+prologue), `norm_chain` (+affine, f16/bf16), attention (f32/f16/bf16 ×
+materialized/online × causal), and pointwise DAGs (with per-feature broadcast) —
+all Evaluator-gated via the M5 displacement oracle. Open work, by leverage:
 
 1. **`linalg→vector` GEMM pipeline (HF — highest value).** The CPU JIT GEMM is
    ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,
@@ -327,18 +327,28 @@ oracle. Open work, by leverage:
    path. Lane (opt-in `TESSERA_JIT_VECTORIZE`): `tile_using_for [8,16,16]` +
    `vectorize_children_and_apply_patterns` via `applyTransformNamedSequence`
    (register vector iter_arg accumulator), full vector→LLVM lowering chain +
-   `libmlir_c_runner_utils` for `memrefCopy`. Matmuls with dims ≤ 256 vectorize at
-   **~30 GFLOP/s** (~13× the 2.3 scalar), correct; larger stay scalar (size guard —
-   large-N runtime crash). Default path unaffected. *Follow-ons:* harden the large-N
-   crash + raise the envelope; vectorize only the matmul tile. See `COMPILER_AUDIT.md`
-   Phase 4. Won't match BLAS; single-GEMM hot path already uses Accelerate.
-2. **M4 compose pointwise+matmul — ✅ core + residual done; whole-program remains
-   (HF).** matmul → multi-op pointwise chain + bias + terminal norm is one kernel,
-   and **full-tensor residual add (`matmul+residual`) landed 2026-06-16** (scalar
-   `_epilogue_{f32,f16}` ABIs gained `(residual, has_residual)`; coopmat/tiled
-   decline → scalar; f32 exact, f16/bf16 correct). Remaining: (a) pointwise
-   prologue on inputs (niche); (b) the bigger whole-program `graph_ir→MSL` emitter
-   (or retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+   `libmlir_c_runner_utils` for `memrefCopy`. Matmuls with dims ≤ 2048 vectorize at
+   **~40-46 GFLOP/s** (512³-1024³), correct; larger stay scalar.
+   **Large-N hardened 2026-06-16:** the failure was a *compile-time* explosion
+   (untiled elementwise epilogue over-vectorized into a giant `vector<MxN>`), not a
+   crash — the transform now tiles the 2D elementwise ops (`[8,16]`) too, bounding
+   every vector; envelope raised 256→2048. *Follow-ons:* tune tile sizes. See
+   `COMPILER_AUDIT.md` Phase 4. Won't match BLAS; single-GEMM hot path uses Accelerate.
+2. **M4 compose pointwise+matmul — ✅ core + residual + prologue done; whole-program
+   remains (HF).** matmul → multi-op pointwise chain + bias + terminal norm is one
+   kernel; **full-tensor residual add (`matmul+residual`) landed 2026-06-16**
+   (scalar `_epilogue_{f32,f16}` ABIs gained `(residual, has_residual)`;
+   coopmat/tiled decline → scalar; f32 exact, f16/bf16 correct); **pointwise
+   prologue on the A operand (`matmul(act(A), B)`) landed 2026-06-16** —
+   `FusedRegion.prologue` is a pure-pointwise chain (EPILOGUE_OPS minus bias)
+   applied elementwise to A before the contraction, **baked into the kernel SOURCE
+   at the A-load site so NO extra buffer / ABI arg** (cleaner than residual);
+   threads through the stack + tiled scalar synth (f32/f16/bf16), coopmat declines
+   → scalar; horizontal-oracle-proven on Metal across dtypes incl. tiled N=2048.
+   Remaining: (a) **auto-discovery** of `matmul(act(A), B)` chains from Graph IR
+   (the region *API* supports prologue today; `discover_fusable_regions` doesn't
+   yet emit one — niche); (b) the bigger whole-program `graph_ir→MSL` emitter (or
+   retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
    runs native bf16 (pure Python; dtype-generic coopmat ABI).
 4. ~~**M5 per-op MPSGraph reduction tail**~~ ✅ landed 2026-06-16 — `sum`/`mean`/

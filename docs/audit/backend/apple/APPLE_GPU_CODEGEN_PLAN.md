@@ -270,8 +270,19 @@ the lane). So the synthesizer displacements are now scored by the same anti-chea
 harness as everything else; a lane that ever regresses fails the grade, not just a
 unit test. Verified: all four lanes fully pass the grade on this M1 Max (5 checks
 each, 0 failures). Guard: `tests/unit/test_displacement_tasks.py` (4).
-*Remaining follow-on:* extend coverage to the per-op MPSGraph tail (claim
-multi-op reduction chains beyond rmsnorm/softmax/layer_norm).
+**Per-op reduction tail ✅ landed (2026-06-16).** A pointwise chain feeding a
+plain row reduction (`sum`/`mean`/`amax`/`amin` over the last axis) — `sum(x*x)`
+(L2²), `mean(abs(x))` (L1), `amax(exp(x))` — previously took **two** Metal
+kernels (the pointwise emitter + an MPSGraph reduce, with an intermediate DRAM
+round-trip). `PointwiseReduceRegion` + `synthesize_pointwise_reduce_msl` +
+`run_pointwise_reduce` collapse them into **one** kernel (thread per output row,
+fp32 register accumulator, output drops the last axis). New variable-arity
+symbols `tessera_apple_gpu_synth_pointwise_reduce_{f32,f16}` (mirrors the
+pointwise pointer-array ABI; output is `rows` not `rows*cols`). Distinct from
+`REDUCTION_OPS`, which are shape-*preserving* norms. **Verified on M1 Max**: all
+4 reduce kinds × 2D/3D/multi-input chains run `metal_runtime`, match numpy, with
+the last axis correctly dropped. Guards: 7 new cases in
+`tests/unit/test_pointwise_graph_fusion.py`.
 
 ## Dependency notes
 - M1 done. M2 (`norm_chain`) is the natural next step — pure Python, reuses the
@@ -306,8 +317,8 @@ oracle. Open work, by leverage:
    `linalg→gpu→{SPIR-V/Metal}`).
 3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
    runs native bf16 (pure Python; dtype-generic coopmat ABI).
-4. **M5 per-op MPSGraph reduction tail (HF — small).** Claim multi-op reduction
-   chains beyond rmsnorm/softmax/layer_norm.
+4. ~~**M5 per-op MPSGraph reduction tail**~~ ✅ landed 2026-06-16 — `sum`/`mean`/
+   `amax`/`amin` of a pointwise chain fused into one kernel (`PointwiseReduceRegion`).
 5. **M2 multi-residual `x+r1+r2` (deprioritized).** Rare (one residual per norm);
    the 2-kernel Metal path already works (pointwise sum → norm_chain, no numpy).
    A 1-kernel fusion needs a variable-arity `norm_chain` symbol — low marginal

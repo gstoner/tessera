@@ -1544,6 +1544,140 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# M5 — pointwise -> plain row-reduction fusion (sum/mean/amax/amin).
+#
+# A pointwise chain feeding a plain reduction over the last axis — sum(x*x) (L2²),
+# mean(abs(x)) (L1), amax(exp(x)) — previously took TWO Metal kernels (the
+# pointwise emitter + an MPSGraph reduce, with an intermediate DRAM round-trip).
+# This collapses them into ONE: a thread per output row computes the pointwise
+# chain per element and accumulates the reduction in a register. Output is the
+# row-reduced shape (last axis dropped). Distinct from REDUCTION_OPS, which are
+# shape-*preserving* normalizations (rmsnorm/softmax/layer_norm).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PW_REDUCE_ENTRY = "synth_pw_reduce"
+#: reduce-kind → (MSL init, MSL accumulate-expr template, numpy fn).
+_PW_REDUCE_KINDS: dict[str, tuple[str, str, Any]] = {
+    "sum": ("0.0f", "acc + v", lambda a: a.sum(-1)),
+    "mean": ("0.0f", "acc + v", lambda a: a.mean(-1)),
+    "amax": ("-INFINITY", "max(acc, v)", lambda a: a.max(-1)),
+    "amin": ("INFINITY", "min(acc, v)", lambda a: a.min(-1)),
+}
+
+
+@dataclass(frozen=True)
+class PointwiseReduceRegion:
+    """A pointwise DAG (``ops`` topo-ordered, same vocab as PointwiseGraphRegion)
+    terminated by a plain row reduction (``reduce`` ∈ sum/mean/amax/amin) over the
+    last axis. ``output`` is the pointwise terminal value-id fed to the reduction;
+    the result drops the last axis (rows → scalar)."""
+
+    ops: tuple[tuple[str, tuple[str, ...], str], ...]
+    inputs: tuple[str, ...]
+    output: str
+    reduce: str
+
+    def __post_init__(self) -> None:
+        if self.reduce not in _PW_REDUCE_KINDS:
+            raise ValueError(f"unknown reduce {self.reduce!r}")
+
+    def reference(self, *arrays: np.ndarray) -> np.ndarray:
+        env = {v: np.asarray(a, np.float32)
+               for v, a in zip(self.inputs, arrays)}
+        for key, ins, out in self.ops:
+            _arity, _expr, ref = POINTWISE_OPS[key]
+            env[out] = np.asarray(ref(*[env[i] for i in ins]), np.float32)
+        _init, _acc, fn = _PW_REDUCE_KINDS[self.reduce]
+        return np.asarray(fn(env[self.output]), np.float32)
+
+
+def synthesize_pointwise_reduce_msl(region: PointwiseReduceRegion,
+                                    dtype: str = "f32") -> str:
+    """Emit ONE MSL kernel: a thread per row computes the pointwise chain per
+    element and reduces over the row. fp32 accumulator; ``ST(...)`` store."""
+    io = _io_type(dtype)
+    n_in = len(region.inputs)
+    params = "".join(
+        f"    device const {io}* in{i} [[buffer({i})]],\n"
+        for i in range(n_in))
+    out_buf = n_in
+    init, acc_expr, _fn = _PW_REDUCE_KINDS[region.reduce]
+    temp: dict[str, str] = {v: f"float(in{i}[idx])"
+                            for i, v in enumerate(region.inputs)}
+    lines = []
+    for k, (key, ins, out) in enumerate(region.ops):
+        _arity, expr, _ref = POINTWISE_OPS[key]
+        lines.append(f"        float t{k} = {expr.format(*[temp[i] for i in ins])};")
+        temp[out] = f"t{k}"
+    body = "\n".join(lines)
+    finalize = "    acc /= float(cols);\n" if region.reduce == "mean" else ""
+    return f"""#include <metal_stdlib>
+using namespace metal;
+using ST = {io};
+kernel void {_PW_REDUCE_ENTRY}(
+{params}    device {io}*       O   [[buffer({out_buf})]],
+    constant int&       rows [[buffer({out_buf + 1})]],
+    constant int&       cols [[buffer({out_buf + 2})]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)rows) return;
+    int base = (int)gid * cols;
+    float acc = {init};
+    for (int c = 0; c < cols; ++c) {{
+        int idx = base + c;
+{body}
+        float v = {temp[region.output]};
+        acc = {acc_expr};
+    }}
+{finalize}    O[gid] = ST(acc);
+}}
+"""
+
+
+def _synth_pointwise_reduce_symbol(dtype: str) -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    name = ("tessera_apple_gpu_synth_pointwise_reduce_f32" if dtype == "f32"
+            else "tessera_apple_gpu_synth_pointwise_reduce_f16")
+    sym = getattr(rt, name, None)
+    if sym is None:
+        return None
+    vpp = ctypes.POINTER(ctypes.c_void_p)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vpp, ctypes.c_int32,
+                    ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_pointwise_reduce(region: PointwiseReduceRegion,
+                         arrays: list[np.ndarray]) -> tuple[np.ndarray, str]:
+    """Run ``reduce(pointwise(inputs))`` as ONE Metal kernel. Inputs share one
+    shape (rows = prod(shape[:-1]), cols = shape[-1]); output drops the last
+    axis. Returns ``(out, "metal_runtime")`` on GPU success, else the reference."""
+    in_dtype = np.asarray(arrays[0]).dtype
+    elem = "f16" if in_dtype == np.float16 else "f32"
+    npdt = np.float16 if elem == "f16" else np.float32
+    arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
+    shape = arrs[0].shape
+    if not shape or any(a.shape != shape for a in arrs):
+        return region.reference(*arrays).astype(npdt), "reference"
+    cols = int(shape[-1])
+    rows = int(np.prod(shape[:-1])) if len(shape) > 1 else 1
+    out_shape = shape[:-1]
+    sym = _synth_pointwise_reduce_symbol(elem)
+    if sym is not None and len(arrs) <= _PW_MAX_INPUTS:
+        in_ptrs = (ctypes.c_void_p * len(arrs))(*[a.ctypes.data for a in arrs])
+        out = np.zeros(out_shape if out_shape else (1,), npdt)
+        rc = sym(synthesize_pointwise_reduce_msl(region, elem).encode("utf-8"),
+                 _PW_REDUCE_ENTRY.encode("utf-8"),
+                 ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
+                 len(arrs), out.ctypes.data, rows, cols)
+        if rc == 1:
+            return out.reshape(out_shape), "metal_runtime"
+    return region.reference(*arrays).astype(npdt), "reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # F2c — attention synthesis (matmul -> softmax -> matmul)
 # ─────────────────────────────────────────────────────────────────────────────
 

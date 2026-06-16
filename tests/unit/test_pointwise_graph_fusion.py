@@ -140,6 +140,57 @@ def test_run_pointwise_per_row_broadcast_declines_to_reference():
     np.testing.assert_allclose(np.asarray(out), _gelu(x * s), rtol=1e-5, atol=1e-5)
 
 
+# ── M5 pointwise -> plain row-reduction fusion ──────────────────────────────
+def test_pointwise_reduce_msl_has_accumulator_no_score_array():
+    region = F.PointwiseReduceRegion(
+        ops=(("mul", ("x", "x"), "sq"),), inputs=("x",), output="sq", reduce="sum")
+    src = F.synthesize_pointwise_reduce_msl(region, "f32")
+    assert "float acc = 0.0f;" in src              # sum init
+    assert "acc = acc + v;" in src                 # accumulate
+    assert "for (int c = 0; c < cols" in src       # reduce over the row
+    # mean appends a /cols finalize; amax/amin use INFINITY inits.
+    assert "/= float(cols)" in F.synthesize_pointwise_reduce_msl(
+        F.PointwiseReduceRegion((("abs", ("x",), "a"),), ("x",), "a", "mean"), "f32")
+    assert "-INFINITY" in F.synthesize_pointwise_reduce_msl(
+        F.PointwiseReduceRegion((("exp", ("x",), "e"),), ("x",), "e", "amax"), "f32")
+
+
+def test_pointwise_reduce_region_validation():
+    with pytest.raises(ValueError):
+        F.PointwiseReduceRegion((("abs", ("x",), "a"),), ("x",), "a", "nope")
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("reduce,fn", [
+    ("sum", lambda a: a.sum(-1)),
+    ("mean", lambda a: a.mean(-1)),
+    ("amax", lambda a: a.max(-1)),
+    ("amin", lambda a: a.min(-1)),
+])
+def test_pointwise_reduce_on_metal(reduce, fn):
+    # reduce(x*x) over the last axis, fused into one kernel. Output drops the
+    # last axis; matches numpy.
+    region = F.PointwiseReduceRegion(
+        ops=(("mul", ("x", "x"), "sq"),), inputs=("x",), output="sq", reduce=reduce)
+    x = (_RNG.standard_normal((32, 64))).astype(np.float32)
+    out, ex = F.run_pointwise_reduce(region, [x])
+    assert ex == "metal_runtime"
+    assert np.asarray(out).shape == (32,)          # last axis dropped
+    np.testing.assert_allclose(np.asarray(out), fn(x * x), rtol=1e-4, atol=1e-3)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_pointwise_reduce_3d_reduces_last_axis():
+    # 3D input → output keeps leading dims, drops the last.
+    region = F.PointwiseReduceRegion(
+        ops=(("abs", ("x",), "a"),), inputs=("x",), output="a", reduce="mean")
+    x = (_RNG.standard_normal((8, 4, 32))).astype(np.float32)
+    out, ex = F.run_pointwise_reduce(region, [x])
+    assert ex == "metal_runtime"
+    assert np.asarray(out).shape == (8, 4)
+    np.testing.assert_allclose(np.asarray(out), np.abs(x).mean(-1), rtol=1e-4, atol=1e-3)
+
+
 # ── end-to-end @jit(apple_gpu) ──────────────────────────────────────────────
 def _dag(x, a, b):
     return ts.ops.gelu(ts.ops.add(ts.ops.mul(x, a), b))

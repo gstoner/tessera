@@ -8087,6 +8087,74 @@ extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
                               out, n_elements, cols, sizeof(uint16_t));
 }
 
+// M5 (2026-06-16) — fused pointwise -> plain row-reduction. A thread per output
+// row reduces over `cols`; each input is rows*cols, the output is rows. Collapses
+// the pointwise-emitter + MPSGraph-reduce two-kernel chain into one.
+static int32_t synth_pw_reduce_impl(const char *msl_source, const char *entry,
+                                    const void *const *inputs, int32_t n_inputs,
+                                    void *out, int32_t rows, int32_t cols,
+                                    NSUInteger elem_bytes) {
+  if (!msl_source || !entry || !inputs || !out || n_inputs <= 0 || rows <= 0 ||
+      cols <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, [NSString stringWithUTF8String:msl_source],
+        [NSString stringWithUTF8String:entry]);
+    if (!pso) return 0;
+    NSUInteger inBytes = elem_bytes * (NSUInteger)rows * (NSUInteger)cols;
+    NSUInteger outBytes = elem_bytes * (NSUInteger)rows;
+    std::vector<MetalBufferGuard> guards;
+    guards.reserve((size_t)n_inputs + 1);
+    std::vector<id<MTLBuffer>> ins;
+    ins.reserve((size_t)n_inputs);
+    for (int32_t i = 0; i < n_inputs; ++i) {
+      id<MTLBuffer> b = metal_buffer_acquire_with_bytes(ctx, inputs[i], inBytes);
+      guards.emplace_back(ctx, b, inBytes);
+      if (!b) return 0;
+      ins.push_back(b);
+    }
+    id<MTLBuffer> bufO = metal_buffer_acquire(ctx, outBytes);
+    guards.emplace_back(ctx, bufO, outBytes);
+    if (!bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    for (int32_t i = 0; i < n_inputs; ++i)
+      [enc setBuffer:ins[(size_t)i] offset:0 atIndex:(NSUInteger)i];
+    [enc setBuffer:bufO offset:0 atIndex:(NSUInteger)n_inputs];
+    [enc setBytes:&rows length:sizeof(int32_t) atIndex:(NSUInteger)(n_inputs + 1)];
+    [enc setBytes:&cols length:sizeof(int32_t) atIndex:(NSUInteger)(n_inputs + 2)];
+    MTLSize grid = MTLSizeMake((NSUInteger)rows, 1, 1);
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)rows,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_pw_reduce"))
+      return 0;
+    std::memcpy(out, [bufO contents], outBytes);
+    return 1;
+  }
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f32(
+    const char *msl_source, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
+  return synth_pw_reduce_impl(msl_source, entry, inputs, n_inputs, out, rows,
+                              cols, sizeof(float));
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f16(
+    const char *msl_source, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
+  return synth_pw_reduce_impl(msl_source, entry, inputs, n_inputs, out, rows,
+                              cols, sizeof(uint16_t));
+}
+
 // Generic SYNTHESIZED matmul -> pointwise(-> reduction) dispatch, THREADGROUP-
 // TILED (Optimizing-Compiler Plan F2b-tiled).  Like the stack symbol above, the
 // MSL source is passed in — but this kernel keeps the score row in dynamic

@@ -247,12 +247,11 @@ def test_known_chain_helper_reads_whole_program_groups():
 
 
 def test_executor_dispatches_fused_kernel_from_fusion_groups(monkeypatch):
-    """With the structural re-matcher disabled, fusion_groups metadata alone
-    must route the program to the fused dispatcher — proof the executor
-    consumes compiler intent rather than re-matching."""
+    """Bare `fusion_groups` that names the chain (no `dispatch` roles) routes
+    the program to the fused dispatcher via the `fused_kernel == "X"` fallback
+    branch — proof the executor consumes compiler intent rather than
+    re-matching (the structural re-matcher was deleted in Phase 0c)."""
     sentinel = np.full((2, 2), 42.0, dtype=np.float32)
-    monkeypatch.setattr(
-        rt, "_apple_gpu_metadata_is_matmul_softmax_chain", lambda ops: False)
     monkeypatch.setattr(
         rt, "_apple_gpu_dispatch_matmul_softmax",
         lambda operands, np_: sentinel)
@@ -263,28 +262,29 @@ def test_executor_dispatches_fused_kernel_from_fusion_groups(monkeypatch):
     np.testing.assert_array_equal(out, sentinel)
 
 
-def test_executor_without_fusion_groups_still_uses_rematcher(monkeypatch):
-    """Legacy artifacts (no fusion_groups) keep working via the structural
-    re-matcher."""
-    sentinel = np.full((2, 2), 7.0, dtype=np.float32)
-    monkeypatch.setattr(
-        rt, "_apple_gpu_dispatch_matmul_softmax",
-        lambda operands, np_: sentinel)
+def test_executor_without_fusion_groups_runs_per_op():
+    """Phase 0c: the structural re-matchers were deleted, so a truly-legacy
+    artifact with no fusion_groups no longer takes a fused fast-path — it runs
+    correctly per-op (the driver always emits fusion_groups today, so this only
+    affects hand-built metadata). Fusion is now a carried compiler decision, not
+    something the executor re-discovers."""
     md = _matmul_softmax_metadata(with_fusion_groups=False)
-    a = np.zeros((2, 3), dtype=np.float32)
-    b = np.zeros((3, 2), dtype=np.float32)
-    out = rt._execute_apple_gpu_mps_metadata(md, {"a": a, "b": b})
-    np.testing.assert_array_equal(out, sentinel)
+    assert rt._apple_gpu_resolve_authoritative_plan(md, len(md["ops"])) is None
+    a = np.random.default_rng(0).standard_normal((2, 3)).astype(np.float32)
+    b = np.random.default_rng(1).standard_normal((3, 4)).astype(np.float32)
+    out = np.asarray(rt._execute_apple_gpu_mps_metadata(md, {"a": a, "b": b}))
+    sm = np.exp(a @ b - (a @ b).max(-1, keepdims=True))
+    sm /= sm.sum(-1, keepdims=True)
+    np.testing.assert_allclose(out, sm, rtol=1e-5, atol=1e-5)
 
 
 def test_executor_dispatches_swiglu_from_fusion_groups(monkeypatch):
-    """SwiGLU follow-on (2026-06-10): the DAG chain is now derived by
-    canonical_compile._match_swiglu_at, and the executor consumes it —
-    with the structural re-matcher disabled, the fusion_groups entry alone
-    routes the 4-op program to the fused swiglu dispatcher."""
+    """SwiGLU follow-on (2026-06-10): the DAG chain is derived by
+    canonical_compile._match_swiglu_at, and the executor consumes it — the
+    bare fusion_groups entry alone routes the 4-op program to the fused swiglu
+    dispatcher via the `fused_kernel == "swiglu"` branch (Phase 0c deleted the
+    structural re-matcher)."""
     sentinel = np.full((2, 4), 9.0, dtype=np.float32)
-    monkeypatch.setattr(
-        rt, "_apple_gpu_metadata_is_swiglu_chain", lambda ops: False)
     monkeypatch.setattr(
         rt, "_apple_gpu_dispatch_swiglu",
         lambda x, wg, wu, wd, np_: sentinel)
@@ -321,22 +321,25 @@ def test_executor_dispatches_swiglu_from_fusion_groups(monkeypatch):
     np.testing.assert_array_equal(out, sentinel)
 
 
-def test_executor_fusion_groups_short_circuits_rematcher(monkeypatch):
-    """When fusion_groups names the chain, the structural re-matcher is not
-    even consulted (the `or` short-circuits)."""
-    calls = {"rematch": 0}
+def test_executor_authoritative_dispatch_uses_roles(monkeypatch):
+    """Phase 0b: a known_chain group carrying `dispatch` roles routes through
+    the authoritative path — the fused dispatcher is called with operands bound
+    from the roles, and the `fused_kernel`/cascade fallback is never reached."""
+    captured = {}
 
-    def counting_rematcher(ops):
-        calls["rematch"] += 1
-        return True
+    def fake_dispatch(operands, np_):
+        captured["operands"] = [np.asarray(o).copy() for o in operands]
+        return np.zeros((2, 2), dtype=np.float32)
 
-    monkeypatch.setattr(
-        rt, "_apple_gpu_metadata_is_matmul_softmax_chain", counting_rematcher)
-    monkeypatch.setattr(
-        rt, "_apple_gpu_dispatch_matmul_softmax",
-        lambda operands, np_: np.zeros((2, 2), dtype=np.float32))
+    monkeypatch.setattr(rt, "_apple_gpu_dispatch_matmul_softmax", fake_dispatch)
     md = _matmul_softmax_metadata(with_fusion_groups=True)
-    a = np.zeros((2, 3), dtype=np.float32)
-    b = np.zeros((3, 2), dtype=np.float32)
-    rt._execute_apple_gpu_mps_metadata(md, {"a": a, "b": b})
-    assert calls["rematch"] == 0
+    # Attach 0a dispatch roles so the authoritative resolver fires.
+    md["fusion_groups"][0]["dispatch"] = {"a": "a", "b": "b", "out": "t1"}
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    b = np.arange(6, dtype=np.float32).reshape(3, 2)
+    out = rt._execute_apple_gpu_mps_metadata(md, {"a": a, "b": b})
+    np.testing.assert_array_equal(out, np.zeros((2, 2), dtype=np.float32))
+    # The authoritative path resolved operands a, b from the roles.
+    assert len(captured["operands"]) == 2
+    np.testing.assert_array_equal(captured["operands"][0], a)
+    np.testing.assert_array_equal(captured["operands"][1], b)

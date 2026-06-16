@@ -149,8 +149,13 @@ def compile_count() -> int:
 # RUNTIME_ABI_SPEC.md §12.5: bf16 uses ml_dtypes.bfloat16 on the Python side and
 # RAW 16-bit storage at the boundary (ctypes.c_uint16) — the bits are passed
 # through unreinterpreted; the MLIR `bf16` element type gives them meaning.
+# f16 is native on Apple M-series NEON (ARMv8.2-A FP16): passed as RAW 16-bit
+# storage at the boundary (ctypes.c_uint16, like bf16) — the bits are
+# unreinterpreted and the MLIR `f16` element type gives them meaning. matmul /
+# reductions accumulate in f32 inside the kernel (TesseraToLinalgPass, ABI §12.5).
 _DTYPE_TABLE: dict[str, tuple[Any, Any, str]] = {
     "f32": (np.float32, ctypes.c_float, "f32"),
+    "f16": (np.float16, ctypes.c_uint16, "f16"),
 }
 
 try:  # bf16 is optional: present iff ml_dtypes is installed (soft dependency).
@@ -798,11 +803,12 @@ def jit_layer_norm(a: np.ndarray, eps: float = 1e-5) -> np.ndarray:
 
 def _jit_unary(op_name: str, sym: str, a: np.ndarray) -> np.ndarray:
     a = np.asarray(a)
-    _f32_envelope_check([a])  # f32 keeps the oracle tight (bf16 acts: later)
+    # f32 / f16 (native M1 NEON) / bf16 (emulated) — consistent with _jit_binary.
+    elem, _npdt = _resolve_elem([a])
     if a.ndim < 1:
         raise TesseraJitError("Phase 1 unary requires rank>=1")
     a = np.ascontiguousarray(a)
-    t = "tensor<" + "x".join(str(s) for s in a.shape) + "xf32>"
+    t = "tensor<" + "x".join(str(s) for s in a.shape) + f"x{elem}>"
     mlir = (
         f"func.func @{sym}(%x: {t}) -> {t} {{\n"
         f"  %0 = {op_name} %x : ({t}) -> {t}\n"
@@ -2530,3 +2536,98 @@ def jit_scan(
     )
     arrays = [init_arr, xs_arr, *const_arrs]  # order matches build_scan's args
     return g._run_apple_gpu_scan(arrays)
+
+
+# ── Whole-graph metadata → tessera_jit bridge (Phase 4) ──────────────────────
+#
+# Translate the executed `@jit` op-list (canonical_compile metadata: arg_names /
+# ops / output_name) into a GraphFn and run the WHOLE graph as one MLIR→LLVM
+# compile+invoke through tessera_jit. This is the bridge that lets the real
+# compiler lane (tessera-to-linalg → bufferize → loops → LLVM, optLevel=2)
+# become the executed CPU path for the covered f32 op set, instead of the numpy
+# reference interpreter. Unsupported ops raise UnsupportedJitOp so the caller can
+# fall back to numpy (correctness preserved).
+
+class UnsupportedJitOp(Exception):
+    """A graph op (or shape/dtype) the tessera_jit GraphFn lane can't build."""
+
+
+# tessera op-name → GraphFn method. Mirrors the op set TesseraToLinalgPass
+# lowers; ops outside this map fall back to the numpy reference path.
+_JIT_GRAPH_OPS: dict[str, str] = {
+    "tessera.matmul": "matmul", "tessera.gemm": "matmul",
+    "tessera.add": "add", "tessera.sub": "sub",
+    "tessera.mul": "mul", "tessera.div": "div",
+    "tessera.relu": "relu", "tessera.sigmoid": "sigmoid", "tessera.tanh": "tanh",
+    "tessera.silu": "silu", "tessera.gelu": "gelu",
+    "tessera.softmax": "softmax", "tessera.rmsnorm": "rmsnorm",
+    "tessera.layer_norm": "layer_norm", "tessera.transpose": "transpose",
+    "tessera.select": "select", "tessera.masked_fill": "masked_fill",
+}
+
+
+def graph_ops_supported(ops) -> bool:
+    """True iff every op in the list maps to a GraphFn builder method."""
+    return bool(ops) and all(
+        str(op.get("op_name", "")) in _JIT_GRAPH_OPS for op in ops)
+
+
+def run_graph_ops(arg_names, ops, output_name, arrays, *, elem: str = "f32"):
+    """Build a GraphFn from the metadata op-list and run it through tessera_jit.
+
+    ``arrays`` maps each arg name to its concrete numpy array (already the right
+    dtype). Returns the output array. Raises ``UnsupportedJitOp`` if any op /
+    shape / dtype is outside the GraphFn lane, so the caller falls back to the
+    numpy reference path."""
+
+    def _strip(name) -> str:
+        s = str(name)
+        return s[1:] if s.startswith("%") else s
+
+    g = GraphFn(name="tessera_jit_graph", elem=elem, target="cpu")
+    env: dict[str, _Val] = {}
+    ordered: list = []
+    for name in arg_names:
+        arr = arrays[name]
+        env[name] = g.arg(arr.shape)
+        ordered.append(arr)
+
+    def _in(operand) -> _Val:
+        key = _strip(operand)
+        if key not in env:
+            raise UnsupportedJitOp(f"unbound operand {operand!r}")
+        return env[key]
+
+    try:
+        for op in ops:
+            op_name = str(op.get("op_name", ""))
+            method = _JIT_GRAPH_OPS.get(op_name)
+            if method is None:
+                raise UnsupportedJitOp(op_name)
+            ins = [_in(o) for o in op.get("operands", [])]
+            kwargs = dict(op.get("kwargs") or {})
+            result = op.get("result")
+            if result is None:
+                raise UnsupportedJitOp(f"{op_name} has no result")
+            if method == "matmul":
+                ta = bool(kwargs.get("transposeA") or kwargs.get("transpose_a"))
+                tb = bool(kwargs.get("transposeB") or kwargs.get("transpose_b"))
+                out = g.matmul(ins[0], ins[1], transpose_a=ta, transpose_b=tb)
+            elif method == "softmax":
+                out = g.softmax(ins[0], axis=int(kwargs.get("axis", -1)))
+            elif method in ("rmsnorm", "layer_norm"):
+                out = getattr(g, method)(ins[0], eps=float(kwargs.get("eps", 1e-5)))
+            elif method == "masked_fill":
+                out = g.masked_fill(ins[0], ins[1],
+                                    value=float(kwargs.get("value", -1e9)))
+            else:
+                out = getattr(g, method)(*ins)
+            env[_strip(result)] = out
+    except TesseraJitError as exc:  # shape/rank/dtype the GraphFn lane rejects
+        raise UnsupportedJitOp(str(exc)) from exc
+
+    out_val = env.get(_strip(output_name))
+    if out_val is None:
+        raise UnsupportedJitOp(f"output {output_name!r} not produced by the graph")
+    g.ret(out_val)
+    return g.run(*ordered)

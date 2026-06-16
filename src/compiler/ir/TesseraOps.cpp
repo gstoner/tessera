@@ -3,6 +3,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -1584,6 +1585,31 @@ LogicalResult TransposeOp::verify() {
   return success();
 }
 
+namespace {
+// Phase 1 — `transpose(transpose(x)) -> x`. A no-perm (reverse-dims) transpose
+// is its own inverse, so the round-trip is identity whenever the outer result
+// type matches the original input type (the type check makes this safe for any
+// rank and guards against a hypothetical attribute-bearing variant).
+struct FoldTransposeOfTranspose : public OpRewritePattern<TransposeOp> {
+  using OpRewritePattern<TransposeOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(TransposeOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inner = op.getX().getDefiningOp<TransposeOp>();
+    if (!inner)
+      return failure();
+    if (inner.getX().getType() != op.getType())
+      return failure();
+    rewriter.replaceOp(op, inner.getX());
+    return success();
+  }
+};
+} // namespace
+
+void TransposeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                              MLIRContext *context) {
+  results.add<FoldTransposeOfTranspose>(context);
+}
+
 // Sprint V1 (2026-05-22) — LayerNormOp: shape-preserving + eps > 0.
 LogicalResult LayerNormOp::verify() {
   auto inTy = dyn_cast<RankedTensorType>(getX().getType());
@@ -2076,6 +2102,15 @@ LogicalResult CastOp::verify() {
              << ": " << in << " vs " << out;
   }
   return success();
+}
+
+// Phase 1 — an identity cast (same type, no numeric policy) folds to its input.
+// A numeric_policy may carry a real rounding / math-mode change, so only fold
+// when it is absent.
+OpFoldResult CastOp::fold(FoldAdaptor adaptor) {
+  if (getX().getType() == getY().getType() && !getNumericPolicy())
+    return getX();
+  return {};
 }
 
 // Sprint V4b (2026-05-22) — SoftmaxOp: shape-preserving normalization

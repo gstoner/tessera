@@ -1,0 +1,124 @@
+"""M4 — whole-graph pointwise MSL emitter (the GPU `tessera_jit` foundation).
+
+An arbitrary connected DAG of same-shape elementwise ops compiles to ONE Metal
+kernel run in a single dispatch, instead of N separate MPSGraph dispatches with
+host round-trips between them — the GPU analogue of the CPU `run_graph_ops` lane.
+See docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M4).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import tessera as ts
+from tessera.compiler import fusion as F
+
+_RNG = np.random.default_rng(20260615)
+
+
+def _gelu(v):
+    t = np.clip(0.7978845608028654 * (v + 0.044715 * v**3), -30.0, 30.0)
+    return 0.5 * v * (1.0 + np.tanh(t))
+
+
+# ── discoverer ──────────────────────────────────────────────────────────────
+def test_discovers_connected_pointwise_dag():
+    ops = [F._Op("tessera.mul", ("x", "a"), "m"),
+           F._Op("tessera.add", ("m", "b"), "s"),
+           F._Op("tessera.gelu", ("s",), "o")]
+    (regs,) = F.discover_pointwise_graph(ops)
+    idxs, region = regs
+    assert idxs == [0, 1, 2]
+    assert region.inputs == ("x", "a", "b") and region.output == "o"
+
+
+def test_diamond_reuses_inputs():
+    # mul(add(x,y), sub(x,y)) — x,y feed two ops; one region, inputs (x,y).
+    ops = [F._Op("tessera.add", ("x", "y"), "s1"),
+           F._Op("tessera.sub", ("x", "y"), "s2"),
+           F._Op("tessera.mul", ("s1", "s2"), "o")]
+    (regs,) = F.discover_pointwise_graph(ops)
+    _idxs, region = regs
+    assert set(region.inputs) == {"x", "y"} and region.output == "o"
+
+
+def test_single_op_not_fused():
+    # A lone pointwise op stays on the MPSGraph elementwise lane.
+    assert F.discover_pointwise_graph([F._Op("tessera.relu", ("x",), "o")]) == []
+
+
+def test_non_pointwise_op_bounds_the_region():
+    # The matmul isn't pointwise → only the gelu+add after it could fuse, but
+    # that's a 2-op pointwise tail consuming the matmul result (external input).
+    ops = [F._Op("tessera.matmul", ("x", "w"), "m"),
+           F._Op("tessera.add", ("m", "b"), "s"),
+           F._Op("tessera.gelu", ("s",), "o")]
+    regs = F.discover_pointwise_graph(ops)
+    assert len(regs) == 1
+    idxs, region = regs[0]
+    assert idxs == [1, 2]                       # matmul excluded
+    assert "m" in region.inputs                 # matmul result is an external input
+
+
+def test_skip_excludes_claimed_ops():
+    ops = [F._Op("tessera.mul", ("x", "a"), "m"),
+           F._Op("tessera.add", ("m", "b"), "o")]
+    assert F.discover_pointwise_graph(ops, skip={0}) == []  # mul claimed → no 2-op region
+
+
+# ── synthesizer ─────────────────────────────────────────────────────────────
+def test_synthesizer_emits_one_kernel_with_n_input_buffers():
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("x", "a"), "m"), ("add", ("m", "b"), "s"),
+             ("gelu", ("s",), "o")),
+        inputs=("x", "a", "b"), output="o")
+    src = F.synthesize_pointwise_graph_msl(region)
+    assert "in0 [[buffer(0)]]" in src and "in2 [[buffer(2)]]" in src
+    assert "O   [[buffer(3)]]" in src           # output after the 3 inputs
+    assert src.count("float t") == 3            # one temp per op
+
+
+# ── runner: executes on Metal, matches numpy ────────────────────────────────
+def test_run_pointwise_dag_matches_numpy():
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("x", "a"), "m"), ("add", ("m", "b"), "s"),
+             ("gelu", ("s",), "o")),
+        inputs=("x", "a", "b"), output="o")
+    x, a, b = (_RNG.standard_normal((4, 16)).astype(np.float32) for _ in range(3))
+    out, ex = F.run_pointwise_graph(region, [x, a, b])
+    assert ex in ("metal_runtime", "reference")
+    np.testing.assert_allclose(np.asarray(out), _gelu(x * a + b),
+                               rtol=1e-5, atol=1e-5)
+
+
+# ── end-to-end @jit(apple_gpu) ──────────────────────────────────────────────
+def _dag(x, a, b):
+    return ts.ops.gelu(ts.ops.add(ts.ops.mul(x, a), b))
+
+
+def _chain(x):
+    return ts.ops.tanh(ts.ops.silu(ts.ops.relu(x)))
+
+
+def test_jit_pointwise_dag_matches_numpy():
+    fn = ts.jit(target="apple_gpu")(_dag)
+    x, a, b = (_RNG.standard_normal((8, 32)).astype(np.float32) for _ in range(3))
+    np.testing.assert_allclose(np.asarray(fn(x, a, b)), _gelu(x * a + b),
+                               rtol=1e-4, atol=1e-4)
+
+
+def test_jit_pointwise_chain_matches_numpy():
+    fn = ts.jit(target="apple_gpu")(_chain)
+    x = _RNG.standard_normal((8, 32)).astype(np.float32)
+    r = np.maximum(x, 0.0)
+    s = r / (1.0 + np.exp(-r))
+    np.testing.assert_allclose(np.asarray(fn(x)), np.tanh(s), rtol=1e-4, atol=1e-4)
+
+
+def test_jit_pointwise_f16():
+    fn = ts.jit(target="apple_gpu")(_dag)
+    x, a, b = (_RNG.standard_normal((8, 32)).astype(np.float16) for _ in range(3))
+    got = np.asarray(fn(x, a, b)).astype(np.float32)
+    ref = _gelu(x.astype(np.float32) * a.astype(np.float32) + b.astype(np.float32))
+    np.testing.assert_allclose(got, ref, rtol=3e-2, atol=3e-2)

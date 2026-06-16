@@ -14,6 +14,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "mlir/Transforms/Passes.h"  // canonicalize / cse (per-op folders)
 #include "llvm/ADT/StringRef.h"
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
@@ -245,6 +246,9 @@ int main(int argc, char **argv) {
 #else
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
+  // Upstream canonicalize / cse so Tessera per-op folders + canonicalizers
+  // (Phase 1: identity cast, transpose-of-transpose, …) are inspectable in lit.
+  mlir::registerTransformsPasses();
   tessera::diagnostics::registerShapeInferencePass();
   tessera::diagnostics::registerErrorReporterPass();
 #endif

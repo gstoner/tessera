@@ -684,7 +684,7 @@ def test_tiled_pure_pointwise_omits_reduction_scratch():
     from tessera.compiler.fusion import synthesize_matmul_epilogue_msl_tiled
     src = synthesize_matmul_epilogue_msl_tiled(FusedRegion(("gelu",)))
     assert "tg_red" not in src                             # no reduction → no scratch
-    assert "O[o_off + n] = v;" in src                      # writes O directly
+    assert "O[o_off + n] = ST(v);" in src                  # writes O directly (ST cast)
 
 
 _TILED_CASES = [
@@ -734,7 +734,15 @@ def test_f16_tiled_synthesizer_emits_half_io_with_fp32_scratch():
 
 def test_synthesizer_rejects_unknown_dtype():
     with pytest.raises(ValueError):
-        synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="bf16")
+        synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="f64")
+
+
+def test_synthesizer_emits_native_bfloat():
+    # Apple7 supports native MSL `bfloat` (MTLDataType.bfloat) — the synthesizer
+    # emits it directly now instead of host-upcasting to f32.
+    src = synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)), dtype="bf16")
+    assert "device const bfloat* A" in src
+    assert "half" not in src
 
 
 _HALF_CASES = [

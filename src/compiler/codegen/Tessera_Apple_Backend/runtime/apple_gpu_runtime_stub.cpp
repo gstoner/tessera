@@ -1013,6 +1013,29 @@ extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f32(
+    const char*, const char*, const float*, const float*, float*,
+    int32_t, int32_t, int32_t, const float*, const float*, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f16(
+    const char*, const char*, const uint16_t*, const uint16_t*, uint16_t*,
+    int32_t, int32_t, int32_t, const uint16_t*, const uint16_t*,
+    int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_f32(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t) {
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
     const char*, const char*, const float*, const float*, const float*,
     float*, int32_t, int32_t, int32_t, int32_t) {

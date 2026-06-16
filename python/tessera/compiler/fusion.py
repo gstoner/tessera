@@ -93,15 +93,23 @@ def _softmax_ref(x: np.ndarray, eps: float) -> np.ndarray:
     return e / e.sum(-1, keepdims=True)
 
 
+def _layer_norm_ref(x: np.ndarray, eps: float) -> np.ndarray:
+    mu = x.mean(-1, keepdims=True)
+    return (x - mu) / np.sqrt(((x - mu) ** 2).mean(-1, keepdims=True) + eps)
+
+
 #: Terminal reduction epilogues.  Adding one here retires the corresponding
 #: hand-written matmul_<reduction> kernel.
+# NB: O-writes go through ``ST(...)`` (a ``using ST = <io>;`` alias each kernel
+# defines) — MSL's `bfloat` rejects *implicit* float→bfloat assignment (unlike
+# `half`), so the store needs an explicit cast that is also valid for half/float.
 REDUCTION_OPS: dict[str, ReductionOp] = {
     "rmsnorm": ReductionOp(
         "rmsnorm",
         "        float _ss = 0.0f;\n"
         "        for (int n = 0; n < N; ++n) _ss += scores[n] * scores[n];\n"
         "        float _inv = rsqrt(_ss / float(N) + {eps}f);\n"
-        "        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] * _inv;",
+        "        for (int n = 0; n < N; ++n) O[o_off + n] = ST(scores[n] * _inv);",
         _rmsnorm_ref,
     ),
     "softmax": ReductionOp(
@@ -111,8 +119,20 @@ REDUCTION_OPS: dict[str, ReductionOp] = {
         "        float _sm = 0.0f;\n"
         "        for (int n = 0; n < N; ++n) {{ scores[n] = exp(scores[n] - _mx);"
         " _sm += scores[n]; }}\n"
-        "        for (int n = 0; n < N; ++n) O[o_off + n] = scores[n] / _sm;",
+        "        for (int n = 0; n < N; ++n) O[o_off + n] = ST(scores[n] / _sm);",
         _softmax_ref,
+    ),
+    "layer_norm": ReductionOp(
+        "layer_norm",
+        "        float _mean = 0.0f;\n"
+        "        for (int n = 0; n < N; ++n) _mean += scores[n];\n"
+        "        _mean /= float(N);\n"
+        "        float _var = 0.0f;\n"
+        "        for (int n = 0; n < N; ++n) {{ float _d = scores[n] - _mean;"
+        " _var += _d * _d; }}\n"
+        "        float _inv = rsqrt(_var / float(N) + {eps}f);\n"
+        "        for (int n = 0; n < N; ++n) O[o_off + n] = ST((scores[n] - _mean) * _inv);",
+        _layer_norm_ref,
     ),
 }
 
@@ -210,7 +230,12 @@ def _io_type(dtype: str) -> str:
         return "float"
     if dtype == "f16":
         return "half"
-    raise ValueError(f"synthesizer dtype must be f32 or f16, got {dtype!r}")
+    if dtype == "bf16":
+        # Native MSL `bfloat` (Metal 3.1+ / MTLDataType.bfloat, Apple6+ incl.
+        # Apple7/M1 Max — see the Apple7 GPU feature-set memo). I/O in bfloat,
+        # fp32 accumulators inside the kernel — no host f32 upcast.
+        return "bfloat"
+    raise ValueError(f"synthesizer dtype must be f32/f16/bf16, got {dtype!r}")
 
 
 def synthesize_matmul_epilogue_msl(region: FusedRegion,
@@ -236,7 +261,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
     for (int n = 0; n < N; ++n) {{
         float v = scores[n];
 {pointwise}
-        O[o_off + n] = v;
+        O[o_off + n] = ST(v);
     }}"""
     else:
         # pointwise modifies scores in place; then the reduction reads the whole
@@ -255,6 +280,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
 
     return f"""#include <metal_stdlib>
 using namespace metal;
+using ST = {io};
 kernel void {_ENTRY}(
     device const {io}* A   [[buffer(0)]],
     device const {io}* B   [[buffer(1)]],
@@ -301,7 +327,7 @@ _TILED_REDUCTIONS: dict[str, str] = {
         "    }}\n"
         "    float _inv = rsqrt(tg_red[0] / float(N) + {eps}f);\n"
         "    int o_off = row * N;\n"
-        "    for (int n = lid_i; n < N; n += T) O[o_off + n] = tg_scores[n] * _inv;\n",
+        "    for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(tg_scores[n] * _inv);\n",
     "softmax":
         "    float _lmax = -INFINITY;\n"
         "    for (int n = lid_i; n < N; n += T) _lmax = max(_lmax, tg_scores[n]);\n"
@@ -324,9 +350,9 @@ _TILED_REDUCTIONS: dict[str, str] = {
         "    }}\n"
         "    float _sm = tg_red[0];\n"
         "    int o_off = row * N;\n"
-        "    if (_sm == 0.0f) {{ for (int n = lid_i; n < N; n += T) O[o_off + n] = 0.0f; }}\n"
+        "    if (_sm == 0.0f) {{ for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(0.0f); }}\n"
         "    else {{ float _inv = 1.0f / _sm;"
-        " for (int n = lid_i; n < N; n += T) O[o_off + n] = tg_scores[n] * _inv; }}\n",
+        " for (int n = lid_i; n < N; n += T) O[o_off + n] = ST(tg_scores[n] * _inv); }}\n",
 }
 
 
@@ -350,7 +376,7 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
     for (int n = lid_i; n < N; n += T) {{
         float v = tg_scores[n];
 {pointwise}
-        O[o_off + n] = v;
+        O[o_off + n] = ST(v);
     }}"""
         red_scratch = ""
     else:
@@ -369,6 +395,7 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
 
     return f"""#include <metal_stdlib>
 using namespace metal;
+using ST = {io};
 #define T {_TILED_THREADS}
 kernel void {_ENTRY_TILED}(
     device const {io}* A   [[buffer(0)]],
@@ -868,6 +895,53 @@ def _synth_f16_symbol() -> Any:
     return sym
 
 
+def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
+                           bias: np.ndarray | None,
+                           variant: str) -> tuple[np.ndarray | None, str]:
+    """Native bf16 path — emit `bfloat`-typed MSL (Apple7 MTLDataType.bfloat)
+    and reuse the f16 synth symbol's uint16 ABI (bf16 is 2-byte raw storage; the
+    MSL `bfloat` element type gives the bits meaning). fp32 accumulators inside
+    the kernel — no host f32 upcast. Returns ``(out, "metal_runtime")`` on GPU
+    success, else ``(None, "fallback")`` so the caller can f32-emulate (e.g. if
+    the runtime's MSL version predates `bfloat`)."""
+    bf16 = _bf16_dtype()
+    if bf16 is None:
+        return None, "fallback"
+    sym = _synth_f16_symbol()                  # same uint16 ABI as f16
+    if sym is None:
+        return None, "fallback"
+    A = np.ascontiguousarray(A, bf16)
+    B = np.ascontiguousarray(B, bf16)
+    M, K = A.shape
+    K2, N = B.shape
+    if K2 != K:
+        raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
+    if N > SYNTH_MAX_N_TILED:
+        return None, "fallback"
+    bias_arr = None
+    has_bias = 1 if region.has_bias else 0
+    u16p = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+    bias_ptr = None
+    if region.has_bias:
+        if bias is None:
+            raise ValueError("region needs a bias")
+        bias_arr = np.ascontiguousarray(bias, bf16).reshape(N)
+        bias_ptr = u16p(bias_arr)
+    is_tiled = 0 if N <= SYNTH_MAX_N else 1
+    if is_tiled:
+        source = synthesize_matmul_epilogue_msl_tiled(region, dtype="bf16")
+        entry = _ENTRY_TILED
+    else:
+        source = synthesize_matmul_epilogue_msl(region, variant, dtype="bf16")
+        entry = _ENTRY
+    out = np.zeros((M, N), bf16)
+    rc = sym(source.encode("utf-8"), entry.encode("utf-8"), u16p(A), u16p(B),
+             bias_ptr, u16p(out), M, N, K, has_bias, is_tiled)
+    if rc == 1:
+        return out, "metal_runtime"
+    return None, "fallback"
+
+
 def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
                           bias: np.ndarray | None,
                           variant: str) -> tuple[np.ndarray, str]:
@@ -926,10 +1000,15 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         if ex == "metal_runtime":
             return out, ex
     if bf16 is not None and in_dtype == bf16:
-        out, ex = run_fused_region(
+        # Native bfloat kernel first (Apple7 MTLDataType.bfloat); fall back to
+        # f32 emulation only if the runtime's MSL `bfloat` is unavailable.
+        out, ex = _run_fused_region_bf16(region, A, B, bias, variant)
+        if ex == "metal_runtime" and out is not None:
+            return out, ex
+        out32, ex32 = run_fused_region(
             region, np.asarray(A, np.float32), np.asarray(B, np.float32),
             None if bias is None else np.asarray(bias, np.float32), variant)
-        return out.astype(bf16), ex
+        return out32.astype(bf16), ex32
     if in_dtype == np.float16:
         return _run_fused_region_f16(region, A, B, bias, variant)
 
@@ -973,6 +1052,429 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# M2 — norm_chain synthesis (NON-matmul-rooted): elementwise pre-ops -> norm.
+# The pre-norm transformer pattern `normed = rmsnorm(x + residual)` fused into
+# ONE kernel — one row per thread, the row materialized from the input (+ an
+# optional residual add) into a stack accumulator, then the row reduction
+# (rmsnorm/layer_norm, reused verbatim from REDUCTION_OPS). Eliminates the
+# host round-trip between the residual add and the norm. See
+# docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M2).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NORM_CHAIN_ENTRY = "synth_norm_chain"
+
+
+@dataclass(frozen=True)
+class NormChainRegion:
+    """A non-matmul-rooted row-reduction region:
+    ``norm(x [+ residual]) [* gamma] [+ beta]``.
+
+    ``norm`` is a ``REDUCTION_OPS`` key (``rmsnorm``/``layer_norm``/``softmax``).
+    ``add_residual`` fuses a preceding residual add (pre-norm pattern); ``weight``
+    (per-feature γ) and ``bias`` (per-feature β) fuse the post-norm affine — i.e.
+    the real transformer RMSNorm/LayerNorm with affine. fp32 math throughout."""
+
+    norm: str
+    add_residual: bool = False
+    weight: bool = False
+    bias: bool = False
+    eps: float = 1e-5
+
+    def __post_init__(self) -> None:
+        if self.norm not in REDUCTION_OPS:
+            raise ValueError(f"unknown norm {self.norm!r}")
+
+    def reference(self, X: np.ndarray, residual: np.ndarray | None = None,
+                  gamma: np.ndarray | None = None,
+                  beta: np.ndarray | None = None) -> np.ndarray:
+        """The unfused numpy ground truth the synthesized kernel must match."""
+        v = np.asarray(X, np.float32)
+        if self.add_residual:
+            if residual is None:
+                raise ValueError("region needs a residual")
+            v = v + np.asarray(residual, np.float32)
+        out = REDUCTION_OPS[self.norm].ref(v, self.eps).astype(np.float32)
+        if self.weight:
+            if gamma is None:
+                raise ValueError("region needs a weight (gamma)")
+            out = out * np.asarray(gamma, np.float32).reshape(-1)
+        if self.bias:
+            if beta is None:
+                raise ValueError("region needs a bias (beta)")
+            out = out + np.asarray(beta, np.float32).reshape(-1)
+        return out.astype(np.float32)
+
+
+def synthesize_norm_chain_msl(region: NormChainRegion, dtype: str = "f32") -> str:
+    """Emit MSL for a norm_chain region — one row per thread, materialize the
+    row (+ optional residual) into a fp32 ``scores`` accumulator, then the
+    reused reduction block. ``dtype`` selects I/O (float/half/bfloat); the
+    accumulator + math are always fp32."""
+    io = _io_type(dtype)
+    residual_param = (f"    device const {io}* residual [[buffer(4)]],\n"
+                      if region.add_residual else "")
+    residual_add = ("        v += float(residual[o_off + n]);\n"
+                    if region.add_residual else "")
+    # Post-norm affine: γ (per-feature weight) at buffer 5, β (bias) at buffer 6.
+    gamma_param = (f"    device const {io}* gamma [[buffer(5)]],\n"
+                   if region.weight else "")
+    beta_param = (f"    device const {io}* beta [[buffer(6)]],\n"
+                  if region.bias else "")
+    affine = ""
+    if region.weight or region.bias:
+        ops = []
+        if region.weight:
+            ops.append("        o *= float(gamma[n]);")
+        if region.bias:
+            ops.append("        o += float(beta[n]);")
+        body = "\n".join(ops)
+        # The reduction wrote the normalized value to O; apply the affine in a
+        # second pass (fp32 math, store back to the storage dtype).
+        affine = f"""
+    for (int n = 0; n < N; ++n) {{
+        float o = float(O[o_off + n]);
+{body}
+        O[o_off + n] = ST(o);
+    }}"""
+    red = REDUCTION_OPS[region.norm].msl.format(eps=region.eps)
+    return f"""#include <metal_stdlib>
+using namespace metal;
+using ST = {io};
+kernel void {_NORM_CHAIN_ENTRY}(
+    device const {io}* X   [[buffer(0)]],
+    device {io}*       O   [[buffer(1)]],
+    constant int&       M   [[buffer(2)]],
+    constant int&       N   [[buffer(3)]],
+{residual_param}{gamma_param}{beta_param}    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)M) return;
+    if (N > {SYNTH_MAX_N}) return;
+    int row = (int)gid;
+    int o_off = row * N;
+    float scores[{SYNTH_MAX_N}];
+    for (int n = 0; n < N; ++n) {{
+        float v = float(X[o_off + n]);
+{residual_add}        scores[n] = v;
+    }}
+{red}{affine}
+}}
+"""
+
+
+def _synth_norm_chain_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_norm_chain_f32", None)
+    if sym is None:
+        return None
+    fptr = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, fptr, fptr, fptr,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    fptr, fptr, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _synth_norm_chain_f16_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_norm_chain_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    u16, u16, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_norm_chain_region(region: NormChainRegion, X: np.ndarray,
+                          residual: np.ndarray | None = None,
+                          gamma: np.ndarray | None = None,
+                          beta: np.ndarray | None = None
+                          ) -> tuple[np.ndarray, str]:
+    """Run a norm_chain region as ONE synthesized Metal kernel. f32 / native f16 /
+    native bf16 I/O (Apple7 `bfloat`), fp32 math throughout; the post-norm affine
+    (``gamma``/``beta``, per-feature) fuses in. Returns ``(out, "metal_runtime")``
+    on GPU success, else ``(out, "reference")`` (numpy — no Metal / N too large /
+    compile-or-dispatch failed). Either way correct."""
+    bf16 = _bf16_dtype()
+    in_dtype = np.asarray(X).dtype
+    if in_dtype == np.float16:
+        elem, dt = "f16", np.float16
+    elif bf16 is not None and in_dtype == bf16:
+        elem, dt = "bf16", bf16
+    else:
+        elem, dt = "f32", np.float32
+
+    def _ref():
+        return region.reference(X, residual, gamma, beta).astype(dt)
+
+    X = np.ascontiguousarray(X, dt)
+    if X.ndim != 2:
+        return _ref(), "reference"
+    M, N = X.shape
+    res_arr = None
+    if region.add_residual:
+        if residual is None:
+            raise ValueError("region needs a residual")
+        res_arr = np.ascontiguousarray(residual, dt)
+        if res_arr.shape != X.shape:
+            return _ref(), "reference"
+    g_arr = (np.ascontiguousarray(np.asarray(gamma, dt).reshape(-1))
+             if region.weight else None)
+    b_arr = (np.ascontiguousarray(np.asarray(beta, dt).reshape(-1))
+             if region.bias else None)
+    if (region.weight and (g_arr is None or g_arr.shape != (N,))) or \
+       (region.bias and (b_arr is None or b_arr.shape != (N,))):
+        return _ref(), "reference"
+
+    has_res = 1 if region.add_residual else 0
+    has_w = 1 if region.weight else 0
+    has_b = 1 if region.bias else 0
+    src = synthesize_norm_chain_msl(region, dtype=elem).encode("utf-8")
+    entry = _NORM_CHAIN_ENTRY.encode("utf-8")
+    if elem == "f32":
+        sym = _synth_norm_chain_symbol()
+        if sym is not None and N <= SYNTH_MAX_N:
+            fp = lambda a: (a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+                            if a is not None else None)
+            out = np.zeros((M, N), np.float32)
+            rc = sym(src, entry, fp(X), fp(res_arr), fp(out), M, N, has_res,
+                     fp(g_arr), fp(b_arr), has_w, has_b)
+            if rc == 1:
+                return out, "metal_runtime"
+    else:
+        sym = _synth_norm_chain_f16_symbol()
+        if sym is not None and N <= SYNTH_MAX_N:
+            u16p = lambda a: (a.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16)) if a is not None else None)
+            out = np.zeros((M, N), dt)
+            rc = sym(src, entry, u16p(X), u16p(res_arr), u16p(out), M, N, has_res,
+                     u16p(g_arr), u16p(b_arr), has_w, has_b)
+            if rc == 1:
+                return out, "metal_runtime"
+    return _ref(), "reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M4 — whole-graph pointwise MSL emitter (the GPU `tessera_jit` foundation).
+# An arbitrary connected DAG of elementwise ops compiles to ONE Metal kernel run
+# in a single dispatch (one thread per element), instead of N separate MPSGraph
+# dispatches with host round-trips between them. The GPU analogue of the CPU
+# `run_graph_ops` lane. First cut: same-shape (no broadcast) pointwise ops; a
+# broadcast operand or a non-pointwise op bounds the region. See
+# docs/audit/backend/apple/APPLE_GPU_CODEGEN_PLAN.md (M4).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PW_ENTRY = "synth_pointwise"
+
+
+def _sigmoid_np(x: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+_GELU_EXPR = ("(0.5f*({0})*(1.0f+tanh(clamp(0.7978845608028654f*"
+              "(({0})+0.044715f*({0})*({0})*({0})), -30.0f, 30.0f))))")
+
+#: pointwise op → (arity, MSL expr template over operand temps, numpy ref).
+POINTWISE_OPS: dict[str, tuple[int, str, Any]] = {
+    "add": (2, "({0} + {1})", lambda a, b: a + b),
+    "sub": (2, "({0} - {1})", lambda a, b: a - b),
+    "mul": (2, "({0} * {1})", lambda a, b: a * b),
+    "div": (2, "({0} / {1})", lambda a, b: a / b),
+    "relu": (1, "max({0}, 0.0f)", lambda a: np.maximum(a, 0.0)),
+    "sigmoid": (1, "(1.0f/(1.0f+exp(-({0}))))", _sigmoid_np),
+    "tanh": (1, "tanh({0})", np.tanh),
+    "silu": (1, "(({0})/(1.0f+exp(-({0}))))", lambda a: a * _sigmoid_np(a)),
+    "gelu": (1, _GELU_EXPR, _gelu),
+    "neg": (1, "(-({0}))", lambda a: -np.asarray(a)),
+    "abs": (1, "fabs({0})", np.abs),
+    "exp": (1, "exp({0})", np.exp),
+}
+#: graph op-name → pointwise vocab key.
+_POINTWISE_NAMES: dict[str, str] = {}
+for _k in POINTWISE_OPS:
+    _POINTWISE_NAMES[_k] = _k
+    _POINTWISE_NAMES[f"tessera.{_k}"] = _k
+
+
+@dataclass(frozen=True)
+class PointwiseGraphRegion:
+    """A connected DAG of same-shape pointwise ops. ``ops`` is topo-ordered
+    ``(vocab_key, (input_value_ids,), out_value_id)``; ``inputs`` are the
+    external value-ids (→ buffer indices, in order); ``output`` is the terminal
+    value-id."""
+
+    ops: tuple[tuple[str, tuple[str, ...], str], ...]
+    inputs: tuple[str, ...]
+    output: str
+
+    def reference(self, *arrays: np.ndarray) -> np.ndarray:
+        env = {v: np.asarray(a, np.float32)
+               for v, a in zip(self.inputs, arrays)}
+        for key, ins, out in self.ops:
+            _arity, _expr, ref = POINTWISE_OPS[key]
+            env[out] = np.asarray(ref(*[env[i] for i in ins]), np.float32)
+        return env[self.output]
+
+
+def synthesize_pointwise_graph_msl(region: PointwiseGraphRegion,
+                                   dtype: str = "f32") -> str:
+    """Emit ONE MSL kernel computing the whole pointwise DAG per element. Each
+    external input is a `device const <io>*` buffer (indices 0..k-1); the output
+    is buffer k. fp32 temps throughout; the store goes through `ST(...)`."""
+    io = _io_type(dtype)
+    params = "".join(
+        f"    device const {io}* in{i} [[buffer({i})]],\n"
+        for i in range(len(region.inputs)))
+    out_buf = len(region.inputs)
+    # value-id → MSL temp expression (input load or a prior op's temp var).
+    temp: dict[str, str] = {v: f"float(in{i}[gid])"
+                            for i, v in enumerate(region.inputs)}
+    lines = []
+    for n, (key, ins, out) in enumerate(region.ops):
+        _arity, expr, _ref = POINTWISE_OPS[key]
+        operands = [temp[i] for i in ins]
+        lines.append(f"    float t{n} = {expr.format(*operands)};")
+        temp[out] = f"t{n}"
+    body = "\n".join(lines)
+    return f"""#include <metal_stdlib>
+using namespace metal;
+using ST = {io};
+kernel void {_PW_ENTRY}(
+{params}    device {io}*       O   [[buffer({out_buf})]],
+    constant int&       N   [[buffer({out_buf + 1})]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)N) return;
+{body}
+    O[gid] = ST({temp[region.output]});
+}}
+"""
+
+
+# Up to 16 input buffers (MSL allows ~31; small pointwise DAGs stay well under).
+_PW_MAX_INPUTS = 16
+
+
+def discover_pointwise_graph(ops: list[_Op], skip: set[int] | None = None
+                             ) -> list[tuple[list[int], PointwiseGraphRegion]]:
+    """Find maximal connected same-shape pointwise regions with a single exit.
+
+    Returns ``([op_indices], PointwiseGraphRegion)`` per region. A region fires
+    only if it has ≥2 ops (a single op is left to the MPSGraph elementwise lane)
+    and one exit value (consumed outside the region or the terminal)."""
+    skip = skip or set()
+    cand = [i for i, op in enumerate(ops)
+            if i not in skip and op.name in _POINTWISE_NAMES]
+    if not cand:
+        return []
+    candset = set(cand)
+    produced = {ops[i].output: i for i in cand}
+    use_count: dict[str, int] = {}
+    for op in ops:
+        for v in op.inputs:
+            use_count[v] = use_count.get(v, 0) + 1
+
+    # Union-find over candidate ops connected by an intra-candidate value edge.
+    parent = {i: i for i in cand}
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for i in cand:
+        for v in ops[i].inputs:
+            p = produced.get(v)
+            if p is not None and p in candset:
+                parent[find(i)] = find(p)
+
+    comps: dict[int, list[int]] = {}
+    for i in cand:
+        comps.setdefault(find(i), []).append(i)
+
+    regions: list[tuple[list[int], PointwiseGraphRegion]] = []
+    for members in comps.values():
+        if len(members) < 2 or len(members) > _PW_MAX_INPUTS * 2:
+            continue
+        members = sorted(members)
+        mset = set(members)
+        internal = {ops[i].output for i in members}
+        # external inputs: operands not produced inside the region (ordered).
+        ext: list[str] = []
+        for i in members:
+            for v in ops[i].inputs:
+                if v not in internal and v not in ext:
+                    ext.append(v)
+        if len(ext) > _PW_MAX_INPUTS:
+            continue
+        # single exit: exactly one internal value used outside the region.
+        exits = [ops[i].output for i in members
+                 if any(c not in mset for c in _consumers(ops, ops[i].output))
+                 or use_count.get(ops[i].output, 0) == 0]
+        # the terminal (use_count 0) or the unique externally-consumed value.
+        exits = list(dict.fromkeys(exits))
+        if len(exits) != 1:
+            continue
+        out_v = exits[0]
+        region_ops = tuple(
+            (_POINTWISE_NAMES[ops[i].name], tuple(ops[i].inputs), ops[i].output)
+            for i in members)
+        regions.append((members,
+                        PointwiseGraphRegion(region_ops, tuple(ext), out_v)))
+    return regions
+
+
+def _consumers(ops: list[_Op], value: str) -> list[int]:
+    return [i for i, op in enumerate(ops) if value in op.inputs]
+
+
+def _synth_pointwise_symbol(dtype: str) -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    name = ("tessera_apple_gpu_synth_pointwise_f32" if dtype == "f32"
+            else "tessera_apple_gpu_synth_pointwise_f16")
+    sym = getattr(rt, name, None)
+    if sym is None:
+        return None
+    vpp = ctypes.POINTER(ctypes.c_void_p)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, vpp, ctypes.c_int32,
+                    ctypes.c_void_p, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
+                        ) -> tuple[np.ndarray, str]:
+    """Run the pointwise DAG as ONE Metal kernel. Same-shape f32/f16 inputs.
+    Returns ``(out, "metal_runtime")`` on GPU success, else the numpy reference."""
+    in_dtype = np.asarray(arrays[0]).dtype
+    elem = "f16" if in_dtype == np.float16 else "f32"
+    npdt = np.float16 if elem == "f16" else np.float32
+    arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
+    shape = arrs[0].shape
+    if any(a.shape != shape for a in arrs):
+        return region.reference(*arrays).astype(npdt), "reference"
+    n = int(np.prod(shape)) if shape else 1
+    sym = _synth_pointwise_symbol(elem)
+    if sym is not None and len(arrs) <= _PW_MAX_INPUTS:
+        ptr_t = ctypes.c_void_p
+        in_ptrs = (ptr_t * len(arrs))(*[a.ctypes.data for a in arrs])
+        out = np.zeros(shape, npdt)
+        rc = sym(synthesize_pointwise_graph_msl(region, elem).encode("utf-8"),
+                 _PW_ENTRY.encode("utf-8"),
+                 ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
+                 len(arrs), out.ctypes.data, n)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(*arrays).astype(npdt), "reference"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # F2c — attention synthesis (matmul -> softmax -> matmul)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -995,11 +1497,27 @@ class AttentionRegion:
     q_name: str = "Q"
     k_name: str = "K"
     v_name: str = "V"
+    # Orientation of the *raw* operands as the score matmul consumes them, read
+    # from its transpose flags (M2 attention-orientation fix). The synthesizer
+    # works on natural Q(M,D)/K(Nk,D); these say whether a raw operand is already
+    # transposed and must be flipped first. Default False = the operand is
+    # natural — so direct AttentionRegion() construction is unchanged.
+    q_transposed: bool = False
+    k_transposed: bool = False
+
+    def _natural(self, Q: np.ndarray, K: np.ndarray):
+        """Flip raw operands to natural Q(M,D)/K(Nk,D) per the transpose flags."""
+        Q = np.asarray(Q, np.float32)
+        K = np.asarray(K, np.float32)
+        if self.q_transposed:
+            Q = np.ascontiguousarray(Q.T)
+        if self.k_transposed:
+            K = np.ascontiguousarray(K.T)
+        return Q, K
 
     def reference(self, Q: np.ndarray, K: np.ndarray, V: np.ndarray) -> np.ndarray:
         """The unfused result in numpy — the horizontal-oracle ground truth."""
-        Q = np.asarray(Q, np.float32)
-        K = np.asarray(K, np.float32)
+        Q, K = self._natural(Q, K)
         V = np.asarray(V, np.float32)
         scores = (Q @ K.T) * np.float32(self.scale)
         if self.causal:
@@ -1083,6 +1601,9 @@ def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
     """Run the attention block as ONE synthesized fused kernel on Metal.  Returns
     ``(output, execution)`` — ``"metal_runtime"`` if the synthesized kernel ran,
     else ``"reference"`` (numpy).  Either way the numbers are correct."""
+    # Flip raw operands to natural Q(M,D)/K(Nk,D) per the score matmul's
+    # transpose flags — the kernel indexes K as K[n*D+d], i.e. natural (Nk,D).
+    Q, K = region._natural(Q, K)
     Q = np.ascontiguousarray(Q, np.float32)
     K = np.ascontiguousarray(K, np.float32)
     V = np.ascontiguousarray(V, np.float32)
@@ -1417,6 +1938,14 @@ _REDUCTION_ALIASES: dict[str, str] = {
     "tessera.rmsnorm": "rmsnorm", "tessera.softmax": "softmax",
     "rmsnorm": "rmsnorm", "softmax": "softmax",
 }
+#: Norm op names recognized by the norm_chain discoverer → REDUCTION_OPS key.
+#: (rmsnorm_safe shares the rmsnorm kernel; layer_norm is norm_chain-only today.)
+_NORM_CHAIN_ALIASES: dict[str, str] = {
+    "tessera.rmsnorm": "rmsnorm", "rmsnorm": "rmsnorm",
+    "tessera.rmsnorm_safe": "rmsnorm", "rmsnorm_safe": "rmsnorm",
+    "tessera.layer_norm": "layer_norm", "layer_norm": "layer_norm",
+}
+_ADD_NAMES = {"tessera.add", "add"}
 
 
 def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], FusedRegion]]:
@@ -1476,8 +2005,109 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
     return regions
 
 
+def discover_norm_chain_regions(
+    ops: list[_Op], skip: set[int] | None = None,
+) -> list[tuple[list[int], NormChainRegion, dict[str, str], str]]:
+    """Find ``[add(x,residual) ->] rmsnorm/layer_norm [-> mul(γ)] [-> add(β)]``
+    regions — the transformer norm (pre-norm residual + post-norm affine), NOT
+    rooted at a matmul (a matmul→bias→norm chain is already a FusedRegion;
+    ``skip`` carries those already-claimed op indices).
+
+    Norm-centric scan: from each norm op, walk back to a single-use residual add
+    and forward to the affine weight/bias. Returns
+    ``([op_indices], NormChainRegion, {x[,residual][,gamma][,beta]}, out_value)``.
+    Fires only when there is a fusion win beyond a bare norm (a preceding add or
+    a post weight) — a lone norm is left to the MPSGraph rowop lane, per the
+    boundary rule 'synthesize only the fusable glue; never displace a library
+    call'. All fused intermediates must be single-use."""
+    skip = skip or set()
+    use_count: dict[str, int] = {}
+    for op in ops:
+        for v in op.inputs:
+            use_count[v] = use_count.get(v, 0) + 1
+    by_input: dict[str, list[int]] = {}
+    producer: dict[str, int] = {}
+    for i, op in enumerate(ops):
+        producer[op.output] = i
+        for v in op.inputs:
+            by_input.setdefault(v, []).append(i)
+
+    def sole_consumer(val: str) -> int | None:
+        if use_count.get(val, 0) != 1:
+            return None
+        cons = by_input.get(val, [])
+        return cons[0] if len(cons) == 1 else None
+
+    def other_operand(op: _Op, this: str) -> str:
+        return op.inputs[1] if op.inputs[0] == this else op.inputs[0]
+
+    regions: list[tuple[list[int], NormChainRegion, dict[str, str], str]] = []
+    claimed: set[int] = set()
+    for j, op in enumerate(ops):
+        if j in skip or j in claimed:
+            continue
+        norm = _NORM_CHAIN_ALIASES.get(op.name)
+        if norm is None or not op.inputs:
+            continue
+        idxs = [j]
+        x_v = op.inputs[0]
+        residual_v: str | None = None
+        add_residual = False
+        # Backward: a single-use residual add feeding the norm.
+        if use_count.get(x_v, 0) == 1:
+            p = producer.get(x_v)
+            if (p is not None and p not in skip and ops[p].name in _ADD_NAMES
+                    and len(ops[p].inputs) == 2):
+                add_residual = True
+                x_v, residual_v = ops[p].inputs[0], ops[p].inputs[1]
+                idxs.append(p)
+        # Forward: post-norm affine — mul(γ) then optional add(β).
+        weight = bias = False
+        gamma_v: str | None = None
+        beta_v: str | None = None
+        out_v = op.output
+        c = sole_consumer(out_v)
+        if (c is not None and c not in skip and ops[c].name in _SCALE_NAMES
+                and len(ops[c].inputs) == 2):
+            weight = True
+            gamma_v = other_operand(ops[c], out_v)
+            idxs.append(c)
+            out_v = ops[c].output
+            c2 = sole_consumer(out_v)
+            if (c2 is not None and c2 not in skip and ops[c2].name in _ADD_NAMES
+                    and len(ops[c2].inputs) == 2):
+                bias = True
+                beta_v = other_operand(ops[c2], out_v)
+                idxs.append(c2)
+                out_v = ops[c2].output
+        if not (add_residual or weight):
+            continue                           # bare norm → MPSGraph rowop lane
+        eps_default = 1e-6 if op.name.endswith("rmsnorm_safe") else 1e-5
+        eps = float(op.attrs.get("eps", eps_default))
+        region = NormChainRegion(norm=norm, add_residual=add_residual,
+                                 weight=weight, bias=bias, eps=eps)
+        operands = {"x": x_v}
+        if add_residual:
+            operands["residual"] = residual_v  # type: ignore[assignment]
+        if weight:
+            operands["gamma"] = gamma_v         # type: ignore[assignment]
+        if bias:
+            operands["beta"] = beta_v           # type: ignore[assignment]
+        regions.append((sorted(idxs), region, operands, out_v))
+        claimed.update(idxs)
+    return regions
+
+
 _SOFTMAX_NAMES = {"tessera.softmax", "softmax"}
 _SCALE_NAMES = {"tessera.mul", "tessera.scale", "mul", "scale"}
+
+
+def _transpose_flag(op: _Op, axis: str) -> bool:
+    """Read a matmul transpose flag (``axis`` = ``"a"``/``"b"``), accepting both
+    the ``transpose_b`` and ``transposeB`` spellings. The flags live in the op's
+    kwargs — the executor merges kwargs into ``_Op.attrs`` before discovery."""
+    return bool(op.attrs.get(f"transpose_{axis}")
+                or op.attrs.get(f"transpose{axis.upper()}"))
 
 
 def discover_attention_regions(
@@ -1510,6 +2140,13 @@ def discover_attention_regions(
         if i in consumed or op.name not in _MATMUL_NAMES or len(op.inputs) < 2:
             continue
         q_val, k_val = op.inputs[0], op.inputs[1]
+        # M2 orientation fix: resolve K's layout from the score matmul's
+        # transpose flags (unambiguous, unlike value shapes when D==Nk). The
+        # synthesizer wants natural Q(M,D)/K(Nk,D); `transpose_b=True` means the
+        # K operand already IS natural (the matmul does Q·Kᵀ), so it does NOT
+        # need flipping — `transpose_b=False` means the operand is Kᵀ and must.
+        q_transposed = _transpose_flag(op, "a")
+        k_transposed = not _transpose_flag(op, "b")
         chain = [i]
         scale = 1.0
         cur = op.output
@@ -1540,10 +2177,16 @@ def discover_attention_regions(
         # the softmax result must be the FIRST operand of the P@V matmul.
         if ops[j].inputs[0] != cur:
             continue
+        # P@V must be a plain contraction (P(M,Nk) @ V(Nk,Dv)); a transpose on
+        # either operand isn't the standard attention shape — leave it unfused.
+        if _transpose_flag(ops[j], "a") or _transpose_flag(ops[j], "b"):
+            continue
         v_val = ops[j].inputs[1]
         chain.append(j)
         consumed.add(j)
-        regions.append((chain, AttentionRegion(scale=scale), (q_val, k_val, v_val)))
+        regions.append((chain, AttentionRegion(
+            scale=scale, q_transposed=q_transposed, k_transposed=k_transposed),
+            (q_val, k_val, v_val)))
     return regions
 
 

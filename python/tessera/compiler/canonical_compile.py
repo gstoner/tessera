@@ -649,6 +649,7 @@ _KNOWN_FUSION_CHAINS: tuple[tuple[str, ...], ...] = (
     ("matmul", "softmax"),             # scores → softmax
     ("matmul", "gelu"),                # MLP matmul → gelu
     ("matmul", "rmsnorm"),             # matmul → rmsnorm
+    ("matmul", "rmsnorm_safe"),        # matmul → rmsnorm (Gemma soft variant, eps 1e-6)
 )
 
 
@@ -676,8 +677,9 @@ def _match_swiglu_at(body, canon, i: int) -> bool:
         h    = silu_mul(gate, up)
         out  = matmul(h, Wd)
 
-    Mirrors runtime.py's ``_apple_gpu_metadata_is_swiglu_chain`` so the
-    executor can dispatch the fused kernel from this group alone."""
+    The executor dispatches the fused kernel from this group alone via the
+    ``dispatch`` roles (Phase 0a/0b) — the structural re-matcher this once
+    mirrored was deleted in Phase 0c (front-to-back closure plan)."""
     if i + 4 > len(body):
         return False
     if tuple(canon[i:i + 4]) != ("matmul", "matmul", "silu_mul", "matmul"):
@@ -698,6 +700,76 @@ def _match_swiglu_at(body, canon, i: int) -> bool:
         return False
     down_operands = [_strip_percent(o) for o in down.operands]
     return bool(down_operands) and down_operands[0] == sm.result_names[0]
+
+
+def _chain_result(op) -> str | None:
+    names = getattr(op, "result_names", None)
+    return _strip_percent(names[0]) if names else None
+
+
+def _chain_dispatch_roles(
+        body, start: int, length: int, fused_kernel: str) -> dict[str, Any] | None:
+    """Operand/result roles for a recognized fusion chain, resolved from
+    Graph-IR operand order — Phase 0a of the front-to-back closure plan
+    (docs/audit/compiler/COMPILER_AUDIT.md).
+
+    Mirrors the inline role extraction in
+    ``runtime._execute_apple_gpu_mps_metadata`` but computes it ONCE at compile
+    time where SSA names + operand order are unambiguous (the executor's
+    value-shape guessing is what blocks attention-region fusion, see
+    runtime.py ~:2460). Carried on the group as ``dispatch`` so a later step can
+    make the executor authoritative and drop the structural re-matchers.
+
+    Returns ``None`` when roles can't be cleanly resolved, so the group simply
+    carries no ``dispatch`` and the executor's existing path is unaffected
+    (0a is strictly additive)."""
+
+    def operand(op, idx: int) -> str | None:
+        ops = op.operands
+        return _strip_percent(ops[idx]) if len(ops) > idx else None
+
+    def tflag(op, axis: str) -> bool:
+        # Score/first matmul transpose flag (kwargs `transpose_b`/`transposeB`),
+        # carried so the executor honors `Q·Kᵀ` (transpose_b) instead of guessing
+        # K's orientation from value shapes — the M2 attention-orientation fix.
+        kw = getattr(op, "kwargs", None) or {}
+        return bool(kw.get(f"transpose_{axis}") or kw.get(f"transpose{axis.upper()}"))
+
+    chain = body[start:start + length]
+    if fused_kernel == "swiglu" and length == 4:
+        gate, up, _silu, down = chain
+        roles: dict[str, Any] = {
+            "x": operand(gate, 0), "wg": operand(gate, 1),
+            "wu": operand(up, 1), "wd": operand(down, 1),
+            "out": _chain_result(down),
+        }
+    elif fused_kernel == "matmul_softmax_matmul" and length == 3:
+        mm1, _sm, mm2 = chain
+        roles = {
+            "a": operand(mm1, 0), "b": operand(mm1, 1),
+            "c": operand(mm2, 1), "out": _chain_result(mm2),
+            "transpose_a": tflag(mm1, "a"), "transpose_b": tflag(mm1, "b"),
+        }
+    elif fused_kernel in ("matmul_softmax", "matmul_gelu", "matmul_rmsnorm",
+                          "matmul_rmsnorm_safe") and length == 2:
+        mm, tail = chain
+        roles = {
+            "a": operand(mm, 0), "b": operand(mm, 1),
+            "out": _chain_result(tail),
+            "transpose_a": tflag(mm, "a"), "transpose_b": tflag(mm, "b"),
+        }
+        if fused_kernel in ("matmul_rmsnorm", "matmul_rmsnorm_safe"):
+            kwargs = getattr(tail, "kwargs", None) or {}
+            eps_default = (1e-6 if str(getattr(tail, "op_name", "")).endswith(
+                "rmsnorm_safe") else 1e-5)
+            roles["eps"] = float(kwargs.get("eps", eps_default))
+    else:
+        return None
+
+    # Every tensor role must resolve; ``eps`` is a scalar param, not an SSA name.
+    if any(v is None for k, v in roles.items() if k != "eps"):
+        return None
+    return roles
 
 
 def _match_known_chains(fn) -> list[dict[str, Any]]:
@@ -721,7 +793,7 @@ def _match_known_chains(fn) -> list[dict[str, Any]]:
                     matched_len, fused_name = L, "_".join(chain)
                     break
         if matched_len:
-            groups.append({
+            group: dict[str, Any] = {
                 "function": fn.name,
                 "kind": "known_chain",
                 "status": "candidate",
@@ -730,7 +802,13 @@ def _match_known_chains(fn) -> list[dict[str, Any]]:
                     {"index": i + k, "op": canon[i + k]}
                     for k in range(matched_len)
                 ],
-            })
+            }
+            # 0a — carry operand/result roles so the executor can dispatch from
+            # this group alone (additive: absent when roles don't resolve).
+            roles = _chain_dispatch_roles(body, i, matched_len, fused_name)
+            if roles is not None:
+                group["dispatch"] = roles
+            groups.append(group)
             i += matched_len                               # don't overlap chains
         else:
             i += 1
@@ -791,9 +869,23 @@ def _derive_compile_metadata(module: GraphIRModule) -> dict[str, Any]:
 # Linear fusion chains the Apple Target IR passes re-discover and now also
 # consume from a descriptor. (swiglu / mla / nsa lower a pre-fused op — the op
 # *is* the descriptor — so they don't need an intent stamp.)
+#
+# These are the intent *names the C++ consumers read*. The reverse direction
+# (every name here is consumed by some Apple pass) is guarded by
+# tests/unit/test_fusion_intent_emitter.py::test_emitter_intents_match_cpp_consumers.
 _INTENT_KERNELS: frozenset[str] = frozenset({
     "matmul_softmax_matmul", "matmul_softmax", "matmul_gelu", "matmul_rmsnorm",
 })
+
+# Producer fused_kernel → the intent name the C++ consumer expects. The Apple
+# `MatmulRMSNormFusion` pass handles `rmsnorm` *and* `rmsnorm_safe` and reads a
+# single `intent == "matmul_rmsnorm"` for both, so the `matmul_rmsnorm_safe`
+# chain (a distinct producer kernel since Phase 0c) maps to that one intent —
+# otherwise the C++ would tag rmsnorm_safe fusions `rediscovered` (drift).
+# Identity for every other kernel.
+_FUSION_INTENT_NAME: dict[str, str] = {
+    "matmul_rmsnorm_safe": "matmul_rmsnorm",
+}
 
 
 def stamp_fusion_intents(module: GraphIRModule) -> int:
@@ -813,7 +905,10 @@ def stamp_fusion_intents(module: GraphIRModule) -> int:
         if group.get("kind") != "known_chain":
             continue
         kernel = group.get("fused_kernel")
-        if kernel not in _INTENT_KERNELS:
+        # Normalize the producer kernel to the intent name the C++ consumer
+        # reads (identity for all but matmul_rmsnorm_safe → matmul_rmsnorm).
+        intent_name = _FUSION_INTENT_NAME.get(kernel, kernel)
+        if intent_name not in _INTENT_KERNELS:
             continue
         fn_name = group.get("function")
         fn = by_fn.get(fn_name) if isinstance(fn_name, str) else None
@@ -830,7 +925,7 @@ def stamp_fusion_intents(module: GraphIRModule) -> int:
             # kwargs are forwarded as the op's real call arguments in the
             # reference/runtime execution path, so a descriptor placed there
             # would leak into the numpy op call (e.g. gelu(**kwargs)).
-            intent_attr = f'tessera.fusion.intent = "{kernel}"'
+            intent_attr = f'tessera.fusion.intent = "{intent_name}"'
             if not op.attrs:
                 op.attrs = intent_attr
             elif "tessera.fusion.intent" not in op.attrs:

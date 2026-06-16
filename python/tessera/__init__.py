@@ -2626,23 +2626,17 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 f"last dim {x.shape[-1]} must be divisible by block_size "
                 f"{block_size} for NVFP4"
             )
-        max_normal = _FP4_FORMATS["e2m1"]["max_normal"]
-        # Reshape last axis into (num_blocks, block_size).
-        leading = x.shape[:-1]
-        num_blocks = x.shape[-1] // block_size
-        blocked = x.reshape(*leading, num_blocks, block_size)
-        # Per-block amax → per-block scale.
-        amax = np.max(np.abs(blocked), axis=-1, keepdims=False)
-        scales = np.maximum(amax / max_normal, 1e-12).astype(np.float32)
-        # Broadcast scales back across the block dim for the cast.
-        scales_bcast = scales[..., None]
-        scaled = np.clip(blocked / scales_bcast, -max_normal, max_normal)
-        rounded = _round_to_fp_grid_numpy(
-            scaled, max_normal=max_normal,
-            mantissa_bits=int(_FP4_FORMATS["e2m1"]["mantissa_bits"]),
-        )
-        out = (rounded * scales_bcast).reshape(x.shape)
-        return out.astype(np.float32), scales
+        # Unified onto the faithful compiler-side contract
+        # (compiler/microscaling.py): bit-accurate E2M1 codes with the spec's
+        # per-block FP8-E4M3 scale (the prior path used an fp32 block scale).
+        # Returns the dequantized fp32 (legacy fake-quant signature) + the
+        # per-block scales as fp32 for call-site symmetry.
+        from .compiler import microscaling as _ms
+        fmt = _ms.LowPrecisionFormat(
+            "nvfp4", "fp4_e2m1", _ms.ScaleLayout(block_size, -1, "fp8_e4m3"))
+        q = _ms.quantize(x, fmt)
+        dq = _ms.dequantize(q).astype(np.float32)
+        return dq, np.asarray(q.scales, np.float32)
 
     def dequantize_nvfp4(x_q, scales, *, block_size: int = 16):
         """Inverse of :func:`quantize_nvfp4`."""

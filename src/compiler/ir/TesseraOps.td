@@ -1694,6 +1694,11 @@ def Tessera_TransposeOp : Op<
   // must be a permutation (dynamic dims are unconstrained).  Element
   // type must match.
   let hasVerifier = 1;
+  // Phase 1 (front-to-back closure plan): a no-perm (reverse-dims) transpose
+  // is its own inverse — `transpose(transpose(x)) -> x`. Picked up by
+  // `createCanonicalizerPass`, now wired into the tessera_jit pipeline so it
+  // is observable end-to-end on the executed CPU path.
+  let hasCanonicalizer = 1;
 }
 
 // Sprint V6a (2026-05-22): ReshapeOp registration.  V5
@@ -1731,6 +1736,10 @@ def Tessera_CastOp : Op<
   // conversion.  Input and output must have the same rank + static
   // dim sizes; only the element type may differ.
   let hasVerifier = 1;
+  // Phase 1 (front-to-back closure plan): an identity cast (same type, no
+  // numeric policy) folds to its input. A numeric_policy may carry a real
+  // rounding/math-mode change, so identity-fold only when it is absent.
+  let hasFolder = 1;
 }
 
 def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", []> {

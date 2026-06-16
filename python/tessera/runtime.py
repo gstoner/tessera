@@ -2412,11 +2412,15 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     def _norm(s: Any) -> str:
         return str(s).lstrip("%")
 
+    # Merge kwargs into the discovery attrs: matmul transpose flags (transpose_b,
+    # …) and the softmax/scale params live in kwargs, and the attention/norm
+    # discoverers read them from _Op.attrs.
     fops = [
         _Op(str(o.get("op_name", "")),
             tuple(_norm(x) for x in (o.get("operands") or [])),
             _norm(o.get("result") or ""),
-            dict(o.get("attributes") or o.get("attrs") or {}))
+            {**(o.get("kwargs") or {}),
+             **(o.get("attributes") or o.get("attrs") or {})})
         for o in ops
     ]
     consumed: set = set()
@@ -2457,15 +2461,194 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
         except Exception:                      # noqa: BLE001 - fall back to per-op
             continue
 
-    # NOTE: attention-block discovery (matmul -> softmax -> matmul, F2c) is NOT
-    # dispatched here.  Its synthesizer is hardware-verified, but the score
-    # matmul feeds the *transposed* K (operand shape (D, Nk)) while
-    # run_fused_attention expects K as (Nk, D); resolving that orientation needs
-    # layout-aware operand info from a Graph-IR pass, not value shapes (which are
-    # ambiguous when D == Nk).  discover_attention_regions stays a tested pure
-    # function for that pass; wiring it from raw values would risk a silent
-    # transpose error.
+    # M2 — norm_chain: add(x, residual) -> rmsnorm/layer_norm fused into one
+    # synthesized kernel (the pre-norm transformer pattern). Discovered on the
+    # ops NOT already claimed by a matmul-epilogue region above (a
+    # matmul->bias->norm chain is handled there). Standalone norms stay on the
+    # MPSGraph rowop lane.
+    try:
+        from tessera.compiler.fusion import (
+            discover_norm_chain_regions, run_norm_chain_region)
+        for idxs, nc_region, ops_map, out_v in discover_norm_chain_regions(
+                fops, skip=consumed):
+            try:
+                X = _as_numpy(values[ops_map["x"]])
+                if X.ndim != 2:
+                    continue
+                R = (_as_numpy(values[ops_map["residual"]])
+                     if "residual" in ops_map else None)
+                G = (_as_numpy(values[ops_map["gamma"]])
+                     if "gamma" in ops_map else None)
+                B = (_as_numpy(values[ops_map["beta"]])
+                     if "beta" in ops_map else None)
+                out, _ex = run_norm_chain_region(
+                    nc_region, X, residual=R, gamma=G, beta=B)
+                values[out_v] = out
+                consumed.update(idxs)
+            except Exception:                  # noqa: BLE001 - fall back to per-op
+                continue
+    except Exception:                          # noqa: BLE001 - fusion optional
+        pass
+
+    # M2 — attention block (matmul -> [scale] -> softmax -> matmul) fused into
+    # ONE synthesized kernel. The score matmul's K orientation is now resolved
+    # from its transpose flag (carried in the region by discover_attention_regions),
+    # not guessed from value shapes — so the long-standing "ambiguous when D==Nk"
+    # blocker is gone. Oracle-gated (verify_synthesized_attention) and cost-gated
+    # (should_fuse_attention) like the matmul-epilogue path.
+    try:
+        from tessera.compiler.fusion import (
+            discover_attention_regions, run_fused_attention,
+            should_fuse_attention, verify_synthesized_attention)
+        for chain_idx, attn_region, (q_v, k_v, v_v) in discover_attention_regions(
+                fops):
+            if any(idx in consumed for idx in chain_idx):
+                continue
+            try:
+                Q = _as_numpy(values[q_v])
+                K = _as_numpy(values[k_v])
+                V = _as_numpy(values[v_v])
+                if Q.ndim != 2 or K.ndim != 2 or V.ndim != 2:
+                    continue
+                # Natural shapes after the region's transpose flags are applied.
+                Qn, Kn = attn_region._natural(Q, K)
+                M, D = Qn.shape
+                Nk = Kn.shape[0]
+                Dv = V.shape[1]
+                if not should_fuse_attention(attn_region, M, Nk, D, Dv):
+                    continue
+                if not verify_synthesized_attention(attn_region):
+                    continue
+                out, _ex = run_fused_attention(attn_region, Q, K, V)
+                values[fops[chain_idx[-1]].output] = out
+                consumed.update(chain_idx)
+            except Exception:                  # noqa: BLE001 - fall back to per-op
+                continue
+    except Exception:                          # noqa: BLE001 - fusion optional
+        pass
+
+    # M4 — whole-graph pointwise: an arbitrary same-shape elementwise DAG runs
+    # as ONE Metal kernel (vs N MPSGraph dispatches). Discovered on the ops not
+    # claimed above; only claimed when it genuinely fuses on Metal (a broadcast
+    # / unsupported region is left to the per-op MPSGraph lane).
+    try:
+        from tessera.compiler.fusion import (
+            discover_pointwise_graph, run_pointwise_graph)
+        for idxs, pw_region in discover_pointwise_graph(fops, skip=consumed):
+            try:
+                inputs = [_as_numpy(values[v]) for v in pw_region.inputs]
+                if any(getattr(a, "ndim", 0) < 1 for a in inputs):
+                    continue
+                shp = np.asarray(inputs[0]).shape
+                if any(np.asarray(a).shape != shp for a in inputs):
+                    continue
+                out, ex = run_pointwise_graph(pw_region, inputs)
+                if ex == "metal_runtime":
+                    values[pw_region.output] = out
+                    consumed.update(idxs)
+            except Exception:                  # noqa: BLE001 - fall back to per-op
+                continue
+    except Exception:                          # noqa: BLE001 - fusion optional
+        pass
+
     return consumed
+
+
+# ---------------------------------------------------------------------------
+# Phase 0b — authoritative fusion dispatch (front-to-back closure plan,
+# docs/audit/compiler/COMPILER_AUDIT.md). When a whole-program known_chain
+# fusion group carries operand/result *roles* (Phase 0a,
+# canonical_compile._chain_dispatch_roles), dispatch the fused kernel directly
+# from the group — no per-invoke re-matching of the op list, no value-shape
+# guessing. The structural re-matchers stay as a fallback for legacy artifacts
+# whose metadata predates the `dispatch` roles. Each handler takes
+# ``(values, roles, np)`` and returns the fused result array.
+# ---------------------------------------------------------------------------
+
+
+def _auth_score_ab(values, roles, np):
+    """Load the (score) matmul operands a, b, applying the carried transpose
+    flags (M2 orientation fix) so `softmax(Q·Kᵀ)` is honored — `transpose_b`
+    means the b operand is K (natural) and the matmul does a·bᵀ. Rank-2; the
+    flag is resolved from the IR, never guessed from value shapes."""
+    a = _as_numpy(values[roles["a"]])
+    b = _as_numpy(values[roles["b"]])
+    if roles.get("transpose_a") and a.ndim == 2:
+        a = np.ascontiguousarray(a.T)
+    if roles.get("transpose_b") and b.ndim == 2:
+        b = np.ascontiguousarray(b.T)
+    return a, b
+
+
+def _auth_dispatch_swiglu(values, roles, np):
+    return _apple_gpu_dispatch_swiglu(
+        _as_numpy(values[roles["x"]]), _as_numpy(values[roles["wg"]]),
+        _as_numpy(values[roles["wu"]]), _as_numpy(values[roles["wd"]]), np)
+
+
+def _auth_dispatch_matmul_softmax_matmul(values, roles, np):
+    a, b = _auth_score_ab(values, roles, np)
+    return _apple_gpu_dispatch_matmul_softmax_matmul(
+        [a, b, _as_numpy(values[roles["c"]])], np)
+
+
+def _auth_dispatch_matmul_softmax(values, roles, np):
+    a, b = _auth_score_ab(values, roles, np)
+    return _apple_gpu_dispatch_matmul_softmax([a, b], np)
+
+
+def _auth_dispatch_matmul_gelu(values, roles, np):
+    a, b = _auth_score_ab(values, roles, np)
+    return _apple_gpu_dispatch_matmul_gelu([a, b], np)
+
+
+def _auth_dispatch_matmul_rmsnorm(values, roles, np):
+    a, b = _auth_score_ab(values, roles, np)
+    return _apple_gpu_dispatch_matmul_rmsnorm(
+        [a, b], float(roles.get("eps", 1e-5)), np)
+
+
+# kernel name → (handler, required-tensor-role-names). The required roles must
+# all resolve to bound values or we decline (and fall through to the cascade).
+_APPLE_GPU_FUSION_DISPATCH: dict[str, Any] = {
+    "swiglu": (_auth_dispatch_swiglu, ("x", "wg", "wu", "wd")),
+    "matmul_softmax_matmul": (_auth_dispatch_matmul_softmax_matmul, ("a", "b", "c")),
+    "matmul_softmax": (_auth_dispatch_matmul_softmax, ("a", "b")),
+    "matmul_gelu": (_auth_dispatch_matmul_gelu, ("a", "b")),
+    "matmul_rmsnorm": (_auth_dispatch_matmul_rmsnorm, ("a", "b")),
+    "matmul_rmsnorm_safe": (_auth_dispatch_matmul_rmsnorm, ("a", "b")),
+}
+
+
+def _apple_gpu_resolve_authoritative_plan(
+        metadata: Mapping[str, Any], n_ops: int) -> tuple[str, dict[str, Any]] | None:
+    """Return ``(fused_kernel, roles)`` when a whole-program known_chain fusion
+    group carries resolvable ``dispatch`` roles for a supported kernel; else
+    ``None``.
+
+    Reads both ``fusion_groups`` (tests / future bare key) and
+    ``canonical_fusion_groups`` (what ``descriptive_metadata()`` actually stamps
+    on the `@jit` artifact today). The whole-program guard (``len == n_ops`` and
+    ``indices == 0..n_ops-1``) is exactly the precondition the structural
+    re-matchers used to re-establish per invoke."""
+    groups = (metadata.get("fusion_groups")
+              or metadata.get("canonical_fusion_groups") or ())
+    for group in groups:
+        if not isinstance(group, Mapping) or group.get("kind") != "known_chain":
+            continue
+        dispatch = group.get("dispatch")
+        if not isinstance(dispatch, Mapping):
+            continue
+        kernel = group.get("fused_kernel")
+        if kernel not in _APPLE_GPU_FUSION_DISPATCH:
+            continue
+        group_ops = group.get("ops") or []
+        if len(group_ops) != n_ops:
+            continue
+        indices = [e.get("index") for e in group_ops if isinstance(e, Mapping)]
+        if indices == list(range(n_ops)):
+            return str(kernel), dict(dispatch)
+    return None
 
 
 def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
@@ -2491,20 +2674,43 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
 
     values = _bind_launch_args(args, arg_names)
 
+    # Phase 0b — authoritative fusion dispatch. When a whole-program known_chain
+    # group carries operand/result roles (Phase 0a), dispatch the fused kernel
+    # straight from the group: no per-invoke re-matching, no value-shape
+    # guessing. If the roles don't resolve against bound values we fall through
+    # to the structural cascade below (legacy-artifact safety).
+    _auth = _apple_gpu_resolve_authoritative_plan(metadata, len(ops))
+    if _auth is not None:
+        _kernel, _roles = _auth
+        _handler, _required = _APPLE_GPU_FUSION_DISPATCH[_kernel]
+        _out = _roles.get("out")
+        if _out is not None and all(_roles.get(r) in values for r in _required):
+            values[str(_out)] = _handler(values, _roles, np)
+            if output_name not in values:
+                raise ValueError(f"artifact did not produce output {output_name!r}")
+            return values[output_name]
+
     # P1 (2026-06-10) — consume compiler fusion intent. canonical_compile
     # derives `fusion_groups` known_chain entries from this same op list at
     # compile time (incl. the SwiGLU DAG via `_match_swiglu_at`); when one
     # covers the whole program, dispatch the fused kernel directly instead of
     # re-discovering the pattern per invoke. The structural re-matchers below
     # stay as fallback for legacy artifacts whose metadata predates
-    # fusion_groups (2026-06-07).
+    # fusion_groups (2026-06-07) or the Phase 0a `dispatch` roles.
     fused_kernel = _apple_gpu_known_chain_from_fusion_groups(metadata, len(ops))
 
     # Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — 4-op fusion dispatch.
     # The longest known fusion. Check before any shorter chain so the most-
     # specific match wins. Chain shape: gate matmul → up matmul → silu_mul
     # → down matmul, with both gate/up consuming the same %x.
-    if fused_kernel == "swiglu" or _apple_gpu_metadata_is_swiglu_chain(ops):
+    #
+    # Phase 0c (front-to-back closure plan): the structural re-matchers were
+    # deleted — the authoritative path above (Phase 0b) is the single fusion
+    # recognizer for `@jit` artifacts (canonical_fusion_groups carry the
+    # `dispatch` roles). These `fused_kernel == "X"` branches remain only for
+    # bare-`fusion_groups` metadata that names the chain but predates the
+    # `dispatch` roles (hand-built / legacy artifacts).
+    if fused_kernel == "swiglu":
         m_gate, m_up, _silu, m_down = ops[0], ops[1], ops[2], ops[3]
         x_name = m_gate.get("operands", [None])[0]
         if x_name is None:
@@ -2531,8 +2737,7 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     # Phase 8.4.3 + 8.4.5 — fused chain dispatch. Longest match wins, so
     # check the 3-op pattern (matmul -> softmax -> matmul) before the 2-op
     # pattern (matmul -> softmax).
-    if (fused_kernel == "matmul_softmax_matmul"
-            or _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops)):
+    if fused_kernel == "matmul_softmax_matmul":
         first, _sm, third = ops[0], ops[1], ops[2]
         a_b = [_as_numpy(values[name]) for name in first.get("operands", [])]
         # The third op's second operand is C (the V tensor).
@@ -2551,8 +2756,7 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
-    if (fused_kernel == "matmul_softmax"
-            or _apple_gpu_metadata_is_matmul_softmax_chain(ops)):
+    if fused_kernel == "matmul_softmax":
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2566,8 +2770,7 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         return values[output_name]
 
     # Phase 8.4.7 — matmul -> gelu and matmul -> rmsnorm 2-op fusions.
-    if (fused_kernel == "matmul_gelu"
-            or _apple_gpu_metadata_is_matmul_postlude_chain(ops, "tessera.gelu")):
+    if fused_kernel == "matmul_gelu":
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2578,10 +2781,7 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
             raise ValueError(f"artifact did not produce output {output_name!r}")
         return values[output_name]
 
-    if (fused_kernel == "matmul_rmsnorm"
-            or _apple_gpu_metadata_is_matmul_postlude_chain(
-                ops, "tessera.rmsnorm", "tessera.rmsnorm_safe"
-            )):
+    if fused_kernel in ("matmul_rmsnorm", "matmul_rmsnorm_safe"):
         first, second = ops[0], ops[1]
         operands = [_as_numpy(values[name]) for name in first.get("operands", [])]
         result_name = second.get("result")
@@ -2732,107 +2932,6 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
     return table
 
 
-def _apple_gpu_metadata_is_matmul_softmax_matmul_chain(ops: list[dict]) -> bool:
-    """Phase 8.4.5 — check whether the metadata ops form a 3-op
-    matmul -> softmax -> matmul fusion chain (full attention block).
-    Mirrors driver.py's compile-time check so the runtime can detect
-    the pattern from artifact metadata alone."""
-
-    if len(ops) != 3:
-        return False
-    first, second, third = ops[0], ops[1], ops[2]
-    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-    if str(second.get("op_name", "")) not in {"tessera.softmax", "tessera.softmax_safe"}:
-        return False
-    if str(third.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-
-    def _strip(name: str) -> str:
-        return name[1:] if name.startswith("%") else name
-
-    sm_operands = [_strip(str(n)) for n in second.get("operands") or []]
-    if len(sm_operands) != 1 or sm_operands[0] != str(first.get("result", "")):
-        return False
-    third_operands = [_strip(str(n)) for n in third.get("operands") or []]
-    if len(third_operands) < 1 or third_operands[0] != str(second.get("result", "")):
-        return False
-    return True
-
-
-def _apple_gpu_metadata_is_swiglu_chain(ops: list[dict]) -> bool:
-    """Phase 8.4.8 (Stage 3 SwiGLU Performance Plan) — check whether the
-    metadata ops form a 4-op SwiGLU MLP-block fusion chain:
-
-        matmul(x, Wg) -> matmul(x, Wu) -> silu_mul(gate, up) -> matmul(_, Wd)
-
-    Mirrors driver.py's compile-time `_apple_gpu_chain_kind == "swiglu"`
-    check. Both gate and up matmuls must consume the same `%x` SSA value;
-    otherwise the chain isn't a SwiGLU block.
-    """
-
-    if len(ops) != 4:
-        return False
-    m_gate, m_up, sm_op, m_down = ops[0], ops[1], ops[2], ops[3]
-    if str(m_gate.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-    if str(m_up.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-    if str(sm_op.get("op_name", "")) != "tessera.silu_mul":
-        return False
-    if str(m_down.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-
-    def _strip(name: str) -> str:
-        return name[1:] if name.startswith("%") else name
-
-    gate_operands = [_strip(str(n)) for n in m_gate.get("operands") or []]
-    up_operands = [_strip(str(n)) for n in m_up.get("operands") or []]
-    if len(gate_operands) < 2 or len(up_operands) < 2:
-        return False
-    if gate_operands[0] != up_operands[0]:
-        return False  # gate and up must share %x.
-
-    sm_operands = [_strip(str(n)) for n in sm_op.get("operands") or []]
-    if len(sm_operands) != 2:
-        return False
-    if sm_operands[0] != str(m_gate.get("result", "")):
-        return False
-    if sm_operands[1] != str(m_up.get("result", "")):
-        return False
-
-    down_operands = [_strip(str(n)) for n in m_down.get("operands") or []]
-    if len(down_operands) < 1:
-        return False
-    if down_operands[0] != str(sm_op.get("result", "")):
-        return False
-    return True
-
-
-def _apple_gpu_metadata_is_matmul_postlude_chain(
-    ops: list[dict], *postlude_op_names: str
-) -> bool:
-    """Phase 8.4.7 — generic matmul -> postlude 2-op chain detector.
-    Used by the matmul_gelu and matmul_rmsnorm dispatchers; the second
-    op's name set is configurable so the same shape works for both.
-    """
-
-    if len(ops) != 2:
-        return False
-    first, second = ops[0], ops[1]
-    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-    if str(second.get("op_name", "")) not in set(postlude_op_names):
-        return False
-    operands = [str(n) for n in second.get("operands") or []]
-    if len(operands) < 1:
-        return False
-    op0 = operands[0]
-    if op0.startswith("%"):
-        op0 = op0[1:]
-    return op0 == str(first.get("result", ""))
-
-
 def _apple_gpu_metadata_matmul_bias_act(ops: list[dict]):
     """P6 — recognize a linear+bias(+activation) chain from metadata:
     matmul/gemm -> add(bias) [-> gelu|relu|silu]. Returns the activation name
@@ -2893,27 +2992,6 @@ def _apple_gpu_dispatch_matmul_bias_act(operands: list[Any], bias: Any,
     y = y.astype(np.float32) + bias.astype(np.float32)
     y = _mtl4_epilogue_act_numpy(y, _MTL4_EPILOGUE_ACT[act], np)
     return y.astype(in_dtype)
-
-
-def _apple_gpu_metadata_is_matmul_softmax_chain(ops: list[dict]) -> bool:
-    """Phase 8.4.3 — check whether the metadata ops form a 2-op
-    matmul -> softmax fusion chain. Mirrors driver.py's compile-time check
-    so the runtime can detect the pattern from artifact metadata alone."""
-
-    if len(ops) != 2:
-        return False
-    first, second = ops[0], ops[1]
-    if str(first.get("op_name", "")) not in {"tessera.matmul", "tessera.gemm"}:
-        return False
-    if str(second.get("op_name", "")) not in {"tessera.softmax", "tessera.softmax_safe"}:
-        return False
-    sm_operands = [str(n) for n in second.get("operands") or []]
-    if len(sm_operands) != 1:
-        return False
-    op0 = sm_operands[0]
-    if op0.startswith("%"):
-        op0 = op0[1:]
-    return op0 == str(first.get("result", ""))
 
 
 def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> Any:

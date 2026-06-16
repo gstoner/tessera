@@ -894,6 +894,36 @@ def test_coopmat_synthesizer_emits_simdgroup_matrix():
     assert "device const half* A" in src               # half I/O
 
 
+def test_coopmat_synthesizer_emits_bfloat_simdgroup_matrix():
+    # M2: bf16 taps the matrix units via simdgroup_matrix<bfloat> (Apple7
+    # MTLDataType.bfloat); fp32 accumulator, explicit (bfloat) store cast.
+    from tessera.compiler.fusion import synthesize_matmul_epilogue_coopmat_msl
+    src = synthesize_matmul_epilogue_coopmat_msl(FusedRegion(("gelu",)), dtype="bf16")
+    assert "simdgroup_matrix<bfloat, 8, 8>" in src     # bf16 inputs on matrix units
+    assert "simdgroup_float8x8 acc" in src             # fp32 accumulator
+    assert "device const bfloat* A" in src             # bfloat I/O
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("M,K,N", [(64, 64, 64), (128, 256, 384)])
+def test_coopmat_bf16_matmul_epilogue_on_metal(M, K, N):
+    # M2: bf16 matmul+epilogue runs on the simdgroup_matrix MMA units (not the
+    # scalar bf16 kernel). Validates simdgroup_matrix<bfloat> compiles + executes.
+    ml = pytest.importorskip("ml_dtypes")
+    from tessera.compiler.fusion import FusedRegion, run_fused_region_coopmat
+    bf16 = ml.bfloat16
+    rng = np.random.default_rng((M * 7 + N) & 0xFFFF)
+    region = FusedRegion(("gelu",))
+    A = (rng.standard_normal((M, K)) * 0.3).astype(bf16)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(bf16)
+    out, ex = run_fused_region_coopmat(region, A, B)
+    assert ex == "metal_runtime"                       # matrix-unit kernel ran
+    assert np.asarray(out).dtype == bf16               # output stays bf16
+    ref = region.reference(A.astype(np.float32), B.astype(np.float32))
+    # bf16 has ~2-3 significant digits → loose tol on O(1) values.
+    assert np.max(np.abs(out.astype(np.float32) - ref)) < 0.1
+
+
 def test_coopmat_64_tile_synthesizes_8_accumulators():
     from tessera.compiler.fusion import (
         synthesize_matmul_epilogue_coopmat_msl, coopmat_threads, SYNTH_COOPMAT_TILES,

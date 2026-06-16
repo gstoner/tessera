@@ -790,13 +790,19 @@ def run_fused_region_coopmat(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     if not coopmat_eligible(region):
         return run_fused_region(region, A, B, bias)
     in_dtype = np.asarray(A).dtype
+    bf16 = _bf16_dtype()
     np_dt: Any
     if in_dtype == np.float16:
         np_dt, elem_size, dtype = np.float16, 2, "f16"
     elif in_dtype == np.float32:
         np_dt, elem_size, dtype = np.float32, 4, "f32"
+    elif bf16 is not None and in_dtype == bf16:
+        # Native bf16 simdgroup_matrix MMA (Apple7 MTLDataType.bfloat). The
+        # synthesized `simdgroup_matrix<bfloat,8,8>` taps the matrix units like
+        # f16 (fp32 accumulate); the C ABI is dtype-generic (void* + elem_size=2).
+        np_dt, elem_size, dtype = bf16, 2, "bf16"
     else:
-        return run_fused_region(region, A, B, bias)   # bf16/other → scalar path
+        return run_fused_region(region, A, B, bias)   # other → scalar path
     A = np.ascontiguousarray(A, np_dt)
     B = np.ascontiguousarray(B, np_dt)
     M, K = A.shape
@@ -1002,13 +1008,18 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     # F2d — pointwise regions run on the matrix units (simdgroup_matrix MMA),
     # ~55-98x the scalar kernel and capturing the f16 throughput. Reduction
     # regions stay on the scalar stack/tiled path (cross-tile row reduce is v2).
-    if coopmat_eligible(region) and in_dtype in (np.float16, np.float32):
+    _is_bf16 = bf16 is not None and in_dtype == bf16
+    if coopmat_eligible(region) and (in_dtype in (np.float16, np.float32)
+                                     or _is_bf16):
+        # Pointwise regions run on the matrix units for f16/f32 AND bf16
+        # (simdgroup_matrix<bfloat> — M2). A reduction region or an MSL-bfloat
+        # miss falls through to the scalar bf16/f32 path below.
         out, ex = run_fused_region_coopmat(region, A, B, bias)
         if ex == "metal_runtime":
             return out, ex
-    if bf16 is not None and in_dtype == bf16:
-        # Native bfloat kernel first (Apple7 MTLDataType.bfloat); fall back to
-        # f32 emulation only if the runtime's MSL `bfloat` is unavailable.
+    if _is_bf16:
+        # Native bfloat scalar kernel next (Apple7 MTLDataType.bfloat); fall back
+        # to f32 emulation only if the runtime's MSL `bfloat` is unavailable.
         out_bf, ex_bf = _run_fused_region_bf16(region, A, B, bias, variant)
         if ex_bf == "metal_runtime" and out_bf is not None:
             return out_bf, ex_bf

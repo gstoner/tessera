@@ -50,8 +50,17 @@ symbol's raw-uint16 ABI (bf16 is 2-byte; the MSL `bfloat` type gives the bits
 meaning), fp32 accumulators inside, with a clean fallback to f32-emulation if the
 runtime's MSL predates `bfloat`. **Verified on M1 Max**: native bfloat compiles +
 runs (`metal_runtime`), bf16-precision-correct. Guard:
-`tests/unit/test_fusion_bf16_native.py`. *Follow-on:* extend the coopmat
-(simdgroup_matrix) variant to native bf16 (MSL `simdgroup_matrix<bfloat>`).
+`tests/unit/test_fusion_bf16_native.py`.
+**Coopmat bf16 ✅ landed (2026-06-16).** The `simdgroup_matrix` MMA variant now
+runs native bf16 — `synthesize_matmul_epilogue_coopmat_msl(dtype="bf16")` emits
+`simdgroup_matrix<bfloat,8,8>` (fp32 accumulator, explicit `(bfloat)` store
+cast), and `run_fused_region_coopmat` accepts bf16. **Pure Python, no `.mm`
+rebuild** — the coopmat C ABI is dtype-generic (`void*` + `elem_size=2`). The
+top-level dispatch routes a bf16 matmul-epilogue region to the matrix units first
+(falling back to the scalar bf16 kernel for reduction regions / an MSL-bfloat
+miss). **Verified on M1 Max**: `simdgroup_matrix<bfloat>` compiles + runs,
+bf16-correct (~0.01 on O(1) values). Guards: 2 new cases in
+`tests/unit/test_fusion_synthesis.py` (structural + 64³/128×256×384 on Metal).
 
 ### M2 — Generalize the synthesizer beyond matmul-epilogue (HF)
 - **`norm_chain` region** ✅ **landed (2026-06-15).** `norm(x [+ residual])` —
@@ -295,8 +304,8 @@ oracle. Open work, by leverage:
    or norm kernel (today they are separate dispatches), then the general
    whole-program emitter (or retarget the CPU JIT `tessera→linalg` spine to
    `linalg→gpu→{SPIR-V/Metal}`).
-3. **M2 coopmat bf16 (HF — perf).** `simdgroup_matrix` MMA path for compute-bound
-   attention/matmul shapes (the memory-bound glue stays the scalar synthesizer).
+3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
+   runs native bf16 (pure Python; dtype-generic coopmat ABI).
 4. **M5 per-op MPSGraph reduction tail (HF — small).** Claim multi-op reduction
    chains beyond rmsnorm/softmax/layer_norm.
 5. **M2 multi-residual `x+r1+r2` (deprioritized).** Rare (one residual per norm);

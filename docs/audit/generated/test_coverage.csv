@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,6,0,0,6,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,85,7,8,92,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
+add,85,11,8,96,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -143,7 +143,7 @@ dequantize_int4,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 dequantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
 dequantize_nvfp4,8,0,1,8,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,needs_direct_test,category default for 'quantize'
 digamma,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-div,5,0,0,5,0,bf16 f16,covered_by_family,category default for 'elementwise'
+div,5,2,0,7,0,bf16 f16,covered_by_family,category default for 'elementwise'
 dropout,18,5,3,23,0,f32 fp32 fp64,structural_only,unclassified — defaults to structural_only
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -288,7 +288,7 @@ msa_index_scores,8,4,1,12,0,,needs_direct_test,category default for 'attention'
 msa_select_blocks,8,6,1,14,0,,structural_only,unclassified — defaults to structural_only
 msa_sparse_attention,37,8,1,45,0,,needs_direct_test,category default for 'attention'
 mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
-mul,80,0,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+mul,80,4,7,84,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 multi_head_attention,5,0,0,5,0,,covered_by_family,covered by attention family + flash_attn tests
 muon,5,0,0,5,0,,needs_direct_test,category default for 'optimizer'
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -414,7 +414,7 @@ state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 stft,5,0,0,5,0,,needs_direct_test,category default for 'spectral'
-sub,8,0,0,8,0,bf16 f16,covered_by_family,category default for 'elementwise'
+sub,8,4,0,12,0,bf16 f16,covered_by_family,category default for 'elementwise'
 sum,4,0,0,4,0,f32,needs_direct_test,category default for 'stable_reduction'
 svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'

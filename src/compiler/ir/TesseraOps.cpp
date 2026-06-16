@@ -2113,6 +2113,62 @@ OpFoldResult CastOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+// ── Phase 1 identity folders for the elementwise binary family ───────────────
+// x+0, 0+x, x-0, x*1, 1*x, x/1 collapse to the surviving operand. We fold only
+// on a constant *splat* — the one constant-tensor shape that is unambiguously
+// the scalar identity at every element — and only when that operand's type
+// equals the result type (no implicit broadcast in this op family). These never
+// appear in hand-written graphs but show up after other folds/lowerings.
+// Signed-zero note: x+0.0 maps -0.0 to +0.0; the Tessera numeric model is
+// no-signed-zeros (fast-math GEMM throughout), so the elementwise identity is
+// the intended behavior.
+static bool isSplatValue(Attribute attr, double wanted) {
+  auto dense = dyn_cast_or_null<DenseElementsAttr>(attr);
+  if (!dense || !dense.isSplat())
+    return false;
+  Type elem = dense.getElementType();
+  if (isa<FloatType>(elem))
+    return dense.getSplatValue<APFloat>().convertToDouble() == wanted;
+  if (isa<IntegerType>(elem))
+    return dense.getSplatValue<APInt>().getSExtValue() ==
+           static_cast<int64_t>(wanted);
+  return false;
+}
+
+OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  if (getLhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getRhs(), 0.0))
+    return getLhs();
+  if (getRhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getLhs(), 0.0))
+    return getRhs();
+  return {};
+}
+
+OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (getLhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getRhs(), 0.0))
+    return getLhs();
+  return {};
+}
+
+OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (getLhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getRhs(), 1.0))
+    return getLhs();
+  if (getRhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getLhs(), 1.0))
+    return getRhs();
+  return {};
+}
+
+OpFoldResult DivOp::fold(FoldAdaptor adaptor) {
+  if (getLhs().getType() == getResult().getType() &&
+      isSplatValue(adaptor.getRhs(), 1.0))
+    return getLhs();
+  return {};
+}
+
 // Sprint V4b (2026-05-22) — SoftmaxOp: shape-preserving normalization
 // over an explicit axis.  When ``axis`` is set, normalize to
 // canonical (non-negative) form and require ``-rank <= axis < rank``.

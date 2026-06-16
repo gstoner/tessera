@@ -1245,6 +1245,7 @@ def Tessera_AddOp : Op<
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 // Phase 1 production-compiler binary elementwise family. Same shape as
@@ -1256,12 +1257,14 @@ def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
   let summary = "Elementwise tensor multiplication (a * b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 def Tessera_ScoreCombineOp : Op<Tessera_Dialect, "score_combine", [Pure]> {
   let summary = "Diffusion guidance score composition (base + gamma * delta)";
@@ -1297,6 +1300,7 @@ def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 // Phase 2 Sprint 2.1 — data-parallel conditional (attention masking). select is

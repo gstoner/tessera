@@ -135,11 +135,26 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   **CSE + DCE verified firing end-to-end on the executed CPU JIT path** (duplicate
   `matmul` → 1; dead `gelu` → eliminated; confirmed in the JIT trace) — these, not
   the rare algebraic folds, are the high-value Phase 1 wins, and they are now live.
-  *Remaining Phase 1 (lower priority):* more Tier-A folders (`add(x,0)`/`mul(x,1)`/
-  `matmul·I` — need constant-operand handling; rarely appear in real graphs),
-  migrate the 5 `CanonicalizeTesseraIR` patterns to per-op hooks (only those whose
-  output the CPU JIT can lower — `fused_epilogue`/`conv` ones would break it),
-  effect interfaces on the 8 non-pure ops, `LayoutAssignmentPass` v1.
+  **Identity folders landed (2026-06-16):** `AddOp`/`SubOp`/`MulOp`/`DivOp` now
+  have `hasFolder` + `fold()` bodies in `TesseraOps.cpp` — `x+0`/`0+x`/`x-0`/`x*1`/
+  `1*x`/`x/1` collapse to the surviving operand when the other is a constant splat
+  of the scalar identity (type-equality-guarded; no-signed-zeros, matching the
+  fast-math GEMM model). Guard: 7 new cases (folds + negatives) in
+  `tests/tessera-ir/phase2/graph_ir_folders.mlir` (18 total FileCheck'd). `matmul·I`
+  deferred (needs identity-matrix recognition; never appears in real graphs).
+  **Effect-interface item assessed + closed:** the genuinely non-pure ops
+  (`dropout`=random, the `all_reduce`/`reduce_scatter`/`all_gather` collectives,
+  `kv_cache_*` writes, the `adam`/`adamw`/`momentum`/… optimizer in-place updates)
+  are **already conservatively sound** under MLIR's unknown-effects model (no `Pure`
+  ⇒ never CSE'd, never DCE'd); the FFT/Clifford families that *look* non-pure
+  actually inherit `[Pure]` from their base classes. Adding explicit
+  `MemoryEffectsOpInterface` yields no practical CSE/DCE win (writes neither CSE
+  nor DCE in MLIR's model) and risks subtle reordering bugs — so the current
+  treatment is the right one. *Remaining Phase 1 (lower priority):* migrate the 5
+  `CanonicalizeTesseraIR` patterns to per-op hooks (only those whose output the CPU
+  JIT can lower — `fused_epilogue`/`conv` ones would break it), `LayoutAssignmentPass`
+  v1 (layout doesn't reach the layout-agnostic rank-2 CPU JIT lane — low value until
+  a layout-sensitive backend executes).
   *Flash-attn streaming is NOT a CPU-lane item* — the CPU JIT is a rank-2 simple-op
   lane; flash-attn (rank-4, batched) belongs to the Apple GPU work, where the
   streaming online-softmax kernel already exists as hand-written MSL

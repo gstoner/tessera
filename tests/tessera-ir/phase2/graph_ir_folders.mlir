@@ -62,3 +62,73 @@ func.func @cse_dup(%x: tensor<4x8xf32>, %w: tensor<8x6xf32>) -> tensor<4x6xf32> 
   %0 = "tessera.add"(%a, %b) : (tensor<4x6xf32>, tensor<4x6xf32>) -> tensor<4x6xf32>
   return %0 : tensor<4x6xf32>
 }
+
+// ── Phase 1 identity folders (2026-06-16) — elementwise binary family ────────
+
+// x + 0 -> x  (constant zero splat on the rhs).
+// CHECK-LABEL: func.func @add_zero
+// CHECK-NOT: tessera.add
+// CHECK: return %arg0
+func.func @add_zero(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %z = arith.constant dense<0.0> : tensor<4x8xf32>
+  %0 = "tessera.add"(%x, %z) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// 0 + x -> x  (constant zero splat on the lhs).
+// CHECK-LABEL: func.func @zero_add
+// CHECK-NOT: tessera.add
+// CHECK: return %arg0
+func.func @zero_add(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %z = arith.constant dense<0.0> : tensor<4x8xf32>
+  %0 = "tessera.add"(%z, %x) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// x - 0 -> x.
+// CHECK-LABEL: func.func @sub_zero
+// CHECK-NOT: tessera.sub
+// CHECK: return %arg0
+func.func @sub_zero(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %z = arith.constant dense<0.0> : tensor<4x8xf32>
+  %0 = "tessera.sub"(%x, %z) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// x * 1 -> x.
+// CHECK-LABEL: func.func @mul_one
+// CHECK-NOT: tessera.mul
+// CHECK: return %arg0
+func.func @mul_one(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %one = arith.constant dense<1.0> : tensor<4x8xf32>
+  %0 = "tessera.mul"(%x, %one) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// x / 1 -> x.
+// CHECK-LABEL: func.func @div_one
+// CHECK-NOT: tessera.div
+// CHECK: return %arg0
+func.func @div_one(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %one = arith.constant dense<1.0> : tensor<4x8xf32>
+  %0 = "tessera.div"(%x, %one) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// Negative: x * 2 is NOT an identity fold — the mul must survive.
+// CHECK-LABEL: func.func @mul_two_survives
+// CHECK: tessera.mul
+func.func @mul_two_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %two = arith.constant dense<2.0> : tensor<4x8xf32>
+  %0 = "tessera.mul"(%x, %two) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// Negative: 1 - x is NOT x (sub only folds the rhs-zero case).
+// CHECK-LABEL: func.func @one_sub_survives
+// CHECK: tessera.sub
+func.func @one_sub_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %one = arith.constant dense<1.0> : tensor<4x8xf32>
+  %0 = "tessera.sub"(%one, %x) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}

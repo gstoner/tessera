@@ -434,6 +434,35 @@ def test_online_attention_large_n_equals_unfused_on_metal(M, Nk, D, Dv, causal):
     assert np.allclose(out, region.reference(Q, K, V), atol=1e-4)  # horizontal oracle
 
 
+_ATTN_DTYPES = [
+    ("f16", np.float16, 3e-2),
+    ("bf16", "bf16", 2e-1),
+]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("Nk", [64, 2048])   # materialized + online paths
+@pytest.mark.parametrize("tag,npdt,tol", _ATTN_DTYPES)
+def test_half_precision_attention_equals_unfused_on_metal(tag, npdt, tol, Nk):
+    # M2: half-precision attention — half/bfloat I/O, fp32 accumulators, via the
+    # uint16 symbol. Covers both the materialized (Nk≤cap) and online (Nk>cap)
+    # kernels. The f32 reference is the horizontal oracle (compare at half tol).
+    if npdt == "bf16":
+        npdt = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(Nk & 0xFFFF)
+    M, D, Dv = 8, 64, 64
+    Q = (rng.standard_normal((M, D)) * 0.5).astype(npdt)
+    K = (rng.standard_normal((Nk, D)) * 0.5).astype(npdt)
+    V = (rng.standard_normal((Nk, Dv)) * 0.5).astype(npdt)
+    region = AttentionRegion(scale=1.0 / np.sqrt(D))
+
+    out, execution = run_fused_attention(region, Q, K, V)
+    assert execution == "metal_runtime"                # half-precision kernel ran
+    assert np.asarray(out).dtype == npdt               # output stays in storage dtype
+    err = np.max(np.abs(np.asarray(out, np.float32) - region.reference(Q, K, V)))
+    assert err < tol, err                              # horizontal oracle (half tol)
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
 def test_synthesized_attention_reproduces_handwritten_flash_attn():
     # the synthesized attention block must match the hand-written flash_attn

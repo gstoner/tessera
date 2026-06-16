@@ -1513,10 +1513,12 @@ class AttentionRegion:
     q_transposed: bool = False
     k_transposed: bool = False
 
-    def _natural(self, Q: np.ndarray, K: np.ndarray):
-        """Flip raw operands to natural Q(M,D)/K(Nk,D) per the transpose flags."""
-        Q = np.asarray(Q, np.float32)
-        K = np.asarray(K, np.float32)
+    def _natural(self, Q: np.ndarray, K: np.ndarray, cast: bool = True):
+        """Flip raw operands to natural Q(M,D)/K(Nk,D) per the transpose flags.
+        ``cast`` (default) coerces to f32 for the numpy reference; ``cast=False``
+        preserves the storage dtype (f16/bf16) for the half-precision GPU path."""
+        Q = np.asarray(Q, np.float32) if cast else np.asarray(Q)
+        K = np.asarray(K, np.float32) if cast else np.asarray(K)
         if self.q_transposed:
             Q = np.ascontiguousarray(Q.T)
         if self.k_transposed:
@@ -1538,18 +1540,24 @@ class AttentionRegion:
         return (p @ V).astype(np.float32)
 
 
-def synthesize_attention_msl(region: AttentionRegion = AttentionRegion()) -> str:
+def synthesize_attention_msl(region: AttentionRegion = AttentionRegion(),
+                             dtype: str = "f32") -> str:
     """Emit the MSL source for a fused attention block — one query row per thread.
 
     The source is shape- *and* scale/causal-independent (those are runtime
-    buffers), so one cached pipeline serves every attention call."""
+    buffers), so one cached pipeline serves every attention call. ``dtype``
+    selects the I/O type (``float``/``half``/``bfloat``); reads cast to float,
+    accumulators + softmax are fp32 throughout, the O-write goes through
+    ``ST(...)`` (bfloat rejects implicit float→bfloat assignment)."""
+    io = _io_type(dtype)
     return f"""#include <metal_stdlib>
 using namespace metal;
+using ST = {io};
 kernel void {_ATTN_ENTRY}(
-    device const float* Q   [[buffer(0)]],
-    device const float* K   [[buffer(1)]],
-    device const float* V   [[buffer(2)]],
-    device float*       O   [[buffer(3)]],
+    device const {io}* Q   [[buffer(0)]],
+    device const {io}* K   [[buffer(1)]],
+    device const {io}* V   [[buffer(2)]],
+    device {io}*       O   [[buffer(3)]],
     constant int&       M   [[buffer(4)]],
     constant int&       Nk  [[buffer(5)]],
     constant int&       D   [[buffer(6)]],
@@ -1568,7 +1576,7 @@ kernel void {_ATTN_ENTRY}(
         if (causal != 0 && n > m) {{ scores[n] = -INFINITY; continue; }}
         float s = 0.0f;
         int k_off = n * D;
-        for (int d = 0; d < D; ++d) s += Q[q_off + d] * K[k_off + d];
+        for (int d = 0; d < D; ++d) s += float(Q[q_off + d]) * float(K[k_off + d]);
         s *= scale;
         scores[n] = s;
         mx = max(mx, s);
@@ -1583,14 +1591,15 @@ kernel void {_ATTN_ENTRY}(
     int o_off = m * Dv;
     for (int dv = 0; dv < Dv; ++dv) {{
         float acc = 0.0f;
-        for (int n = 0; n < Nk; ++n) acc += scores[n] * V[n * Dv + dv];
-        O[o_off + dv] = acc * inv;
+        for (int n = 0; n < Nk; ++n) acc += scores[n] * float(V[n * Dv + dv]);
+        O[o_off + dv] = ST(acc * inv);
     }}
 }}
 """
 
 
-def synthesize_attention_online_msl(region: AttentionRegion = AttentionRegion()) -> str:
+def synthesize_attention_online_msl(region: AttentionRegion = AttentionRegion(),
+                                    dtype: str = "f32") -> str:
     """Emit MSL for a fused attention block using ONLINE softmax — flash-attention
     style. One query row per thread; keys are streamed in a single pass holding
     only a running max ``m``, running denominator ``l``, and an ``acc[head_dim]``
@@ -1599,17 +1608,19 @@ def synthesize_attention_online_msl(region: AttentionRegion = AttentionRegion())
     large-context attention case the materialized kernel can't reach.
 
     Same C-ABI buffer layout / entry signature as the materialized kernel, so it
-    rides the existing ``tessera_apple_gpu_synth_attention_f32`` symbol (which
-    takes the MSL source + entry name as parameters) — no new runtime symbol.
-    Shape / scale / causal are runtime buffers, so one cached pipeline serves
-    every call. fp32 accumulators throughout."""
+    rides the existing ``tessera_apple_gpu_synth_attention_{f32,f16}`` symbols
+    (which take the MSL source + entry name as parameters) — no new runtime
+    symbol per kernel. ``dtype`` selects the I/O type; reads cast to float,
+    accumulators are fp32, the O-write goes through ``ST(...)``."""
+    io = _io_type(dtype)
     return f"""#include <metal_stdlib>
 using namespace metal;
+using ST = {io};
 kernel void {_ATTN_ONLINE_ENTRY}(
-    device const float* Q   [[buffer(0)]],
-    device const float* K   [[buffer(1)]],
-    device const float* V   [[buffer(2)]],
-    device float*       O   [[buffer(3)]],
+    device const {io}* Q   [[buffer(0)]],
+    device const {io}* K   [[buffer(1)]],
+    device const {io}* V   [[buffer(2)]],
+    device {io}*       O   [[buffer(3)]],
     constant int&       M   [[buffer(4)]],
     constant int&       Nk  [[buffer(5)]],
     constant int&       D   [[buffer(6)]],
@@ -1631,7 +1642,7 @@ kernel void {_ATTN_ONLINE_ENTRY}(
         if (causal != 0 && n > m) break;
         float s = 0.0f;
         int k_off = n * D;
-        for (int d = 0; d < D; ++d) s += Q[q_off + d] * K[k_off + d];
+        for (int d = 0; d < D; ++d) s += float(Q[q_off + d]) * float(K[k_off + d]);
         s *= scale;
         float new_max = max(run_max, s);
         // first key: run_max = -inf -> corr = exp(-inf) = 0 (acc/sum start at 0).
@@ -1639,12 +1650,12 @@ kernel void {_ATTN_ONLINE_ENTRY}(
         float p = exp(s - new_max);
         run_sum = run_sum * corr + p;
         int v_off = n * Dv;
-        for (int d = 0; d < Dv; ++d) acc[d] = acc[d] * corr + p * V[v_off + d];
+        for (int d = 0; d < Dv; ++d) acc[d] = acc[d] * corr + p * float(V[v_off + d]);
         run_max = new_max;
     }}
     float inv = (run_sum > 0.0f) ? (1.0f / run_sum) : 0.0f;
     int o_off = m * Dv;
-    for (int d = 0; d < Dv; ++d) O[o_off + d] = acc[d] * inv;
+    for (int d = 0; d < Dv; ++d) O[o_off + d] = ST(acc[d] * inv);
 }}
 """
 
@@ -1663,42 +1674,86 @@ def _attn_symbol() -> Any:
     return sym
 
 
+def _attn_f16_symbol() -> Any:
+    """The uint16-I/O attention symbol — serves both half and native bfloat (the
+    MSL source the caller emits selects which). Same arg layout as the f32 symbol
+    but with uint16 buffers."""
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_attention_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, u16, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_float, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _attn_dtype_tag(dt: Any) -> str:
+    """Map a numpy/ml_dtypes dtype to a synthesizer dtype tag. Non-16-bit floats
+    use the f32 path (the inputs are cast to f32)."""
+    if dt == np.float16:
+        return "f16"
+    bf = _bf16_dtype()
+    if bf is not None and dt == bf:
+        return "bf16"
+    return "f32"
+
+
 def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
                         V: np.ndarray) -> tuple[np.ndarray, str]:
     """Run the attention block as ONE synthesized fused kernel on Metal.  Returns
     ``(output, execution)`` — ``"metal_runtime"`` if the synthesized kernel ran,
-    else ``"reference"`` (numpy).  Either way the numbers are correct."""
-    # Flip raw operands to natural Q(M,D)/K(Nk,D) per the score matmul's
-    # transpose flags — the kernel indexes K as K[n*D+d], i.e. natural (Nk,D).
-    Q, K = region._natural(Q, K)
-    Q = np.ascontiguousarray(Q, np.float32)
-    K = np.ascontiguousarray(K, np.float32)
-    V = np.ascontiguousarray(V, np.float32)
-    M, D = Q.shape
-    Nk, Dk = K.shape
-    Nv, Dv = V.shape
-    if Dk != D:
-        raise ValueError(f"Q/K head_dim mismatch: Q {Q.shape}, K {K.shape}")
-    if Nv != Nk:
-        raise ValueError(f"K/V seqlen mismatch: K {K.shape}, V {V.shape}")
+    else ``"reference"`` (numpy).  Either way the numbers are correct.
 
-    # Two synthesized kernels, same C-ABI symbol (it takes the MSL source + entry
-    # as params): the materialized-scores kernel for Nk ≤ SYNTH_MAX_N (no head_dim
-    # cap), and the ONLINE-softmax kernel for larger Nk (M2 — Nk unbounded, but
-    # head_dim ≤ SYNTH_MAX_D). Beyond both caps, fall to the numpy reference.
-    sym = _attn_symbol()
+    f16/bf16 inputs run a ``half``/``bfloat``-I/O kernel (fp32 accumulators) via
+    the uint16 symbol; f32 (and any other dtype, cast to f32) uses the f32 symbol.
+    Either dtype picks the materialized kernel for Nk ≤ SYNTH_MAX_N, else the
+    online-softmax kernel for larger Nk (head_dim ≤ SYNTH_MAX_D), else reference."""
+    tag = _attn_dtype_tag(np.asarray(V).dtype)
+    # Orientation per the score matmul's transpose flags; preserve the storage
+    # dtype on the half-precision path, cast to f32 otherwise.
+    Qn, Kn = region._natural(Q, K, cast=(tag == "f32"))
+    if tag == "f32":
+        Qn = np.ascontiguousarray(Qn, np.float32)
+        Kn = np.ascontiguousarray(Kn, np.float32)
+        Vn = np.ascontiguousarray(V, np.float32)
+    else:
+        Qn = np.ascontiguousarray(Qn)
+        Kn = np.ascontiguousarray(Kn)
+        Vn = np.ascontiguousarray(V)
+    M, D = Qn.shape
+    Nk, Dk = Kn.shape
+    Nv, Dv = Vn.shape
+    if Dk != D:
+        raise ValueError(f"Q/K head_dim mismatch: Q {Qn.shape}, K {Kn.shape}")
+    if Nv != Nk:
+        raise ValueError(f"K/V seqlen mismatch: K {Kn.shape}, V {Vn.shape}")
+
+    # Pick the kernel: materialized-scores for Nk ≤ SYNTH_MAX_N (no head_dim cap),
+    # else the ONLINE-softmax kernel for larger Nk (Nk unbounded, head_dim ≤
+    # SYNTH_MAX_D). Beyond both caps, fall to the numpy reference. Both kernels
+    # ride one symbol per dtype (it takes the MSL source + entry as params).
+    sym = _attn_symbol() if tag == "f32" else _attn_f16_symbol()
     source: bytes | None = None
     entry = b""
     if sym is not None and Nk <= SYNTH_MAX_N:
-        source = synthesize_attention_msl(region).encode("utf-8")
+        source = synthesize_attention_msl(region, tag).encode("utf-8")
         entry = _ATTN_ENTRY.encode("utf-8")
     elif sym is not None and Dv <= SYNTH_MAX_D:
-        source = synthesize_attention_online_msl(region).encode("utf-8")
+        source = synthesize_attention_online_msl(region, tag).encode("utf-8")
         entry = _ATTN_ONLINE_ENTRY.encode("utf-8")
     if sym is not None and source is not None:
-        out = np.zeros((M, Dv), np.float32)
-        fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-        rc = sym(source, entry, fp(Q), fp(K), fp(V), fp(out),
+        if tag == "f32":
+            out = np.zeros((M, Dv), np.float32)
+            p = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        else:
+            out = np.zeros((M, Dv), Vn.dtype)
+            p = lambda a: a.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16))
+        rc = sym(source, entry, p(Qn), p(Kn), p(Vn), p(out),
                  M, Nk, D, Dv, ctypes.c_float(region.scale),
                  1 if region.causal else 0)
         if rc == 1:

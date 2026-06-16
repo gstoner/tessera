@@ -108,7 +108,18 @@ runs (`metal_runtime`), bf16-precision-correct. Guard:
   SYNTH_MAX_D) → online, else reference. Verified on M1 Max: Nk = 2048/4096 + the
   head_dim=256 boundary + large causal all run `metal_runtime` at fp32 tol (~2.5e-7
   vs numpy). Guards: 6 new cases in `tests/unit/test_fusion_synthesis.py` (structural
-  + large-Nk-on-Metal). *Follow-on:* f16/bf16 attention; scale-variant coopmat.
+  + large-Nk-on-Metal).
+  **f16/bf16 attention ✅ landed (2026-06-16).** Both synthesizers gained a
+  `dtype` param (reads cast to float, fp32 accumulators + softmax, O-write through
+  `ST(...)` — bfloat rejects implicit float→bfloat). New uint16-I/O symbol
+  `tessera_apple_gpu_synth_attention_f16` (serves both `half` and native `bfloat`,
+  the MSL source selects which) mirrors the f32 symbol; `run_fused_attention`
+  detects the storage dtype from V, preserves it (no f32 cast) on the half path,
+  and views buffers as uint16. **Both** the materialized and online kernels work
+  in half precision. Verified on M1 Max: f16 (materialized + online + causal) at
+  ~6e-5–2e-4, bf16 at ~5e-4–6e-5, all `metal_runtime`, output stays in storage
+  dtype. Guards: 4 new (f16,bf16)×(materialized,online) cases. *Follow-on:*
+  scale-variant coopmat (simdgroup_matrix) attention for compute-bound shapes.
 - Boundary rule: **synthesize MSL** for memory-bound fusable glue; **keep MPSGraph**
   for compute-bound primitives Apple ships a tuned kernel for (large-N GEMM, bmm,
   reductions). Never displace a working MPSGraph call — only the numpy/reference

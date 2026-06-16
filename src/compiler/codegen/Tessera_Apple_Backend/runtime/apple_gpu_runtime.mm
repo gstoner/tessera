@@ -8385,6 +8385,64 @@ extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
   }
 }
 
+// M2 (2026-06-16) — half-precision fused attention. Mirrors the f32 symbol with
+// uint16 I/O (half / native bfloat, selected by the MSL source the caller emits);
+// the kernel casts to float, accumulates in fp32, stores back through ST(...).
+// Same buffer layout (Q0 K1 V2 O3 M4 Nk5 D6 Dv7 scale8 causal9) so both the
+// materialized and online MSL kernels ride this one symbol.
+extern "C" int32_t tessera_apple_gpu_synth_attention_f16(
+    const char* msl_source, const char* entry, const uint16_t* Q,
+    const uint16_t* K, const uint16_t* V, uint16_t* O, int32_t M, int32_t Nk,
+    int32_t D, int32_t Dv, float scale, int32_t causal) {
+  if (!msl_source || !entry || !Q || !K || !V || !O || M <= 0 || Nk <= 0 ||
+      D <= 0 || Dv <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)D;
+    NSUInteger kBytes = sizeof(uint16_t) * (NSUInteger)Nk * (NSUInteger)D;
+    NSUInteger vBytes = sizeof(uint16_t) * (NSUInteger)Nk * (NSUInteger)Dv;
+    NSUInteger oBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)Dv;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, kBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufQ || !bufK || !bufV || !bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&Nk length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&Dv length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&scale length:sizeof(float) atIndex:8];
+    [enc setBytes:&causal length:sizeof(int32_t) atIndex:9];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_attention_f16"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 // tessera_apple_gpu_matmul_rmsnorm_f32 — RETIRED (see the F2 note above); the
 // synthesized epilogue kernel subsumes it.
 

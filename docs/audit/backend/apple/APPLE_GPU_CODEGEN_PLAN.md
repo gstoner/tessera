@@ -271,3 +271,35 @@ multi-op reduction chains beyond rmsnorm/softmax/layer_norm).
   needs runtime MTLTensor plumbing. M4 is the unifying long game.
 - All of M1–M3 are hardware-free on this M1 Max (Apple7). No NVIDIA/ROCm silicon
   required — that's the point of grounding in Apple7 + Metal 4.
+
+## Deferred backlog (single source — the scattered *Follow-on:* notes above)
+
+As of 2026-06-16 the synthesizer covers matmul-epilogue, `norm_chain` (+affine,
+f16/bf16), attention (f32/f16/bf16 × materialized/online × causal), and pointwise
+DAGs (with per-feature broadcast) — all Evaluator-gated via the M5 displacement
+oracle. Open work, by leverage:
+
+1. **`linalg→vector` GEMM pipeline (HF — highest value).** The CPU JIT GEMM is
+   ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,
+   fast-math) are *measured* insufficient (see `COMPILER_AUDIT.md` Phase 4). The
+   real fix is register-tile `linalg.matmul` → `linalg::vectorize` → `vector→LLVM`.
+   **Needs a stable env** (rebuild→measure→tune iteration); risk of slower/wrong
+   code if mis-configured. Won't match BLAS; the single-GEMM hot path already
+   routes to Accelerate, so this targets multi-op-with-GEMM programs.
+2. **M4 compose pointwise+matmul → one kernel; whole-program `graph_ir→MSL`
+   (HF — larger codegen).** Fuse a pointwise epilogue/prologue *into* the matmul
+   or norm kernel (today they are separate dispatches), then the general
+   whole-program emitter (or retarget the CPU JIT `tessera→linalg` spine to
+   `linalg→gpu→{SPIR-V/Metal}`).
+3. **M2 coopmat bf16 (HF — perf).** `simdgroup_matrix` MMA path for compute-bound
+   attention/matmul shapes (the memory-bound glue stays the scalar synthesizer).
+4. **M5 per-op MPSGraph reduction tail (HF — small).** Claim multi-op reduction
+   chains beyond rmsnorm/softmax/layer_norm.
+5. **M2 multi-residual `x+r1+r2` (deprioritized).** Rare (one residual per norm);
+   the 2-kernel Metal path already works (pointwise sum → norm_chain, no numpy).
+   A 1-kernel fusion needs a variable-arity `norm_chain` symbol — low marginal
+   value.
+6. **M3 FP8/FP4/MX runtime execution (toolchain-gated, macOS 27.0 SDK).** The
+   hardware-free contract + Metal bridge (`metal_plane_plan`) + version-gated
+   runtime stub are in place; finish the multi-plane `MTLTensor` construction +
+   ML-encoder/MSL lowering once a 27.0 SDK is installed.

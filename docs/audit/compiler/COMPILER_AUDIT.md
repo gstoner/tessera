@@ -222,12 +222,24 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `native_cpu` fast path is f32-only and numpy f64 matmul is already exact f64);
   multi-op f64 programs route through real f64 codegen. Guards:
   `test_f64_runs_through_jit_at_exact_precision` + `test_f64_gemm_is_exact_over_k`.
-  matmul perf note: AMX is only reachable
-  via Accelerate (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane; the
-  tessera_jit `linalg→loops→LLVM` matmul targets NEON, with tiling/vectorize before
-  LLVM as the perf follow-on. *Next on this thread:* tiling/vectorize before LLVM
-  (NEON: 4×f32 / 8×f16 per 128-bit reg) → widen `TesseraToLinalgPass` op coverage
-  (reductions, batched_gemm) → f64 boundary → then swap the pipeline bottom
+  **matmul perf — measured + diagnosed (2026-06-16).** The tessera_jit
+  `linalg→loops→LLVM` GEMM runs at **~2.2 GFLOP/s** (256³/512³), **~50–110× off**
+  numpy/Accelerate's 100–240 GFLOP/s — the `ConvertLinalgToLoops` body is naive
+  scalar, un-tiled. Two cheap optimizer levers were tried and **measured
+  insufficient**: (a) a host-detected `TargetMachine` into the transformer (was
+  `nullptr` → no NEON cost model) + `-O3`; (b) stamping `fastmath<fast>` on the
+  float arith ops after linalg→loops (a float reduction won't auto-vectorize
+  without `reassoc`). Neither moved the GEMM (LLVM's loop vectorizer won't crack
+  the reduction from this IR shape). **Both changes are kept** — they're correct
+  (target-aware codegen; `fast` matches Tessera's documented fast-math GEMM
+  contract) and prerequisites for vectorization — but the **real lever is an MLIR
+  `linalg→vector` tiling+vectorization pipeline** (register-tile the matmul →
+  `linalg::vectorize` → `vector→LLVM`), a focused multi-step effort. Scope honesty:
+  even done well it won't match hand-tuned Accelerate BLAS, and the **single-GEMM
+  hot path already routes to Accelerate** (`_native_cpu_fast_call`); this affects
+  multi-op programs that contain a GEMM. AMX is only reachable via Accelerate
+  (BLAS/BNNS), so the AMX fast path stays the apple_cpu lane. *Next on this thread:*
+  the `linalg→vector` GEMM pipeline → then swap the pipeline bottom
   `linalg→loops→LLVM` for `linalg→gpu→NVVM/ROCDL` (**emission HF**, the
   `tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
 - **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /

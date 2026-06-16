@@ -59,9 +59,9 @@ def test_jit_add_is_destination_passing_writes_into_fresh_output():
 @pytest.mark.parametrize(
     "a, b",
     [
-        # f64 — dtype outside the f32/f16/bf16 boundary table (native on M1 but
-        # not yet wired; f16 is now supported, see test below).
-        (np.ones((4, 4), np.float64), np.ones((4, 4), np.float64)),
+        # int32 — the lowering is float-only (f32/f64/f16/bf16); integer dtypes
+        # are outside the boundary table (f64 is now wired, see test below).
+        (np.ones((4, 4), np.int32), np.ones((4, 4), np.int32)),
         # Shape mismatch — elementwise requires equal shapes.
         (np.ones((4, 8), np.float32), np.ones((8, 4), np.float32)),
         # Scalar (rank-0) — Phase 1 boundary requires rank >= 1.

@@ -49,6 +49,7 @@
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
+#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser/Parser.h"
@@ -214,10 +215,33 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   if (failed(rewriteResultsToOutParams(module)))
     return failure();
 
-  // Stage 2: memref/loops → LLVM dialect.
+  // Stage 2a: linalg → scalar scf loops (this is where the matmul's
+  // arith.mulf/addf reduction body is created).
+  PassManager pm2a(module->getContext());
+  maybeTrace(pm2a);
+  pm2a.nest<func::FuncOp>().addPass(createConvertLinalgToLoopsPass());
+  if (failed(pm2a.run(module)))
+    return failure();
+
+  // Phase 4 (2026-06-16): stamp fast-math on float arith ops so LLVM may
+  // vectorize the matmul/reduction inner loop. A float reduction (`acc += a*b`)
+  // is NOT auto-vectorized without `reassoc` — reordering the additions changes
+  // the result — so the loops stayed scalar (~2 GFLOP/s, ~50x off Accelerate).
+  // Tessera's GEMM is fast-math by contract (f32 accumulate, rtol≈1e-4), so
+  // `fast` is the intended numerics; it's the difference between a scalar and a
+  // SIMD inner loop on NEON.
+  auto fmFast = arith::FastMathFlagsAttr::get(module.getContext(),
+                                              arith::FastMathFlags::fast);
+  module.walk([&](Operation *op) {
+    if (isa<arith::AddFOp, arith::SubFOp, arith::MulFOp, arith::DivFOp,
+            arith::MaximumFOp, arith::MinimumFOp, arith::MaxNumFOp,
+            arith::MinNumFOp, arith::NegFOp>(op))
+      op->setAttr("fastmath", fmFast);
+  });
+
+  // Stage 2b: memref/loops → LLVM dialect.
   PassManager pm2(module->getContext());
   maybeTrace(pm2);
-  pm2.nest<func::FuncOp>().addPass(createConvertLinalgToLoopsPass());
   pm2.addPass(createSCFToControlFlowPass());
   pm2.addPass(memref::createExpandStridedMetadataPass());
   pm2.addPass(createConvertMathToLLVMPass());
@@ -281,9 +305,25 @@ void *tessera_jit_compile(const char *mlir_text) {
     jm->module->dump();
 
   ExecutionEngineOptions opts;
-  opts.transformer = makeOptimizingTransformer(/*optLevel=*/2,
+  // Phase 4 (2026-06-16): build a host-targeted TargetMachine so the LLVM
+  // optimizer (the transformer) is target-aware. With targetMachine=nullptr the
+  // vectorizer has no NEON cost model and the linalg-lowered loops stay scalar
+  // (measured ~2 GFLOP/s GEMM, ~50-110x off numpy/Accelerate). detectHost() pins
+  // the native CPU (apple-m1…) + features (NEON/FMA) so -O3 vectorizes for the
+  // host. The TM must outlive ExecutionEngine::create (the transformer runs
+  // synchronously inside it); this local does.
+  std::unique_ptr<llvm::TargetMachine> hostTM;
+  if (auto tmb = llvm::orc::JITTargetMachineBuilder::detectHost()) {
+    if (auto tmOrErr = tmb->createTargetMachine())
+      hostTM = std::move(*tmOrErr);
+    else
+      llvm::consumeError(tmOrErr.takeError());
+  } else {
+    llvm::consumeError(tmb.takeError());
+  }
+  opts.transformer = makeOptimizingTransformer(/*optLevel=*/3,
                                                /*sizeLevel=*/0,
-                                               /*targetMachine=*/nullptr);
+                                               /*targetMachine=*/hostTM.get());
   auto expectedEngine = ExecutionEngine::create(*jm->module, opts);
   if (!expectedEngine) {
     setError("tessera_jit: ExecutionEngine::create failed");

@@ -68,7 +68,17 @@ def test_activation_f16_now_executes():
     assert np.asarray(out).dtype == np.float16
 
 
+def test_activation_f64_now_executes():
+    # Phase 4 (2026-06-16): f64 is wired into the boundary table — the
+    # exact-precision lane (accumulates in f64, no f32 truncation).
+    before = jb.invocation_count()
+    out = jb.jit_gelu(np.ones((4,), dtype=np.float64))
+    assert jb.invocation_count() == before + 1
+    assert np.asarray(out).dtype == np.float64
+
+
 def test_activation_rejects_unsupported_dtype():
-    # f64 is native on M1 but not yet wired into the boundary table → reject.
+    # The lowering is float-only; an integer dtype is outside the boundary
+    # table (f32/f64/f16/bf16) → reject, never silently compute via numpy.
     with pytest.raises(jb.TesseraJitError):
-        jb.jit_gelu(np.ones((4,), dtype=np.float64))
+        jb.jit_gelu(np.ones((4,), dtype=np.int32))

@@ -218,9 +218,18 @@ sweeps every shipped lane. **Verified on M1 Max** — all four lanes
 on `metal_runtime` at rel_err ~1e-7. This makes the M2/M4 displacements provably
 safe and is the gate every future lane migration calls before shipping. Guard:
 `tests/unit/test_fusion_displacement_gate.py` (11).
-*Follow-ons:* extend coverage to the remaining per-op MPSGraph tail (claim
-multi-op reduction chains beyond rmsnorm/softmax/layer_norm); wire `gate_all`
-into the generated conformance dashboard so a divergent lane fails CI.
+**Follow-on landed — lanes graded in the scored environment (2026-06-16):**
+`compiler/displacement_tasks.py` registers each displaced lane as a
+`compiler_grader` task (import-to-register, the LongCA/`attention_tasks`
+pattern), graded on **hidden inputs** across a small shape matrix. Each task
+asserts the lane never diverges from its reference, is equivalent when it runs on
+Metal, and genuinely executes on Metal (provenance — a numpy fallback can't pass
+the lane). So the synthesizer displacements are now scored by the same anti-cheat
+harness as everything else; a lane that ever regresses fails the grade, not just a
+unit test. Verified: all four lanes fully pass the grade on this M1 Max (5 checks
+each, 0 failures). Guard: `tests/unit/test_displacement_tasks.py` (4).
+*Remaining follow-on:* extend coverage to the per-op MPSGraph tail (claim
+multi-op reduction chains beyond rmsnorm/softmax/layer_norm).
 
 ## Dependency notes
 - M1 done. M2 (`norm_chain`) is the natural next step — pure Python, reuses the

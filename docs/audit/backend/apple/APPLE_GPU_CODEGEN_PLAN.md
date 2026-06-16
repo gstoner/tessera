@@ -166,10 +166,26 @@ the matmul/reduction synthesizers into a single whole-graph kernel; the bigger
 `graph_ir → MSL` whole-program emitter (or retarget the CPU JIT's
 `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 
-### M5 — Displace the dispatcher lane-by-lane (HF, Evaluator-gated)
+### M5 — Displace the dispatcher lane-by-lane (HF, Evaluator-gated) — **gate landed (2026-06-16)**
 Migrate op families from name→MPS/MSL dispatch to synthesizer codegen one at a
 time, each gated by the Evaluator's horizontal/DESIL oracle (codegen ≡ library on
 hidden inputs). Keep the MPSGraph fast paths; target the numpy/reference tail.
+
+**Landed: the reusable displacement gate** — `compiler/fusion_equivalence.py`.
+`displacement_verdict(kind, shape, *, seed)` runs one synthesizer codegen lane on
+**hidden** inputs (fresh RNG the codegen never saw) and returns `equivalent`
+(ran on Metal AND matched the reference within tol), `divergent` (ran on Metal
+but mismatched — a real codegen bug, blocks shipping), or `not_displaced` (fell
+back — no Metal execution to credit). The provenance gate is the Evaluator's
+invariant: a silent numpy fallback can *never* earn `equivalent`. `gate_all`
+sweeps every shipped lane. **Verified on M1 Max** — all four lanes
+(`matmul_epilogue`, `norm_chain`, `attention`, `pointwise`) return `equivalent`
+on `metal_runtime` at rel_err ~1e-7. This makes the M2/M4 displacements provably
+safe and is the gate every future lane migration calls before shipping. Guard:
+`tests/unit/test_fusion_displacement_gate.py` (11).
+*Follow-ons:* extend coverage to the remaining per-op MPSGraph tail (claim
+multi-op reduction chains beyond rmsnorm/softmax/layer_norm); wire `gate_all`
+into the generated conformance dashboard so a divergent lane fails CI.
 
 ## Dependency notes
 - M1 done. M2 (`norm_chain`) is the natural next step — pure Python, reuses the

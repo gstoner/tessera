@@ -159,10 +159,20 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   (`elementwise_only` + `norm_chain` region kinds; grow `EPILOGUE_OPS`) and displace
   the numpy interpreter lane-by-lane, **elementwise first**, Evaluator-gated — never
   displacing a working MPSGraph call.
-- **Phase 3 — Close the optimizing loop (HF on Apple/CPU).** Autotuner write-path
-  (`apply_to_op()` stamps `tessera.tile_*`/`tile_q`/`tile_kv`); swap `_mock_latency`
-  for `flywheel` measured latency on Apple/CPU; keep the roofline mock as the honest
-  NVIDIA/ROCm fallback.
+- **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
+  The synthesizer had a measured-latency, correctness-gated variant autotuner
+  (`autotune_matmul_epilogue` — times each MSL variant on-device, gates each
+  against the numpy reference, populates `_AUTOTUNE_CORPUS`) that was never
+  auto-invoked, so `best_variant_for` always returned the static default. Closed
+  the loop in `fusion.py`: `autotune_enabled()` (reads `TESSERA_AUTOTUNE`) +
+  `select_variant(region, M, N, K, *, autotune=None)` — on a corpus miss with
+  autotune on it measures + caches the measured-best variant, else it's an O(1)
+  lookup. Wired into `runtime.py::_apple_gpu_try_synthesized_fusion` (replacing
+  `best_variant_for`), so the executed Apple GPU lane runs the measured-best
+  kernel. Latency is real (synthesizer dispatch timing); the roofline mock stays
+  the honest NVIDIA/ROCm fallback. Guard: `tests/unit/test_autotune_loop.py` (5).
+  *Deferred:* the `apply_to_op()` tile-attribute write-path for the Schedule/Tile
+  IR autotuner (NVIDIA/tile-IR configs have no executable Apple kernel — HG).
 - **Phase 4 — Grow `tessera_jit` toward default CPU (HF), then GPU spine.**
   **Brought forward (2026-06-15) — the keystone landed: the tessera_jit MLIR→LLVM
   lane is now the executed CPU path** for the covered f32 op set, so the C++ IR

@@ -2403,7 +2403,7 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     operands, missing values, unknown bias) skips the region."""
     try:
         from tessera.compiler.fusion import (
-            EPILOGUE_OPS, _Op, best_variant_for, discover_fusable_regions,
+            EPILOGUE_OPS, _Op, discover_fusable_regions, select_variant,
             run_fused_region, should_fuse_region, verify_synthesized_region,
         )
     except Exception:                          # noqa: BLE001 - fusion optional
@@ -2454,7 +2454,7 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
                         raise KeyError(bias_name)
                     bias = np.ascontiguousarray(_as_numpy(values[bias_name]), fuse_dt)
                 running = fops[op_idx].output
-            variant = best_variant_for(region, M, N, K)   # F5 distilled choice
+            variant = select_variant(region, M, N, K)     # measured-best (lazy autotune) or default
             out, _exec = run_fused_region(region, a, b, bias, variant=variant)
             values[fops[chain_idx[-1]].output] = out
             consumed.update([mi, *chain_idx])

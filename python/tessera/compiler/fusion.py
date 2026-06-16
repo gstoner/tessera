@@ -1855,6 +1855,31 @@ def best_variant_for(region: FusedRegion, M: int, N: int, K: int) -> str:
     return _AUTOTUNE_CORPUS.get(_corpus_key(region, M, N, K), "broadcast")
 
 
+def autotune_enabled() -> bool:
+    """Whether lazy measured-latency autotuning is on (env ``TESSERA_AUTOTUNE``).
+    Off by default — autotuning measures every variant on first use of a shape,
+    which is a one-time cost callers opt into."""
+    import os
+    return os.environ.get("TESSERA_AUTOTUNE", "").lower() in ("1", "true", "on", "yes")
+
+
+def select_variant(region: FusedRegion, M: int, N: int, K: int, *,
+                   autotune: bool | None = None) -> str:
+    """Pick the synthesis variant for (region, shape) — Phase 3 'close the
+    optimizing loop': when autotuning is enabled and this shape is unseen, MEASURE
+    each variant on-device (`autotune_matmul_epilogue`, correctness-gated) and
+    cache the fastest, so the choice is measured-best rather than the static
+    default. Otherwise an O(1) corpus lookup (`best_variant_for`)."""
+    if autotune is None:
+        autotune = autotune_enabled()
+    if autotune and _corpus_key(region, M, N, K) not in _AUTOTUNE_CORPUS:
+        try:
+            autotune_matmul_epilogue(region, M, N, K)   # measures + caches
+        except Exception:                               # noqa: BLE001 - fall back to default
+            pass
+    return best_variant_for(region, M, N, K)
+
+
 #: Distilled best coopmat *tile* (32/64) per (region-class, shape-bucket).
 _COOPMAT_TILE_CORPUS: dict[tuple, int] = {}
 
@@ -2224,6 +2249,9 @@ __all__ = [
     "AutotuneRecord",
     "autotune_matmul_epilogue",
     "best_variant_for",
+    "select_variant",
+    "autotune_enabled",
+    "autotune_matmul_epilogue",
     "clear_autotune_corpus",
     "SYNTH_MAX_N",
     "synthesize_matmul_epilogue_msl",

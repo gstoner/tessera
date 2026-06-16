@@ -245,14 +245,22 @@ chain* + per-feature bias + an optional terminal norm (rmsnorm/softmax/
 layer_norm) into ONE kernel — verified on M1 Max: `matmul→gelu`, `matmul→silu`,
 `matmul→gelu→tanh`, `matmul→relu+bias`, `matmul→gelu→rmsnorm` all run
 `metal_runtime` at fp32 tol. So the high-value "compose pointwise+matmul" is done.
-*Remaining (scoped, not session-end work):* (a) **full-tensor residual add**
-(`matmul(A,B) + residual`, the transformer `x + sublayer(x)` pattern — per-element,
-distinct from the per-feature bias) — modest value (memory-bound add) but it
-extends the *core* scalar `..._epilogue_{f32,f16}` + coopmat + tiled symbol ABIs
-(a +residual buffer through all four for consistency), so it's a focused
-multi-site change, not a tail-end add; (b) pointwise *prologue* on the matmul
-inputs (niche); (c) the bigger `graph_ir → MSL` whole-program emitter (or retarget
-the CPU JIT's `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+**Full-tensor residual add ✅ landed (2026-06-16).** `matmul(A,B) + residual`
+(the transformer `x + sublayer(x)` pattern — a full (M,N) per-element add, distinct
+from the per-feature bias) fused into the matmul-epilogue kernel.
+`FusedRegion.residual` + `has_residual` + validation (residual ⟹ no reduction, v1)
++ reference; `synthesize_matmul_epilogue_msl` emits a residual buffer (index 7,
+`v += float(residual[o_off+n])` after the pointwise chain); the **core scalar
+`..._epilogue_{f32,f16}` symbol ABIs** gained `(residual, has_residual)` (stub +
+loader argtypes updated, backward-compatible); coopmat + tiled **decline** residual
+(no residual buffer → scalar stack path, ≤SYNTH_MAX_N). **Verified on M1 Max**:
+`matmul+residual` and `gelu(matmul)+residual` fuse in one kernel, f32 exact, f16
+~5e-4, bf16 ~4e-3. Guards: 5 new cases in `tests/unit/test_fusion_synthesis.py`
+(structural + validation + reference + f32/f16/bias on Metal). 168 fusion tests
+green (the ABI change is backward-compatible).
+*Remaining (niche/large):* (a) pointwise *prologue* on the matmul inputs; (b) the
+bigger `graph_ir → MSL` whole-program emitter (or retarget the CPU JIT's
+`tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 
 ### M5 — Displace the dispatcher lane-by-lane (HF, Evaluator-gated) — **gate landed (2026-06-16)**
 Migrate op families from name→MPS/MSL dispatch to synthesizer codegen one at a
@@ -324,13 +332,13 @@ oracle. Open work, by leverage:
    large-N runtime crash). Default path unaffected. *Follow-ons:* harden the large-N
    crash + raise the envelope; vectorize only the matmul tile. See `COMPILER_AUDIT.md`
    Phase 4. Won't match BLAS; single-GEMM hot path already uses Accelerate.
-2. **M4 compose pointwise+matmul — core done; residual + whole-program remain
-   (HF).** ✅ matmul → multi-op pointwise chain + bias + terminal norm is already
-   one kernel (confirmed 2026-06-16). Remaining: (a) **full-tensor residual add**
-   (`matmul+residual`) — extends the core `..._epilogue_{f32,f16}`+coopmat+tiled
-   ABIs (+residual buffer ×4), a focused multi-site change; (b) pointwise prologue
-   on inputs (niche); (c) the bigger whole-program `graph_ir→MSL` emitter (or
-   retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+2. **M4 compose pointwise+matmul — ✅ core + residual done; whole-program remains
+   (HF).** matmul → multi-op pointwise chain + bias + terminal norm is one kernel,
+   and **full-tensor residual add (`matmul+residual`) landed 2026-06-16** (scalar
+   `_epilogue_{f32,f16}` ABIs gained `(residual, has_residual)`; coopmat/tiled
+   decline → scalar; f32 exact, f16/bf16 correct). Remaining: (a) pointwise
+   prologue on inputs (niche); (b) the bigger whole-program `graph_ir→MSL` emitter
+   (or retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
    runs native bf16 (pure Python; dtype-generic coopmat ABI).
 4. ~~**M5 per-op MPSGraph reduction tail**~~ ✅ landed 2026-06-16 — `sum`/`mean`/

@@ -7813,7 +7813,7 @@ inline void reference_matmul_rmsnorm_f32(const float* A, const float* B,
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     const char* msl_source, const char* entry, const float* A, const float* B,
     const float* bias, float* O, int32_t M, int32_t N, int32_t K,
-    int32_t has_bias) {
+    int32_t has_bias, const float* residual, int32_t has_residual) {
   if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0)
     return 0;
   MetalDeviceContext &ctx = deviceContext();
@@ -7839,6 +7839,13 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
       if (!bufBias) return 0;
     }
     MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
+    // M4 residual: full (M,N) tensor at buffer 7.
+    id<MTLBuffer> bufRes = nil;
+    if (has_residual != 0 && residual) {
+      bufRes = metal_buffer_acquire_with_bytes(ctx, residual, oBytes);
+      if (!bufRes) return 0;
+    }
+    MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? oBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -7850,6 +7857,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
     if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
+    if (has_residual != 0 && bufRes) [enc setBuffer:bufRes offset:0 atIndex:7];
 
     MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
     NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
@@ -8225,7 +8233,8 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
     const char* msl_source, const char* entry, const uint16_t* A,
     const uint16_t* B, const uint16_t* bias, uint16_t* O, int32_t M, int32_t N,
-    int32_t K, int32_t has_bias, int32_t is_tiled) {
+    int32_t K, int32_t has_bias, int32_t is_tiled, const uint16_t* residual,
+    int32_t has_residual) {
   if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0)
     return 0;
   MetalDeviceContext &ctx = deviceContext();
@@ -8251,6 +8260,13 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
       if (!bufBias) return 0;
     }
     MetalBufferGuard biasGuard(ctx, bufBias, has_bias != 0 ? biasBytes : 0);
+    // M4 residual: full (M,N) tensor at buffer 7 (non-tiled path only).
+    id<MTLBuffer> bufRes = nil;
+    if (has_residual != 0 && residual) {
+      bufRes = metal_buffer_acquire_with_bytes(ctx, residual, oBytes);
+      if (!bufRes) return 0;
+    }
+    MetalBufferGuard resGuard(ctx, bufRes, has_residual != 0 ? oBytes : 0);
 
     id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -8262,6 +8278,7 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
     [enc setBytes:&N length:sizeof(int32_t) atIndex:4];
     [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
     if (has_bias != 0 && bufBias) [enc setBuffer:bufBias offset:0 atIndex:6];
+    if (has_residual != 0 && bufRes) [enc setBuffer:bufRes offset:0 atIndex:7];
 
     if (is_tiled != 0) {
       [enc setThreadgroupMemoryLength:(sizeof(float) * (NSUInteger)N) atIndex:0];

@@ -1003,7 +1003,7 @@ inline void reference_matmul_rmsnorm_f32_stub(const float* A, const float* B,
 // caller knows the epilogue op chain and falls back to its numpy reference.
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
     const char*, const char*, const float*, const float*, const float*,
-    float*, int32_t, int32_t, int32_t, int32_t) {
+    float*, int32_t, int32_t, int32_t, int32_t, const float*, int32_t) {
   return 0;
 }
 
@@ -1074,7 +1074,8 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_tiled_f32(
 
 extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
     const char*, const char*, const uint16_t*, const uint16_t*,
-    const uint16_t*, uint16_t*, int32_t, int32_t, int32_t, int32_t, int32_t) {
+    const uint16_t*, uint16_t*, int32_t, int32_t, int32_t, int32_t, int32_t,
+    const uint16_t*, int32_t) {
   return 0;
 }
 

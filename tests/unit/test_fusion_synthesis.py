@@ -49,6 +49,51 @@ def test_no_bias_region_omits_the_bias_buffer():
     assert "v / (1.0f + exp(-v))" in src
 
 
+def test_residual_region_emits_buffer_and_per_element_add():
+    # M4: matmul + residual (full M×N), added after the pointwise chain.
+    src = synthesize_matmul_epilogue_msl(FusedRegion((), residual=True))
+    assert "device const float* residual [[buffer(7)]]" in src
+    assert "v += float(residual[o_off + n]);" in src
+    # no-residual region omits the buffer (the original path).
+    assert "residual" not in synthesize_matmul_epilogue_msl(FusedRegion(("gelu",)))
+
+
+def test_residual_region_validation():
+    # residual-only (no epilogue / reduction) is valid; residual+reduction is not.
+    FusedRegion((), residual=True)                  # ok
+    FusedRegion(("gelu",), residual=True)           # ok
+    with pytest.raises(ValueError):
+        FusedRegion((), reduction="rmsnorm", residual=True)
+
+
+def test_residual_region_reference_matches_numpy():
+    region = FusedRegion(("gelu",), residual=True)
+    rng = np.random.default_rng(0)
+    a, b = rng.standard_normal((4, 8)), rng.standard_normal((8, 6))
+    r = rng.standard_normal((4, 6))
+    out = region.reference(a, b, residual=r)
+    g = 0.5 * (a @ b) * (1.0 + np.tanh(np.sqrt(2 / np.pi)
+                                       * ((a @ b) + 0.044715 * (a @ b) ** 3)))
+    np.testing.assert_allclose(out, g + r, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("epi", [(), ("gelu",), ("bias",)])
+def test_residual_fusion_equals_unfused_on_metal(epi):
+    # The transformer x + sublayer(x) pattern fused into the matmul kernel.
+    from tessera.compiler.fusion import run_fused_region
+    rng = np.random.default_rng(hash(epi) & 0xFFFF)
+    M, K, N = 16, 32, 48
+    region = FusedRegion(epi, residual=True)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(np.float32)
+    B = (rng.standard_normal((K, N)) * 0.3).astype(np.float32)
+    R = (rng.standard_normal((M, N)) * 0.3).astype(np.float32)
+    bias = (rng.standard_normal((N,)) * 0.3).astype(np.float32) if region.has_bias else None
+    out, ex = run_fused_region(region, A, B, bias, residual=R)
+    assert ex == "metal_runtime"                    # fused in one kernel
+    assert np.allclose(out, region.reference(A, B, bias, R), atol=1e-4)
+
+
 def test_region_validation():
     with pytest.raises(ValueError):
         FusedRegion(("not_a_real_op",))

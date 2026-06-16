@@ -160,6 +160,10 @@ class FusedRegion:
     a_name: str = "A"
     b_name: str = "B"
     bias_name: str | None = None
+    # M4 residual: a full (M,N) tensor added to the matmul result after the
+    # pointwise chain — the transformer ``x + sublayer(x)`` pattern (per-element,
+    # distinct from the per-feature ``bias``). v1 is non-reduction only.
+    residual: bool = False
 
     def __post_init__(self) -> None:
         for op in self.epilogue:
@@ -170,17 +174,25 @@ class FusedRegion:
             raise ValueError("at most one bias op per region")
         if self.reduction is not None and self.reduction not in REDUCTION_OPS:
             raise ValueError(f"unknown reduction epilogue {self.reduction!r}")
-        if not self.epilogue and self.reduction is None:
-            raise ValueError("a region must have at least one epilogue op")
+        if self.residual and self.reduction is not None:
+            raise ValueError("residual + reduction not supported (v1)")
+        if not self.epilogue and self.reduction is None and not self.residual:
+            raise ValueError("a region must have an epilogue op, reduction, or residual")
 
     @property
     def has_bias(self) -> bool:
         return any(EPILOGUE_OPS[op].needs_bias for op in self.epilogue)
 
+    @property
+    def has_residual(self) -> bool:
+        return self.residual
+
     def reference(self, A: np.ndarray, B: np.ndarray,
-                  bias: np.ndarray | None = None) -> np.ndarray:
-        """The *unfused* result: matmul, pointwise chain, then the reduction, in
-        numpy — the horizontal-oracle ground truth the synthesized kernel matches."""
+                  bias: np.ndarray | None = None,
+                  residual: np.ndarray | None = None) -> np.ndarray:
+        """The *unfused* result: matmul, pointwise chain, optional residual add,
+        then the reduction, in numpy — the horizontal-oracle ground truth the
+        synthesized kernel matches."""
         out = np.asarray(A, np.float32) @ np.asarray(B, np.float32)
         for op in self.epilogue:
             spec = EPILOGUE_OPS[op]
@@ -190,6 +202,10 @@ class FusedRegion:
                 out = out + np.asarray(bias, np.float32)
             else:
                 out = spec.ref(out)
+        if self.residual:
+            if residual is None:
+                raise ValueError("region needs a residual")
+            out = out + np.asarray(residual, np.float32)
         if self.reduction is not None:
             out = REDUCTION_OPS[self.reduction].ref(out, self.eps)
         return out.astype(np.float32)
@@ -259,16 +275,22 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
     io = _io_type(dtype)
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
+    # M4 residual: full (M,N) tensor at buffer 7, added per element after the
+    # pointwise chain (the transformer x + sublayer(x)). Validated non-reduction.
+    residual_param = (f"    device const {io}* residual [[buffer(7)]],\n"
+                      if region.has_residual else "")
+    residual_add = ("        v += float(residual[o_off + n]);\n"
+                    if region.has_residual else "")
     pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
     matmul_body = _matmul_body(variant)
 
     if region.reduction is None:
-        # pure pointwise: one pass, write O directly.
+        # pure pointwise (+ optional residual): one pass, write O directly.
         finalize = f"""    int o_off = row * N;
     for (int n = 0; n < N; ++n) {{
         float v = scores[n];
 {pointwise}
-        O[o_off + n] = ST(v);
+{residual_add}        O[o_off + n] = ST(v);
     }}"""
     else:
         # pointwise modifies scores in place; then the reduction reads the whole
@@ -295,7 +317,7 @@ kernel void {_ENTRY}(
     constant int&       M   [[buffer(3)]],
     constant int&       N   [[buffer(4)]],
     constant int&       K   [[buffer(5)]],
-{bias_param}    uint gid [[thread_position_in_grid]])
+{bias_param}{residual_param}    uint gid [[thread_position_in_grid]])
 {{
     if (gid >= (uint)M) return;
     if (N > {SYNTH_MAX_N}) return;
@@ -450,8 +472,10 @@ _ENTRY_COOPMAT = "synth_matmul_epi_coopmat"
 
 
 def coopmat_eligible(region: FusedRegion) -> bool:
-    """v1 covers pointwise-epilogue regions (no terminal reduction)."""
-    return region.reduction is None
+    """v1 covers pointwise-epilogue regions (no terminal reduction). Residual
+    regions route to the scalar kernel (the coopmat kernel has no residual
+    buffer)."""
+    return region.reduction is None and not region.has_residual
 
 
 #: Coopmat tile configs: tile -> (BM, BN, SGCOLS, NR, NC, THREADS).
@@ -726,7 +750,8 @@ def _synth_symbol() -> Any:
     sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
                     ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
                     ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
-                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.POINTER(ctypes.c_float), ctypes.c_int32]  # residual, has_residual
     sym.restype = ctypes.c_int32
     return sym
 
@@ -903,14 +928,16 @@ def _synth_f16_symbol() -> Any:
     u16 = ctypes.POINTER(ctypes.c_uint16)
     sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, u16, u16, u16, u16,
                     ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
-                    ctypes.c_int32]
+                    ctypes.c_int32, u16, ctypes.c_int32]  # is_tiled, residual, has_residual
     sym.restype = ctypes.c_int32
     return sym
 
 
 def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
                            bias: np.ndarray | None,
-                           variant: str) -> tuple[np.ndarray | None, str]:
+                           variant: str,
+                           residual: np.ndarray | None = None
+                           ) -> tuple[np.ndarray | None, str]:
     """Native bf16 path — emit `bfloat`-typed MSL (Apple7 MTLDataType.bfloat)
     and reuse the f16 synth symbol's uint16 ABI (bf16 is 2-byte raw storage; the
     MSL `bfloat` element type gives the bits meaning). fp32 accumulators inside
@@ -929,10 +956,13 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     K2, N = B.shape
     if K2 != K:
         raise ValueError(f"matmul shape mismatch: A {A.shape}, B {B.shape}")
-    if N > SYNTH_MAX_N_TILED:
+    # The tiled kernel has no residual buffer → residual stays on the stack path.
+    n_cap = SYNTH_MAX_N if region.has_residual else SYNTH_MAX_N_TILED
+    if N > n_cap:
         return None, "fallback"
     bias_arr = None
     has_bias = 1 if region.has_bias else 0
+    has_residual = 1 if region.has_residual else 0
     u16p = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
     bias_ptr = None
     if region.has_bias:
@@ -940,6 +970,13 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
             raise ValueError("region needs a bias")
         bias_arr = np.ascontiguousarray(bias, bf16).reshape(N)
         bias_ptr = u16p(bias_arr)
+    res_arr = None
+    res_ptr = None
+    if region.has_residual:
+        if residual is None:
+            raise ValueError("region needs a residual")
+        res_arr = np.ascontiguousarray(residual, bf16).reshape(M, N)
+        res_ptr = u16p(res_arr)
     is_tiled = 0 if N <= SYNTH_MAX_N else 1
     if is_tiled:
         source = synthesize_matmul_epilogue_msl_tiled(region, dtype="bf16")
@@ -949,7 +986,8 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         entry = _ENTRY
     out = np.zeros((M, N), bf16)
     rc = sym(source.encode("utf-8"), entry.encode("utf-8"), u16p(A), u16p(B),
-             bias_ptr, u16p(out), M, N, K, has_bias, is_tiled)
+             bias_ptr, u16p(out), M, N, K, has_bias, is_tiled,
+             res_ptr, has_residual)
     if rc == 1:
         return out, "metal_runtime"
     return None, "fallback"
@@ -957,7 +995,9 @@ def _run_fused_region_bf16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
 
 def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
                           bias: np.ndarray | None,
-                          variant: str) -> tuple[np.ndarray, str]:
+                          variant: str,
+                          residual: np.ndarray | None = None
+                          ) -> tuple[np.ndarray, str]:
     """f16 path — native ``half``-I/O kernel (fp32 accumulators), stack for
     N<=1024 and threadgroup-tiled for N<=8192.  Reference (f32 math, cast to
     f16) when Metal/the symbol is unavailable."""
@@ -972,12 +1012,21 @@ def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         if bias is None:
             raise ValueError("region needs a bias")
         bias_arr = np.ascontiguousarray(bias, np.float16).reshape(N)
+    res_arr = None
+    if region.has_residual:
+        if residual is None:
+            raise ValueError("region needs a residual")
+        res_arr = np.ascontiguousarray(residual, np.float16).reshape(M, N)
     u16p = lambda a: a.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
     bias_ptr = u16p(bias_arr) if bias_arr is not None else None
+    res_ptr = u16p(res_arr) if res_arr is not None else None
     has_bias = 1 if region.has_bias else 0
+    has_residual = 1 if region.has_residual else 0
 
     sym = _synth_f16_symbol()
-    if sym is not None and N <= SYNTH_MAX_N_TILED:
+    # The tiled kernel has no residual buffer → residual stays on the stack path.
+    n_cap = SYNTH_MAX_N if region.has_residual else SYNTH_MAX_N_TILED
+    if sym is not None and N <= n_cap:
         is_tiled = 0 if N <= SYNTH_MAX_N else 1
         if is_tiled:
             source = synthesize_matmul_epilogue_msl_tiled(region, dtype="f16")
@@ -987,15 +1036,18 @@ def _run_fused_region_f16(region: FusedRegion, A: np.ndarray, B: np.ndarray,
             entry = _ENTRY
         out = np.zeros((M, N), np.float16)
         rc = sym(source.encode("utf-8"), entry.encode("utf-8"), u16p(A), u16p(B),
-                 bias_ptr, u16p(out), M, N, K, has_bias, is_tiled)
+                 bias_ptr, u16p(out), M, N, K, has_bias, is_tiled,
+                 res_ptr, has_residual)
         if rc == 1:
             return out, "metal_runtime"
-    return region.reference(A, B, bias_arr).astype(np.float16), "reference"
+    return region.reference(A, B, bias_arr, res_arr).astype(np.float16), "reference"
 
 
 def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
                      bias: np.ndarray | None = None,
-                     variant: str = "broadcast") -> tuple[np.ndarray, str]:
+                     variant: str = "broadcast",
+                     residual: np.ndarray | None = None
+                     ) -> tuple[np.ndarray, str]:
     """Run the region as ONE synthesized fused kernel on Metal.  Returns
     ``(output, execution)`` where execution is ``"metal_runtime"`` (the
     synthesized kernel ran) or ``"reference"`` (numpy fallback — no Metal, N too
@@ -1020,15 +1072,17 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     if _is_bf16:
         # Native bfloat scalar kernel next (Apple7 MTLDataType.bfloat); fall back
         # to f32 emulation only if the runtime's MSL `bfloat` is unavailable.
-        out_bf, ex_bf = _run_fused_region_bf16(region, A, B, bias, variant)
+        out_bf, ex_bf = _run_fused_region_bf16(region, A, B, bias, variant,
+                                               residual)
         if ex_bf == "metal_runtime" and out_bf is not None:
             return out_bf, ex_bf
         out32, ex32 = run_fused_region(
             region, np.asarray(A, np.float32), np.asarray(B, np.float32),
-            None if bias is None else np.asarray(bias, np.float32), variant)
+            None if bias is None else np.asarray(bias, np.float32), variant,
+            None if residual is None else np.asarray(residual, np.float32))
         return out32.astype(bf16), ex32
     if in_dtype == np.float16:
-        return _run_fused_region_f16(region, A, B, bias, variant)
+        return _run_fused_region_f16(region, A, B, bias, variant, residual)
 
     A = np.ascontiguousarray(A, np.float32)
     B = np.ascontiguousarray(B, np.float32)
@@ -1041,24 +1095,33 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         if bias is None:
             raise ValueError("region needs a bias")
         bias_arr = np.ascontiguousarray(bias, np.float32).reshape(N)
+    res_arr = None
+    if region.has_residual:
+        if residual is None:
+            raise ValueError("region needs a residual")
+        res_arr = np.ascontiguousarray(residual, np.float32).reshape(M, N)
 
     fp = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     bias_ptr = fp(bias_arr) if bias_arr is not None else None
+    res_ptr = fp(res_arr) if res_arr is not None else None
     has_bias = 1 if region.has_bias else 0
+    has_residual = 1 if region.has_residual else 0
 
     sym = _synth_symbol()
     if sym is not None and N <= SYNTH_MAX_N:
         source = synthesize_matmul_epilogue_msl(region, variant).encode("utf-8")
         out = np.zeros((M, N), np.float32)
         rc = sym(source, _ENTRY.encode("utf-8"), fp(A), fp(B), bias_ptr, fp(out),
-                 M, N, K, has_bias)
+                 M, N, K, has_bias, res_ptr, has_residual)
         if rc == 1:
             return out, "metal_runtime"
 
     # Large N (over the per-thread stack cap): the threadgroup-tiled kernel keeps
     # the score row in dynamic threadgroup memory, lifting the bound to ~8192.
+    # The tiled kernel has no residual buffer, so residual regions skip it.
     tiled = _synth_tiled_symbol()
-    if tiled is not None and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED:
+    if (tiled is not None and not region.has_residual
+            and SYNTH_MAX_N < N <= SYNTH_MAX_N_TILED):
         source = synthesize_matmul_epilogue_msl_tiled(region).encode("utf-8")
         out = np.zeros((M, N), np.float32)
         rc = tiled(source, _ENTRY_TILED.encode("utf-8"), fp(A), fp(B), bias_ptr,
@@ -1066,7 +1129,7 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
         if rc == 1:
             return out, "metal_runtime"
 
-    return region.reference(A, B, bias_arr), "reference"
+    return region.reference(A, B, bias_arr, res_arr), "reference"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

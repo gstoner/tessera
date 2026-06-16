@@ -160,8 +160,22 @@ int4/uint4 → `26.4`; int8/f32 → `26.0`), and `metal_plane_plan(fmt, shape)` 
 `block_factors`/`scale_shape` @ `27.0`). The `scale_shape` round-trips the
 contract's own `ScaleLayout.scale_shape` (one source of truth). Guards:
 `tests/unit/test_microscaling.py` (29) + `test_microscaling_metal_bridge.py` (7).
-*Follow-on:* the runtime-side MTLTensor construction + ML-encoder/MSL lowering for
-FP8/FP4 once a macOS 27.0 SDK is installed — the Python bridge gives it the exact
+**Runtime stub landed (version-gated no-op, 2026-06-16):** `apple_gpu_runtime.mm`
+adds `tessera_apple_gpu_supports_microscaling()` (runtime probe — 1 only when
+built against a >=27.0 SDK AND running on 27.0+) and
+`tessera_apple_gpu_microscaled_descriptor_probe(element_code, scale_code, rank,
+dims, block_factors)` — the multi-plane `MTLTensorDescriptor` construction
+sketch (data plane + one `MTLTensorAuxiliaryPlaneDescriptor` scale plane with
+`blockFactors`, keyed `MTLTensorPlaneTypeScales`). The real construction is
+**compile-time gated** behind `TESSERA_HAVE_MICROSCALING_SDK` (`__MAC_27_0`), so
+it's excluded on the 26.5 SDK and the entry points are honest no-ops that set
+last-error **kind 4 (toolchain_gated)**. Verified: the runtime builds clean
+against 26.5, `supports_microscaling()==0`, `descriptor_probe(...)==0` + kind 4.
+Python surface `microscaling.metal_microscaling_available()` reads the probe.
+Guards: `test_microscaling_metal_bridge.py` (8, incl. runtime-gate↔contract).
+*Follow-on (needs a 27.0 SDK):* finish the construction (id<MTLTensor> +
+`MTLTensorBufferAttachments` for data+scale planes), then FP8/FP4 GEMM via the ML
+encoder/MSL — the Python bridge + this descriptor sketch give it the exact
 per-plane dtype + blockFactors target.
 
 ### M4 — Whole-graph MSL emitter (the GPU `tessera_jit`) — **first cut landed (2026-06-15)**

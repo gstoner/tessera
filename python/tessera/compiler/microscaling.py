@@ -242,6 +242,25 @@ def metal_plane_plan(fmt: LowPrecisionFormat,
         _max_macos(elem.min_macos, scale.min_macos, "27.0"))
 
 
+def metal_microscaling_available() -> bool:
+    """True iff the Apple GPU runtime can actually drive microscaled (FP8/FP4/MX)
+    tensors — i.e. it was built against a macOS >=27.0 SDK *and* is running on
+    macOS 27.0+. False on the 26.5 toolchain (the contract + Metal bridge are
+    hardware-free; only the multi-plane MTLTensor execution is version-gated).
+    Probes the runtime's ``tessera_apple_gpu_supports_microscaling`` symbol."""
+    try:
+        import ctypes
+
+        from .._apple_gpu_dispatch import apple_gpu_runtime
+        lib = apple_gpu_runtime()
+        if lib is None:
+            return False
+        lib.tessera_apple_gpu_supports_microscaling.restype = ctypes.c_int32
+        return bool(lib.tessera_apple_gpu_supports_microscaling())
+    except Exception:
+        return False
+
+
 def _elem_amax(fmt: LowPrecisionFormat) -> float:
     """Largest finite magnitude representable by the element dtype."""
     if fmt.element in _INTEGER_ELEMENTS:

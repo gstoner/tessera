@@ -1007,6 +1007,16 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f32(
   return 0;
 }
 
+// M3 microscaling (FP8/FP4/MX) — macOS 27.0 multi-plane MTLTensor stub. Always
+// toolchain-gated off Darwin / non-27.0 SDKs.
+extern "C" int32_t tessera_apple_gpu_supports_microscaling(void) {
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_microscaled_descriptor_probe(
+    int32_t, int32_t, int32_t, const int64_t*, const int64_t*) {
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_synth_attention_f32(
     const char*, const char*, const float*, const float*, const float*,
     float*, int32_t, int32_t, int32_t, int32_t, float, int32_t) {

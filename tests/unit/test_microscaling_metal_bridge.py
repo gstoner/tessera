@@ -77,3 +77,16 @@ def test_plane_plan_round_trips_block_count_with_scale_shape():
     shape = (8, 96)
     plan = M.metal_plane_plan(fmt, shape)
     assert plan.aux_planes[0].scale_shape == fmt.layout.scale_shape(shape)
+
+
+def test_runtime_gate_matches_contract_min_macos():
+    # The runtime probe and the contract's min_macos must agree: an MX format
+    # needs macOS 27.0, and the runtime here (26.5 SDK) reports unavailable. If
+    # this ever flips True, we're on a 27.0 SDK and the gate has lifted.
+    avail = M.metal_microscaling_available()
+    assert isinstance(avail, bool)
+    mx_needs_270 = M.metal_plane_plan(M.FORMATS["mxfp8_e4m3"], (4, 64)).min_macos
+    assert mx_needs_270 == "27.0"
+    if not avail:
+        # 26.5 toolchain: execution gated, but the hardware-free contract works.
+        assert M.mtl_tensor_data_type("fp8_e4m3") is not None

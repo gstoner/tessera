@@ -2793,6 +2793,135 @@ static size_t _mlpkg_dtype_byte_size(MTLTensorDataType dt) {
   return 0;
 }
 
+// ── M3 microscaling (FP8/FP4/MX) — macOS 27.0 multi-plane MTLTensor stub ──────
+//
+// The macOS 27.0 SDK adds MTLTensorDataType.{float8e4m3,float8e5m2,float4e2m1,
+// float8ue8m0,int2,uint2} + the multi-plane auxiliary-plane machinery
+// (MTLTensorAuxiliaryPlaneDescriptor.blockFactors / MTLTensorDescriptor.
+// auxiliaryPlanes), which is the runtime image of a Tessera ScaleLayout: one
+// data plane (element dtype) + one auxiliary scale plane (e8m0 for MX / e4m3 for
+// NVFP4) whose blockFactors give data-elements-per-scale. The Python contract
+// (compiler/microscaling.py: metal_plane_plan) computes the exact per-plane
+// dtype + blockFactors this code would consume.
+//
+// This file is compiled against whatever SDK is installed; on the 26.5 SDK here
+// none of those symbols exist, so the real construction is COMPILE-TIME gated and
+// excluded — these entry points are honest no-ops that set last-error kind 4
+// (toolchain_gated). When a 27.0 SDK is installed the gated block compiles and
+// the runtime probe also requires the OS to be 27.0+ at run time.
+//
+// __MAC_27_0 is defined only by a macOS 27.0+ SDK's <AvailabilityVersions.h>.
+#if defined(__MAC_27_0) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
+    __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_27_0
+#define TESSERA_HAVE_MICROSCALING_SDK 1
+#else
+#define TESSERA_HAVE_MICROSCALING_SDK 0
+#endif
+
+// Stable ABI dtype codes (independent of the MTLTensorDataType enum ints, which
+// this SDK doesn't expose). Mirrors microscaling._MTL_TENSOR_DATA_TYPE.
+enum {
+  TS_MX_FP8_E4M3 = 0,
+  TS_MX_FP8_E5M2 = 1,
+  TS_MX_FP4_E2M1 = 2,
+  TS_MX_E8M0 = 3,
+  TS_MX_INT8 = 4,
+  TS_MX_FP32 = 5,
+};
+
+#if TESSERA_HAVE_MICROSCALING_SDK
+// Maps a Tessera dtype code to its MTLTensorDataType. Only reachable under a
+// 27.0 SDK where these enum cases exist. Returns MTLTensorDataTypeNone on miss.
+API_AVAILABLE(macos(27.0), ios(27.0))
+static MTLTensorDataType _ts_mx_mtl_dtype(int32_t code) {
+  switch (code) {
+    case TS_MX_FP8_E4M3: return MTLTensorDataTypeFloat8E4M3;
+    case TS_MX_FP8_E5M2: return MTLTensorDataTypeFloat8E5M2;
+    case TS_MX_FP4_E2M1: return MTLTensorDataTypeFloat4E2M1;
+    case TS_MX_E8M0:     return MTLTensorDataTypeFloat8UE8M0;
+    case TS_MX_INT8:     return MTLTensorDataTypeInt8;
+    case TS_MX_FP32:     return MTLTensorDataTypeFloat32;
+    default:             return MTLTensorDataTypeNone;
+  }
+}
+#endif
+
+// Returns 1 iff this build can actually drive microscaled tensors: built against
+// a >=27.0 SDK AND running on macOS 27.0+. On the 26.5 toolchain here → 0.
+extern "C" int32_t tessera_apple_gpu_supports_microscaling(void) {
+#if TESSERA_HAVE_MICROSCALING_SDK
+  if (@available(macOS 27.0, iOS 27.0, *)) return 1;
+#endif
+  return 0;
+}
+
+// Build the multi-plane MTLTensorDescriptor for a microscaled tensor: a data
+// plane (``element_code``) + one auxiliary scale plane (``scale_code``) whose
+// ``block_factors`` (``rank`` entries, data-elements-per-scale per axis) come
+// straight from microscaling.metal_plane_plan. ``scale_code < 0`` means a
+// per-tensor scalar scale (no auxiliary plane — e.g. int8). This is the
+// descriptor-construction sketch: it validates the inputs and builds the
+// descriptor under 27.0; wiring it to an actual id<MTLTensor> + buffer
+// attachments is the remaining runtime step. Returns 1 on success, 0 on the
+// 26.5 toolchain (sets last-error kind 4) or on invalid input.
+extern "C" int32_t tessera_apple_gpu_microscaled_descriptor_probe(
+    int32_t element_code, int32_t scale_code, int32_t rank,
+    const int64_t *dims, const int64_t *block_factors) {
+  if (rank <= 0 || !dims) return 0;
+#if TESSERA_HAVE_MICROSCALING_SDK
+  if (@available(macOS 27.0, iOS 27.0, *)) {
+    @autoreleasepool {
+      MTLTensorDataType edt = _ts_mx_mtl_dtype(element_code);
+      if (edt == MTLTensorDataTypeNone) {
+        ts_set_last_gpu_error(4, "microscaled_descriptor",
+                              "unknown element dtype code");
+        return 0;
+      }
+      NSMutableArray<NSNumber *> *ext = [NSMutableArray arrayWithCapacity:rank];
+      for (int32_t i = 0; i < rank; ++i) [ext addObject:@(dims[i])];
+      MTLTensorExtents *dimensions =
+          [[MTLTensorExtents alloc] initWithRank:rank values:dims];
+      (void)dimensions;  // descriptor wiring uses this once tensor-create lands
+
+      MTLTensorDescriptor *td = [[MTLTensorDescriptor alloc] init];
+      td.dataType = edt;
+      td.usage = MTLTensorUsageMachineLearning;
+      td.storageMode = MTLStorageModeShared;
+
+      if (scale_code >= 0 && block_factors) {
+        MTLTensorDataType sdt = _ts_mx_mtl_dtype(scale_code);
+        if (sdt == MTLTensorDataTypeNone) {
+          ts_set_last_gpu_error(4, "microscaled_descriptor",
+                                "unknown scale dtype code");
+          return 0;
+        }
+        MTLTensorAuxiliaryPlaneDescriptor *ap =
+            [[MTLTensorAuxiliaryPlaneDescriptor alloc] init];
+        ap.dataType = sdt;
+        ap.blockFactors =
+            [[MTLTensorExtents alloc] initWithRank:rank values:block_factors];
+        MTLTensorAuxiliaryPlaneDescriptorMap *planes =
+            [[MTLTensorAuxiliaryPlaneDescriptorMap alloc] init];
+        // scales plane keyed by the canonical scales plane type
+        [planes setDescriptor:ap forPlaneType:MTLTensorPlaneTypeScales];
+        td.auxiliaryPlanes = planes;
+      }
+      // Descriptor built successfully; tensor-create + buffer attachments next.
+      return td ? 1 : 0;
+    }
+  }
+#else
+  (void)element_code;
+  (void)scale_code;
+  (void)block_factors;
+#endif
+  ts_set_last_gpu_error(
+      4, "microscaled_descriptor",
+      "FP8/FP4/MX tensors require a macOS 27.0 SDK + runtime; this build is "
+      "toolchain-gated (no-op). See compiler/microscaling.py metal_plane_plan.");
+  return 0;
+}
+
 // Phase 2 stride-alignment wire-up (2026-06-01) — opt-in setter
 // for ``MTLTensorDescriptor.strides`` to use the aligned helper.
 // Default off (Metal's implicit strides — pre-Phase-2 behavior).

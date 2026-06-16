@@ -905,6 +905,8 @@ def stamp_fusion_intents(module: GraphIRModule) -> int:
         if group.get("kind") != "known_chain":
             continue
         kernel = group.get("fused_kernel")
+        if not isinstance(kernel, str):
+            continue
         # Normalize the producer kernel to the intent name the C++ consumer
         # reads (identity for all but matmul_rmsnorm_safe → matmul_rmsnorm).
         intent_name = _FUSION_INTENT_NAME.get(kernel, kernel)

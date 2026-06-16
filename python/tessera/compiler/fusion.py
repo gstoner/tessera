@@ -1009,9 +1009,9 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     if bf16 is not None and in_dtype == bf16:
         # Native bfloat kernel first (Apple7 MTLDataType.bfloat); fall back to
         # f32 emulation only if the runtime's MSL `bfloat` is unavailable.
-        out, ex = _run_fused_region_bf16(region, A, B, bias, variant)
-        if ex == "metal_runtime" and out is not None:
-            return out, ex
+        out_bf, ex_bf = _run_fused_region_bf16(region, A, B, bias, variant)
+        if ex_bf == "metal_runtime" and out_bf is not None:
+            return out_bf, ex_bf
         out32, ex32 = run_fused_region(
             region, np.asarray(A, np.float32), np.asarray(B, np.float32),
             None if bias is None else np.asarray(bias, np.float32), variant)
@@ -1208,6 +1208,8 @@ def run_norm_chain_region(region: NormChainRegion, X: np.ndarray,
     compile-or-dispatch failed). Either way correct."""
     bf16 = _bf16_dtype()
     in_dtype = np.asarray(X).dtype
+    elem: str
+    dt: Any  # numpy or ml_dtypes scalar type (f16 / bf16 / f32)
     if in_dtype == np.float16:
         elem, dt = "f16", np.float16
     elif bf16 is not None and in_dtype == bf16:

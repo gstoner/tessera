@@ -67,40 +67,40 @@ def displacement_verdict(kind: str, shape: tuple[int, ...], *, seed: int = 0,
 
     if kind == "matmul_epilogue":
         M, K, N = shape
-        region = F.FusedRegion(epilogue=("gelu",))
+        mm_region = F.FusedRegion(epilogue=("gelu",))
         A = rng.standard_normal((M, K)).astype(np.float32)
         B = rng.standard_normal((K, N)).astype(np.float32)
-        out, ex = F.run_fused_region(region, A, B)
-        return _verdict(kind, ex, out, region.reference(A, B), rtol, atol)
+        out, ex = F.run_fused_region(mm_region, A, B)
+        return _verdict(kind, ex, out, mm_region.reference(A, B), rtol, atol)
 
     if kind == "norm_chain":
         rows, cols = shape
-        region = F.NormChainRegion("rmsnorm", add_residual=True, weight=True)
+        nc_region = F.NormChainRegion("rmsnorm", add_residual=True, weight=True)
         X = rng.standard_normal((rows, cols)).astype(np.float32)
         R = rng.standard_normal((rows, cols)).astype(np.float32)
         G = rng.standard_normal((cols,)).astype(np.float32)
-        out, ex = F.run_norm_chain_region(region, X, residual=R, gamma=G)
-        return _verdict(kind, ex, out, region.reference(X, R, G), rtol, atol)
+        out, ex = F.run_norm_chain_region(nc_region, X, residual=R, gamma=G)
+        return _verdict(kind, ex, out, nc_region.reference(X, R, G), rtol, atol)
 
     if kind == "attention":
         M, D, Nk = shape
-        region = F.AttentionRegion()
+        attn_region = F.AttentionRegion()
         Q = rng.standard_normal((M, D)).astype(np.float32)
         Kt = rng.standard_normal((Nk, D)).astype(np.float32)
         V = rng.standard_normal((Nk, D)).astype(np.float32)
-        out, ex = F.run_fused_attention(region, Q, Kt, V)
-        return _verdict(kind, ex, out, region.reference(Q, Kt, V), rtol, atol)
+        out, ex = F.run_fused_attention(attn_region, Q, Kt, V)
+        return _verdict(kind, ex, out, attn_region.reference(Q, Kt, V), rtol, atol)
 
     if kind == "pointwise":
         rows, cols = shape
-        region = F.PointwiseGraphRegion(
+        pw_region = F.PointwiseGraphRegion(
             ops=(("mul", ("x", "a"), "m"), ("add", ("m", "b"), "s"),
                  ("gelu", ("s",), "o")),
             inputs=("x", "a", "b"), output="o")
         arrs = [rng.standard_normal((rows, cols)).astype(np.float32)
                 for _ in range(3)]
-        out, ex = F.run_pointwise_graph(region, arrs)
-        return _verdict(kind, ex, out, region.reference(*arrs), rtol, atol)
+        out, ex = F.run_pointwise_graph(pw_region, arrs)
+        return _verdict(kind, ex, out, pw_region.reference(*arrs), rtol, atol)
 
     raise ValueError(f"unknown displacement kind {kind!r}")
 

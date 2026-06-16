@@ -239,9 +239,20 @@ Per-row `(rows,1)` / internal broadcast correctly **declines** to the reference
 (never mis-indexes). Verified on M1 Max: `relu(x*scale+bias)` with per-feature
 scale+bias fuses in one kernel (~4.8e-7 vs numpy); all-full path unchanged.
 Guards: 4 new cases in `tests/unit/test_pointwise_graph_fusion.py`.
-*Follow-ons:* compose pointwise with the matmul/reduction synthesizers into a
-single whole-graph kernel; the bigger `graph_ir → MSL` whole-program emitter (or
-retarget the CPU JIT's `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+**Compose pointwise+matmul — core already complete (confirmed 2026-06-16).** The
+matmul-epilogue synthesizer already fuses matmul → an *ordered multi-op pointwise
+chain* + per-feature bias + an optional terminal norm (rmsnorm/softmax/
+layer_norm) into ONE kernel — verified on M1 Max: `matmul→gelu`, `matmul→silu`,
+`matmul→gelu→tanh`, `matmul→relu+bias`, `matmul→gelu→rmsnorm` all run
+`metal_runtime` at fp32 tol. So the high-value "compose pointwise+matmul" is done.
+*Remaining (scoped, not session-end work):* (a) **full-tensor residual add**
+(`matmul(A,B) + residual`, the transformer `x + sublayer(x)` pattern — per-element,
+distinct from the per-feature bias) — modest value (memory-bound add) but it
+extends the *core* scalar `..._epilogue_{f32,f16}` + coopmat + tiled symbol ABIs
+(a +residual buffer through all four for consistency), so it's a focused
+multi-site change, not a tail-end add; (b) pointwise *prologue* on the matmul
+inputs (niche); (c) the bigger `graph_ir → MSL` whole-program emitter (or retarget
+the CPU JIT's `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 
 ### M5 — Displace the dispatcher lane-by-lane (HF, Evaluator-gated) — **gate landed (2026-06-16)**
 Migrate op families from name→MPS/MSL dispatch to synthesizer codegen one at a
@@ -310,11 +321,13 @@ oracle. Open work, by leverage:
    `linalg.matmul` + `scf::tileUsingSCF`), isolate op-state vs MLIR-22 bug, then
    wire into the JIT once stable. Won't match BLAS; the single-GEMM hot path
    already routes to Accelerate, so this targets multi-op-with-GEMM programs.
-2. **M4 compose pointwise+matmul → one kernel; whole-program `graph_ir→MSL`
-   (HF — larger codegen).** Fuse a pointwise epilogue/prologue *into* the matmul
-   or norm kernel (today they are separate dispatches), then the general
-   whole-program emitter (or retarget the CPU JIT `tessera→linalg` spine to
-   `linalg→gpu→{SPIR-V/Metal}`).
+2. **M4 compose pointwise+matmul — core done; residual + whole-program remain
+   (HF).** ✅ matmul → multi-op pointwise chain + bias + terminal norm is already
+   one kernel (confirmed 2026-06-16). Remaining: (a) **full-tensor residual add**
+   (`matmul+residual`) — extends the core `..._epilogue_{f32,f16}`+coopmat+tiled
+   ABIs (+residual buffer ×4), a focused multi-site change; (b) pointwise prologue
+   on inputs (niche); (c) the bigger whole-program `graph_ir→MSL` emitter (or
+   retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
 3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
    runs native bf16 (pure Python; dtype-generic coopmat ABI).
 4. ~~**M5 per-op MPSGraph reduction tail**~~ ✅ landed 2026-06-16 — `sum`/`mean`/

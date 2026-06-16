@@ -235,22 +235,33 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   contract) and prerequisites for vectorization — but the **real lever is an MLIR
   `linalg→vector` tiling+vectorization pipeline** (register-tile the matmul →
   `linalg::vectorize` → `vector→LLVM`), a focused multi-step effort.
-  **`linalg→vector` attempt (2026-06-16) — diagnosed deeper, reverted.** Built the
-  full gated lane (`TESSERA_JIT_VECTORIZE`): tile each `linalg.matmul` on tensors
-  (pre-bufferize) so vectorize emits a `vector.contract` with a **register** (not
-  memory) accumulator → vectorize → `populateVectorContractLoweringPatterns`
-  (OuterProduct) + transfer lowering → `ConvertVectorToLLVM`; all libs wired
-  (`MLIRVectorToLLVMPass`/`MLIRVectorTransforms`/`MLIRSCFTransforms`/
-  `MLIRTilingInterface`), compiled + linked clean. **Blocker:** the tiling step
-  segfaults internally — *both* `linalg::tileLinalgOp` (legacy) and
-  `scf::tileUsingSCF` (modern TilingInterface) crash on the matmul in this MLIR-22
-  pre-bufferization context (instrumented: "matmuls found: 1" then a crash inside
-  the tiling call). Reverted the experiment (a segfaulting lane shouldn't ship even
-  gated). **Next focused session:** reproduce the tiling crash in a standalone
-  `tessera-opt` lit harness (a bare `linalg.matmul` + `scf::tileUsingSCF`), *not*
-  in the JIT — determine if it's an op-state precondition (the matmul needs a
-  specific form / the rewriter needs different setup) or an MLIR-22 bug; only wire
-  it into the JIT once stable in isolation. Scope honesty:
+  **`linalg→vector` — two attempts (2026-06-16), root cause narrowed, reverted.**
+  Built the full gated lane (`TESSERA_JIT_VECTORIZE`): tile each `linalg.matmul`
+  on tensors (pre-bufferize) so vectorize emits a `vector.contract` with a
+  **register** (not memory) accumulator → `linalg::vectorize` →
+  `populateVectorContractLoweringPatterns` (OuterProduct) + transfer lowering →
+  `ConvertVectorToLLVM`; all libs wired, compiled + linked clean. **Diagnosis
+  (this attempt went much deeper):** (1) **MLIR-22 tiling is NOT broken** —
+  `scf::tileUsingSCF` tiles the *identical* `linalg.matmul<64x64>` perfectly via
+  `mlir-opt --transform-interpreter` (`transform.structured.tile_using_for
+  tile_sizes [8,16,16]` → clean `scf.for` nest + `extract_slice` + inner matmul
+  with a tensor iter_arg accumulator). (2) The JIT's *direct* `scf::tileUsingSCF`
+  call null-derefs (`EXC_BAD_ACCESS address=0x2c`, inside `tileUsingSCF`). (3)
+  Added the registrations the transform interpreter implies —
+  `linalg::registerTilingInterfaceExternalModels`,
+  `tensor::registerTilingInterfaceExternalModels`, the `affine` dialect,
+  `arith`/`tensor` `registerValueBoundsOpInterfaceExternalModels` — **necessary
+  but NOT sufficient**: a clean build with all of them still null-derefs. So the
+  blocker is the **call mechanism**, not registrations: the transform
+  interpreter's wrapper (its `TransformRewriter` + state) does setup the bare
+  `IRRewriter` direct call lacks. **Concrete next step (clear, lower-risk):**
+  drive the tiling via the **transform interpreter** (the proven path) instead of
+  the direct C++ API — parse the `transform.structured.tile_using_for` sequence +
+  `transform.structured.vectorize`, run `transform::applyTransforms`. (Register
+  the transform dialect + linalg/transform extensions; mind the archive-vs-target
+  link rule in `CMakeLists.txt` to avoid the MLIR-aggregate-dylib coexistence
+  segfault.) Reverted the direct-call experiment (a segfaulting lane shouldn't
+  ship even gated). Scope honesty:
   even done well it won't match hand-tuned Accelerate BLAS, and the **single-GEMM
   hot path already routes to Accelerate** (`_native_cpu_fast_call`); this affects
   multi-op programs that contain a GEMM. AMX is only reachable via Accelerate

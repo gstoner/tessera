@@ -2428,7 +2428,10 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     # matmul -> pointwise(-> reduction) chains.
     for mi, chain_idx, region in discover_fusable_regions(fops):
         try:
-            a_raw = _as_numpy(values[fops[mi].inputs[0]])
+            # region.a_name is the matmul's A operand, OR the root of a discovered
+            # prologue activation chain (matmul(act(A), B)) — the synthesized
+            # kernel applies the prologue at the A-load site, so we feed the root.
+            a_raw = _as_numpy(values[region.a_name])
             b_raw = _as_numpy(values[fops[mi].inputs[1]])
             # Preserve the input precision (run_fused_region is dtype-aware:
             # f16 native kernel, bf16 host-convert, f32 default).
@@ -2456,8 +2459,9 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
                 running = fops[op_idx].output
             variant = select_variant(region, M, N, K)     # measured-best (lazy autotune) or default
             out, _exec = run_fused_region(region, a, b, bias, variant=variant)
-            values[fops[chain_idx[-1]].output] = out
-            consumed.update([mi, *chain_idx])
+            out_idx = chain_idx[-1] if chain_idx else mi
+            values[fops[out_idx].output] = out
+            consumed.update([mi, *chain_idx, *region.prologue_src_indices])
         except Exception:                      # noqa: BLE001 - fall back to per-op
             continue
 

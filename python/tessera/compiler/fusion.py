@@ -171,6 +171,10 @@ class FusedRegion:
     # Because it acts per-element of A before the K-sum, it equals applying the
     # op to A then contracting — exact for any pointwise op.
     prologue: tuple[str, ...] = ()
+    # Graph bookkeeping (like a_name/b_name; NOT synthesis-semantic): the op
+    # indices of the prologue activation chain in the source graph, so the
+    # orchestrator can mark them consumed. Empty unless discovery found a prologue.
+    prologue_src_indices: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         for op in self.epilogue:
@@ -2176,7 +2180,7 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     magellan/alphaevolve reward-hack rejection: a faster-but-wrong kernel is
     refused.  Verdicts are cached per region-class; pass ``force`` to re-probe."""
     key = ("R", region.epilogue, region.reduction, region.has_bias,
-           round(region.eps, 9))
+           region.prologue, region.has_residual, round(region.eps, 9))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
@@ -2442,7 +2446,9 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
         for v in op.inputs:
             use_count[v] = use_count.get(v, 0) + 1
     by_input: dict[str, list[int]] = {}
+    producer: dict[str, int] = {}
     for i, op in enumerate(ops):
+        producer[op.output] = i
         for v in op.inputs:
             by_input.setdefault(v, []).append(i)
 
@@ -2454,6 +2460,27 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
         chain: list[int] = []
         epi: list[str] = []
         reduction: str | None = None
+        # Backward: a single-use UNARY activation chain feeding the matmul's A
+        # operand → a prologue, ``matmul(act(A), B)``. Each producer must be the
+        # sole consumer of its output (fusing it in drops nothing) and a unary
+        # pointwise op (bias/add are binary → not a prologue). Walk to the chain
+        # root; the synthesized kernel applies the chain at the A-load site.
+        prologue: list[str] = []
+        prologue_idx: list[int] = []
+        a_root = op.inputs[0]
+        while True:
+            if use_count.get(a_root, 0) != 1:
+                break                          # A read elsewhere too → don't fuse
+            p = producer.get(a_root)
+            if p is None or p in consumed:
+                break
+            pkey = _POINTWISE_ALIASES.get(ops[p].name)
+            if pkey is None or pkey == "bias" or len(ops[p].inputs) != 1:
+                break                          # not a unary activation
+            prologue.insert(0, pkey)           # source order: root op applied first
+            prologue_idx.insert(0, p)
+            consumed.add(p)
+            a_root = ops[p].inputs[0]
         cur = op.output
         while True:
             if use_count.get(cur, 0) != 1:
@@ -2480,10 +2507,12 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
                     reduction = rkey
                     chain.append(j)
                     consumed.add(j)
-        if epi or reduction:
-            a, b = op.inputs[0], op.inputs[1]
-            regions.append((i, chain, FusedRegion(tuple(epi), reduction=reduction,
-                                                  a_name=a, b_name=b)))
+        if epi or reduction or prologue:
+            b = op.inputs[1]
+            regions.append((i, chain, FusedRegion(
+                tuple(epi), reduction=reduction, a_name=a_root, b_name=b,
+                prologue=tuple(prologue),
+                prologue_src_indices=tuple(prologue_idx))))
     return regions
 
 

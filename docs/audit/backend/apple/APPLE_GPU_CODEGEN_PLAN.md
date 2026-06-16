@@ -345,10 +345,27 @@ all Evaluator-gated via the M5 displacement oracle. Open work, by leverage:
    at the A-load site so NO extra buffer / ABI arg** (cleaner than residual);
    threads through the stack + tiled scalar synth (f32/f16/bf16), coopmat declines
    → scalar; horizontal-oracle-proven on Metal across dtypes incl. tiled N=2048.
-   Remaining: (a) **auto-discovery** of `matmul(act(A), B)` chains from Graph IR
-   (the region *API* supports prologue today; `discover_fusable_regions` doesn't
-   yet emit one — niche); (b) the bigger whole-program `graph_ir→MSL` emitter (or
-   retarget the CPU JIT `tessera→linalg` spine to `linalg→gpu→{SPIR-V/Metal}`).
+   **Prologue auto-discovery landed 2026-06-16:** `discover_fusable_regions` now
+   walks *backward* from a matmul through a single-use unary-activation chain
+   feeding its A operand and emits a prologue (`matmul(relu(X), W)` fuses the relu
+   into the matmul kernel; multi-use A correctly refuses). The orchestrator feeds
+   the chain root and marks the activation ops consumed
+   (`region.prologue_src_indices`); verify-oracle cache key now includes
+   `prologue`/`residual`. End-to-end on Metal: `relu(X) → matmul → gelu` fuses all
+   3 ops into one kernel. **Whole-program assessment (2026-06-16):** the
+   "big emitter" is *already largely realized* — the orchestrator
+   (`_apple_gpu_try_synthesized_fusion`) runs 5 region synthesizers (matmul-epilogue
+   +residual+prologue, norm-chain, attention, pointwise-DAG) + single-kernel
+   `gpu_swiglu`; real models run as compositions of these, each on `metal_runtime`.
+   No tractable single-kernel-decoder-layer gain (activations are too large for
+   registers; per-major-op dispatch is what MPS/cuDNN do too). Remaining is
+   *incremental coverage* — the next real increment is a **GatedMatmulRegion**
+   (`f(A@Wg) ⊙ (A@Wu)` from primitives — the SwiGLU gate when a graph is written in
+   primitive ops rather than the `swiglu` op; complementary to library `gpu_swiglu`,
+   must not displace it), a multi-day build to start fresh. **Option 2 (MLIR spine
+   → Metal) is deferred by gravity:** Apple ships no public LLVM→AIR translator and
+   there's no MLIR→MSL bridge in-tree, so MSL-source synthesis is the only open
+   Apple-GPU codegen path today (see the codegen-path-constraint memo).
 3. ~~**M2 coopmat bf16**~~ ✅ landed 2026-06-16 — `simdgroup_matrix<bfloat>` MMA
    runs native bf16 (pure Python; dtype-generic coopmat ABI).
 4. ~~**M5 per-op MPSGraph reduction tail**~~ ✅ landed 2026-06-16 — `sum`/`mean`/

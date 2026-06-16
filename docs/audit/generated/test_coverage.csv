@@ -186,7 +186,7 @@ gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,21,4,0,25,0,fp64,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,41,19,1,60,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
+gelu,42,19,1,61,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
@@ -254,7 +254,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,361,164,15,525,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,362,164,15,526,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -331,7 +331,7 @@ rearrange,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 reduce_scatter,0,4,0,4,0,,needs_direct_test,category default for 'collective'
-relu,96,7,9,103,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
+relu,97,7,9,104,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only

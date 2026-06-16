@@ -212,6 +212,46 @@ def test_discovery_ignores_non_matmul_roots():
     assert discover_fusable_regions(ops) == []
 
 
+def test_discovery_captures_prologue_on_a_operand():
+    # relu(X) -> matmul(_, W) -> gelu : relu is a PROLOGUE on A, gelu an epilogue.
+    ops = [_Op("relu", ("X",), "t"),
+           _Op("matmul", ("t", "W"), "m"),
+           _Op("gelu", ("m",), "g")]
+    (mi, chain, region), = discover_fusable_regions(ops)
+    assert mi == 1 and chain == [2]
+    assert region.prologue == ("relu",) and region.epilogue == ("gelu",)
+    assert region.a_name == "X"                      # synth reads the chain root
+    assert region.prologue_src_indices == (0,)       # so the orchestrator skips it
+
+
+def test_discovery_captures_multi_op_prologue_chain_in_source_order():
+    # gelu(X) -> relu(_) -> matmul : prologue applied in source order (gelu, relu).
+    ops = [_Op("gelu", ("X",), "u"),
+           _Op("relu", ("u",), "t"),
+           _Op("matmul", ("t", "W"), "m")]
+    (_, _, region), = discover_fusable_regions(ops)
+    assert region.prologue == ("gelu", "relu") and region.a_name == "X"
+    assert region.prologue_src_indices == (0, 1)
+
+
+def test_discovery_prologue_respects_single_use_of_the_a_operand():
+    # relu output feeds the matmul AND a second consumer → relu is NOT a prologue
+    # (fusing it in would drop the value the second op reads).
+    ops = [_Op("relu", ("X",), "t"),
+           _Op("matmul", ("t", "W"), "m"),
+           _Op("add", ("t", "Y"), "z")]              # second consumer of t
+    for _, _, region in discover_fusable_regions(ops):
+        assert region.prologue == ()
+
+
+def test_discovery_prologue_only_region_no_epilogue():
+    # relu(X) -> matmul, with no epilogue: still a valid (prologue-only) region.
+    ops = [_Op("relu", ("X",), "t"), _Op("matmul", ("t", "W"), "m")]
+    (mi, chain, region), = discover_fusable_regions(ops)
+    assert mi == 1 and chain == [] and region.prologue == ("relu",)
+    assert region.epilogue == ()
+
+
 # ── F2a: hardware-verified synthesis, gated by the horizontal oracle ─────────
 
 # catalog chains (replace the hand-written kernels) + NOVEL chains (the catalog
@@ -389,6 +429,26 @@ def test_runtime_prepass_fuses_matmul_pointwise_chain():
     consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
     assert consumed == {0, 1}
     ref = FusedRegion(("gelu",)).reference(A, B)
+    assert np.allclose(values["g"], ref, atol=1e-4)
+
+
+def test_runtime_prepass_fuses_prologue_activation_into_matmul():
+    # matmul(relu(X), W) -> gelu : the relu PROLOGUE on the A operand fuses into
+    # the synthesized matmul kernel — the activation op is consumed (no separate
+    # dispatch), proving prologue auto-discovery is wired end-to-end.
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((8, 12)).astype(np.float32)
+    W = rng.standard_normal((12, 16)).astype(np.float32)
+    ops = [{"op_name": "tessera.relu", "operands": ["%x"], "result": "%t"},
+           {"op_name": "tessera.matmul", "operands": ["%t", "%W"], "result": "%m"},
+           {"op_name": "tessera.gelu", "operands": ["%m"], "result": "%g"}]
+    values = {"x": X, "W": W}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1, 2}                       # relu (op 0) is fused in
+    ref = FusedRegion(("gelu",), prologue=("relu",)).reference(X, W)
     assert np.allclose(values["g"], ref, atol=1e-4)
 
 

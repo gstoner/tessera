@@ -4619,6 +4619,35 @@ def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> An
         return _ts.ops.selective_ssm(
             x, A, B, C, delta, gate=gate, state=state, chunk_size=chunk)
 
+    # Route the *stateless* scalar-A prefill through the single-dispatch block
+    # decode kernel (Track-R) when it's faster than the bmm chunked path — this
+    # is how the block kernel becomes reachable from the enveloped
+    # `selective_ssm` graph op (the decode-loop handle stays separate by
+    # design).  A shape sweep (docs/audit/roadmap/REPLAYSSM_PLAN.md) showed the
+    # block kernel wins for larger work (batched, large T, or large state) and
+    # loses only for tiny shapes, so the default is a **size heuristic**:
+    # block when ``B*D >= 256`` (enough threads) or ``T >= 128`` (amortizes the
+    # per-(b,d) serial loop).  ``TESSERA_SSM_BLOCK_PREFILL=1`` forces block,
+    # ``=0`` forces bmm.  Requires scalar-A, no initial state, N<=256.
+    import os
+    _flag = os.environ.get("TESSERA_SSM_BLOCK_PREFILL")
+    Bsz, S, Dd = (int(d) for d in x.shape)
+    Nn = int(B.shape[-1])
+    _heuristic = (Bsz * Dd >= 256) or (S >= 128)
+    _use_block = (state is None and Nn <= 256 and _flag != "0"
+                  and (_flag == "1" or _heuristic))
+    if _use_block:
+        blk = apple_gpu_ssm_block_callable("fp32")
+        s0 = np.zeros((Bsz, Dd, Nn), dtype=np.float64)
+        out = blk(np.moveaxis(delta, 1, 0), np.moveaxis(x, 1, 0),
+                  np.moveaxis(B, 1, 0), np.moveaxis(C, 1, 0), s0,
+                  np.asarray(A).reshape(-1), Bsz, S, Dd, Nn)
+        if out is not None:
+            y = np.moveaxis(np.asarray(out), 0, 1)        # (B, S, D)
+            if gate is not None:
+                y = y * np.asarray(gate)
+            return y.astype(np.float32)
+
     def _gpu_bmm(p: Any, q: Any) -> Any:
         r = _apple_gpu_dispatch_bmm(p, q, np)
         return r if r is not None else np.matmul(p, q)
@@ -4626,6 +4655,346 @@ def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> An
     return _mamba_ssd.selective_ssm_parallel(
         x, A, B, C, delta, gate=gate, state=state, chunk_size=chunk,
         matmul3d=_gpu_bmm)
+
+
+def apple_gpu_bmm_callable() -> Any:
+    """A batched-matmul callable ``(…,M,K) @ (…,K,N)`` that runs on the Apple
+    GPU bmm (MPSGraph) lane.
+
+    Operands are cast to float32 so they actually dispatch to Metal (the bmm
+    lane only accepts f32/f16; f64 would fall through to numpy); the result is
+    returned as float64 for the reference-tier accumulation in
+    :class:`tessera.cache.SSMStateHandle`.  On non-Darwin / no-Metal hosts the
+    underlying dispatch falls back to numpy, so this is always safe to wire."""
+    import numpy as np
+
+    def _mm(p: Any, q: Any) -> Any:
+        p32 = np.ascontiguousarray(np.asarray(p, dtype=np.float32))
+        q32 = np.ascontiguousarray(np.asarray(q, dtype=np.float32))
+        r = _apple_gpu_dispatch_bmm(p32, q32, np)
+        if r is None:
+            r = np.matmul(p32, q32)
+        return np.asarray(r, dtype=np.float64)
+
+    return _mm
+
+
+def apple_gpu_ssm_state_handle(
+    batch: int,
+    num_channels: int,
+    state_dim: int,
+    a: Any,
+    *,
+    capacity: int = 64,
+    spec_window: int = 0,
+    dtype: str = "fp32",
+) -> Any:
+    """Build a :class:`tessera.cache.SSMStateHandle` whose scalar-A replay
+    contractions (projection / gram / state update) run on the Apple GPU bmm
+    lane — the Track-R Phase 4 "correct-but-composed" Mamba-2 decode path.
+
+    The reconstruction is identical to the reference handle; only the batched
+    matmuls move to Metal.  General ``(D,N)`` A is not bmm-separable and stays
+    on the numpy reference regardless.
+    """
+    from .cache import SSMStateHandle
+
+    return SSMStateHandle(
+        batch=batch, num_channels=num_channels, state_dim=state_dim, a=a,
+        capacity=capacity, spec_window=spec_window, dtype=dtype,
+        matmul3d=apple_gpu_bmm_callable(), backend="apple_gpu",
+    )
+
+
+def _apple_gpu_ssm_replay_decode_f32() -> Any:
+    """Bind the fused output-only ReplaySSM decode C ABI symbol (or None)."""
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ssm_replay_decode_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def apple_gpu_ssm_decode_callable() -> Any:
+    """A fused output-only ReplaySSM decode callable (scalar-A, f32) for
+    :attr:`SSMStateHandle.decode_fn`.
+
+    Signature ``(delta(m,B,D), x(m,B,D), b(m,B,N), s0(B,D,N), c(B,N), a(D,),
+    B, D, N, m) -> y(B,D)``.  The single Metal dispatch keeps ``s0`` resident
+    and reads only the small replay inputs; on no-Metal hosts the C ABI symbol
+    runs its own host reference.  Returns ``None`` when the symbol is absent so
+    the handle falls back to its bmm/numpy reconstruction."""
+    import numpy as np
+
+    sym = _apple_gpu_ssm_replay_decode_f32()
+
+    def _decode(delta: Any, x: Any, b: Any, s0: Any, c: Any, a: Any,
+                B: int, D: int, N: int, m: int) -> Any:
+        if sym is None:
+            return None
+
+        def _run() -> Any:
+            d32 = np.ascontiguousarray(delta, dtype=np.float32)
+            x32 = np.ascontiguousarray(x, dtype=np.float32)
+            b32 = np.ascontiguousarray(b, dtype=np.float32)
+            s32 = np.ascontiguousarray(s0, dtype=np.float32)
+            c32 = np.ascontiguousarray(c, dtype=np.float32)
+            a32 = np.ascontiguousarray(a, dtype=np.float32)
+            out = np.zeros((B, D), dtype=np.float32)
+            fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            sym(fp(d32), fp(x32), fp(b32), fp(s32), fp(c32), fp(a32), fp(out),
+                ctypes.c_int32(B), ctypes.c_int32(D), ctypes.c_int32(N),
+                ctypes.c_int32(m))
+            return out.astype(np.float64)
+
+        return _run()
+
+    return _decode
+
+
+def _apple_gpu_ssm_block_decode_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ssm_block_decode_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_ssm_block_decode_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_ssm_block_decode_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [u16, u16, u16, u16, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def apple_gpu_ssm_block_callable(dtype: str = "fp32") -> Any:
+    """A block SSM decode callable (scalar-A) for ``SSMStateHandle``'s
+    ``block_fn``: compute all ``T`` token outputs from a checkpoint ``s0`` in a
+    single Metal dispatch (the dispatch-overhead fix).  ``dtype="fp16"`` uses
+    the half-I/O kernel (f32 accumulation); else f32.
+
+    Signature ``(delta(T,B,D), x(T,B,D), b(T,B,N), c(T,B,N), s0(B,D,N), a(D,),
+    B, T, D, N) -> out(T,B,D)``; ``None`` when the symbol is absent."""
+    import numpy as np
+
+    f32 = _apple_gpu_ssm_block_decode_f32()
+    f16 = _apple_gpu_ssm_block_decode_f16() if dtype == "fp16" else None
+    bf16 = _bfloat16_dtype() if dtype == "bf16" else None
+
+    def _block(delta: Any, x: Any, b: Any, c: Any, s0: Any, a: Any,
+               B: int, T: int, D: int, N: int) -> Any:
+        if dtype == "bf16" and bf16 is not None and f32 is not None:
+            # bf16 storage via fp32-conversion (MSL has no native bf16) — round
+            # inputs to bf16, run the f32 kernel (f32 accum), round the output.
+            r = lambda arr: np.ascontiguousarray(
+                np.asarray(arr, dtype=np.float32).astype(bf16).astype(np.float32))
+            d32, x32, b32, c32, s32, a32 = (r(delta), r(x), r(b), r(c), r(s0), r(a))
+            out = np.zeros((T, B, D), dtype=np.float32)
+            fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            f32(fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
+                ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
+                ctypes.c_int32(N))
+            return out.astype(bf16).astype(np.float64)
+        if dtype == "fp16" and f16 is not None:
+            h = lambda arr: np.ascontiguousarray(arr, dtype=np.float16)
+            d16, x16, b16, c16 = h(delta), h(x), h(b), h(c)
+            s16, a16 = h(s0), h(a)
+            out = np.zeros((T, B, D), dtype=np.float16)
+            up = lambda arr: arr.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16))
+            f16(up(d16), up(x16), up(b16), up(c16), up(s16), up(a16), up(out),
+                ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
+                ctypes.c_int32(N))
+            return out.astype(np.float64)
+        if f32 is None:
+            return None
+        d32 = np.ascontiguousarray(delta, dtype=np.float32)
+        x32 = np.ascontiguousarray(x, dtype=np.float32)
+        b32 = np.ascontiguousarray(b, dtype=np.float32)
+        c32 = np.ascontiguousarray(c, dtype=np.float32)
+        s32 = np.ascontiguousarray(s0, dtype=np.float32)
+        a32 = np.ascontiguousarray(a, dtype=np.float32)
+        out = np.zeros((T, B, D), dtype=np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        f32(fp(d32), fp(x32), fp(b32), fp(c32), fp(s32), fp(a32), fp(out),
+            ctypes.c_int32(B), ctypes.c_int32(T), ctypes.c_int32(D),
+            ctypes.c_int32(N))
+        return out.astype(np.float64)
+
+    return _block
+
+
+def apple_gpu_fused_ssm_state_handle(
+    batch: int,
+    num_channels: int,
+    state_dim: int,
+    a: Any,
+    *,
+    capacity: int = 64,
+    spec_window: int = 0,
+    dtype: str = "fp32",
+    compute_dtype: str = "fp32",
+) -> Any:
+    """Build an :class:`SSMStateHandle` whose scalar-A output-only decode runs
+    in a single fused Metal dispatch (``tessera_apple_gpu_ssm_replay_decode_f32``
+    — Track-R Phase 5, S0 kept resident), plus a block-decode path
+    (``decode_block`` → one dispatch for many tokens).  ``compute_dtype="fp16"``
+    routes block decode through the half-I/O kernel.  Flush/materialize stay on
+    the bmm lane.  General ``(D,N)`` A falls back to the numpy reference."""
+    from .cache import SSMStateHandle
+
+    return SSMStateHandle(
+        batch=batch, num_channels=num_channels, state_dim=state_dim, a=a,
+        capacity=capacity, spec_window=spec_window, dtype=dtype,
+        matmul3d=apple_gpu_bmm_callable(),
+        decode_fn=apple_gpu_ssm_decode_callable(),
+        block_fn=apple_gpu_ssm_block_callable(compute_dtype),
+        backend="apple_gpu_fused",
+    )
+
+
+def _apple_gpu_gated_delta_rule_decode_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_gated_delta_rule_decode_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_gated_delta_rule_decode_big_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_gated_delta_rule_decode_big_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [fp, fp, fp, fp, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_gated_delta_rule_decode_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_gated_delta_rule_decode_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [u16, u16, u16, u16, u16, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = None
+    return sym
+
+
+def apple_gpu_delta_block_callable(dtype: str = "fp32") -> Any:
+    """A gated delta-rule block decode callable for ``DeltaNetStateHandle``'s
+    ``block_fn``: replay the recurrence over a block of ``T`` tokens from a
+    checkpoint ``S0`` in a single Metal dispatch, returning per-token outputs
+    and the final state.  Picks the kernel by state size:
+
+      * ``d_qk*d_v <= 256``  — register kernel (f32 or, with ``dtype="fp16"``,
+        the half-I/O kernel);
+      * ``256 < d_qk*d_v <= 8192`` — the threadgroup-memory ("big") f32 kernel
+        (beyond the register envelope).
+
+    Signature ``(Q, K, V, beta, decay, S0, B, H, T, dk, dv, erase) ->
+    (O(B,H,T,dv), Sout(B,H,dk,dv))``; ``None`` when out of envelope / absent."""
+    import numpy as np
+
+    f32 = _apple_gpu_gated_delta_rule_decode_f32()
+    big = _apple_gpu_gated_delta_rule_decode_big_f32()
+    f16 = _apple_gpu_gated_delta_rule_decode_f16() if dtype == "fp16" else None
+    bf16 = _bfloat16_dtype() if dtype == "bf16" else None
+
+    def _block(Q: Any, K: Any, V: Any, beta: Any, decay: Any, S0: Any,
+               B: int, H: int, T: int, dk: int, dv: int, erase: int) -> Any:
+        sz = dk * dv
+        dims = (ctypes.c_int32(B), ctypes.c_int32(H), ctypes.c_int32(T),
+                ctypes.c_int32(dk), ctypes.c_int32(dv), ctypes.c_int32(int(erase)))
+        if dtype == "bf16" and bf16 is not None:
+            # bf16 storage via fp32-conversion; picks register/big f32 by size.
+            sym_bf = f32 if sz <= 256 else big
+            if sym_bf is None or sz > 8192:
+                return None
+            r = lambda arr: np.ascontiguousarray(
+                np.asarray(arr, dtype=np.float32).astype(bf16).astype(np.float32))
+            qb, kb, vb, beb, deb, sb = (r(Q), r(K), r(V), r(beta), r(decay), r(S0))
+            ob = np.zeros((B, H, T, dv), dtype=np.float32)
+            soutb = np.zeros((B, H, dk, dv), dtype=np.float32)
+            fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            sym_bf(fp(qb), fp(kb), fp(vb), fp(beb), fp(deb), fp(sb), fp(ob),
+                   fp(soutb), *dims)
+            return ob.astype(bf16).astype(np.float64), soutb.astype(bf16).astype(np.float64)
+        if dtype == "fp16" and f16 is not None and sz <= 256:
+            h = lambda arr: np.ascontiguousarray(arr, dtype=np.float16)
+            q, k, v, be, de, s = (h(Q), h(K), h(V), h(beta), h(decay), h(S0))
+            o = np.zeros((B, H, T, dv), dtype=np.float16)
+            sout = np.zeros((B, H, dk, dv), dtype=np.float16)
+            up = lambda arr: arr.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16))
+            f16(up(q), up(k), up(v), up(be), up(de), up(s), up(o), up(sout), *dims)
+            return o.astype(np.float64), sout.astype(np.float64)
+        sym = f32 if sz <= 256 else big
+        if sym is None or sz > 8192:
+            return None
+        cast = lambda arr: np.ascontiguousarray(arr, dtype=np.float32)
+        q32, k32, v32, be32, de32, s32 = (cast(Q), cast(K), cast(V), cast(beta),
+                                          cast(decay), cast(S0))
+        o32 = np.zeros((B, H, T, dv), dtype=np.float32)
+        sout32 = np.zeros((B, H, dk, dv), dtype=np.float32)
+        fp = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(fp(q32), fp(k32), fp(v32), fp(be32), fp(de32), fp(s32), fp(o32),
+            fp(sout32), *dims)
+        return o32.astype(np.float64), sout32.astype(np.float64)
+
+    return _block
+
+
+def apple_gpu_delta_state_handle(
+    batch: int,
+    num_heads: int,
+    key_dim: int,
+    value_dim: int,
+    *,
+    capacity: int = 64,
+    spec_window: int = 0,
+    dtype: str = "fp32",
+    compute_dtype: str = "fp32",
+    erase: bool = True,
+) -> Any:
+    """Build a :class:`DeltaNetStateHandle` with a Metal block-decode path
+    (``decode_block`` → one dispatch for a whole block from the checkpoint).
+    The block kernel is picked by state size — register for
+    ``d_qk*d_v<=256``, threadgroup-memory ("big") up to 8192 —, and by
+    ``compute_dtype`` (``"fp16"`` half-I/O for the register case).  Per-token
+    ``step`` stays on the numpy replay; the GPU win is the single-dispatch
+    block."""
+    from .cache import DeltaNetStateHandle
+
+    return DeltaNetStateHandle(
+        batch=batch, num_heads=num_heads, key_dim=key_dim, value_dim=value_dim,
+        capacity=capacity, spec_window=spec_window, dtype=dtype, erase=erase,
+        block_fn=apple_gpu_delta_block_callable(compute_dtype), backend="apple_gpu",
+    )
 
 
 def _apple_gpu_dispatch_bmm(a: Any, b: Any, np: Any) -> Any:

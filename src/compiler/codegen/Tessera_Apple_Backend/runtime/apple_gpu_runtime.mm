@@ -3531,6 +3531,431 @@ extern "C" void tessera_apple_gpu_rope_f32(const float* X, const float* Theta,
 }
 
 //===---------------------------------------------------------------------===//
+// Track-R (ReplaySSM) Phase 5 — fused output-only SSM decode (scalar-A).
+//
+// One thread per (b, d).  Reconstructs y_t[b,d] from the *resident* checkpoint
+// state S0 (B,D,N) and a small ring buffer of replay inputs (delta, x, b_in)
+// — never materializing the (D,N) state (the ReplaySSM output-only trick:
+// form the scalar c·b_i first, then scale).  This is the single-dispatch decode
+// step that keeps S0 resident; the host buffers fed in are the small per-token
+// inputs (2D+N per token), not the full state.  f32, scalar-state A only.
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kSsmReplayDecodeF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ssm_replay_decode_output_only_f32(
+    device const float* delta [[buffer(0)]],   // (M, B, D)
+    device const float* xin   [[buffer(1)]],   // (M, B, D)
+    device const float* bin   [[buffer(2)]],   // (M, B, N)
+    device const float* s0    [[buffer(3)]],   // (B, D, N) resident checkpoint
+    device const float* cin   [[buffer(4)]],   // (B, N)
+    device const float* a     [[buffer(5)]],   // (D,)
+    device float*       out   [[buffer(6)]],   // (B, D)
+    constant int& B [[buffer(7)]],
+    constant int& D [[buffer(8)]],
+    constant int& N [[buffer(9)]],
+    constant int& M [[buffer(10)]],
+    uint gid [[thread_position_in_grid]])
+{
+    int total = B * D;
+    if ((int)gid >= total) return;
+    int b = (int)gid / D;
+    int d = (int)gid % D;
+    float ad = a[d];
+    // Full cumulative decay over the buffer (scalar A → independent of N).
+    float dcum_t = 0.0f;
+    for (int i = 0; i < M; ++i) dcum_t += delta[(i * B + b) * D + d] * ad;
+    // Checkpoint projection: sproj = sum_n c[n] * S0[b,d,n].
+    float sproj = 0.0f;
+    for (int n = 0; n < N; ++n) sproj += cin[b * N + n] * s0[(b * D + d) * N + n];
+    float y = exp(dcum_t) * sproj;
+    // Buffer term: inner-product-first, never materializes h_t.
+    float dcum_i = 0.0f;
+    for (int i = 0; i < M; ++i) {
+        dcum_i += delta[(i * B + b) * D + d] * ad;           // inclusive cumsum
+        float gram = 0.0f;
+        for (int n = 0; n < N; ++n)
+            gram += cin[b * N + n] * bin[(i * B + b) * N + n];
+        float gi = delta[(i * B + b) * D + d] * xin[(i * B + b) * D + d];
+        y += gi * exp(dcum_t - dcum_i) * gram;
+    }
+    out[b * D + d] = y;
+}
+)MSL";
+
+inline void reference_ssm_replay_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* s0,
+    const float* cin, const float* a, float* out,
+    int32_t B, int32_t D, int32_t N, int32_t M) {
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      float ad = a[d];
+      float dcum_t = 0.0f;
+      for (int i = 0; i < M; ++i) dcum_t += delta[(i * B + b) * D + d] * ad;
+      float sproj = 0.0f;
+      for (int n = 0; n < N; ++n)
+        sproj += cin[b * N + n] * s0[(b * D + d) * N + n];
+      float y = std::exp(dcum_t) * sproj;
+      float dcum_i = 0.0f;
+      for (int i = 0; i < M; ++i) {
+        dcum_i += delta[(i * B + b) * D + d] * ad;
+        float gram = 0.0f;
+        for (int n = 0; n < N; ++n)
+          gram += cin[b * N + n] * bin[(i * B + b) * N + n];
+        float gi = delta[(i * B + b) * D + d] * xin[(i * B + b) * D + d];
+        y += gi * std::exp(dcum_t - dcum_i) * gram;
+      }
+      out[b * D + d] = y;
+    }
+  }
+}
+
+bool dispatch_ssm_replay_decode_msl(
+    MetalDeviceContext &ctx, const float* delta, const float* xin,
+    const float* bin, const float* s0, const float* cin, const float* a,
+    float* out, int32_t B, int32_t D, int32_t N, int32_t M) {
+  if (B <= 0 || D <= 0 || N <= 0 || M <= 0) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kSsmReplayDecodeF32Source, @"ssm_replay_decode_output_only_f32");
+    if (!pso) return false;
+
+    NSUInteger mbd = sizeof(float) * (NSUInteger)M * B * D;
+    NSUInteger mbn = sizeof(float) * (NSUInteger)M * B * N;
+    NSUInteger bdn = sizeof(float) * (NSUInteger)B * D * N;
+    NSUInteger bn  = sizeof(float) * (NSUInteger)B * N;
+    NSUInteger dd  = sizeof(float) * (NSUInteger)D;
+    NSUInteger bd  = sizeof(float) * (NSUInteger)B * D;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDelta, ctx, delta, mbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, xin, mbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, bin, mbn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, s0, bdn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, cin, bn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, dd);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, bd);
+    if (!bufDelta || !bufX || !bufB || !bufS0 || !bufC || !bufA || !bufO)
+      return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufDelta offset:0 atIndex:0];
+    [enc setBuffer:bufX offset:0 atIndex:1];
+    [enc setBuffer:bufB offset:0 atIndex:2];
+    [enc setBuffer:bufS0 offset:0 atIndex:3];
+    [enc setBuffer:bufC offset:0 atIndex:4];
+    [enc setBuffer:bufA offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:10];
+    NSUInteger total = (NSUInteger)B * D;
+    NSUInteger tg = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000,
+                                      "ssm_replay_decode_f32")) return false;
+    std::memcpy(out, [bufO contents], bd);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Fused output-only ReplaySSM decode (scalar-A, f32).  Buffers: delta (M,B,D),
+// x (M,B,D), b (M,B,N), s0 (B,D,N), c (B,N), a (D,), out (B,D).
+extern "C" void tessera_apple_gpu_ssm_replay_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* s0,
+    const float* cin, const float* a, float* out,
+    int32_t B, int32_t D, int32_t N, int32_t M) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ssm_replay_decode_msl(
+          ctx, delta, xin, bin, s0, cin, a, out, B, D, N, M))
+    return;
+  reference_ssm_replay_decode_f32(delta, xin, bin, s0, cin, a, out, B, D, N, M);
+}
+
+//===---------------------------------------------------------------------===//
+// Track-R Phase 5 (dispatch-overhead fix) — block SSM decode (scalar-A).
+//
+// Processes a whole block of T tokens from a checkpoint S0 in ONE dispatch:
+// one thread per (b, d) maintains the running state row h[N] in registers and
+// loops the T tokens, so a T-token decode pays a single command-buffer
+// commit+wait instead of T.  This is the path for prefill / speculative
+// verification / benchmarking where the inputs are all known up front (true
+// single-token AR can't batch because token t+1 depends on y_t).
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kSsmBlockDecodeF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ssm_block_decode_f32(
+    device const float* delta [[buffer(0)]],   // (T, B, D)
+    device const float* xin   [[buffer(1)]],   // (T, B, D)
+    device const float* bin   [[buffer(2)]],   // (T, B, N)
+    device const float* cin   [[buffer(3)]],   // (T, B, N)
+    device const float* s0    [[buffer(4)]],   // (B, D, N) checkpoint
+    device const float* a     [[buffer(5)]],   // (D,)
+    device float*       out   [[buffer(6)]],   // (T, B, D)
+    constant int& B [[buffer(7)]],
+    constant int& T [[buffer(8)]],
+    constant int& D [[buffer(9)]],
+    constant int& N [[buffer(10)]],
+    uint gid [[thread_position_in_grid]])
+{
+    int total = B * D;
+    if ((int)gid >= total || N > 256) return;
+    int b = (int)gid / D;
+    int d = (int)gid % D;
+    float h[256];
+    for (int n = 0; n < N; ++n) h[n] = s0[(b * D + d) * N + n];
+    float ad = a[d];
+    for (int t = 0; t < T; ++t) {
+        float dt = delta[(t * B + b) * D + d];
+        float abar = exp(dt * ad);
+        float g = dt * xin[(t * B + b) * D + d];
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+            h[n] = abar * h[n] + g * bin[(t * B + b) * N + n];
+            y += cin[(t * B + b) * N + n] * h[n];
+        }
+        out[(t * B + b) * D + d] = y;
+    }
+}
+)MSL";
+
+inline void reference_ssm_block_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* cin,
+    const float* s0, const float* a, float* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  std::vector<float> h((std::size_t)N);
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      for (int n = 0; n < N; ++n) h[n] = s0[(b * D + d) * N + n];
+      float ad = a[d];
+      for (int t = 0; t < T; ++t) {
+        float dt = delta[(t * B + b) * D + d];
+        float abar = std::exp(dt * ad);
+        float g = dt * xin[(t * B + b) * D + d];
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+          h[n] = abar * h[n] + g * bin[(t * B + b) * N + n];
+          y += cin[(t * B + b) * N + n] * h[n];
+        }
+        out[(t * B + b) * D + d] = y;
+      }
+    }
+  }
+}
+
+bool dispatch_ssm_block_decode_msl(
+    MetalDeviceContext &ctx, const float* delta, const float* xin,
+    const float* bin, const float* cin, const float* s0, const float* a,
+    float* out, int32_t B, int32_t T, int32_t D, int32_t N) {
+  if (B <= 0 || T <= 0 || D <= 0 || N <= 0 || N > 256) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kSsmBlockDecodeF32Source, @"ssm_block_decode_f32");
+    if (!pso) return false;
+    NSUInteger tbd = sizeof(float) * (NSUInteger)T * B * D;
+    NSUInteger tbn = sizeof(float) * (NSUInteger)T * B * N;
+    NSUInteger bdn = sizeof(float) * (NSUInteger)B * D * N;
+    NSUInteger dd  = sizeof(float) * (NSUInteger)D;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDelta, ctx, delta, tbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, xin, tbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, bin, tbn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, cin, tbn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, s0, bdn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, dd);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, tbd);
+    if (!bufDelta || !bufX || !bufB || !bufC || !bufS0 || !bufA || !bufO)
+      return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufDelta offset:0 atIndex:0];
+    [enc setBuffer:bufX offset:0 atIndex:1];
+    [enc setBuffer:bufB offset:0 atIndex:2];
+    [enc setBuffer:bufC offset:0 atIndex:3];
+    [enc setBuffer:bufS0 offset:0 atIndex:4];
+    [enc setBuffer:bufA offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:10];
+    NSUInteger total = (NSUInteger)B * D;
+    NSUInteger tg = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "ssm_block_decode_f32")) return false;
+    std::memcpy(out, [bufO contents], tbd);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Block SSM decode (scalar-A, f32) — T tokens from checkpoint S0 in ONE
+// dispatch.  Buffers: delta/x (T,B,D), b/c (T,B,N), s0 (B,D,N), a (D,),
+// out (T,B,D).
+extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* cin,
+    const float* s0, const float* a, float* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ssm_block_decode_msl(
+          ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N))
+    return;
+  reference_ssm_block_decode_f32(delta, xin, bin, cin, s0, a, out, B, T, D, N);
+}
+
+//===---------------------------------------------------------------------===//
+// Track-R — f16 block SSM decode (half I/O, f32 accumulation).  Halves the
+// I/O bandwidth vs f32; the running state row stays in f32 registers for
+// accuracy (the production numeric_policy: storage f16, accum f32).
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kSsmBlockDecodeF16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void ssm_block_decode_f16(
+    device const half* delta [[buffer(0)]],
+    device const half* xin   [[buffer(1)]],
+    device const half* bin   [[buffer(2)]],
+    device const half* cin   [[buffer(3)]],
+    device const half* s0    [[buffer(4)]],
+    device const half* a     [[buffer(5)]],
+    device half*       out   [[buffer(6)]],
+    constant int& B [[buffer(7)]],
+    constant int& T [[buffer(8)]],
+    constant int& D [[buffer(9)]],
+    constant int& N [[buffer(10)]],
+    uint gid [[thread_position_in_grid]])
+{
+    int total = B * D;
+    if ((int)gid >= total || N > 256) return;
+    int b = (int)gid / D;
+    int d = (int)gid % D;
+    float h[256];
+    for (int n = 0; n < N; ++n) h[n] = (float)s0[(b * D + d) * N + n];
+    float ad = (float)a[d];
+    for (int t = 0; t < T; ++t) {
+        float dt = (float)delta[(t * B + b) * D + d];
+        float abar = exp(dt * ad);
+        float g = dt * (float)xin[(t * B + b) * D + d];
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+            h[n] = abar * h[n] + g * (float)bin[(t * B + b) * N + n];
+            y += (float)cin[(t * B + b) * N + n] * h[n];
+        }
+        out[(t * B + b) * D + d] = (half)y;
+    }
+}
+)MSL";
+
+inline void reference_ssm_block_decode_f16(
+    const uint16_t* delta, const uint16_t* xin, const uint16_t* bin,
+    const uint16_t* cin, const uint16_t* s0, const uint16_t* a, uint16_t* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  std::vector<float> h((std::size_t)N);
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      for (int n = 0; n < N; ++n) h[n] = half_to_float_gpu(s0[(b * D + d) * N + n]);
+      float ad = half_to_float_gpu(a[d]);
+      for (int t = 0; t < T; ++t) {
+        float dt = half_to_float_gpu(delta[(t * B + b) * D + d]);
+        float abar = std::exp(dt * ad);
+        float g = dt * half_to_float_gpu(xin[(t * B + b) * D + d]);
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+          h[n] = abar * h[n] + g * half_to_float_gpu(bin[(t * B + b) * N + n]);
+          y += half_to_float_gpu(cin[(t * B + b) * N + n]) * h[n];
+        }
+        out[(t * B + b) * D + d] = float_to_half_gpu(y);
+      }
+    }
+  }
+}
+
+bool dispatch_ssm_block_decode_f16_msl(
+    MetalDeviceContext &ctx, const uint16_t* delta, const uint16_t* xin,
+    const uint16_t* bin, const uint16_t* cin, const uint16_t* s0,
+    const uint16_t* a, uint16_t* out, int32_t B, int32_t T, int32_t D, int32_t N) {
+  if (B <= 0 || T <= 0 || D <= 0 || N <= 0 || N > 256) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kSsmBlockDecodeF16Source, @"ssm_block_decode_f16");
+    if (!pso) return false;
+    NSUInteger tbd = sizeof(uint16_t) * (NSUInteger)T * B * D;
+    NSUInteger tbn = sizeof(uint16_t) * (NSUInteger)T * B * N;
+    NSUInteger bdn = sizeof(uint16_t) * (NSUInteger)B * D * N;
+    NSUInteger dd  = sizeof(uint16_t) * (NSUInteger)D;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDelta, ctx, delta, tbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, xin, tbd);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, bin, tbn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufC, ctx, cin, tbn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, s0, bdn);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, dd);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, tbd);
+    if (!bufDelta || !bufX || !bufB || !bufC || !bufS0 || !bufA || !bufO)
+      return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufDelta offset:0 atIndex:0];
+    [enc setBuffer:bufX offset:0 atIndex:1];
+    [enc setBuffer:bufB offset:0 atIndex:2];
+    [enc setBuffer:bufC offset:0 atIndex:3];
+    [enc setBuffer:bufS0 offset:0 atIndex:4];
+    [enc setBuffer:bufA offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&T length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&D length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:10];
+    NSUInteger total = (NSUInteger)B * D;
+    NSUInteger tg = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "ssm_block_decode_f16")) return false;
+    std::memcpy(out, [bufO contents], tbd);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Block SSM decode (scalar-A, f16 storage / f32 accum).  Buffers are half bits
+// (uint16_t): delta/x (T,B,D), b/c (T,B,N), s0 (B,D,N), a (D,), out (T,B,D).
+extern "C" void tessera_apple_gpu_ssm_block_decode_f16(
+    const uint16_t* delta, const uint16_t* xin, const uint16_t* bin,
+    const uint16_t* cin, const uint16_t* s0, const uint16_t* a, uint16_t* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_ssm_block_decode_f16_msl(
+          ctx, delta, xin, bin, cin, s0, a, out, B, T, D, N))
+    return;
+  reference_ssm_block_decode_f16(delta, xin, bin, cin, s0, a, out, B, T, D, N);
+}
+
+//===---------------------------------------------------------------------===//
 // Phase 8.4.4.1 — fp16 + bf16 rope variants.
 //
 // fp16: native MSL `half` kernel. Compute is in `float` for accuracy
@@ -8575,6 +9000,512 @@ extern "C" void tessera_apple_gpu_gated_delta_rule_f32(
                                               S, D_qk, D_v, erase))
     return;
   reference_gated_delta_rule_f32(Q, K, V, beta, decay, O, B, H, S, D_qk, D_v, erase);
+}
+
+//===---------------------------------------------------------------------===//
+// Track-R Phase 6 (GDN fused replay + dispatch-overhead fix) — gated delta-rule
+// block decode from a checkpoint state.
+//
+// Replays the gated delta-rule recurrence over a block of S tokens starting
+// from an initial state S0 (the ReplaySSM checkpoint), in ONE dispatch (one
+// thread per (b,h), full state in registers), and returns BOTH the per-token
+// outputs O and the final state Sout (so the handle can fold it into the next
+// checkpoint).  This is the GDN analogue of ssm_block_decode_f32.
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kGatedDeltaDecodeF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gated_delta_rule_decode_f32(
+    device const float* Q     [[buffer(0)]],
+    device const float* K     [[buffer(1)]],
+    device const float* V     [[buffer(2)]],
+    device const float* beta  [[buffer(3)]],
+    device const float* decay [[buffer(4)]],
+    device const float* S0    [[buffer(5)]],   // (B,H,d_qk,d_v) initial state
+    device float*       O     [[buffer(6)]],   // (B,H,S,d_v)
+    device float*       Sout  [[buffer(7)]],   // (B,H,d_qk,d_v) final state
+    constant int&       B     [[buffer(8)]],
+    constant int&       H     [[buffer(9)]],
+    constant int&       S     [[buffer(10)]],
+    constant int&       D_qk  [[buffer(11)]],
+    constant int&       D_v   [[buffer(12)]],
+    constant int&       erase [[buffer(13)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)(B * H)) return;
+    int bh = (int)gid;
+    if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) return;
+    int sz = D_qk * D_v;
+    float state[256];
+    int sob = bh * sz;
+    for (int i = 0; i < sz; ++i) state[i] = S0[sob + i];
+    float vhat[64];
+    int rqk = S * D_qk, rv = S * D_v;
+    int qb = bh * rqk, kb = qb, vb = bh * rv, ob = vb, sb = bh * S;
+    for (int t = 0; t < S; ++t) {
+        float a  = decay[sb + t];
+        float bt = beta[sb + t];
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += K[kb + t * D_qk + d] * state[d * D_v + e];
+            vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+            float k_d = K[kb + t * D_qk + d];
+            int ro = d * D_v;
+            for (int e = 0; e < D_v; ++e) {
+                float v_e = V[vb + t * D_v + e];
+                float tgt = (erase != 0) ? (v_e - a * vhat[e]) : v_e;
+                state[ro + e] = a * state[ro + e] + bt * k_d * tgt;
+            }
+        }
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += Q[qb + t * D_qk + d] * state[d * D_v + e];
+            O[ob + t * D_v + e] = acc;
+        }
+    }
+    for (int i = 0; i < sz; ++i) Sout[sob + i] = state[i];
+}
+)MSL";
+
+inline void reference_gated_delta_rule_decode_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, const float* S0, float* O, float* Sout,
+    int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  std::vector<float> vhat((std::size_t)D_v, 0.0f);
+  int sz = D_qk * D_v;
+  for (int b = 0; b < B; ++b) {
+    for (int h = 0; h < H; ++h) {
+      int bh = b * H + h, sob = bh * sz;
+      for (int i = 0; i < sz; ++i) state[i] = S0[sob + i];
+      int qb = bh * S * D_qk, kb = qb, vb = bh * S * D_v, ob = vb, sb = bh * S;
+      for (int t = 0; t < S; ++t) {
+        float a = decay[sb + t], bt = beta[sb + t];
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += K[kb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+          float k_d = K[kb + t * D_qk + d];
+          for (int e = 0; e < D_v; ++e) {
+            float v_e = V[vb + t * D_v + e];
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[(std::size_t)d * D_v + e] =
+                a * state[(std::size_t)d * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += Q[qb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          O[ob + t * D_v + e] = acc;
+        }
+      }
+      for (int i = 0; i < sz; ++i) Sout[sob + i] = state[i];
+    }
+  }
+}
+
+bool dispatch_gated_delta_rule_decode_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* beta, const float* decay, const float* S0, float* O,
+    float* Sout, int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v,
+    int32_t erase) {
+  if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kGatedDeltaDecodeF32Source, @"gated_delta_rule_decode_f32");
+    if (!pso) return false;
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)B * H * S;
+    NSUInteger stBytes = sizeof(float) * (NSUInteger)B * H * D_qk * D_v;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBeta, ctx, beta, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDecay, ctx, decay, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, S0, stBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufSout, ctx, stBytes);
+    if (!bufQ || !bufK || !bufV || !bufBeta || !bufDecay || !bufS0 || !bufO ||
+        !bufSout) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufBeta offset:0 atIndex:3];
+    [enc setBuffer:bufDecay offset:0 atIndex:4];
+    [enc setBuffer:bufS0 offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBuffer:bufSout offset:0 atIndex:7];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&erase length:sizeof(int32_t) atIndex:13];
+    NSUInteger total = (NSUInteger)B * H;
+    NSUInteger tg = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "gated_delta_rule_decode_msl")) return false;
+    std::memcpy(O, [bufO contents], vBytes);
+    std::memcpy(Sout, [bufSout contents], stBytes);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Gated delta-rule block decode from checkpoint S0 (f32) — outputs O and final
+// state Sout in ONE dispatch.  Q/K (B,H,S,d_qk), V (B,H,S,d_v),
+// beta/decay (B,H,S), S0/Sout (B,H,d_qk,d_v).
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, const float* S0, float* O, float* Sout,
+    int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gated_delta_rule_decode_msl(
+          ctx, Q, K, V, beta, decay, S0, O, Sout, B, H, S, D_qk, D_v, erase))
+    return;
+  reference_gated_delta_rule_decode_f32(Q, K, V, beta, decay, S0, O, Sout,
+                                        B, H, S, D_qk, D_v, erase);
+}
+
+//===---------------------------------------------------------------------===//
+// Track-R Phase 6 (beyond the register envelope) — gated delta-rule block
+// decode with the (d_k, d_v) state in THREADGROUP memory.
+//
+// The register kernel above caps d_qk*d_v <= 256 (per-thread `float state[256]`).
+// This variant runs one *threadgroup* per (b,h) with the state in threadgroup
+// memory and the threads cooperating over the d_v / (d_qk*d_v) loops, lifting
+// the cap to the threadgroup-memory budget (d_qk*d_v <= ~8192 floats).
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kGatedDeltaDecodeBigF32Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gated_delta_rule_decode_big_f32(
+    device const float* Q     [[buffer(0)]],
+    device const float* K     [[buffer(1)]],
+    device const float* V     [[buffer(2)]],
+    device const float* beta  [[buffer(3)]],
+    device const float* decay [[buffer(4)]],
+    device const float* S0    [[buffer(5)]],
+    device float*       O     [[buffer(6)]],
+    device float*       Sout  [[buffer(7)]],
+    constant int&       B     [[buffer(8)]],
+    constant int&       H     [[buffer(9)]],
+    constant int&       S     [[buffer(10)]],
+    constant int&       D_qk  [[buffer(11)]],
+    constant int&       D_v   [[buffer(12)]],
+    constant int&       erase [[buffer(13)]],
+    threadgroup float*  state [[threadgroup(0)]],   // D_qk * D_v
+    threadgroup float*  vhat  [[threadgroup(1)]],   // D_v
+    uint  tgid  [[threadgroup_position_in_grid]],
+    uint  tid   [[thread_position_in_threadgroup]],
+    uint  tgsz  [[threads_per_threadgroup]])
+{
+    int bh = (int)tgid;
+    if (bh >= B * H) return;
+    int sz = D_qk * D_v;
+    int sob = bh * sz;
+    for (int i = (int)tid; i < sz; i += (int)tgsz) state[i] = S0[sob + i];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    int qb = bh * S * D_qk, vb = bh * S * D_v, sb = bh * S;
+    for (int t = 0; t < S; ++t) {
+        float a  = decay[sb + t];
+        float bt = beta[sb + t];
+        // v̂_t[e] = Σ_d K[d]·state[d,e]
+        for (int e = (int)tid; e < D_v; e += (int)tgsz) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += K[qb + t * D_qk + d] * state[d * D_v + e];
+            vhat[e] = acc;
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        // state[d,e] = a·state[d,e] + β·K[d]·(v[e] − a·v̂[e])
+        for (int idx = (int)tid; idx < sz; idx += (int)tgsz) {
+            int d = idx / D_v, e = idx % D_v;
+            float v_e = V[vb + t * D_v + e];
+            float tgt = (erase != 0) ? (v_e - a * vhat[e]) : v_e;
+            state[idx] = a * state[idx] + bt * K[qb + t * D_qk + d] * tgt;
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        // O[t,e] = Σ_d Q[d]·state[d,e]
+        for (int e = (int)tid; e < D_v; e += (int)tgsz) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += Q[qb + t * D_qk + d] * state[d * D_v + e];
+            O[vb + t * D_v + e] = acc;
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    for (int i = (int)tid; i < sz; i += (int)tgsz) Sout[sob + i] = state[i];
+}
+)MSL";
+
+bool dispatch_gated_delta_rule_decode_big_msl(
+    MetalDeviceContext &ctx, const float* Q, const float* K, const float* V,
+    const float* beta, const float* decay, const float* S0, float* O,
+    float* Sout, int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v,
+    int32_t erase) {
+  int32_t sz = D_qk * D_v;
+  if (sz <= 0 || sz > 8192) return false;            // threadgroup-memory budget
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kGatedDeltaDecodeBigF32Source, @"gated_delta_rule_decode_big_f32");
+    if (!pso) return false;
+    NSUInteger qBytes = sizeof(float) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger vBytes = sizeof(float) * (NSUInteger)B * H * S * D_v;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)B * H * S;
+    NSUInteger stBytes = sizeof(float) * (NSUInteger)B * H * sz;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBeta, ctx, beta, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDecay, ctx, decay, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, S0, stBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufSout, ctx, stBytes);
+    if (!bufQ || !bufK || !bufV || !bufBeta || !bufDecay || !bufS0 || !bufO ||
+        !bufSout) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufBeta offset:0 atIndex:3];
+    [enc setBuffer:bufDecay offset:0 atIndex:4];
+    [enc setBuffer:bufS0 offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBuffer:bufSout offset:0 atIndex:7];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&erase length:sizeof(int32_t) atIndex:13];
+    [enc setThreadgroupMemoryLength:(NSUInteger)sz * sizeof(float) atIndex:0];
+    [enc setThreadgroupMemoryLength:(NSUInteger)D_v * sizeof(float) atIndex:1];
+    NSUInteger tg = std::min<NSUInteger>((NSUInteger)sz,
+                                         pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreadgroups:MTLSizeMake((NSUInteger)B * H, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "gated_delta_rule_decode_big_msl")) return false;
+    std::memcpy(O, [bufO contents], vBytes);
+    std::memcpy(Sout, [bufSout contents], stBytes);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Gated delta-rule block decode (f32) for LARGE state (d_qk*d_v up to 8192) —
+// state in threadgroup memory, one threadgroup per (b,h).  Same ABI as
+// tessera_apple_gpu_gated_delta_rule_decode_f32.
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_big_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, const float* S0, float* O, float* Sout,
+    int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gated_delta_rule_decode_big_msl(
+          ctx, Q, K, V, beta, decay, S0, O, Sout, B, H, S, D_qk, D_v, erase))
+    return;
+  reference_gated_delta_rule_decode_f32(Q, K, V, beta, decay, S0, O, Sout,
+                                        B, H, S, D_qk, D_v, erase);
+}
+
+//===---------------------------------------------------------------------===//
+// Track-R — f16 gated delta-rule block decode (half I/O, f32 state/accum).
+//===---------------------------------------------------------------------===//
+namespace {
+
+static NSString *const kGatedDeltaDecodeF16Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void gated_delta_rule_decode_f16(
+    device const half* Q     [[buffer(0)]],
+    device const half* K     [[buffer(1)]],
+    device const half* V     [[buffer(2)]],
+    device const half* beta  [[buffer(3)]],
+    device const half* decay [[buffer(4)]],
+    device const half* S0    [[buffer(5)]],
+    device half*       O     [[buffer(6)]],
+    device half*       Sout  [[buffer(7)]],
+    constant int& B [[buffer(8)]],
+    constant int& H [[buffer(9)]],
+    constant int& S [[buffer(10)]],
+    constant int& D_qk [[buffer(11)]],
+    constant int& D_v [[buffer(12)]],
+    constant int& erase [[buffer(13)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= (uint)(B * H)) return;
+    int bh = (int)gid;
+    if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) return;
+    int sz = D_qk * D_v, sob = bh * sz;
+    float state[256];
+    for (int i = 0; i < sz; ++i) state[i] = (float)S0[sob + i];
+    float vhat[64];
+    int qb = bh * S * D_qk, vb = bh * S * D_v, sb = bh * S;
+    for (int t = 0; t < S; ++t) {
+        float a = (float)decay[sb + t], bt = (float)beta[sb + t];
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += (float)K[qb + t * D_qk + d] * state[d * D_v + e];
+            vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+            float k_d = (float)K[qb + t * D_qk + d];
+            int ro = d * D_v;
+            for (int e = 0; e < D_v; ++e) {
+                float v_e = (float)V[vb + t * D_v + e];
+                float tgt = (erase != 0) ? (v_e - a * vhat[e]) : v_e;
+                state[ro + e] = a * state[ro + e] + bt * k_d * tgt;
+            }
+        }
+        for (int e = 0; e < D_v; ++e) {
+            float acc = 0.0f;
+            for (int d = 0; d < D_qk; ++d) acc += (float)Q[qb + t * D_qk + d] * state[d * D_v + e];
+            O[vb + t * D_v + e] = (half)acc;
+        }
+    }
+    for (int i = 0; i < sz; ++i) Sout[sob + i] = (half)state[i];
+}
+)MSL";
+
+inline void reference_gated_delta_rule_decode_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const uint16_t* beta, const uint16_t* decay, const uint16_t* S0,
+    uint16_t* O, uint16_t* Sout, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  std::vector<float> vhat((std::size_t)D_v, 0.0f);
+  int sz = D_qk * D_v;
+  for (int b = 0; b < B; ++b) {
+    for (int hh = 0; hh < H; ++hh) {
+      int bh = b * H + hh, sob = bh * sz;
+      for (int i = 0; i < sz; ++i) state[i] = half_to_float_gpu(S0[sob + i]);
+      int qb = bh * S * D_qk, vb = bh * S * D_v, sb = bh * S;
+      for (int t = 0; t < S; ++t) {
+        float a = half_to_float_gpu(decay[sb + t]), bt = half_to_float_gpu(beta[sb + t]);
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += half_to_float_gpu(K[qb + t * D_qk + d]) * state[(std::size_t)d * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+          float k_d = half_to_float_gpu(K[qb + t * D_qk + d]);
+          for (int e = 0; e < D_v; ++e) {
+            float v_e = half_to_float_gpu(V[vb + t * D_v + e]);
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[(std::size_t)d * D_v + e] =
+                a * state[(std::size_t)d * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += half_to_float_gpu(Q[qb + t * D_qk + d]) * state[(std::size_t)d * D_v + e];
+          O[vb + t * D_v + e] = float_to_half_gpu(acc);
+        }
+      }
+      for (int i = 0; i < sz; ++i) Sout[sob + i] = float_to_half_gpu(state[i]);
+    }
+  }
+}
+
+bool dispatch_gated_delta_rule_decode_f16_msl(
+    MetalDeviceContext &ctx, const uint16_t* Q, const uint16_t* K,
+    const uint16_t* V, const uint16_t* beta, const uint16_t* decay,
+    const uint16_t* S0, uint16_t* O, uint16_t* Sout, int32_t B, int32_t H,
+    int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  if (D_qk > 16 || D_v > 64 || D_qk * D_v > 256) return false;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kGatedDeltaDecodeF16Source, @"gated_delta_rule_decode_f16");
+    if (!pso) return false;
+    NSUInteger qBytes = sizeof(uint16_t) * (NSUInteger)B * H * S * D_qk;
+    NSUInteger vBytes = sizeof(uint16_t) * (NSUInteger)B * H * S * D_v;
+    NSUInteger sBytes = sizeof(uint16_t) * (NSUInteger)B * H * S;
+    NSUInteger stBytes = sizeof(uint16_t) * (NSUInteger)B * H * D_qk * D_v;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufQ, ctx, Q, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufK, ctx, K, qBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufV, ctx, V, vBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufBeta, ctx, beta, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDecay, ctx, decay, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS0, ctx, S0, stBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, vBytes);
+    TS_METAL_BUF_ACQUIRE(bufSout, ctx, stBytes);
+    if (!bufQ || !bufK || !bufV || !bufBeta || !bufDecay || !bufS0 || !bufO ||
+        !bufSout) return false;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0];
+    [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2];
+    [enc setBuffer:bufBeta offset:0 atIndex:3];
+    [enc setBuffer:bufDecay offset:0 atIndex:4];
+    [enc setBuffer:bufS0 offset:0 atIndex:5];
+    [enc setBuffer:bufO offset:0 atIndex:6];
+    [enc setBuffer:bufSout offset:0 atIndex:7];
+    [enc setBytes:&B length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:9];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:10];
+    [enc setBytes:&D_qk length:sizeof(int32_t) atIndex:11];
+    [enc setBytes:&D_v length:sizeof(int32_t) atIndex:12];
+    [enc setBytes:&erase length:sizeof(int32_t) atIndex:13];
+    NSUInteger total = (NSUInteger)B * H;
+    NSUInteger tg = std::min<NSUInteger>(total, pso.maxTotalThreadsPerThreadgroup);
+    if (tg == 0) tg = 1;
+    [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000,
+                                      "gated_delta_rule_decode_f16")) return false;
+    std::memcpy(O, [bufO contents], vBytes);
+    std::memcpy(Sout, [bufSout contents], stBytes);
+    return true;
+  }
+}
+
+}  // namespace
+
+// Gated delta-rule block decode (f16 storage / f32 accum).  Buffers are half
+// bits (uint16_t); same shapes as the f32 variant.
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const uint16_t* beta, const uint16_t* decay, const uint16_t* S0,
+    uint16_t* O, uint16_t* Sout, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && dispatch_gated_delta_rule_decode_f16_msl(
+          ctx, Q, K, V, beta, decay, S0, O, Sout, B, H, S, D_qk, D_v, erase))
+    return;
+  reference_gated_delta_rule_decode_f16(Q, K, V, beta, decay, S0, O, Sout,
+                                        B, H, S, D_qk, D_v, erase);
 }
 
 //===---------------------------------------------------------------------===//

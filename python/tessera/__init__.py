@@ -2990,11 +2990,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             h[t,d,n] = A_bar * h[t-1,d,n] + B_bar * x[b,t,d]
             y[t,d] = sum_n C[b,t,n] * h[t,d,n]
 
-        Phase D3 of the execution roadmap. **Forward-only in v1** — calling
-        inside a tape and backpropping through it raises the standard
-        ``TesseraAutodiffError`` pointing to
-        ``tessera.autodiff.custom_rule("selective_ssm")``. The Mamba2 adjoint
-        is on the Phase D3 follow-up list.
+        Phase D3 of the execution roadmap. **Differentiable** — both
+        reverse-mode (``tessera.autodiff.vjp._VJPS["selective_ssm"]``) and
+        forward-mode (``tessera.autodiff.jvp._JVPS["selective_ssm"]``) rules
+        are registered, so this op backprops through a tape directly. (The
+        earlier "forward-only in v1" note predated the Phase D3 adjoint
+        landing and no longer applies.)
         """
         for arr_name, arr in (("x", x), ("A", A), ("B", B), ("C", C), ("delta", delta)):
             if hasattr(arr, "_data"):

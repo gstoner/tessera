@@ -1841,31 +1841,60 @@ LogicalResult SelectiveSsmOp::verify() {
   // Unranked / dynamic operands — defer (consistent with the attention ops).
   if (!xTy || !bTy || !cTy || !dTy || !aTy)
     return success();
+  // Dynamic-compatible dim equality: dims agree unless both are static and
+  // unequal (a dynamic dim is compatible with anything). Matches the idiom
+  // used by the attention verifiers above.
+  auto dimsCompat = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  auto shapesCompat = [&](ArrayRef<int64_t> a, ArrayRef<int64_t> b) {
+    if (a.size() != b.size())
+      return false;
+    for (size_t i = 0; i < a.size(); ++i)
+      if (!dimsCompat(a[i], b[i]))
+        return false;
+    return true;
+  };
   if (xTy.getRank() != 3)
     return emitOpError("x must be rank-3 (B, S, D)");
-  if (dTy.getRank() != 3 || dTy.getShape() != xTy.getShape())
-    return emitOpError("delta must be rank-3 and shape-equal to x (B, S, D)");
+  if (dTy.getRank() != 3 || !shapesCompat(dTy.getShape(), xTy.getShape()))
+    return emitOpError(
+        "delta must be rank-3 and shape-compatible with x (B, S, D)");
   if (bTy.getRank() != 3 || cTy.getRank() != 3)
     return emitOpError("b and c must be rank-3 (B, S, N)");
-  if (bTy.getShape() != cTy.getShape())
-    return emitOpError("b and c must have matching shape (B, S, N)");
-  if (xTy.getShape()[0] != bTy.getShape()[0] ||
-      xTy.getShape()[1] != bTy.getShape()[1])
+  if (!shapesCompat(bTy.getShape(), cTy.getShape()))
+    return emitOpError("b and c must have compatible shape (B, S, N)");
+  if (!dimsCompat(xTy.getShape()[0], bTy.getShape()[0]) ||
+      !dimsCompat(xTy.getShape()[1], bTy.getShape()[1]))
     return emitOpError("x and b must share batch and sequence dims");
+  const int64_t D = xTy.getShape()[2];
+  const int64_t N = bTy.getShape()[2];
   if (aTy.getRank() != 1 && aTy.getRank() != 2)
     return emitOpError("a must be rank-1 (D) or rank-2 (D, N)");
-  int64_t D = xTy.getShape()[2];
-  if (!aTy.isDynamicDim(0) && D != ShapedType::kDynamic && aTy.getShape()[0] != D)
+  // a's leading dim is the channel dim D (both rank-1 and rank-2 layouts).
+  if (!dimsCompat(aTy.getShape()[0], D))
     return emitOpError("a leading dim must equal x channel dim D");
+  // rank-2 a: the trailing dim is the state dim N (must match b/c).
+  if (aTy.getRank() == 2 && !dimsCompat(aTy.getShape()[1], N))
+    return emitOpError("a trailing dim must equal state dim N");
   if (auto g = getGate()) {
     auto gTy = dyn_cast<RankedTensorType>(g.getType());
-    if (gTy && gTy.getShape() != xTy.getShape())
-      return emitOpError("gate must be shape-equal to x (B, S, D)");
+    if (gTy &&
+        (gTy.getRank() != 3 || !shapesCompat(gTy.getShape(), xTy.getShape())))
+      return emitOpError("gate must be shape-compatible with x (B, S, D)");
   }
   if (auto s = getState()) {
     auto sTy = dyn_cast<RankedTensorType>(s.getType());
-    if (sTy && sTy.getRank() != 3)
-      return emitOpError("state must be rank-3 (B, D, N)");
+    if (sTy) {
+      if (sTy.getRank() != 3)
+        return emitOpError("state must be rank-3 (B, D, N)");
+      // state is (B, D, N): batch matches x, D matches x channel, N matches b/c.
+      if (!dimsCompat(sTy.getShape()[0], xTy.getShape()[0]) ||
+          !dimsCompat(sTy.getShape()[1], D) ||
+          !dimsCompat(sTy.getShape()[2], N))
+        return emitOpError(
+            "state must have shape (B, D, N) compatible with x and b");
+    }
   }
   return success();
 }

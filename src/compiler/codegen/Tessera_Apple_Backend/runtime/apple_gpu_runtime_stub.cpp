@@ -3796,4 +3796,179 @@ extern "C" void tessera_apple_gpu_conv3d_f16(
   for (std::size_t i = 0; i < oN; ++i) O[i] = float_to_half_stub(Of[i]);
 }
 
+// Track-R (ReplaySSM) Phase 5 — fused output-only SSM decode (scalar-A, f32).
+// Non-Apple reference mirroring the MSL kernel exactly (host-side fallback).
+extern "C" void tessera_apple_gpu_ssm_replay_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* s0,
+    const float* cin, const float* a, float* out,
+    int32_t B, int32_t D, int32_t N, int32_t M) {
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      float ad = a[d];
+      float dcum_t = 0.0f;
+      for (int i = 0; i < M; ++i) dcum_t += delta[(i * B + b) * D + d] * ad;
+      float sproj = 0.0f;
+      for (int n = 0; n < N; ++n)
+        sproj += cin[b * N + n] * s0[(b * D + d) * N + n];
+      float y = std::exp(dcum_t) * sproj;
+      float dcum_i = 0.0f;
+      for (int i = 0; i < M; ++i) {
+        dcum_i += delta[(i * B + b) * D + d] * ad;
+        float gram = 0.0f;
+        for (int n = 0; n < N; ++n)
+          gram += cin[b * N + n] * bin[(i * B + b) * N + n];
+        float gi = delta[(i * B + b) * D + d] * xin[(i * B + b) * D + d];
+        y += gi * std::exp(dcum_t - dcum_i) * gram;
+      }
+      out[b * D + d] = y;
+    }
+  }
+}
+
+// Track-R Phase 5 — block SSM decode (scalar-A, f32). Non-Apple reference.
+extern "C" void tessera_apple_gpu_ssm_block_decode_f32(
+    const float* delta, const float* xin, const float* bin, const float* cin,
+    const float* s0, const float* a, float* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  std::vector<float> h((std::size_t)N);
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      for (int n = 0; n < N; ++n) h[n] = s0[(b * D + d) * N + n];
+      float ad = a[d];
+      for (int t = 0; t < T; ++t) {
+        float dt = delta[(t * B + b) * D + d];
+        float abar = std::exp(dt * ad);
+        float g = dt * xin[(t * B + b) * D + d];
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+          h[n] = abar * h[n] + g * bin[(t * B + b) * N + n];
+          y += cin[(t * B + b) * N + n] * h[n];
+        }
+        out[(t * B + b) * D + d] = y;
+      }
+    }
+  }
+}
+
+// Track-R Phase 6 — gated delta-rule block decode from checkpoint S0 (f32).
+// Non-Apple reference; returns O and final state Sout.
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, const float* S0, float* O, float* Sout,
+    int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  std::vector<float> vhat((std::size_t)D_v, 0.0f);
+  int sz = D_qk * D_v;
+  for (int b = 0; b < B; ++b) {
+    for (int hh = 0; hh < H; ++hh) {
+      int bh = b * H + hh, sob = bh * sz;
+      for (int i = 0; i < sz; ++i) state[i] = S0[sob + i];
+      int qb = bh * S * D_qk, kb = qb, vb = bh * S * D_v, ob = vb, sb = bh * S;
+      for (int t = 0; t < S; ++t) {
+        float a = decay[sb + t], bt = beta[sb + t];
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += K[kb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+          float k_d = K[kb + t * D_qk + d];
+          for (int e = 0; e < D_v; ++e) {
+            float v_e = V[vb + t * D_v + e];
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[(std::size_t)d * D_v + e] =
+                a * state[(std::size_t)d * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += Q[qb + t * D_qk + d] * state[(std::size_t)d * D_v + e];
+          O[ob + t * D_v + e] = acc;
+        }
+      }
+      for (int i = 0; i < sz; ++i) Sout[sob + i] = state[i];
+    }
+  }
+}
+
+// Big (threadgroup-state) GDN block decode — same math as the f32 variant on
+// the host reference path.
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_big_f32(
+    const float* Q, const float* K, const float* V, const float* beta,
+    const float* decay, const float* S0, float* O, float* Sout,
+    int32_t B, int32_t H, int32_t S, int32_t D_qk, int32_t D_v, int32_t erase) {
+  tessera_apple_gpu_gated_delta_rule_decode_f32(Q, K, V, beta, decay, S0, O,
+                                                Sout, B, H, S, D_qk, D_v, erase);
+}
+
+// f16 block SSM decode (half bits via uint16_t).
+extern "C" void tessera_apple_gpu_ssm_block_decode_f16(
+    const uint16_t* delta, const uint16_t* xin, const uint16_t* bin,
+    const uint16_t* cin, const uint16_t* s0, const uint16_t* a, uint16_t* out,
+    int32_t B, int32_t T, int32_t D, int32_t N) {
+  std::vector<float> h((std::size_t)N);
+  for (int b = 0; b < B; ++b) {
+    for (int d = 0; d < D; ++d) {
+      for (int n = 0; n < N; ++n) h[n] = half_to_float_stub(s0[(b * D + d) * N + n]);
+      float ad = half_to_float_stub(a[d]);
+      for (int t = 0; t < T; ++t) {
+        float dt = half_to_float_stub(delta[(t * B + b) * D + d]);
+        float abar = std::exp(dt * ad);
+        float g = dt * half_to_float_stub(xin[(t * B + b) * D + d]);
+        float y = 0.0f;
+        for (int n = 0; n < N; ++n) {
+          h[n] = abar * h[n] + g * half_to_float_stub(bin[(t * B + b) * N + n]);
+          y += half_to_float_stub(cin[(t * B + b) * N + n]) * h[n];
+        }
+        out[(t * B + b) * D + d] = float_to_half_stub(y);
+      }
+    }
+  }
+}
+
+// f16 GDN block decode (half bits via uint16_t).
+extern "C" void tessera_apple_gpu_gated_delta_rule_decode_f16(
+    const uint16_t* Q, const uint16_t* K, const uint16_t* V,
+    const uint16_t* beta, const uint16_t* decay, const uint16_t* S0,
+    uint16_t* O, uint16_t* Sout, int32_t B, int32_t H, int32_t S,
+    int32_t D_qk, int32_t D_v, int32_t erase) {
+  std::vector<float> state((std::size_t)D_qk * D_v, 0.0f);
+  std::vector<float> vhat((std::size_t)D_v, 0.0f);
+  int sz = D_qk * D_v;
+  for (int b = 0; b < B; ++b) {
+    for (int hh = 0; hh < H; ++hh) {
+      int bh = b * H + hh, sob = bh * sz;
+      for (int i = 0; i < sz; ++i) state[i] = half_to_float_stub(S0[sob + i]);
+      int qb = bh * S * D_qk, kb = qb, vb = bh * S * D_v, ob = vb, sb = bh * S;
+      for (int t = 0; t < S; ++t) {
+        float a = half_to_float_stub(decay[sb + t]), bt = half_to_float_stub(beta[sb + t]);
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += half_to_float_stub(K[kb + t * D_qk + d]) * state[(std::size_t)d * D_v + e];
+          vhat[e] = acc;
+        }
+        for (int d = 0; d < D_qk; ++d) {
+          float k_d = half_to_float_stub(K[kb + t * D_qk + d]);
+          for (int e = 0; e < D_v; ++e) {
+            float v_e = half_to_float_stub(V[vb + t * D_v + e]);
+            float tgt = erase ? (v_e - a * vhat[e]) : v_e;
+            state[(std::size_t)d * D_v + e] =
+                a * state[(std::size_t)d * D_v + e] + bt * k_d * tgt;
+          }
+        }
+        for (int e = 0; e < D_v; ++e) {
+          float acc = 0.0f;
+          for (int d = 0; d < D_qk; ++d)
+            acc += half_to_float_stub(Q[qb + t * D_qk + d]) * state[(std::size_t)d * D_v + e];
+          O[ob + t * D_v + e] = float_to_half_stub(acc);
+        }
+      }
+      for (int i = 0; i < sz; ++i) Sout[sob + i] = float_to_half_stub(state[i]);
+    }
+  }
+}
+
 #endif // !__APPLE__

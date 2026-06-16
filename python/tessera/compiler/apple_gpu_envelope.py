@@ -190,6 +190,10 @@ _APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
 _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
 # Mamba-2 selective state-space scan — chunked-parallel SSD with its batched
 # contractions on the Metal bmm lane (scalar-state A; (D,N) A falls back).
+# NOTE: the ReplaySSM *decode* routes (output_only / state_and_output / spec —
+# see compiler/ssm_replay.py) run host-side on `tessera.cache.SSMStateHandle`
+# today; their fused Metal decode kernels are `planned` (Track-R Phase 5) and
+# join this runtime set only once they exist — do NOT add them here before then.
 _APPLE_GPU_SSM_OPS = frozenset({"tessera.selective_ssm"})
 # Ragged grouped matmul (MoE expert-FFN compute core) — per-group MPS matmul.
 _APPLE_GPU_MOE_OPS = frozenset({"tessera.grouped_gemm", "tessera.moe_swiglu_block"})

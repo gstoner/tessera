@@ -25,6 +25,8 @@ from .mla_paged import MLAPagedDecoder
 from .resident_decode import ResidentMLADecoder
 from .resident_kv import (ResidentLatentKVCache, ResidentBlockPagedKVCache,
                           ResidentBlockPagedKVCacheError)
+from .ssm_state import SSMStateHandle
+from .delta_state import DeltaNetStateHandle
 from .tiered import (TieredKVCache, TieredKVCacheError, StageStats,
                      TieredStats, lookahead_attention_tiered)
 
@@ -37,6 +39,8 @@ __all__ = [
     "KVCacheHandle",
     "LatentKVCacheHandle",
     "MemoryStateHandle",
+    "SSMStateHandle",
+    "DeltaNetStateHandle",
     "MLAPagedDecoder",
     "MLABlockPagedCache",
     "MLABlockPagedCacheError",

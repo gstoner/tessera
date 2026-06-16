@@ -314,6 +314,51 @@ def advance_kv(cache, accepted_prefix_length: int):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# SSM decode-state advance — the ReplaySSM sibling of advance_kv (Track-R)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def advance_ssm(handle, num_accepted: int, *, num_drafts: int):
+    """Commit the accepted speculative prefix on an SSM decode-state handle.
+
+    The SSM analogue of :func:`advance_kv`.  Attention models trim a KV cache;
+    selective-SSM models (Mamba-2 / Gated DeltaNet) instead carry a recurrent
+    state, which ReplaySSM keeps as a checkpoint plus a ring buffer of recent
+    replay inputs (:class:`tessera.cache.SSMStateHandle`).
+
+    The caller appended ``num_drafts`` speculative tokens to the handle's ring
+    buffer (one ``append``/``step`` per draft).  The target accepted the first
+    ``num_accepted`` of them; this op rejects the rest by **rewinding the
+    cursor** — ``handle.rollback(num_drafts - num_accepted)`` — with no
+    per-position state snapshot.  Because ReplaySSM's flush rule reserves
+    ``2*spec_window`` slots, the draft burst never forced a flush, so the
+    rejected tokens are still live in the buffer and rollback is exact.
+
+    Mutates the handle in place and returns it for chaining.
+    """
+    if num_drafts < 0:
+        raise ValueError("num_drafts must be non-negative")
+    if not (0 <= num_accepted <= num_drafts):
+        raise ValueError(
+            f"num_accepted must be in [0, num_drafts={num_drafts}]; "
+            f"got {num_accepted}"
+        )
+    if not (hasattr(handle, "rollback") and hasattr(handle, "count")):
+        raise TypeError(
+            f"advance_ssm expects a tessera.cache.SSMStateHandle-like handle "
+            f"(with rollback()/count); got {type(handle).__name__}"
+        )
+    if num_drafts > handle.count:
+        raise ValueError(
+            f"num_drafts={num_drafts} exceeds live replay tokens "
+            f"handle.count={handle.count} (a flush dropped draft tokens — "
+            f"raise spec_window so the burst fits the ring buffer)"
+        )
+    handle.rollback(num_drafts - num_accepted)
+    return handle
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Convenience: end-to-end speculative-step orchestration
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -374,4 +419,5 @@ __all__ = [
     "acceptance_probabilities",
     "batch_verify",
     "advance_kv",
+    "advance_ssm",
 ]

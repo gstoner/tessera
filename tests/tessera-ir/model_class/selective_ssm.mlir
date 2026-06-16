@@ -4,8 +4,10 @@
 // SSD recurrence).  The coverage registry previously *claimed* this op had
 // landed (graph_ir_lowering = "registered") while no ODS op existed; this
 // fixture is the proof that the claim is now true.  Verifier:
-// `SelectiveSsmOp::verify` (rank-3 x / shape-equal delta / matching b,c / A
-// rank-1|2 / optional gate shape-equal x / state rank-3).
+// `SelectiveSsmOp::verify` (rank-3 x / shape-compatible delta / matching b,c /
+// a rank-1|2 with leading dim D and rank-2 trailing dim N / optional gate
+// shape-compatible with x / state (B,D,N)).  Dim checks are dynamic-compatible
+// (a dynamic dim agrees with anything); negatives in `selective_ssm_invalid.mlir`.
 
 // CHECK-LABEL: func.func @ssm_scalar_state
 func.func @ssm_scalar_state(%x: tensor<2x16x8xf32>, %a: tensor<8xf32>,
@@ -30,4 +32,17 @@ func.func @ssm_full_state_gated(%x: tensor<1x32x16xf32>, %a: tensor<16x8xf32>,
          tensor<1x32x8xf32>, tensor<1x32x16xf32>, tensor<1x32x16xf32>,
          tensor<1x16x8xf32>) -> tensor<1x32x16xf32>
   return %y : tensor<1x32x16xf32>
+}
+
+// Dynamic batch/sequence dims must verify — a dynamic dim is compatible with
+// anything, so this must NOT be rejected (the old direct shape-compare did).
+// CHECK-LABEL: func.func @ssm_dynamic_bs
+func.func @ssm_dynamic_bs(%x: tensor<?x?x8xf32>, %a: tensor<8xf32>,
+                          %b: tensor<?x?x4xf32>, %c: tensor<?x?x4xf32>,
+                          %delta: tensor<?x?x8xf32>) -> tensor<?x?x8xf32> {
+  // CHECK: tessera.selective_ssm
+  %y = tessera.selective_ssm %x, %a, %b, %c, %delta {chunk_size = 64 : i64}
+      : (tensor<?x?x8xf32>, tensor<8xf32>, tensor<?x?x4xf32>,
+         tensor<?x?x4xf32>, tensor<?x?x8xf32>) -> tensor<?x?x8xf32>
+  return %y : tensor<?x?x8xf32>
 }

@@ -160,4 +160,9 @@ def numeric_cases(nrng):
         ("fuse_log_sqrt_dag",
          _agpu(lambda a: ts.ops.log(ts.ops.sqrt(a))),
          (xp,), np.log(np.sqrt(xp)), False),
+        # Phase C tail — sign + a fused max/min DAG.
+        ("sign", _agpu(lambda a: ts.ops.sign(a)), (x,), np.sign(x), False),
+        ("fuse_clamp_like_dag",
+         _agpu(lambda a, b: ts.ops.minimum(ts.ops.maximum(a, b), a)),
+         (x, y), np.minimum(np.maximum(x, y), x), False),
     ]

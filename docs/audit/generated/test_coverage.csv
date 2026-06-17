@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,6,0,0,6,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,88,11,8,99,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
+add,89,11,8,100,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
@@ -254,10 +254,10 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,367,164,15,531,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,369,164,15,533,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-maximum,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+maximum,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
 mean,11,0,0,11,0,bf16 f16,structural_only,unclassified — defaults to structural_only
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
 memory_index_score,1,0,0,1,1,,needs_direct_test,category default for 'attention'
@@ -267,7 +267,7 @@ memory_read,2,0,0,2,0,,needs_direct_test,category default for 'memory'
 memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 min_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
-minimum,5,0,0,5,0,,structural_only,unclassified — defaults to structural_only
+minimum,6,0,0,6,0,,structural_only,unclassified — defaults to structural_only
 mla_decode,3,2,0,5,0,,needs_direct_test,category default for 'attention'
 mla_decode_fused,4,9,0,13,0,,needs_direct_test,category default for 'attention'
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
@@ -337,7 +337,7 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,68,10,2,78,0,bf16 f16 f32 f64 fp32,needs_direct_test,category default for 'normalization'
+rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,needs_direct_test,category default for 'normalization'
 rmsnorm_safe,5,5,0,10,0,bf16 f16 f32,needs_direct_test,category default for 'normalization'
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -384,8 +384,8 @@ shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
 sigmoid,4,0,0,4,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
 sigmoid_safe,4,0,0,4,0,,needs_direct_test,category default for 'stable_reduction'
-sign,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-silu,81,2,5,83,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+sign,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+silu,82,2,5,84,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 silu_mul,13,13,0,26,0,fp32,covered_by_family,category default for 'elementwise'
 simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'

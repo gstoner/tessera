@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import collections
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 from tessera.compiler import apple_gpu_envelope as _env
 from tessera.compiler import fusion as _fusion
@@ -96,6 +96,29 @@ def render_report(report: CoverageReport | None = None) -> str:
     for cat, ops in sorted(r.by_category.items(), key=lambda kv: -len(kv[1])):
         lines.append(f"  {cat:24s} {len(ops):3d}  {', '.join(ops)}")
     return "\n".join(lines)
+
+
+def fallback_histogram(run_fn: Callable[[], Any]) -> dict[tuple[str, str], int]:
+    """Phase B (runtime half) — the complement to the static worklist above.
+
+    Run ``run_fn`` (a closure that invokes a model / decoder layer under
+    ``@jit(target="apple_gpu")``) and return a histogram of the *failure-class*
+    dispatch fallbacks it triggered, keyed by ``(op_name, reason)`` → count. This
+    captures the runtime shape-bail / dtype-bail / Metal-failure reasons the
+    static classifier can't see (no-lane ops never reach this path — they raise).
+
+    A silent rot (a kernel that quietly degrades to numpy) shows up here as a
+    non-empty histogram; an all-GPU run returns ``{}``. See
+    ``runtime.dispatch_fallback_log`` (the purpose-built failure-class log).
+    """
+    from tessera import runtime as _rt
+
+    _rt.reset_dispatch_fallback_log()
+    run_fn()
+    hist: dict[tuple[str, str], int] = collections.Counter()
+    for op_name, reason in _rt.dispatch_fallback_log():
+        hist[(op_name, reason)] += 1
+    return dict(hist)
 
 
 if __name__ == "__main__":  # pragma: no cover - human-facing report

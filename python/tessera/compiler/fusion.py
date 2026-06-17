@@ -61,6 +61,15 @@ def _gelu(x: np.ndarray) -> np.ndarray:
 
 #: The pointwise epilogue vocabulary.  Adding an activation here makes it fusible
 #: into *any* matmul epilogue chain — no new kernel, no new pass.
+#:
+#: C2 close-out (2026-06-17): this set is deliberately NOT grown beyond the common
+#: matmul-epilogue activations (bias/relu/gelu/silu/sigmoid/tanh).  EPILOGUE_OPS
+#: fuses an activation *into* the matmul kernel (no intermediate write); rarer
+#: activations are instead handled by the general pointwise-DAG path
+#: (``POINTWISE_OPS`` / ``discover_pointwise_graph``), which fuses the matmul's
+#: result tail into one kernel as a separate (still on-GPU) dispatch.  So the only
+#: ops worth in-matmul fusion are the hot activations already here; growing this
+#: further would be speculative.
 EPILOGUE_OPS: dict[str, EpilogueOp] = {
     "bias":    EpilogueOp("bias", "v = v + bias[n];", lambda x: x, needs_bias=True),
     "relu":    EpilogueOp("relu", "v = max(v, 0.0f);", lambda x: np.maximum(x, 0.0)),
@@ -1458,6 +1467,12 @@ POINTWISE_OPS: dict[str, tuple[int, str, Any]] = {
     # the identical definition so the oracle compares like-for-like.
     "softplus": (1, "(max({0}, 0.0f) + log(1.0f + exp(-fabs({0}))))",
                  lambda a: np.maximum(a, 0.0) + np.log1p(np.exp(-np.abs(a)))),
+    # Phase C tail — binary min/max and unary sign (real catalog ops with
+    # single-op lanes; adding them lets DAGs containing min/max/sign fuse rather
+    # than bailing at those nodes). NaN-safe under the oracle's equal_nan compare.
+    "maximum": (2, "max({0}, {1})", np.maximum),
+    "minimum": (2, "min({0}, {1})", np.minimum),
+    "sign": (1, "sign({0})", np.sign),
 }
 #: graph op-name → pointwise vocab key.
 _POINTWISE_NAMES: dict[str, str] = {}

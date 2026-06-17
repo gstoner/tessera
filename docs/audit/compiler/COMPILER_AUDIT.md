@@ -190,17 +190,32 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `expm1`/`reciprocal`/`softplus` to `POINTWISE_OPS` (they already had single-op
   lanes, so DAGs containing them used to bail at those nodes — now they fuse into
   one kernel, a dispatch-count win), each auto-gated by the (A) oracle
-  (`equal_nan`-aware for the domain-restricted ops). **(D, lock)** two fused-DAG
-  cases added to the differential harness (`_diff_lane.numeric_cases`) + a
-  vocab-coverage invariant guard. `EPILOGUE_OPS` growth and the parameterized
-  `softcap` (the one genuinely numpy-only real-valued elementwise op — needs a
-  unary MPSGraph lane with a scalar param, not a pointwise-vocab entry) remain
-  tracked follow-ups. Guards: `tests/unit/test_fusion_pointwise_oracle.py`,
-  `test_apple_gpu_coverage.py`, `test_fusion_pointwise_vocab_phase_c.py` (2019
-  apple_gpu/fusion tests green). *Still open:* the `norm_chain` broadening
-  (bare norms already run on the MPSGraph rowop lane — no numpy there to displace,
-  so deliberately deferred) and the numpy interpreter lane-by-lane displacement of
-  the non-elementwise tail, Evaluator-gated — never displacing a working MPSGraph
+  (`equal_nan`-aware for the domain-restricted ops). **(D, lock)** fused-DAG cases
+  added to the differential harness (`_diff_lane.numeric_cases`).
+  **Close-out follow-ups landed (2026-06-17):** **(C1 tail)** `maximum`/`minimum`/
+  `sign` added to `POINTWISE_OPS`. **(C2)** closed by decision — `EPILOGUE_OPS` is
+  deliberately *not* grown beyond the hot matmul-epilogue activations
+  (bias/relu/gelu/silu/sigmoid/tanh); rarer activations ride the general
+  pointwise-DAG path as a separate on-GPU dispatch, so further in-matmul-epilogue
+  entries would be speculative (rationale in the `EPILOGUE_OPS` docstring).
+  **(B1 runtime half)** `apple_gpu_coverage.fallback_histogram(run_fn)` runs a
+  model under `@jit(apple_gpu)` and reports the failure-class fallbacks
+  (shape/dtype/Metal-failure reasons + frequency) from
+  `runtime.dispatch_fallback_log` — the runtime complement to the static no-lane
+  worklist. **(D2)** the real no-silent-rot regression lock landed: a
+  representative pre-norm decoder-MLP block (rmsnorm→matmul→silu→matmul→residual)
+  runs on apple_gpu and asserts an **empty** fallback histogram (Darwin-gated);
+  a kernel that quietly degrades to numpy trips it. The only remaining tracked
+  follow-up is the parameterized `softcap`/`clamp` family (genuinely numpy-only
+  real-valued elementwise ops that need a unary MPSGraph lane with a scalar param,
+  not a pointwise-vocab entry — a separate small project). Guards:
+  `tests/unit/test_fusion_pointwise_oracle.py`, `test_apple_gpu_coverage.py`,
+  `test_fusion_pointwise_vocab_phase_c.py`,
+  `test_apple_gpu_displacement_regression.py`. *Still open:* the `norm_chain`
+  broadening (bare norms already run on the MPSGraph rowop lane — no numpy there to
+  displace, so deliberately deferred) and the numpy interpreter lane-by-lane
+  displacement of the non-elementwise tail, Evaluator-gated — never displacing a
+  working MPSGraph
   call.
 - **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
   The synthesizer had a measured-latency, correctness-gated variant autotuner

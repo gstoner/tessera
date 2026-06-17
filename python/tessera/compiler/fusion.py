@@ -2780,6 +2780,7 @@ def discover_fusable_regions(
             consumed.add(j)
             cur = nxt.output
         # a terminal reduction (rmsnorm/softmax) may close the chain — single-use.
+        reduction_eps: float | None = None
         if use_count.get(cur, 0) == 1:
             consumers = by_input.get(cur, [])
             if len(consumers) == 1:
@@ -2787,6 +2788,16 @@ def discover_fusable_regions(
                 rkey = _REDUCTION_ALIASES.get(ops[j].name)
                 if rkey is not None:
                     reduction = rkey
+                    # Carry the reduction op's eps into the fused region. Dropping
+                    # it silently falls back to FusedRegion's 1e-6 default, which
+                    # diverges from the unfused rmsnorm (canonical eps 1e-5) by a
+                    # row-dependent ~1% — the kernel stays self-consistent with its
+                    # own oracle but no longer matches the op the user wrote.
+                    # (softmax ignores eps, so this is a no-op there.) Mirrors the
+                    # eps resolution in discover_norm_chain_regions below.
+                    eps_default = (1e-6 if ops[j].name.endswith("rmsnorm_safe")
+                                   else 1e-5)
+                    reduction_eps = float(ops[j].attrs.get("eps", eps_default))
                     chain.append(j)
                     consumed.add(j)
         if epi or reduction or prologue:
@@ -2794,7 +2805,8 @@ def discover_fusable_regions(
             regions.append((i, chain, FusedRegion(
                 tuple(epi), reduction=reduction, a_name=a_root, b_name=b,
                 prologue=tuple(prologue),
-                prologue_src_indices=tuple(prologue_idx))))
+                prologue_src_indices=tuple(prologue_idx),
+                eps=reduction_eps if reduction_eps is not None else 1e-6)))
     return regions
 
 

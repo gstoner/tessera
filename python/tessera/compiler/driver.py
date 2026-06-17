@@ -757,6 +757,38 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
         ):
             return "swiglu"
 
+    # Gated matmul (SwiGLU gate from PRIMITIVE ops, no down-proj):
+    #   gate = matmul(x, Wg); up = matmul(x, Wu)   # share %x
+    #   gact = f(gate)                              # unary activation
+    #   out  = mul(gact, up)
+    # Matched STRUCTURALLY (op order varies with how the gate is spelled) so the
+    # plan routes to apple_gpu_mps; the runtime prepass
+    # (discover_gated_matmul_regions) synthesizes the fused kernel. Distinct from
+    # `swiglu` above (fused silu_mul op + down-projection).
+    if len(ops) == 4:
+        _MM = {"tessera.matmul", "tessera.gemm"}
+        _ACTS = {"tessera.silu", "tessera.gelu", "tessera.relu",
+                 "tessera.sigmoid", "tessera.tanh"}
+        _MULS = {"tessera.mul", "tessera.multiply"}
+        mm_idx = [k for k in range(4) if ops[k].op_name in _MM]
+        act_idx = [k for k in range(4) if ops[k].op_name in _ACTS]
+        mul_idx = [k for k in range(4) if ops[k].op_name in _MULS]
+        if len(mm_idx) == 2 and len(act_idx) == 1 and len(mul_idx) == 1:
+            act, mul = ops[act_idx[0]], ops[mul_idx[0]]
+            if (act.operands and act.result and len(mul.operands) == 2):
+                act_in = act.operands[0].lstrip("%")
+                gate_mm = next(
+                    (ops[k] for k in mm_idx
+                     if ops[k].result and ops[k].result == act_in), None)
+                if gate_mm is not None:
+                    up_mm = next(ops[k] for k in mm_idx if ops[k] is not gate_mm)
+                    if (gate_mm.operands and up_mm.operands and up_mm.result
+                            and gate_mm.operands[0].lstrip("%")
+                            == up_mm.operands[0].lstrip("%")):
+                        mul_ins = {o.lstrip("%") for o in mul.operands}
+                        if mul_ins == {act.result, up_mm.result}:
+                            return "gated_matmul"
+
     # Phase 8.4.5: 3-op fusion. matmul -> softmax -> matmul.
     if len(ops) == 3:
         m1, sm, m2 = ops[0], ops[1], ops[2]
@@ -864,6 +896,12 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             framework = "Metal"
             abi = "MSLComputePipelineState"
             fused_epilogue = "rmsnorm"
+        elif chain == "gated_matmul":
+            # Gate from primitives — the runtime prepass synthesizes the fused
+            # dual-weight kernel; name it here so the Target IR is descriptive.
+            symbol = "tessera_apple_gpu_synth_gated_matmul_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
         elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",
                        "matmul_bias_silu"}:
             # P6 — linear+bias(+act) fused via the MPP matmul2d epilogue (f16/bf16).

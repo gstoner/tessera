@@ -702,6 +702,56 @@ def _match_swiglu_at(body, canon, i: int) -> bool:
     return bool(down_operands) and down_operands[0] == sm.result_names[0]
 
 
+#: Unary activations that can sit on a gate branch (mirrors fusion.EPILOGUE_OPS
+#: minus bias). Matched structurally, so order within the 4-op window is free.
+_GATE_ACTS: frozenset[str] = frozenset(
+    {"silu", "gelu", "relu", "sigmoid", "tanh"})
+_GATE_MULS: frozenset[str] = frozenset({"mul", "multiply"})
+
+
+def _match_gated_matmul_at(body, canon, i: int) -> bool:
+    """Gated matmul (SwiGLU gate from PRIMITIVE ops) — a DAG, not a linear chain:
+
+        gate = matmul(x, Wg); up = matmul(x, Wu)   # both consume the SAME x
+        gact = f(gate)                              # unary activation on the gate
+        out  = mul(gact, up)                        # elementwise combine
+
+    Distinct from ``_match_swiglu_at`` (which has a fused ``silu_mul`` op *and* a
+    down-projection). Recognizing this 4-op window as a whole-program known_chain
+    routes the program to the ``apple_gpu_mps`` executor, where the runtime
+    prepass (``discover_gated_matmul_regions``) synthesizes the fused kernel. The
+    window is matched structurally (any op order), since the tracer's emission
+    order varies with how the gate expression is spelled."""
+    if i + 4 > len(body):
+        return False
+    idxs = list(range(i, i + 4))
+    matmuls = [k for k in idxs if canon[k] == "matmul"]
+    acts = [k for k in idxs if canon[k] in _GATE_ACTS]
+    muls = [k for k in idxs if canon[k] in _GATE_MULS]
+    if len(matmuls) != 2 or len(acts) != 1 or len(muls) != 1:
+        return False
+    act, mul = acts[0], muls[0]
+    if not body[act].operands or not body[act].result_names:
+        return False
+    act_in = _strip_percent(body[act].operands[0])
+    # the activation consumes one matmul's output → that is the gate projection.
+    gate_mm = next((k for k in matmuls
+                    if body[k].result_names
+                    and body[k].result_names[0] == act_in), None)
+    if gate_mm is None:
+        return False
+    up_mm = next(k for k in matmuls if k != gate_mm)
+    g_ops = [_strip_percent(o) for o in body[gate_mm].operands]
+    u_ops = [_strip_percent(o) for o in body[up_mm].operands]
+    if len(g_ops) < 2 or len(u_ops) < 2 or g_ops[0] != u_ops[0]:
+        return False                              # the two matmuls must share %x
+    if not body[up_mm].result_names:
+        return False
+    mul_ins = {_strip_percent(o) for o in body[mul].operands}
+    # the multiply combines the activation output and the up projection.
+    return mul_ins == {body[act].result_names[0], body[up_mm].result_names[0]}
+
+
 def _chain_result(op) -> str | None:
     names = getattr(op, "result_names", None)
     return _strip_percent(names[0]) if names else None
@@ -786,6 +836,10 @@ def _match_known_chains(fn) -> list[dict[str, Any]]:
         # silu_mul) rather than the linear _ssa_connected walk.
         if _match_swiglu_at(body, canon, i):
             matched_len, fused_name = 4, "swiglu"
+        elif _match_gated_matmul_at(body, canon, i):
+            # gate from primitives (no down-proj) — routes to apple_gpu_mps, the
+            # runtime prepass synthesizes the fused gated kernel.
+            matched_len, fused_name = 4, "gated_matmul"
         else:
             for chain in _KNOWN_FUSION_CHAINS:             # longest-first
                 L = len(chain)

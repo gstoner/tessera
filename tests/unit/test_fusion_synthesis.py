@@ -364,6 +364,33 @@ def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
         assert np.allclose(values["o"], ref, atol=1e-4)
 
 
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="metal_runtime dispatch is Darwin-only")
+def test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime():
+    # The full pipeline proof: a real @jit(target="apple_gpu") gate from
+    # primitives must route through the compile-time recognizer
+    # (driver._apple_gpu_chain_kind -> "gated_matmul") to apple_gpu_mps, where the
+    # runtime prepass synthesizes the fused kernel — i.e. execution_mode is
+    # metal_runtime, NOT the target_ir_artifact bypass.
+    import tessera as ts
+
+    @ts.jit(target="apple_gpu")
+    def gate(x, wg, wu):
+        return ts.ops.mul(ts.ops.silu(ts.ops.matmul(x, wg)),
+                          ts.ops.matmul(x, wu))
+
+    rng = np.random.default_rng(0)
+    x = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    wg = (rng.standard_normal((16, 12)) * 0.3).astype(np.float32)
+    wu = (rng.standard_normal((16, 12)) * 0.3).astype(np.float32)
+    out = np.asarray(gate(x, wg, wu), np.float32)
+    np.testing.assert_allclose(
+        out, GatedMatmulRegion().reference(x, wg, wu), rtol=1e-3, atol=1e-3)
+    meta = gate.runtime_artifact().metadata
+    assert meta["compiler_path"] == "apple_gpu_mps", meta.get("compiler_path")
+    assert meta["execution_mode"] == "metal_runtime", meta.get("execution_mode")
+
+
 def test_runtime_prepass_plain_matmul_silu_still_fuses_as_epilogue():
     # Regression: a bare matmul->silu (no gate) must still fuse via the
     # matmul-epilogue pass after the gated pass declines it.

@@ -320,6 +320,20 @@ causal), and pointwise DAGs (with per-feature broadcast) — all Evaluator-gated
 the M5 displacement oracle (`displacement/{matmul_epilogue,norm_chain,attention,
 pointwise,gated_matmul}`).
 
+> **✅ Gated path reachability CLOSED (2026-06-16).** The gate now routes end-to-end
+> through public `@jit(target="apple_gpu")`: `driver._apple_gpu_chain_kind` gained a
+> structural 4-op `gated_matmul` recognizer (two matmuls sharing `%x` + a unary
+> activation + a multiply, any order) → `_is_apple_gpu_mps_executable` True →
+> `compiler_path = apple_gpu_mps` → the runtime prepass synthesizes the fused kernel
+> → `execution_mode = metal_runtime`. `canonical_compile._match_gated_matmul_at`
+> mirrors it for the descriptive `known_chain` metadata (not stamped as a C++ intent,
+> like `swiglu`). Proven: `test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime`
+> (Darwin) asserts `compiler_path==apple_gpu_mps` + `execution_mode==metal_runtime` +
+> numeric match. The investigation below stands as the architecture record; the
+> **broader pointwise gap is NOT yet closed** (same root cause — `_apple_gpu_chain_kind`
+> doesn't recognize a bare pointwise DAG — and the design question still applies before
+> broadening recognizers).
+>
 > **⚠️ Pipeline-reachability finding (2026-06-16, from validating the gated path
 > end-to-end).** The synthesized-fusion prepass (`_apple_gpu_try_synthesized_fusion`,
 > runtime.py) — where **every** region discoverer lives (matmul-epilogue, norm_chain,

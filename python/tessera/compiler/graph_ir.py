@@ -42,6 +42,13 @@ from .op_catalog import GRAPH_OP_MAP, graph_name_for
 # operands.  Tensor positional args are unaffected (they still emit as operands).
 _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.top_k": ("k", "axis"),
+    # slice(x, start_indices, slice_sizes): the two trailing positional args are
+    # index/size *lists* (StableHLO dynamic-slice form), not tensors — bind them
+    # as attributes so the op lowers to ``tessera.slice(%x) {start_indices=…,
+    # slice_sizes=…}`` instead of dropping them as "%?" operands. (The list-of-
+    # ints is literal-eval'd; contrast cat/stack, whose list-of-tensors flattens
+    # into operands.)
+    "tessera.slice": ("start_indices", "slice_sizes"),
 }
 
 

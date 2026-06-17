@@ -2941,6 +2941,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "transpose": _apple_gpu_dispatch_transpose,
         "gather": _apple_gpu_dispatch_gather,
         "concat": _apple_gpu_dispatch_concat,
+        "slice": _apple_gpu_dispatch_slice,
         "loss_compose": _apple_gpu_dispatch_loss,
         "norm_compose": _apple_gpu_dispatch_norm,
         "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
@@ -8651,6 +8652,104 @@ def _apple_gpu_dispatch_concat(op_name: str, operands: list[Any],
             o_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
         sym(a_ptr, b_ptr, o_ptr, ctypes.c_int32(outer), ctypes.c_int32(a_axis),
             ctypes.c_int32(b_axis), ctypes.c_int32(inner))
+        return out
+
+    return _apple_gpu_run_checked(op_name, _gpu, _host)
+
+
+def _apple_gpu_mpsgraph_slice_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_slice_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),    # x (dims…)
+        ctypes.POINTER(ctypes.c_float),    # out (sizes…)
+        ctypes.POINTER(ctypes.c_int32),    # dims [rank]
+        ctypes.POINTER(ctypes.c_int32),    # starts [rank]
+        ctypes.POINTER(ctypes.c_int32),    # sizes [rank]
+        ctypes.c_int32,                    # rank
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_slice_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_slice_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_slice(op_name: str, operands: list[Any],
+                              kwargs: dict, np: Any) -> Any:
+    """tessera.slice via the MPSGraph sliceTensor:starts:ends:strides: lane (the
+    StableHLO dynamic-slice / KV-window data-mover). v1 envelope: a static per-axis
+    slice ``x[starts[i] : starts[i]+sizes[i]]`` (stride 1) where ``start_indices``
+    and ``slice_sizes`` are length-rank int lists in kwargs. A rank mismatch or a
+    dtype outside {f32, f16, bf16} falls back to numpy. f32 + f16 native; bf16 rides
+    the f16 raw path."""
+    x = np.asarray(operands[0])
+    starts = [int(s) for s in kwargs.get("start_indices", ())]
+    sizes = [int(s) for s in kwargs.get("slice_sizes", ())]
+
+    def _host() -> Any:
+        sl = tuple(slice(st, st + sz) for st, sz in zip(starts, sizes))
+        return np.ascontiguousarray(x[sl])
+
+    if len(starts) != x.ndim or len(sizes) != x.ndim or x.ndim == 0:
+        return _host()
+    # In-bounds guard — out-of-range windows go to numpy (which clamps/raises
+    # consistently with the reference) rather than the GPU strided slice.
+    for d in range(x.ndim):
+        if starts[d] < 0 or sizes[d] < 0 or starts[d] + sizes[d] > int(x.shape[d]):
+            return _host()
+
+    bf16_dtype = _bfloat16_dtype()
+    lanes: dict[Any, tuple[Any, Any, Any]] = {
+        np.float32: (np.float32, _apple_gpu_mpsgraph_slice_f32, ctypes.c_float),
+        np.float16: (np.float16, _apple_gpu_mpsgraph_slice_f16, ctypes.c_uint16),
+    }
+    if bf16_dtype is not None:
+        lanes[bf16_dtype] = (bf16_dtype, _apple_gpu_mpsgraph_slice_f16,
+                             ctypes.c_uint16)
+
+    lane = lanes.get(x.dtype.type)
+    if lane is None:
+        return _host()
+    run_dtype, sym_getter, c_elem = lane
+    sym = sym_getter()
+    if sym is None:
+        return _host()
+
+    dims32 = np.ascontiguousarray(x.shape, dtype=np.int32)
+    starts32 = np.ascontiguousarray(starts, dtype=np.int32)
+    sizes32 = np.ascontiguousarray(sizes, dtype=np.int32)
+    out_shape = tuple(sizes)
+
+    def _gpu() -> Any:
+        xc = np.ascontiguousarray(x, dtype=run_dtype)
+        out = np.empty(out_shape, dtype=run_dtype)
+        d_ptr = dims32.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        st_ptr = starts32.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        sz_ptr = sizes32.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        if c_elem is ctypes.c_uint16:
+            x_ptr = xc.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            o_ptr = out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        else:
+            x_ptr = xc.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            o_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(x_ptr, o_ptr, d_ptr, st_ptr, sz_ptr, ctypes.c_int32(x.ndim))
         return out
 
     return _apple_gpu_run_checked(op_name, _gpu, _host)

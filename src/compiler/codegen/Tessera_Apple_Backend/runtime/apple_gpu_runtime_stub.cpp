@@ -1803,6 +1803,40 @@ extern "C" void tessera_apple_gpu_mpsgraph_concat_f16(
   ts_stub_concat<uint16_t>(a, b, out, outer, a_axis, b_axis, inner);
 }
 
+// Slice (2026-06-17) — host parity: out[lin] = x[starts + unravel(lin, sizes)].
+template <typename T>
+static void ts_stub_slice(const T* x, T* out, const int32_t* dims,
+                          const int32_t* starts, const int32_t* sizes,
+                          int32_t rank) {
+  if (rank <= 0) return;
+  std::vector<int64_t> istride((size_t)rank);
+  int64_t s = 1;
+  for (int i = rank - 1; i >= 0; --i) { istride[(size_t)i] = s; s *= dims[i]; }
+  int64_t outN = 1;
+  for (int i = 0; i < rank; ++i) outN *= sizes[i];
+  for (int64_t lin = 0; lin < outN; ++lin) {
+    int64_t rem = lin, in_off = 0;
+    for (int i = rank - 1; i >= 0; --i) {
+      int64_t c = rem % sizes[i];
+      rem /= sizes[i];
+      in_off += (int64_t)(starts[i] + c) * istride[(size_t)i];
+    }
+    out[lin] = x[in_off];
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_slice_f32(
+    const float* x, float* out, const int32_t* dims, const int32_t* starts,
+    const int32_t* sizes, int32_t rank) {
+  ts_stub_slice<float>(x, out, dims, starts, sizes, rank);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_slice_f16(
+    const uint16_t* x, uint16_t* out, const int32_t* dims, const int32_t* starts,
+    const int32_t* sizes, int32_t rank) {
+  ts_stub_slice<uint16_t>(x, out, dims, starts, sizes, rank);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
                                                      float* out, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {

@@ -332,10 +332,32 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   (a KV append mid-program stays GPU-resident). Guards:
   `tests/unit/test_apple_gpu_concat.py` (handler vs numpy over axis 0/1/-1 + rank-3
   seq-axis + f16 + >2-operand fallback, jit native_gpu, matmul→cat per_op_metal,
-  no-fallback-on-Metal). *Still open:* the remaining data-mover (slice), same `.mm`
-  recipe, plus the `norm_chain` broadening (bare norms already run on the MPSGraph
-  rowop lane — no numpy there to displace, so deliberately deferred) — all
-  Evaluator-gated, never displacing a working MPSGraph call.
+  no-fallback-on-Metal).
+  **Slice landed (2026-06-17) — fourth data-mover + the mirror frontend fix.**
+  `tessera.slice` now runs on a real MPSGraph kernel (`sliceTensor:starts:ends:strides:`,
+  header-grounded per Decision #27): the StableHLO dynamic-slice / KV-window data-
+  mover — a static per-axis window `x[starts[i] : starts[i]+sizes[i]]` (stride 1)
+  over an N-D input; `ends[i] = starts[i]+sizes[i]`, value-preserving, f32 native +
+  f16/bf16 on the 2-byte raw path. Rank mismatch or out-of-bounds window falls back
+  to numpy. New `.mm` `mpsg_run_slice` + `tessera_apple_gpu_mpsgraph_slice_{f32,f16}`
+  + host fallback + stub parity; first-class runtime op (`_APPLE_GPU_SLICE_OPS` →
+  `"slice"` lane + `_apple_gpu_dispatch_slice`). The frontend fix is the **mirror**
+  of cat's: slice's two trailing positional args are index/size *lists of ints*
+  (not tensors), so the AST `GraphIRBuilder` must bind them as **attributes**
+  (`_POSITIONAL_ATTR_PARAMS["tessera.slice"] = ("start_indices","slice_sizes")`)
+  rather than flatten them into operands — otherwise they dropped as `"%?"`
+  operands and the op never reached a kernel (cat flattened a list-of-tensors *into*
+  operands; slice binds a list-of-ints *out* of operands). A single-op
+  `@jit(apple_gpu)` slice now reports `execution_kind="native_gpu"`; `matmul→slice`
+  compounds on the per_op_metal gate (windowing a matmul output stays GPU-resident).
+  Guards: `tests/unit/test_apple_gpu_slice.py` (handler vs numpy over 2D windows +
+  rank-3 + f16 + out-of-bounds fallback, jit native_gpu, matmul→slice per_op_metal,
+  no-fallback-on-Metal). *Still open:* the `norm_chain` broadening (bare norms
+  already run on the MPSGraph rowop lane — no numpy there to displace, so
+  deliberately deferred) — all Evaluator-gated, never displacing a working MPSGraph
+  call. **The four structural data-movers (transpose, gather, concat, slice) are now
+  all GPU-resident**, so the common KV-cache / embedding / reshape-window glue
+  between matmuls no longer demotes a program off Metal.
 - **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
   The synthesizer had a measured-latency, correctness-gated variant autotuner
   (`autotune_matmul_epilogue` — times each MSL variant on-device, gates each

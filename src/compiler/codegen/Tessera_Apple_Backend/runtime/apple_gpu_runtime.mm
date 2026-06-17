@@ -15002,6 +15002,77 @@ static void ts_host_concat(const T *a, const T *b, T *out, int32_t outer,
   }
 }
 
+// ── Slice (MPSGraph sliceTensor:starts:ends:strides:) ────────────────────────
+// Phase 2 displacement (2026-06-17): the StableHLO dynamic-slice data-mover (KV-
+// cache window reads, chunking). v1 envelope: a static per-axis slice
+// out = x[starts[i] : starts[i]+sizes[i]] (stride 1) over an N-D input — starts /
+// sizes carry one entry per input dim. ends[i] = starts[i] + sizes[i]. Value-
+// preserving, so f16/bf16 share the 2-byte raw path.
+static bool mpsg_run_slice(MetalDeviceContext &ctx, const void *x, void *out,
+                           const int32_t *dims, const int32_t *starts,
+                           const int32_t *sizes, int32_t rank, MPSDataType ioType,
+                           size_t elemSize) {
+  if (rank <= 0) return true;
+  @autoreleasepool {
+    int64_t n = 1;
+    NSMutableArray<NSNumber *> *shape = [NSMutableArray arrayWithCapacity:rank];
+    NSMutableArray<NSNumber *> *startsA = [NSMutableArray arrayWithCapacity:rank];
+    NSMutableArray<NSNumber *> *endsA = [NSMutableArray arrayWithCapacity:rank];
+    NSMutableArray<NSNumber *> *stridesA = [NSMutableArray arrayWithCapacity:rank];
+    for (int32_t i = 0; i < rank; ++i) {
+      n *= dims[i];
+      [shape addObject:@(dims[i])];
+      [startsA addObject:@(starts[i])];
+      [endsA addObject:@(starts[i] + sizes[i])];
+      [stridesA addObject:@(1)];
+    }
+    if (n <= 0) return true;
+    size_t bytes = (size_t)n * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
+    if (!bufX) return false;
+    MPSGraph *g = [MPSGraph new];
+    MPSGraphTensor *ph = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *y = [g sliceTensor:ph
+                               starts:startsA
+                                 ends:endsA
+                              strides:stridesA
+                                 name:nil];
+    if (!y) return false;
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{ph : xd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+// Host slice fallback: copy x[starts : starts+sizes] (stride 1) by strided index.
+template <typename T>
+static void ts_host_slice(const T *x, T *out, const int32_t *dims,
+                          const int32_t *starts, const int32_t *sizes,
+                          int32_t rank) {
+  if (rank <= 0) return;
+  std::vector<int64_t> istride((size_t)rank);
+  int64_t s = 1;
+  for (int i = rank - 1; i >= 0; --i) { istride[(size_t)i] = s; s *= dims[i]; }
+  int64_t outN = 1;
+  for (int i = 0; i < rank; ++i) outN *= sizes[i];
+  for (int64_t lin = 0; lin < outN; ++lin) {
+    int64_t rem = lin, in_off = 0;
+    for (int i = rank - 1; i >= 0; --i) {
+      int64_t c = rem % sizes[i];
+      rem /= sizes[i];
+      in_off += (int64_t)(starts[i] + c) * istride[(size_t)i];
+    }
+    out[lin] = x[in_off];
+  }
+}
+
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
                            void *out, int64_t n, MPSDataType ioType,
                            size_t elemSize) {
@@ -18490,6 +18561,32 @@ extern "C" void tessera_apple_gpu_mpsgraph_concat_f16(
                       MPSDataTypeFloat16, 2))
     return;
   ts_host_concat<uint16_t>(a, b, out, outer, a_axis, b_axis, inner);
+}
+
+// ── Slice C ABI (2026-06-17) ─────────────────────────────────────────────────
+// x = N-D input (dims); out = x[starts[i] : starts[i]+sizes[i]] (stride 1) per
+// axis. The StableHLO dynamic-slice / KV-window-read case. f16 is the 2-byte raw
+// path (also bf16 — slice is value-preserving).
+extern "C" void tessera_apple_gpu_mpsgraph_slice_f32(
+    const float *x, float *out, const int32_t *dims, const int32_t *starts,
+    const int32_t *sizes, int32_t rank) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_slice(ctx, x, out, dims, starts, sizes, rank,
+                     MPSDataTypeFloat32, 4))
+    return;
+  ts_host_slice<float>(x, out, dims, starts, sizes, rank);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_slice_f16(
+    const uint16_t *x, uint16_t *out, const int32_t *dims, const int32_t *starts,
+    const int32_t *sizes, int32_t rank) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_slice(ctx, x, out, dims, starts, sizes, rank,
+                     MPSDataTypeFloat16, 2))
+    return;
+  ts_host_slice<uint16_t>(x, out, dims, starts, sizes, rank);
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op,

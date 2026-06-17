@@ -5,17 +5,17 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**179/457 primitives are accelerator-proven on Apple GPU today.** Of the 314 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**180/457 primitives are accelerator-proven on Apple GPU today.** Of the 315 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
 | Class | Count | Meaning |
 |-------|------:|---------|
-| `proven` | 179 | executes on Apple GPU today (`metal_runtime`) |
+| `proven` | 180 | executes on Apple GPU today (`metal_runtime`) |
 | `eligible` | 123 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
-| `host` | 133 | structural / orchestration / shape — accelerator not-applicable |
+| `host` | 132 | structural / orchestration / shape — accelerator not-applicable |
 
 ## By category
 
@@ -75,7 +75,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `state_tree` | 10 | 0 | 0 | `host` |
 | `state_update` | 4 | 0 | 4 | `eligible` |
 | `stencil` | 8 | 0 | 8 | `eligible` |
-| `tensor_algebra` | 19 | 1 | 0 | `host` |
+| `tensor_algebra` | 19 | 2 | 0 | `host` |
 | `tokenizer` | 5 | 0 | 0 | `host` |
 | `transform` | 11 | 0 | 0 | `host` |
 

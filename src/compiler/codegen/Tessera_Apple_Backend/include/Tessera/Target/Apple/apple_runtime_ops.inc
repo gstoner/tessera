@@ -207,6 +207,9 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.rmsnorm_safe")
 // lane: silu_mul (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.silu_mul")
 
+// lane: slice (1 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.slice")
+
 // lane: softcap (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.softcap")
 
@@ -286,5 +289,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 182
+// Total runtime-executable ops: 183
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

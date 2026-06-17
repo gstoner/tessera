@@ -252,12 +252,30 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   is closed. Guards (prior phases):
   `tests/unit/test_fusion_pointwise_oracle.py`, `test_apple_gpu_coverage.py`,
   `test_fusion_pointwise_vocab_phase_c.py`,
-  `test_apple_gpu_displacement_regression.py`. *Still open:* the `norm_chain`
-  broadening (bare norms already run on the MPSGraph rowop lane — no numpy there to
-  displace, so deliberately deferred) and the numpy interpreter lane-by-lane
-  displacement of the non-elementwise tail, Evaluator-gated — never displacing a
-  working MPSGraph
-  call.
+  `test_apple_gpu_displacement_regression.py`.
+  **Non-elementwise tail — investigated + categorized (2026-06-17).** The naive
+  "displace the 124 numpy-only ops" framing is mostly wrong (the same lesson as
+  the elementwise + P2 findings). Investigation: `optim.adam` runs host-side on
+  pytrees of numpy (a training-loop utility, never emitted as a single `@jit`
+  graph op), and `matmul→transpose→gelu` *demotes to `artifact_only`* because a
+  structural op mid-program isn't a recognized chain. So
+  `apple_gpu_coverage.disposition_for` now classifies the numpy-only tail:
+  **51 `real_gap_structural`** (layout/indexing/state/dropout/position-encoding —
+  the genuine target: ops that demote an otherwise-GPU program off
+  `metal_runtime`), **50 `hard_kernel`** (quantize packed-FP4/6/8, sparse,
+  spectral, stencil, linalg, complex-elementwise, sort/einsum), **8 `host_utility`**
+  (optimizers + RNG — no GPU gap), **6 `distributed`** (collectives + MoE
+  transport), **9 `unclassified`** (per-op judgment). Guard:
+  `test_apple_gpu_coverage.py::test_displacement_disposition_classifies_the_real_gap`.
+  *The real displacement target is the 51 structural ops, not 124* — closing it
+  needs real MPSGraph kernels for the data-movers (transpose/concat/slice/gather)
+  or a residency-neutral chain gate for true-view ops (reshape/squeeze/…) so a
+  structural op mid-program doesn't demote `metal_runtime`. Both are scoped
+  follow-ons (the data-movers need `.mm`; the chain gate is a careful
+  `_apple_gpu_chain_kind` change). *Still open:* that structural displacement, plus
+  the `norm_chain` broadening (bare norms already run on the MPSGraph rowop lane —
+  no numpy there to displace, so deliberately deferred) — all Evaluator-gated,
+  never displacing a working MPSGraph call.
 - **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
   The synthesizer had a measured-latency, correctness-gated variant autotuner
   (`autotune_matmul_epilogue` — times each MSL variant on-device, gates each

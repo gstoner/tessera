@@ -39,6 +39,58 @@ def has_gpu_lane(public_name: str) -> bool:
     return _graph_name(public_name) in covered or f"tessera.{public_name}" in covered
 
 
+# Phase 2 displacement disposition by lowering category (2026-06-17). The naive
+# "displace the 124 numpy-only ops" framing is mostly wrong — an investigation
+# (matmul→transpose→gelu demotes to artifact_only; optim.adam runs host-side on
+# pytrees, never @jit'd) showed most numpy-only ops are NOT a real GPU execution
+# gap. Each category is one of:
+#   real_gap_structural — layout/indexing ops that, mid-program, demote an
+#       otherwise-GPU program off metal_runtime. The genuine Phase-2 target;
+#       closing it needs real MPSGraph kernels for data-movers (transpose/concat/
+#       slice/gather) or a residency-neutral chain gate for true-view ops
+#       (reshape/squeeze/...). The actionable displacement worklist.
+#   host_utility — functional optimizer steps; operate on host pytrees of numpy
+#       (training-loop utilities, never emitted as a single @jit graph op). No GPU
+#       gap — the heavy forward/backward already runs on GPU; the step is tiny.
+#   distributed — collectives; multi-rank, run via the collective adapters, not a
+#       single-device GPU concern.
+#   hard_kernel — genuinely need a dedicated kernel: quantize (packed FP4/6/8 bit
+#       layout), sparse (spmm/sddmm), spectral (distributed FFT), stencil, linalg
+#       decomposition/solver, complex-number elementwise (2-channel).
+_CATEGORY_DISPOSITION: dict[str, str] = {
+    "layout_transform": "real_gap_structural",
+    "indexing": "real_gap_structural",
+    "functional_optimizer_step": "host_utility",
+    "collective": "distributed",
+    "quantize": "hard_kernel",
+    "sparse": "hard_kernel",
+    "spectral": "hard_kernel",
+    "stencil": "hard_kernel",
+    "linalg_decomposition": "hard_kernel",
+    "linalg_solver": "hard_kernel",
+    "elementwise": "hard_kernel",   # the numpy-only tail is complex-number ops
+    "loop_nest": "hard_kernel",     # dequant-GEMM / latent-KV: fused kernels
+    "state_update": "real_gap_structural",      # KV-cache append/prune/read on GPU
+    "random_mask": "real_gap_structural",       # dropout
+    "position_encoding": "real_gap_structural", # alibi / ntk_rope (rowop-shaped)
+    "moe_transport": "distributed",             # all-to-all dispatch/combine
+    "random_source": "host_utility",            # rng_uniform/normal (host RNG)
+    "sort": "hard_kernel",
+    "contraction": "hard_kernel",               # einsum
+    "segment_reduce": "hard_kernel",
+    "stable_reduction": "hard_kernel",
+    "ebm": "hard_kernel",
+    # Left unclassified on purpose (need per-op judgment, not a category default):
+    #   rl_loss (ppo/grpo/cispo — may decompose), attention (specific variants),
+    #   fused_epilogue (a fusion artifact). The unclassified bucket honestly flags
+    #   "decide per-op" rather than risk a wrong category claim.
+}
+
+
+def disposition_for(category: str) -> str:
+    return _CATEGORY_DISPOSITION.get(category, "unclassified")
+
+
 @dataclass(frozen=True)
 class CoverageReport:
     """Apple GPU lane coverage over a set of ops."""
@@ -91,10 +143,23 @@ def render_report(report: CoverageReport | None = None) -> str:
         f"  numpy-only     : {r.numpy_only_count}",
         f"  pointwise-vocab fully GPU-covered: {r.pointwise_vocab_covered}",
         "",
-        "numpy-only by lowering category (ranked):",
+        "numpy-only by lowering category (category → displacement disposition):",
     ]
-    for cat, ops in sorted(r.by_category.items(), key=lambda kv: -len(kv[1])):
-        lines.append(f"  {cat:24s} {len(ops):3d}  {', '.join(ops)}")
+    # Group categories by disposition so the real displacement target stands out.
+    order = {"real_gap_structural": 0, "host_utility": 1, "distributed": 2,
+             "hard_kernel": 3, "unclassified": 4}
+    by_disp: dict[str, int] = {}
+    for cat, ops in r.by_category.items():
+        by_disp[disposition_for(cat)] = by_disp.get(disposition_for(cat), 0) + len(ops)
+    for cat, ops in sorted(
+            r.by_category.items(),
+            key=lambda kv: (order.get(disposition_for(kv[0]), 9), -len(kv[1]))):
+        lines.append(f"  [{disposition_for(cat):20s}] {cat:24s} {len(ops):3d}  "
+                     f"{', '.join(ops)}")
+    lines.append("")
+    lines.append("counts by displacement disposition:")
+    for disp in sorted(by_disp, key=lambda d: order.get(d, 9)):
+        lines.append(f"  {disp:22s} {by_disp[disp]}")
     return "\n".join(lines)
 
 

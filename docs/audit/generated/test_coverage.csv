@@ -184,7 +184,7 @@ fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
 fused_epilogue,2,6,0,8,0,,structural_only,unclassified — defaults to structural_only
 gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,21,4,0,25,0,fp64,needs_direct_test,category default for 'attention'
-gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
+gather,13,3,0,16,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 gelu,44,19,1,63,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
@@ -334,7 +334,7 @@ reduce_scatter,0,4,0,4,0,,needs_direct_test,category default for 'collective'
 relu,98,9,9,107,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reshape,4,5,0,9,0,,structural_only,unclassified — defaults to structural_only
+reshape,7,5,0,12,0,,structural_only,unclassified — defaults to structural_only
 retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
 rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
 rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,needs_direct_test,category default for 'normalization'

@@ -2939,6 +2939,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "where": lambda op, a, k, np: _apple_gpu_dispatch_where(a, np),
         "softcap": _apple_gpu_dispatch_softcap,
         "transpose": _apple_gpu_dispatch_transpose,
+        "gather": _apple_gpu_dispatch_gather,
         "loss_compose": _apple_gpu_dispatch_loss,
         "norm_compose": _apple_gpu_dispatch_norm,
         "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
@@ -8456,6 +8457,96 @@ def _apple_gpu_dispatch_transpose(op_name: str, operands: list[Any],
     return _apple_gpu_run_checked(
         op_name, _gpu,
         lambda: np.ascontiguousarray(np.transpose(x, axes)))
+
+
+def _apple_gpu_mpsgraph_gather_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_gather_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),    # table [rows, cols]
+        ctypes.POINTER(ctypes.c_int32),    # indices [n_idx]
+        ctypes.POINTER(ctypes.c_float),    # out [n_idx, cols]
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,  # rows, cols, n_idx
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_gather_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_gather_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_gather(op_name: str, operands: list[Any],
+                               kwargs: dict, np: Any) -> Any:
+    """tessera.gather via the MPSGraph axis-0 row-gather lane (embedding /
+    attention-index). v1 envelope: a 2D table gathered by int32 indices of any
+    shape along axis 0 → indices.shape + (cols,). Other axes / non-2D tables fall
+    back to np.take. f32 + f16 native; bf16 rides the f16 raw path."""
+    table = np.asarray(operands[0])
+    indices = np.asarray(operands[1])
+    axis = int(kwargs.get("axis", 0))
+
+    # v1 fast path: axis-0 gather of a 2D table.
+    if axis != 0 or table.ndim != 2:
+        return np.ascontiguousarray(np.take(table, indices.astype(np.int64), axis=axis))
+
+    rows, cols = int(table.shape[0]), int(table.shape[1])
+    idx_shape = indices.shape
+    n_idx = int(indices.size)
+    idx32 = np.ascontiguousarray(indices, dtype=np.int32).reshape(-1)
+    # MPSGraph gather doesn't wrap negative indices like numpy — normalize to
+    # [0, rows) before the GPU call so the Metal path matches the host fallback.
+    idx32 = np.where(idx32 < 0, idx32 + np.int32(rows), idx32).astype(np.int32)
+
+    bf16_dtype = _bfloat16_dtype()
+    lanes: dict[Any, tuple[Any, Any, Any]] = {
+        np.float32: (np.float32, _apple_gpu_mpsgraph_gather_f32, ctypes.c_float),
+        np.float16: (np.float16, _apple_gpu_mpsgraph_gather_f16, ctypes.c_uint16),
+    }
+    if bf16_dtype is not None:
+        lanes[bf16_dtype] = (bf16_dtype, _apple_gpu_mpsgraph_gather_f16,
+                             ctypes.c_uint16)
+
+    def _host() -> Any:
+        return np.ascontiguousarray(
+            np.take(table, indices.astype(np.int64), axis=0))
+
+    lane = lanes.get(table.dtype.type)
+    if lane is None:
+        return _host()
+    run_dtype, sym_getter, c_elem = lane
+    sym = sym_getter()
+    if sym is None:
+        return _host()
+
+    def _gpu() -> Any:
+        tbl = np.ascontiguousarray(table, dtype=run_dtype)
+        out = np.empty((n_idx, cols), dtype=run_dtype)
+        idx_ptr = idx32.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        if c_elem is ctypes.c_uint16:
+            t_ptr = tbl.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            o_ptr = out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        else:
+            t_ptr = tbl.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            o_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(t_ptr, idx_ptr, o_ptr,
+            ctypes.c_int32(rows), ctypes.c_int32(cols), ctypes.c_int32(n_idx))
+        return out.reshape(tuple(idx_shape) + (cols,))
+
+    return _apple_gpu_run_checked(op_name, _gpu, _host)
 
 
 def _apple_gpu_mpsgraph_binary_f32() -> Any:

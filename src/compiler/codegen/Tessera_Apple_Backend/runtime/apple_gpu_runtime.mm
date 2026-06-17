@@ -14889,6 +14889,64 @@ static void ts_host_transpose(const T *x, T *out, const int32_t *dims,
   }
 }
 
+// ── Gather (MPSGraph gatherWithUpdatesTensor:indicesTensor:axis:) ─────────────
+// Phase 2 displacement (2026-06-17): embedding / attention-index gather on the
+// GPU. v1 envelope: axis-0 gather of rows from a 2D table[rows,cols] by flat
+// int32 indices (n_idx of them) → out[n_idx, cols]. Higher-rank tables / other
+// axes fall back to the per-op host path. Value-preserving, so f16/bf16 share the
+// 2-byte raw path.
+static bool mpsg_run_gather(MetalDeviceContext &ctx, const void *table,
+                            const int32_t *indices, void *out, int32_t rows,
+                            int32_t cols, int32_t n_idx, MPSDataType ioType,
+                            size_t elemSize) {
+  if (n_idx <= 0 || rows <= 0 || cols <= 0) return true;
+  @autoreleasepool {
+    size_t tblBytes = (size_t)rows * cols * elemSize;
+    size_t idxBytes = (size_t)n_idx * sizeof(int32_t);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufT, ctx, table, tblBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufI, ctx, indices, idxBytes);
+    if (!bufT || !bufI) return false;
+    MPSGraph *g = [MPSGraph new];
+    NSArray<NSNumber *> *tShape = @[ @(rows), @(cols) ];
+    NSArray<NSNumber *> *iShape = @[ @(n_idx) ];
+    MPSGraphTensor *phT = [g placeholderWithShape:tShape dataType:ioType name:nil];
+    MPSGraphTensor *phI = [g placeholderWithShape:iShape
+                                         dataType:MPSDataTypeInt32 name:nil];
+    MPSGraphTensor *y = [g gatherWithUpdatesTensor:phT
+                                     indicesTensor:phI
+                                              axis:0
+                                   batchDimensions:0
+                                              name:nil];
+    if (!y) return false;
+    MPSGraphTensorData *td =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufT shape:tShape dataType:ioType];
+    MPSGraphTensorData *idd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufI shape:iShape
+                                             dataType:MPSDataTypeInt32];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{phT : td, phI : idd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+// Host gather fallback: out[i, :] = table[indices[i], :].
+template <typename T>
+static void ts_host_gather(const T *table, const int32_t *indices, T *out,
+                           int32_t rows, int32_t cols, int32_t n_idx) {
+  for (int32_t i = 0; i < n_idx; ++i) {
+    int32_t r = indices[i];
+    if (r < 0) r += rows;            // numpy-style negative index
+    if (r < 0 || r >= rows) r = 0;   // clamp out-of-range (defensive)
+    for (int32_t c = 0; c < cols; ++c)
+      out[(size_t)i * cols + c] = table[(size_t)r * cols + c];
+  }
+}
+
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
                            void *out, int64_t n, MPSDataType ioType,
                            size_t elemSize) {
@@ -18324,6 +18382,32 @@ extern "C" void tessera_apple_gpu_mpsgraph_transpose_f16(
       mpsg_run_transpose(ctx, x, out, dims, perm, rank, MPSDataTypeFloat16, 2))
     return;
   ts_host_transpose<uint16_t>(x, out, dims, perm, rank);
+}
+
+// ── Gather C ABI (2026-06-17) ────────────────────────────────────────────────
+// table = 2D [rows, cols]; indices = flat int32 [n_idx]; out = [n_idx, cols].
+// Axis-0 row gather (the embedding / attention-index case). f16 is the 2-byte raw
+// path (also bf16 — gather is value-preserving).
+extern "C" void tessera_apple_gpu_mpsgraph_gather_f32(
+    const float *table, const int32_t *indices, float *out, int32_t rows,
+    int32_t cols, int32_t n_idx) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_gather(ctx, table, indices, out, rows, cols, n_idx,
+                      MPSDataTypeFloat32, 4))
+    return;
+  ts_host_gather<float>(table, indices, out, rows, cols, n_idx);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_gather_f16(
+    const uint16_t *table, const int32_t *indices, uint16_t *out, int32_t rows,
+    int32_t cols, int32_t n_idx) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_gather(ctx, table, indices, out, rows, cols, n_idx,
+                      MPSDataTypeFloat16, 2))
+    return;
+  ts_host_gather<uint16_t>(table, indices, out, rows, cols, n_idx);
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op,

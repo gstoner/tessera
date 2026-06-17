@@ -1751,6 +1751,31 @@ extern "C" void tessera_apple_gpu_mpsgraph_transpose_f16(
   ts_stub_transpose<uint16_t>(x, out, dims, perm, rank);
 }
 
+// Gather (2026-06-17) — host parity: out[i, :] = table[indices[i], :].
+template <typename T>
+static void ts_stub_gather(const T* table, const int32_t* indices, T* out,
+                           int32_t rows, int32_t cols, int32_t n_idx) {
+  for (int32_t i = 0; i < n_idx; ++i) {
+    int32_t r = indices[i];
+    if (r < 0) r += rows;
+    if (r < 0 || r >= rows) r = 0;
+    for (int32_t c = 0; c < cols; ++c)
+      out[(size_t)i * cols + c] = table[(size_t)r * cols + c];
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_gather_f32(
+    const float* table, const int32_t* indices, float* out, int32_t rows,
+    int32_t cols, int32_t n_idx) {
+  ts_stub_gather<float>(table, indices, out, rows, cols, n_idx);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_gather_f16(
+    const uint16_t* table, const int32_t* indices, uint16_t* out, int32_t rows,
+    int32_t cols, int32_t n_idx) {
+  ts_stub_gather<uint16_t>(table, indices, out, rows, cols, n_idx);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
                                                      float* out, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {

@@ -106,6 +106,9 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.score_matching")
 // lane: flash_attn (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.flash_attn")
 
+// lane: gather (1 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.gather")
+
 // lane: gelu (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.gelu")
 
@@ -280,5 +283,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 180
+// Total runtime-executable ops: 181
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

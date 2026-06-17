@@ -300,8 +300,18 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   artifact-projection string still uses the per-op-contract / `metal_artifact`
   format for multi-op programs — routing per_op_metal through the runtime-pipeline
   target-IR text is a cosmetic follow-on, orthogonal to the (correct) residency
-  claim. *Still open:* the remaining data-mover kernels (concat/slice/gather —
-  same `.mm` recipe as transpose, to grow what counts as "GPU-capable"), plus
+  claim. **Gather landed (2026-06-17) — second data-mover.** `tessera.gather` now
+  runs on a real MPSGraph kernel (`gatherWithUpdatesTensor:axis:0`, header-grounded):
+  embedding / attention-index row gather of a 2D table by int32 indices (v1
+  envelope: axis-0 + 2D table; other axes / N-D tables fall back to `np.take`).
+  Negative indices are normalized before the GPU call so the Metal path matches
+  numpy. New `.mm` `mpsg_run_gather` + `tessera_apple_gpu_mpsgraph_gather_{f32,f16}`
+  + host fallback + stub parity; first-class runtime op (`_APPLE_GPU_GATHER_OPS` →
+  `"gather"` lane). It immediately compounds on the residency gate — an embedding
+  lookup mid-program (`gather→matmul`) now runs `native_gpu` instead of demoting.
+  Guards: `tests/unit/test_apple_gpu_gather.py` (handler vs numpy over 1D/N-D
+  indices, negative indices, f16, jit, no-fallback-on-Metal). *Still open:* the
+  remaining data-movers (concat — KV-cache append; slice), same `.mm` recipe, plus
   the `norm_chain` broadening (bare norms already run on the MPSGraph rowop lane —
   no numpy there to displace, so deliberately deferred) — all Evaluator-gated,
   never displacing a working MPSGraph call.

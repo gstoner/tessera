@@ -112,7 +112,9 @@ def test_driver_and_runtime_reexport_identical_objects():
 def test_lane_for_accepts_bare_and_dotted_names():
     assert env.lane_for("matmul") == "mps"
     assert env.lane_for("tessera.matmul") == "mps"
-    assert env.lane_for("gather") is None
+    # A genuinely non-lane op returns None (gather joined the data-mover lane
+    # 2026-06-17; reshape is a true-view metadata op with no GPU lane).
+    assert env.lane_for("reshape") is None
 
 
 def test_descriptors_carry_envelope_lane():

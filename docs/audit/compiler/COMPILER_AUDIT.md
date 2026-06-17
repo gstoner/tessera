@@ -280,12 +280,28 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   reports `execution_kind="native_gpu"` / driver `execution_mode="metal_runtime"`
   (was `fallback_eager`). Guards:
   `tests/unit/test_apple_gpu_transpose.py` (7: 2D/3D/4D + explicit permute, f16,
-  jit, no-fallback-on-Metal). *Caveat:* this makes a single transpose GPU-resident;
-  a transpose *mid-program* (e.g. `matmul→transpose→gelu`) still demotes to
-  `artifact_only` until `_apple_gpu_chain_kind` learns a general "all ops
-  GPU-capable → per-op metal" recognizer — the next structural step. *Still open:*
-  the remaining data-movers (concat/slice/gather — same `.mm` recipe), the chain
-  gate, the true-view residency path (reshape/squeeze/…), plus
+  jit, no-fallback-on-Metal).
+  **General residency gate landed — `per_op_metal` (2026-06-17).**
+  `_apple_gpu_chain_kind` now returns `"per_op_metal"` for any multi-op program
+  where *every* op has a GPU lane (`lane_for(op) is not None`), checked LAST so the
+  named fused chains still win. This closes the transpose-mid-program caveat:
+  `matmul→transpose→gelu` (and `matmul→add→transpose→silu`) now run `native_gpu` /
+  `metal_runtime` per-op (each op on its lane; the fusion prepass still fuses
+  sub-chains) instead of demoting the whole program to `artifact_only`. Conservative
+  by construction — a program with any non-lane op returns `None` (stays
+  `artifact_only`); per-op handlers still fall back individually (recorded), so the
+  program claim stays honest. Guards: `tests/unit/test_apple_gpu_per_op_metal.py`
+  (recognizer accepts all-GPU-capable; named fusion still wins; non-GPU op stays
+  conservative; mixed program runs `native_gpu` + no-fallback-on-Metal). Updated
+  the two Phase-8.4 "multi-op = artifact_only" roadmap gate tests to the new
+  contract (all-GPU-capable → `metal_runtime` + numpy-proven; non-lane op →
+  artifact_only). *Representation gap (tracked):* the runtime *contract* is
+  correctly `metal_runtime` (metadata + verified execution), but the `.target_ir`
+  artifact-projection string still uses the per-op-contract / `metal_artifact`
+  format for multi-op programs — routing per_op_metal through the runtime-pipeline
+  target-IR text is a cosmetic follow-on, orthogonal to the (correct) residency
+  claim. *Still open:* the remaining data-mover kernels (concat/slice/gather —
+  same `.mm` recipe as transpose, to grow what counts as "GPU-capable"), plus
   the `norm_chain` broadening (bare norms already run on the MPSGraph rowop lane —
   no numpy there to displace, so deliberately deferred) — all Evaluator-gated,
   never displacing a working MPSGraph call.

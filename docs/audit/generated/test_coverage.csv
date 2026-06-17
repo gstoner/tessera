@@ -162,7 +162,7 @@ ebm_refinement,3,0,0,3,0,,structural_only,unclassified — defaults to structura
 ebm_self_verify,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
-einsum,6,0,0,6,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,structural_only,unclassified — defaults to structural_only
+einsum,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,structural_only,unclassified — defaults to structural_only
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
@@ -186,7 +186,7 @@ gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
 gated_deltanet,21,4,0,25,0,fp64,needs_direct_test,category default for 'attention'
 gather,9,3,0,12,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,43,19,1,62,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
+gelu,44,19,1,63,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
@@ -254,7 +254,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,372,173,15,545,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,374,173,15,547,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
@@ -275,7 +275,7 @@ mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elem
 mod,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 modified_delta_attention,7,0,0,7,0,fp64,needs_direct_test,category default for 'attention'
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
-moe,8,0,0,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+moe,9,0,0,9,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
 moe_combine,4,0,0,4,0,,needs_direct_test,category default for 'moe_transport'
 moe_dispatch,1,3,0,4,0,,needs_direct_test,category default for 'moe_transport'
 moe_swiglu_block,10,17,1,27,0,fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
@@ -393,7 +393,7 @@ sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,covered_by_family,category default for 'elementwise'
-softmax,89,37,5,126,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
+softmax,90,37,5,127,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
 softplus,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -433,7 +433,7 @@ tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for '
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 top_k,14,0,0,14,0,,structural_only,unclassified — defaults to structural_only
-transpose,22,27,0,49,0,bf16 f16 fp32,needs_direct_test,category default for 'layout_transform'
+transpose,23,27,0,50,0,bf16 f16 fp32,needs_direct_test,category default for 'layout_transform'
 tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'

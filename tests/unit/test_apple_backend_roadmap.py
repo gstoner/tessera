@@ -305,7 +305,14 @@ def test_apple_cpu_simple_transformer_block_executes_attention_and_mlp():
     np.testing.assert_allclose(out, expected, rtol=1e-5, atol=1e-6)
 
 
-def test_apple_gpu_simple_transformer_block_emits_metal_artifact_contracts():
+def test_apple_gpu_simple_transformer_block_runs_metal_runtime_per_op():
+    """2026-06-17: with the general ``per_op_metal`` residency gate
+    (``_apple_gpu_chain_kind``), a full transformer block — 8 matmuls +
+    transpose + softmax + gelu, every op with a GPU lane — now runs per-op on
+    Metal end-to-end instead of demoting to the metal_artifact contract just
+    because it isn't a single named fusion. Supersedes the old "multi-op =
+    artifact_only" gate. The strongest assertion is numerical: the per-op Metal
+    path matches the numpy reference."""
     @ts.jit(target="apple_gpu")
     def simple_transformer(x, wq, wk, wv, wo, w1, w2):
         q = ts.ops.matmul(x, wq)
@@ -318,20 +325,39 @@ def test_apple_gpu_simple_transformer_block_emits_metal_artifact_contracts():
         hidden = ts.ops.gelu(ts.ops.matmul(proj, w1))
         return ts.ops.matmul(hidden, w2)
 
-    artifact = simple_transformer.runtime_artifact()
-    target_ir = simple_transformer.target_ir
+    r = np.random.default_rng(0)
+    x = r.standard_normal((4, 8)).astype(np.float32)
+    wq = r.standard_normal((8, 8)).astype(np.float32)
+    wk = r.standard_normal((8, 8)).astype(np.float32)
+    wv = r.standard_normal((8, 8)).astype(np.float32)
+    wo = r.standard_normal((8, 8)).astype(np.float32)
+    w1 = r.standard_normal((8, 16)).astype(np.float32)
+    w2 = r.standard_normal((16, 8)).astype(np.float32)
+    out = np.asarray(simple_transformer(x, wq, wk, wv, wo, w1, w2))
 
-    assert artifact.metadata["execution_mode"] == "metal_artifact"
-    assert artifact.metadata["runtime_status"] == "artifact_only"
-    assert not simple_transformer.is_executable
+    def _gelu(v):
+        return 0.5 * v * (1.0 + np.tanh(0.7978845608028654 * (v + 0.044715 * v**3)))
+
+    def _softmax(s):
+        e = np.exp(s - s.max(-1, keepdims=True))
+        return e / e.sum(-1, keepdims=True)
+
+    q = x @ wq; k = x @ wk; v = x @ wv
+    ref = _gelu((_softmax(q @ k.T) @ v @ wo) @ w1) @ w2
+    np.testing.assert_allclose(out, ref, rtol=1e-3, atol=1e-3)
+
+    artifact = simple_transformer.runtime_artifact()
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert simple_transformer.is_executable
+    # IR still carries the full op vocabulary.
     assert simple_transformer.ir_text().count("tessera.matmul") == 8
     assert "tessera.softmax" in simple_transformer.ir_text()
-    assert "tessera.gelu" in simple_transformer.ir_text()
-    assert target_ir.count('kernel = "matmul_contract"') == 8
-    assert 'kernel = "softmax_contract"' in target_ir
-    assert 'kernel = "gelu_contract"' in target_ir
-    assert 'framework = "MPSGraph"' in target_ir
-    assert 'execution_mode = "metal_artifact"' in target_ir
+    # NB: the runtime *contract* is metal_runtime (asserted above + proven
+    # numerically). The `.target_ir` artifact-projection string is a separate
+    # codegen dump that still uses the per-op-contract format for multi-op
+    # programs — reflecting per_op_metal there is a tracked follow-on, orthogonal
+    # to the (correct, verified) runtime residency claim.
 
 
 def test_apple_cpu_runtime_shim_gemm_f32_correctness(tmp_path):
@@ -759,21 +785,36 @@ def test_apple_gpu_runtime_shim_exposes_mps_matmul_symbol(tmp_path):
         assert capability == 0
 
 
-def test_apple_gpu_target_keeps_metal_artifact_for_unrecognized_multi_op_programs():
-    """Phase 8.4.3 added the first multi-op fusion. To keep the gate honest,
-    programs that compose ops outside any recognized fusion pattern must
-    still stay on the metal_artifact contract. Each Phase 8.4.x adds a
-    pattern, so the negative case has to be updated to a still-unrecognized
-    chain — currently softmax -> matmul (suffix-only chain, no matmul head)
-    which doesn't match any of our fusion shapes.
-    """
-
+def test_apple_gpu_all_gpu_capable_multi_op_runs_per_op_metal():
+    """2026-06-17: the general ``per_op_metal`` residency gate supersedes the old
+    "any unrecognized multi-op stays artifact_only" rule. softmax -> matmul isn't
+    a named fusion, but BOTH ops have a GPU lane, so it now runs per-op on Metal
+    (and matches numpy). The gate stays honest via the negative case below."""
     @ts.jit(target="apple_gpu")
     def chain(x, w):
-        # softmax(x) doesn't have a matmul head, so neither matmul_softmax
-        # nor matmul_softmax_matmul fires. The trailing matmul also can't
-        # fuse (its left operand isn't a recognized post-matmul producer).
         return ts.ops.matmul(ts.ops.softmax(x), w)
+
+    r = np.random.default_rng(1)
+    x = r.standard_normal((4, 8)).astype(np.float32)
+    w = r.standard_normal((8, 16)).astype(np.float32)
+    out = np.asarray(chain(x, w))
+    e = np.exp(x - x.max(-1, keepdims=True))
+    ref = (e / e.sum(-1, keepdims=True)) @ w
+    np.testing.assert_allclose(out, ref, rtol=1e-3, atol=1e-3)
+
+    artifact = chain.runtime_artifact()
+    assert artifact.metadata["execution_mode"] == "metal_runtime"
+    assert artifact.metadata["runtime_status"] == "ready"
+    assert chain.is_executable
+
+
+def test_apple_gpu_multi_op_with_non_gpu_op_stays_metal_artifact():
+    """The residency gate is conservative: a multi-op program containing an op
+    with NO GPU lane (here tessera.moe) must NOT be claimed per-op metal — it
+    stays on the metal_artifact contract (artifact_only, not executable)."""
+    @ts.jit(target="apple_gpu")
+    def chain(x, experts):
+        return ts.ops.gelu(ts.ops.moe(x, experts))
 
     artifact = chain.runtime_artifact()
     assert artifact.metadata["execution_mode"] == "metal_artifact"

@@ -444,6 +444,7 @@ from .apple_gpu_envelope import (  # noqa: F401
     _APPLE_GPU_HYBRID_ATTN_OPS,
     _APPLE_GPU_SPARSE_ATTN_OPS,
     _APPLE_GPU_RUNTIME_OPS,
+    lane_for,
 )
 
 
@@ -855,6 +856,18 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
         from .fusion import is_pointwise_op
         if all(is_pointwise_op(op.op_name) for op in ops):
             return "pointwise"
+
+    # General residency gate (2026-06-17): a multi-op program where EVERY op has
+    # an Apple GPU dispatch lane runs per-op on Metal (each op dispatches to its
+    # lane in the runtime per-op loop; the fusion prepass still fuses what it can).
+    # Checked LAST so the specific fused chains above win. This keeps mixed
+    # programs that interleave compute with structural ops (e.g.
+    # matmul -> transpose -> gelu) on metal_runtime instead of demoting the whole
+    # program to artifact_only just because the chain isn't a named fusion. An op
+    # whose lane handler can't run a given case still falls back per-op (recorded),
+    # never silently — so the program claim stays honest.
+    if len(ops) >= 2 and all(lane_for(op.op_name) is not None for op in ops):
+        return "per_op_metal"
     return None
 
 
@@ -918,6 +931,13 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             # General pointwise DAG — the runtime prepass synthesizes one fused
             # elementwise kernel; name it here so the Target IR is descriptive.
             symbol = "tessera_apple_gpu_synth_pointwise_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "per_op_metal":
+            # General residency: every op has a GPU lane; the runtime dispatches
+            # each op per-op on Metal (fusing sub-chains where possible). No single
+            # fused symbol — the descriptor names the per-op-metal contract.
+            symbol = "tessera_apple_gpu_per_op_metal"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",

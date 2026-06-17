@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **457** ops in `primitive_coverage` registry.
-- **2646** total Python-test references, **757** total lit-fixture references.
+- **2653** total Python-test references, **757** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **199** ops have ≤1 reference ("thinly tested").
 - **58** ops have ≥10 references ("well tested").
@@ -17,9 +17,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  372 |  173 |  545 |  15 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  374 |  173 |  547 |  15 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |   93 |   57 |  150 |   5 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |   89 |   37 |  126 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
+| `softmax` |   90 |   37 |  127 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   98 |    9 |  107 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   92 |   13 |  105 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   84 |    4 |   88 |   7 | `bf16`, `f16`, `f32`, `f64` … |
@@ -27,12 +27,12 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `reduce` |   83 |    0 |   83 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
 | `rmsnorm` |   69 |   10 |   79 |   2 | `bf16`, `f16`, `f32`, `f64` … |
-| `gelu` |   43 |   19 |   62 |   1 | `bf16`, `f16`, `f32`, `f64` … |
+| `gelu` |   44 |   19 |   63 |   1 | `bf16`, `f16`, `f32`, `f64` … |
 | `selective_ssm` |   51 |   10 |   61 |   2 | `bf16`, `fp16`, `fp32` |
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
 | `grouped_gemm` |   28 |   24 |   52 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `cast` |   10 |   40 |   50 |   0 | `fp32` |
-| `transpose` |   22 |   27 |   49 |   0 | `bf16`, `f16`, `fp32` |
+| `transpose` |   23 |   27 |   50 |   0 | `bf16`, `f16`, `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `msa_sparse_attention` |   37 |    8 |   45 |   1 |  |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |

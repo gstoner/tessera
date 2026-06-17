@@ -137,6 +137,10 @@ void registerTesseraPasses() {
   // signals pass failure.  Registered standalone for now; inserted into
   // x86 / GPU pipelines in a follow-up sprint.
   ::mlir::registerPass([]() { return createLayoutLegalityPass(); });
+  // 2026-06-17: layout assignment (seed → propagate → insert cast{layout}),
+  // verified by LayoutLegalityPass. Standalone for now (no backend consumes the
+  // assignments yet); registered as --tessera-layout-assignment.
+  ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
 
   // ── Sprint V5 (2026-05-22) — Symbolic dim equality verifier ───────────
   // Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.

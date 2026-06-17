@@ -169,9 +169,20 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   weight), while plain identity casts still fold. This is the prerequisite for
   `LayoutAssignmentPass` (which inserts same-type `cast{layout}` markers). Guard:
   the `@layout_cast_survives` case in `graph_ir_folders.mlir`.
-  *Remaining Phase 1 (lower priority):* `LayoutAssignmentPass`
-  v1 (layout doesn't reach the layout-agnostic rank-2 CPU JIT lane — low value until
-  a layout-sensitive backend executes).
+  **LayoutAssignmentPass v1 landed (2026-06-17):** the assignment half of the
+  layout contract (`src/transforms/lib/LayoutAssignmentPass.cpp`,
+  `--tessera-layout-assignment`) — (1) seed kernel-producer layouts
+  (matmul/batched_gemm→row_major, flash_attn→bhsd, conv2d_nhwc→nhwc), (2) propagate
+  through single-result pointwise ops to a fixpoint, (3) insert
+  `tessera.cast{tessera.layout=…}` markers at consumer accept-set boundaries (the
+  same-type markers the 2026-06-17 cast-fold guard preserves). Paired with
+  LayoutLegalityPass as its verifier — `tests/tessera-ir/phase2/layout_assignment.mlir`
+  proves the assignment output runs clean through `--tessera-layout-legality`
+  (assign + verify). Guards: that lit fixture + `tests/unit/test_layout_assignment.py`.
+  *Honest scope:* v1 assignments are IR metadata — no backend consumes them yet
+  (the rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL), so this is an
+  IR-completeness milestone; when a layout-sensitive backend lands it reads these
+  attrs to pick kernels and the cast markers become real memory reorders.
   *Flash-attn streaming is NOT a CPU-lane item* — the CPU JIT is a rank-2 simple-op
   lane; flash-attn (rank-4, batched) belongs to the Apple GPU work, where the
   streaming online-softmax kernel already exists as hand-written MSL

@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **457** ops in `primitive_coverage` registry.
-- **2631** total Python-test references, **745** total lit-fixture references.
+- **2637** total Python-test references, **755** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **199** ops have ≤1 reference ("thinly tested").
 - **58** ops have ≥10 references ("well tested").
@@ -17,10 +17,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  370 |  169 |  539 |  15 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  372 |  173 |  545 |  15 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |   93 |   57 |  150 |   5 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   89 |   37 |  126 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
-| `relu` |   97 |    7 |  104 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |   98 |    9 |  107 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   89 |   11 |  100 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   84 |    4 |   88 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   82 |    2 |   84 |   5 | `bf16`, `f16`, `f32`, `f64` … |
@@ -31,9 +31,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `selective_ssm` |   51 |   10 |   61 |   2 | `bf16`, `fp16`, `fp32` |
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
 | `grouped_gemm` |   28 |   24 |   52 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
+| `cast` |   10 |   40 |   50 |   0 | `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `msa_sparse_attention` |   37 |    8 |   45 |   1 |  |
-| `cast` |    7 |   36 |   43 |   0 | `fp32` |
 | `transpose` |   16 |   27 |   43 |   0 | `bf16`, `f16`, `fp32` |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
 | `layer_norm` |   20 |    7 |   27 |   2 | `bf16`, `f16`, `f32`, `fp16` … |

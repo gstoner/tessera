@@ -247,6 +247,15 @@ std::unique_ptr<mlir::Pass> createVarlenSdpaDecomposePass();
 // surface is large enough.
 std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
 
+// ── 2026-06-17 — LayoutAssignmentPass (the assignment half) ──────────────
+// Seed kernel-producer layouts (matmul→row_major, flash_attn→bhsd,
+// conv2d_nhwc→nhwc), propagate through pointwise ops, and insert
+// `tessera.cast{tessera.layout=...}` markers at consumer accept-set boundaries.
+// Paired with LayoutLegalityPass as its verifier. Registered standalone as
+// `--tessera-layout-assignment`. v1 assignments are IR metadata; no backend
+// consumes them yet (an IR-completeness milestone).
+std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
+
 // ── Sprint V5 (2026-05-22) — SymbolicDimEqualityPass ─────────────────────
 //
 // Closes the 4th and final MLIR-verifier gap in SHAPE_SYSTEM.md §11.2:

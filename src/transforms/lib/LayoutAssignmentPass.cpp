@@ -1,0 +1,204 @@
+// LayoutAssignmentPass.cpp — the *assignment* half of the layout contract
+// (2026-06-17), paired with LayoutLegalityPass as its verifier.
+//
+// Three phases, matching the front-to-back closure plan's Phase-1 description
+// ("seed kernel layouts → propagate through pointwise → insert cast{layout}"):
+//
+//   1. SEED      — stamp `tessera.layout` on kernel-producer ops with a natural
+//                  output layout (matmul/batched_gemm → row_major, flash_attn →
+//                  bhsd, conv2d_nhwc → nhwc) when they don't already carry one.
+//   2. PROPAGATE — flow the producer's layout forward through single-result
+//                  pointwise ops (which preserve layout), to a fixpoint, so each
+//                  pointwise result becomes a layout-tagged producer.
+//   3. INSERT    — at a consumer op with a known accept-set (matmul/conv2d_nhwc/
+//                  flash_attn), if an operand's producer carries a layout outside
+//                  that accept-set, splice in a `tessera.cast {tessera.layout=...}`
+//                  marker requesting an accepted layout (same dtype). The
+//                  CastOp-fold / EraseIdentityCast guards (2026-06-17) keep these
+//                  same-type markers from being canonicalized away.
+//
+// v1 scope honesty: the assignments are IR metadata. No backend consumes them
+// yet (the rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL), so this is
+// an IR-completeness milestone — it makes the layout contract two-sided (assign +
+// verify) and is validated structurally + by running LayoutLegalityPass after it
+// (the assignments + inserted casts must be legal). When a layout-sensitive
+// backend lands, it reads these attrs to pick a kernel; the cast markers become
+// real memory reorders.
+
+#include "Tessera/Transforms/Passes.h"
+
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
+
+using namespace mlir;
+
+namespace {
+
+constexpr StringRef kLayoutAttr = "tessera.layout";
+
+// Kernel producers → the layout they naturally emit.
+static StringRef producerLayout(StringRef opName) {
+  if (opName == "tessera.matmul" || opName == "tessera.batched_gemm")
+    return "row_major";
+  if (opName == "tessera.flash_attn")
+    return "bhsd";
+  if (opName == "tessera.conv2d_nhwc")
+    return "nhwc";
+  return {};
+}
+
+// Consumer ops whose operands carry a layout contract → accept-set (first
+// element is the canonical/preferred layout the inserted cast requests). Mirrors
+// LayoutLegalityPass::checkTensorOpLayouts; the operand indices that carry the
+// contract are encoded in `contractOperands`.
+static ArrayRef<StringRef> consumerAcceptSet(StringRef opName) {
+  static const StringRef matmul[] = {"row_major", "col_major"};
+  static const StringRef nhwc[] = {"nhwc"};
+  static const StringRef bhsd[] = {"bhsd"};
+  if (opName == "tessera.matmul" || opName == "tessera.batched_gemm")
+    return matmul;
+  if (opName == "tessera.conv2d_nhwc")
+    return nhwc;
+  if (opName == "tessera.flash_attn")
+    return bhsd;
+  return {};
+}
+
+// Operand indices that carry the layout contract for a consumer op.
+static SmallVector<unsigned> contractOperands(StringRef opName, unsigned n) {
+  if (opName == "tessera.matmul" || opName == "tessera.batched_gemm")
+    return {0u, 1u};
+  if (opName == "tessera.conv2d_nhwc")
+    return {0u};  // data operand; filter is a separate weight layout
+  if (opName == "tessera.flash_attn") {
+    SmallVector<unsigned> qkv;
+    for (unsigned i = 0; i < std::min(n, 3u); ++i) qkv.push_back(i);
+    return qkv;
+  }
+  return {};
+}
+
+static bool isPointwise(StringRef opName) {
+  static const llvm::StringSet<> kSet = {
+      "tessera.add",  "tessera.sub",     "tessera.mul",   "tessera.div",
+      "tessera.relu", "tessera.gelu",    "tessera.silu",  "tessera.sigmoid",
+      "tessera.tanh", "tessera.exp",     "tessera.log",   "tessera.neg",
+      "tessera.abs",  "tessera.sqrt",    "tessera.rsqrt", "tessera.softplus",
+  };
+  return kSet.contains(opName);
+}
+
+// The layout a value's defining op advertises (its `tessera.layout` attr), or
+// empty for a block argument / untagged producer.
+static StringRef layoutOf(Value v) {
+  Operation *def = v.getDefiningOp();
+  if (!def)
+    return {};
+  if (auto a = def->getAttrOfType<StringAttr>(kLayoutAttr))
+    return a.getValue();
+  return {};
+}
+
+struct LayoutAssignment
+    : public PassWrapper<LayoutAssignment, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LayoutAssignment)
+
+  StringRef getArgument() const override { return "tessera-layout-assignment"; }
+  StringRef getDescription() const override {
+    return "Layout assignment pass — seed kernel-producer layouts "
+           "(matmul→row_major, flash_attn→bhsd, conv2d_nhwc→nhwc), propagate "
+           "through pointwise ops, and insert tessera.cast{layout} markers at "
+           "consumer accept-set boundaries. The assignment half of the layout "
+           "contract; LayoutLegalityPass is its verifier.";
+  }
+
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
+    MLIRContext *ctx = &getContext();
+    auto stamp = [&](Operation *op, StringRef layout) {
+      op->setAttr(kLayoutAttr, StringAttr::get(ctx, layout));
+    };
+
+    // ── Phase 1: seed kernel producers. ──────────────────────────────────
+    module.walk([&](Operation *op) {
+      if (op->hasAttr(kLayoutAttr))
+        return;
+      StringRef l = producerLayout(op->getName().getStringRef());
+      if (!l.empty())
+        stamp(op, l);
+    });
+
+    // ── Phase 2: propagate through pointwise ops to a fixpoint. ──────────
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      module.walk([&](Operation *op) {
+        if (op->getNumResults() != 1 || op->hasAttr(kLayoutAttr))
+          return;
+        if (!isPointwise(op->getName().getStringRef()))
+          return;
+        for (Value operand : op->getOperands()) {
+          StringRef l = layoutOf(operand);
+          if (!l.empty()) {
+            stamp(op, l);
+            changed = true;
+            break;
+          }
+        }
+      });
+    }
+
+    // ── Phase 3: insert cast{layout} at consumer accept-set boundaries. ──
+    // Collect first (don't mutate operands mid-walk).
+    struct Fix {
+      Operation *consumer;
+      unsigned operandIdx;
+      StringRef wanted;
+    };
+    SmallVector<Fix> fixes;
+    module.walk([&](Operation *op) {
+      ArrayRef<StringRef> accept = consumerAcceptSet(op->getName().getStringRef());
+      if (accept.empty())
+        return;
+      llvm::StringSet<> acceptSet;
+      for (StringRef a : accept)
+        acceptSet.insert(a);
+      for (unsigned i : contractOperands(op->getName().getStringRef(),
+                                         op->getNumOperands())) {
+        if (i >= op->getNumOperands())
+          continue;
+        StringRef l = layoutOf(op->getOperand(i));
+        if (!l.empty() && !acceptSet.contains(l))
+          fixes.push_back({op, i, accept.front()});
+      }
+    });
+
+    OpBuilder builder(ctx);
+    for (const Fix &f : fixes) {
+      Value operand = f.consumer->getOperand(f.operandIdx);
+      builder.setInsertionPoint(f.consumer);
+      // Same-type tessera.cast carrying the requested layout — a layout-change
+      // marker the CastOp-fold / EraseIdentityCast guards preserve. Built
+      // generically (tessera.cast is a registered tessera-dialect op).
+      OperationState st(f.consumer->getLoc(), "tessera.cast");
+      st.addOperands(operand);
+      st.addTypes(operand.getType());
+      st.addAttribute(kLayoutAttr, StringAttr::get(ctx, f.wanted));
+      Operation *marker = builder.create(st);
+      f.consumer->setOperand(f.operandIdx, marker->getResult(0));
+    }
+  }
+};
+
+}  // namespace
+
+namespace tessera {
+std::unique_ptr<Pass> createLayoutAssignmentPass() {
+  return std::make_unique<LayoutAssignment>();
+}
+}  // namespace tessera

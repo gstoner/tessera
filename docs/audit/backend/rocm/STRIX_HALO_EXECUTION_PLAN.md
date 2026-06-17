@@ -83,15 +83,15 @@ Two viable emit paths for Stage A (pick after a spike):
 
 ### Honest external gates
 
-- **ROCm 7.2.x runs on gfx1151 in practice — but it is community/nightly support, not AMD's
-  official matrix.** Multiple working stacks are documented on ROCm 7.0/7.2 (ollama ~40 tok/s on
-  30B, a known-good llama.cpp stack, the TinyComputers 7.0→7.2 upgrade guide), and they generally
-  enumerate the iGPU **without** an `HSA_OVERRIDE_GFX_VERSION` hack on 7.2. However, AMD's official
-  support matrix still lists the Ryzen AI Max+ 395 only under **ROCm 6.4.4**; gfx1151 on 7.2.x is
-  unofficial, and stable ROCm does not ship gfx1151 kernels for every component (some ecosystems
-  need nightly wheels). Tessera pins ROCm **7.2.3** (≥ the 7.2.2 the user confirmed works), which
-  comfortably covers gfx1151 — but treat 7.2.x/gfx1151 as community-supported, and still
-  `rocminfo`-verify enumeration on the box before Stage B.
+- **gfx1151 is officially supported via the "ROCm on Radeon and Ryzen" client track (≥ 7.2.0,
+  with dedicated 7.2.1 release notes for Ryzen AI Max+).** AMD ships a "ROCm 7.2.1 on Radeon and
+  Ryzen for Linux" release-notes page; gfx1151 support landed in 7.0/7.2.0 (counter-collection for
+  gfx1150/1151 added in 7.2.0) and continues in 7.2.x. AMD's recommended stack for Ryzen AI Max+ is
+  **Ubuntu 24.04.3 inbox graphics drivers + ROCm 7.2.1**. Note this is the *Radeon/Ryzen client*
+  track, distinct from the Instinct "Supported GPUs" matrix — so cite the Radeon-Ryzen docs, not the
+  data-center matrix. Tessera's **7.2.3 pin (≥ the user-confirmed 7.2.1/7.2.2)** is covered by
+  official support; community guides (ollama, llama.cpp) corroborate it enumerates **without** an
+  `HSA_OVERRIDE_GFX_VERSION` hack on 7.2. Still `rocminfo`-verify enumeration on the box before Stage B.
 - **⚠️ Documented gfx1151 bf16 correctness bugs (ROCm/ROCm#6034: "5 critical bf16 bugs").** This is
   directly load-bearing for us: Stage D's first proof is a **bf16 WMMA GEMM**. Mitigation —
   bring up the **fp32←f16 and f16←f16 WMMA combos first** (Stage D), then bf16, and cross-check any

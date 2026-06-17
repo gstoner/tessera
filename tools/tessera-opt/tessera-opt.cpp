@@ -253,6 +253,24 @@ static mlir::PassPipelineRegistration<> gEmitNVVM(
         llvm::report_fatal_error("tessera-emit-nvvm: failed to build pipeline");
     });
 
+// ROCDL twin of tessera-emit-nvvm — identical spine, AMD GPU backend
+// (convert-gpu-to-rocdl). Emission only; HIP launch is hardware-gated.
+static mlir::PassPipelineRegistration<> gEmitROCDL(
+    "tessera-emit-rocdl",
+    "Phase 4 GPU emission: lower a tessera kernel through linalg -> scf.parallel "
+    "-> gpu -> ROCDL (emission only; GPU launch is hardware-gated).",
+    [](mlir::OpPassManager &pm) {
+      if (failed(mlir::parsePassPipeline(
+              "func.func(tessera-to-linalg),empty-tensor-to-alloc-tensor,"
+              "one-shot-bufferize{bufferize-function-boundaries=true},"
+              "func.func(convert-linalg-to-parallel-loops),"
+              "func.func(gpu-map-parallel-loops),"
+              "func.func(convert-parallel-loops-to-gpu),gpu-kernel-outlining,"
+              "gpu.module(lower-affine,convert-gpu-to-rocdl)",
+              pm)))
+        llvm::report_fatal_error("tessera-emit-rocdl: failed to build pipeline");
+    });
+
 int main(int argc, char **argv) {
 #if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
@@ -345,6 +363,7 @@ int main(int argc, char **argv) {
   mlir::registerConvertParallelLoopToGpuPass();
   mlir::registerLowerAffinePass();  // affine.apply in the outlined kernel → std
   mlir::registerConvertGpuOpsToNVVMOpsPass();
+  mlir::registerConvertGpuOpsToROCDLOpsPass();  // ROCDL twin of the NVVM lane
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect,

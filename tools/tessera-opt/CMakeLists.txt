@@ -25,6 +25,7 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRGPUTransforms
   MLIRSCFToGPU
   MLIRGPUToNVVMTransforms
+  MLIRGPUToROCDLTransforms
   MLIRAffineToStandard
   MLIROptLib
 )

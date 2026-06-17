@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional
 adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adamw,6,0,0,6,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
 adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,91,13,8,104,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
+add,92,13,8,105,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
 add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'

@@ -60,6 +60,20 @@ def test_tessera_add_emits_nvvm(tmp_path):
 
 
 @_needs_opt
+def test_tessera_add_emits_rocdl(tmp_path):
+    """ROCDL twin of the NVVM lane — identical recipe, AMD backend."""
+    f = tmp_path / "ew.mlir"
+    f.write_text(_KERNEL)
+    out = subprocess.run(
+        [_OPT, str(f), "--tessera-emit-rocdl"],
+        capture_output=True, text=True, check=True).stdout
+    assert "gpu.module" in out
+    assert "rocdl.kernel" in out
+    assert "rocdl.workgroup.id" in out
+    assert "tessera.add" not in out
+
+
+@_needs_opt
 def test_emit_nvvm_is_emission_only_no_launch(tmp_path):
     """Honest-scope guard: emission produces the kernel, not a host launch — no
     cuLaunchKernel/gpu.launch_func resolution to a runtime is implied here."""

@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-11
+last_updated: 2026-06-16
 ---
 
 # Tessera Canonical API Quick Reference
 **Status:** Normative - grounded in `python/tessera/` active implementation  
-**Last updated:** May 11, 2026  
+**Last updated:** June 16, 2026  
 **Use this document** to resolve any naming disagreement in other docs. If something here conflicts with another doc, this file wins.
 
 > **Tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical reference for the six tensor attributes (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype names + accepted aliases, the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, `mxfp*`), and the JAX-like promotion direction. Every dtype string used in this file (`"fp32"`, `"bf16"`, `"fp16"`, `"fp8_e4m3"`, etc.) follows that vocabulary; aliases like `"f32"` are accepted at API boundaries but should normalize before storage.
@@ -246,7 +246,7 @@ Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `
 
 | Input | Normalized target | Notes |
 |-------|-------------------|-------|
-| `None`, `"cpu"` | `cpu` | CPU/mock-runtime path when supported by the op graph |
+| `None`, `"cpu"` | `cpu` | Executed via the `tessera_jit` MLIR→LLVM JIT lane for the covered op set (f32/f16/bf16/f64); numpy reference fallback otherwise |
 | `"cuda"`, `"nvidia"`, `"gpu"`, `"sm90"`, `"sm_90"`, `"sm90a"`, `"sm_90a"`, `"hopper"` | `nvidia_sm90` | NVIDIA artifact target |
 | `"rocm"`, `"amd"`, `"hip"` | `rocm` | ROCm Target IR artifact |
 | `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | Apple CPU Target IR artifact |

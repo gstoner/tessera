@@ -33,7 +33,7 @@ machinery — ``primitive_coverage``, ``op_catalog``, ``backend_manifest`` — o
 any C++/MLIR. Those are exactly the "implicit indirection" PithTrain measures
 as costly for agents. They belong behind ``@tessera.jit``; the compiler is the
 *invisible* operator layer. Keeping the agent read-path free of them is the
-whole point. ``test_train_agent_native_firewall`` (to be added) enforces this.
+whole point. ``tests/unit/test_train_agent_native_firewall.py`` enforces this.
 
 Status (Phase 1, honest)
 ------------------------
@@ -50,6 +50,24 @@ Layers
 * ``tessera.train.engine``  — engine: routing, load-balancing loss, MoE FFN.
 * ``tessera.train.loop``    — training loops (RL first: GRPO/CISPO).
 * ``tessera.train.skills/`` — in-repo agent skills.
+
+Top-level export + audit scope (decided 2026-06-16)
+---------------------------------------------------
+This package is **lazily bound** at the top level: ``import tessera;
+tessera.train.X`` resolves on first access via the PEP 562 ``__getattr__`` in
+``python/tessera/__init__.py`` (and ``from tessera import train`` works
+directly). Lazy binding keeps ``import tessera`` cheap and avoids an import
+cycle, while preserving the firewall above. Locked by
+``tests/unit/test_train_top_level_export.py``.
+
+It is **intentionally outside the generated audit dashboards** (no
+``primitive_coverage`` / ``backend_manifest`` / ``surface_manifest`` row) — the
+firewall forbids the registry coupling, and the compact principle argues against
+fleet machinery for a handful of files. The audit-as-data guarantee is instead a
+drift-gated coverage *test* (``tests/unit/test_train_manifest.py``): every model
+module must have test coverage, every skill must ship a ``SKILL.md`` + runnable
+script. Promote to a ``surface_manifest`` entry only if the package grows
+runnable smoke-command CLIs.
 """
 
 from __future__ import annotations

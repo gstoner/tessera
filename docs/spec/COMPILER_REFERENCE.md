@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-11
+last_updated: 2026-06-16
 ---
 
 # Tessera Compiler Reference
@@ -69,25 +69,47 @@ loads the `.mtlpackage`, extracts reflection, and validates the ABI before
 dispatch. The fixture-backed manifest proves the lifecycle; production packaged
 kernels are tracked separately in `apple_packaged_manifest.py`.
 
-### Production MLIR/LLVM JIT lane (`tessera_jit`)
+### Production MLIR/LLVM JIT lane (`tessera_jit`) — the executed CPU path
 
-Distinct from the artifact-lowering paths above, the **production compiler
-track** adds a real MLIR→LLVM **JIT execution** lane on CPU: `tessera.*` ops
-lower through `linalg` → standard MLIR dialects → LLVM IR → an ORC JIT, and the
-compiled function is invoked over the runtime's compiled-function C ABI
-(`tessera_jit_invoke`, see [`RUNTIME_ABI_SPEC.md`](RUNTIME_ABI_SPEC.md) §12).
-This is genuine codegen-and-run, oracle-tested against numpy — not a numpy
-reference. As of Phase 1 it covers `add/sub/mul/div`, `matmul` (±transpose,
-±bf16 with f32 accumulate), `batched_gemm`, `reduce(sum/max/min/mean)`,
-`softmax`, `rmsnorm`, `layer_norm`, `relu/sigmoid/tanh/silu/gelu`, and
-`transpose`, plus **multi-op graph compilation** (`GraphFn` — a whole
+The **production compiler track** is a real MLIR→LLVM **JIT execution** lane on
+CPU: `tessera.*` ops lower through `linalg` → standard MLIR dialects → LLVM IR →
+an ORC JIT, and the compiled function is invoked over the runtime's
+compiled-function C ABI (`tessera_jit_invoke`, see
+[`RUNTIME_ABI_SPEC.md`](RUNTIME_ABI_SPEC.md) §12). This is genuine
+codegen-and-run, oracle-tested against numpy — not a numpy reference.
+
+**As of the 2026-06-15/16 front-to-back closure this lane is the executed CPU
+path, not a side lane.** `@tessera.jit(target="cpu")` translates the executed
+`GraphIRModule` op-list into a whole-graph `GraphFn` and runs it through
+`tessera_jit` *before* the numpy reference interpreter; anything outside the
+covered set / dtype / rank falls back to numpy (a fallback handles "couldn't
+run", never "ran wrong"; `TESSERA_DISABLE_CPU_JIT` is the kill-switch). Because
+the executed path now runs compiled IR, the C++ Graph-IR folders/canonicalizers
+(`canonicalize` + `cse` run before `TesseraToLinalg`) and the linalg
+GEMM K-reduction loop reach execution rather than only the discarded validation
+pipeline.
+
+Covered set (`_JIT_GRAPH_OPS`): `add/sub/mul/div`, `matmul` (±transpose, with
+f32 accumulate), `batched_gemm`, `reduce(sum/max/min/mean)`, `softmax`,
+`rmsnorm`, `layer_norm`, `relu/sigmoid/tanh/silu/gelu`, `transpose`, `select`,
+`masked_fill`, plus **multi-op graph compilation** (`GraphFn` — a whole
 multi-op `tessera` function JIT'd as one unit so intermediates never cross the
 boundary and the lowering can fuse) and a **compilation cache** keyed on MLIR
-text. Capstone proof: a LLaMA-style transformer decoder layer (rmsnorm +
-attention + SwiGLU + residuals) compiles as one function and matches numpy.
-Source of truth and roadmap:
-[`PRODUCTION_COMPILER_PLAN.md`](PRODUCTION_COMPILER_PLAN.md) (Ratified);
-tests under `tests/unit/test_production_jit_*.py`.
+text. Dtypes: **f32** (native), **f16** (native NEON on ARMv8.2-A), **bf16**
+(correct, f32-emulated in-kernel on pre-ARMv8.6 hosts), and **f64** (the
+exact-precision lane for gradient-checking — accumulates in f64 throughout,
+verified ~1.8e-15 GEMM error). An opt-in `linalg→vector` tiling+vectorization
+lane (`TESSERA_JIT_VECTORIZE`, dims ≤ `TESSERA_JIT_VECTORIZE_MAXDIM` = 2048)
+register-tiles the matmul for ~13–20× over the scalar loop nest; the single-GEMM
+hot path still routes to Accelerate.
+
+Capstone proof: a LLaMA-style transformer decoder layer (rmsnorm + attention +
+SwiGLU + residuals) compiles as one function and matches numpy. Source of truth
+and roadmap: the front-to-back closure plan in
+[`../audit/compiler/COMPILER_AUDIT.md`](../audit/compiler/COMPILER_AUDIT.md)
+(Phases 0–5) and [`PRODUCTION_COMPILER_PLAN.md`](PRODUCTION_COMPILER_PLAN.md)
+(Ratified); tests under `tests/unit/test_production_jit_*.py` and
+`tests/unit/test_native_cpu_jit.py`.
 
 ---
 
@@ -140,7 +162,7 @@ aliases handled by `python/tessera/compiler/matmul_pipeline.py`.
 
 | Input | Normalized target | Status |
 |-------|-------------------|--------|
-| `None`, `"cpu"` | `cpu` | implemented / mock-runtime |
+| `None`, `"cpu"` | `cpu` | implemented / hardware-runtime via the `tessera_jit` MLIR→LLVM lane for the covered op set (numpy fallback otherwise) |
 | `"cuda"`, `"nvidia"`, `"gpu"`, `"sm90"`, `"hopper"` | `nvidia_sm90` | implemented / lit-testable |
 | `GPUTargetProfile(ISA.SM_80)` | `nvidia_sm80` | artifact target |
 | `GPUTargetProfile(ISA.SM_90)` | `nvidia_sm90` | implemented / lit-testable |

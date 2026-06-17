@@ -90,7 +90,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current high-level status (as of June 14, 2026):
+Current high-level status (as of June 16, 2026):
 
 | Area | Status |
 |------|--------|
@@ -98,7 +98,7 @@ Current high-level status (as of June 14, 2026):
 | Object-backed Graph / Schedule / Tile IR + per-target Target IR artifacts | implemented / lit-testable |
 | **x86 AMX BF16 + AVX512 lowering and execution** (Phase 2) | **implemented / hardware-runtime** |
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
-| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 265 Apple C ABI symbols across 113 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
+| **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 284 Apple C ABI symbols across 126 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | **Distributed MoE / MegaMoE** — single-device `nn.functional.moe_layer`, fused `ops.moe_swiglu_block` (Graph-IR op + GPU kernel), expert-parallel `megamoe_forward` (GShard 2× all-to-all dispatch/combine), FP8×FP4 mixed precision, and **real wall-clock comm/compute overlap** (async GPU command buffer ∥ CPU comm) | implemented / hardware-runtime (Apple GPU expert FFN); multi-rank via in-process mock collectives — see [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) |
 | NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
@@ -107,7 +107,7 @@ Current high-level status (as of June 14, 2026):
 | **Tier 2 autodiff** — Python tape (`tessera.autodiff.{tape, reverse, custom_rule, rematerialize}`) + 270+ built-in VJPs/JVPs covering matmul, depthwise conv 1d/2d, RNN cells (LSTM), Mamba2 `selective_ssm`, distributed collectives | implemented / hardware-runtime (numpy-reference tape); end-to-end BPTT through multi-step LSTM, depthwise conv chains, and selective SSMs verified vs. central-difference numerical Jacobian at fp64 |
 | **Phase F4/F5 — Graph IR adjoint pass** — `tessera-autodiff` MLIR pass + `Tessera_AdjointInterface` op trait + per-op `buildAdjoint` impls (`MatmulOp`, `LayerNormOp`, `SoftmaxOp`, GELU/ReLU/Sigmoid/Sin via `tessera.custom_adjoint_call` placeholder); `tessera-adjoint-collective-insertion` emits real `tessera.collective.{reduce_scatter, all_gather, all_reduce}` on cotangent SSA values from F4's multi-output rewrite; `tessera-autodiff-pipeline` combines F4+F5 | implemented / lit-testable — `tessera-opt` builds clean against MLIR 21 + 22; `tests/tessera-ir/phase_f4/autodiff_pass_smoke.mlir` passes FileCheck showing cotangent seed + two transposed matmuls (`dA = seed @ B^T`, `dB = A^T @ seed`) + `tessera.autodiff.arg_cotangents` annotation |
 | **Phase I — DDP / FSDP wrappers** — `tessera.distributed.DDP` (replicated weights, `all_reduce` mean-reduction on `Parameter.grad`); `tessera.distributed.FSDP` (ZeRO stage 2/3, leading-dim sharding, `gather_for_forward` / `reshard_after_forward` / `reduce_scatter` to local shard) | implemented / mock-runtime (in-process `MockRankGroup`); real NCCL/RCCL bindings land alongside Phase G |
-| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 456 entries × 12 contract axes tracked in `primitive_coverage.py` (count truth: [`docs/audit/standalone_primitive_coverage.md`](docs/audit/standalone_primitive_coverage.md)); backend-kernel proof remains the universal open Phase G/H gate |
+| **S-series standalone compiler track** (S0–S15): RNG, state/pytrees, control flow, sharding, NN functional, quantization, optimizers, losses, **`tessera.rl` PPO/GRPO/CISPO**, AOT export, custom-primitive API, dataset combinators + tokenizers | implemented (Python reference); 457 entries × 12 contract axes tracked in `primitive_coverage.py` (count truth: [`docs/audit/standalone_primitive_coverage.md`](docs/audit/standalone_primitive_coverage.md)); backend-kernel proof remains the universal open Phase G/H gate |
 | **Reasoning-model attention family** — DeepSeek sparse attention, MiniMax Lightning, Kimi-Delta, gated/hybrid/MLA decode + RL post-training losses, all with VJP+JVP | implemented / lit-testable |
 | **Speculative decoding — `attn_bias` substrate + DFlash block-diffusion draft** — additive `attn_bias` operand on `FlashAttnOp` end-to-end (Graph IR ODS + verifier, Tile→Apple lowering, MPSGraph `flash_attn_bias_{f32,f16,bf16}` runtime symbols, eager/CPU/GPU dispatch, VJP, ABI audit); `tessera.dflash` block-diffusion draft (KV injection, QK-norm, GQA, sliding-window-via-bias, draft KV cache, sampling + distribution-preserving rejection, `DFlashDraft` `nn.Module`, training loss), `tessera.dflash_reference` (stateful KV-cached target + rollback), `tessera.dflash_io` (safetensors checkpoint loader), `tessera.dflash_serve` (tokenizer-wired generation + scheduler) — see [`docs/dflash.md`](docs/dflash.md) | implemented (Python reference; attention core on Apple GPU `metal_runtime`); greedy spec-decode == greedy AR proven vs the `z-lab/dflash` MLX reference; real-checkpoint numerical parity (network) + a fully-jitted GPU draft (GPU gather) are external gates |
 | **DiffusionGemma model graph** (`tessera.models`) — a Gemma-4-calibrated block-diffusion MoE text model as a **shape-only Graph + config-aware verifier** (the contract layer): `DiffusionGemmaConfig`, `build_text_block` / `verify_text_block` / `verify_config`, param-budget estimator; plus reference layers for MoE top-k routing + packing (`route_top_k` / `moe_forward`), the entropy-bound sampler, the block-diffusion step graph + decode loop (`BlockDiffusionDecoder`), and quantization/vision staging manifests. Adds the differentiable `tessera.ops.softcap` (Gemma logit soft-cap) with VJP+JVP. **Block-diffusion region native execution** (`block_diffusion_runtime`): a faithful multi-head GQA canvas denoiser (canvas queries over `[encoder_KV ++ canvas_KV]`, bidirectional) + grouped-SwiGLU MoE FFN, composed through `ops.flash_attn` + `moe_swiglu_block`. **`backend="apple_gpu"`** runs the *whole* step on Metal (attention + MoE + LM-head matmul); `execute_block_diffusion_step` does denoiser → LM head → entropy sampler, and `NativeBlockDiffusionDecoder` is the end-to-end native decode loop (commit/freeze/re-noise + KV promotion). The compiler sees the step as **one structured Graph-IR op** `tessera.diffusion_block_step` (verifier: bidirectional canvas / GQA / head_dim≤256; Tile→Apple tags it `metal_runtime`) | implemented (Python reference — shape-only graph + verifier; **the whole block-diffusion step executes on Apple GPU `metal_runtime`** via `backend="apple_gpu"`, validated against the numpy backend at production head_dim=256; the `tessera.diffusion_block_step` Graph-IR region op + Tile→Apple lowering are lit-proven). Hardware-fused single-kernel region + real-checkpoint weights are future |
@@ -117,23 +117,23 @@ Current high-level status (as of June 14, 2026):
 | Runtime C ABI and Python wrapper | mock-runtime; hardware-runtime when C runtime is built |
 | **Audit-as-data infrastructure** — 5 manifest families + 17 generated audit dashboards (15 under `docs/audit/generated/` + 2 root: `op_target_conformance`, `standalone_primitive_coverage`), incl. the **S-series accelerator-proof map** (`s_series_accelerator_proof.md`), with CSV-canonical artifacts where applicable, drift-gated by `tests/unit/` | implemented |
 
-The ~8,240-test fast unit suite passes under `-m "not slow"`; the full Python
-suite collects ~9,685 tests including heavy benchmark contracts.
+The ~9,560-test fast unit suite passes under `-m "not slow"`; the full Python
+suite collects ~10,340 tests including heavy benchmark contracts.
 
 ### Current Source and Documentation Health
 
 This repository is moving quickly; prefer generated audits and executable tests
-over phase prose when they disagree. As of the June 9, 2026 source review:
+over phase prose when they disagree. As of the June 16, 2026 source review:
 
 | Surface | Health |
 |---------|--------|
 | Source and static checks | The `mypy` ratchet and generated-doc drift gates are part of the validation spine; rerun `scripts/validate.sh` or the focused generated-doc checks before treating a local checkout as green. |
-| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 267 unique `extern "C" tessera_*` C ABI symbols, 256 unique Apple symbols, and 109 Apple GPU kernel families. |
+| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 295 unique `extern "C" tessera_*` C ABI symbols, 284 unique Apple symbols, and 126 Apple GPU kernel families. |
 | Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_backend.md` (canonical CPU+GPU reference) and `docs/apple_gpu_metal4_adoption.md` (forward-looking ladder). |
-| Compiler gap focus | The frontend and IR artifact spine are broad, but production promotion still depends on executable codegen plus oracle/fixture comparison. Current open work is runtime consumption of `fusion_groups`, stronger dtype/layout/aliasing/buffer-binding contracts, graph outputs in canonical metadata, and fixture-backed numerical proof before backend cells become complete. |
-| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 445 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
+| Compiler gap focus | The front-to-back optimizing-compiler closure has landed its keystone phases (see below): the `tessera_jit` MLIR→LLVM lane is now the **executed** CPU path for the covered op set, and the Apple GPU fusion seam is closed (authoritative carried intent; the structural re-matchers are deleted). Current open work is stronger dtype/layout/aliasing/buffer-binding contracts, more Graph-IR folders/canonicalizers reaching the executed path, real Schedule-IR 1F1B ordering, and fixture-backed numerical proof before backend cells become complete. See [`docs/audit/compiler/COMPILER_AUDIT.md`](docs/audit/compiler/COMPILER_AUDIT.md). |
+| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 457 entries with complete tests and lowering rules, but every entry still has an open `backend_kernel` axis (`partial` or `planned`). Treat broad S-series status as Python/reference + contract coverage until a backend-specific proof closes that axis. |
 | Known Apple test gaps | Apple runtime claims require a capable Darwin host. Non-Darwin stubs are CI fallbacks, and hardware proof should come from fresh-process runtime checks or the backend-specific benchmark/test lanes before promoting a new Apple claim. |
-| Documentation | The freshness dashboard is healthy but date-sensitive (66 docs catalogued; current manifest summary: 62 dated, 25 within 30 days, 0 older than 90 days, 4 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
+| Documentation | The freshness dashboard is healthy but date-sensitive (66 docs catalogued; current manifest summary: 65 dated, 42 within 30 days, 0 older than 90 days, 1 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
 
 ---
 
@@ -191,6 +191,33 @@ canonical pipelines registered in `tessera-opt` today:
 | `tessera-lower-to-apple_gpu` (artifact) / `tessera-lower-to-apple_gpu-runtime` (MPS + custom MSL) | implemented / hardware-runtime |
 | `tpp-space-time` (Tensor Parallel Primitives) | implemented / lit-testable |
 | `ts-spectral-pipeline` (Spectral / FFT) | implemented / lit-testable |
+
+### Front-to-Back Optimizing-Compiler Closure
+
+Tessera is being converged from a library/dispatcher into a true optimizing
+compiler whose C++ IR rewrites reach execution. The phased plan and per-item
+status live in
+[`docs/audit/compiler/COMPILER_AUDIT.md`](docs/audit/compiler/COMPILER_AUDIT.md);
+the keystone phases have landed:
+
+- **The executed CPU path is now real codegen.** `@tessera.jit(target="cpu")`
+  translates the whole-graph op list into one `GraphFn` and runs it through the
+  `tessera_jit` MLIR→LLVM ORC-JIT lane (`tessera-to-linalg → bufferize →
+  linalg-to-loops → LLVM`) *before* the numpy reference interpreter — so the
+  matmul lowers to a real M×N×K loop nest with a K-reduction, and the C++ Graph-IR
+  optimizations finally reach execution. Covered set is f32/f16/bf16/f64 over
+  `matmul`, the arith/activation/softmax/norm/transpose families; anything else
+  falls back to numpy (correctness-preserving — a fallback handles "couldn't run",
+  never "ran wrong"). An opt-in `linalg→vector` tiling+vectorization lane
+  (`TESSERA_JIT_VECTORIZE`) runs the GEMM ~13–20× faster than the scalar loops.
+- **The Apple GPU fusion seam is closed.** Fusion is now recognized once (by the
+  compiler) and carried across to the executor as authoritative `dispatch` roles
+  on each fusion group; the four structural re-matchers in the runtime were proven
+  equivalent and deleted. The executor no longer re-discovers fusion per invoke.
+- **Graph-IR folders/canonicalizers reach the executed path.** `canonicalize` +
+  `cse` run before lowering on the CPU JIT lane, with per-op folders shipped
+  (`transpose(transpose(x))→x`, identity `cast`, `x+0`/`x*1`/`x/1`, …); CSE/DCE
+  fire end-to-end (duplicate QKV-projection matmuls collapse; dead pure ops drop).
 
 ### General Fusion Middle-End & Kernel Synthesis
 
@@ -297,7 +324,7 @@ consolidated into one generated dashboard:
 - [`docs/audit/generated/surface_status.md`](docs/audit/generated/surface_status.md) (human) + [`surface_status.csv`](docs/audit/generated/surface_status.csv) (canonical, machine-readable) — examples / benchmarks / research / tools / tests + operator-benchmark coverage.
 
 Plus 13 op-level / compiler-level audit registries covering primitive
-coverage (`primitive_coverage.py` — 443 entries × 12 contract axes), backend
+coverage (`primitive_coverage.py` — 457 entries × 12 contract axes), backend
 kernel manifests, MLIR verifier coverage, dialect registration, named-pipeline
 registry, diagnostic codes, docs freshness, effect lattice, runtime C ABI
 surface, test coverage by op family, TSOL canonical-op coverage, and
@@ -354,10 +381,10 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Daily edit-loop sanity check (~8,240 fast tests, < 512 MB RAM)
+# Daily edit-loop sanity check (~9,560 fast tests, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
-# Full Python suite including heavy benchmarks (~9,685 collected)
+# Full Python suite including heavy benchmarks (~10,340 collected)
 pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin
@@ -447,6 +474,9 @@ python/tessera/
                          MoE router + distributed MegaMoE (expert-parallel
                          2x all-to-all, FP8xFP4, async comm/compute overlap)
   nn/                    Stateful module / layers / functional / utils
+  train/                 Agent-native MoE training stack (lazily bound as
+                         tessera.train): MoE router/FFN, sparse dispatch,
+                         Qwen3-MoE model, GRPO loop — Apple-GPU single-node
   autodiff/              Tape, VJPs, JVPs, mixed-precision, rematerialize (Tier 2)
   cache/                 KVCacheHandle + MemoryStateHandle persistent state ABI
   ebm/                   Energy-based model primitives (M6)

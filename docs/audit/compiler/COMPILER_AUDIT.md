@@ -496,6 +496,11 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
 
 ## Next Work
 
+> **Open items: #4 (fixture-backed numerical proof before conformance cells go
+> complete) and #5 (point specs at dashboards/this audit, not old root audits).**
+> Items #1, #2, #3, and #6 have **landed** — they are kept below (struck through)
+> for provenance, not as pending work.
+
 1. ~~Add `component_ops`, `fusion_groups`, `shape_envelope`, `effects`, and
    `layout_contracts` to canonical compile metadata.~~ **Landed** —
    `component_ops` (2026-06-02) + `effects` / `shape_envelope` /

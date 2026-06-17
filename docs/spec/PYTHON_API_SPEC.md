@@ -1,15 +1,31 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-05-22
+last_updated: 2026-06-16
 ---
 
 # Tessera Python API Specification
 **Status:** Normative — grounded in `python/tessera/` Phase 1–3 implementation plus S-series standalone compiler updates
-**Last updated:** May 22, 2026
+**Last updated:** June 16, 2026
 **Authority:** This document specifies every public Python symbol in Tessera Phases 1–3. For naming disputes, `docs/CANONICAL_API.md` is the final arbiter. For compiler internals (pass pipeline, IR layers), see `docs/spec/COMPILER_REFERENCE.md`.
 
 ---
+
+## Documentation refresh (2026-06-16)
+
+Freshness pass aligned with the front-to-back optimizing-compiler closure:
+
+- **CPU execution is now real codegen.** `@tessera.jit(target="cpu")` (and
+  `target=None`) executes through the `tessera_jit` MLIR→LLVM JIT lane for the
+  covered op set, with a numpy reference fallback otherwise. The `target`
+  parameter row in §2.1 and the "Current CPU end-to-end path" subsection are
+  updated; full lane contract in `docs/spec/COMPILER_REFERENCE.md` §2.3.
+- **Namespace additions** (§1.1): `tessera.from_text` (textual-DSL compile),
+  `tessera.compiler.support`, the `tessera.ga` / `tessera.ebm` math-IR surfaces,
+  and the `JitFn.explain()` compiler-tour entry point.
+- **`tessera.train`** (new §20) — the agent-native MoE training stack, now
+  lazily bound at the top level (`import tessera; tessera.train.X`) and
+  documented with its agent-native firewall and Phase-1 single-node status.
 
 ## Documentation refresh (2026-05-22)
 
@@ -134,6 +150,10 @@ import tessera
 tessera.jit          # @tessera.jit
 tessera.kernel       # @tessera.kernel
 
+# Textual frontend + compiler inspection
+tessera.from_text    # compile a JIT function from a source string (textual DSL)
+tessera.compiler.support  # tessera.compiler.support(op_name) -> OpSupport (per-op/per-target support)
+
 # Region
 tessera.Region       # Region["read"], Region["write"], etc.
 
@@ -187,6 +207,13 @@ tessera.dflash_serve      # dflash_generate_text + DFlashScheduler
 
 # Production model graphs (experimental) — see §19
 tessera.models            # DiffusionGemma config/graph/verifier + MoE routing, sampler, decode, staging
+
+# Mathematical IR surfaces (compiler-native)
+tessera.ga                # Clifford / geometric-algebra surface (multivectors, GA ops, geometric autodiff)
+tessera.ebm               # Energy-based model surface (energy primitives, samplers, partition estimators, EBM losses)
+
+# Agent-native MoE training stack (lazily bound; see §20) — also `from tessera import train`
+tessera.train             # MoERouter/MoEFeedForward, Qwen3MoE*, sparse_moe_dispatch, GRPO loop, adamw_step
 
 # Canonical dtype helpers
 tessera.dtype        # Dtype, canonicalize_dtype, result_type, planned-gated checks
@@ -256,7 +283,7 @@ def fn(...): ...
 | `deterministic` | `bool` | `False` | If `True`, raises `TesseraEffectError` if the function body contains any unseeded `random` effect op (e.g. `dropout` without `seed`). |
 | `seed` | `int \| None` | `None` | RNG seed. Required when `deterministic=True` and the body calls a `random` effect op. |
 | `bindings` | `dict[str, int] \| None` | `None` | Optional concrete dimension bindings for early constraint checking at decoration time. Example: `{"K": 128, "M": 512}`. When omitted, symbolic tensor annotations are resolved from call-time argument shapes and constraints are checked before execution. |
-| `target` | `GPUTargetProfile \| str \| None` | `None` | Target lowering profile. `None` routes to the CPU/interpreted path. `GPUTargetProfile(ISA.SM_90)` selects NVIDIA Hopper artifacts; `ISA.SM_100` and `ISA.SM_120` select Blackwell artifacts. String aliases include `cuda`, `nvidia`, `gpu`, `sm90`, `sm100`, and `sm120`. |
+| `target` | `GPUTargetProfile \| str \| None` | `None` | Target lowering profile. `None` / `"cpu"` routes to the CPU path, which executes through the `tessera_jit` MLIR→LLVM JIT lane for the covered op set (numpy reference fallback otherwise — see "Current CPU end-to-end path" below). `GPUTargetProfile(ISA.SM_90)` selects NVIDIA Hopper artifacts; `ISA.SM_100` and `ISA.SM_120` select Blackwell artifacts. String aliases include `cuda`, `nvidia`, `gpu`, `sm90`, `sm100`, `sm120`, `rocm`, `apple_cpu`, and `apple_gpu` (normalized by `python/tessera/compiler/matmul_pipeline.py`; full table in `docs/CANONICAL_API.md`). |
 | `attn_config` | `FlashAttnLoweringConfig \| None` | `None` | Flash attention tile sizes and pipeline configuration. If `None` and `target.isa >= ISA.SM_90`, `SM90_DEFAULT` is used automatically. |
 | `cpu_tile` | `tuple[int, int, int]` | `(128, 128, 64)` | CPU matmul/GEMM Schedule IR tile `(tile_m, tile_n, tile_k)` for the narrow end-to-end CPU compiler path. |
 | `source` | `str \| None` | `None` | Optional Python source text for functions created from `stdin`, notebooks, or `exec(...)` where `inspect.getsource()` cannot recover the body. |
@@ -282,6 +309,7 @@ def fn(...): ...
 | `.is_native_execution` | `bool` | `True` for native CPU/GPU runtime execution. |
 | `.lowering_diagnostics` | `tuple[JitDiagnostic, ...]` | Compile/fallback decision diagnostics. |
 | `.explain_lowering()` | `str` | Human-readable compile/fallback explanation. |
+| `.explain()` | `Explain` | A single opinionated diagnostic object for the function (the compiler-tour entry point used by `examples/getting_started/compile_and_explain.py`). |
 
 **Exceptions raised at decoration time:**
 
@@ -332,12 +360,21 @@ def gemm_256x128(A, B):
 print(gemm_256x128.schedule_ir)
 ```
 
-This path supports returned straight-line dataflow made from CPU-backed ops
-including `ops.matmul`, `ops.gemm`, `ops.relu`, `ops.sigmoid`, `ops.softmax`,
-`ops.reduce`, `ops.sum`, `ops.tanh`, `ops.sin`, and functional `ops.adam`. It
-exposes Graph IR, Schedule IR, Tile IR, and Target IR artifacts before executing
-on CPU. Other functions continue to use the eager Python fallback and expose the
-reason through `.lowering_diagnostics` and `.explain_lowering()`.
+This path exposes Graph IR, Schedule IR, Tile IR, and Target IR artifacts and
+executes on CPU. As of the 2026-06-15/16 front-to-back closure, the executed CPU
+path is the **`tessera_jit` MLIR→LLVM JIT lane** (genuine codegen-and-run, not a
+numpy reference): `@tessera.jit(target="cpu")` translates the whole-graph op-list
+into one `GraphFn` and runs it through `tessera-to-linalg → bufferize →
+linalg-to-loops → LLVM` *before* the numpy interpreter. The covered op set
+(`_JIT_GRAPH_OPS`) includes `matmul` (±transpose), `batched_gemm`,
+`add/sub/mul/div`, `relu/sigmoid/tanh/silu/gelu`, `softmax`, `rmsnorm`,
+`layer_norm`, `transpose`, `select`, `masked_fill`, and `reduce(sum/max/min/mean)`,
+over f32/f16/bf16/f64. Anything outside the covered set / dtype / rank falls back
+to the numpy reference (a fallback handles "couldn't run", never "ran wrong");
+`.execution_kind` reports `native_cpu` vs `reference_cpu`, and the decision is
+explained through `.lowering_diagnostics` and `.explain_lowering()`. See
+`docs/spec/COMPILER_REFERENCE.md` §2.3 and the front-to-back closure plan in
+`docs/audit/compiler/COMPILER_AUDIT.md` for the full lane contract.
 
 **S-series sprint S2 — additional CPU-backed ops (landed 2026-05-10).** The
 following primitives now have numpy reference implementations and are
@@ -1900,6 +1937,47 @@ multiple of KV heads, `head_dim ∈ (0, 256]` (GPU attention-kernel envelope). T
 Tile→Apple pass recognizes it and tags the region `status="metal_runtime"` (the
 per-head attention rides the `attn_bias`/`flash_attn` lane, the MoE the
 `moe_swiglu_block` lane). Lit: `tests/tessera-ir/phase8/diffusion_block_step*.mlir`.
+
+---
+
+## 20. Agent-Native MoE Training Stack (`tessera.train`)
+
+`tessera.train` is a compact, PithTrain-inspired MoE training surface
+(arXiv:2605.31463) built entirely on Tessera primitives — pure Python, no
+torch/jax/flax at runtime (Architecture Decision #23). It is **lazily bound at
+the top level**: `import tessera; tessera.train.X` resolves on first attribute
+access via the PEP 562 `__getattr__` in `python/tessera/__init__.py`, and
+`from tessera import train` works directly. Lazy binding keeps `import tessera`
+cheap and avoids an import cycle (the package imports `tessera.ops` /
+`tessera.autodiff`).
+
+**Agent-native firewall (hard rule):** nothing under `tessera.train` may import
+the compiler's audit/registry machinery (`primitive_coverage`, `op_catalog`,
+`backend_manifest`) or any C++/MLIR — those belong behind `@tessera.jit`, the
+invisible operator layer. Enforced by
+`tests/unit/test_train_agent_native_firewall.py`; the lazy export is locked by
+`tests/unit/test_train_top_level_export.py`.
+
+**Status (Phase 1, honest):** runs today on numpy and
+`@jit(target="apple_gpu")` (single node). Multi-node throughput (real EP/PP
+collectives, DualPipeV overlap, FP8 weight cache) is hardware-gated behind the
+Phase G/H NVIDIA/ROCm frontier (`docs/audit/backend/BACKEND_AUDIT.md`).
+
+| Layer | Symbol | Notes |
+|-------|--------|-------|
+| engine | `MoERouter`, `MoEFeedForward` | Top-k token routing + expert FFN. |
+| engine | `top_k_selection`, `load_balancing_loss`, `router_z_loss` | Routing primitive + the two auxiliary MoE losses. |
+| engine | `sparse_moe_dispatch` | Real per-expert routing (O(N·k), numerically identical to the dense soft-combine), tape-traceable. |
+| models | `Qwen3MoEConfig`, `Qwen3MoEBlock`, `Qwen3MoEModel` | One self-contained Qwen3-style MoE model file, built directly (no plugin registry). |
+| models | `TracedMoEPolicy` | Traceable MoE policy for RL post-training. |
+| loop | `adamw_step` | Functional AdamW step over the Tier-2 tape. |
+| loop | `GRPOConfig`, `grpo_step`, `grpo_surrogate`, `grpo_train_step` | GRPO post-training objective + loop. |
+
+Each model lives in exactly one file under `python/tessera/train/models/` and is
+instantiated directly — no string-keyed `ModuleSpec` resolution in the
+construction read-path (PithTrain principle 3). Recurring framework tasks ship as
+in-repo agent skills under `python/tessera/train/skills/` (one `SKILL.md`
+playbook per task, each with a verifiable PASS/FAIL check).
 
 ---
 

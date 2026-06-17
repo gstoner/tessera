@@ -4663,4 +4663,31 @@ __all__ = [
     "autodiff", "autocast", "rematerialize", "activation_checkpoint",
     # KV-cache handle (Phase B2)
     "cache", "distributions",
+    # Agent-native MoE training stack (lazily bound — see __getattr__ below)
+    "train",
 ]
+
+
+def __getattr__(name):
+    """Lazily expose heavy optional subpackages on first attribute access.
+
+    PEP 562 module-level ``__getattr__``. ``tessera.train`` (the agent-native
+    MoE training stack) is bound lazily rather than imported eagerly: it keeps
+    ``import tessera`` cheap and avoids an import cycle (``tessera.train``
+    imports ``tessera.ops`` / ``tessera.autodiff``, which are themselves
+    initializing while ``tessera/__init__`` runs). ``from tessera import train``
+    also resolves through this hook. The agent-native firewall
+    (``tests/unit/test_train_agent_native_firewall.py``) still holds — accessing
+    ``tessera.train`` must not pull in the compiler audit/registry machinery.
+    """
+    if name == "train":
+        import importlib
+
+        module = importlib.import_module("tessera.train")
+        globals()["train"] = module  # cache so subsequent access is direct
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | {"train"})

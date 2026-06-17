@@ -1,8 +1,10 @@
 """Tests for the agent-native MoE training scaffold (tessera.train).
 
 Covers the Phase-1 runnable surface: model forward, MoE engine auxiliary
-losses, the GRPO loop objective, and the agent-native firewall (the train
-package must not import the compiler audit/registry machinery).
+losses, and the GRPO loop objective. The agent-native firewall (the train
+package must not import the compiler audit/registry machinery) is a
+cross-cutting invariant and lives in
+``tests/unit/test_train_agent_native_firewall.py``.
 """
 
 from __future__ import annotations
@@ -83,30 +85,3 @@ def test_grpo_step_combines_policy_and_aux():
     # total = policy + lb_coef*lb + z_coef*z
     expected = out["policy"] + 1e-2 * 1.5 + 1e-3 * 3.0
     assert out["total"] == pytest.approx(expected, rel=1e-6)
-
-
-def test_agent_native_firewall():
-    """tessera.train must not pull in the compiler audit/registry machinery.
-
-    These modules (primitive_coverage / op_catalog / backend_manifest) are the
-    implicit indirection PithTrain measures as costly for agents; they belong
-    behind @jit, not in the training read-path. See tessera/train/__init__.py.
-    """
-    import sys
-
-    forbidden = {
-        "tessera.compiler.primitive_coverage",
-        "tessera.compiler.op_catalog",
-        "tessera.compiler.backend_manifest",
-    }
-    # Drop any that a *prior* test already imported, then import train fresh.
-    for name in list(sys.modules):
-        if name in forbidden:
-            del sys.modules[name]
-    for name in [n for n in list(sys.modules) if n.startswith("tessera.train")]:
-        del sys.modules[name]
-
-    import tessera.train  # noqa: F401
-
-    leaked = forbidden & set(sys.modules)
-    assert not leaked, f"tessera.train leaked compiler registry imports: {leaked}"

@@ -317,7 +317,34 @@ As of 2026-06-16 the synthesizer covers matmul-epilogue (+ residual + A-operand
 prologue), **gated-matmul (SwiGLU gate `f(A@Wg) ⊙ (A@Wu)` from primitive ops)**,
 `norm_chain` (+affine, f16/bf16), attention (f32/f16/bf16 × materialized/online ×
 causal), and pointwise DAGs (with per-feature broadcast) — all Evaluator-gated via
-the M5 displacement oracle. Open work, by leverage:
+the M5 displacement oracle (`displacement/{matmul_epilogue,norm_chain,attention,
+pointwise,gated_matmul}`).
+
+> **⚠️ Pipeline-reachability finding (2026-06-16, from validating the gated path
+> end-to-end).** The synthesized-fusion prepass (`_apple_gpu_try_synthesized_fusion`,
+> runtime.py) — where **every** region discoverer lives (matmul-epilogue, norm_chain,
+> attention, **pointwise**, gated) — is only reached when the **compile-time canonical
+> analysis** (`canonical_compile.py`) marks a program `canonical_program_executable`
+> and routes it to `compiler_path == "apple_gpu_mps"`. That happens for single
+> supported ops and recognized `known_chain`s (e.g. `matmul→gelu`, the DAG-shaped
+> `_match_swiglu_at`). A multi-op program that is *not* a single recognized chain —
+> a bare pointwise DAG `gelu(add(mul))`, **or the gate `mul(silu(matmul),matmul)`** —
+> is marked non-executable and routed to `target_ir_artifact`, which produces
+> **correct** numerics but **bypasses the prepass entirely** (the synthesized kernels
+> never run). So today the region synthesizers are proven in isolation (direct prepass
+> tests + the M5 Evaluator) and fire for gates *embedded in* an MPS-routed program,
+> but a gate-shaped (or pointwise-shaped) standalone `@jit` does **not** reach them.
+> **Closure (scoped next action):** teach the canonical analysis to recognize the
+> gate DAG (`matmul,silu,matmul,mul` sharing A — a `_match_gated_matmul_at` mirroring
+> `_match_swiglu_at`) so the program flips to `apple_gpu_mps` and the prepass runs the
+> gated kernel; then a public `@jit(target="apple_gpu")` e2e can assert
+> `execution_mode=="metal_runtime"`. This is a compile-time change with drift guards
+> (`test_fusion_intent_emitter`, `test_canonical_compile`) and a real design question
+> attached: *is the runtime prepass meant to be the live path for arbitrary multi-op
+> programs, or is `target_ir_artifact` the intended future and the prepass a
+> transitional lane?* — decide before broadening the recognizer beyond the gate.
+
+Open work, by leverage:
 
 1. **`linalg→vector` GEMM pipeline (HF — highest value).** The CPU JIT GEMM is
    ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,

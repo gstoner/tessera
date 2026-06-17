@@ -163,9 +163,25 @@ class TraceBuilder:
         graph_name = graph_name_for(name)
         if graph_name is None:
             raise TesseraTraceError(f"trace: op {name!r} is not in the op catalog")
-        tracer_args = [a for a in args if isinstance(a, Tracer)]
+        # `call_args` mirrors `args` with Tracer→value substituted lazily; it
+        # preserves variadic-operand *grouping* (a list/tuple of Tracers, the
+        # cat/stack pattern) so the concrete-execution path can reconstruct the
+        # original call.  `tracer_args` is the flattened operand set used for the
+        # IR (one SSA ref per tensor) and shape inference.
+        tracer_args: List[Tracer] = []
+        call_args: List[Any] = []
         for a in args:
-            if not isinstance(a, Tracer):
+            if isinstance(a, Tracer):
+                tracer_args.append(a)
+                call_args.append(a)
+            elif (isinstance(a, (list, tuple)) and a
+                  and all(isinstance(x, Tracer) for x in a)):
+                # Variadic tensor-list operand (e.g. ``cat([a, b], axis=…)``):
+                # flatten its tracers into the operand set but keep the group so
+                # ``original`` is still called as ``op([v0, v1], …)``.
+                tracer_args.extend(a)
+                call_args.append(list(a))
+            else:
                 raise TesseraTraceError(
                     f"trace: op {name!r} got a non-Tracer positional operand "
                     f"({type(a).__name__}); tensor inputs must be traced values "
@@ -176,7 +192,11 @@ class TraceBuilder:
         # per-op shape rule). Falls back to the shape-rule path for value-less
         # specs (the executable subset only).
         if tracer_args and all(t.value is not None for t in tracer_args):
-            out = original(*[t.value for t in tracer_args], **kwargs)
+            def _concrete(x: Any) -> Any:
+                if isinstance(x, Tracer):
+                    return x.value
+                return [t.value for t in x]  # variadic group
+            out = original(*[_concrete(x) for x in call_args], **kwargs)
             if isinstance(out, tuple):
                 raise TesseraTraceError(
                     f"trace: multi-output op {name!r} is not supported (F6+)")

@@ -1549,6 +1549,20 @@ class _OpExtractor(ast.NodeVisitor):
         attr_params = _POSITIONAL_ATTR_PARAMS.get(mlir_name, ())
         scalar_seen = 0
         for arg in call.args:
+            # Variadic tensor-list operand (the cat/stack pattern:
+            # ``cat([a, b], axis=…)``). A list/tuple of defined tensor values
+            # flattens into individual operands so the op lowers to
+            # ``tessera.cat %a, %b {axis = …}`` instead of a dropped "%?".
+            if isinstance(arg, (ast.List, ast.Tuple)):
+                raw = [self._emit_expr(e) for e in arg.elts]
+                if raw and all(
+                        v is not None and self._is_defined_value(v) for v in raw):
+                    elts: list[str] = [v for v in raw if v is not None]
+                    for v in elts:
+                        operands.append(v)
+                        operand_types.append(
+                            str(self._value_types.get(v, TENSOR_OPAQUE)))
+                    continue
             operand = self._emit_expr(arg)
             if operand is not None and self._is_defined_value(operand):
                 operands.append(operand)

@@ -296,8 +296,11 @@ _SPECS = [
     OpSpec("permute", "tessera.permute", 1, 1, lowering="layout_transform"),
     OpSpec("broadcast", "tessera.broadcast", 1, 1, lowering="layout_transform"),
     OpSpec("expand", "tessera.expand", 1, 1, lowering="layout_transform"),
-    OpSpec("cat", "tessera.cat", 1, 1, lowering="layout_transform"),
-    OpSpec("stack", "tessera.stack", 1, 1, lowering="layout_transform"),
+    # cat/stack are variadic: ``cat([a, b, …], axis)`` flattens its tensor list
+    # into N≥1 operands (the AST/runtime frontends expand the list), so the spec
+    # accepts a range rather than a fixed arity-1.
+    OpSpec("cat", "tessera.cat", 1, 64, lowering="layout_transform"),
+    OpSpec("stack", "tessera.stack", 1, 64, lowering="layout_transform"),
     OpSpec("split", "tessera.split", 1, 1, lowering="layout_transform"),
     OpSpec("chunk", "tessera.chunk", 1, 1, lowering="layout_transform"),
     OpSpec("pad", "tessera.pad", 1, 1, lowering="layout_transform"),

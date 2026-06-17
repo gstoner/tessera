@@ -2940,6 +2940,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "softcap": _apple_gpu_dispatch_softcap,
         "transpose": _apple_gpu_dispatch_transpose,
         "gather": _apple_gpu_dispatch_gather,
+        "concat": _apple_gpu_dispatch_concat,
         "loss_compose": _apple_gpu_dispatch_loss,
         "norm_compose": _apple_gpu_dispatch_norm,
         "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
@@ -8545,6 +8546,112 @@ def _apple_gpu_dispatch_gather(op_name: str, operands: list[Any],
         sym(t_ptr, idx_ptr, o_ptr,
             ctypes.c_int32(rows), ctypes.c_int32(cols), ctypes.c_int32(n_idx))
         return out.reshape(tuple(idx_shape) + (cols,))
+
+    return _apple_gpu_run_checked(op_name, _gpu, _host)
+
+
+def _apple_gpu_mpsgraph_concat_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_concat_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),    # a (outer, a_axis, inner)
+        ctypes.POINTER(ctypes.c_float),    # b (outer, b_axis, inner)
+        ctypes.POINTER(ctypes.c_float),    # out (outer, a_axis+b_axis, inner)
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]                                       # outer, a_axis, b_axis, inner
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_concat_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_concat_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_concat(op_name: str, operands: list[Any],
+                               kwargs: dict, np: Any) -> Any:
+    """tessera.cat via the MPSGraph concatTensors:dimension: lane (KV-cache
+    append). v1 envelope: two operands concatenated along one axis. Any rank /
+    axis flattens to an (outer, axis, inner) view — outer = ∏ dims before the
+    axis, inner = ∏ dims after — so the GPU sees a 3-axis concat along dim 1.
+    >2 operands or a dtype outside {f32, f16, bf16} falls back to np.concatenate.
+    f32 + f16 native; bf16 rides the f16 raw path."""
+    arrays = [np.asarray(o) for o in operands]
+
+    def _host() -> Any:
+        return np.ascontiguousarray(np.concatenate(arrays, axis=int(kwargs.get("axis", 0))))
+
+    # v1 fast path: exactly two equal-rank operands.
+    if len(arrays) != 2 or arrays[0].ndim != arrays[1].ndim or arrays[0].ndim == 0:
+        return _host()
+    a, b = arrays
+    if a.dtype != b.dtype:
+        return _host()
+    rank = a.ndim
+    axis = int(kwargs.get("axis", 0))
+    if axis < 0:
+        axis += rank
+    if not (0 <= axis < rank):
+        return _host()
+    # Every non-axis dim must agree (numpy concat contract); flatten to
+    # (outer, axis, inner).
+    for d in range(rank):
+        if d != axis and a.shape[d] != b.shape[d]:
+            return _host()
+    outer = 1
+    for d in range(axis):
+        outer *= int(a.shape[d])
+    inner = 1
+    for d in range(axis + 1, rank):
+        inner *= int(a.shape[d])
+    a_axis, b_axis = int(a.shape[axis]), int(b.shape[axis])
+    out_shape = list(a.shape)
+    out_shape[axis] = a_axis + b_axis
+
+    bf16_dtype = _bfloat16_dtype()
+    lanes: dict[Any, tuple[Any, Any, Any]] = {
+        np.float32: (np.float32, _apple_gpu_mpsgraph_concat_f32, ctypes.c_float),
+        np.float16: (np.float16, _apple_gpu_mpsgraph_concat_f16, ctypes.c_uint16),
+    }
+    if bf16_dtype is not None:
+        lanes[bf16_dtype] = (bf16_dtype, _apple_gpu_mpsgraph_concat_f16,
+                             ctypes.c_uint16)
+
+    lane = lanes.get(a.dtype.type)
+    if lane is None:
+        return _host()
+    run_dtype, sym_getter, c_elem = lane
+    sym = sym_getter()
+    if sym is None:
+        return _host()
+
+    def _gpu() -> Any:
+        ac = np.ascontiguousarray(a, dtype=run_dtype)
+        bc = np.ascontiguousarray(b, dtype=run_dtype)
+        out = np.empty(tuple(out_shape), dtype=run_dtype)
+        if c_elem is ctypes.c_uint16:
+            a_ptr = ac.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            b_ptr = bc.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            o_ptr = out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        else:
+            a_ptr = ac.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            b_ptr = bc.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            o_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(a_ptr, b_ptr, o_ptr, ctypes.c_int32(outer), ctypes.c_int32(a_axis),
+            ctypes.c_int32(b_axis), ctypes.c_int32(inner))
+        return out
 
     return _apple_gpu_run_checked(op_name, _gpu, _host)
 

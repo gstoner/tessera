@@ -803,6 +803,15 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         if isinstance(axes, list):
             axes = tuple(axes)
         return np.transpose(operands[0], axes)
+    if op_name == "tessera.cat":
+        # Variadic: the frontends flatten ``cat([a, b, …], axis)`` into N
+        # operands, so re-pack them as the concatenation list here (the public
+        # ``cat(xs, axis)`` would otherwise bind operand[1] to ``axis``).
+        return np.concatenate([np.asarray(o) for o in operands],
+                              axis=int(kwargs.get("axis", 0)))
+    if op_name == "tessera.stack":
+        return np.stack([np.asarray(o) for o in operands],
+                        axis=int(kwargs.get("axis", 0)))
     if op_name == "tessera.cast":
         dtype = str(kwargs.get("dtype", "fp32"))
         cast_map: dict[str, Any] = {"bf16": np.float32, "fp16": np.float16, "fp32": np.float32, "fp64": np.float64}

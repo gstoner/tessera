@@ -1776,6 +1776,33 @@ extern "C" void tessera_apple_gpu_mpsgraph_gather_f16(
   ts_stub_gather<uint16_t>(table, indices, out, rows, cols, n_idx);
 }
 
+// Concat (2026-06-17) — host parity: per outer slice, a's axis-block then b's.
+template <typename T>
+static void ts_stub_concat(const T* a, const T* b, T* out, int32_t outer,
+                           int32_t a_axis, int32_t b_axis, int32_t inner) {
+  size_t aBlk = (size_t)a_axis * inner;
+  size_t bBlk = (size_t)b_axis * inner;
+  for (int32_t o = 0; o < outer; ++o) {
+    T* dst = out + (size_t)o * (aBlk + bBlk);
+    const T* aSrc = a + (size_t)o * aBlk;
+    const T* bSrc = b + (size_t)o * bBlk;
+    for (size_t i = 0; i < aBlk; ++i) dst[i] = aSrc[i];
+    for (size_t i = 0; i < bBlk; ++i) dst[aBlk + i] = bSrc[i];
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_concat_f32(
+    const float* a, const float* b, float* out, int32_t outer, int32_t a_axis,
+    int32_t b_axis, int32_t inner) {
+  ts_stub_concat<float>(a, b, out, outer, a_axis, b_axis, inner);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_concat_f16(
+    const uint16_t* a, const uint16_t* b, uint16_t* out, int32_t outer,
+    int32_t a_axis, int32_t b_axis, int32_t inner) {
+  ts_stub_concat<uint16_t>(a, b, out, outer, a_axis, b_axis, inner);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
                                                      float* out, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {

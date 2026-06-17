@@ -14947,6 +14947,61 @@ static void ts_host_gather(const T *table, const int32_t *indices, T *out,
   }
 }
 
+// ── Concat (MPSGraph concatTensors:dimension:) ───────────────────────────────
+// Phase 2 displacement (2026-06-17): the KV-cache-append data-mover. v1 envelope:
+// concatenate two operands along one axis. Any rank / axis flattens to a 3-axis
+// (outer, axis, inner) view — outer = ∏ dims before the concat axis, inner = ∏
+// dims after it — so a/b differ only on the middle (axis) extent. The two views
+// concat along dim 1 → (outer, a_axis+b_axis, inner). Value-preserving, so
+// f16/bf16 share the 2-byte raw path.
+static bool mpsg_run_concat(MetalDeviceContext &ctx, const void *a, const void *b,
+                            void *out, int32_t outer, int32_t a_axis,
+                            int32_t b_axis, int32_t inner, MPSDataType ioType,
+                            size_t elemSize) {
+  if (outer <= 0 || inner <= 0 || (a_axis <= 0 && b_axis <= 0)) return true;
+  @autoreleasepool {
+    size_t aBytes = (size_t)outer * a_axis * inner * elemSize;
+    size_t bBytes = (size_t)outer * b_axis * inner * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, a, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, b, bBytes);
+    if (!bufA || !bufB) return false;
+    MPSGraph *g = [MPSGraph new];
+    NSArray<NSNumber *> *aShape = @[ @(outer), @(a_axis), @(inner) ];
+    NSArray<NSNumber *> *bShape = @[ @(outer), @(b_axis), @(inner) ];
+    MPSGraphTensor *phA = [g placeholderWithShape:aShape dataType:ioType name:nil];
+    MPSGraphTensor *phB = [g placeholderWithShape:bShape dataType:ioType name:nil];
+    MPSGraphTensor *y = [g concatTensors:@[ phA, phB ] dimension:1 name:nil];
+    if (!y) return false;
+    MPSGraphTensorData *ad =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
+    MPSGraphTensorData *bd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{phA : ad, phB : bd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+// Host concat fallback: per outer slice, copy a's axis-block then b's.
+template <typename T>
+static void ts_host_concat(const T *a, const T *b, T *out, int32_t outer,
+                           int32_t a_axis, int32_t b_axis, int32_t inner) {
+  size_t aBlk = (size_t)a_axis * inner;
+  size_t bBlk = (size_t)b_axis * inner;
+  for (int32_t o = 0; o < outer; ++o) {
+    T *dst = out + (size_t)o * (aBlk + bBlk);
+    const T *aSrc = a + (size_t)o * aBlk;
+    const T *bSrc = b + (size_t)o * bBlk;
+    for (size_t i = 0; i < aBlk; ++i) dst[i] = aSrc[i];
+    for (size_t i = 0; i < bBlk; ++i) dst[aBlk + i] = bSrc[i];
+  }
+}
+
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
                            void *out, int64_t n, MPSDataType ioType,
                            size_t elemSize) {
@@ -18408,6 +18463,33 @@ extern "C" void tessera_apple_gpu_mpsgraph_gather_f16(
                       MPSDataTypeFloat16, 2))
     return;
   ts_host_gather<uint16_t>(table, indices, out, rows, cols, n_idx);
+}
+
+// ── Concat C ABI (2026-06-17) ────────────────────────────────────────────────
+// Two operands flattened to (outer, axis, inner) views; out is the same outer ×
+// inner with the two axis-extents stacked: (outer, a_axis+b_axis, inner). The
+// KV-cache-append case (concat along the sequence axis). f16 is the 2-byte raw
+// path (also bf16 — concat is value-preserving).
+extern "C" void tessera_apple_gpu_mpsgraph_concat_f32(
+    const float *a, const float *b, float *out, int32_t outer, int32_t a_axis,
+    int32_t b_axis, int32_t inner) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_concat(ctx, a, b, out, outer, a_axis, b_axis, inner,
+                      MPSDataTypeFloat32, 4))
+    return;
+  ts_host_concat<float>(a, b, out, outer, a_axis, b_axis, inner);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_concat_f16(
+    const uint16_t *a, const uint16_t *b, uint16_t *out, int32_t outer,
+    int32_t a_axis, int32_t b_axis, int32_t inner) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_concat(ctx, a, b, out, outer, a_axis, b_axis, inner,
+                      MPSDataTypeFloat16, 2))
+    return;
+  ts_host_concat<uint16_t>(a, b, out, outer, a_axis, b_axis, inner);
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op,

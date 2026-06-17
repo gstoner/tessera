@@ -105,6 +105,12 @@ _APPLE_GPU_TRANSPOSE_OPS = frozenset({"tessera.transpose"})
 # second structural data-mover after transpose — each one widens what the general
 # `per_op_metal` residency gate accepts. A first-class runtime op.
 _APPLE_GPU_GATHER_OPS = frozenset({"tessera.gather"})
+# Concat on a real MPSGraph kernel (2026-06-17, concatTensors:dimension:). The
+# KV-cache-append data-mover: stack two operands along one axis. The third
+# structural data-mover after transpose + gather — each widens what the general
+# `per_op_metal` residency gate accepts (a KV append mid-program stays GPU-
+# resident). A first-class runtime op.
+_APPLE_GPU_CONCAT_OPS = frozenset({"tessera.cat"})
 # Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
 # lanes (per-element recipe + reduce). One dispatcher, no dedicated kernels.
 _APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
@@ -266,6 +272,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
     | _APPLE_GPU_SOFTCAP_OPS | _APPLE_GPU_TRANSPOSE_OPS | _APPLE_GPU_GATHER_OPS
+    | _APPLE_GPU_CONCAT_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
     | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
@@ -294,6 +301,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_SOFTCAP_OPS, "softcap")
     put(_APPLE_GPU_TRANSPOSE_OPS, "transpose")
     put(_APPLE_GPU_GATHER_OPS, "gather")
+    put(_APPLE_GPU_CONCAT_OPS, "concat")
     put(_APPLE_GPU_LOSS_COMPOSE_OPS, "loss_compose")
     put(_APPLE_GPU_NORM_COMPOSE_OPS, "norm_compose")
     put(_APPLE_GPU_ATTN_WRAPPER_OPS, "attn_wrapper")

@@ -310,11 +310,32 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `"gather"` lane). It immediately compounds on the residency gate — an embedding
   lookup mid-program (`gather→matmul`) now runs `native_gpu` instead of demoting.
   Guards: `tests/unit/test_apple_gpu_gather.py` (handler vs numpy over 1D/N-D
-  indices, negative indices, f16, jit, no-fallback-on-Metal). *Still open:* the
-  remaining data-movers (concat — KV-cache append; slice), same `.mm` recipe, plus
-  the `norm_chain` broadening (bare norms already run on the MPSGraph rowop lane —
-  no numpy there to displace, so deliberately deferred) — all Evaluator-gated,
-  never displacing a working MPSGraph call.
+  indices, negative indices, f16, jit, no-fallback-on-Metal).
+  **Concat landed (2026-06-17) — third data-mover + a frontend-gap fix.**
+  `tessera.cat` now runs on a real MPSGraph kernel (`concatTensors:dimension:`,
+  header-grounded): the KV-cache-append data-mover — two operands stacked along
+  one axis, flattened to an `(outer, axis, inner)` view so *any* rank/axis is one
+  GPU concat along dim 1; value-preserving, f32 native + f16/bf16 on the 2-byte
+  raw path. >2 operands or mixed dtypes fall back to `np.concatenate` inside the
+  dispatcher. New `.mm` `mpsg_run_concat` + `tessera_apple_gpu_mpsgraph_concat_{f32,f16}`
+  + host fallback + stub parity; first-class runtime op (`_APPLE_GPU_CONCAT_OPS` →
+  `"concat"` lane + `_apple_gpu_dispatch_concat`). Unlike transpose/gather, cat
+  was blocked in **both** frontend builders before it could reach a kernel: the
+  AST `GraphIRBuilder` and the abstract-interp tracer each rejected a *list* of
+  tensor operands (`cat([a, b], axis)` → empty body → `_trace_deferred` /
+  "non-Tracer positional operand"), and the op-catalog declared cat/stack as
+  fixed arity-1. Fixed generally (also unblocks `stack`): both builders now expand
+  a list/tuple of defined tensor values into flat operands, cat/stack arity widened
+  to variadic (1–64), and `_execute_op` re-packs the flattened operands for the CPU
+  plan (`np.concatenate`/`np.stack`). A single-op `@jit(apple_gpu)` cat now reports
+  `execution_kind="native_gpu"`; `matmul→cat` compounds on the per_op_metal gate
+  (a KV append mid-program stays GPU-resident). Guards:
+  `tests/unit/test_apple_gpu_concat.py` (handler vs numpy over axis 0/1/-1 + rank-3
+  seq-axis + f16 + >2-operand fallback, jit native_gpu, matmul→cat per_op_metal,
+  no-fallback-on-Metal). *Still open:* the remaining data-mover (slice), same `.mm`
+  recipe, plus the `norm_chain` broadening (bare norms already run on the MPSGraph
+  rowop lane — no numpy there to displace, so deliberately deferred) — all
+  Evaluator-gated, never displacing a working MPSGraph call.
 - **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
   The synthesizer had a measured-latency, correctness-gated variant autotuner
   (`autotune_matmul_epilogue` — times each MSL variant on-device, gates each

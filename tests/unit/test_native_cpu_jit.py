@@ -25,6 +25,16 @@ import pytest
 import tessera as ts
 from tessera import _jit_boundary as jb
 
+# The CPU JIT lane is the *executed* path here, so every test needs the compiled
+# `libtessera_jit` dylib. CI's unit lane is Python-only (no C++ build), so skip
+# the whole module when the lib isn't built rather than hard-failing — exactly
+# the pattern the Apple/lit suites use when their backend is unavailable. Locally
+# (where `ninja -C build tessera_jit` has run) every test stays live.
+pytestmark = pytest.mark.skipif(
+    not jb.is_available(),
+    reason="libtessera_jit not built; run `ninja -C build tessera_jit` "
+           "(or set TESSERA_JIT_LIB)")
+
 _RNG = np.random.default_rng(20260615)
 
 

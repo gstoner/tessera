@@ -341,10 +341,14 @@ def test_gated_over_cap_falls_back_to_reference():
     assert np.allclose(out, region.reference(A, Wg, Wu), atol=1e-4)
 
 
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="the gated prepass block only claims ops on metal_runtime")
 def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
     # The orchestrator must fuse matmul(A,Wg)->silu, matmul(A,Wu), mul(...) into
     # ONE gated kernel — and the gated pass must run BEFORE matmul-epilogue (which
-    # would otherwise greedily claim matmul(A,Wg)->silu and starve the gate).
+    # would otherwise greedily claim matmul(A,Wg)->silu and starve the gate). Off
+    # Metal the gated block makes no claim (the per-op lane handles it), so this
+    # full-fusion assertion is a Metal property.
     import numpy as np
     from tessera.runtime import _apple_gpu_try_synthesized_fusion
 
@@ -359,9 +363,8 @@ def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
     values = {"A": A, "Wg": Wg, "Wu": Wu}
     consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
     assert consumed == {0, 1, 2, 3}
-    ref = GatedMatmulRegion().reference(A, Wg, Wu)
-    if sys.platform == "darwin":
-        assert np.allclose(values["o"], ref, atol=1e-4)
+    assert np.allclose(values["o"], GatedMatmulRegion().reference(A, Wg, Wu),
+                       atol=1e-4)
 
 
 @pytest.mark.skipif(sys.platform != "darwin",

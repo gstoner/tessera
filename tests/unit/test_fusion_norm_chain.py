@@ -118,9 +118,14 @@ def test_f16_norm_chain_runs_native_and_matches():
     region = F.NormChainRegion("rmsnorm", add_residual=True)
     X = _RNG.standard_normal((8, 32)).astype(np.float32)
     R = _RNG.standard_normal((8, 32)).astype(np.float32)
+    # Probe the f32 path first (mirrors the bf16 test below): only require the
+    # native `half` kernel where Metal actually runs — off Metal (Linux CI) it
+    # correctly falls back to the f32 reference cast to f16.
+    _f32_out, f32_ex = F.run_norm_chain_region(region, X, R)
     out, ex = F.run_norm_chain_region(region, X.astype(np.float16),
                                       R.astype(np.float16))
-    assert ex == "metal_runtime"               # native MSL `half`
+    if f32_ex == "metal_runtime":
+        assert ex == "metal_runtime"           # native MSL `half`
     assert np.asarray(out).dtype == np.float16
     # f32-accumulated reduction → half-precision accurate vs the f32 reference.
     np.testing.assert_allclose(np.asarray(out).astype(np.float32),

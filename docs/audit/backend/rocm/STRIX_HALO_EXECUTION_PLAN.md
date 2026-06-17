@@ -83,9 +83,20 @@ Two viable emit paths for Stage A (pick after a spike):
 
 ### Honest external gates
 
-- **ROCm support for gfx1151 has been partial/unofficial.** Expect a recent ROCm (≈6.4+/7.x) and
-  possibly `HSA_OVERRIDE_GFX_VERSION=11.5.1` (or nearest supported) to get HIP to enumerate the iGPU.
-  **Verify on the box first** — do not assume the runtime enumerates gfx1151 out of the box.
+- **ROCm 7.2.x runs on gfx1151 in practice — but it is community/nightly support, not AMD's
+  official matrix.** Multiple working stacks are documented on ROCm 7.0/7.2 (ollama ~40 tok/s on
+  30B, a known-good llama.cpp stack, the TinyComputers 7.0→7.2 upgrade guide), and they generally
+  enumerate the iGPU **without** an `HSA_OVERRIDE_GFX_VERSION` hack on 7.2. However, AMD's official
+  support matrix still lists the Ryzen AI Max+ 395 only under **ROCm 6.4.4**; gfx1151 on 7.2.x is
+  unofficial, and stable ROCm does not ship gfx1151 kernels for every component (some ecosystems
+  need nightly wheels). Tessera pins ROCm **7.2.3** (≥ the 7.2.2 the user confirmed works), which
+  comfortably covers gfx1151 — but treat 7.2.x/gfx1151 as community-supported, and still
+  `rocminfo`-verify enumeration on the box before Stage B.
+- **⚠️ Documented gfx1151 bf16 correctness bugs (ROCm/ROCm#6034: "5 critical bf16 bugs").** This is
+  directly load-bearing for us: Stage D's first proof is a **bf16 WMMA GEMM**. Mitigation —
+  bring up the **fp32←f16 and f16←f16 WMMA combos first** (Stage D), then bf16, and cross-check any
+  bf16 mismatch against the upstream bug list rather than assuming a Tessera codegen bug. The
+  Evaluator's execute-and-compare oracle is exactly the instrument to catch this.
 - **Bandwidth-bound:** 256 GB/s. Roofline analysis and `flywheel.py` per-chip calibration should get
   a Strix Halo entry; perf expectations are capacity-led (128 GB unified) not bandwidth-led.
 

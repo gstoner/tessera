@@ -1610,6 +1610,54 @@ void TransposeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<FoldTransposeOfTranspose>(context);
 }
 
+namespace {
+// Fold a producer tessera.transpose into the matmul's transpose flag — the
+// per-op-hook twin of CanonicalizeTesseraIR's TransposeIntoMatmul, so the fold
+// also fires under the generic --canonicalize the tessera_jit CPU lane runs (not
+// only the custom tessera-canonicalize pass). A folded transpose composes with
+// an existing flag by XOR: transpose(Aᵀ) = A. All other attrs are preserved.
+struct FoldTransposeIntoMatmul : public OpRewritePattern<MatmulOp> {
+  using OpRewritePattern<MatmulOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(MatmulOp mm,
+                                PatternRewriter &rewriter) const override {
+    auto isTranspose = [](Operation *o) {
+      return o && o->getName().getStringRef() == "tessera.transpose";
+    };
+    Operation *aDef = mm.getLhs().getDefiningOp();
+    Operation *bDef = mm.getRhs().getDefiningOp();
+    bool transA = false, transB = false;
+    Value a = mm.getLhs(), b = mm.getRhs();
+    if (isTranspose(aDef)) { transA = true; a = aDef->getOperand(0); }
+    if (isTranspose(bDef)) { transB = true; b = bDef->getOperand(0); }
+    if (!transA && !transB)
+      return failure();
+    OperationState st(mm.getLoc(), "tessera.matmul");
+    st.addOperands({a, b});
+    st.addTypes(mm->getResultTypes());
+    auto getFlag = [&](StringRef n) {
+      if (auto fb = mm->getAttrOfType<BoolAttr>(n))
+        return fb.getValue();
+      return false;
+    };
+    for (auto &na : mm->getAttrs())
+      if (na.getName() != "transposeA" && na.getName() != "transposeB")
+        st.addAttribute(na.getName(), na.getValue());
+    st.addAttribute("transposeA",
+                    rewriter.getBoolAttr(transA != getFlag("transposeA")));
+    st.addAttribute("transposeB",
+                    rewriter.getBoolAttr(transB != getFlag("transposeB")));
+    Operation *n = rewriter.create(st);
+    rewriter.replaceOp(mm, n->getResults());
+    return success();
+  }
+};
+} // namespace
+
+void MatmulOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add<FoldTransposeIntoMatmul>(context);
+}
+
 // Sprint V1 (2026-05-22) — LayerNormOp: shape-preserving + eps > 0.
 LogicalResult LayerNormOp::verify() {
   auto inTy = dyn_cast<RankedTensorType>(getX().getType());

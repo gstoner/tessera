@@ -65,6 +65,11 @@ void registerTesseraPasses() {
       [](OpPassManager &pm) {
         addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
+        // 2026-06-17: layout legality now runs in the named pipelines (was
+        // standalone) — early, so unknown-layout / producer-consumer-mismatch /
+        // scale-without-layout violations surface with the other structural
+        // diagnostics before lowering.
+        pm.addPass(createLayoutLegalityPass());
         // Sprint V6b (2026-05-22): re-check symbolic-dim equality
         // AFTER DistributionLoweringPass so a downstream pass that
         // accidentally breaks a `where D = H * Dh` clause fails
@@ -175,6 +180,8 @@ void registerTesseraPasses() {
       [](OpPassManager &pm) {
         addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
+        // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
+        pm.addPass(createLayoutLegalityPass());
         // Sprint V6b (2026-05-22): symbolic-dim equality recheck
         // after distribution lowering (see lowerToX86 comment).
         pm.addPass(createSymbolicDimEqualityPass());
@@ -216,6 +223,8 @@ void registerTesseraPasses() {
   auto buildCUDA13Pipeline = [](OpPassManager &pm) {
     addGraphIRPreLoweringPasses(pm);
     pm.addPass(createDistributionLoweringPass());
+    // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
+    pm.addPass(createLayoutLegalityPass());
     // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
     pm.addPass(createSymbolicDimEqualityPass());
     pm.addPass(createTileIRLoweringPass());

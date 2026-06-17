@@ -45,7 +45,7 @@ broadcast,1,0,0,1,1,,structural_only,unclassified — defaults to structural_onl
 broadcast_to_axis,3,0,0,3,0,,needs_direct_test,category default for 'collective'
 bsmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,7,31,0,38,0,fp32,needs_direct_test,category default for 'layout_transform'
+cast,7,34,0,41,0,fp32,needs_direct_test,category default for 'layout_transform'
 cat,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 ceil,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'
@@ -254,7 +254,7 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,369,164,15,533,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
+matmul,370,169,15,539,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
 maximum,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
@@ -433,7 +433,7 @@ tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for '
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 top_k,14,0,0,14,0,,structural_only,unclassified — defaults to structural_only
-transpose,15,23,0,38,0,bf16 f16 fp32,needs_direct_test,category default for 'layout_transform'
+transpose,16,27,0,43,0,bf16 f16 fp32,needs_direct_test,category default for 'layout_transform'
 tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'

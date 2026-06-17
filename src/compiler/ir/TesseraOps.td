@@ -188,6 +188,10 @@ def Tessera_MatmulOp : Op<
 
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
+  // Per-op hook twin of CanonicalizeTesseraIR's TransposeIntoMatmul, so the
+  // transpose→flag fold also fires under the generic --canonicalize the CPU JIT
+  // runs (reaching the executed path, not just the custom tessera-canonicalize).
+  let hasCanonicalizer = 1;
 }
 
 // Apple Value Target IR sprint 6 (2026-06-03): batched matrix multiply.

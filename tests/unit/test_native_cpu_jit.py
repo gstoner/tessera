@@ -283,6 +283,24 @@ def test_transpose_of_transpose_folds_and_is_identity():
     np.testing.assert_array_equal(got, x)
 
 
+def _matmul_transposed_a(a, b):
+    return ts.ops.matmul(ts.ops.transpose(a), b)
+
+
+def test_transpose_into_matmul_folds_on_executed_path():
+    # MatmulOp::getCanonicalizationPatterns (the per-op-hook twin of
+    # CanonicalizeTesseraIR's TransposeIntoMatmul) now fires under the generic
+    # --canonicalize the tessera_jit CPU lane runs, so matmul(transpose(A), B)
+    # folds the transpose into the transposeA flag on the executed path and
+    # equals A.T @ B numerically.
+    fn = ts.jit(target="cpu")(_matmul_transposed_a)
+    a = _f32(8, 4)
+    b = _f32(8, 16)
+    got, used_jit = _ran_through_jit(fn, a, b)
+    assert used_jit
+    np.testing.assert_allclose(got, a.T @ b, rtol=1e-5, atol=1e-5)
+
+
 # ── Phase 2: the executed GEMM uses the linalg K-reduction loop ─────────────
 def test_gemm_multi_op_is_exact_over_k():
     # A multi-op graph routes matmul through tessera_jit (tessera.matmul →

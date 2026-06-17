@@ -132,3 +132,30 @@ func.func @one_sub_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
   %0 = "tessera.sub"(%one, %x) : (tensor<4x8xf32>, tensor<4x8xf32>) -> tensor<4x8xf32>
   return %0 : tensor<4x8xf32>
 }
+
+// transpose-into-matmul: matmul(transpose(A), B) folds the transpose into the
+// transposeA flag (per-op MatmulOp canonicalizer — the twin of
+// CanonicalizeTesseraIR's TransposeIntoMatmul, now firing under --canonicalize
+// so it reaches the executed tessera_jit CPU path).
+// CHECK-LABEL: func.func @transpose_into_matmul
+// CHECK-NOT: tessera.transpose
+// CHECK: tessera.matmul
+// CHECK-SAME: transposeA = true
+func.func @transpose_into_matmul(%a: tensor<8x4xf32>, %b: tensor<8x16xf32>) -> tensor<4x16xf32> {
+  %at = "tessera.transpose"(%a) : (tensor<8x4xf32>) -> tensor<4x8xf32>
+  %0 = "tessera.matmul"(%at, %b) : (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
+  return %0 : tensor<4x16xf32>
+}
+
+// Double-transpose into matmul composes by XOR: an explicit transposeB=true with
+// a folded transpose(B) cancels back to transposeB=false (the default-false attr
+// is elided on print, so it must NOT survive as transposeB = true).
+// CHECK-LABEL: func.func @xor_flag_compose
+// CHECK-NOT: tessera.transpose
+// CHECK: tessera.matmul
+// CHECK-NOT: transposeB = true
+func.func @xor_flag_compose(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) -> tensor<4x16xf32> {
+  %bt = "tessera.transpose"(%b) : (tensor<8x16xf32>) -> tensor<16x8xf32>
+  %0 = "tessera.matmul"(%a, %bt) {transposeB = true} : (tensor<4x8xf32>, tensor<16x8xf32>) -> tensor<4x16xf32>
+  return %0 : tensor<4x16xf32>
+}

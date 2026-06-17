@@ -150,9 +150,22 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   actually inherit `[Pure]` from their base classes. Adding explicit
   `MemoryEffectsOpInterface` yields no practical CSE/DCE win (writes neither CSE
   nor DCE in MLIR's model) and risks subtle reordering bugs — so the current
-  treatment is the right one. *Remaining Phase 1 (lower priority):* migrate the 5
-  `CanonicalizeTesseraIR` patterns to per-op hooks (only those whose output the CPU
-  JIT can lower — `fused_epilogue`/`conv` ones would break it), `LayoutAssignmentPass`
+  treatment is the right one. **Graph-IR folder tail closed (2026-06-17):** of the
+  5 `CanonicalizeTesseraIR` patterns, only 2 were CPU-JIT-lowerable. `TransposeIntoMatmul`
+  is now also a per-op hook — `MatmulOp::getCanonicalizationPatterns` (the exact
+  proven XOR flag-composition: `transpose(Aᵀ)=A`) — so the transpose→flag fold fires
+  under the generic `--canonicalize` the tessera_jit CPU lane runs, reaching the
+  executed path (proven by `tests/tessera-ir/phase2/graph_ir_folders.mlir` +
+  `test_native_cpu_jit.py::test_transpose_into_matmul_folds_on_executed_path`). The
+  original stays in `CanonicalizeTesseraIR` for the custom-pass pipelines
+  (zero-regression). `EraseIdentityCast` was already covered by `CastOp::fold`. The
+  remaining 3 (`FuseMatmulBiasGELU`/`FuseConvRelu`/`DropoutZeroSimplify`) are
+  deliberately NOT migrated — they emit `fused_epilogue`/`conv2d_nhwc`/`flash_attn`
+  the rank-2 CPU JIT can't lower. *Latent finding:* `EraseIdentityCast` (in
+  tessera-canonicalize, which runs before LayoutLegality) erases a same-type
+  `cast{layout}` before the legality check sees it — a concern for the future
+  `LayoutAssignmentPass` (which inserts same-type `cast{layout}` markers).
+  *Remaining Phase 1 (lower priority):* `LayoutAssignmentPass`
   v1 (layout doesn't reach the layout-agnostic rank-2 CPU JIT lane — low value until
   a layout-sensitive backend executes).
   *Flash-attn streaming is NOT a CPU-lane item* — the CPU JIT is a rank-2 simple-op
@@ -502,9 +515,17 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   checks the operands that carry each contract. matmul stays verbatim (the V4a
   diagnostic + `matmulAcceptSet()` are pinned by existing tests). Lit:
   `tests/tessera-ir/phase2/layout_conv_flashattn_accept_set.mlir`; Python:
-  `tests/unit/test_layout_legality_extended.py`. Still open: dtype / aliasing /
-  buffer-binding contracts, and wiring `LayoutLegalityPass` into the named
-  pipelines (it's still registered standalone). **Phase 1** of the closure plan
+  `tests/unit/test_layout_legality_extended.py`. **Pipeline wiring landed
+  (2026-06-17):** `LayoutLegalityPass` now runs inside `tessera-lower-to-x86`,
+  `tessera-lower-to-gpu`, and `buildCUDA13Pipeline` (the nvidia-pipeline aliases)
+  — early, after distribution lowering and before `SymbolicDimEqualityPass`, so
+  unknown-layout / producer-consumer-mismatch / scale-without-layout violations
+  surface with the other structural diagnostics during real lowering (was
+  standalone `--tessera-layout-legality`). Proven firing end-to-end by
+  `tests/tessera-ir/phase2/layout_legality_in_pipeline.mlir` (x86) +
+  `tests/unit/test_layout_legality_pipeline_wiring.py` (all three builders,
+  before-symdim ordering). Still open: dtype / aliasing / buffer-binding
+  contracts. **Phase 1** of the closure plan
   adds the missing *assignment* half — `LayoutAssignmentPass` (seed kernel layouts
   → propagate through pointwise → insert `cast{layout}`), with the legality pass
   reused as its verifier. Phase 1 also covers the Graph-IR `hasFolder`/

@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **457** ops in `primitive_coverage` registry.
-- **2629** total Python-test references, **731** total lit-fixture references.
+- **2631** total Python-test references, **743** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
 - **199** ops have ≤1 reference ("thinly tested").
 - **58** ops have ≥10 references ("well tested").
@@ -17,7 +17,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  369 |  164 |  533 |  15 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  370 |  169 |  539 |  15 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |   93 |   57 |  150 |   5 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   89 |   37 |  126 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   97 |    7 |  104 |   9 | `bf16`, `f16`, `f32`, `f64` … |
@@ -33,9 +33,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `grouped_gemm` |   28 |   24 |   52 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `msa_sparse_attention` |   37 |    8 |   45 |   1 |  |
+| `transpose` |   16 |   27 |   43 |   0 | `bf16`, `f16`, `fp32` |
+| `cast` |    7 |   34 |   41 |   0 | `fp32` |
 | `linear_attn` |   31 |    8 |   39 |   1 |  |
-| `cast` |    7 |   31 |   38 |   0 | `fp32` |
-| `transpose` |   15 |   23 |   38 |   0 | `bf16`, `f16`, `fp32` |
 | `layer_norm` |   20 |    7 |   27 |   2 | `bf16`, `f16`, `f32`, `fp16` … |
 
 ## Thinly-tested ops (≤1 reference)

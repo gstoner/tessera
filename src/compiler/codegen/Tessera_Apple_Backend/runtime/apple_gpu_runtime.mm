@@ -14825,6 +14825,70 @@ static void mpsg_cache_put(NSString *key, NSArray *entry) {
   }
 }
 
+// ── Transpose / N-D permute (MPSGraph transposeTensor:permutation:) ──────────
+// Phase 2 displacement (2026-06-17): a real Metal transpose so tessera.transpose
+// runs on the GPU (was the numpy-reference fallback). Transpose is purely a
+// layout op (value-preserving data movement), so the element dtype is irrelevant
+// numerically — f32 goes 4-byte, f16/bf16 share the 2-byte raw path.
+static bool mpsg_run_transpose(MetalDeviceContext &ctx, const void *x, void *out,
+                               const int32_t *dims, const int32_t *perm,
+                               int32_t rank, MPSDataType ioType,
+                               size_t elemSize) {
+  if (rank <= 0) return true;
+  @autoreleasepool {
+    int64_t n = 1;
+    NSMutableArray<NSNumber *> *shape = [NSMutableArray arrayWithCapacity:rank];
+    NSMutableArray<NSNumber *> *permA = [NSMutableArray arrayWithCapacity:rank];
+    for (int32_t i = 0; i < rank; ++i) {
+      n *= dims[i];
+      [shape addObject:@(dims[i])];
+      [permA addObject:@(perm[i])];
+    }
+    if (n <= 0) return true;
+    size_t bytes = (size_t)n * elemSize;
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
+    if (!bufX) return false;
+    MPSGraph *g = [MPSGraph new];
+    MPSGraphTensor *ph = [g placeholderWithShape:shape dataType:ioType name:nil];
+    MPSGraphTensor *y = [g transposeTensor:ph permutation:permA name:nil];
+    if (!y) return false;
+    MPSGraphTensorData *xd =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufX shape:shape dataType:ioType];
+    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
+                                            feeds:@{ph : xd}
+                                    targetTensors:@[ y ]
+                                 targetOperations:nil];
+    MPSGraphTensorData *od = res[y];
+    if (!od) return false;
+    [[od mpsndarray] readBytes:out strideBytes:nil];
+    return true;
+  }
+}
+
+// Generic N-D permute host fallback (value copy by permuted strides).
+template <typename T>
+static void ts_host_transpose(const T *x, T *out, const int32_t *dims,
+                              const int32_t *perm, int32_t rank) {
+  if (rank <= 0) return;
+  int64_t n = 1;
+  for (int i = 0; i < rank; ++i) n *= dims[i];
+  std::vector<int64_t> istride((size_t)rank);
+  int64_t s = 1;
+  for (int i = rank - 1; i >= 0; --i) { istride[(size_t)i] = s; s *= dims[i]; }
+  std::vector<int64_t> ostride((size_t)rank);
+  s = 1;
+  for (int i = rank - 1; i >= 0; --i) { ostride[(size_t)i] = s; s *= dims[perm[i]]; }
+  for (int64_t lin = 0; lin < n; ++lin) {
+    int64_t rem = lin, in_off = 0;
+    for (int i = 0; i < rank; ++i) {
+      int64_t c = rem / ostride[(size_t)i];
+      rem %= ostride[(size_t)i];
+      in_off += c * istride[(size_t)perm[i]];
+    }
+    out[lin] = x[in_off];
+  }
+}
+
 static bool mpsg_run_unary(MetalDeviceContext &ctx, int op, const void *x,
                            void *out, int64_t n, MPSDataType ioType,
                            size_t elemSize) {
@@ -18236,6 +18300,30 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_bf16(int32_t op,
   for (int64_t i = 0; i < n; ++i) xf[i] = bfloat16_to_float_gpu(x[i]);
   tessera_apple_gpu_mpsgraph_unary_f32(op, xf.data(), of.data(), n);
   for (int64_t i = 0; i < n; ++i) out[i] = float_to_bfloat16_gpu(of[i]);
+}
+
+// ── Transpose / N-D permute C ABI (2026-06-17) ───────────────────────────────
+// dims = input shape (rank ints); perm = permutation (rank ints, output axis i
+// reads input axis perm[i]). out is contiguous in the permuted layout. f16 is
+// the 2-byte raw path (also used for bf16 — transpose is value-preserving).
+extern "C" void tessera_apple_gpu_mpsgraph_transpose_f32(
+    const float *x, float *out, const int32_t *dims, const int32_t *perm,
+    int32_t rank) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_transpose(ctx, x, out, dims, perm, rank, MPSDataTypeFloat32, 4))
+    return;
+  ts_host_transpose<float>(x, out, dims, perm, rank);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_transpose_f16(
+    const uint16_t *x, uint16_t *out, const int32_t *dims, const int32_t *perm,
+    int32_t rank) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok &&
+      mpsg_run_transpose(ctx, x, out, dims, perm, rank, MPSDataTypeFloat16, 2))
+    return;
+  ts_host_transpose<uint16_t>(x, out, dims, perm, rank);
 }
 
 extern "C" void tessera_apple_gpu_mpsgraph_binary_bf16(int32_t op,

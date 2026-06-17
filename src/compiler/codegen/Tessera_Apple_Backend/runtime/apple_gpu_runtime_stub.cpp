@@ -1714,6 +1714,43 @@ extern "C" int32_t tessera_apple_gpu_native_sparse_attn_last_path(void) {
 // ---- MPSGraph lane (non-Apple reference fallbacks, 2026-05-29) -------------
 // Mirror the C ABI of the MPSGraph-backed Tier-1 / long-tail lane so the
 // symbol surface is identical across platforms. Op codes match the .mm.
+// Transpose / N-D permute (2026-06-17) — host parity for the Darwin MPSGraph
+// path; value-preserving permuted-stride copy. f16 is the 2-byte raw path.
+template <typename T>
+static void ts_stub_transpose(const T* x, T* out, const int32_t* dims,
+                              const int32_t* perm, int32_t rank) {
+  if (rank <= 0) return;
+  int64_t n = 1;
+  for (int i = 0; i < rank; ++i) n *= dims[i];
+  std::vector<int64_t> istride((size_t)rank);
+  int64_t s = 1;
+  for (int i = rank - 1; i >= 0; --i) { istride[(size_t)i] = s; s *= dims[i]; }
+  std::vector<int64_t> ostride((size_t)rank);
+  s = 1;
+  for (int i = rank - 1; i >= 0; --i) { ostride[(size_t)i] = s; s *= dims[perm[i]]; }
+  for (int64_t lin = 0; lin < n; ++lin) {
+    int64_t rem = lin, in_off = 0;
+    for (int i = 0; i < rank; ++i) {
+      int64_t c = rem / ostride[(size_t)i];
+      rem %= ostride[(size_t)i];
+      in_off += c * istride[(size_t)perm[i]];
+    }
+    out[lin] = x[in_off];
+  }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_transpose_f32(
+    const float* x, float* out, const int32_t* dims, const int32_t* perm,
+    int32_t rank) {
+  ts_stub_transpose<float>(x, out, dims, perm, rank);
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_transpose_f16(
+    const uint16_t* x, uint16_t* out, const int32_t* dims, const int32_t* perm,
+    int32_t rank) {
+  ts_stub_transpose<uint16_t>(x, out, dims, perm, rank);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_unary_f32(int32_t op, const float* x,
                                                      float* out, int64_t n) {
   for (int64_t i = 0; i < n; ++i) {

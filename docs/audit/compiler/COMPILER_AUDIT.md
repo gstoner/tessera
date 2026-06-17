@@ -267,12 +267,25 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   (optimizers + RNG — no GPU gap), **6 `distributed`** (collectives + MoE
   transport), **9 `unclassified`** (per-op judgment). Guard:
   `test_apple_gpu_coverage.py::test_displacement_disposition_classifies_the_real_gap`.
-  *The real displacement target is the 51 structural ops, not 124* — closing it
-  needs real MPSGraph kernels for the data-movers (transpose/concat/slice/gather)
-  or a residency-neutral chain gate for true-view ops (reshape/squeeze/…) so a
-  structural op mid-program doesn't demote `metal_runtime`. Both are scoped
-  follow-ons (the data-movers need `.mm`; the chain gate is a careful
-  `_apple_gpu_chain_kind` change). *Still open:* that structural displacement, plus
+  *The real displacement target is the 51 structural ops, not 124.*
+  **First structural displacement landed — transpose (2026-06-17).**
+  `tessera.transpose` now runs on a real MPSGraph kernel
+  (`transposeTensor:permutation:`, SDK-header-grounded per Decision #27): N-D
+  permute, value-preserving, f32 native + f16/bf16 on the 2-byte raw path, host
+  fallback for non-Darwin / GPU-miss. New `.mm` `mpsg_run_transpose` +
+  `tessera_apple_gpu_mpsgraph_transpose_{f32,f16}` symbols + stub parity;
+  first-class runtime op (`_APPLE_GPU_TRANSPOSE_OPS` → `"transpose"` lane +
+  `_apple_gpu_dispatch_transpose`); `.inc` regenerated + `tessera-opt` rebuilt
+  (C++ enforcer + drift gate pass). A single-op `@jit(apple_gpu)` transpose now
+  reports `execution_kind="native_gpu"` / driver `execution_mode="metal_runtime"`
+  (was `fallback_eager`). Guards:
+  `tests/unit/test_apple_gpu_transpose.py` (7: 2D/3D/4D + explicit permute, f16,
+  jit, no-fallback-on-Metal). *Caveat:* this makes a single transpose GPU-resident;
+  a transpose *mid-program* (e.g. `matmul→transpose→gelu`) still demotes to
+  `artifact_only` until `_apple_gpu_chain_kind` learns a general "all ops
+  GPU-capable → per-op metal" recognizer — the next structural step. *Still open:*
+  the remaining data-movers (concat/slice/gather — same `.mm` recipe), the chain
+  gate, the true-view residency path (reshape/squeeze/…), plus
   the `norm_chain` broadening (bare norms already run on the MPSGraph rowop lane —
   no numpy there to displace, so deliberately deferred) — all Evaluator-gated,
   never displacing a working MPSGraph call.

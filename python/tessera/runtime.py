@@ -2938,6 +2938,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "clamp": _apple_gpu_dispatch_clamp,
         "where": lambda op, a, k, np: _apple_gpu_dispatch_where(a, np),
         "softcap": _apple_gpu_dispatch_softcap,
+        "transpose": _apple_gpu_dispatch_transpose,
         "loss_compose": _apple_gpu_dispatch_loss,
         "norm_compose": _apple_gpu_dispatch_norm,
         "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
@@ -8366,6 +8367,95 @@ def _apple_gpu_mpsgraph_unary_f16() -> Any:
     ]
     sym.restype = None
     return sym
+
+
+def _apple_gpu_mpsgraph_transpose_f32() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_transpose_f32", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_float),    # x
+        ctypes.POINTER(ctypes.c_float),    # out
+        ctypes.POINTER(ctypes.c_int32),    # dims (input shape)
+        ctypes.POINTER(ctypes.c_int32),    # perm
+        ctypes.c_int32,                    # rank
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_mpsgraph_transpose_f16() -> Any:
+    runtime = _load_apple_gpu_runtime()
+    sym = getattr(runtime, "tessera_apple_gpu_mpsgraph_transpose_f16", None)
+    if sym is None:
+        return None
+    sym.argtypes = [
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_uint16),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_int32,
+    ]
+    sym.restype = None
+    return sym
+
+
+def _apple_gpu_dispatch_transpose(op_name: str, operands: list[Any],
+                                  kwargs: dict, np: Any) -> Any:
+    """tessera.transpose via the MPSGraph N-D permute lane (real Metal data
+    movement; value-preserving). ``axes`` defaults to reversed (numpy semantics).
+    f32 + f16 run natively; bf16 rides the f16 (raw 16-bit) path. Host fallback
+    is np.transpose."""
+    x = np.asarray(operands[0])
+    rank = x.ndim
+    axes = kwargs.get("axes")
+    if axes is None:
+        axes = tuple(range(rank - 1, -1, -1))
+    axes = tuple(int(a) % rank for a in axes)
+    if len(axes) != rank:
+        return np.transpose(x, axes)           # malformed → reference
+
+    bf16_dtype = _bfloat16_dtype()
+    lanes: dict[Any, tuple[Any, Any, Any]] = {
+        np.float32: (np.float32, _apple_gpu_mpsgraph_transpose_f32, ctypes.c_float),
+        np.float16: (np.float16, _apple_gpu_mpsgraph_transpose_f16, ctypes.c_uint16),
+    }
+    if bf16_dtype is not None:
+        lanes[bf16_dtype] = (bf16_dtype, _apple_gpu_mpsgraph_transpose_f16,
+                             ctypes.c_uint16)
+
+    lane = lanes.get(x.dtype.type)
+    if lane is None:
+        return np.ascontiguousarray(np.transpose(x, axes))
+
+    run_dtype, sym_getter, c_elem = lane
+    sym = sym_getter()
+    if sym is None:
+        return np.ascontiguousarray(np.transpose(x, axes))
+
+    def _gpu() -> Any:
+        xc = np.ascontiguousarray(x, dtype=run_dtype)
+        out_shape = tuple(xc.shape[a] for a in axes)
+        out = np.empty(out_shape, dtype=run_dtype)
+        dims = (ctypes.c_int32 * rank)(*[int(d) for d in xc.shape])
+        perm = (ctypes.c_int32 * rank)(*[int(a) for a in axes])
+        # f16/bf16 pass the raw 16-bit lanes; f32 passes floats.
+        if c_elem is ctypes.c_uint16:
+            in_ptr = xc.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+            out_ptr = out.view(np.uint16).ctypes.data_as(ctypes.POINTER(ctypes.c_uint16))
+        else:
+            in_ptr = xc.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            out_ptr = out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        sym(in_ptr, out_ptr,
+            ctypes.cast(dims, ctypes.POINTER(ctypes.c_int32)),
+            ctypes.cast(perm, ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_int32(rank))
+        return out
+
+    return _apple_gpu_run_checked(
+        op_name, _gpu,
+        lambda: np.ascontiguousarray(np.transpose(x, axes)))
 
 
 def _apple_gpu_mpsgraph_binary_f32() -> Any:

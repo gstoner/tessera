@@ -392,7 +392,7 @@ sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-softcap,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
+softcap,7,0,1,7,0,,covered_by_family,category default for 'elementwise'
 softmax,89,37,5,126,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
 softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
 softplus,2,0,0,2,0,,covered_by_family,category default for 'elementwise'

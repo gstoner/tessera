@@ -2937,6 +2937,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "binary": _apple_gpu_dispatch_mpsgraph_binary,
         "clamp": _apple_gpu_dispatch_clamp,
         "where": lambda op, a, k, np: _apple_gpu_dispatch_where(a, np),
+        "softcap": _apple_gpu_dispatch_softcap,
         "loss_compose": _apple_gpu_dispatch_loss,
         "norm_compose": _apple_gpu_dispatch_norm,
         "attn_wrapper": _apple_gpu_dispatch_attn_wrapper,
@@ -9529,6 +9530,32 @@ def _apple_gpu_dispatch_clamp(op_name: str, operands: list[Any], kwargs: dict,
     if lo is not None:
         res = _apple_gpu_dispatch_mpsgraph_binary("tessera.maximum", [res], {"scalar": lo}, np)
     return np.asarray(res, dtype=np.float32)
+
+
+def _apple_gpu_dispatch_softcap(op_name: str, operands: list[Any], kwargs: dict,
+                                np: Any) -> Any:
+    """softcap(x, cap) = cap * tanh(x / cap) — the Gemma logit soft-cap, composed
+    on the GPU lanes (div-by-scalar -> tanh unary -> mul-by-scalar). No dedicated
+    kernel. ``cap`` arrives as a scalar kwarg; a non-positive cap is a no-op
+    (matches the reference)."""
+    x = np.asarray(operands[0], dtype=np.float32)
+    raw = kwargs.get("cap")
+    if not isinstance(raw, (int, float)):
+        # A non-numeric cap is an unresolved SSA ref (e.g. "%cap") — a
+        # closure-captured scalar the apple_gpu metadata path doesn't fold yet.
+        # softcap's cap is a config constant in practice (a literal in the jitted
+        # source), which resolves fine; fail loudly rather than silently wrong.
+        raise ValueError(
+            f"softcap on apple_gpu needs a literal scalar `cap`; got {raw!r} "
+            "(closure-captured scalars are not folded into the apple_gpu path)")
+    cap = float(raw)
+    if cap <= 0.0:
+        return x
+    t = _apple_gpu_dispatch_mpsgraph_binary("tessera.div", [x], {"scalar": cap}, np)
+    t = _apple_gpu_dispatch_unary("tessera.tanh", [np.ascontiguousarray(t)], np)
+    out = _apple_gpu_dispatch_mpsgraph_binary(
+        "tessera.mul", [np.ascontiguousarray(t)], {"scalar": cap}, np)
+    return np.asarray(out, dtype=np.float32)
 
 
 def _apple_gpu_dispatch_where(operands: list[Any], np: Any) -> Any:

@@ -205,10 +205,23 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   worklist. **(D2)** the real no-silent-rot regression lock landed: a
   representative pre-norm decoder-MLP block (rmsnorm→matmul→silu→matmul→residual)
   runs on apple_gpu and asserts an **empty** fallback histogram (Darwin-gated);
-  a kernel that quietly degrades to numpy trips it. The only remaining tracked
-  follow-up is the parameterized `softcap`/`clamp` family (genuinely numpy-only
-  real-valued elementwise ops that need a unary MPSGraph lane with a scalar param,
-  not a pointwise-vocab entry — a separate small project). Guards:
+  a kernel that quietly degrades to numpy trips it. **Parameterized-unary
+  follow-up landed (2026-06-17):** `softcap` (the Gemma logit soft-cap
+  `cap*tanh(x/cap)`) was the one genuinely numpy-only *real-valued* elementwise
+  op. It carries a scalar `cap`, so it rides a GPU **compose** lane (div-by-scalar
+  → tanh unary → mul-by-scalar — the clamp/where pattern, no dedicated kernel, no
+  `.mm` change) rather than a pointwise-vocab entry. Made a first-class runtime op
+  (`_APPLE_GPU_SOFTCAP_OPS` in the master envelope set + `"softcap"` lane +
+  handler), which required regenerating the `apple_runtime_ops.inc` X-macro the
+  C++ Tile→Apple pass `#include`s and rebuilding `tessera-opt` (the C++/Python
+  single-source enforcer + `.inc` drift gate both pass). `cap` is a config literal
+  in the jitted source in practice; closure-captured scalars are an unresolved SSA
+  ref the apple_gpu metadata path doesn't fold (a known frontend limit, not
+  softcap-specific) and the handler fails loudly rather than silently wrong.
+  `clamp`/`clip`/`where` were already on GPU compose lanes. Guards:
+  `tests/unit/test_apple_gpu_softcap.py`. Remaining: no parameterized-elementwise
+  numpy-lane ops left — the displacement worklist's real-valued elementwise tail
+  is closed. Guards (prior phases):
   `tests/unit/test_fusion_pointwise_oracle.py`, `test_apple_gpu_coverage.py`,
   `test_fusion_pointwise_vocab_phase_c.py`,
   `test_apple_gpu_displacement_regression.py`. *Still open:* the `norm_chain`

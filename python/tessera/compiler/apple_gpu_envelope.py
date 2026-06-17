@@ -89,6 +89,12 @@ _APPLE_GPU_ROWOP_KINDS = {
 # Batch 2 (2026-06-08) — composed on the GPU binary lane (no dedicated kernel):
 # clamp/clip = max(min(x,hi),lo); where = c*a + (1-c)*b.
 _APPLE_GPU_COMPOSE_OPS = frozenset({"tessera.clamp", "tessera.clip", "tessera.where"})
+# Parameterized unary composed on the GPU lanes (2026-06-17): softcap = the Gemma
+# logit soft-cap cap*tanh(x/cap) — div-by-scalar -> tanh -> mul-by-scalar. Unlike
+# the param-free unary opcodes it carries a scalar `cap`, so it rides a compose
+# handler rather than a pointwise-vocab entry. A first-class runtime op (in the
+# master set below) so @jit(apple_gpu) routes a softcap program to the GPU.
+_APPLE_GPU_SOFTCAP_OPS = frozenset({"tessera.softcap"})
 # Batch 3 (2026-06-08) — regression / CE losses composed from the GPU opcode
 # lanes (per-element recipe + reduce). One dispatcher, no dedicated kernels.
 _APPLE_GPU_LOSS_COMPOSE_OPS = frozenset({
@@ -249,6 +255,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_SPECTRAL_OPS
     | _APPLE_GPU_LDT_OPS | _APPLE_GPU_CLIFFORD_OPS | _APPLE_GPU_EBM_OPS
     | _APPLE_GPU_EBM_LOSS_OPS | _APPLE_GPU_LOSS_COMPOSE_OPS
+    | _APPLE_GPU_SOFTCAP_OPS
     | _APPLE_GPU_NORM_COMPOSE_OPS | _APPLE_GPU_ATTN_WRAPPER_OPS
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
     | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
@@ -274,6 +281,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_BINARY_OPCODES, "binary")
     put({"tessera.clamp", "tessera.clip"}, "clamp")
     put({"tessera.where"}, "where")
+    put(_APPLE_GPU_SOFTCAP_OPS, "softcap")
     put(_APPLE_GPU_LOSS_COMPOSE_OPS, "loss_compose")
     put(_APPLE_GPU_NORM_COMPOSE_OPS, "norm_compose")
     put(_APPLE_GPU_ATTN_WRAPPER_OPS, "attn_wrapper")

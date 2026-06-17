@@ -33,12 +33,14 @@ def test_worklist_is_wellformed_and_nonempty():
     assert sorted(flat) == list(report.numpy_only)
 
 
-def test_softcap_is_a_known_displacement_candidate():
-    """softcap is a real-valued elementwise op with a graph op but no GPU lane
-    today — a concrete Phase C candidate. This pins it as numpy-only so flipping
-    it (adding a lane / pointwise-vocab entry) is a measurable progress marker."""
+def test_softcap_was_displaced_off_the_numpy_lane():
+    """softcap (the Gemma logit soft-cap cap*tanh(x/cap)) was the one genuinely
+    numpy-only real-valued elementwise op; it now rides a GPU compose lane
+    (div-scalar -> tanh -> mul-scalar), so it must no longer appear in the
+    numpy-only worklist. The inverse of the original Phase-C progress marker."""
     report = cov.numpy_lane_worklist()
-    assert "softcap" in report.numpy_only
+    assert "softcap" not in report.numpy_only
+    assert cov.has_gpu_lane("softcap")
 
 
 def test_render_report_runs():

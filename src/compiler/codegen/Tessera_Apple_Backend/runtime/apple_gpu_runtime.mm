@@ -8543,6 +8543,109 @@ extern "C" int32_t tessera_apple_gpu_synth_attention_f16(
   }
 }
 
+// F2e (2026-06-16) — synthesized gated-matmul (SwiGLU gate): one symbol per
+// dtype carrying the MSL source + entry, dispatching O = f(A@Wg) ⊙ (A@Wu) with
+// the dual-weight buffer layout (A0 Wg1 Wu2 O3 M4 H5 K6). Mirrors the attention
+// synth symbol shape (one row per thread, M threads).
+extern "C" int32_t tessera_apple_gpu_synth_gated_matmul_f32(
+    const char* msl_source, const char* entry, const float* A, const float* Wg,
+    const float* Wu, float* O, int32_t M, int32_t H, int32_t K) {
+  if (!msl_source || !entry || !A || !Wg || !Wu || !O || M <= 0 || H <= 0 ||
+      K <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger aBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger wBytes = sizeof(float) * (NSUInteger)K * (NSUInteger)H;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)H;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWg, ctx, Wg, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWu, ctx, Wu, wBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufWg || !bufWu || !bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufWg offset:0 atIndex:1];
+    [enc setBuffer:bufWu offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_gated_matmul"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
+// Half-precision gated-matmul: uint16 I/O (half / native bfloat, selected by the
+// MSL source the caller emits); same buffer layout (A0 Wg1 Wu2 O3 M4 H5 K6).
+extern "C" int32_t tessera_apple_gpu_synth_gated_matmul_f16(
+    const char* msl_source, const char* entry, const uint16_t* A,
+    const uint16_t* Wg, const uint16_t* Wu, uint16_t* O, int32_t M, int32_t H,
+    int32_t K) {
+  if (!msl_source || !entry || !A || !Wg || !Wu || !O || M <= 0 || H <= 0 ||
+      K <= 0)
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+
+    NSUInteger aBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger wBytes = sizeof(uint16_t) * (NSUInteger)K * (NSUInteger)H;
+    NSUInteger oBytes = sizeof(uint16_t) * (NSUInteger)M * (NSUInteger)H;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufA, ctx, A, aBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWg, ctx, Wg, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufWu, ctx, Wu, wBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufA || !bufWg || !bufWu || !bufO) return 0;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufA offset:0 atIndex:0];
+    [enc setBuffer:bufWg offset:0 atIndex:1];
+    [enc setBuffer:bufWu offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&H length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:6];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, 1, 1);
+    NSUInteger tg_x = std::min<NSUInteger>((NSUInteger)M,
+                                           pso.maxTotalThreadsPerThreadgroup);
+    if (tg_x == 0) tg_x = 1;
+    [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tg_x, 1, 1)];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "synth_gated_matmul_f16"))
+      return 0;
+    std::memcpy(O, [bufO contents], oBytes);
+    return 1;
+  }
+}
+
 // tessera_apple_gpu_matmul_rmsnorm_f32 — RETIRED (see the F2 note above); the
 // synthesized epilogue kernel subsumes it.
 

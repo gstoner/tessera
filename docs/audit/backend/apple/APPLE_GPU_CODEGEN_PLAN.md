@@ -314,9 +314,10 @@ the last axis correctly dropped. Guards: 7 new cases in
 ## Deferred backlog (single source — the scattered *Follow-on:* notes above)
 
 As of 2026-06-16 the synthesizer covers matmul-epilogue (+ residual + A-operand
-prologue), `norm_chain` (+affine, f16/bf16), attention (f32/f16/bf16 ×
-materialized/online × causal), and pointwise DAGs (with per-feature broadcast) —
-all Evaluator-gated via the M5 displacement oracle. Open work, by leverage:
+prologue), **gated-matmul (SwiGLU gate `f(A@Wg) ⊙ (A@Wu)` from primitive ops)**,
+`norm_chain` (+affine, f16/bf16), attention (f32/f16/bf16 × materialized/online ×
+causal), and pointwise DAGs (with per-feature broadcast) — all Evaluator-gated via
+the M5 displacement oracle. Open work, by leverage:
 
 1. **`linalg→vector` GEMM pipeline (HF — highest value).** The CPU JIT GEMM is
    ~2.2 GFLOP/s, ~50–110× off Accelerate; cheap optimizer levers (host TM,
@@ -359,10 +360,21 @@ all Evaluator-gated via the M5 displacement oracle. Open work, by leverage:
    `gpu_swiglu`; real models run as compositions of these, each on `metal_runtime`.
    No tractable single-kernel-decoder-layer gain (activations are too large for
    registers; per-major-op dispatch is what MPS/cuDNN do too). Remaining is
-   *incremental coverage* — the next real increment is a **GatedMatmulRegion**
-   (`f(A@Wg) ⊙ (A@Wu)` from primitives — the SwiGLU gate when a graph is written in
-   primitive ops rather than the `swiglu` op; complementary to library `gpu_swiglu`,
-   must not displace it), a multi-day build to start fresh. **Option 2 (MLIR spine
+   *incremental coverage*. **GatedMatmulRegion landed 2026-06-16:** `f(A@Wg) ⊙
+   (A@Wu)` — the SwiGLU gate from PRIMITIVE ops (two matmuls sharing A + gate
+   activation + elementwise multiply) fused into ONE synthesized kernel (both
+   projections in a single K-loop, A read once). New dual-weight C ABI symbol
+   `tessera_apple_gpu_synth_gated_matmul_{f32,f16}` (f32/f16 native, bf16
+   host-convert); `discover_gated_matmul_regions` (mul-centric scan: shared-A +
+   single-use intermediates); orchestrator runs it FIRST (more specific than
+   matmul-epilogue, which would otherwise greedily claim `matmul→silu` and starve
+   the gate) — `discover_fusable_regions` gained a `skip` set. Complementary to
+   library `gpu_swiglu` (whole block incl. down-proj); fires only on primitive-op
+   graphs. Horizontal-oracle-proven on Metal across silu/gelu/relu/sigmoid/tanh ×
+   f32/f16/bf16; end-to-end: 4 ops → 1 kernel. Caps H ≤ `SYNTH_GATED_MAX_H` (=512,
+   two fp32 stack rows); larger H falls to the per-op two-matmul path. Next
+   increments: a tiled large-H gated kernel; auto-discovery of bilinear (no-act)
+   GeGLU. **Option 2 (MLIR spine
    → Metal) is deferred by gravity:** Apple ships no public LLVM→AIR translator and
    there's no MLIR→MSL bridge in-tree, so MSL-source synthesis is the only open
    Apple-GPU codegen path today (see the codegen-path-constraint memo).

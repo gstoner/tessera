@@ -2090,6 +2090,210 @@ def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# F2e — gated-matmul (SwiGLU gate) synthesis: O = f(A @ Wg) ⊙ (A @ Wu)
+#
+# Two matmuls sharing the A operand, an activation f on the gate branch, and an
+# elementwise multiply — the transformer FFN gate written from PRIMITIVE ops
+# (matmul, silu, mul). Complementary to the library ``gpu_swiglu`` (which also
+# folds the down-projection): this fires only when a graph is expressed in
+# primitives, never displacing the library op. One A row per thread fills BOTH
+# score rows in a single K-loop (A read once, shared), then gate-act × up.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Per-thread cap for the gated kernel. Two fp32 stack rows (gate + up) live
+#: per thread, so the cap is half the single-row epilogue cap to stay within the
+#: register/stack budget — larger H falls to the per-op (two-matmul) path.
+SYNTH_GATED_MAX_H = SYNTH_MAX_N // 2
+_GATED_ENTRY = "synth_gated_matmul"
+
+
+@dataclass(frozen=True)
+class GatedMatmulRegion:
+    """A fused gated MLP projection ``O = f(A @ Wg) ⊙ (A @ Wu)``.
+
+    Two matmuls share the A operand; ``gate_act`` (a unary EPILOGUE_OPS
+    activation — ``silu`` for SwiGLU) is applied to the gate branch, then an
+    elementwise multiply with the up branch.  ``A:(M,K)  Wg,Wu:(K,H) -> O:(M,H)``.
+    This is the SwiGLU *gate* (no down-projection) from primitive ops; the library
+    ``gpu_swiglu`` covers the whole block including the down-proj, so the
+    discoverer only fires on primitive-op graphs that don't call the ``swiglu``
+    op."""
+
+    gate_act: str = "silu"
+    a_name: str = "A"
+    wg_name: str = "Wg"
+    wu_name: str = "Wu"
+
+    def __post_init__(self) -> None:
+        if (self.gate_act not in EPILOGUE_OPS
+                or EPILOGUE_OPS[self.gate_act].needs_bias):
+            raise ValueError(
+                f"gate activation must be a unary pointwise op, got "
+                f"{self.gate_act!r}")
+
+    def reference(self, A: np.ndarray, Wg: np.ndarray,
+                  Wu: np.ndarray) -> np.ndarray:
+        """The unfused result in numpy — the horizontal-oracle ground truth."""
+        a = np.asarray(A, np.float32)
+        gate = EPILOGUE_OPS[self.gate_act].ref(a @ np.asarray(Wg, np.float32))
+        up = a @ np.asarray(Wu, np.float32)
+        return (gate * up).astype(np.float32)
+
+
+def synthesize_gated_matmul_msl(region: GatedMatmulRegion = GatedMatmulRegion(),
+                                dtype: str = "f32") -> str:
+    """Emit the MSL source for ``O = f(A @ Wg) ⊙ (A @ Wu)`` — one A row per thread.
+
+    Both projections accumulate in a single K-loop (A[k] loaded once, fanned to
+    the gate and up rows), so the shared input is read K times total, not 2K.
+    The gate activation runs in fp32; the O-write goes through ``ST(...)`` (bfloat
+    rejects implicit float→bfloat). ``dtype`` selects the I/O type."""
+    io = _io_type(dtype)
+    act = EPILOGUE_OPS[region.gate_act].msl        # operates on `v`
+    return f"""#include <metal_stdlib>
+using namespace metal;
+using ST = {io};
+kernel void {_GATED_ENTRY}(
+    device const {io}* A   [[buffer(0)]],
+    device const {io}* Wg  [[buffer(1)]],
+    device const {io}* Wu  [[buffer(2)]],
+    device {io}*       O   [[buffer(3)]],
+    constant int&       M   [[buffer(4)]],
+    constant int&       H   [[buffer(5)]],
+    constant int&       K   [[buffer(6)]],
+    uint gid [[thread_position_in_grid]])
+{{
+    if (gid >= (uint)M) return;
+    if (H > {SYNTH_GATED_MAX_H}) return;
+    int row = (int)gid;
+    float gate[{SYNTH_GATED_MAX_H}];
+    float up[{SYNTH_GATED_MAX_H}];
+    for (int n = 0; n < H; ++n) {{ gate[n] = 0.0f; up[n] = 0.0f; }}
+    int a_off = row * K;
+    for (int k = 0; k < K; ++k) {{
+        float a = float(A[a_off + k]);
+        int w_off = k * H;
+        for (int n = 0; n < H; ++n) {{
+            gate[n] += a * float(Wg[w_off + n]);
+            up[n]   += a * float(Wu[w_off + n]);
+        }}
+    }}
+    int o_off = row * H;
+    for (int n = 0; n < H; ++n) {{
+        float v = gate[n];
+        {act}
+        O[o_off + n] = ST(v * up[n]);
+    }}
+}}
+"""
+
+
+def _gated_symbol() -> Any:
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_gated_matmul_f32", None)
+    if sym is None:
+        return None
+    fp = ctypes.POINTER(ctypes.c_float)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, fp, fp, fp, fp,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def _gated_f16_symbol() -> Any:
+    """The uint16-I/O gated symbol — serves both half and native bfloat (the MSL
+    source the caller emits selects which)."""
+    from tessera.runtime import _load_apple_gpu_runtime
+    rt = _load_apple_gpu_runtime()
+    sym = getattr(rt, "tessera_apple_gpu_synth_gated_matmul_f16", None)
+    if sym is None:
+        return None
+    u16 = ctypes.POINTER(ctypes.c_uint16)
+    sym.argtypes = [ctypes.c_char_p, ctypes.c_char_p, u16, u16, u16, u16,
+                    ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    sym.restype = ctypes.c_int32
+    return sym
+
+
+def should_fuse_gated(region: GatedMatmulRegion, M: int, H: int, K: int) -> bool:
+    """F3 cost gate: the gated kernel keeps two fp32 rows of width H in the
+    per-thread stack, so it only fuses when H fits the (halved) cap. Larger H is
+    left to the per-op two-matmul path."""
+    return H <= SYNTH_GATED_MAX_H
+
+
+def run_gated_matmul_region(region: GatedMatmulRegion, A: np.ndarray,
+                            Wg: np.ndarray, Wu: np.ndarray
+                            ) -> tuple[np.ndarray, str]:
+    """Run ``O = f(A @ Wg) ⊙ (A @ Wu)`` as ONE synthesized Metal kernel. Returns
+    ``(output, execution)`` — ``"metal_runtime"`` if the synthesized kernel ran,
+    else ``"reference"`` (numpy). f16 runs a native ``half`` kernel; bf16 (no MSL
+    type) converts to f32, runs, converts back (the 8.4.4.x convention)."""
+    in_dtype = np.asarray(A).dtype
+    bf16 = _bf16_dtype()
+    if bf16 is not None and in_dtype == bf16:
+        out32, ex = run_gated_matmul_region(
+            region, np.asarray(A, np.float32), np.asarray(Wg, np.float32),
+            np.asarray(Wu, np.float32))
+        return out32.astype(bf16), ex
+    tag = "f16" if in_dtype == np.float16 else "f32"
+    if tag == "f16":
+        A = np.ascontiguousarray(A, np.float16)
+        Wg = np.ascontiguousarray(Wg, np.float16)
+        Wu = np.ascontiguousarray(Wu, np.float16)
+    else:
+        A = np.ascontiguousarray(A, np.float32)
+        Wg = np.ascontiguousarray(Wg, np.float32)
+        Wu = np.ascontiguousarray(Wu, np.float32)
+    M, K = A.shape
+    Kg, H = Wg.shape
+    if Kg != K or Wu.shape != (K, H):
+        raise ValueError(
+            f"gated matmul shape mismatch: A{A.shape} Wg{Wg.shape} Wu{Wu.shape}")
+    sym = _gated_f16_symbol() if tag == "f16" else _gated_symbol()
+    if sym is not None and H <= SYNTH_GATED_MAX_H:
+        source = synthesize_gated_matmul_msl(region, tag).encode("utf-8")
+        entry = _GATED_ENTRY.encode("utf-8")
+        if tag == "f16":
+            out = np.zeros((M, H), np.float16)
+            p = lambda a: a.view(np.uint16).ctypes.data_as(
+                ctypes.POINTER(ctypes.c_uint16))
+        else:
+            out = np.zeros((M, H), np.float32)
+            p = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+        rc = sym(source, entry, p(A), p(Wg), p(Wu), p(out), M, H, K)
+        if rc == 1:
+            return out, "metal_runtime"
+    return region.reference(A, Wg, Wu), "reference"
+
+
+_GATED_VERIFY_CACHE: dict[Any, bool] = {}
+
+
+def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
+                             atol: float = 1e-3, force: bool = False) -> bool:
+    """Codegen-gated oracle for a gated-matmul region (see
+    ``verify_synthesized_region``): run the synthesized kernel on a small probe
+    and compare to the unfused numpy reference. ``True`` unless a kernel ran and
+    diverged. Cached per gate-activation."""
+    key = ("G", region.gate_act)
+    if not force and key in _GATED_VERIFY_CACHE:
+        return _GATED_VERIFY_CACHE[key]
+    rng = np.random.default_rng(seed)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    Wg = rng.standard_normal((12, 16)).astype(np.float32)
+    Wu = rng.standard_normal((12, 16)).astype(np.float32)
+    out, execution = run_gated_matmul_region(region, A, Wg, Wu)
+    if execution != "metal_runtime":
+        verdict = True
+    else:
+        verdict = bool(np.allclose(out, region.reference(A, Wg, Wu), atol=atol))
+    _GATED_VERIFY_CACHE[key] = verdict
+    return verdict
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # F3 — fusion cost model
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2167,6 +2371,7 @@ _VERIFY_CACHE: dict[Any, bool] = {}
 
 def clear_verification_cache() -> None:
     _VERIFY_CACHE.clear()
+    _GATED_VERIFY_CACHE.clear()
 
 
 def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
@@ -2434,12 +2639,17 @@ _NORM_CHAIN_ALIASES: dict[str, str] = {
 _ADD_NAMES = {"tessera.add", "add"}
 
 
-def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], FusedRegion]]:
+def discover_fusable_regions(
+    ops: list[_Op], skip: set[int] | None = None,
+) -> list[tuple[int, list[int], FusedRegion]]:
     """Find maximal ``matmul -> pointwise-chain`` regions in ``ops``.
 
     Returns ``(matmul_index, [epilogue_indices], FusedRegion)`` per region.  An
     op only fuses into the chain if it is the *sole* consumer of the running
     value — otherwise fusing would drop an intermediate another op reads.
+    ``skip`` carries op indices already claimed by an earlier (more specific)
+    discoverer — e.g. a gated-matmul region claims its two projections + the gate
+    activation before this matmul-epilogue pass runs, so they aren't re-fused.
     """
     use_count: dict[str, int] = {}
     for op in ops:
@@ -2453,7 +2663,7 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
             by_input.setdefault(v, []).append(i)
 
     regions: list[tuple[int, list[int], FusedRegion]] = []
-    consumed: set[int] = set()
+    consumed: set[int] = set(skip or ())
     for i, op in enumerate(ops):
         if i in consumed or op.name not in _MATMUL_NAMES:
             continue
@@ -2489,6 +2699,8 @@ def discover_fusable_regions(ops: list[_Op]) -> list[tuple[int, list[int], Fused
             if len(consumers) != 1:
                 break
             j = consumers[0]
+            if j in consumed:
+                break                          # claimed by an earlier discoverer
             nxt = ops[j]
             key = _POINTWISE_ALIASES.get(nxt.name)
             if key is None:
@@ -2701,6 +2913,76 @@ def discover_attention_regions(
     return regions
 
 
+#: Elementwise multiply op names for the gated-matmul combine. Distinct from
+#: `_SCALE_NAMES` (affine scale-by-vector): the gate combine multiplies two
+#: same-shape projection results.
+_MUL_NAMES = {"tessera.mul", "mul", "tessera.multiply", "multiply"}
+
+
+def discover_gated_matmul_regions(
+    ops: list[_Op], skip: set[int] | None = None,
+) -> list[tuple[list[int], GatedMatmulRegion, str]]:
+    """Find ``f(A @ Wg) ⊙ (A @ Wu)`` — the SwiGLU gate from PRIMITIVE ops.
+
+    Pattern: two matmuls sharing operand A (one is the gate, one the up
+    projection), a unary activation on the gate branch, and an elementwise
+    multiply combining them. Returns ``([op_indices], GatedMatmulRegion,
+    out_value)``. Mul-centric scan: from each multiply, one operand must be a
+    single-use activation of a matmul(A, Wg) and the other a single-use
+    matmul(A, Wu) sharing the same A. All fused intermediates must be single-use,
+    and nothing already claimed (``skip``) is reused — so this is complementary
+    to the library ``swiglu`` op (which never lowers to these primitives)."""
+    skip = skip or set()
+    use_count: dict[str, int] = {}
+    producer: dict[str, int] = {}
+    for i, op in enumerate(ops):
+        producer[op.output] = i
+        for v in op.inputs:
+            use_count[v] = use_count.get(v, 0) + 1
+
+    regions: list[tuple[list[int], GatedMatmulRegion, str]] = []
+    claimed: set[int] = set()
+    for j, op in enumerate(ops):
+        if j in skip or j in claimed or op.name not in _MUL_NAMES:
+            continue
+        if len(op.inputs) != 2:
+            continue
+        x, y = op.inputs
+        # The activation branch is the gate; the bare-matmul branch is the up.
+        # Try both operand orderings (multiply is commutative).
+        for act_v, up_v in ((x, y), (y, x)):
+            pa, pu = producer.get(act_v), producer.get(up_v)
+            if pa is None or pu is None or pa in skip or pu in skip:
+                continue
+            act_key = _POINTWISE_ALIASES.get(ops[pa].name)
+            if act_key is None or act_key == "bias" or len(ops[pa].inputs) != 1:
+                continue                       # gate branch isn't a unary activation
+            g_v = ops[pa].inputs[0]            # the activation's input = gate matmul
+            pg = producer.get(g_v)
+            if pg is None or pg in skip:
+                continue
+            if (ops[pg].name not in _MATMUL_NAMES
+                    or ops[pu].name not in _MATMUL_NAMES):
+                continue
+            if len(ops[pg].inputs) < 2 or len(ops[pu].inputs) < 2:
+                continue
+            if ops[pg].inputs[0] != ops[pu].inputs[0]:
+                continue                       # the two matmuls must share operand A
+            # single-use: gate-matmul out -> act only; act out -> mul only;
+            # up-matmul out -> mul only (fusing must drop nothing).
+            if (use_count.get(g_v, 0) != 1 or use_count.get(act_v, 0) != 1
+                    or use_count.get(up_v, 0) != 1):
+                continue
+            idxs = [pg, pa, pu, j]
+            regions.append((idxs, GatedMatmulRegion(
+                gate_act=act_key, a_name=ops[pg].inputs[0],
+                wg_name=ops[pg].inputs[1], wu_name=ops[pu].inputs[1]),
+                op.output))
+            claimed.update(idxs)
+            break
+    return regions
+
+
 __all__ = [
     "EPILOGUE_OPS",
     "EpilogueOp",
@@ -2748,4 +3030,10 @@ __all__ = [
     "run_fused_attention",
     "discover_fusable_regions",
     "discover_attention_regions",
+    "GatedMatmulRegion",
+    "synthesize_gated_matmul_msl",
+    "run_gated_matmul_region",
+    "should_fuse_gated",
+    "verify_synthesized_gated",
+    "discover_gated_matmul_regions",
 ]

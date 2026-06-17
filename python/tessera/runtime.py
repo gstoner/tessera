@@ -2425,8 +2425,44 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     ]
     consumed: set = set()
 
-    # matmul -> pointwise(-> reduction) chains.
-    for mi, chain_idx, region in discover_fusable_regions(fops):
+    # F2e — gated matmul (SwiGLU gate from primitives): f(A@Wg) ⊙ (A@Wu) fused
+    # into ONE synthesized kernel (two projections sharing A + gate activation +
+    # elementwise multiply). Runs FIRST: it is more specific than the
+    # matmul-epilogue pass, which would otherwise greedily claim matmul(A,Wg)→silu
+    # as a matmul+silu region and starve the gate. Complementary to the library
+    # `swiglu` op (which never lowers to these primitives).
+    try:
+        from tessera.compiler.fusion import (
+            discover_gated_matmul_regions, run_gated_matmul_region,
+            should_fuse_gated, verify_synthesized_gated)
+        for idxs, g_region, out_v in discover_gated_matmul_regions(fops):
+            try:
+                A = _as_numpy(values[g_region.a_name])
+                Wg = _as_numpy(values[g_region.wg_name])
+                Wu = _as_numpy(values[g_region.wu_name])
+                if A.ndim != 2 or Wg.ndim != 2 or Wu.ndim != 2:
+                    continue
+                M, Kdim = A.shape
+                H = Wg.shape[1]
+                if not should_fuse_gated(g_region, M, H, Kdim):   # F3 cost gate
+                    continue
+                if not verify_synthesized_gated(g_region):        # F4 oracle
+                    continue
+                fuse_dt = _apple_gpu_synth_fusion_dtype(A, Wg, np)
+                out, ex = run_gated_matmul_region(
+                    g_region, np.ascontiguousarray(A, fuse_dt),
+                    np.ascontiguousarray(Wg, fuse_dt),
+                    np.ascontiguousarray(Wu, fuse_dt))
+                if ex == "metal_runtime":
+                    values[out_v] = out
+                    consumed.update(idxs)
+            except Exception:                  # noqa: BLE001 - fall back to per-op
+                continue
+    except Exception:                          # noqa: BLE001 - fusion optional
+        pass
+
+    # matmul -> pointwise(-> reduction) chains (skipping gated-claimed ops).
+    for mi, chain_idx, region in discover_fusable_regions(fops, skip=consumed):
         try:
             # region.a_name is the matmul's A operand, OR the root of a discovered
             # prologue activation chain (matmul(act(A), B)) — the synthesized

@@ -29,6 +29,11 @@ from tessera.compiler.fusion import (
     synthesize_attention_msl,
     synthesize_matmul_epilogue_msl,
     synthesize_matmul_epilogue_msl_tiled,
+    GatedMatmulRegion,
+    SYNTH_GATED_MAX_H,
+    discover_gated_matmul_regions,
+    run_gated_matmul_region,
+    synthesize_gated_matmul_msl,
     _Op,
 )
 
@@ -250,6 +255,132 @@ def test_discovery_prologue_only_region_no_epilogue():
     (mi, chain, region), = discover_fusable_regions(ops)
     assert mi == 1 and chain == [] and region.prologue == ("relu",)
     assert region.epilogue == ()
+
+
+# ── F2e: gated matmul (SwiGLU gate from primitives) ──────────────────────────
+
+def test_gated_region_validation_and_reference():
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((4, 8))
+    Wg = rng.standard_normal((8, 6))
+    Wu = rng.standard_normal((8, 6))
+    region = GatedMatmulRegion(gate_act="silu")
+    ref = region.reference(A, Wg, Wu)
+    g = A @ Wg
+    expected = (g / (1.0 + np.exp(-g))) * (A @ Wu)
+    np.testing.assert_allclose(ref, expected, rtol=1e-5, atol=1e-5)
+    with pytest.raises(ValueError):
+        GatedMatmulRegion(gate_act="bias")              # must be unary activation
+    with pytest.raises(ValueError):
+        GatedMatmulRegion(gate_act="not_an_op")
+
+
+def test_gated_synth_msl_has_dual_weight_shape():
+    src = synthesize_gated_matmul_msl(GatedMatmulRegion(gate_act="silu"))
+    assert "kernel void synth_gated_matmul(" in src
+    assert "device const float* Wg" in src and "device const float* Wu" in src
+    assert "gate[n] += a * float(Wg[w_off + n])" in src
+    assert "up[n]   += a * float(Wu[w_off + n])" in src
+    assert "O[o_off + n] = ST(v * up[n])" in src        # gate-act × up
+
+
+def test_gated_discovery_from_primitives():
+    # g=matmul(A,Wg); ga=silu(g); u=matmul(A,Wu); o=mul(ga,u)
+    ops = [_Op("matmul", ("A", "Wg"), "g"),
+           _Op("silu", ("g",), "ga"),
+           _Op("matmul", ("A", "Wu"), "u"),
+           _Op("mul", ("ga", "u"), "o")]
+    (idxs, region, out), = discover_gated_matmul_regions(ops)
+    assert idxs == [0, 1, 2, 3] and out == "o"
+    assert region.gate_act == "silu" and region.a_name == "A"
+    assert region.wg_name == "Wg" and region.wu_name == "Wu"
+
+
+def test_gated_discovery_is_commutative_in_the_multiply():
+    ops = [_Op("matmul", ("A", "Wg"), "g"), _Op("gelu", ("g",), "ga"),
+           _Op("matmul", ("A", "Wu"), "u"), _Op("mul", ("u", "ga"), "o")]
+    (_, region, _), = discover_gated_matmul_regions(ops)
+    assert region.gate_act == "gelu" and region.wg_name == "Wg"
+
+
+def test_gated_discovery_requires_shared_a_and_single_use():
+    # different A on the two matmuls → not a gate.
+    diff_a = [_Op("matmul", ("A", "Wg"), "g"), _Op("silu", ("g",), "ga"),
+              _Op("matmul", ("B", "Wu"), "u"), _Op("mul", ("ga", "u"), "o")]
+    assert discover_gated_matmul_regions(diff_a) == []
+    # the gate matmul output is multi-use → fusing would drop it.
+    multi = [_Op("matmul", ("A", "Wg"), "g"), _Op("silu", ("g",), "ga"),
+             _Op("matmul", ("A", "Wu"), "u"), _Op("mul", ("ga", "u"), "o"),
+             _Op("add", ("g", "Z"), "z2")]
+    assert discover_gated_matmul_regions(multi) == []
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+@pytest.mark.parametrize("act", ["silu", "gelu", "relu", "sigmoid", "tanh"])
+def test_gated_fusion_equals_unfused_on_metal(act):
+    rng = np.random.default_rng(hash(act) & 0xFFFF)
+    M, K, H = 16, 32, 48
+    region = GatedMatmulRegion(gate_act=act)
+    A = (rng.standard_normal((M, K)) * 0.3).astype(np.float32)
+    Wg = (rng.standard_normal((K, H)) * 0.3).astype(np.float32)
+    Wu = (rng.standard_normal((K, H)) * 0.3).astype(np.float32)
+    out, ex = run_gated_matmul_region(region, A, Wg, Wu)
+    assert ex == "metal_runtime"
+    assert np.allclose(out, region.reference(A, Wg, Wu), atol=1e-4)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="synthesis runs on Metal.")
+def test_gated_over_cap_falls_back_to_reference():
+    region = GatedMatmulRegion()
+    rng = np.random.default_rng(1)
+    A = rng.standard_normal((2, 4)).astype(np.float32)
+    Wg = rng.standard_normal((4, SYNTH_GATED_MAX_H + 1)).astype(np.float32)
+    Wu = rng.standard_normal((4, SYNTH_GATED_MAX_H + 1)).astype(np.float32)
+    out, ex = run_gated_matmul_region(region, A, Wg, Wu)
+    assert ex == "reference"                            # over the stack cap
+    assert np.allclose(out, region.reference(A, Wg, Wu), atol=1e-4)
+
+
+def test_runtime_prepass_fuses_swiglu_gate_from_primitives():
+    # The orchestrator must fuse matmul(A,Wg)->silu, matmul(A,Wu), mul(...) into
+    # ONE gated kernel — and the gated pass must run BEFORE matmul-epilogue (which
+    # would otherwise greedily claim matmul(A,Wg)->silu and starve the gate).
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(2)
+    A = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    Wg = (rng.standard_normal((16, 12)) * 0.3).astype(np.float32)
+    Wu = (rng.standard_normal((16, 12)) * 0.3).astype(np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%A", "%Wg"], "result": "%g"},
+           {"op_name": "tessera.silu", "operands": ["%g"], "result": "%ga"},
+           {"op_name": "tessera.matmul", "operands": ["%A", "%Wu"], "result": "%u"},
+           {"op_name": "tessera.mul", "operands": ["%ga", "%u"], "result": "%o"}]
+    values = {"A": A, "Wg": Wg, "Wu": Wu}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1, 2, 3}
+    ref = GatedMatmulRegion().reference(A, Wg, Wu)
+    if sys.platform == "darwin":
+        assert np.allclose(values["o"], ref, atol=1e-4)
+
+
+def test_runtime_prepass_plain_matmul_silu_still_fuses_as_epilogue():
+    # Regression: a bare matmul->silu (no gate) must still fuse via the
+    # matmul-epilogue pass after the gated pass declines it.
+    import numpy as np
+    from tessera.runtime import _apple_gpu_try_synthesized_fusion
+
+    rng = np.random.default_rng(4)
+    A = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    Wg = (rng.standard_normal((16, 12)) * 0.3).astype(np.float32)
+    ops = [{"op_name": "tessera.matmul", "operands": ["%A", "%Wg"], "result": "%g"},
+           {"op_name": "tessera.silu", "operands": ["%g"], "result": "%o"}]
+    values = {"A": A, "Wg": Wg}
+    consumed = _apple_gpu_try_synthesized_fusion(ops, values, np)
+    assert consumed == {0, 1}
+    ref = FusedRegion(("silu",)).reference(A, Wg)
+    if sys.platform == "darwin":
+        assert np.allclose(values["o"], ref, atol=1e-4)
 
 
 # ── F2a: hardware-verified synthesis, gated by the horizontal oracle ─────────

@@ -15,7 +15,8 @@ from tessera.compiler import displacement_tasks as DT  # noqa: F401 (registers t
 
 def test_lanes_registered_as_tasks():
     names = set(G.task_names())
-    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise"):
+    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise",
+                 "gated_matmul"):
         assert f"displacement/{kind}" in names
 
 
@@ -31,7 +32,8 @@ def test_displacement_lanes_pass_or_only_provenance_skips():
     # On a Metal host every displacement task should fully pass. Off Metal the
     # only allowed failure is the "executes_on_metal" provenance check — never a
     # divergence or a wrong-on-metal check.
-    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise"):
+    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise",
+                 "gated_matmul"):
         g = G.grade(f"displacement/{kind}", np.random.default_rng(7))
         for c in g.failures:
             assert c.name.endswith("executes_on_metal"), \
@@ -40,6 +42,7 @@ def test_displacement_lanes_pass_or_only_provenance_skips():
 
 def test_no_vacuous_pass():
     # Each task emits checks (a zero-check task fails by construction).
-    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise"):
+    for kind in ("matmul_epilogue", "norm_chain", "attention", "pointwise",
+                 "gated_matmul"):
         g = G.grade(f"displacement/{kind}", np.random.default_rng(1))
         assert len(g.checks) > 0

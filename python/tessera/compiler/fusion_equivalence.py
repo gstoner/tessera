@@ -59,10 +59,12 @@ def displacement_verdict(kind: str, shape: tuple[int, ...], *, seed: int = 0,
                          rtol: float = 1e-3, atol: float = 1e-4
                          ) -> DisplacementVerdict:
     """Gate one synthesizer codegen path on **hidden** inputs (fresh RNG keyed by
-    ``seed``). ``kind`` ∈ {matmul_epilogue, norm_chain, attention, pointwise}.
+    ``seed``). ``kind`` ∈ {matmul_epilogue, norm_chain, attention, pointwise,
+    gated_matmul}.
 
     ``shape`` is interpreted per kind: matmul_epilogue/attention use (M, K, N)
-    (and a head_dim for attention's V); norm_chain/pointwise use (rows, cols)."""
+    (and a head_dim for attention's V); norm_chain/pointwise use (rows, cols);
+    gated_matmul uses (M, K, H)."""
     rng = np.random.default_rng(seed)
 
     if kind == "matmul_epilogue":
@@ -102,11 +104,21 @@ def displacement_verdict(kind: str, shape: tuple[int, ...], *, seed: int = 0,
         out, ex = F.run_pointwise_graph(pw_region, arrs)
         return _verdict(kind, ex, out, pw_region.reference(*arrs), rtol, atol)
 
+    if kind == "gated_matmul":
+        M, K, H = shape
+        g_region = F.GatedMatmulRegion(gate_act="silu")
+        A = rng.standard_normal((M, K)).astype(np.float32)
+        Wg = rng.standard_normal((K, H)).astype(np.float32)
+        Wu = rng.standard_normal((K, H)).astype(np.float32)
+        out, ex = F.run_gated_matmul_region(g_region, A, Wg, Wu)
+        return _verdict(kind, ex, out, g_region.reference(A, Wg, Wu), rtol, atol)
+
     raise ValueError(f"unknown displacement kind {kind!r}")
 
 
 #: The synthesizer codegen lanes that displace the per-op dispatcher today.
-DISPLACED_LANES = ("matmul_epilogue", "norm_chain", "attention", "pointwise")
+DISPLACED_LANES = ("matmul_epilogue", "norm_chain", "attention", "pointwise",
+                   "gated_matmul")
 
 
 def gate_all(shape_by_kind: dict[str, tuple[int, ...]] | None = None, *,
@@ -119,6 +131,7 @@ def gate_all(shape_by_kind: dict[str, tuple[int, ...]] | None = None, *,
         "norm_chain": (8, 64),
         "attention": (8, 32, 16),
         "pointwise": (8, 64),
+        "gated_matmul": (16, 32, 48),
     }
     return {k: displacement_verdict(k, shapes[k], seed=seed)
             for k in DISPLACED_LANES}

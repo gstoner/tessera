@@ -27,6 +27,7 @@ _SHAPES: dict[str, tuple[tuple[int, ...], ...]] = {
     "norm_chain": ((8, 64), (4, 128)),
     "attention": ((8, 32, 16), (16, 16, 8)),
     "pointwise": ((8, 64), (16, 32)),
+    "gated_matmul": ((16, 32, 48), (8, 16, 12)),
 }
 
 
@@ -76,3 +77,8 @@ def _t_disp_attention(rng: Any) -> list[CheckResult]:
 @task("displacement/pointwise")
 def _t_disp_pointwise(rng: Any) -> list[CheckResult]:
     return _grade_lane("pointwise", rng)
+
+
+@task("displacement/gated_matmul")
+def _t_disp_gated_matmul(rng: Any) -> list[CheckResult]:
+    return _grade_lane("gated_matmul", rng)

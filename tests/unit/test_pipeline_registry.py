@@ -192,6 +192,15 @@ _KNOWN_UNTRACKED_PIPELINES: frozenset[str] = frozenset({
     "tessera-lower-to-nvidia",
     "tessera-lower-to-blackwell",
     "tessera-lower-to-hopper",
+    # Phase 4 GPU-emission convenience aliases (2026-06-17): lower a tessera
+    # kernel through the linalg→gpu spine to NVVM / ROCDL IR text (emission only;
+    # GPU launch is hardware-gated). Composed via parsePassPipeline over upstream
+    # MLIR passes, so they require the upstream gpu/nvvm/rocdl dialects rather than
+    # Tessera dialects — outside the REGISTERED_DIALECTS-validated PipelineSpec
+    # surface. Exercised by tests/tessera-ir/phase8/gpu_emit_nvvm.mlir +
+    # tests/unit/test_gpu_emit_nvvm.py.
+    "tessera-emit-nvvm",
+    "tessera-emit-rocdl",
     # Internal cleanup / verification meta-pipelines.
     "tessera-cleanup",
     "tessera-full-pipeline",

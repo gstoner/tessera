@@ -350,10 +350,24 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   *Follow-ons:* tune tile sizes. Scope honesty: won't match hand-tuned Accelerate
   BLAS, and the
   **single-GEMM hot path already routes to Accelerate** (`_native_cpu_fast_call`);
-  this lane targets multi-op programs that contain a small/medium GEMM. *Next on
-  this thread:* swap the pipeline bottom `linalg→loops→LLVM` for
-  `linalg→gpu→NVVM/ROCDL` (**emission HF**, the `tsrRegisterGpuLauncher` →
-  `cuLaunchKernel`/`hipLaunchKernel` wiring HG).
+  this lane targets multi-op programs that contain a small/medium GEMM.
+  **GPU-emission spine landed (2026-06-17, HF).** `tessera-opt` now lowers a
+  tessera kernel through `linalg → empty-tensor-to-alloc → one-shot-bufferize →
+  convert-linalg-to-parallel-loops → gpu-map-parallel-loops →
+  convert-parallel-loops-to-gpu → gpu-kernel-outlining →
+  gpu.module(lower-affine, convert-gpu-to-nvvm)`, exposed as the
+  `--tessera-emit-nvvm` pipeline. A `tessera.add` emits real NVVM — an outlined
+  `gpu.module` with an `llvm.func` kernel (`nvvm.kernel`) reading
+  `nvvm.read.ptx.sreg.ctaid.x` etc. Required registering the GPU dialect + the
+  bufferization external models + the conversion passes in `tessera-opt` and
+  linking the MLIR GPU/NVVM libs (Homebrew LLVM 22 ships `nvptx64` + the libs).
+  Guards: `tests/tessera-ir/phase8/gpu_emit_nvvm.mlir` +
+  `tests/unit/test_gpu_emit_nvvm.py`. **EMISSION ONLY** — the kernel is produced
+  for inspection/codegen; the host `gpu.launch_func` stub remains and GPU launch
+  (`tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel`) is hardware-gated.
+  *Next on this thread:* ROCDL emission (`convert-gpu-to-rocdl`, same recipe),
+  matmul/reduction kernels (beyond elementwise), then the gated launch wiring +
+  PTX/cubin via the NVPTX target machine.
 - **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /
   async overlap (HG); real 1F1B ordering (HF); collective↔compute overlap via the
   unused `ChunkPlanner`/`CollectiveScheduler` (plan HF, measurement HG); GPU MMA

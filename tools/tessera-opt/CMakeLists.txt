@@ -8,14 +8,24 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRTransforms
   MLIRArithDialect
   MLIRBufferizationDialect
+  MLIRBufferizationTransforms
   MLIRFuncDialect
   MLIRLLVMDialect
+  MLIRNVVMDialect
   MLIRROCDLDialect
   MLIRLinalgDialect
+  MLIRLinalgTransforms
   MLIRMemRefDialect
   MLIRSCFDialect
   MLIRTensorDialect
   MLIRUBDialect
+  # Phase 4 GPU emission (2026-06-17): the linalg→gpu→NVVM passes (emission only;
+  # launch stays hardware-gated). Transitive deps resolve via MLIR's targets.
+  MLIRGPUDialect
+  MLIRGPUTransforms
+  MLIRSCFToGPU
+  MLIRGPUToNVVMTransforms
+  MLIRAffineToStandard
   MLIROptLib
 )
 

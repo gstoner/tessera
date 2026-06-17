@@ -3,10 +3,22 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+#include "mlir/Conversion/Passes.h"  // Phase 4 GPU emission: per-pass register decls
+// Phase 4 GPU emission: BufferizableOpInterface external models — without these,
+// one-shot-bufferize reports "op was not bufferized" for linalg/tensor/etc.
+#include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -16,6 +28,7 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"  // canonicalize / cse (per-op folders)
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/ErrorHandling.h"  // report_fatal_error (tessera-emit-nvvm)
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
@@ -219,6 +232,27 @@ mlir::PassPipelineRegistration<> gAppleGPUFullPipeline(
 } // namespace
 #endif
 
+// Phase 4 GPU emission (2026-06-17): convenience alias for the linalg→gpu→NVVM
+// emission spine — tessera kernel → linalg → scf.parallel → gpu.launch → NVVM IR
+// text. EMISSION ONLY: the NVVM kernel is produced for inspection/codegen; GPU
+// launch (cuLaunchKernel/hipLaunchKernel) stays hardware-gated. Composed via
+// parsePassPipeline so it reuses the upstream passes registered in main().
+static mlir::PassPipelineRegistration<> gEmitNVVM(
+    "tessera-emit-nvvm",
+    "Phase 4 GPU emission: lower a tessera kernel through linalg -> scf.parallel "
+    "-> gpu -> NVVM (emission only; GPU launch is hardware-gated).",
+    [](mlir::OpPassManager &pm) {
+      if (failed(mlir::parsePassPipeline(
+              "func.func(tessera-to-linalg),empty-tensor-to-alloc-tensor,"
+              "one-shot-bufferize{bufferize-function-boundaries=true},"
+              "func.func(convert-linalg-to-parallel-loops),"
+              "func.func(gpu-map-parallel-loops),"
+              "func.func(convert-parallel-loops-to-gpu),gpu-kernel-outlining,"
+              "gpu.module(lower-affine,convert-gpu-to-nvvm)",
+              pm)))
+        llvm::report_fatal_error("tessera-emit-nvvm: failed to build pipeline");
+    });
+
 int main(int argc, char **argv) {
 #if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
@@ -298,10 +332,25 @@ int main(int argc, char **argv) {
   tessera::registerTesseraNVIDIABackendPasses();
 #endif
 
+  // Phase 4 GPU emission (2026-06-17): register the upstream passes that compose
+  // the linalg→gpu→NVVM emission spine, so the `tessera-emit-nvvm` pipeline (and
+  // ad-hoc --pass-pipeline lit fixtures) can lower a tessera kernel to NVVM IR
+  // text. Emission only — GPU launch (cuLaunchKernel/hipLaunchKernel) stays
+  // hardware-gated. Only the specific passes we use are registered (minimal
+  // link surface), not the full conversion umbrella.
+  mlir::registerConvertLinalgToParallelLoopsPass();
+  mlir::bufferization::registerBufferizationPasses();
+  mlir::registerGpuMapParallelLoopsPass();
+  mlir::registerGpuKernelOutliningPass();
+  mlir::registerConvertParallelLoopToGpuPass();
+  mlir::registerLowerAffinePass();  // affine.apply in the outlined kernel → std
+  mlir::registerConvertGpuOpsToNVVMOpsPass();
+
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect,
                   mlir::bufferization::BufferizationDialect,
                   mlir::func::FuncDialect,
+                  mlir::gpu::GPUDialect,
                   mlir::linalg::LinalgDialect,
                   mlir::memref::MemRefDialect,
                   mlir::scf::SCFDialect,
@@ -310,6 +359,15 @@ int main(int argc, char **argv) {
                   mlir::LLVM::LLVMDialect,
                   mlir::NVVM::NVVMDialect,
                   mlir::ROCDL::ROCDLDialect>();
+
+  // Phase 4 GPU emission: BufferizableOpInterface external models so
+  // one-shot-bufferize can lower linalg/tensor/scf/arith + func boundaries.
+  mlir::arith::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::linalg::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::scf::registerBufferizableOpInterfaceExternalModels(registry);
+  mlir::bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
+      registry);
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraDialects(registry);

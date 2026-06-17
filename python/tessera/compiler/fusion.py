@@ -1452,6 +1452,14 @@ for _k in POINTWISE_OPS:
     _POINTWISE_NAMES[f"tessera.{_k}"] = _k
 
 
+def is_pointwise_op(op_name: str) -> bool:
+    """True if ``op_name`` is in the pointwise-DAG synthesizer's vocabulary — the
+    single source of truth shared by ``discover_pointwise_graph`` (runtime prepass)
+    and the compile-time routing recognizer (``driver._apple_gpu_chain_kind``), so
+    the two never drift."""
+    return op_name in _POINTWISE_NAMES
+
+
 @dataclass(frozen=True)
 class PointwiseGraphRegion:
     """A connected DAG of same-shape pointwise ops. ``ops`` is topo-ordered
@@ -3036,4 +3044,5 @@ __all__ = [
     "should_fuse_gated",
     "verify_synthesized_gated",
     "discover_gated_matmul_regions",
+    "is_pointwise_op",
 ]

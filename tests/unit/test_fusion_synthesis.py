@@ -391,6 +391,33 @@ def test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime():
     assert meta["execution_mode"] == "metal_runtime", meta.get("execution_mode")
 
 
+@pytest.mark.skipif(sys.platform != "darwin",
+                    reason="metal_runtime dispatch is Darwin-only")
+def test_public_jit_pointwise_dag_routes_to_apple_gpu_mps_metal_runtime():
+    # The pointwise-gap closure: a bare pointwise DAG (every op in the pointwise
+    # vocabulary) routes through driver._apple_gpu_chain_kind -> "pointwise" to
+    # apple_gpu_mps, where the prepass fuses it — metal_runtime, not the
+    # target_ir_artifact bypass.
+    import tessera as ts
+
+    @ts.jit(target="apple_gpu")
+    def pw(a, b, c):
+        return ts.ops.gelu(ts.ops.add(ts.ops.mul(a, b), c))
+
+    rng = np.random.default_rng(0)
+    a = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    b = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    c = (rng.standard_normal((8, 16)) * 0.3).astype(np.float32)
+    out = np.asarray(pw(a, b, c), np.float32)
+    ab = a * b + c
+    ref = 0.5 * ab * (1.0 + np.tanh(np.sqrt(2 / np.pi)
+                                    * (ab + 0.044715 * ab ** 3)))
+    np.testing.assert_allclose(out, ref, rtol=1e-3, atol=1e-3)
+    meta = pw.runtime_artifact().metadata
+    assert meta["compiler_path"] == "apple_gpu_mps", meta.get("compiler_path")
+    assert meta["execution_mode"] == "metal_runtime", meta.get("execution_mode")
+
+
 def test_runtime_prepass_plain_matmul_silu_still_fuses_as_epilogue():
     # Regression: a bare matmul->silu (no gate) must still fuse via the
     # matmul-epilogue pass after the gated pass declines it.

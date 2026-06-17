@@ -843,6 +843,18 @@ def _apple_gpu_chain_kind(cpu_plan: CPUPlan | None) -> str | None:
                 return "matmul_gelu"
             if second.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}:
                 return "matmul_rmsnorm"
+
+    # General pointwise DAG (≥2 ops, every op in the pointwise-synthesizer
+    # vocabulary) — checked LAST so the specific matmul-rooted chains above win.
+    # Routes the program to apple_gpu_mps, where the runtime prepass
+    # (discover_pointwise_graph) fuses it into one kernel; any op the prepass
+    # declines still runs per-op on Metal (single pointwise ops are
+    # mps-executable). The vocabulary is fusion's single source of truth, so the
+    # routing recognizer and the prepass discoverer never drift.
+    if len(ops) >= 2:
+        from .fusion import is_pointwise_op
+        if all(is_pointwise_op(op.op_name) for op in ops):
+            return "pointwise"
     return None
 
 
@@ -900,6 +912,12 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
             # Gate from primitives — the runtime prepass synthesizes the fused
             # dual-weight kernel; name it here so the Target IR is descriptive.
             symbol = "tessera_apple_gpu_synth_gated_matmul_f32"
+            framework = "Metal"
+            abi = "MSLComputePipelineState"
+        elif chain == "pointwise":
+            # General pointwise DAG — the runtime prepass synthesizes one fused
+            # elementwise kernel; name it here so the Target IR is descriptive.
+            symbol = "tessera_apple_gpu_synth_pointwise_f32"
             framework = "Metal"
             abi = "MSLComputePipelineState"
         elif chain in {"matmul_bias", "matmul_bias_gelu", "matmul_bias_relu",

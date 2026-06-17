@@ -329,10 +329,20 @@ pointwise,gated_matmul}`).
 > mirrors it for the descriptive `known_chain` metadata (not stamped as a C++ intent,
 > like `swiglu`). Proven: `test_public_jit_gate_routes_to_apple_gpu_mps_metal_runtime`
 > (Darwin) asserts `compiler_path==apple_gpu_mps` + `execution_mode==metal_runtime` +
-> numeric match. The investigation below stands as the architecture record; the
-> **broader pointwise gap is NOT yet closed** (same root cause — `_apple_gpu_chain_kind`
-> doesn't recognize a bare pointwise DAG — and the design question still applies before
-> broadening recognizers).
+> numeric match.
+>
+> **✅ Pointwise gap ALSO closed (2026-06-16) — design question answered: the prepass
+> IS the live path.** `_apple_gpu_chain_kind` gained a *general* pointwise-DAG
+> recognizer (checked last): a ≥2-op plan where every op is in
+> `fusion.is_pointwise_op`'s vocabulary → `"pointwise"` → `apple_gpu_mps` → the prepass
+> `discover_pointwise_graph` fuses it (declined ops still run per-op on Metal). The
+> vocabulary is fusion's single source of truth (one `is_pointwise_op` helper consumed
+> by both the prepass discoverer and the routing recognizer — no drift). Unlike the
+> gate's bespoke shape, this is one general predicate, so it's not a recognizer
+> treadmill. Proven: `test_public_jit_pointwise_dag_routes_to_apple_gpu_mps_metal_runtime`.
+> Net: multi-op programs the prepass can fuse now reach it via public `@jit`; the
+> `target_ir_artifact` lane remains for programs neither a known_chain nor wholly
+> pointwise/gated.
 >
 > **⚠️ Pipeline-reachability finding (2026-06-16, from validating the gated path
 > end-to-end).** The synthesized-fusion prepass (`_apple_gpu_try_synthesized_fusion`,

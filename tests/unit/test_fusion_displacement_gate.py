@@ -21,6 +21,7 @@ def test_lane_never_diverges(kind):
         "norm_chain": (8, 64),
         "attention": (8, 32, 16),
         "pointwise": (8, 64),
+        "gated_matmul": (16, 32, 48),
     }[kind]
     v = FE.displacement_verdict(kind, shape, seed=1234)
     # The gate's hard invariant: a lane is EITHER equivalent (ran on Metal +
@@ -36,6 +37,7 @@ def test_lane_equivalent_when_on_metal(kind):
         "norm_chain": (8, 64),
         "attention": (8, 32, 16),
         "pointwise": (8, 64),
+        "gated_matmul": (16, 32, 48),
     }[kind]
     v = FE.displacement_verdict(kind, shape, seed=7)
     if v.executed == "metal_runtime":

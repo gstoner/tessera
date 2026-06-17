@@ -460,6 +460,22 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         supported_dtypes=("bf16", "fp16", "fp32", "int8"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
+    "rocm_gfx1151": TargetCapability(
+        name="rocm_gfx1151",
+        aliases=("gfx1151", "rdna35", "strixhalo", "radeon8060s", "ryzenaimax395"),
+        family="rocm",
+        runtime_backend="hip",
+        default_runtime_status="artifact_only",
+        supported_ops=_ops(
+            "artifact_only",
+            ("tessera.matmul",),
+            reason="ROCm 7.2.3 RDNA 3.5 (Strix Halo APU) WMMA artifact; HIP execution gated on real gfx1151 silicon",
+        ),
+        # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
+        # RDNA 3.5 (the load-bearing difference from gfx1200).
+        supported_dtypes=("bf16", "fp16", "fp32", "int8"),
+        features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
+    ),
     "rocm_gfx1200": TargetCapability(
         name="rocm_gfx1200",
         aliases=("gfx1200", "gfx12", "rdna4", "rx9000"),

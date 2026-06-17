@@ -2,6 +2,12 @@
 
 This document consolidates ROCm-specific audit material.
 
+> **Real-hardware bring-up:** see [`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md)
+> — the gfx1151 (RDNA 3.5 / Ryzen AI Max+ 395) target model is now grounded in the
+> RDNA3.5 ISA (WMMA 16×16×16, no FP8), and the doc lays out the rung ladder to the
+> first real non-Apple `backend_kernel` execution proof (emit → assemble → HIP-launch →
+> execute-and-compare). This is the unblock for the "Still Open" / "Next Work" items below.
+
 ## Finished
 
 - ROCm target-map generation exists at `../../generated/rocm_target_map.md`.

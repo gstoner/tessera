@@ -8,12 +8,20 @@ Per-ISA feature matrix covers:
   - gfx94x (CDNA 3, MI300A / MI300X)
   - gfx950 (CDNA 4, MI325X / future)
   - gfx1100 (RDNA 3, prosumer; kept for completeness)
+  - gfx1151 (RDNA 3.5, Strix Halo APU — Radeon 8060S / Ryzen AI Max+ 395)
   - gfx1200 (RDNA 4 / GFX12 consumer class)
 
-Each ISA exposes a feature dict + a dtype set + MFMA-instruction
+Each ISA exposes a feature dict + a dtype set + matrix-instruction
 variants.  ``rocm_feature_status(isa, name)`` queries individual flags;
-``mfma_variants(isa)`` returns the set of MFMA instruction shapes the
-backend can lower to.
+``mfma_variants(isa)`` returns the set of MFMA instruction shapes a CDNA
+arch can lower to, and ``wmma_variants(isa)`` returns the WMMA shapes an
+RDNA arch can lower to (the two are mutually exclusive per arch).
+
+The gfx1151 (RDNA 3.5) entry is grounded in the "RDNA3.5" Instruction Set
+Architecture Reference Guide (AMD, 23-July-2024), §7.9 Wave Matrix Multiply
+Accumulate: WMMA is VOP3P, tile 16x16x16, dtype combos F32<-F16, F32<-BF16,
+F16<-F16, BF16<-BF16, I32<-IU8, I32<-IU4 — **no FP8/FP4 WMMA on RDNA 3.5**
+(that is CDNA 4 / RDNA 4 only).
 """
 
 from __future__ import annotations
@@ -38,7 +46,15 @@ class AMDArch(IntEnum):
     GFX_942 = 942      # MI300X — CDNA 3 discrete
     GFX_950 = 950      # MI325X — CDNA 4
     GFX_1100 = 1100    # RDNA 3 prosumer (RX 7900-series)
+    GFX_1151 = 1151    # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
     GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
+
+
+#: RDNA-family arches (wave32, WMMA matrix path).  Everything else is CDNA
+#: (wave64, MFMA).  Used by lane-width and matrix-path gates.
+_RDNA_ARCHES: frozenset[AMDArch] = frozenset({
+    AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
+})
 
 
 #: Target ROCm release that Tessera's AMD backend is built against.
@@ -56,6 +72,7 @@ _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_942:  65536,
     AMDArch.GFX_950:  163840,   # CDNA 4 doubles LDS
     AMDArch.GFX_1100: 65536,
+    AMDArch.GFX_1151: 65536,    # RDNA 3.5 — 128 KiB per WGP (2 CUs); 64 KiB/CU view
     AMDArch.GFX_1200: 65536,
 }
 
@@ -67,6 +84,7 @@ _MAX_WAVES: dict[AMDArch, int] = {
     AMDArch.GFX_942:  32,
     AMDArch.GFX_950:  32,
     AMDArch.GFX_1100: 16,
+    AMDArch.GFX_1151: 16,       # RDNA 3.5 wave32 occupancy (same as RDNA 3)
     AMDArch.GFX_1200: 16,
 }
 
@@ -98,6 +116,14 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
         "int8",
     }),
     AMDArch.GFX_1100: frozenset({
+        "fp32", "bf16", "fp16", "int8",
+    }),
+    AMDArch.GFX_1151: frozenset({
+        # RDNA 3.5 (Strix Halo).  WMMA executable surface per the ISA §7.9
+        # Table 33: F16, BF16, IU8 (int8).  IU4 (int4) is architecturally
+        # present but stays planned-gated (no first-class packed-4 storage
+        # policy yet — same stance as gfx1200), so it is omitted from the
+        # executable dtype set.  Notably NO FP8 here (unlike gfx1200).
         "fp32", "bf16", "fp16", "int8",
     }),
     AMDArch.GFX_1200: frozenset({
@@ -203,6 +229,30 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "xnack":               "not_supported",
         "sram_ecc":            "not_supported",
     },
+    AMDArch.GFX_1151: {
+        # RDNA 3.5 (Strix Halo APU).  WMMA only, no MFMA — same matrix
+        # surface as RDNA 3 (gfx1100).  Grounded in the RDNA3.5 ISA §7.9
+        # Table 33: WMMA combos are F16/BF16/IU8/IU4 — there is **no FP8
+        # WMMA instruction** on RDNA 3.5, so wmma_f8 is not_supported
+        # (this is the load-bearing distinction from gfx1200, which has it).
+        "mfma":                "not_supported",
+        "mfma_f8":             "not_supported",
+        "mfma_xf32":           "not_supported",
+        "mfma_f4":             "not_supported",
+        "mfma_f6":             "not_supported",
+        "wmma_f16":            "ready",
+        "wmma_bf16":           "ready",
+        "wmma_f8":             "not_supported",
+        "lds_async_copy":      "not_supported",
+        "buffer_load_lds":     "ready",
+        "global_load_lds":     "not_supported",
+        "cluster_mode":        "not_supported",
+        # APU with truly unified LPDDR5x; xnack/managed-memory behaviour on
+        # gfx1151 is left conservative (not asserted ready) until validated
+        # on real silicon under a shipping ROCm.
+        "xnack":               "not_supported",
+        "sram_ecc":            "not_supported",
+    },
     AMDArch.GFX_1200: {
         # RDNA 4 / GFX12 — WMMA/rocWMMA-class target.  Public ROCm docs
         # list GFX12 matrix datatypes/instructions including FP8/BF8 WMMA
@@ -269,7 +319,27 @@ _MFMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int, int]]] = {
         (16, 16, 8, 1),
     }),
     AMDArch.GFX_1100: frozenset(),  # RDNA 3 has WMMA, not MFMA
+    AMDArch.GFX_1151: frozenset(),  # RDNA 3.5 has WMMA, not MFMA
     AMDArch.GFX_1200: frozenset(),  # RDNA 4 has WMMA, not MFMA
+}
+
+
+# WMMA instruction shape table per RDNA arch.  Each entry is a tuple of
+# (M, N, K) shapes the backend can lower to.  RDNA's Wave Matrix Multiply
+# Accumulate (VOP3P `V_WMMA_*`) is the RDNA analogue of CDNA's MFMA; the two
+# are mutually exclusive (a CDNA arch has MFMA + empty WMMA, an RDNA arch has
+# WMMA + empty MFMA).  RDNA 3 / 3.5 expose a single 16x16x16 tile across all
+# supported dtype combos (RDNA3.5 ISA §7.9, Table 33).
+_WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
+    AMDArch.GFX_90A:  frozenset(),  # CDNA — MFMA only
+    AMDArch.GFX_940:  frozenset(),
+    AMDArch.GFX_942:  frozenset(),
+    AMDArch.GFX_950:  frozenset(),
+    AMDArch.GFX_1100: frozenset({(16, 16, 16)}),   # RDNA 3 WMMA
+    AMDArch.GFX_1151: frozenset({(16, 16, 16)}),   # RDNA 3.5 WMMA (ISA §7.9)
+    # RDNA 4 keeps the 16x16x16 base tile; additional GFX12 SWMMAC / larger-K
+    # shapes are deferred until grounded against the RDNA 4 ISA (not this doc).
+    AMDArch.GFX_1200: frozenset({(16, 16, 16)}),
 }
 
 
@@ -280,6 +350,7 @@ _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_942:  "gfx942",
     AMDArch.GFX_950:  "gfx950",
     AMDArch.GFX_1100: "gfx1100",
+    AMDArch.GFX_1151: "gfx1151",
     AMDArch.GFX_1200: "gfx1200",
 }
 
@@ -387,7 +458,7 @@ class ROCmTargetProfile:
     @property
     def threads_per_wave(self) -> int:
         # AMD wavefronts are 64 lanes on CDNA, 32 on RDNA.
-        return 32 if self.arch in {AMDArch.GFX_1100, AMDArch.GFX_1200} else 64
+        return 32 if self.arch in _RDNA_ARCHES else 64
 
     @property
     def rocm_features(self) -> frozenset[str]:
@@ -406,6 +477,15 @@ class ROCmTargetProfile:
     @property
     def mfma_shapes(self) -> frozenset[tuple[int, int, int, int]]:
         return _MFMA_VARIANTS[self.arch]
+
+    @property
+    def wmma_shapes(self) -> frozenset[tuple[int, int, int]]:
+        """WMMA (M, N, K) tiles for this arch (empty on CDNA — see mfma_shapes)."""
+        return _WMMA_VARIANTS[self.arch]
+
+    @property
+    def is_rdna(self) -> bool:
+        return self.arch in _RDNA_ARCHES
 
 
 def rocm_feature_status(arch: AMDArch, feature: str) -> str:
@@ -429,6 +509,11 @@ def mfma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int, int]]:
     return _MFMA_VARIANTS[arch]
 
 
+def wmma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int]]:
+    """Return WMMA instruction shapes (M, N, K) for an RDNA ``arch`` (empty on CDNA)."""
+    return _WMMA_VARIANTS[arch]
+
+
 __all__ = [
     "AMDArch",
     "ROCmTargetProfile",
@@ -442,4 +527,5 @@ __all__ = [
     "rocm_feature_set",
     "rocm_arch_string",
     "mfma_variants",
+    "wmma_variants",
 ]

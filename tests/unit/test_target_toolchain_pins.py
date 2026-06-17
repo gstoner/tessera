@@ -195,6 +195,26 @@ class TestROCmFeatureMatrix:
         assert p.threads_per_wave == 32   # RDNA wavefront = 32
         assert p.dtype_set == frozenset({"fp32", "bf16", "fp16", "int8"})
 
+    def test_gfx1151_rdna35_strix_halo_wmma_no_fp8(self):
+        """RDNA 3.5 (Strix Halo / Radeon 8060S) — WMMA, wave32, NO FP8 WMMA.
+
+        Grounded in the RDNA3.5 ISA §7.9 Table 33: WMMA combos are
+        F16/BF16/IU8/IU4 only; there is no FP8 WMMA instruction (the
+        load-bearing difference from gfx1200/RDNA 4)."""
+        from tessera.compiler.rocm_target import (
+            ROCmTargetProfile, AMDArch, rocm_feature_status)
+        p = ROCmTargetProfile(arch=AMDArch.GFX_1151)
+        assert p.hipcc_arch == "gfx1151"
+        assert p.is_rdna
+        assert not p.supports_mfma          # RDNA has no MFMA
+        assert p.supports_wmma              # has WMMA (f16/bf16)
+        assert p.threads_per_wave == 32     # RDNA wavefront = 32
+        # The ISA-grounded distinction: NO FP8 WMMA on RDNA 3.5.
+        assert rocm_feature_status(AMDArch.GFX_1151, "wmma_f8") == "not_supported"
+        assert "fp8_e4m3" not in p.dtype_set and "fp8_e5m2" not in p.dtype_set
+        assert p.dtype_set == frozenset({"fp32", "bf16", "fp16", "int8"})
+        assert p.lds_capacity_bytes == 65536
+
     def test_gfx1200_rdna4_wmma_f8(self):
         from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch
         p = ROCmTargetProfile(arch=AMDArch.GFX_1200)
@@ -243,15 +263,53 @@ class TestROCmMFMAShapeTable:
         from tessera.compiler.rocm_target import mfma_variants, AMDArch
         assert mfma_variants(AMDArch.GFX_1200) == frozenset()
 
+    def test_rdna35_has_no_mfma_shapes(self):
+        from tessera.compiler.rocm_target import mfma_variants, AMDArch
+        assert mfma_variants(AMDArch.GFX_1151) == frozenset()
+
+
+class TestROCmWMMAShapeTable:
+    """RDNA WMMA shapes (the matrix path on RDNA, parallel to MFMA on CDNA)."""
+
+    def test_rdna_arches_expose_16x16x16(self):
+        from tessera.compiler.rocm_target import wmma_variants, AMDArch
+        for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200):
+            assert wmma_variants(arch) == frozenset({(16, 16, 16)}), arch.name
+
+    def test_cdna_arches_have_no_wmma(self):
+        from tessera.compiler.rocm_target import wmma_variants, AMDArch
+        for arch in (AMDArch.GFX_90A, AMDArch.GFX_940,
+                     AMDArch.GFX_942, AMDArch.GFX_950):
+            assert wmma_variants(arch) == frozenset(), arch.name
+
+    def test_mfma_and_wmma_are_mutually_exclusive(self):
+        """Every arch has MFMA xor WMMA shapes, never both, never neither."""
+        from tessera.compiler.rocm_target import (
+            mfma_variants, wmma_variants, AMDArch)
+        for arch in AMDArch:
+            has_mfma = bool(mfma_variants(arch))
+            has_wmma = bool(wmma_variants(arch))
+            assert has_mfma != has_wmma, (
+                f"{arch.name}: mfma={has_mfma} wmma={has_wmma} (want exactly one)")
+
 
 class TestROCmCapabilityRegistry:
     @pytest.mark.parametrize("name", [
         "rocm", "rocm_gfx90a", "rocm_gfx940",
-        "rocm_gfx942", "rocm_gfx950", "rocm_gfx1100", "rocm_gfx1200",
+        "rocm_gfx942", "rocm_gfx950", "rocm_gfx1100", "rocm_gfx1151",
+        "rocm_gfx1200",
     ])
     def test_rocm_723_marker_present(self, name):
         cap = TARGET_CAPABILITIES[name]
         assert "rocm_7_2_3" in cap.features
+
+    def test_gfx1151_strix_halo_wmma_no_fp8(self):
+        cap = TARGET_CAPABILITIES["rocm_gfx1151"]
+        assert "wmma_f16" in cap.features and "wmma_bf16" in cap.features
+        assert "wmma_f8" not in cap.features        # no FP8 WMMA on RDNA 3.5
+        assert "mfma" not in cap.features
+        assert "fp8_e4m3" not in cap.supported_dtypes
+        assert "strixhalo" in cap.aliases
 
     def test_gfx950_has_f4_f6(self):
         cap = TARGET_CAPABILITIES["rocm_gfx950"]

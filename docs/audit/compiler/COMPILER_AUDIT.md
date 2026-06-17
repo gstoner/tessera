@@ -365,9 +365,22 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `tests/unit/test_gpu_emit_nvvm.py`. **EMISSION ONLY** — the kernel is produced
   for inspection/codegen; the host `gpu.launch_func` stub remains and GPU launch
   (`tsrRegisterGpuLauncher` → `cuLaunchKernel`/`hipLaunchKernel`) is hardware-gated.
-  *Next on this thread:* ROCDL emission (`convert-gpu-to-rocdl`, same recipe),
-  matmul/reduction kernels (beyond elementwise), then the gated launch wiring +
-  PTX/cubin via the NVPTX target machine.
+  **ROCDL emission landed (2026-06-17):** `--tessera-emit-rocdl` is the AMD twin
+  of the NVVM lane (identical spine, `gpu.module(convert-gpu-to-rocdl)`); a
+  `tessera.add` emits real ROCDL (`rocdl.kernel` + `rocdl.workgroup.id.x` + AMD
+  data layout). Guard: the ROCDL RUN line in `gpu_emit_nvvm.mlir` +
+  `test_gpu_emit_nvvm.py`. **PTX attempted + deferred (2026-06-17):** wired
+  `nvvm-attach-target{chip=sm_90}` + `gpu-module-to-binary{format=isa}` (with
+  NVPTX target init + the LLVM-IR translation interfaces) as `--tessera-emit-ptx`,
+  but it **segfaults inside `mlir::gpu::transformGpuModulesToBinaries`** (the NVVM
+  target serialization) on this macOS / Homebrew LLVM 22 build — likely a
+  libdevice/toolkit lookup or an LLVM-22 serialization quirk even for `format=isa`.
+  Reverted (won't ship a crashing pipeline); the NVVM/ROCDL emission is the proven
+  layer. *Next on this thread:* debug the `gpu-module-to-binary` serialization
+  (target options / toolkit path) — or chain `tessera-emit-nvvm` → isolate the
+  `gpu.module` → `tessera-translate-mlir --mlir-to-llvmir` → `llc -mtriple=nvptx64`
+  for PTX text; plus matmul/reduction GPU kernels (beyond elementwise) and the
+  gated launch wiring.
 - **Phase 5 — Schedule + pipelining (mixed).** Double-buffering structure (HF) /
   async overlap (HG); real 1F1B ordering (HF); collective↔compute overlap via the
   unused `ChunkPlanner`/`CollectiveScheduler` (plan HF, measurement HG); GPU MMA

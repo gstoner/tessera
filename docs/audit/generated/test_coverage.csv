@@ -45,7 +45,7 @@ broadcast,1,0,0,1,1,,structural_only,unclassified — defaults to structural_onl
 broadcast_to_axis,3,0,0,3,0,,needs_direct_test,category default for 'collective'
 bsmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,7,34,0,41,0,fp32,needs_direct_test,category default for 'layout_transform'
+cast,7,36,0,43,0,fp32,needs_direct_test,category default for 'layout_transform'
 cat,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
 ceil,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'

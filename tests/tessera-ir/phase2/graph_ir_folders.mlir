@@ -159,3 +159,15 @@ func.func @xor_flag_compose(%a: tensor<4x8xf32>, %b: tensor<8x16xf32>) -> tensor
   %0 = "tessera.matmul"(%a, %bt) {transposeB = true} : (tensor<4x8xf32>, tensor<16x8xf32>) -> tensor<4x16xf32>
   return %0 : tensor<4x16xf32>
 }
+
+// A same-type cast carrying a tessera.layout attribute is a layout-change marker
+// (the cast{layout} form a LayoutAssignmentPass inserts), NOT dead weight — it
+// must survive --canonicalize (CastOp::fold + CanonicalizeTesseraIR both guard
+// on the layout attr). Contrast with the plain identity cast above, which folds.
+// CHECK-LABEL: func.func @layout_cast_survives
+// CHECK: tessera.cast
+// CHECK-SAME: tessera.layout = "col_major"
+func.func @layout_cast_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %0 = "tessera.cast"(%x) {tessera.layout = "col_major"} : (tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}

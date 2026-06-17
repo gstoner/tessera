@@ -2154,9 +2154,13 @@ LogicalResult CastOp::verify() {
 
 // Phase 1 — an identity cast (same type, no numeric policy) folds to its input.
 // A numeric_policy may carry a real rounding / math-mode change, so only fold
-// when it is absent.
+// when it is absent.  A `tessera.layout` attribute makes the cast a layout-change
+// marker (the cast{layout} form a LayoutAssignmentPass inserts to request a
+// layout without changing dtype) — preserve it so layout legality and the
+// layout-sensitive backends still see the requested layout.
 OpFoldResult CastOp::fold(FoldAdaptor adaptor) {
-  if (getX().getType() == getY().getType() && !getNumericPolicy())
+  if (getX().getType() == getY().getType() && !getNumericPolicy() &&
+      !(*this)->hasAttr("tessera.layout"))
     return getX();
   return {};
 }

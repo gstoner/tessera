@@ -161,10 +161,14 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   (zero-regression). `EraseIdentityCast` was already covered by `CastOp::fold`. The
   remaining 3 (`FuseMatmulBiasGELU`/`FuseConvRelu`/`DropoutZeroSimplify`) are
   deliberately NOT migrated — they emit `fused_epilogue`/`conv2d_nhwc`/`flash_attn`
-  the rank-2 CPU JIT can't lower. *Latent finding:* `EraseIdentityCast` (in
-  tessera-canonicalize, which runs before LayoutLegality) erases a same-type
-  `cast{layout}` before the legality check sees it — a concern for the future
-  `LayoutAssignmentPass` (which inserts same-type `cast{layout}` markers).
+  the rank-2 CPU JIT can't lower. **Layout-cast guard landed (2026-06-17):** the
+  latent finding that `EraseIdentityCast` (in tessera-canonicalize) and
+  `CastOp::fold` (generic --canonicalize) erased a same-type `cast{layout}` before
+  the legality check / codegen saw it is **fixed** — both now skip a same-type
+  cast carrying a `tessera.layout` attribute (a layout-change marker, not dead
+  weight), while plain identity casts still fold. This is the prerequisite for
+  `LayoutAssignmentPass` (which inserts same-type `cast{layout}` markers). Guard:
+  the `@layout_cast_survives` case in `graph_ir_folders.mlir`.
   *Remaining Phase 1 (lower priority):* `LayoutAssignmentPass`
   v1 (layout doesn't reach the layout-agnostic rank-2 CPU JIT lane — low value until
   a layout-sensitive backend executes).

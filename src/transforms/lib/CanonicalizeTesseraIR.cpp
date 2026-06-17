@@ -109,6 +109,11 @@ struct EraseIdentityCast : public RewritePattern {
       return failure();
     if (cast->getOperand(0).getType() != cast->getResult(0).getType())
       return failure();
+    // A `tessera.layout` attribute makes a same-type cast a layout-change marker
+    // (the cast{layout} form a LayoutAssignmentPass inserts) — not dead weight.
+    // Erasing it would drop the requested layout before legality/codegen sees it.
+    if (cast->hasAttr("tessera.layout"))
+      return failure();
     rewriter.replaceOp(cast, cast->getOperand(0));
     return success();
   }

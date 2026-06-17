@@ -1,0 +1,102 @@
+"""Phase B — the Apple GPU "numpy lane" displacement worklist.
+
+A deterministic, host-free classifier that answers *which catalog ops have no
+Apple GPU lane today and therefore execute on the numpy reference interpreter*.
+It reads the authoritative lane table (``apple_gpu_envelope.runtime_ops`` /
+``lane_for``) and the op universe + categories (``op_catalog.OP_SPECS``), so it
+runs anywhere (no Darwin, no Metal) and never touches the live dispatch path.
+
+This turns the vague "~87% via numpy" into a ranked worklist grouped by the op's
+lowering category, and it surfaces the key empirical fact that guided Phase C:
+**every op in the pointwise-DAG fusion vocabulary already has a single-op GPU
+lane** — so the displacement win is multi-op *DAG fusion* (fewer dispatches) plus
+the genuinely-uncovered non-elementwise tail, not single-op elementwise.
+
+Run as a script for the human-readable report::
+
+    PYTHONPATH=python python -m tessera.compiler.apple_gpu_coverage
+"""
+
+from __future__ import annotations
+
+import collections
+from dataclasses import dataclass, field
+from typing import Iterable
+
+from tessera.compiler import apple_gpu_envelope as _env
+from tessera.compiler import fusion as _fusion
+from tessera.compiler import op_catalog as _oc
+
+
+def _graph_name(public_name: str) -> str:
+    """Graph-IR op name used for lane lookup (falls back to ``tessera.<name>``)."""
+    return _oc.graph_name_for(public_name) or f"tessera.{public_name}"
+
+
+def has_gpu_lane(public_name: str) -> bool:
+    """True iff the op has any Apple GPU dispatch lane today."""
+    covered = _env.runtime_ops()
+    return _graph_name(public_name) in covered or f"tessera.{public_name}" in covered
+
+
+@dataclass(frozen=True)
+class CoverageReport:
+    """Apple GPU lane coverage over a set of ops."""
+
+    total: int
+    covered: int
+    numpy_only: tuple[str, ...]
+    by_category: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    pointwise_vocab_covered: bool = True
+
+    @property
+    def numpy_only_count(self) -> int:
+        return len(self.numpy_only)
+
+
+def numpy_lane_worklist(op_names: Iterable[str] | None = None) -> CoverageReport:
+    """Classify ``op_names`` (default: the whole op catalog) into GPU-covered vs
+    numpy-only, grouping the numpy-only tail by lowering category. Also reports
+    whether the pointwise-DAG fusion vocabulary is fully GPU-covered."""
+    names = list(op_names) if op_names is not None else list(_oc.OP_SPECS)
+    numpy_only: list[str] = []
+    by_cat: dict[str, list[str]] = collections.defaultdict(list)
+    for n in names:
+        if has_gpu_lane(n):
+            continue
+        numpy_only.append(n)
+        spec = _oc.OP_SPECS.get(n)
+        by_cat[spec.lowering if spec else "unknown"].append(n)
+
+    # Invariant Phase C/D care about: every fusable pointwise-vocab op already has
+    # a single-op GPU lane (so elementwise single-op displacement is complete).
+    pw_uncovered = [k for k in _fusion.POINTWISE_OPS
+                    if not has_gpu_lane(k)]
+
+    return CoverageReport(
+        total=len(names),
+        covered=len(names) - len(numpy_only),
+        numpy_only=tuple(sorted(numpy_only)),
+        by_category={c: tuple(sorted(v)) for c, v in by_cat.items()},
+        pointwise_vocab_covered=not pw_uncovered,
+    )
+
+
+def render_report(report: CoverageReport | None = None) -> str:
+    r = report or numpy_lane_worklist()
+    lines = [
+        "Apple GPU numpy-lane displacement worklist",
+        f"  ops classified : {r.total}",
+        f"  GPU-covered    : {r.covered}",
+        f"  numpy-only     : {r.numpy_only_count}",
+        f"  pointwise-vocab fully GPU-covered: {r.pointwise_vocab_covered}",
+        "",
+        "numpy-only by lowering category (ranked):",
+    ]
+    for cat, ops in sorted(r.by_category.items(), key=lambda kv: -len(kv[1])):
+        lines.append(f"  {cat:24s} {len(ops):3d}  {', '.join(ops)}")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":  # pragma: no cover - human-facing report
+    print(render_report())

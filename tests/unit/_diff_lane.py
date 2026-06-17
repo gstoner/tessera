@@ -152,4 +152,12 @@ def numeric_cases(nrng):
         ("mean",     _agpu(lambda a: ts.ops.mean(a, axis=-1)), (x,), x.mean(-1),      False),
         ("amax",     _agpu(lambda a: ts.ops.amax(a, axis=-1)), (x,), x.max(-1),       False),
         ("amin",     _agpu(lambda a: ts.ops.amin(a, axis=-1)), (x,), x.min(-1),       False),
+        # Phase C — multi-op pointwise DAGs that exercise the *fusion* path with
+        # the newly-added vocab (log1p/exp/mul and sqrt/log), diffed vs numpy.
+        ("fuse_softplus_dag",
+         _agpu(lambda a, b: ts.ops.mul(ts.ops.log1p(ts.ops.exp(a)), b)),
+         (x, y), np.log1p(np.exp(x)) * y, False),
+        ("fuse_log_sqrt_dag",
+         _agpu(lambda a: ts.ops.log(ts.ops.sqrt(a))),
+         (xp,), np.log(np.sqrt(xp)), False),
     ]

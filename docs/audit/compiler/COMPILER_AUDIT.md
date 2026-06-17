@@ -170,10 +170,38 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   *it* to linalg is the remaining, lower-priority item. *Remaining Phase 2:*
   flash-attn streaming (wrap the attn ops in `scf.for` over KV with `(m,l,acc)`
   iter_args — `OnlineSoftmaxOp` ODS is already iter_args-shaped; only the loop
-  wrapper + `kv_offset` threading is missing); generalize the `fusion.py` synthesizer
-  (`elementwise_only` + `norm_chain` region kinds; grow `EPILOGUE_OPS`) and displace
-  the numpy interpreter lane-by-lane, **elementwise first**, Evaluator-gated — never
-  displacing a working MPSGraph call.
+  wrapper + `kv_offset` threading is missing — **but note the executed Apple GPU
+  path already streams** via the hand-written MSL `flash_attn_f32` online-softmax
+  kernel, so this gap is the C++ Tile-IR validation lane + the NVIDIA emitter, not
+  Apple execution).
+  **Synthesizer generalization — A→B→C→D landed (2026-06-17).** **(A, keystone)**
+  `fusion.py` gained `verify_synthesized_pointwise` — the F4 codegen oracle the
+  pointwise-DAG path was *missing* (it was the only synthesizer region kind with
+  no correctness gate; region/gated/attention all had one). The apple_gpu executor
+  now gates the pointwise dispatch branch on it, so a divergent synthesizer falls
+  back to the per-op MPSGraph lane instead of being trusted. **(B, measure —
+  corrected the plan)** new `compiler/apple_gpu_coverage.py` + guard classifies
+  every catalog op against the authoritative lane table: of **302 ops, 177 have a
+  GPU lane, 125 are numpy-only, and 0 of those are elementwise/pointwise** — i.e.
+  single-op elementwise displacement is *already complete*; the numpy tail is
+  layout/indexing/quantize/linalg/spectral/complex. This refuted the original
+  Phase-C assumption ("displace elementwise single-ops"). **(C, guided by B)** the
+  real lever is enlarging fusable *DAGs*: added `sqrt`/`rsqrt`/`log`/`log1p`/
+  `expm1`/`reciprocal`/`softplus` to `POINTWISE_OPS` (they already had single-op
+  lanes, so DAGs containing them used to bail at those nodes — now they fuse into
+  one kernel, a dispatch-count win), each auto-gated by the (A) oracle
+  (`equal_nan`-aware for the domain-restricted ops). **(D, lock)** two fused-DAG
+  cases added to the differential harness (`_diff_lane.numeric_cases`) + a
+  vocab-coverage invariant guard. `EPILOGUE_OPS` growth and the parameterized
+  `softcap` (the one genuinely numpy-only real-valued elementwise op — needs a
+  unary MPSGraph lane with a scalar param, not a pointwise-vocab entry) remain
+  tracked follow-ups. Guards: `tests/unit/test_fusion_pointwise_oracle.py`,
+  `test_apple_gpu_coverage.py`, `test_fusion_pointwise_vocab_phase_c.py` (2019
+  apple_gpu/fusion tests green). *Still open:* the `norm_chain` broadening
+  (bare norms already run on the MPSGraph rowop lane — no numpy there to displace,
+  so deliberately deferred) and the numpy interpreter lane-by-lane displacement of
+  the non-elementwise tail, Evaluator-gated — never displacing a working MPSGraph
+  call.
 - **Phase 3 — Close the optimizing loop (HF on Apple/CPU). ✅ landed (2026-06-16).**
   The synthesizer had a measured-latency, correctness-gated variant autotuner
   (`autotune_matmul_epilogue` — times each MSL variant on-device, gates each

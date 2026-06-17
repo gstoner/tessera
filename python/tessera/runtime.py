@@ -2573,7 +2573,8 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
     # / unsupported region is left to the per-op MPSGraph lane).
     try:
         from tessera.compiler.fusion import (
-            discover_pointwise_graph, run_pointwise_graph)
+            discover_pointwise_graph, run_pointwise_graph,
+            verify_synthesized_pointwise)
         for idxs, pw_region in discover_pointwise_graph(fops, skip=consumed):
             try:
                 inputs = [_as_numpy(values[v]) for v in pw_region.inputs]
@@ -2582,6 +2583,8 @@ def _apple_gpu_try_synthesized_fusion(ops: list, values: dict, np: Any) -> set:
                 shp = np.asarray(inputs[0]).shape
                 if any(np.asarray(a).shape != shp for a in inputs):
                     continue
+                if not verify_synthesized_pointwise(pw_region):  # F4 codegen oracle
+                    continue                   # divergent synth → per-op MPSGraph lane
                 out, ex = run_pointwise_graph(pw_region, inputs)
                 if ex == "metal_runtime":
                     values[pw_region.output] = out

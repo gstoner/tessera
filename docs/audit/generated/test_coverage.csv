@@ -168,7 +168,7 @@ empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-exp,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
+exp,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
@@ -237,8 +237,8 @@ lion,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_opti
 load_balance_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
 load_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 load_state,13,0,2,13,0,,structural_only,category default for 'serialization'
-log,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-log1p,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+log,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
+log1p,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 log_softmax,5,5,0,10,0,,needs_direct_test,category default for 'stable_reduction'
 logical_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -288,7 +288,7 @@ msa_index_scores,8,4,1,12,0,,needs_direct_test,category default for 'attention'
 msa_select_blocks,8,6,1,14,0,,structural_only,unclassified — defaults to structural_only
 msa_sparse_attention,37,8,1,45,0,,needs_direct_test,category default for 'attention'
 mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
-mul,83,4,7,87,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
+mul,84,4,7,88,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
 multi_head_attention,5,0,0,5,0,,covered_by_family,covered by attention family + flash_attn tests
 muon,5,0,0,5,0,,needs_direct_test,category default for 'optimizer'
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -403,7 +403,7 @@ spectral_norm,2,0,0,2,0,,needs_direct_test,category default for 'normalization'
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,3,0,0,3,0,,needs_direct_test,category default for 'sparse'
 spmm_csr,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
-sqrt,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
+sqrt,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 stablehlo_export,2,0,0,2,0,,structural_only,category default for 'aot'
 stack,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only

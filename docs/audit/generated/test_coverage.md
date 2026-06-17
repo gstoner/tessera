@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **457** ops in `primitive_coverage` registry.
-- **2609** total Python-test references, **731** total lit-fixture references.
+- **2614** total Python-test references, **731** total lit-fixture references.
 - **104** ops have **zero** references in either test surface.
-- **202** ops have ≤1 reference ("thinly tested").
+- **201** ops have ≤1 reference ("thinly tested").
 - **58** ops have ≥10 references ("well tested").
 - **61** ops have at least one associated `pytest.raises` negative test.
 
@@ -22,7 +22,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `softmax` |   89 |   37 |  126 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |   97 |    7 |  104 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   88 |   11 |   99 |   8 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |   83 |    4 |   87 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |   84 |    4 |   88 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   83 |    0 |   83 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `silu` |   81 |    2 |   83 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **202** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **201** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **202** ops have at most one test reference across the whole test surface.
 | `dataset_interleave` |    0 |    0 |    0 |
 | `dataset_map` |    0 |    0 |    0 |
 
-_(142 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(141 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**202** ops have ≤1 direct test reference.  They break down as:
+**201** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   79 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   78 | Tested via a parent op or family wrapper |
 | `structural_only`        |  117 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -147,7 +147,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 79 ops
+## `covered_by_family` — 78 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -184,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `dbar` | exercised by complex differential tests |
 | `ddpm_noise_pred_loss` | category default for 'loss' |
 
-_(49 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(48 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 117 ops
 

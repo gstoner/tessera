@@ -1444,6 +1444,20 @@ POINTWISE_OPS: dict[str, tuple[int, str, Any]] = {
     "neg": (1, "(-({0}))", lambda a: -np.asarray(a)),
     "abs": (1, "fabs({0})", np.abs),
     "exp": (1, "exp({0})", np.exp),
+    # Phase C — real-valued ops that already have single-op GPU lanes; adding
+    # them here enlarges fusable pointwise DAGs (fewer dispatches). Each is
+    # codegen-gated by verify_synthesized_pointwise (equal_nan-aware, so the
+    # domain-restricted ones below are safe).
+    "sqrt": (1, "sqrt({0})", np.sqrt),
+    "rsqrt": (1, "rsqrt({0})", lambda a: 1.0 / np.sqrt(a)),
+    "log": (1, "log({0})", np.log),
+    "log1p": (1, "log(1.0f + ({0}))", np.log1p),
+    "expm1": (1, "(exp({0}) - 1.0f)", np.expm1),
+    "reciprocal": (1, "(1.0f / ({0}))", lambda a: 1.0 / np.asarray(a)),
+    # Numerically-stable softplus: max(x,0) + log1p(exp(-|x|)); MSL and ref share
+    # the identical definition so the oracle compares like-for-like.
+    "softplus": (1, "(max({0}, 0.0f) + log(1.0f + exp(-fabs({0}))))",
+                 lambda a: np.maximum(a, 0.0) + np.log1p(np.exp(-np.abs(a)))),
 }
 #: graph op-name → pointwise vocab key.
 _POINTWISE_NAMES: dict[str, str] = {}
@@ -2426,6 +2440,39 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
         verdict = True
     else:
         verdict = bool(np.allclose(out, region.reference(Q, K, V), atol=atol))
+    _VERIFY_CACHE[key] = verdict
+    return verdict
+
+
+def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
+                                 atol: float = 1e-3, force: bool = False) -> bool:
+    """Codegen-gated oracle for a synthesized pointwise-DAG kernel (see
+    ``verify_synthesized_region``).  Runs the whole ``region`` on a small
+    same-shape probe and compares to the unfused numpy reference; returns ``True``
+    when the GPU result matches (or when no synthesized kernel ran — the reference
+    path is trusted by construction) and ``False`` when a kernel ran and diverged,
+    so the caller falls back to the per-op MPSGraph lane.  This brings the
+    pointwise path to F4 parity with the matmul-epilogue / gated / attention
+    region kinds — the gate that makes lane-by-lane numpy displacement safe.
+    Verdicts are cached per region-class; pass ``force`` to re-probe."""
+    key = ("P", region.ops, len(region.inputs))
+    if not force and key in _VERIFY_CACHE:
+        return _VERIFY_CACHE[key]
+    rng = np.random.default_rng(seed)
+    # Same-shape full probes, one per external input (the broadcast classifier in
+    # run_pointwise_graph treats equal shapes as full operands).
+    probes = [rng.standard_normal((8, 16)).astype(np.float32)
+              for _ in region.inputs]
+    # Domain-restricted ops (sqrt/log/rsqrt) on a standard-normal probe produce
+    # NaN/inf in both kernel and reference by design — silence the numpy warnings
+    # and treat matched NaNs as agreement (equal_nan).
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        out, execution = run_pointwise_graph(region, probes)
+        if execution != "metal_runtime":
+            verdict = True                     # no synthesized kernel to distrust
+        else:
+            verdict = bool(np.allclose(out, region.reference(*probes),
+                                       atol=atol, equal_nan=True))
     _VERIFY_CACHE[key] = verdict
     return verdict
 

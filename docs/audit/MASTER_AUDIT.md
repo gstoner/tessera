@@ -222,7 +222,22 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 ### P2
 
-- Remaining batching/transpose/sharding long-tail closure.
+- **Batching/transpose/sharding long-tail — assessed closed for everything
+  provable (2026-06-17).** `transpose_rule` is fully closed (0 partial);
+  `batching_rule` has 4 partials; `sharding_rule` has 39. **All 43 residual
+  partials sit in genuinely distributed-mesh-gated categories** — `attention`
+  (the reasoning-model fused family: sparse/delta/gated/lightning variants, where
+  head-split equivalence isn't trivially true — the *standard* family was already
+  proven complete in `test_attention_sharding_mock_mesh.py`), `spectral`
+  (distributed FFT = all-to-all transpose), `linalg_decomposition`/`linalg_solver`
+  (distributed cholesky/qr/svd), `moe`/`moe_transport` (all-to-all dispatch/
+  combine), `ebm`, `state_space`/`state_update`, `sparse`, `loop_nest`. These are
+  **Phase-G-gated by design, not bookkeeping debt** — the `_SHARDING_RULE_BY_CATEGORY`
+  classifier marks each partial with a documented "known but mesh-aware" reason.
+  Flipping them without real mock-mesh proofs would be the audit-inflation
+  Decision #25 forbids; closing any further requires a genuine per-variant proof
+  (the established `test_*_sharding_mock_mesh.py` pattern) or real Phase-G mesh
+  hardware. So the closable closure is **done**; the rest is correctly gated.
 - Domain roadmap hygiene and stale-claim cleanup.
 - ✅ Benchmark/performance gates tied to backend manifest rows — done for Apple GPU (2026-06-09: `benchmark_json` on hot-path + packaged rows; `perf_gate --ratchet`); other backends follow with Phase G/H/I hardware.
 - Unify generated-doc regeneration + drift into one registry/`--write` contract (fold in `release_gate.py`, standardize generator CLIs, extend CSV-canonical to data-shaped dashboards). Detail: [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) Next Work #6.

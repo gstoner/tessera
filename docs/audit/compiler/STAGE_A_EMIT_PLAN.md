@@ -102,10 +102,14 @@ for). The structural validators are what earn rung 2.5.
 1. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
    coordinated edit across `gpu_target.py` / `TesseraToolchainPins.cmake` / the C++ pin header / the
    byte-identical consistency test.
-2. **AMD: grow `rocdl_emit` toward a real GEMM** — operand VGPR layout + lane replication (A/B lanes
-   0-15 → 16-31) + the §7.9.1 V_NOP scheduling hazard + tiling; and add the **gfx12 v2 wmma intrinsic
-   ABI** for gfx1200/RDNA 4 (different operand packing + format/reuse operands). The rung-3 `llc` lane
-   already runs here, so each step is immediately AMDGCN-verifiable on the dev Mac.
+2. **AMD: grow `rocdl_emit` toward a real GEMM** — *in progress.* `emit_wmma_gemm_llvmir` added the
+   **K-reduction GEMM tile** (an `<8 x float>` accumulator PHI over the K-loop + global A/B fragment
+   loads by lane id + the `wmma` intrinsic in the loop body + the result store); verified via
+   `llc -mcpu=gfx1151` to lower to a real `v_wmma_*` **inside an AMDGCN loop**. Remaining: the exact
+   operand VGPR layout + lane replication (A/B lanes 0-15 → 16-31, ISA §7.9) for *numerical*
+   correctness, the §7.9.1 V_NOP scheduling hazard, threadgroup tiling — and the **gfx12 v2 wmma
+   intrinsic ABI** for gfx1200/RDNA 4. The rung-3 `llc` lane runs here, so each structural step is
+   immediately AMDGCN-verifiable on the dev Mac; numerical correctness waits for real silicon (rungs 6-7).
 3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
    async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)

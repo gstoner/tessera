@@ -12,8 +12,10 @@ from __future__ import annotations
 import pytest
 
 from tessera.compiler.rocdl_emit import (
+    emit_wmma_gemm_llvmir,
     emit_wmma_llvmir,
     llc_assemble,
+    validate_wmma_gemm_structure,
     validate_wmma_llvmir_structure,
     wmma_intrinsic,
 )
@@ -88,3 +90,42 @@ def test_rung3_lowers_to_real_wmma_instruction(dtype, arch, want):
     r = llc_assemble(ir, arch=arch)
     assert r.status == "ok", r.detail
     assert want in r.wmma_instruction, r.wmma_instruction
+
+
+# ── K-reduction GEMM emit (grows the lane toward a real tiled GEMM) ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gemm_emit_and_validate(dtype):
+    ir = emit_wmma_gemm_llvmir(dtype, arch="gfx1151")
+    v = validate_wmma_gemm_structure(ir, dtype=dtype, arch="gfx1151")
+    assert v.ok, v.reasons
+
+
+def test_gemm_has_kloop_accumulator_and_global_io():
+    ir = emit_wmma_gemm_llvmir("f16")
+    assert "phi <8 x float>" in ir              # K-loop accumulator
+    assert ir.count("load <16 x half>") == 2    # A and B global fragment loads
+    assert "llvm.amdgcn.workitem.id.x" in ir    # lane-based addressing
+    assert "store <8 x float>" in ir            # D store
+
+
+def test_gemm_validator_catches_dropped_kloop():
+    ir = emit_wmma_gemm_llvmir("f16").replace("phi <8 x float>", "freeze <8 x float>")
+    v = validate_wmma_gemm_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("accumulator phi" in r for r in v.reasons)
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x16_f16"),
+    ("bf16", "v_wmma_f32_16x16x16_bf16"),
+])
+def test_rung3_gemm_lowers_to_wmma_inside_a_loop(dtype, want):
+    """The K-reduction GEMM lowers to AMDGCN with the v_wmma_* inside a real loop."""
+    ir = emit_wmma_gemm_llvmir(dtype, arch="gfx1151")
+    r = llc_assemble(ir, arch="gfx1151")
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+    # the wmma is inside a loop body (a conditional branch / loop label exists).
+    assert "s_cbranch" in r.asm or ".LBB" in r.asm

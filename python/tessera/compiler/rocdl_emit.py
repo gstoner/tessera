@@ -114,6 +114,77 @@ declare {acc_ty} @{intr}({a_ty}, {b_ty}, {acc_ty})
 """
 
 
+def emit_wmma_gemm_llvmir(
+    dtype: str = "bf16",
+    *,
+    acc: str = "f32",
+    arch: str = "gfx1151",
+    entry: str | None = None,
+) -> str:
+    """Emit a **K-reduction WMMA GEMM tile** — a step up from the single-intrinsic
+    :func:`emit_wmma_llvmir`. ``D[16×16] = Σ_k A[16×K]·B[K×16]`` accumulated across
+    ``K``-tiles: an ``<8 x float>`` accumulator carried in a PHI over the K-loop,
+    ``<16 x {elem}>`` A/B fragments loaded from global memory addressed by the lane
+    id (``llvm.amdgcn.workitem.id.x``), the ``wmma`` intrinsic in the loop body, the
+    result stored at the end. Verified to lower via ``llc -mcpu=gfx1151`` to a real
+    ``v_wmma_*`` inside an AMDGCN loop.
+
+    **Honesty ceiling.** This grows the *structure* toward a real GEMM (K-loop +
+    global I/O + the intrinsic in a loop) and is llc-compilable, but the per-lane
+    addressing here is a **simplified documented placeholder**, NOT the exact WMMA
+    operand VGPR layout (the RDNA3.5 ISA §7.9 "Matrix Element Storage in VGPRs"
+    mapping + A/B lane-0-15→16-31 replication) required for *numerical* correctness
+    — that, and threadgroup tiling, are the named next sub-steps and need real
+    silicon to verify numerically (rungs 6-7)."""
+    if arch not in _RDNA3_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported — RDNA3-class only "
+            f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
+    intr = wmma_intrinsic(dtype, acc=acc)
+    _, elem = _WMMA_F32_INPUT[dtype]
+    a_ty = f"<{_A_LEN} x {elem}>"
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_gemm_{dtype}"
+    return f"""; Tessera rung-2.5/3 emission — RDNA WMMA {dtype} GEMM tile (16x16x16, fp32 acc) for {arch}.
+; D = sum_k A·B over K-tiles. K-loop accumulator PHI; A/B {a_ty} global loads by lane id;
+; {intr} in the loop body; result stored at the end. Lowers via `llc -mcpu={arch}` to a real
+; v_wmma_* inside an AMDGCN loop. Honesty: the per-lane addressing is a documented placeholder,
+; NOT the exact WMMA VGPR layout / lane replication (ISA 7.9) needed for numerical correctness —
+; that + tiling are the next sub-steps, verified numerically only on real silicon (rungs 6-7).
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(
+    ptr addrspace(1) %A, ptr addrspace(1) %B, ptr addrspace(1) %D, i32 %K) {{
+entry:
+  %lane = call i32 @llvm.amdgcn.workitem.id.x()
+  %lane64 = zext i32 %lane to i64
+  br label %kloop
+kloop:
+  %k    = phi i32 [ 0, %entry ], [ %knext, %kbody ]
+  %acc  = phi {acc_ty} [ zeroinitializer, %entry ], [ %accn, %kbody ]
+  %done = icmp sge i32 %k, %K
+  br i1 %done, label %store, label %kbody
+kbody:
+  %k64  = sext i32 %k to i64
+  %off  = add i64 %k64, %lane64
+  %aptr = getelementptr {elem}, ptr addrspace(1) %A, i64 %off
+  %a    = load {a_ty}, ptr addrspace(1) %aptr
+  %bptr = getelementptr {elem}, ptr addrspace(1) %B, i64 %off
+  %b    = load {a_ty}, ptr addrspace(1) %bptr
+  %accn = call {acc_ty} @{intr}({a_ty} %a, {a_ty} %b, {acc_ty} %acc)
+  %knext = add i32 %k, 16
+  br label %kloop
+store:
+  %dptr = getelementptr float, ptr addrspace(1) %D, i64 %lane64
+  store {acc_ty} %acc, ptr addrspace(1) %dptr
+  ret void
+}}
+
+declare {acc_ty} @{intr}({a_ty}, {a_ty}, {acc_ty})
+declare i32 @llvm.amdgcn.workitem.id.x()
+"""
+
+
 @dataclass(frozen=True)
 class RocdlValidation:
     ok: bool
@@ -142,6 +213,29 @@ def validate_wmma_llvmir_structure(
     # RDNA 3.5 has no FP8 WMMA — guard against emitting a gfx1200-only combo for it.
     if arch == "gfx1151" and (".fp8" in ir or ".bf8" in ir or "16x16x128" in ir):
         reasons.append("emitted an FP8/large-K WMMA for gfx1151 (RDNA 3.5 has none)")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
+def validate_wmma_gemm_structure(
+    ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the K-reduction GEMM emit: on top of the base
+    intrinsic/type/kernel checks, assert the GEMM structure — a ``<8 x float>``
+    K-loop accumulator PHI, two global operand loads, lane-id addressing, the
+    intrinsic in the loop, the bound check, and the result store."""
+    base = validate_wmma_llvmir_structure(ir, dtype=dtype, arch=arch)
+    reasons = list(base.reasons)
+    if f"phi <{_ACC_LEN} x float>" not in ir:
+        reasons.append(f"missing the <{_ACC_LEN} x float> K-loop accumulator phi")
+    _, elem = _WMMA_F32_INPUT[dtype]
+    if ir.count(f"load <{_A_LEN} x {elem}>") < 2:
+        reasons.append(f"expected 2 global <{_A_LEN} x {elem}> operand loads (A, B)")
+    if "llvm.amdgcn.workitem.id.x" not in ir:
+        reasons.append("missing workitem.id.x lane addressing")
+    if "icmp sge i32" not in ir:
+        reasons.append("missing the K-loop bound check")
+    if f"store <{_ACC_LEN} x float>" not in ir:
+        reasons.append("missing the D-matrix store")
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
@@ -196,7 +290,9 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
 __all__ = [
     "wmma_intrinsic",
     "emit_wmma_llvmir",
+    "emit_wmma_gemm_llvmir",
     "validate_wmma_llvmir_structure",
+    "validate_wmma_gemm_structure",
     "llc_assemble",
     "RocdlValidation",
     "LlcResult",

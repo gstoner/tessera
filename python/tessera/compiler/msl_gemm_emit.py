@@ -150,6 +150,35 @@ kernel void {name}(
 """
 
 
+def _steel_compute_block(mf: int, nf: int, T: str, f: int, a_src: str, b_src: str) -> str:
+    """The BK-deep fragment inner product, reading the staged tiles via ``a_src`` /
+    ``b_src`` base expressions (``As`` or ``As[buf]`` for single/double buffer)."""
+    return f"""    for (uint kf = 0; kf < BK; kf += F) {{
+      simdgroup_matrix<{T}, {f}, {f}> a[{mf}], b[{nf}];
+      for (uint im = 0; im < {mf}u; ++im)
+        simdgroup_load(a[im], {a_src} + (im * F) * BK + kf, BK);
+      for (uint in = 0; in < {nf}u; ++in)
+        simdgroup_load(b[in], {b_src} + kf * BN + (in * F), BN);
+      for (uint im = 0; im < {mf}u; ++im)
+        for (uint in = 0; in < {nf}u; ++in)
+          simdgroup_multiply_accumulate(
+              acc[im * {nf}u + in], a[im], b[in], acc[im * {nf}u + in]);
+    }}"""
+
+
+def _steel_stage_block(T: str, a_dst: str, b_dst: str, k_expr: str) -> str:
+    """Cooperative bounds-guarded global→threadgroup staging load (zero-padded at
+    ragged edges), writing into the ``a_dst``/``b_dst`` buffer expressions."""
+    return f"""    for (uint i = tid; i < BM * BK; i += tcount) {{
+      uint r = i / BK, c = i % BK;
+      {a_dst}[i] = (m0 + r < M && {k_expr} + c < K) ? A[(m0 + r) * K + ({k_expr} + c)] : {T}(0);
+    }}
+    for (uint i = tid; i < BK * BN; i += tcount) {{
+      uint r = i / BN, c = i % BN;
+      {b_dst}[i] = ({k_expr} + r < K && n0 + c < N) ? B[({k_expr} + r) * N + (n0 + c)] : {T}(0);
+    }}"""
+
+
 def emit_steel_gemm_msl(
     dtype: str = "bf16",
     bm: int = 32,
@@ -158,6 +187,8 @@ def emit_steel_gemm_msl(
     *,
     accum: str = "f32",
     entry: str | None = None,
+    partial_edge: bool = False,
+    double_buffer: bool = False,
 ) -> str:
     """Emit the **steel-structured** MSL ``simdgroup_matrix`` GEMM — the production
     shape MLX uses (``kernels/steel/gemm``), a step up from the single-fragment
@@ -171,11 +202,25 @@ def emit_steel_gemm_msl(
     from threadgroup memory → the ``MF×NF`` fragment ``simdgroup_multiply_
     accumulate`` inner product.
 
-    Still a documented skeleton (not perf-tuned): single-buffered staging (no
-    double-buffer / async copy), a naive cooperative load, and **whole-fragment**
-    store guards — *partial* output-fragment edge handling (when ``M``/``N`` aren't
-    multiples of 8) is the named next sub-step. Honesty ceiling + grounding as in
-    the module docstring; not compile-verified on this host.
+    Two opt-in production refinements (default off → the original skeleton):
+      * ``partial_edge=True`` (**B1**) — handles ``M``/``N`` not a multiple of 8:
+        full fragments take the direct ``simdgroup_store`` fast path; edge
+        fragments stage their 8×8 to a **threadgroup scratch** then **cooperatively
+        copy only the valid ``min(8, M-cr)×min(8, N-cc)`` elements** to ``C``. The
+        full/edge branch is **threadgroup-uniform** (keyed on ``tgid``/compile-time
+        loop counters), so the scratch barriers are hit uniformly — never inside
+        divergent control flow.
+      * ``double_buffer=True`` (**B2**) — **ping-pong** staging: two threadgroup
+        slots (``As[2]``/``Bs[2]``), a prologue prefetch of tile 0, then a
+        steady-state loop that **prefetches the next tile into the alternate slot
+        while computing the current** one (one barrier per step instead of two).
+
+    **Honesty ceiling.** Even with both refinements this is a documented,
+    structurally-grounded skeleton (cooperative load is still naive; no async-copy
+    DMA). The Apple rung-3 toolchain (``metal``) is **absent on this host**, so —
+    unlike the AMD ``llc`` lane — these are **not compile-verified here**; the
+    rung-3 Metal-CI lane (B3, :func:`metal_compile`) is the verification on a
+    Metal-capable runner. API grounded from MLX ``steel/gemm/mma.h`` + MSL spec ch.6.
     """
     tile = MslGemmShape(bm, bn, bk)
     if not tile.is_valid():
@@ -185,12 +230,81 @@ def emit_steel_gemm_msl(
     T, ACC, f = _scalar(dtype), _scalar(accum), SIMDGROUP_FRAG
     mf, nf = bm // f, bn // f
     name = entry or f"tessera_steel_gemm_{dtype}"
+
+    # ── staging (single- vs double-buffered) ──
+    if double_buffer:
+        buffers = (f"  threadgroup {T} As[2][{bm} * {bk}];   // double-buffered staged A (ping-pong)\n"
+                   f"  threadgroup {T} Bs[2][{bk} * {bn}];   // double-buffered staged B (ping-pong)")
+        kloop = f"""  // B2: prologue — prefetch the first tile into slot 0.
+  uint buf = 0u;
+{_steel_stage_block(T, "As[0]", "Bs[0]", "0u")}
+  threadgroup_barrier(mem_flags::mem_threadgroup);
+
+  for (uint k0 = 0; k0 < K; k0 += BK) {{
+    // Prefetch the NEXT tile into the alternate slot while we compute this one.
+    uint nbuf = buf ^ 1u;
+    uint nk0 = k0 + BK;
+    if (nk0 < K) {{
+{_steel_stage_block(T, "As[nbuf]", "Bs[nbuf]", "nk0")}
+    }}
+{_steel_compute_block(mf, nf, T, f, "As[buf]", "Bs[buf]")}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    buf = nbuf;
+  }}"""
+    else:
+        buffers = (f"  threadgroup {T} As[{bm} * {bk}];   // staged A tile (zero-padded at edges)\n"
+                   f"  threadgroup {T} Bs[{bk} * {bn}];   // staged B tile")
+        kloop = f"""  for (uint k0 = 0; k0 < K; k0 += BK) {{
+    // Cooperative, bounds-guarded staging load (ragged edges -> zero pad).
+{_steel_stage_block(T, "As", "Bs", "k0")}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Fragment inner product over the staged tiles.
+{_steel_compute_block(mf, nf, T, f, "As", "Bs")}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+  }}"""
+
+    # ── store (whole-fragment vs partial-edge) ──
+    if partial_edge:
+        store = f"""  // B1: edge-aware store. The full/edge test is threadgroup-uniform (keyed on
+  // tgid + compile-time loop counters), so the scratch barriers are hit uniformly.
+  threadgroup {ACC} Cs[{f} * {f}];
+  for (uint im = 0; im < {mf}u; ++im) {{
+    for (uint in = 0; in < {nf}u; ++in) {{
+      uint cr = m0 + im * F, cc = n0 + in * F;
+      if (cr + F <= M && cc + F <= N) {{
+        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);   // full fragment fast path
+      }} else {{
+        simdgroup_store(acc[im * {nf}u + in], Cs, F);                // stage 8x8 to scratch
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        if (cr < M && cc < N) {{                                     // copy only valid elements
+          uint rows = min(F, M - cr), cols = min(F, N - cc);
+          for (uint e = tid; e < rows * cols; e += tcount) {{
+            uint rr = e / cols, cl = e % cols;
+            C[(cr + rr) * N + (cc + cl)] = Cs[rr * F + cl];
+          }}
+        }}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+      }}
+    }}
+  }}"""
+    else:
+        store = f"""  // Whole-fragment guarded store of the {mf}x{nf} output fragments.
+  for (uint im = 0; im < {mf}u; ++im) {{
+    for (uint in = 0; in < {nf}u; ++in) {{
+      uint cr = m0 + im * F, cc = n0 + in * F;
+      if (cr + F <= M && cc + F <= N)
+        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);
+    }}
+  }}"""
+
+    refinements = ((" +partial-edge-store" if partial_edge else "")
+                   + (" +double-buffer" if double_buffer else ""))
     return f"""//
 // Tessera rung-2.5 emission — Apple simdgroup_matrix {dtype} GEMM, STEEL-structured
-// (BM={bm} BN={bn} BK={bk}; {mf}x{nf} output fragments per threadgroup). Multi-fragment
-// tiling + threadgroup staging + edge-masked load — the production MLX-steel shape.
-// Skeleton: single-buffered staging, naive cooperative load, whole-fragment store
-// guards (partial-edge store is the next sub-step). metal-compile = rung 3. API
+// (BM={bm} BN={bn} BK={bk}; {mf}x{nf} output fragments per threadgroup{refinements}). Multi-
+// fragment tiling + threadgroup staging + edge-masked load — the production MLX-steel
+// shape. metal-compile = rung 3 (absent here; the B3 Metal-CI lane verifies). API
 // grounded from MLX steel/gemm/mma.h + MSL spec ch.6; not compile-verified here.
 //
 #include <metal_stdlib>
@@ -212,49 +326,16 @@ kernel void {name}(
   const uint m0 = tgid.y * BM;
   const uint n0 = tgid.x * BN;
 
-  threadgroup {T} As[{bm} * {bk}];   // staged A tile (zero-padded at edges)
-  threadgroup {T} Bs[{bk} * {bn}];   // staged B tile
+{buffers}
 
   // {mf}x{nf} accumulator fragments ({ACC}).
   simdgroup_matrix<{ACC}, {f}, {f}> acc[{mf} * {nf}];
   for (uint i = 0; i < {mf}u * {nf}u; ++i)
     acc[i] = make_filled_simdgroup_matrix<{ACC}, {f}, {f}>({ACC}(0));
 
-  for (uint k0 = 0; k0 < K; k0 += BK) {{
-    // Cooperative, bounds-guarded staging load (ragged edges -> zero pad).
-    for (uint i = tid; i < BM * BK; i += tcount) {{
-      uint r = i / BK, c = i % BK;
-      As[i] = (m0 + r < M && k0 + c < K) ? A[(m0 + r) * K + (k0 + c)] : {T}(0);
-    }}
-    for (uint i = tid; i < BK * BN; i += tcount) {{
-      uint r = i / BN, c = i % BN;
-      Bs[i] = (k0 + r < K && n0 + c < N) ? B[(k0 + r) * N + (n0 + c)] : {T}(0);
-    }}
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+{kloop}
 
-    // Fragment inner product over the staged tiles.
-    for (uint kf = 0; kf < BK; kf += F) {{
-      simdgroup_matrix<{T}, {f}, {f}> a[{mf}], b[{nf}];
-      for (uint im = 0; im < {mf}u; ++im)
-        simdgroup_load(a[im], As + (im * F) * BK + kf, BK);
-      for (uint in = 0; in < {nf}u; ++in)
-        simdgroup_load(b[in], Bs + kf * BN + (in * F), BN);
-      for (uint im = 0; im < {mf}u; ++im)
-        for (uint in = 0; in < {nf}u; ++in)
-          simdgroup_multiply_accumulate(
-              acc[im * {nf}u + in], a[im], b[in], acc[im * {nf}u + in]);
-    }}
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-  }}
-
-  // Whole-fragment guarded store of the {mf}x{nf} output fragments.
-  for (uint im = 0; im < {mf}u; ++im) {{
-    for (uint in = 0; in < {nf}u; ++in) {{
-      uint cr = m0 + im * F, cc = n0 + in * F;
-      if (cr + F <= M && cc + F <= N)
-        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);
-    }}
-  }}
+{store}
 }}
 """
 
@@ -303,11 +384,16 @@ def validate_msl_gemm_structure(
 
 def validate_steel_gemm_structure(
     msl: str, *, dtype: str = "bf16", accum: str = "f32",
+    partial_edge: bool = False, double_buffer: bool = False,
 ) -> MslValidation:
     """Host-free rung-2.5 check for the steel-structured emit: on top of the base
     ``simdgroup_matrix`` GEMM tokens, assert the production-shape features —
     threadgroup-memory staging, a barrier, an accumulator-fragment array, the
-    multi-fragment accumulate, and ragged-edge masking on the staged load."""
+    multi-fragment accumulate, and ragged-edge masking on the staged load.
+
+    ``partial_edge`` / ``double_buffer`` additionally assert the B1 / B2 refinement
+    markers (the threadgroup scratch + valid-element copy; the ping-pong slots +
+    prologue prefetch)."""
     base = validate_msl_gemm_structure(msl, dtype=dtype, accum=accum)
     reasons = list(base.reasons)
     ACC = _scalar(accum)
@@ -325,6 +411,18 @@ def validate_steel_gemm_structure(
     # edge masking: zero-padded staged load (bounds-guarded).
     if "< M && " not in msl or f": {_scalar(dtype)}(0)" not in msl:
         reasons.append("missing ragged-edge masking (bounds-guarded zero-pad load)")
+    if partial_edge:
+        # B1: threadgroup scratch + valid-element cooperative copy.
+        if f"threadgroup {ACC} Cs[" not in msl:
+            reasons.append("missing the B1 partial-edge threadgroup scratch (Cs)")
+        if "min(F, M - cr)" not in msl or "Cs[rr * F + cl]" not in msl:
+            reasons.append("missing the B1 valid-element cooperative copy (min-bounded)")
+    if double_buffer:
+        # B2: two ping-pong slots + prologue prefetch + alternate-slot index.
+        if "As[2]" not in msl or "Bs[2]" not in msl:
+            reasons.append("missing the B2 double-buffer ping-pong slots (As[2]/Bs[2])")
+        if "uint buf = 0u" not in msl or "buf ^ 1u" not in msl:
+            reasons.append("missing the B2 prologue + alternate-slot ping-pong index")
     return MslValidation(ok=not reasons, reasons=tuple(reasons))
 
 

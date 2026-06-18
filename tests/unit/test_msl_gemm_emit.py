@@ -179,3 +179,68 @@ def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
     msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
     r = metal_compile(msl, dtype=dtype)
     assert r.status == "ok", f"{dtype}: {r.detail}"
+
+
+# ── B1 partial-edge store + B2 double-buffer staging (opt-in refinements) ──
+
+def test_steel_default_path_unchanged():
+    # The refinements are opt-in: default output keeps the whole-fragment store and
+    # single-buffered staging (no scratch / no ping-pong).
+    msl = emit_steel_gemm_msl("bf16", 32, 32, 16)
+    assert "Cs[" not in msl and "As[2]" not in msl
+
+
+def test_steel_partial_edge_store():
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True)
+    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
+    assert v.ok, v.reasons
+    assert "threadgroup float Cs[8 * 8]" in msl          # 8x8 scratch
+    assert "uint rows = min(F, M - cr), cols = min(F, N - cc)" in msl  # valid-element bounds
+    assert "C[(cr + rr) * N + (cc + cl)] = Cs[rr * F + cl]" in msl     # cooperative copy
+    # full-fragment fast path is still present.
+    assert "simdgroup_store(acc[im * 4u + in], C + cr * N + cc, N);" in msl
+
+
+def test_steel_double_buffer_staging():
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, double_buffer=True)
+    v = validate_steel_gemm_structure(msl, dtype="f16", double_buffer=True)
+    assert v.ok, v.reasons
+    assert "threadgroup half As[2][32 * 16]" in msl      # ping-pong slots
+    assert "uint buf = 0u" in msl                        # prologue index
+    assert "uint nbuf = buf ^ 1u" in msl                 # alternate slot
+    # double-buffer drops to ONE barrier per K-step (prologue + 1/iter) vs two.
+    single = emit_steel_gemm_msl("f16", 32, 32, 16)
+    assert msl.count("threadgroup_barrier") < single.count("threadgroup_barrier") * 2
+
+
+def test_steel_partial_edge_branch_is_threadgroup_uniform():
+    # The full/edge test must be keyed on tgid + uniform loop counters (not per-thread
+    # data) so the scratch barriers are hit uniformly — never in divergent control flow.
+    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True)
+    assert "if (cr + F <= M && cc + F <= N) {" in msl    # uniform branch (m0/n0/im/in)
+
+
+def test_steel_refinements_compose():
+    msl = emit_steel_gemm_msl("bf16", 16, 24, 16, partial_edge=True, double_buffer=True)
+    v = validate_steel_gemm_structure(
+        msl, dtype="bf16", partial_edge=True, double_buffer=True)
+    assert v.ok, v.reasons
+
+
+def test_steel_validator_catches_missing_partial_scratch():
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True).replace(
+        "threadgroup float Cs[8 * 8];", "/* no scratch */")
+    v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
+    assert not v.ok
+    assert any("partial-edge" in r for r in v.reasons)
+
+
+@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.parametrize("partial_edge,double_buffer", [(True, False), (False, True), (True, True)])
+def test_rung3_steel_refinements_compile_on_metal_host(partial_edge, double_buffer):
+    """B3: the B1/B2 refinements compile to AIR on a Metal-capable runner — the
+    real verification for the structures the host-free validator can only token-check."""
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16,
+                              partial_edge=partial_edge, double_buffer=double_buffer)
+    r = metal_compile(msl, dtype="f16")
+    assert r.status == "ok", r.detail

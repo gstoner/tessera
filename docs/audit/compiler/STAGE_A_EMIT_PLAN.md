@@ -90,12 +90,27 @@ whole-fragment guarded store. The structural validator asserts all of these.
 output and assert it compiles to AIR — `@pytest.mark.skipif` when `metal` is absent (the arm64 dev Mac
 / Linux), so they run only on a Metal-capable runner. 23 host-free tests pass here; 6 rung-3 tests skip.
 
-**Honesty ceiling (still in the docstrings + emitted kernel comments):** even the steel form is a
-documented skeleton — single-buffered staging (no double-buffer / async copy), a naive cooperative
-load, and **whole-fragment** store guards; *partial* output-fragment edge handling (M/N not a multiple
-of 8) is the named next sub-step. The API is grounded from MLX `steel/gemm/mma.h` + MSL spec ch.6;
-**not compile-verified on this host** (no Metal toolchain — that is exactly what the rung-3 CI lane is
-for). The structural validators are what earn rung 2.5.
+**B1 partial-edge store + B2 double-buffer staging (landed — opt-in flags).** `emit_steel_gemm_msl`
+gains `partial_edge=` and `double_buffer=` (default off → the original skeleton, byte-token-compatible):
+- **B1** — `M`/`N` not a multiple of 8: full fragments take the direct `simdgroup_store` fast path;
+  edge fragments stage their 8×8 to a **threadgroup scratch** (`Cs`) then **cooperatively copy only the
+  valid `min(8,M-cr)×min(8,N-cc)` elements** to `C`. The full/edge branch is **threadgroup-uniform**
+  (keyed on `tgid` + compile-time loop counters), so the scratch barriers are hit uniformly — never in
+  divergent control flow (the one MSL-correctness trap here, avoided by construction).
+- **B2** — **ping-pong** staging: two threadgroup slots (`As[2]`/`Bs[2]`), a prologue prefetch of tile
+  0, then a steady-state loop that prefetches the next tile into the alternate slot while computing the
+  current one — **one barrier per K-step instead of two**.
+Both compose, with token validators (`validate_steel_gemm_structure(partial_edge=, double_buffer=)`)
+earning rung 2.5.
+
+**B3 Metal-CI rung-3 lane (extended).** `test_rung3_steel_refinements_compile_on_metal_host` adds the
+B1/B2 variants to the rung-3 lane — `@pytest.mark.skipif` when `metal` is absent (this host), so they
+**verify on a Metal-capable runner**.
+
+**Honesty ceiling:** even with B1+B2 this is a structurally-grounded skeleton (cooperative load still
+naive; no async-copy DMA). The Apple rung-3 toolchain (`metal`) is **absent on this host** — so, unlike
+the AMD `llc` lane, these are **not compile-verified here**; B3 is the verification. API grounded from
+MLX `steel/gemm/mma.h` + MSL spec ch.6.
 
 ## 4. Next steps (in dependency order)
 
@@ -158,7 +173,10 @@ for). The structural validators are what earn rung 2.5.
    GEMM has the full operand layout + threadgroup tiling + the §7.9.1 hazard locked, and the RDNA 4 ABI
    path is grounded and emitting. *Numerical* correctness across both waits for the AMD Matrix
    Instruction Calculator cross-check or real silicon (rungs 6-7).
-3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
-   async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
+3. **Apple GEMM sub-steps** — *partial-edge store (B1) + double-buffered staging (B2) landed* (opt-in
+   `emit_steel_gemm_msl(partial_edge=, double_buffer=)`; §3). Remaining: **async-copy DMA** staging
+   (`simdgroup_async_copy`, a further perf step), and running the rung-3 Metal-CI lane (B3, now covering
+   the refinements) on a **Metal-capable runner** to confirm real `.air` — the Apple emitter's
+   verification gap, since `metal` is absent on this dev Mac (unlike AMD's on-host `llc`).
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)
    + execute-and-compare, flipping `backend_kernel` to a real-execution status per vendor.

@@ -111,6 +111,15 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Te
   byte-identical cross-language consistency test. **Ground the exact 13.3 driver-min / PTX-ISA /
   NCCL values from the 13.3 release notes first** (do not carry the 13.2 values — 555.85 / 8.6 / 2.22).
 
+### CUDA 13.3 toolchain → Tessera component map (grounded from NVIDIA docs, 2026-06-17)
+
+| CUDA 13.3 surface | What it is | Tessera role |
+|---|---|---|
+| **CUDA Tile C++** ([api ref](https://docs.nvidia.com/cuda/cuda-tile-cpp-api-reference/index.html)) | Tile programming in C++; elementwise ops on tiles; compiler "leverages TMA and Tensor Cores" automatically (`cuda::tiles`, `ct::partition_view`, `load_masked`/`store_masked`) | **Stage-A frontend** — the concrete way to lower Tessera tiles to Tile IR without hand-rolling per-arch PTX. Confirms the tensor-core auto-abstraction. |
+| **`cuda.tile`** (Python DSL) | Same tile model from Python | Python authoring / prototyping of the tile path |
+| **CUDA Python** ([cuda-python](https://nvidia.github.io/cuda-python/latest/), 13.3.1) | Official ctypes-free bindings: `cuda.bindings` (CUDA C ABI), `cuda.core` (runtime) | **Replaces the hand-rolled ctypes CUDA wrapper** in `runtime.py` for the `tsrRegisterGpuLauncher` launch bridge (Stage C) |
+| **CompileIQ** ([repo](https://github.com/nvidia/compileiq), OSS) | Measured ptxas/nvcc Advanced-Control autotuning → ACF; `PtxasSearchSpace(version="13.3")` | Compiler-flag layer beneath Tessera's kernel-config autotuner; a direct parallel + reference for `flywheel.py` / the Evaluator |
+
 ## Honest external gates
 
 - The "RTX 5070 Ti not supported" noise is about **framework wheels** (PyTorch/TF prebuilt binaries

@@ -545,6 +545,102 @@ declare void @llvm.amdgcn.s.barrier()
 """
 
 
+def emit_dependent_wmma_chain_llvmir(
+    dtype: str = "f16",
+    *,
+    hazard: bool = False,
+    depth: int = 3,
+    arch: str = "gfx1151",
+    entry: str | None = None,
+) -> str:
+    """Emit a chain of ``depth`` dependent WMMAs to exercise the **RDNA 3.5 §7.9.1
+    WMMA scheduling hazard** — a documented, `llc`-reproducible artifact.
+
+    Two modes, both ``depth`` WMMAs deep:
+      * ``hazard=False`` (the **GEMM accumulation pattern**): each WMMA feeds its
+        result forward only as the **C/D accumulator** (in-place), with independent
+        ``SrcA``/``SrcB``. Per §7.9.1 this is **hazard-free** — `llc` schedules it
+        with ``s_delay_alu`` and **no** ``v_nop``. This is what every Tessera WMMA
+        GEMM emits, so the GEMMs need no manual scheduling nop.
+      * ``hazard=True``: each WMMA reads the **previous WMMA's destination** as its
+        ``SrcA`` (a read-after-write on a matrix *source*). This is the §7.9.1
+        hazard — `llc`'s ``GCNHazardRecognizer`` inserts a mandatory ``v_nop``
+        between the dependent WMMAs.
+
+    Used by :func:`wmma_scheduling` + the rung-3 tests to **lock both behaviors**:
+    the GEMM pattern is hazard-free by construction, and the hazard — when present —
+    is handled. The IR-level emit gets the (rare) mandatory nop from the backend for
+    free; there is nothing for the emitter to insert by hand."""
+    if arch not in _RDNA3_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported — RDNA3-class only "
+            f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
+    if depth < 2:
+        raise ValueError(f"depth must be >= 2 to form a dependent chain (got {depth})")
+    intr = wmma_intrinsic(dtype)
+    _, elem = _WMMA_F32_INPUT[dtype]
+    a_ty = f"<{_A_LEN} x {elem}>"
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_chain_{'hazard' if hazard else 'accum'}_{dtype}"
+
+    body = [f"  %a0 = load {a_ty}, ptr addrspace(1) %A"]
+    prev_acc = "zeroinitializer"
+    prev_dst: str | None = None
+    for n in range(depth):
+        if hazard and prev_dst is not None:
+            # SrcA reads the PRIOR WMMA's destination — the §7.9.1 RAW-on-source hazard.
+            body.append(f"  %a{n} = bitcast {acc_ty} {prev_dst} to {a_ty}")
+            src_a, c_in = f"%a{n}", "zeroinitializer"
+        else:
+            # hazard-free: independent SrcA/SrcB, accumulator (C/D) feedback only.
+            src_a, c_in = "%a0", prev_acc
+        body.append(
+            f"  %c{n} = call {acc_ty} @{intr}({a_ty} {src_a}, {a_ty} %a0, {acc_ty} {c_in})")
+        prev_acc, prev_dst = f"%c{n}", f"%c{n}"
+    body.append(f"  store {acc_ty} {prev_dst}, ptr addrspace(1) %D")
+
+    mode = ("hazard: SrcA reads the prior WMMA destination (§7.9.1 -> llc inserts v_nop)"
+            if hazard else
+            "accumulation: C/D feedback only, independent SrcA/B (§7.9.1 hazard-free)")
+    return f"""; Tessera rung-3 — RDNA WMMA dependent chain ({arch}), depth {depth}.
+; {mode}
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(ptr addrspace(1) %A, ptr addrspace(1) %D) {{
+entry:
+{chr(10).join(body)}
+  ret void
+}}
+
+declare {acc_ty} @{intr}({a_ty}, {a_ty}, {acc_ty})
+"""
+
+
+@dataclass(frozen=True)
+class WmmaScheduling:
+    """Summary of WMMA scheduling in lowered AMDGCN — the §7.9.1 hazard lens."""
+    n_wmma: int
+    n_vnop: int
+    n_sdelay: int
+
+    @property
+    def hazard_free(self) -> bool:
+        """True when no ``v_nop`` was needed between the WMMAs (the in-place
+        accumulation pattern). A mandatory hazard nop ⇒ ``False``."""
+        return self.n_vnop == 0
+
+
+def wmma_scheduling(asm: str) -> WmmaScheduling:
+    """Analyze lowered AMDGCN for the §7.9.1 WMMA scheduling shape: count the
+    ``v_wmma_*`` instructions, the ``v_nop`` hazard nops the backend inserted, and
+    the ``s_delay_alu`` scheduling hints. ``hazard_free`` ⇔ no ``v_nop`` was
+    needed."""
+    n_wmma = sum(1 for ln in asm.splitlines() if "v_wmma" in ln.lower())
+    n_vnop = sum(1 for ln in asm.splitlines() if ln.strip().startswith("v_nop"))
+    n_sdelay = sum(1 for ln in asm.splitlines() if "s_delay_alu" in ln)
+    return WmmaScheduling(n_wmma=n_wmma, n_vnop=n_vnop, n_sdelay=n_sdelay)
+
+
 @dataclass(frozen=True)
 class RocdlValidation:
     ok: bool
@@ -740,6 +836,9 @@ __all__ = [
     "emit_wmma_gemm_layout_llvmir",
     "emit_wmma_gemm_store_llvmir",
     "emit_wmma_gemm_threadgroup_llvmir",
+    "emit_dependent_wmma_chain_llvmir",
+    "wmma_scheduling",
+    "WmmaScheduling",
     "validate_wmma_llvmir_structure",
     "validate_wmma_gemm_structure",
     "validate_wmma_gemm_layout_structure",

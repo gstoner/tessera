@@ -130,11 +130,18 @@ for). The structural validators are what earn rung 2.5.
    land. The AMD analog of the Apple steel structure. *Honesty ceiling:* one wave owns the whole grid
    (cooperative multi-wave fragment distribution + coalesced/vectorized LDS loads + double-buffering
    are the perf follow-ons).
-   Remaining: the **§7.9.1 V_NOP scheduling hazard** (`s_nop`/`v_nop` between dependent WMMAs), and
-   the **gfx12 v2 wmma intrinsic ABI** for gfx1200/RDNA 4 (gfx11 intrinsics "cannot select" on gfx12;
-   unlocks FP8/BF8 + SWMMAC sparse + int4 16×16×32). The rung-3 `llc` lane runs here, so each step is
-   immediately AMDGCN-verifiable on the dev Mac; *numerical* correctness waits for the AMD Matrix
-   Instruction Calculator cross-check or real silicon (rungs 6-7).
+   **§7.9.1 WMMA scheduling hazard grounded + locked** — `emit_dependent_wmma_chain_llvmir(dtype,
+   hazard=)` + `wmma_scheduling(asm)` pin both behaviors via `llc`: the **in-place accumulation
+   pattern** (C/D feedback, independent SrcA/B — what every Tessera WMMA GEMM emits) is **hazard-free**,
+   scheduled with `s_delay_alu` and **no** `v_nop`; a **forced** SrcA-reads-prior-WMMA-destination chain
+   triggers the mandatory `v_nop` from `llc`'s `GCNHazardRecognizer`. The real threadgroup GEMM is
+   asserted hazard-free by construction (`test_rung3_threadgroup_gemm_is_hazard_free`). Key grounding:
+   the IR-level emit gets the (rare) mandatory hazard nop from the backend for free — there is nothing
+   for the emitter to insert by hand; the deliverable is the grounding + the lock.
+   Remaining: the **gfx12 v2 wmma intrinsic ABI** for gfx1200/RDNA 4 (gfx11 intrinsics "cannot select"
+   on gfx12; unlocks FP8/BF8 + SWMMAC sparse + int4 16×16×32). The rung-3 `llc` lane runs here, so each
+   step is immediately AMDGCN-verifiable on the dev Mac; *numerical* correctness waits for the AMD
+   Matrix Instruction Calculator cross-check or real silicon (rungs 6-7).
 3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
    async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)

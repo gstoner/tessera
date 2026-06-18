@@ -15,9 +15,11 @@ from tessera.compiler.rocdl_emit import (
     emit_wmma_gemm_layout_llvmir,
     emit_wmma_gemm_llvmir,
     emit_wmma_gemm_store_llvmir,
+    emit_dependent_wmma_chain_llvmir,
     emit_wmma_gemm_threadgroup_llvmir,
     emit_wmma_llvmir,
     llc_assemble,
+    wmma_scheduling,
     validate_wmma_gemm_layout_structure,
     validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
@@ -311,3 +313,61 @@ def test_rung3_threadgroup_lowers_with_lds_and_barrier(dtype, want):
     assert r.asm.count("v_wmma_f32_16x16x16") == 4   # 2x2 fragment grid
     assert "s_barrier" in r.asm
     assert "ds_store" in r.asm and "ds_load" in r.asm
+
+
+# ── §7.9.1 WMMA scheduling hazard: grounded + llc-verified both ways ──
+
+@pytest.mark.parametrize("hazard", [False, True])
+def test_dependent_chain_emits(hazard):
+    ir = emit_dependent_wmma_chain_llvmir("f16", hazard=hazard, depth=3)
+    assert ir.count("@llvm.amdgcn.wmma.f32.16x16x16.f16(") == 3 + 1   # 3 calls + declare
+    if hazard:
+        assert "bitcast <8 x float>" in ir   # SrcA reads the prior WMMA destination
+    else:
+        assert "bitcast <8 x float>" not in ir
+
+
+def test_dependent_chain_requires_depth_2():
+    with pytest.raises(ValueError):
+        emit_dependent_wmma_chain_llvmir("f16", depth=1)
+
+
+def test_dependent_chain_rejects_rdna4():
+    with pytest.raises(ValueError):
+        emit_dependent_wmma_chain_llvmir("f16", arch="gfx1200")
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+def test_rung3_accumulation_chain_is_hazard_free():
+    """§7.9.1: the in-place accumulation pattern (C/D feedback, independent SrcA/B)
+    needs NO v_nop — llc schedules it with s_delay_alu. This is what the GEMMs emit,
+    so they require no manual scheduling nop."""
+    r = llc_assemble(emit_dependent_wmma_chain_llvmir("f16", hazard=False, depth=4))
+    assert r.status == "ok", r.detail
+    s = wmma_scheduling(r.asm)
+    assert s.n_wmma == 4
+    assert s.n_vnop == 0 and s.hazard_free
+    assert s.n_sdelay >= 1   # scheduled with s_delay_alu, not v_nop
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+def test_rung3_hazard_chain_triggers_vnop():
+    """§7.9.1: when a WMMA's SrcA reads the prior WMMA's destination, llc's hazard
+    recognizer inserts a mandatory v_nop between them."""
+    r = llc_assemble(emit_dependent_wmma_chain_llvmir("f16", hazard=True, depth=3))
+    assert r.status == "ok", r.detail
+    s = wmma_scheduling(r.asm)
+    assert s.n_wmma == 3
+    assert s.n_vnop >= 1 and not s.hazard_free
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_rung3_threadgroup_gemm_is_hazard_free(dtype):
+    """The real threadgroup GEMM is §7.9.1 hazard-free by construction — its
+    fragment grid reads independent LDS-loaded SrcA/B + per-fragment accumulator
+    PHIs, never a prior WMMA destination, so llc inserts no v_nop."""
+    r = llc_assemble(emit_wmma_gemm_threadgroup_llvmir(dtype, mf=2, nf=2))
+    assert r.status == "ok", r.detail
+    s = wmma_scheduling(r.asm)
+    assert s.n_wmma == 4 and s.hazard_free

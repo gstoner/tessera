@@ -65,6 +65,36 @@ difference from the existing rung-2.5 work: that targets **sm_90a WGMMA** (Hoppe
 | **C. Launch** | 6 | Register a CUDA launcher into the C-ABI bridge `tsrRegisterGpuLauncher` (landed G7, `../BACKEND_AUDIT.md`); HIPRTC-equivalent is NVRTC + `cuModuleLoadData` / `cuLaunchKernel`. | the box + R570+ driver |
 | **D. Prove** | 7 | Execute-and-compare the sm_120 bf16 `mma.sync` GEMM vs numpy (Evaluator vertical oracle); flip `backend_kernel` for `tessera.matmul` on `nvidia_sm120` to a real-execution status. **First real NVIDIA `backend_kernel` proof.** Then NVFP4 via block_scale. | the box |
 
+## ⭐ Preferred Stage-A path: lower to NVIDIA Tile IR (not hand-rolled PTX)
+
+NVIDIA shipped **CUDA Tile IR** (https://docs.nvidia.com/cuda/tile-ir/latest/) — "a portable,
+low-level tile virtual machine and instruction set that models the GPU as a tile-based processor",
+i.e. **the tile-level analog of PTX**. Critically for us, it ships **an MLIR dialect "that existing
+compilers can use to target Tile IR as a backend compiler target"** (plus textual syntax + portable
+bytecode), with an optimizing Tile IR compiler "available as part of the CUDA driver and as a
+standalone tool". OpenAI Triton already has a CUDA Tile IR backend — the integration precedent.
+
+**Why this is the better Stage A:** Tile IR's explicit goal is to "abstract tensor-cores and their
+programming model". That makes **the per-arch instruction selection NVIDIA's job, not Tessera's** —
+exactly the gap this plan flags (sm_120 needs `mma.sync`, not the sm_90a `wgmma` we hand-emit today;
+sm_100 needs `tcgen05`). Instead of maintaining three hand-rolled PTX emitters (wgmma / tcgen05 /
+mma.sync), Tessera lowers its **own Tile IR → NVIDIA Tile IR (via the MLIR dialect)** and one program
+runs across sm_90 / sm_100 / sm_120. This is the "MLIR/LLVM foundation for NVIDIA" realized at exactly
+Tessera's abstraction level — and it validates Tessera's tile-centric thesis (NVIDIA now agrees the
+GPU is a tile processor).
+
+**So the revised Stage A is a fork:**
+- **(A-tileir, preferred):** Tessera Tile IR → NVIDIA Tile IR MLIR dialect → driver/standalone Tile IR
+  compiler → SASS. Portable across arches; no per-arch PTX. **Spike this first** once the spec
+  details below are confirmed.
+- **(A-ptx, fallback):** hand-emit `sm_120a` `mma.sync` PTX (the row above). Keep as a control /
+  oracle and for environments without the Tile IR compiler.
+
+**Verify against the full Tile IR spec (sections 1-8) before committing:** CUDA toolkit version +
+GA-vs-preview status; whether the standalone Tile IR compiler ships in the pinned CUDA 13.2 U1; the
+MLIR dialect name/op set; the SASS-vs-PTX consumption path; concrete sm_90/100/120 portability
+guarantees. (Grounded so far from the spec landing + Introduction only.)
+
 ## Honest external gates
 
 - **CUDA toolkit ≥ 12.8 is required for sm_120** (Tessera pins 13.2 U1 — fine). The widely-reported

@@ -120,8 +120,17 @@ for). The structural validators are what earn rung 2.5.
    VGPRs" is an RDNA *4* §7.12.2 addition). Verified via `llc -mcpu=gfx1151` — the AMDGCN carries a
    real `v_wmma_*`, `v_and_b32 _,15,_` (replication), the column-major A address math, and strided
    `global_store`s (the D mapping).
-   Remaining: **threadgroup tiling** (BM×BN tile over a BK K-loop — the AMD analog of the Apple steel
-   structure), the **§7.9.1 V_NOP scheduling hazard** (`s_nop`/`v_nop` between dependent WMMAs), and
+   **Threadgroup tiling landed** — `emit_wmma_gemm_threadgroup_llvmir(dtype, mf, nf)` lifts the
+   single-wave fragment GEMM to a `BM×BN` (= `16mf × 16nf`) output tile: an `mf×nf` grid of WMMA
+   fragments (one `<8 x float>` accumulator PHI + one `wmma` each), A/B staged through **LDS**
+   (`addrspace(3)` globals) with a **double** `llvm.amdgcn.s.barrier` (stage-complete + LDS-reuse
+   guard) over a BK-deep (16-wide) K-loop, reusing the A1 column-major-A / nt-B addressing and the
+   grounded D→C store per fragment (with the `(16i, 16j)` block offset). Verified via `llc
+   -mcpu=gfx1151`: the `mf×nf` `v_wmma_*` grid, a real `s_barrier`, and LDS `ds_store`/`ds_load` all
+   land. The AMD analog of the Apple steel structure. *Honesty ceiling:* one wave owns the whole grid
+   (cooperative multi-wave fragment distribution + coalesced/vectorized LDS loads + double-buffering
+   are the perf follow-ons).
+   Remaining: the **§7.9.1 V_NOP scheduling hazard** (`s_nop`/`v_nop` between dependent WMMAs), and
    the **gfx12 v2 wmma intrinsic ABI** for gfx1200/RDNA 4 (gfx11 intrinsics "cannot select" on gfx12;
    unlocks FP8/BF8 + SWMMAC sparse + int4 16×16×32). The rung-3 `llc` lane runs here, so each step is
    immediately AMDGCN-verifiable on the dev Mac; *numerical* correctness waits for the AMD Matrix

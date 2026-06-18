@@ -374,6 +374,177 @@ declare i32 @llvm.amdgcn.workitem.id.x()
 """
 
 
+def _tg_fragment_store(i: int, j: int, acc_ssa: str) -> str:
+    """The grounded D→C store for output fragment ``(i, j)`` of a threadgroup tile.
+    Reuses the per-lane mapping ``D[2*ele + L/16][L%16]`` (GPUOpen RDNA3 blog) with
+    the fragment's row/col block offset (``16*i`` rows, ``16*j`` cols) folded in."""
+    tag = f"{i}_{j}"
+    lines = [
+        f"  ; --- store fragment ({i},{j}): D rows [16*{i}..], cols [16*{j}..] ---",
+        f"  %fcol{tag} = add i64 %col64, {16 * j}",
+        f"  %frow0{tag} = add i64 %rowbase64, {16 * i}",
+    ]
+    for ele in range(_ACC_LEN):
+        lines.append(
+            f"  %fe{tag}_{ele} = extractelement <{_ACC_LEN} x float> {acc_ssa}, i32 {ele}\n"
+            f"  %frow{tag}_{ele} = add i64 {2 * ele}, %frow0{tag}\n"
+            f"  %fro{tag}_{ele} = mul i64 %frow{tag}_{ele}, %Nx\n"
+            f"  %fra{tag}_{ele} = add i64 %fro{tag}_{ele}, %fcol{tag}\n"
+            f"  %fp{tag}_{ele} = getelementptr float, ptr addrspace(1) %D, i64 %fra{tag}_{ele}\n"
+            f"  store float %fe{tag}_{ele}, ptr addrspace(1) %fp{tag}_{ele}")
+    return "\n".join(lines)
+
+
+def emit_wmma_gemm_threadgroup_llvmir(
+    dtype: str = "bf16",
+    *,
+    mf: int = 2,
+    nf: int = 2,
+    acc: str = "f32",
+    arch: str = "gfx1151",
+    entry: str | None = None,
+) -> str:
+    """Emit a **threadgroup-tiled** WMMA GEMM — the AMD analog of the Apple "steel"
+    structure. One workgroup computes a ``BM×BN`` output tile (an ``mf×nf`` grid of
+    16×16 WMMA fragments) over a ``BK``-deep (16-wide) K-loop, staging the A and B
+    tiles through **LDS** (``addrspace(3)``) with a workgroup ``s_barrier`` between
+    the cooperative load and the matrix multiply.
+
+    Structure (all llc-verifiable on gfx1151):
+      * **LDS staging** — module-level ``addrspace(3)`` globals hold the A tile
+        (``BM×16``) and B tile (``16×BN``) for the current K-step.
+      * **cooperative load → barrier** — each K-step loads the column-major A
+        fragments + nt B fragments from global into LDS, then ``llvm.amdgcn.s.barrier``
+        before the fragments are read back (the threadgroup-synchronization point).
+      * **mf×nf fragment grid** — ``mf*nf`` ``<8 x float>`` accumulator PHIs, one
+        per output fragment, each updated by a ``wmma`` reading its A/B fragment
+        from LDS; a second barrier guards LDS reuse before the next K-step.
+      * **grounded fragment stores** — each fragment writes back with the
+        ``D[2*ele + L/16][L%16]`` mapping plus its ``(16*i, 16*j)`` block offset.
+
+    **Honesty ceiling.** This is the threadgroup *structure* — LDS staging, the
+    double barrier, the fragment grid, the K-loop — with **one wave owning the whole
+    ``mf×nf`` grid** (sequential WMMAs). Cooperative multi-wave fragment distribution
+    + coalesced/vectorized LDS loads + double-buffering are the perf follow-ons. The
+    operand addressing is the A1 column-major-A / nt-B grounding; `llc` verifies the
+    instruction sequence, not the math (rungs 6-7 for numbers)."""
+    if arch not in _RDNA3_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported — RDNA3-class only "
+            f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
+    if mf < 1 or nf < 1:
+        raise ValueError(f"mf/nf must be >= 1 (got mf={mf}, nf={nf})")
+    intr = wmma_intrinsic(dtype, acc=acc)
+    _, elem = _WMMA_F32_INPUT[dtype]
+    a_ty = f"<{_A_LEN} x {elem}>"
+    acc_ty = f"<{_ACC_LEN} x float>"
+    bm, bn = 16 * mf, 16 * nf
+    name = entry or f"tessera_wmma_gemm_tg_{dtype}_{mf}x{nf}"
+    suff = f"{dtype}_{mf}x{nf}"
+    nfrag = mf * nf
+
+    # LDS staging: A tile BM×16 (column-major blocks), B tile 16×BN (nt blocks).
+    lds = (f"@lds.a.{suff} = internal addrspace(3) global [{bm * 16} x {elem}] undef, align 16\n"
+           f"@lds.b.{suff} = internal addrspace(3) global [{16 * bn} x {elem}] undef, align 16")
+
+    # Accumulator PHIs — one per output fragment.
+    phis = "\n".join(
+        f"  %acc{f} = phi {acc_ty} [ zeroinitializer, %entry ], [ %accn{f}, %kbody ]"
+        for f in range(nfrag))
+
+    # Cooperative load: per fragment-row i stage A block i; per fragment-col j stage
+    # B block j. lane copies its 16-element vector (column-major A / nt B per A1).
+    coop = []
+    for i in range(mf):
+        coop.append(
+            f"  ; stage A block {i} (column-major: col=k0+lane, base=col*16, rows 16*{i}..)\n"
+            f"  %ablk{i} = add i64 %acolbase, {i * 16}\n"
+            f"  %ag{i} = getelementptr {elem}, ptr addrspace(1) %A, i64 %ablk{i}\n"
+            f"  %av{i} = load {a_ty}, ptr addrspace(1) %ag{i}\n"
+            f"  %as{i} = getelementptr {a_ty}, ptr addrspace(3) @lds.a.{suff}, i32 %lane16, i32 {i}\n"
+            f"  store {a_ty} %av{i}, ptr addrspace(3) %as{i}")
+    for j in range(nf):
+        coop.append(
+            f"  ; stage B block {j} (nt: Bt[16*{j}+lane][k0..], contiguous over K)\n"
+            f"  %bblk{j} = add i64 %bidx, {j * 16} \n"
+            f"  %bg{j} = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %bblk{j}\n"
+            f"  %bv{j} = load {a_ty}, ptr addrspace(1) %bg{j}\n"
+            f"  %bs{j} = getelementptr {a_ty}, ptr addrspace(3) @lds.b.{suff}, i32 %lane16, i32 {j}\n"
+            f"  store {a_ty} %bv{j}, ptr addrspace(3) %bs{j}")
+    coop_block = "\n".join(coop)
+
+    # Fragment multiply: read A block i + B block j back from LDS, wmma into acc.
+    mma = []
+    for i in range(mf):
+        mma.append(
+            f"  %la{i} = getelementptr {a_ty}, ptr addrspace(3) @lds.a.{suff}, i32 %lane16, i32 {i}\n"
+            f"  %fa{i} = load {a_ty}, ptr addrspace(3) %la{i}")
+    for j in range(nf):
+        mma.append(
+            f"  %lb{j} = getelementptr {a_ty}, ptr addrspace(3) @lds.b.{suff}, i32 %lane16, i32 {j}\n"
+            f"  %fb{j} = load {a_ty}, ptr addrspace(3) %lb{j}")
+    for i in range(mf):
+        for j in range(nf):
+            f = i * nf + j
+            mma.append(
+                f"  %accn{f} = call {acc_ty} @{intr}({a_ty} %fa{i}, {a_ty} %fb{j}, {acc_ty} %acc{f})")
+    mma_block = "\n".join(mma)
+
+    stores = "\n".join(_tg_fragment_store(i, j, f"%acc{i * nf + j}")
+                       for i in range(mf) for j in range(nf))
+
+    return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} threadgroup-tiled GEMM, {mf}x{nf} fragment grid ({arch}).
+; BM={bm} x BN={bn} output tile via LDS-staged A/B + s_barrier + an {mf}x{nf} WMMA fragment grid over a
+; BK-deep (16) K-loop. Column-major A / nt B (A1 grounding). One wave owns the grid (cooperative
+; multi-wave distribution is the perf follow-on). numerical correctness needs silicon (rungs 6-7).
+target triple = "amdgcn-amd-amdhsa"
+{lds}
+
+define amdgpu_kernel void @{name}(
+    ptr addrspace(1) %A, ptr addrspace(1) %Bt, ptr addrspace(1) %D, i32 %K, i32 %N) {{
+entry:
+  %lane = call i32 @llvm.amdgcn.workitem.id.x()
+  %lane16 = and i32 %lane, 15                 ; lanes 16-31 alias 0-15 (replication)
+  %row = sext i32 %lane16 to i64
+  %Kx = sext i32 %K to i64
+  %rowK = mul i64 %row, %Kx                   ; B (nt) base: lane * K
+  %col64 = zext i32 %lane16 to i64            ; output column = lane % 16
+  %rowbase = lshr i32 %lane, 4
+  %rowbase64 = zext i32 %rowbase to i64       ; output row half (lane / 16)
+  %Nx = sext i32 %N to i64
+  br label %kloop
+kloop:
+  %k = phi i32 [ 0, %entry ], [ %knext, %kbody ]
+{phis}
+  %done = icmp sge i32 %k, %K
+  br i1 %done, label %store, label %kbody
+kbody:
+  ; --- column-major A column base (col = k0 + lane, base = col*16) ---
+  %kcol = add i32 %k, %lane16
+  %kcol64 = sext i32 %kcol to i64
+  %acolbase = mul i64 %kcol64, 16
+  ; --- nt B base (Bt[lane][k0..], contiguous over K) ---
+  %k64 = sext i32 %k to i64
+  %bidx = add i64 %rowK, %k64
+  ; --- cooperative global -> LDS stage ---
+{coop_block}
+  call void @llvm.amdgcn.s.barrier()          ; threadgroup sync: stage complete
+  ; --- {mf}x{nf} fragment grid: read from LDS, wmma-accumulate ---
+{mma_block}
+  call void @llvm.amdgcn.s.barrier()          ; guard LDS before next K-step overwrites it
+  %knext = add i32 %k, 16
+  br label %kloop
+store:
+{stores}
+  ret void
+}}
+
+declare {acc_ty} @{intr}({a_ty}, {a_ty}, {acc_ty})
+declare i32 @llvm.amdgcn.workitem.id.x()
+declare void @llvm.amdgcn.s.barrier()
+"""
+
+
 @dataclass(frozen=True)
 class RocdlValidation:
     ok: bool
@@ -480,6 +651,40 @@ def validate_wmma_gemm_store_structure(
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
+def validate_wmma_gemm_threadgroup_structure(
+    ir: str, *, dtype: str = "bf16", mf: int = 2, nf: int = 2, arch: str = "gfx1151",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the **threadgroup-tiled** GEMM: the base
+    intrinsic/type checks plus the threadgroup structure — **LDS** ``addrspace(3)``
+    A/B staging globals, a **double** ``llvm.amdgcn.s.barrier`` (stage-complete +
+    LDS-reuse guard), the column-major A base, ``mf*nf`` accumulator PHIs and
+    ``mf*nf`` ``wmma`` calls (the fragment grid), and ``mf*nf*8`` strided scalar D
+    stores (one grounded mapping per output fragment)."""
+    base = validate_wmma_llvmir_structure(ir, dtype=dtype, arch=arch)
+    reasons = list(base.reasons)
+    nfrag = mf * nf
+    intr = wmma_intrinsic(dtype)
+    if "addrspace(3) global" not in ir:
+        reasons.append("missing the LDS (addrspace(3)) staging globals")
+    n_bar = ir.count("@llvm.amdgcn.s.barrier()")
+    # 2 barriers in the K-loop body + 1 in the declare line = 3 textual occurrences.
+    if n_bar < 3:
+        reasons.append(f"expected a double s.barrier (+declare), found {n_bar} occurrences")
+    if "mul i64 %kcol64, 16" not in ir:
+        reasons.append("missing the column-major A base (col * 16 leading dim)")
+    n_phi = ir.count(f"phi <{_ACC_LEN} x float>")
+    if n_phi != nfrag:
+        reasons.append(f"expected {nfrag} accumulator PHIs (mf*nf), found {n_phi}")
+    n_wmma = ir.count(f"call <{_ACC_LEN} x float> @{intr}(")
+    if n_wmma != nfrag:
+        reasons.append(f"expected {nfrag} wmma calls (mf*nf fragment grid), found {n_wmma}")
+    n_stores = ir.count("store float %fe")
+    if n_stores != nfrag * _ACC_LEN:
+        reasons.append(
+            f"expected {nfrag * _ACC_LEN} fragment D stores (mf*nf*8), found {n_stores}")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
 @dataclass(frozen=True)
 class LlcResult:
     status: str            # "ok" | "failed" | "skipped"
@@ -534,10 +739,12 @@ __all__ = [
     "emit_wmma_gemm_llvmir",
     "emit_wmma_gemm_layout_llvmir",
     "emit_wmma_gemm_store_llvmir",
+    "emit_wmma_gemm_threadgroup_llvmir",
     "validate_wmma_llvmir_structure",
     "validate_wmma_gemm_structure",
     "validate_wmma_gemm_layout_structure",
     "validate_wmma_gemm_store_structure",
+    "validate_wmma_gemm_threadgroup_structure",
     "llc_assemble",
     "RocdlValidation",
     "LlcResult",

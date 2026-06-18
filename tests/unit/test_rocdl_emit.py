@@ -15,11 +15,13 @@ from tessera.compiler.rocdl_emit import (
     emit_wmma_gemm_layout_llvmir,
     emit_wmma_gemm_llvmir,
     emit_wmma_gemm_store_llvmir,
+    emit_wmma_gemm_threadgroup_llvmir,
     emit_wmma_llvmir,
     llc_assemble,
     validate_wmma_gemm_layout_structure,
     validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
+    validate_wmma_gemm_threadgroup_structure,
     validate_wmma_llvmir_structure,
     wmma_intrinsic,
 )
@@ -250,3 +252,62 @@ def test_rung3_store_gemm_lowers_with_strided_global_stores(dtype, want):
     assert want in r.wmma_instruction
     assert "v_and_b32" in r.asm        # lane replication + column mask
     assert "global_store" in r.asm     # the strided D stores landed
+
+
+# ── threadgroup tiling: LDS-staged MF×NF fragment grid + double barrier ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gemm_threadgroup_emit_and_validate(dtype):
+    ir = emit_wmma_gemm_threadgroup_llvmir(dtype, mf=2, nf=2, arch="gfx1151")
+    v = validate_wmma_gemm_threadgroup_structure(ir, dtype=dtype, mf=2, nf=2, arch="gfx1151")
+    assert v.ok, v.reasons
+
+
+@pytest.mark.parametrize("mf,nf", [(1, 1), (2, 2), (1, 4), (3, 2)])
+def test_gemm_threadgroup_fragment_grid_counts(mf, nf):
+    ir = emit_wmma_gemm_threadgroup_llvmir("f16", mf=mf, nf=nf)
+    nfrag = mf * nf
+    assert ir.count("phi <8 x float>") == nfrag                     # one acc per fragment
+    assert ir.count("@llvm.amdgcn.wmma.f32.16x16x16.f16(") == nfrag + 1  # +1 declare
+    assert ir.count("store float %fe") == nfrag * 8                 # grounded store per frag
+    v = validate_wmma_gemm_threadgroup_structure(ir, dtype="f16", mf=mf, nf=nf)
+    assert v.ok, v.reasons
+
+
+def test_gemm_threadgroup_has_lds_and_double_barrier():
+    ir = emit_wmma_gemm_threadgroup_llvmir("bf16", mf=2, nf=2)
+    assert "addrspace(3) global" in ir                  # LDS staging
+    # two barriers in the loop body (stage-complete + LDS-reuse guard) + 1 declare.
+    assert ir.count("@llvm.amdgcn.s.barrier()") == 3
+    assert "mul i64 %kcol64, 16" in ir                  # column-major A base reused
+
+
+def test_gemm_threadgroup_validator_catches_missing_barrier():
+    ir = emit_wmma_gemm_threadgroup_llvmir("f16", mf=2, nf=2).replace(
+        "  call void @llvm.amdgcn.s.barrier()          ; guard LDS before next K-step overwrites it\n",
+        "", 1)
+    v = validate_wmma_gemm_threadgroup_structure(ir, dtype="f16", mf=2, nf=2)
+    assert not v.ok
+    assert any("s.barrier" in r for r in v.reasons)
+
+
+def test_gemm_threadgroup_rejects_rdna4():
+    with pytest.raises(ValueError):
+        emit_wmma_gemm_threadgroup_llvmir("f16", arch="gfx1200")
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x16_f16"),
+    ("bf16", "v_wmma_f32_16x16x16_bf16"),
+])
+def test_rung3_threadgroup_lowers_with_lds_and_barrier(dtype, want):
+    """The threadgroup-tiled GEMM lowers to AMDGCN with the MF×NF v_wmma_* grid,
+    a real s_barrier, and LDS ds_store/ds_load — machine-confirmed on this host."""
+    ir = emit_wmma_gemm_threadgroup_llvmir(dtype, mf=2, nf=2, arch="gfx1151")
+    r = llc_assemble(ir, arch="gfx1151")
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+    assert r.asm.count("v_wmma_f32_16x16x16") == 4   # 2x2 fragment grid
+    assert "s_barrier" in r.asm
+    assert "ds_store" in r.asm and "ds_load" in r.asm

@@ -418,6 +418,45 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
 }
 
 
+# ── Per-arch register budgets (per-lane) ────────────────────────────────────
+# Architectural vector/accumulator register file budgets, expressed PER LANE.
+# These are the registers a single work-item (lane) may hold live before the
+# compiler must spill to scratch — the budget the AMD Gluon GEMM tutorial
+# identified as the dominant perf lever (double-buffering regressed −73% by
+# spilling past it; slicing the output tile to fit was the real fix).
+#
+#   CDNA (gfx90a/940/942/950): 256 VGPR + 256 AGPR per lane = 512 combined.
+#     The AGPRs are the matrix-core accumulator registers; the combined 512
+#     matches the Gluon "512-VGPR budget" framing on gfx950.
+#   RDNA / wave32 (gfx1100/1151/1200/1250/1251): 256 VGPR + 0 AGPR.
+#     RDNA has no separate AGPR file; the accumulator lives in the VGPR file.
+_VGPR_BUDGET: dict[AMDArch, int] = {
+    AMDArch.GFX_90A:  256,
+    AMDArch.GFX_940:  256,
+    AMDArch.GFX_942:  256,
+    AMDArch.GFX_950:  256,
+    AMDArch.GFX_1100: 256,
+    AMDArch.GFX_1151: 256,
+    AMDArch.GFX_1200: 256,
+    AMDArch.GFX_1250: 256,
+    AMDArch.GFX_1251: 256,
+}
+
+#: Accumulator (matrix-core) register budget per lane.  Non-zero only on CDNA,
+#: which has a dedicated AGPR file feeding MFMA; RDNA/wave32 has none (0).
+_AGPR_BUDGET: dict[AMDArch, int] = {
+    AMDArch.GFX_90A:  256,
+    AMDArch.GFX_940:  256,
+    AMDArch.GFX_942:  256,
+    AMDArch.GFX_950:  256,
+    AMDArch.GFX_1100: 0,
+    AMDArch.GFX_1151: 0,
+    AMDArch.GFX_1200: 0,
+    AMDArch.GFX_1250: 0,
+    AMDArch.GFX_1251: 0,
+}
+
+
 # Per-arch HIP/HIPCC compile-target strings under ROCm 7.2.3.
 _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_90A:  "gfx90a",
@@ -535,6 +574,29 @@ class ROCmTargetProfile:
         if self.lds_bytes is not None:
             return self.lds_bytes
         return _LDS_BYTES[self.arch]
+
+    @property
+    def vgpr_budget(self) -> int:
+        """Vector general-purpose registers available per lane on this arch.
+
+        This is the architectural VGPR file budget a single work-item may hold
+        live before the compiler must spill.  It is the dominant tiling-fit
+        lever per the AMD Gluon GEMM tutorial (see ``rocm_tiling``)."""
+        return _VGPR_BUDGET[self.arch]
+
+    @property
+    def agpr_budget(self) -> int:
+        """Accumulator (matrix-core) registers per lane.  Non-zero only on CDNA
+        (dedicated AGPR file feeding MFMA); ``0`` on RDNA/wave32 arches."""
+        return _AGPR_BUDGET[self.arch]
+
+    @property
+    def total_reg_budget(self) -> int:
+        """Combined per-lane register budget (``vgpr_budget + agpr_budget``).
+
+        On CDNA this is 512 (256 VGPR + 256 AGPR — the Gluon "512-VGPR budget");
+        on RDNA/wave32 it is 256 (no separate AGPR file)."""
+        return self.vgpr_budget + self.agpr_budget
 
     @property
     def waves_per_simd(self) -> int:

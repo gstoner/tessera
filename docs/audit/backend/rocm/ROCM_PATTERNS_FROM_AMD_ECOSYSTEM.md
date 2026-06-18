@@ -418,6 +418,28 @@ silently regress.
 
 ---
 
+## 2.7 Hardware-free B/C batch landed (2026-06-18)
+
+The hardware-free slices of the **B** (GEMM perf ladder) and **C**
+(distributed/comm) tracks are implemented as pure modeling/IR surfaces (170 unit
+tests; mypy + ruff clean). They give the compiler the *vocabulary* the real
+kernels will need; the executable kernels themselves stay hardware-gated.
+
+| Item | Module | Tests | Notes |
+|------|--------|-------|-------|
+| **B1** register budget | `rocm_target.py` (`vgpr_budget`/`agpr_budget`/`total_reg_budget`, per-arch tables: CDNA 256+256, RDNA 256+0) + `compiler/rocm_tiling.py` (`TileShape`/`TileCandidate`, `estimate_vgpr_usage`, `prune_candidates`→`PruneResult`, `quad_slice`/`n_slice`) | 30 | The Gluon v6 lesson encoded: a double-buffered over-budget tile is pruned; quad-slice fits it. Never silently drops — `PruneResult` records dropped candidates. |
+| **B2** pipeline + LDS layout | `compiler/rocm_lds.py` — `SoftwarePipeline(stages)`→N-buffered LDS; `SwizzledLdsLayout` (XOR) vs `PaddedLdsLayout`; `select_lds_layout(arch, global_to_lds=…)` | 32 | Padding for gfx950 `GLOBAL_LOAD_LDS`, swizzle elsewhere (arch-keyed). |
+| **B3** buffer_load / ds_read_tr | `tessera_rocm.buffer_load` (OOB addressing) + `ds_read_tr` ops in the dialect ODS + ROCDL marker lowering | lit | `test/rocm/buffer_load_ds_read_tr.mlir` (roundtrip + lowering); `check-tessera-rocm` 10/10. |
+| **C1** symmetric heap | `symmetric_heap.py` — `SymmetricHeap` (offset-arithmetic `remote_address`) + `SymmetricShardSpec` (replicated/partitioned) | 32 | The substrate for one-sided collectives (Iris/Mori): the *offset* is symmetric across ranks; base pointers may differ. |
+| **C3** overlap modeling | `compiler/comm_overlap.py` — SC-HRF `MemoryScope`/`MemoryOrdering`, `SignalOp` (producer=release / consumer=acquire), `OverlapPlan` + `plan_overlap` | 38 | Models the three Iris overlap patterns (sequential-fused / workgroup-specialized / unfused). |
+
+**Still hardware-gated (need Strix Halo / MI300 / NICs):** B4 full numeric
+`rocdl.mfma/wmma` emission, B5 counter-driven scoring (`rocprofv3 --att`), C2
+comm device-function bitcode ABI, and `backend_kernel = complete` (execute-and-
+compare on real silicon — see `STRIX_HALO_EXECUTION_PLAN.md`).
+
+---
+
 ## 3. Recommended sequencing
 
 1. **Now (hardware-free, highest ROI):** A4 (tuned-config DB) + A3 (epilogue bit-flags) +

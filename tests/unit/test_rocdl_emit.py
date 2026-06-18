@@ -18,14 +18,17 @@ from tessera.compiler.rocdl_emit import (
     emit_dependent_wmma_chain_llvmir,
     emit_wmma_gemm_threadgroup_llvmir,
     emit_wmma_llvmir,
+    emit_wmma_rdna4_llvmir,
     llc_assemble,
-    wmma_scheduling,
     validate_wmma_gemm_layout_structure,
     validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
     validate_wmma_gemm_threadgroup_structure,
     validate_wmma_llvmir_structure,
+    validate_wmma_rdna4_structure,
     wmma_intrinsic,
+    wmma_intrinsic_rdna4,
+    wmma_scheduling,
 )
 
 def _llc_available() -> bool:
@@ -371,3 +374,64 @@ def test_rung3_threadgroup_gemm_is_hazard_free(dtype):
     assert r.status == "ok", r.detail
     s = wmma_scheduling(r.asm)
     assert s.n_wmma == 4 and s.hazard_free
+
+
+# ── RDNA 4 (gfx1200/1201): denser fragments + FP8 unlock, plain 3-arg ABI ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16", "fp8_e4m3", "fp8_e5m2"])
+def test_rdna4_emit_and_validate(dtype):
+    ir = emit_wmma_rdna4_llvmir(dtype, arch="gfx1200")
+    v = validate_wmma_rdna4_structure(ir, dtype=dtype, arch="gfx1200")
+    assert v.ok, v.reasons
+
+
+def test_rdna4_uses_denser_8wide_fragments():
+    # RDNA 4 drops the wave32 lane-replication -> A/B are <8 x ...>, not gfx11's <16 x ...>.
+    ir = emit_wmma_rdna4_llvmir("f16")
+    assert "<8 x half>" in ir
+    assert "<16 x half>" not in ir
+    bf = emit_wmma_rdna4_llvmir("bf16")
+    assert "<8 x i16>" in bf and "<16 x i16>" not in bf
+
+
+def test_rdna4_fp8_intrinsic_names():
+    assert wmma_intrinsic_rdna4("fp8_e4m3") == "llvm.amdgcn.wmma.f32.16x16x16.fp8.fp8"
+    assert wmma_intrinsic_rdna4("fp8_e5m2") == "llvm.amdgcn.wmma.f32.16x16x16.bf8.bf8"
+    assert wmma_intrinsic_rdna4("f16") == "llvm.amdgcn.wmma.f32.16x16x16.f16"
+
+
+def test_rdna4_rejects_rdna3_and_gfx1250_arch():
+    # gfx1151 is the RDNA3 emitter; gfx1250/1251 use the later mods/reuse ABI.
+    for bad in ("gfx1151", "gfx1100", "gfx1250", "gfx1251"):
+        with pytest.raises(ValueError):
+            emit_wmma_rdna4_llvmir("f16", arch=bad)
+
+
+def test_rdna4_rejects_unknown_dtype():
+    with pytest.raises(ValueError):
+        wmma_intrinsic_rdna4("int4")
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x16_f16"),
+    ("bf16", "v_wmma_f32_16x16x16_bf16"),
+    ("fp8_e4m3", "v_wmma_f32_16x16x16_fp8_fp8"),
+    ("fp8_e5m2", "v_wmma_f32_16x16x16_bf8_bf8"),
+])
+def test_rung3_rdna4_lowers_on_gfx1200(dtype, want):
+    """RDNA 4 lowers on gfx1200 — machine-confirmed here (LLVM 22 AMDGPU). The FP8
+    forms are the RDNA 4 unlock that gfx1151/RDNA 3.5 cannot select."""
+    ir = emit_wmma_rdna4_llvmir(dtype, arch="gfx1200")
+    r = llc_assemble(ir, arch="gfx1200")
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+def test_rung3_rdna4_fp8_is_not_selectable_on_rdna3():
+    """Cross-check: the RDNA 4 FP8 intrinsic 'Cannot select' on gfx1151 — the FP8
+    unlock is genuinely RDNA-4-only, not a naming nicety."""
+    ir = emit_wmma_rdna4_llvmir("fp8_e4m3", arch="gfx1200")
+    r = llc_assemble(ir, arch="gfx1151")   # try to lower the fp8 form on RDNA 3.5
+    assert r.status == "failed"

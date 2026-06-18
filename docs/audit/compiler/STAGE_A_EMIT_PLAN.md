@@ -138,10 +138,22 @@ for). The structural validators are what earn rung 2.5.
    asserted hazard-free by construction (`test_rung3_threadgroup_gemm_is_hazard_free`). Key grounding:
    the IR-level emit gets the (rare) mandatory hazard nop from the backend for free — there is nothing
    for the emitter to insert by hand; the deliverable is the grounding + the lock.
-   Remaining: the **gfx12 v2 wmma intrinsic ABI** for gfx1200/RDNA 4 (gfx11 intrinsics "cannot select"
-   on gfx12; unlocks FP8/BF8 + SWMMAC sparse + int4 16×16×32). The rung-3 `llc` lane runs here, so each
-   step is immediately AMDGCN-verifiable on the dev Mac; *numerical* correctness waits for the AMD
-   Matrix Instruction Calculator cross-check or real silicon (rungs 6-7).
+   **RDNA 4 (gfx1200/1201) ABI grounded + emitted** — `emit_wmma_rdna4_llvmir(dtype)` +
+   `wmma_intrinsic_rdna4` + `validate_wmma_rdna4_structure`, all `llc`-verified on this host across
+   f16/bf16/fp8_e4m3/fp8_e5m2. **Decision #27 correction:** the earlier "gfx12 v2 ABI = extra
+   format/reuse operands" note was *wrong* — `llc` on this host shows the mods/reuse ABI (`i1
+   A_mod`/`i16 C_mod`/reuse flags, `wmma.f32.16x16x32.f16`) is **gfx1250/1251**, a later arch, NOT
+   RDNA 4. RDNA 4 keeps the **plain 3-arg `wmma(A,B,C)` ABI** but uses **denser `<8 x elem>`
+   fragments** (gfx11 is `<16 x elem>` — RDNA 4 drops the wave32 lane 0-15 → 16-31 duplication) and
+   adds native **FP8/BF8** (`fp8_e4m3`→`fp8.fp8`, `fp8_e5m2`→`bf8.bf8` → `v_wmma_f32_16x16x16_{fp8_fp8,
+   bf8_bf8}`). Cross-checked: the FP8 intrinsic "Cannot select" on gfx1151, confirming the unlock is
+   genuinely RDNA-4-only. 7 new tests (5 rung-3). Honesty ceiling: single-intrinsic ABI proof (the
+   gfx11 path's starting point) — RDNA 4's GEMM/operand-layout/threadgroup generalizations are
+   follow-ons, and its denser VGPR layout means the D→C mapping is its own grounding job (not a reuse
+   of the gfx11 one). The **AMD Stage-A emit track (A1–A4) is now complete**: the gfx11/RDNA3-class
+   GEMM has the full operand layout + threadgroup tiling + the §7.9.1 hazard locked, and the RDNA 4 ABI
+   path is grounded and emitting. *Numerical* correctness across both waits for the AMD Matrix
+   Instruction Calculator cross-check or real silicon (rungs 6-7).
 3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
    async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)

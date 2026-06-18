@@ -49,13 +49,32 @@ _WMMA_F32_INPUT: dict[str, tuple[str, str]] = {
 # RDNA 3.5 supports ONLY 16×16×16 (no FP8 / larger-K — those are gfx1200/RDNA 4).
 _RDNA35_SHAPE = (16, 16, 16)
 # This emitter uses the RDNA3-class wmma intrinsic (gfx11). Verified on this host:
-# it lowers on gfx1100/gfx1151 but **"Cannot select" on gfx1200** — RDNA 4 has a
-# different gfx12 "v2" wmma intrinsic ABI (extra format/reuse operands, different
-# operand packing), grounded separately as a follow-on. So scope to RDNA 3/3.5.
+# it lowers on gfx1100/gfx1151 but **"Cannot select" on gfx1200** — RDNA 4 keeps the
+# plain 3-arg (A,B,C) ABI but uses DENSER per-lane fragments (<8 x elem>, no lane
+# 0-15 → 16-31 replication) and adds FP8/BF8; see `emit_wmma_rdna4_llvmir`. (The
+# *mods/reuse* "v2" ABI with extra immediate operands — `i1 A_mod`/`i16 C_mod`/reuse
+# flags — is gfx1250/gfx1251, a LATER arch, NOT RDNA 4. Grounded by `llc` on this
+# host: gfx1250/1251 select `wmma.f32.16x16x32.f16`; gfx1200/1201 do not.)
 _RDNA3_CLASS_ARCHES: frozenset[str] = frozenset({"gfx1100", "gfx1151"})
 # Per-lane operand widths for wave32 16×16×16: A/B = 16 elements, C/D = 8 fp32.
 _A_LEN = _B_LEN = 16
 _ACC_LEN = 8
+
+# RDNA 4 (gfx1200/gfx1201) WMMA — grounded by `llc` on this host (LLVM 22 AMDGPU):
+# the plain (A,B,C) 3-arg ABI is preserved, but A/B fragments are DENSER (<8 x elem>
+# — half the width of gfx11's <16 x elem> — because RDNA 4 drops the wave32 lane
+# 0-15 → 16-31 duplication). New: native FP8/BF8 (16×16×16). dtype → (intrinsic
+# suffix, A/B LLVM vector type, v_wmma_* mnemonic infix).
+_RDNA4_CLASS_ARCHES: frozenset[str] = frozenset({"gfx1200", "gfx1201"})
+_RDNA4_A_LEN = 8
+_RDNA4_INPUT: dict[str, tuple[str, str, str]] = {
+    "f16":      ("f16",     f"<{_RDNA4_A_LEN} x half>", "f16"),
+    "fp16":     ("f16",     f"<{_RDNA4_A_LEN} x half>", "f16"),
+    "bf16":     ("bf16",    f"<{_RDNA4_A_LEN} x i16>",  "bf16"),
+    # FP8 (the RDNA 4 unlock): AMD fp8 = e4m3, bf8 = e5m2; A/B byte-packed <2 x i32>.
+    "fp8_e4m3": ("fp8.fp8", "<2 x i32>",                "fp8_fp8"),
+    "fp8_e5m2": ("bf8.bf8", "<2 x i32>",                "bf8_bf8"),
+}
 
 
 def wmma_intrinsic(dtype: str, *, acc: str = "f32") -> str:
@@ -70,6 +89,65 @@ def wmma_intrinsic(dtype: str, *, acc: str = "f32") -> str:
             "note RDNA 3.5 has NO FP8 WMMA (that is gfx1200/RDNA 4)")
     suffix, _ = _WMMA_F32_INPUT[dtype]
     return f"llvm.amdgcn.wmma.f32.16x16x16.{suffix}"
+
+
+def wmma_intrinsic_rdna4(dtype: str) -> str:
+    """The documented ``llvm.amdgcn.wmma`` intrinsic for one input dtype on **RDNA 4**
+    (gfx1200/gfx1201), fp32 accumulator, 16×16×16. Same intrinsic *names* as gfx11
+    for f16/bf16, plus the new fp8/bf8 forms; the difference is the denser operand
+    vector width (see :data:`_RDNA4_INPUT`), not the intrinsic name."""
+    if dtype not in _RDNA4_INPUT:
+        raise ValueError(
+            f"unsupported RDNA 4 WMMA input dtype {dtype!r} "
+            f"(supported: {sorted(_RDNA4_INPUT)})")
+    suffix, _, _ = _RDNA4_INPUT[dtype]
+    return f"llvm.amdgcn.wmma.f32.16x16x16.{suffix}"
+
+
+def emit_wmma_rdna4_llvmir(
+    dtype: str = "f16", *, arch: str = "gfx1200", entry: str | None = None,
+) -> str:
+    """Emit the **RDNA 4** (gfx1200/gfx1201) WMMA intrinsic — the gfx12 path, grounded
+    by `llc` on this host (LLVM 22 AMDGPU backend).
+
+    Establishes the RDNA 4 ABI the way :func:`emit_wmma_llvmir` did for gfx11: a
+    single ``wmma`` in a minimal ``amdgpu_kernel``. The RDNA 4 differences from gfx11,
+    all `llc`-verified:
+      * **plain 3-arg ABI preserved** — ``wmma(A, B, C)``; RDNA 4 does *not* take the
+        mods/reuse immediate operands (those are gfx1250/1251).
+      * **denser fragments** — A/B are ``<8 x elem>`` (gfx11 is ``<16 x elem>``):
+        RDNA 4 drops the wave32 lane 0-15 → 16-31 duplication.
+      * **FP8/BF8** — ``fp8_e4m3``→``fp8.fp8``, ``fp8_e5m2``→``bf8.bf8`` (the RDNA 4
+        low-precision unlock; gfx11/RDNA 3.5 have none).
+
+    **Honesty ceiling.** This is the single-intrinsic ABI proof (the gfx11 path's
+    starting point). The GEMM / operand-layout / threadgroup generalizations
+    (column-major A, D→C store, LDS tiling) are the follow-ons — and RDNA 4's denser
+    VGPR layout means its D→C mapping is its *own* grounding job, not a reuse of the
+    gfx11 one. `llc` verifies the instruction; numbers wait for silicon (rungs 6-7)."""
+    if arch not in _RDNA4_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported by the RDNA 4 emitter "
+            f"({sorted(_RDNA4_CLASS_ARCHES)}); gfx1100/gfx1151 use emit_wmma_llvmir "
+            "(RDNA 3-class), gfx1250/1251 use the later mods/reuse ABI.")
+    intr = wmma_intrinsic_rdna4(dtype)
+    _, abty, _ = _RDNA4_INPUT[dtype]
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_rdna4_{dtype}"
+    return f"""; Tessera rung-2.5/3 — RDNA 4 WMMA {dtype} ({arch}). Plain (A,B,C) ABI, DENSER
+; {abty} fragments (no wave32 lane replication), fp32 accumulator. fp8/bf8 = RDNA 4 unlock.
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(ptr addrspace(1) %A, ptr addrspace(1) %D) {{
+entry:
+  %a = load {abty}, ptr addrspace(1) %A
+  %c = call {acc_ty} @{intr}({abty} %a, {abty} %a, {acc_ty} zeroinitializer)
+  store {acc_ty} %c, ptr addrspace(1) %D
+  ret void
+}}
+
+declare {acc_ty} @{intr}({abty}, {abty}, {acc_ty})
+"""
 
 
 def emit_wmma_llvmir(
@@ -672,6 +750,34 @@ def validate_wmma_llvmir_structure(
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
+def validate_wmma_rdna4_structure(
+    ir: str, *, dtype: str = "f16", arch: str = "gfx1200",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the RDNA 4 emit: the intrinsic call, the
+    ``amdgpu_kernel`` def, the fp32 accumulator, the target triple, and the two
+    RDNA 4 hallmarks — the **denser** A/B fragment type (``<8 x ...>``, not gfx11's
+    ``<16 x ...>``) and the **plain 3-arg ABI** (no gfx1250 ``i16`` C-mod operand)."""
+    reasons: list[str] = []
+    intr = wmma_intrinsic_rdna4(dtype)
+    _, abty, _ = _RDNA4_INPUT[dtype]
+    if f"@{intr}(" not in ir:
+        reasons.append(f"missing the {intr} intrinsic call")
+    if "amdgpu_kernel" not in ir:
+        reasons.append("missing amdgpu_kernel definition")
+    if abty not in ir:
+        reasons.append(f"missing the denser RDNA 4 A/B operand type {abty}")
+    if f"<{_A_LEN} x " in ir and dtype in ("f16", "fp16", "bf16"):
+        reasons.append(f"emitted the gfx11 <{_A_LEN} x ...> fragment (RDNA 4 is denser <8 x ...>)")
+    if f"<{_ACC_LEN} x float>" not in ir:
+        reasons.append(f"missing the fp32 accumulator type <{_ACC_LEN} x float>")
+    if "amdgcn-amd-amdhsa" not in ir:
+        reasons.append("missing the amdgcn target triple")
+    # The gfx1250 mods/reuse ABI carries an i16 C-mod operand — must NOT appear here.
+    if "i16," in ir.replace("x i16", ""):
+        reasons.append("emitted a gfx1250 mods/reuse operand (RDNA 4 uses the plain 3-arg ABI)")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
 def validate_wmma_gemm_structure(
     ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
     expect_vector_store: bool = True,
@@ -831,7 +937,10 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
 
 __all__ = [
     "wmma_intrinsic",
+    "wmma_intrinsic_rdna4",
     "emit_wmma_llvmir",
+    "emit_wmma_rdna4_llvmir",
+    "validate_wmma_rdna4_structure",
     "emit_wmma_gemm_llvmir",
     "emit_wmma_gemm_layout_llvmir",
     "emit_wmma_gemm_store_llvmir",

@@ -512,3 +512,43 @@ def test_rung3_gfx1250_k32_not_selectable_on_rdna4():
     ir = emit_wmma_gfx1250_llvmir("f16", arch="gfx1250")
     r = llc_assemble(ir, arch="gfx1200")
     assert r.status == "failed"
+
+
+# ── review-hardening guards (corner cases / glass jaws) ──
+
+def test_threadgroup_lds_slots_are_non_overlapping():
+    # Each (block, lane) fragment must own a 256-strided slot (16x16), not the old
+    # 2-index <16 x elem> GEP that strided blocks by 1 element (overlapping).
+    ir = emit_wmma_gemm_threadgroup_llvmir("f16", mf=2, nf=2)
+    assert "%lane_x16 = mul i32 %lane16, 16" in ir       # per-lane fragment offset
+    assert "add i32 %lane_x16, 256" in ir                # block 1 base = 256
+    assert "i32 %lane16, i32 1\n" not in ir              # the old overlapping GEP is gone
+
+
+def test_threadgroup_rejects_oversized_fragment_grid():
+    with pytest.raises(ValueError, match="single-wave cap"):
+        emit_wmma_gemm_threadgroup_llvmir("f16", mf=8, nf=8)   # 64 > 16
+
+
+def test_emitters_reject_malformed_entry_name():
+    for bad in ("has space", "1leading_digit", "bad-dash", ""):
+        with pytest.raises(ValueError, match="entry name"):
+            emit_wmma_llvmir("f16", entry=bad)
+    with pytest.raises(ValueError, match="entry name"):
+        emit_wmma_gemm_threadgroup_llvmir("f16", entry="no good")
+
+
+def test_llc_assemble_rejects_malformed_arch():
+    from tessera.compiler.rocdl_emit import llc_assemble
+    with pytest.raises(ValueError, match="invalid arch"):
+        llc_assemble(emit_wmma_llvmir("f16"), arch="x86; rm -rf")
+
+
+def test_rdna4_validator_now_catches_gfx1250_operands():
+    # Regression: the old `"i16," in ...` heuristic never matched the real `i16 0,`
+    # operand. Splice a gfx1250 reuse-flag tail into an RDNA4 emit -> must be caught.
+    ir = emit_wmma_rdna4_llvmir("f16").replace(
+        "%a, <8 x float> zeroinitializer)", "%a, <8 x float> zeroinitializer, i1 0, i1 0)")
+    v = validate_wmma_rdna4_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("plain 3-arg ABI" in r for r in v.reasons)

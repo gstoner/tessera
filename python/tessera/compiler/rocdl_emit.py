@@ -30,10 +30,33 @@ rung 2.5; ``llc_assemble`` is the (here-runnable) rung 3.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+# A legal LLVM identifier for a kernel `entry` name / a gfx target string. Used to
+# reject malformed user input before it is interpolated into emitted IR or an `llc`
+# argv (argv already blocks shell injection; these catch typos + invalid-IR names).
+_ENTRY_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.$]*$")
+_LLC_ARCH_RE = re.compile(r"^gfx[0-9a-f]+$")
+# Single-wave fragment-grid cap for the threadgroup emitter: 16 fragments × 8 fp32
+# accumulator VGPRs = 128 VGPRs, at the wave32 budget. Beyond this the one-wave
+# design is nonsensical (the cooperative multi-wave split is the perf follow-on).
+_TG_MAX_FRAGMENTS = 16
+
+
+def _entry_name(entry: str | None, default: str) -> str:
+    """Return ``default`` when ``entry`` is None, else ``entry`` after validating it
+    is a legal LLVM identifier (so a bad name can't silently emit invalid IR)."""
+    if entry is None:
+        return default
+    if not _ENTRY_NAME_RE.match(entry):
+        raise ValueError(
+            f"invalid kernel entry name {entry!r} — must match {_ENTRY_NAME_RE.pattern}")
+    return entry
 
 # RDNA 3.5 (gfx1151) WMMA combos with an fp32 accumulator — the GEMM/attention
 # float paths (ISA Table 33). dtype -> (intrinsic suffix, LLVM A/B element type).
@@ -151,7 +174,7 @@ def emit_wmma_rdna4_llvmir(
     intr = wmma_intrinsic_rdna4(dtype)
     _, abty, _ = _RDNA4_INPUT[dtype]
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_rdna4_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_rdna4_{dtype}")
     return f"""; Tessera rung-2.5/3 — RDNA 4 WMMA {dtype} ({arch}). Plain (A,B,C) ABI, DENSER
 ; {abty} fragments (no wave32 lane replication), fp32 accumulator. fp8/bf8 = RDNA 4 unlock.
 target triple = "amdgcn-amd-amdhsa"
@@ -208,7 +231,7 @@ def emit_wmma_gfx1250_llvmir(
     intr = wmma_intrinsic_gfx1250(dtype)
     _, abty, _ = _GFX1250_INPUT[dtype]
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_gfx1250_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_gfx1250_{dtype}")
     return f"""; Tessera rung-2.5/3 — gfx1250/1251 WMMA {dtype} ({arch}). v2 mods/reuse ABI:
 ; wmma(i1 A_mod, A, i1 B_mod, B, i16 C_mod, C, i1 a_reuse, i1 b_reuse); 16x16x32 (K doubled);
 ; native bfloat; fp32 accumulator. Modifiers/reuse flags all 0 = the plain product.
@@ -246,6 +269,7 @@ def emit_wmma_llvmir(
             f"arch {arch!r} not supported by this emitter — it uses the RDNA3-class "
             f"gfx11 wmma intrinsic ({sorted(_RDNA3_CLASS_ARCHES)}). RDNA 4 (gfx1200) "
             "uses a different gfx12 'v2' wmma intrinsic ABI; that is a follow-on.")
+    name = _entry_name(entry, "tessera_wmma")
     intr = wmma_intrinsic(dtype, acc=acc)
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
@@ -258,7 +282,7 @@ def emit_wmma_llvmir(
 ; next sub-steps. `llc -mcpu={arch}` lowers the {intr} call to a real v_wmma_*.
 target triple = "amdgcn-amd-amdhsa"
 
-define amdgpu_kernel void @{entry}(
+define amdgpu_kernel void @{name}(
     ptr addrspace(1) %d, {a_ty} %a, {b_ty} %b, {acc_ty} %c) {{
   %r = call {acc_ty} @{intr}({a_ty} %a, {b_ty} %b, {acc_ty} %c)
   store {acc_ty} %r, ptr addrspace(1) %d
@@ -299,7 +323,7 @@ def emit_wmma_gemm_llvmir(
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_gemm_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_gemm_{dtype}")
     return f"""; Tessera rung-2.5/3 emission — RDNA WMMA {dtype} GEMM tile (16x16x16, fp32 acc) for {arch}.
 ; D = sum_k A·B over K-tiles. K-loop accumulator PHI; A/B {a_ty} global loads by lane id;
 ; {intr} in the loop body; result stored at the end. Lowers via `llc -mcpu={arch}` to a real
@@ -372,7 +396,7 @@ def emit_wmma_gemm_layout_llvmir(
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_gemm_layout_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_gemm_layout_{dtype}")
     return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM with the ISA 7.9 operand layout ({arch}).
 ; Lane replication: lanes 0-15 -> 16-31 via (lane & 15), wave32. nt layout: A row-major MxK,
 ; Bt transposed NxK -> both contiguous {a_ty} loads. Verified: llc emits v_and_b32 _,15,_ + a real
@@ -476,7 +500,7 @@ def emit_wmma_gemm_store_llvmir(
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_gemm_store_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_gemm_store_{dtype}")
     return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM, complete operand layout ({arch}).
 ; Lane replication (lane & 15) + COLUMN-MAJOR A load (a[16*lane+ele]) + nt B load +
 ; the D->C output mapping (wave32 fp32 lane L reg ele(0-7) -> D[2*ele + L/16][L%16]).
@@ -589,12 +613,17 @@ def emit_wmma_gemm_threadgroup_llvmir(
             f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
     if mf < 1 or nf < 1:
         raise ValueError(f"mf/nf must be >= 1 (got mf={mf}, nf={nf})")
+    if mf * nf > _TG_MAX_FRAGMENTS:
+        raise ValueError(
+            f"mf*nf = {mf * nf} exceeds the single-wave cap {_TG_MAX_FRAGMENTS} "
+            f"({_TG_MAX_FRAGMENTS} frags × 8 fp32 acc VGPRs = 128, the wave32 budget); "
+            "larger tiles need the cooperative multi-wave split (a perf follow-on)")
     intr = wmma_intrinsic(dtype, acc=acc)
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
     bm, bn = 16 * mf, 16 * nf
-    name = entry or f"tessera_wmma_gemm_tg_{dtype}_{mf}x{nf}"
+    name = _entry_name(entry, f"tessera_wmma_gemm_tg_{dtype}_{mf}x{nf}")
     suff = f"{dtype}_{mf}x{nf}"
     nfrag = mf * nf
 
@@ -607,8 +636,11 @@ def emit_wmma_gemm_threadgroup_llvmir(
         f"  %acc{f} = phi {acc_ty} [ zeroinitializer, %entry ], [ %accn{f}, %kbody ]"
         for f in range(nfrag))
 
-    # Cooperative load: per fragment-row i stage A block i; per fragment-col j stage
-    # B block j. lane copies its 16-element vector (column-major A / nt B per A1).
+    # LDS slot layout: each (block, lane) owns a NON-OVERLAPPING 16-element fragment.
+    # Block b is a 16×16 sub-tile = 256 elements at [256*b, 256*b+256); lane L's
+    # 16-element fragment sits at offset 256*b + 16*L. (A flat `getelementptr elem,
+    # …, i32 <off>` — NOT a 2-index `<16 x elem>` GEP, which would stride blocks by
+    # only 1 element and overlap them.) `%lane_x16` = 16*lane is computed in entry.
     coop = []
     for i in range(mf):
         coop.append(
@@ -616,7 +648,8 @@ def emit_wmma_gemm_threadgroup_llvmir(
             f"  %ablk{i} = add i64 %acolbase, {i * 16}\n"
             f"  %ag{i} = getelementptr {elem}, ptr addrspace(1) %A, i64 %ablk{i}\n"
             f"  %av{i} = load {a_ty}, ptr addrspace(1) %ag{i}\n"
-            f"  %as{i} = getelementptr {a_ty}, ptr addrspace(3) @lds.a.{suff}, i32 %lane16, i32 {i}\n"
+            f"  %aoff{i} = add i32 %lane_x16, {256 * i}\n"
+            f"  %as{i} = getelementptr {elem}, ptr addrspace(3) @lds.a.{suff}, i32 %aoff{i}\n"
             f"  store {a_ty} %av{i}, ptr addrspace(3) %as{i}")
     for j in range(nf):
         coop.append(
@@ -624,19 +657,21 @@ def emit_wmma_gemm_threadgroup_llvmir(
             f"  %bblk{j} = add i64 %bidx, {j * 16} \n"
             f"  %bg{j} = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %bblk{j}\n"
             f"  %bv{j} = load {a_ty}, ptr addrspace(1) %bg{j}\n"
-            f"  %bs{j} = getelementptr {a_ty}, ptr addrspace(3) @lds.b.{suff}, i32 %lane16, i32 {j}\n"
+            f"  %boff{j} = add i32 %lane_x16, {256 * j}\n"
+            f"  %bs{j} = getelementptr {elem}, ptr addrspace(3) @lds.b.{suff}, i32 %boff{j}\n"
             f"  store {a_ty} %bv{j}, ptr addrspace(3) %bs{j}")
     coop_block = "\n".join(coop)
 
-    # Fragment multiply: read A block i + B block j back from LDS, wmma into acc.
+    # Fragment multiply: read A block i + B block j back from LDS (reusing the same
+    # %aoff/%boff slot offsets from the stage above), wmma into acc.
     mma = []
     for i in range(mf):
         mma.append(
-            f"  %la{i} = getelementptr {a_ty}, ptr addrspace(3) @lds.a.{suff}, i32 %lane16, i32 {i}\n"
+            f"  %la{i} = getelementptr {elem}, ptr addrspace(3) @lds.a.{suff}, i32 %aoff{i}\n"
             f"  %fa{i} = load {a_ty}, ptr addrspace(3) %la{i}")
     for j in range(nf):
         mma.append(
-            f"  %lb{j} = getelementptr {a_ty}, ptr addrspace(3) @lds.b.{suff}, i32 %lane16, i32 {j}\n"
+            f"  %lb{j} = getelementptr {elem}, ptr addrspace(3) @lds.b.{suff}, i32 %boff{j}\n"
             f"  %fb{j} = load {a_ty}, ptr addrspace(3) %lb{j}")
     for i in range(mf):
         for j in range(nf):
@@ -660,6 +695,7 @@ define amdgpu_kernel void @{name}(
 entry:
   %lane = call i32 @llvm.amdgcn.workitem.id.x()
   %lane16 = and i32 %lane, 15                 ; lanes 16-31 alias 0-15 (replication)
+  %lane_x16 = mul i32 %lane16, 16             ; per-lane 16-elem fragment offset within an LDS block
   %row = sext i32 %lane16 to i64
   %Kx = sext i32 %K to i64
   %rowK = mul i64 %row, %Kx                   ; B (nt) base: lane * K
@@ -736,7 +772,7 @@ def emit_dependent_wmma_chain_llvmir(
     _, elem = _WMMA_F32_INPUT[dtype]
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
-    name = entry or f"tessera_wmma_chain_{'hazard' if hazard else 'accum'}_{dtype}"
+    name = _entry_name(entry, f"tessera_wmma_chain_{'hazard' if hazard else 'accum'}_{dtype}")
 
     body = [f"  %a0 = load {a_ty}, ptr addrspace(1) %A"]
     prev_acc = "zeroinitializer"
@@ -849,8 +885,11 @@ def validate_wmma_rdna4_structure(
         reasons.append(f"missing the fp32 accumulator type <{_ACC_LEN} x float>")
     if "amdgcn-amd-amdhsa" not in ir:
         reasons.append("missing the amdgcn target triple")
-    # The gfx1250 mods/reuse ABI carries an i16 C-mod operand — must NOT appear here.
-    if "i16," in ir.replace("x i16", ""):
+    # The gfx1250 v2 ABI carries an `i16 0,` C-mod immediate + trailing `i1 0, i1 0)`
+    # reuse flags — neither may appear in the RDNA 4 plain 3-arg ABI. (The earlier
+    # `"i16," in ir.replace("x i16","")` heuristic was a false-negative: the real
+    # operand text is `i16 0,` with a space, so it never matched.)
+    if "i16 0," in ir or "i1 0, i1 0)" in ir:
         reasons.append("emitted a gfx1250 mods/reuse operand (RDNA 4 uses the plain 3-arg ABI)")
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
@@ -1019,10 +1058,12 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
 
     **Runs on this host** (Homebrew LLVM 22 has the AMDGPU backend); skip-cleans
     (``status="skipped"``) only if no ``llc`` is found."""
+    if not _LLC_ARCH_RE.match(arch):
+        raise ValueError(
+            f"invalid arch {arch!r} — must match {_LLC_ARCH_RE.pattern} (e.g. gfx1151)")
     llc = _find_llc()
     if not llc:
         return LlcResult("skipped", "llc (LLVM AMDGPU backend) not available")
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "wmma.ll"
         out = Path(td) / "wmma.s"

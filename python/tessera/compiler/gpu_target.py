@@ -35,10 +35,9 @@ _SMEM_BYTES: dict[ISA, int] = {
     ISA.SM_89:  100352,   # RTX 4090: 98 KB
     ISA.SM_90:  233472,   # H100: 228 KB
     ISA.SM_100: 262144,   # B100: 256 KB
-    # RTX 50-series consumer SM is the Ada-class (~100 KB opt-in), NOT the 256 KB
-    # datacenter B100 SM.  Set to the consumer class pending on-silicon
-    # cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin) confirmation.
-    ISA.SM_120: 100352,   # RTX 50-series: ~98 KB (consumer Blackwell) — verify on box
+    # CC 12.0 = 100 KB/SM (99 KB/block), per the CUDA Programming Guide
+    # compute-capabilities appendix Table 31 — NOT the 256 KB datacenter sm_100 SM.
+    ISA.SM_120: 102400,   # RTX 50-series: 100 KB/SM (consumer Blackwell, CC 12.0)
 }
 
 # Maximum warps per CTA for each generation.
@@ -88,8 +87,12 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
         "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4", "int8",
     }),
     ISA.SM_120: frozenset({
+        # CC 12.0 Tensor Core input types (CUDA Programming Guide compute-
+        # capabilities appendix, Table 33): FP64, TF32, BF16, FP16, FP8, FP6,
+        # FP4, INT8, INT4 — all "Yes" for 12.x.  (int4 is planned_gated under
+        # Tessera's dtype policy but the hardware supports it.)
         "nvfp4", "fp4_e2m1", "fp64", "tf32", "bf16", "fp16",
-        "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "int8",
+        "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "int8", "int4",
     }),
 }
 

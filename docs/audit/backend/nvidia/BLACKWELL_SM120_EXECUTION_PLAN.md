@@ -11,9 +11,29 @@
 
 | Part | What | Tessera role |
 |------|------|--------------|
-| **NVIDIA RTX 5070 Ti 16 GB** | **Blackwell consumer, GB203, sm_120** (CC 12.0) | The NVIDIA execution target |
+| **NVIDIA RTX 5070 Ti 16 GB** | **Blackwell consumer, GB203, sm_120** (CC 12.0); 8,960 CUDA cores; 16 GB GDDR7, 256-bit, 28 Gbps → **896 GB/s**; ~1,406 AI TOPS | The NVIDIA execution target |
 | **Intel Core Ultra 7 265F** | Arrow Lake-S, 20c; **AVX-512 disabled, no AMX** | CUDA **host only** — *not* an x86-backend target |
 | 32 GB DDR5-6000 | | |
+
+**Memory/roofline:** 896 GB/s — **~3.5× the Strix Halo's 256 GB/s**, so this box is *not*
+bandwidth-starved the way the APU is; it's a healthy roofline target (but 16 GB caps model size,
+where Strix Halo's 128 GB unified is the complement). `flywheel.py` per-chip calibration should get
+an sm_120 entry.
+
+### Grounded hardware facts (CUDA Programming Guide, compute-capabilities appendix, CC 12.0)
+
+Authoritative source (per the user, 2026-06-17): the
+[compute-capabilities appendix](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/compute-capabilities.html)
+is the place to confirm what CC 12.0 supports — not marketing or forum posts. From it:
+- **Tensor Core input types (Table 33), all "Yes" for 12.x:** FP64, TF32, BF16, FP16, FP8, **FP6**,
+  **FP4**, INT8, **INT4**. (Marketing lists FP4/FP8/INT8/INT4/FP16 but *omits FP6* — the table
+  confirms FP6 is in fact supported. `gpu_target.py`'s sm_120 dtype set now matches, incl. int4.)
+- **Shared memory (Table 31): 100 KB/SM, 99 KB/block** (>48 KB needs dynamic opt-in). `gpu_target.py`
+  `_SMEM_BYTES[SM_120]` set to 102400 accordingly.
+- **vs datacenter sm_100 (Table 32):** same Tensor Core *input dtypes*, but CC 12.x has a **smaller
+  unified data cache (128 KB vs 256 KB)** and fewer SMEM config options (5 vs 9). The deeper
+  difference is the *instruction path* (sm_120 `mma.sync` vs sm_100 `tcgen05`/TMEM), which the
+  programming-guide dtype table does not show — see the correction below.
 
 ## ⚠️ The load-bearing correction: sm_120 ≠ Hopper, ≠ datacenter Blackwell
 

@@ -90,10 +90,32 @@ GPU is a tile processor).
 - **(A-ptx, fallback):** hand-emit `sm_120a` `mma.sync` PTX (the row above). Keep as a control /
   oracle and for environments without the Tile IR compiler.
 
-**Verify against the full Tile IR spec (sections 1-8) before committing:** CUDA toolkit version +
-GA-vs-preview status; whether the standalone Tile IR compiler ships in the pinned CUDA 13.2 U1; the
-MLIR dialect name/op set; the SASS-vs-PTX consumption path; concrete sm_90/100/120 portability
-guarantees. (Grounded so far from the spec landing + Introduction only.)
+**CUDA Tile op vocabulary → Tessera mapping (grounded from the 13.3 Programming Guide §2.4, the
+attached PDF).** The CUDA Tile model is a near-1:1 match for Tessera's own tile abstraction, which
+makes the Stage-A lowering largely structural:
+
+| Tessera concept | CUDA Tile C++ (`ct = cuda::tiles`) | notes |
+|---|---|---|
+| tile (first-class IR) | `ct::tile<T, ct::shape<…>>` | **dims must be powers of two**, shape known at compile time, value semantics |
+| `tessera.matmul` (storage=bf16, **accum=fp32**) | `ct::mma(a, b, acc)` / `a @ b` | **mma mixes operand vs accumulator precision** — Tessera's `numeric_policy{storage,accum}` maps *exactly*; 2D **and** 3D-batched supported |
+| tile loads / `partition_view` | `ct::tensor_span` + `ct::partition_view{…}.load(idx)` | **lowered to TMA automatically on supported HW** |
+| causal / edge masking | `.load_masked()` / `.store_masked()` (OOB→0, `PaddingMode.ZERO`) | the canonical GEMM K-loop zero-pads partial K-tiles, store-side OOB-discard for M/N edges |
+| gather/scatter (our data-movers) | tile-of-pointers `ct::load/store`, `ct.gather/scatter` | |
+| block id / grid | `ct::bid()`, `ct::num_blocks()` | one logical thread/block; launch `<<<grid, 1>>>` |
+| bounded loops | `ct::irange(0, n)` | single control-flow path per block — **no warp-divergence concerns** |
+| `__tile_global__` / `__tile__` | tile-kernel entry / tile-callable | coexist with SIMT in one `.cu` |
+
+The guide's canonical `gemm(const __half* A, const __half* B, float* C, …)` with `tm=32,tn=32,tk=16`,
+an **fp32 accumulator**, `ct::mma(load_masked, load_masked, acc)` over a `ceil(K/tk)` K-loop, and
+`store_masked` — **is the exact shape Tessera's matmul lowering would emit.** The fp32-accum/bf16-operand
+pattern validates Decision #15a (storage on the tensor, accumulator in `numeric_policy`).
+**CUDA Tile C++ requires CUDA Toolkit 13.3** ("available from 13.3 onward") — another reason to bump
+the pin. Both Tile C++ and cuTile Python share one backend = **CUDA Tile IR**.
+
+**Verify against the full Tile IR spec (sections 1-8) before committing:** GA-vs-preview status of the
+standalone Tile IR *compiler*; the MLIR dialect name/op set; the SASS-vs-PTX consumption path; concrete
+sm_90/100/120 portability guarantees. (The *programming-model* op surface above is now grounded; the
+Tile-IR-as-backend-target details are not.)
 
 ## Toolkit: the box runs CUDA 13.3 (bump the pin from 13.2 U1)
 

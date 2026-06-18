@@ -7,6 +7,13 @@ This document consolidates ROCm-specific audit material.
 > RDNA3.5 ISA (WMMA 16×16×16, no FP8), and the doc lays out the rung ladder to the
 > first real non-Apple `backend_kernel` execution proof (emit → assemble → HIP-launch →
 > execute-and-compare). This is the unblock for the "Still Open" / "Next Work" items below.
+>
+> **Design patterns from the AMD ROCm ecosystem:** see
+> [`ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`](ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md) — a
+> source-grounded survey of AITER, ATOM, hipBLASLt, rocWMMA, Mori, Iris, XIO, and the
+> AMD Gluon GEMM tutorial, with ranked, Tessera-mapped patterns (hardware-free IR/dispatch
+> wins to adopt now, the GEMM perf ladder for Strix Halo bring-up, and the GPU-initiated
+> comm track).
 
 ## Finished
 

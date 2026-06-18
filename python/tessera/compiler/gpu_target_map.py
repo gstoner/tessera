@@ -231,6 +231,44 @@ def render_csv(target: str) -> str:
     return buf.getvalue()
 
 
+def _rocm_fp8_section() -> list[str]:
+    """Per-arch FP8 numeric-semantics table (A6) — FNUZ vs OCP.
+
+    The same canonical ``fp8_e4m3`` / ``fp8_e5m2`` dtype encodes different bits
+    across AMD generations; this surfaces that arch-keyed distinction in the
+    drift-gated dashboard.  Source of truth:
+    ``rocm_target._FP8_SEMANTICS`` / ``fp8_dtype_flavor``.
+    """
+    from . import rocm_target as _rt
+
+    arches = (
+        _rt.AMDArch.GFX_90A, _rt.AMDArch.GFX_940, _rt.AMDArch.GFX_942,
+        _rt.AMDArch.GFX_950, _rt.AMDArch.GFX_1100, _rt.AMDArch.GFX_1151,
+        _rt.AMDArch.GFX_1200, _rt.AMDArch.GFX_1250, _rt.AMDArch.GFX_1251,
+    )
+    lines = [
+        "## FP8 numeric semantics (per arch)",
+        "",
+        "The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different "
+        "bits** across AMD generations (FNUZ vs OCP) — a correctness-critical, "
+        "arch-keyed distinction (A6). Source: "
+        "`tessera.compiler.rocm_target._FP8_SEMANTICS`.",
+        "",
+        "| arch | FP8 semantics | e4m3 flavor | e5m2 flavor |",
+        "|---|---|---|---|",
+    ]
+    for a in arches:
+        sem = _rt.fp8_semantics(a)
+        if sem == "none":
+            e4 = e5 = "-"
+        else:
+            e4 = _rt.fp8_dtype_flavor(a, "fp8_e4m3")
+            e5 = _rt.fp8_dtype_flavor(a, "fp8_e5m2")
+        lines.append(f"| `{_rt.rocm_arch_string(a)}` | {sem} | {e4} | {e5} |")
+    lines.append("")
+    return lines
+
+
 def render_markdown(target: str) -> str:
     """Render the per-target dashboard.
 
@@ -289,6 +327,9 @@ def render_markdown(target: str) -> str:
             lines.append(f"| ``{status}`` | {n} |")
     lines.append(f"| **total** | **{len(rows)}** |")
     lines.append("")
+
+    if target.startswith("rocm"):
+        lines.extend(_rocm_fp8_section())
 
     for fam in sorted(by_family):
         fam_rows = by_family[fam]

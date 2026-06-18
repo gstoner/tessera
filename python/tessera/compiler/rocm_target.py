@@ -523,6 +523,14 @@ class ROCmTargetProfile:
         return rocm_feature_status(self.arch, "cluster_mode") == "ready"
 
     @property
+    def fp8_semantics(self) -> str:
+        """FP8 bit-encoding family for this arch: ``"fnuz"`` (CDNA 3) /
+        ``"ocp"`` (CDNA 4, RDNA 4, gfx125x) / ``"none"``.  The same canonical
+        ``fp8_e4m3``/``fp8_e5m2`` dtype encodes different bits across these — a
+        correctness-critical, arch-keyed distinction (see ``_FP8_SEMANTICS``)."""
+        return _FP8_SEMANTICS[self.arch]
+
+    @property
     def lds_capacity_bytes(self) -> int:
         if self.lds_bytes is not None:
             return self.lds_bytes
@@ -606,6 +614,62 @@ def wmma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int]]:
     return _WMMA_VARIANTS[arch]
 
 
+# ── FP8 numeric semantics per arch ──────────────────────────────────────────
+# The SAME canonical fp8 dtype (fp8_e4m3 / fp8_e5m2) has DIFFERENT bit semantics
+# across AMD generations — a correctness-critical, arch-keyed distinction that
+# hipBLASLt encodes as the FNUZ-vs-OCP type split:
+#   "fnuz" — CDNA 3 (gfx940/942, MI300): E4M3FNUZ / E5M2FNUZ (AMD "finite,
+#            unsigned-zero, no-Inf" encoding; NaN/Inf bit patterns differ from OCP).
+#   "ocp"  — CDNA 4 (gfx950, MI350), RDNA 4 (gfx1200), gfx125x: OCP standard
+#            E4M3 / E5M2 (the encoding NVIDIA Blackwell + the OCP MX spec use).
+#   "none" — arch has no FP8 matrix path at all.
+# A registry/manifest "complete FP8 kernel" claim is silently arch-ambiguous
+# without this flag — same op, different bits per target.
+_FP8_SEMANTICS: dict[AMDArch, str] = {
+    AMDArch.GFX_90A:  "none",
+    AMDArch.GFX_940:  "fnuz",
+    AMDArch.GFX_942:  "fnuz",
+    AMDArch.GFX_950:  "ocp",
+    AMDArch.GFX_1100: "none",
+    AMDArch.GFX_1151: "none",   # RDNA 3.5 has no FP8 WMMA at all
+    AMDArch.GFX_1200: "ocp",
+    AMDArch.GFX_1250: "ocp",
+    AMDArch.GFX_1251: "ocp",
+}
+
+#: The concrete LLVM/MLIR dtype-flavor spelling per (semantics, canonical fp8).
+_FP8_FLAVOR: dict[tuple[str, str], str] = {
+    ("fnuz", "fp8_e4m3"): "e4m3fnuz",
+    ("fnuz", "fp8_e5m2"): "e5m2fnuz",
+    ("ocp", "fp8_e4m3"):  "e4m3",
+    ("ocp", "fp8_e5m2"):  "e5m2",
+}
+
+
+def fp8_semantics(arch: AMDArch) -> str:
+    """FP8 bit-encoding family for ``arch``: ``"fnuz"`` / ``"ocp"`` / ``"none"``."""
+    return _FP8_SEMANTICS[arch]
+
+
+def fp8_dtype_flavor(arch: AMDArch, dtype: str) -> str:
+    """Concrete fp8 flavor spelling for ``arch``.
+
+    ``(gfx942, fp8_e4m3) -> "e4m3fnuz"`` (CDNA 3 FNUZ);
+    ``(gfx950, fp8_e4m3) -> "e4m3"`` (CDNA 4 OCP).  Raises a stable diagnostic
+    when the arch has no FP8 path, or ``dtype`` is not an fp8 dtype — never
+    guesses an ambiguous flavor.
+    """
+    sem = _FP8_SEMANTICS[arch]
+    if sem == "none":
+        raise TesseraROCmTargetError(
+            f"{arch.name} has no FP8 matrix path; there is no fp8 flavor to name "
+            f"(fp8_semantics={sem!r}).")
+    if dtype not in ("fp8_e4m3", "fp8_e5m2"):
+        raise TesseraROCmTargetError(
+            f"{dtype!r} is not an fp8 dtype (expected fp8_e4m3 / fp8_e5m2).")
+    return _FP8_FLAVOR[(sem, dtype)]
+
+
 __all__ = [
     "AMDArch",
     "ROCmTargetProfile",
@@ -620,4 +684,6 @@ __all__ = [
     "rocm_arch_string",
     "mfma_variants",
     "wmma_variants",
+    "fp8_semantics",
+    "fp8_dtype_flavor",
 ]

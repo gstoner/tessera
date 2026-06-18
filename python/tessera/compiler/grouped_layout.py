@@ -142,6 +142,61 @@ class ScaleLayout:
         }
 
 
+# ── Batched vs grouped GEMM classification (A7) ─────────────────────────────
+# Two distinct one-launch multi-GEMM families a backend / verifier must NOT
+# conflate (hipBLASLt models them as separate ``GemmType`` values):
+#   * BATCHED — ``batch_count`` GEMMs of IDENTICAL shape, strided operands; every
+#               problem dim is host-known at launch.
+#   * GROUPED — a vector of INDEPENDENTLY-sized problems in one launch; the
+#               per-group sizes (and group count) are runtime / device-resident,
+#               not host-known (the MoE / variable-expert path; hipBLASLt's
+#               ``run(deviceUserArgs, stream)`` model).
+BATCHED_GEMM_OPS = ("batched_gemm", "bmm")
+GROUPED_GEMM_OPS = ("grouped_gemm", "dequant_grouped_gemm")
+_SINGLE_GEMM_OPS = ("matmul", "gemm")
+
+
+@dataclass(frozen=True)
+class GemmDispatchClass:
+    """How a GEMM op dispatches — the batched / grouped / single distinction."""
+
+    family: str                 # "batched" | "grouped" | "single"
+    uniform_shape: bool         # True iff every sub-problem shares one (M,N,K)
+    device_resident_args: bool  # True iff per-problem sizes resolve on-device
+    one_launch: bool
+
+    def as_metadata_dict(self) -> dict[str, Any]:
+        return {
+            "family": self.family,
+            "uniform_shape": self.uniform_shape,
+            "device_resident_args": self.device_resident_args,
+            "one_launch": self.one_launch,
+        }
+
+
+def classify_gemm_dispatch(op_name: str) -> GemmDispatchClass:
+    """Classify a GEMM op into its dispatch family (A7).
+
+    Grouped GEMM carries ``device_resident_args=True`` — per-expert token counts
+    are not known host-side (hipBLASLt's device-resident user-arguments model);
+    batched GEMM is uniform-shape + host-known; a plain matmul/gemm is "single".
+    Raises a stable diagnostic for a non-GEMM op rather than guessing.
+    """
+    n = str(op_name).lower()
+    if n in BATCHED_GEMM_OPS:
+        return GemmDispatchClass("batched", uniform_shape=True,
+                                 device_resident_args=False, one_launch=True)
+    if n in GROUPED_GEMM_OPS:
+        return GemmDispatchClass("grouped", uniform_shape=False,
+                                 device_resident_args=True, one_launch=True)
+    if n in _SINGLE_GEMM_OPS:
+        return GemmDispatchClass("single", uniform_shape=True,
+                                 device_resident_args=False, one_launch=True)
+    raise ValueError(
+        f"{op_name!r} is not a GEMM-family op; known: "
+        f"{_SINGLE_GEMM_OPS + BATCHED_GEMM_OPS + GROUPED_GEMM_OPS}")
+
+
 # ── Family factory helpers ──────────────────────────────────────────────────
 def dense_layout(**kw: Any) -> GroupedLayout:
     return GroupedLayout(kind="dense", **kw)
@@ -181,6 +236,41 @@ def scale_layout_for(dtype: str) -> ScaleLayout | None:
     if d in ("int8",):
         return ScaleLayout(granularity="per_tensor", packing="none")
     return None
+
+
+# hipBLASLt scale-mode vocabulary → ScaleLayout.  hipBLASLt encodes the FP8/FP4
+# scale granularity as ``hipblasLtMatmulMatrixScale_t``; this maps those canonical
+# names onto Tessera's ScaleLayout so a backend manifest / numeric_policy can
+# speak either vocabulary.  (The scale *layout* is a numeric_policy concern, not
+# part of the dtype string — Tessera Decision #15a.)
+HIPBLASLT_SCALE_MODES = (
+    "scalar_32f", "vec16_ue4m3", "vec32_ue8m0", "blk128x128_32f",
+)
+
+
+def scale_mode_to_layout(mode: str) -> ScaleLayout:
+    """Map a hipBLASLt ``hipblasLtMatmulMatrixScale_t`` name to a ScaleLayout.
+
+      scalar_32f      → per-tensor fp32 scalar scale (SCALAR_32F)
+      vec16_ue4m3     → 1x16 micro-block, e4m3 packed scale (NVFP4-style)
+      vec32_ue8m0     → 1x32 micro-block, UE8M0 packed scale (OCP MX microscaling)
+      blk128x128_32f  → 128x128 2-D block, fp32 scale (DeepSeek block scaling)
+    """
+    m = str(mode).lower()
+    if m == "scalar_32f":
+        return ScaleLayout(granularity="per_tensor", packing="none")
+    if m == "vec16_ue4m3":
+        return ScaleLayout(granularity="block", block=(1, 16), packing="e4m3",
+                           vector_size=16, alignment=16)
+    if m == "vec32_ue8m0":
+        return ScaleLayout(granularity="block", block=(1, 32), packing="ue8m0",
+                           vector_size=32, alignment=32)
+    if m == "blk128x128_32f":
+        return ScaleLayout(granularity="block", block=(128, 128), packing="none",
+                           vector_size=1, alignment=128)
+    raise ValueError(
+        f"unknown hipBLASLt scale mode {mode!r}; expected one of "
+        f"{HIPBLASLT_SCALE_MODES}")
 
 
 # ── Runtime enforcement (Rung A) ────────────────────────────────────────────

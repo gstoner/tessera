@@ -1892,6 +1892,85 @@ def _grouped_layout_for_name(name: str) -> "Any | None":
     return factory() if factory is not None else None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# A1 — unified cooperative-matrix (MFMA/WMMA) descriptor (rocm_mma).  Maps a
+# GEMM-family op → per-(arch, dtype) MMA contract so the "shape is the anchor;
+# A/B operand layout + k_width are derived from it" rule is compiler-visible per
+# op (rocWMMA / AMD Gluon).  Attached as `metadata.rocm_mma`.
+# ─────────────────────────────────────────────────────────────────────────────
+_ROCM_MMA_OPS: frozenset[str] = frozenset({
+    "matmul", "batched_gemm", "grouped_gemm", "dequant_grouped_gemm",
+    "linear_general", "qkv_projection", "factorized_matmul",
+})
+
+# Representative arch (AMDArch int values) × dtype probe matrix.
+_ROCM_MMA_PROBE_ARCHES: tuple[int, ...] = (90, 942, 950, 1100, 1151, 1200)
+_ROCM_MMA_PROBE_DTYPES: tuple[str, ...] = (
+    "bf16", "fp16", "fp8_e4m3", "fp4_e2m1", "int8")
+
+
+def _rocm_mma_for_name(name: str) -> "dict[str, Any] | None":
+    if name not in _ROCM_MMA_OPS:
+        return None
+    from .rocm_target import AMDArch, TesseraROCmTargetError, rocm_arch_string
+    from .rocm_mma import select_mma
+    out: dict[str, Any] = {}
+    for arch_val in _ROCM_MMA_PROBE_ARCHES:
+        arch = AMDArch(arch_val)
+        per: dict[str, Any] = {}
+        for dt in _ROCM_MMA_PROBE_DTYPES:
+            try:
+                d = select_mma(arch, dt)
+            except TesseraROCmTargetError:
+                continue  # dtype has no matrix-core path on this arch
+            per[dt] = {
+                "kind": d.kind,
+                "shape": list(d.shape),
+                "k_blocks": d.k_blocks,
+                "acc": d.acc_dtype,
+                "k_width": d.operand_a.k_width,
+                "intrinsic": d.intrinsic,
+            }
+        if per:
+            out[rocm_arch_string(arch)] = per
+    return out or None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A3 — composable epilogue catalog (epilogue).  Attached to fused-epilogue ops
+# so the activation × bias × aux × gradient lattice (hipBLASLt) — and the
+# autodiff aux contract (a fused-matmul VJP reads the *_AUX pre-activation
+# instead of recomputing A@B) — is compiler-visible.  `metadata.epilogue`.
+# ─────────────────────────────────────────────────────────────────────────────
+_EPILOGUE_OPS: frozenset[str] = frozenset({"fused_epilogue"})
+
+
+def _epilogue_for_name(name: str) -> "dict[str, Any] | None":
+    if name not in _EPILOGUE_OPS:
+        return None
+    from .epilogue import CANONICAL_EPILOGUES, backward_epilogue, requires_aux
+    catalog: dict[str, Any] = {}
+    for label, spec in sorted(CANONICAL_EPILOGUES.items()):
+        try:
+            bw_flags: int | None = int(
+                backward_epilogue(spec, error_on_unimplemented=False).flags)
+        except ValueError:
+            bw_flags = None  # no backward epilogue in the hipBLASLt vocabulary
+        catalog[label] = {
+            "flags": int(spec.flags),
+            "activation": spec.activation_kind,
+            "has_bias": spec.has_bias,
+            "requires_aux": requires_aux(spec),
+            "backward_flags": bw_flags,
+        }
+    return {
+        "catalog": catalog,
+        "autodiff_note": (
+            "fused-epilogue VJP requests the *_AUX pre-activation tensor "
+            "instead of recomputing A@B"),
+    }
+
+
 def _manifest_for_name(name: str) -> list[dict[str, object]] | None:
     """Return the backend-kernel manifest entries for ``name`` as plain
     dicts (Sprint E, 2026-05-11).
@@ -1930,6 +2009,12 @@ def _supplemental_metadata(name: str, graph_ir_state: str) -> dict[str, object]:
     grouped = _grouped_layout_for_name(name)
     if grouped is not None:
         md["grouped_layout"] = grouped.as_metadata_dict()
+    rocm_mma = _rocm_mma_for_name(name)
+    if rocm_mma is not None:
+        md["rocm_mma"] = rocm_mma
+    epilogue = _epilogue_for_name(name)
+    if epilogue is not None:
+        md["epilogue"] = epilogue
     return md
 
 
@@ -2246,6 +2331,16 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         grouped = _grouped_layout_for_name(name)
         if grouped is not None:
             metadata["grouped_layout"] = grouped.as_metadata_dict()
+        # A1 (2026-06-18): attach the unified MFMA/WMMA descriptor per
+        # (arch, dtype) for GEMM-family ops.
+        rocm_mma = _rocm_mma_for_name(name)
+        if rocm_mma is not None:
+            metadata["rocm_mma"] = rocm_mma
+        # A3 (2026-06-18): attach the composable epilogue catalog (+ autodiff
+        # aux contract) for fused-epilogue ops.
+        epilogue = _epilogue_for_name(name)
+        if epilogue is not None:
+            metadata["epilogue"] = epilogue
         # Sprint E (2026-05-11): attach the per-target backend-kernel
         # manifest synthesized from the capability registry +
         # Apple GPU kernel inventory + x86 AMX backend.

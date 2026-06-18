@@ -244,6 +244,15 @@ class BackendKernelEntry:
     hipcc_version_min: Optional_str = None
     expected_mfu: Optional_float = None
     roofline_target: Optional_str = None
+    mma_descriptor: Optional[object] = None
+    """A1 (2026-06-18) — the unified cooperative-matrix descriptor
+    (:class:`rocm_mma.MmaDescriptor`) for a representative ``(arch, dtype)`` of
+    this entry: the MFMA(CDNA)/WMMA(RDNA) instruction with its *derived* A/B
+    operand layouts + ``k_width`` (the "shape is the anchor" contract from
+    rocWMMA / AMD Gluon).  Complements the coarser :attr:`mfma_shape` with the
+    operand-layout/packing detail.  Type-erased to ``object`` to keep this a
+    leaf-importable module; validated structurally in ``__post_init__`` (ROCm
+    targets only).  ``None`` for non-GEMM / non-ROCm entries."""
     # Arch-3 (2026-05-22) — execute-and-compare hooks.  All optional so
     # existing constructors continue to work.  When ``status ==
     # "hardware_verified"`` the validator below requires
@@ -365,6 +374,19 @@ class BackendKernelEntry:
                     f"expected_mfu must be in [0, 1], got {self.expected_mfu}"
                 )
 
+        # A1 (2026-06-18) — mma_descriptor must be a rocm_mma.MmaDescriptor and
+        # only applies to ROCm targets (lazy import avoids an import cycle).
+        if self.mma_descriptor is not None:
+            from .rocm_mma import MmaDescriptor
+            if not isinstance(self.mma_descriptor, MmaDescriptor):
+                raise TypeError(
+                    f"mma_descriptor must be a rocm_mma.MmaDescriptor, got "
+                    f"{type(self.mma_descriptor).__name__}")
+            if not self.target.startswith("rocm"):
+                raise ValueError(
+                    f"mma_descriptor only applies to ROCm targets, got "
+                    f"target={self.target!r}")
+
         # Arch-3 (2026-05-22) — hardware_verified contract.  This is
         # the top rung of the readiness ladder; an entry only qualifies
         # when it carries both an executable runtime entry point AND a
@@ -468,6 +490,10 @@ class BackendKernelEntry:
             out["expected_mfu"] = self.expected_mfu
         if self.roofline_target is not None:
             out["roofline_target"] = self.roofline_target
+        if self.mma_descriptor is not None:
+            from .rocm_mma import MmaDescriptor
+            if isinstance(self.mma_descriptor, MmaDescriptor):
+                out["mma_descriptor"] = self.mma_descriptor.as_metadata_dict()
         # Arch-3 (2026-05-22) — execute-and-compare hooks.
         if self.shape_envelope is not None:
             out["shape_envelope"] = self.shape_envelope
@@ -1943,6 +1969,31 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     return entries
 
 
+# A1 (2026-06-18) — GEMM-family ops that carry a unified MMA descriptor.
+# Mirrors ``primitive_coverage._ROCM_MMA_OPS`` (kept as a local literal so this
+# module stays importable without pulling in the audit registry).
+_ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
+    "matmul", "batched_gemm", "grouped_gemm", "dequant_grouped_gemm",
+    "linear_general", "qkv_projection", "factorized_matmul",
+})
+
+
+def _rocm_mma_descriptor_for(op_name: str, dtypes: tuple[str, ...]):
+    """Build the unified MMA descriptor for a ROCm GEMM-family entry, using the
+    first dtype in ``dtypes`` that has a matrix-core path on gfx942 (the ``rocm``
+    alias).  Returns ``None`` for non-GEMM ops or when no dtype resolves."""
+    if op_name not in _ROCM_MMA_OP_NAMES:
+        return None
+    from .rocm_mma import select_mma
+    from .rocm_target import AMDArch, TesseraROCmTargetError
+    for dt in dtypes:
+        try:
+            return select_mma(AMDArch.GFX_942, dt)
+        except TesseraROCmTargetError:
+            continue
+    return None
+
+
 def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for ``op_name``.
 
@@ -2116,6 +2167,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         )
         mfma = _ROCM_KERNEL_MFMA_SHAPES.get(op_name)
         mfu = _ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942"))
+        # A1 (2026-06-18) — attach the unified MMA descriptor for GEMM-family
+        # ops, derived from a representative dtype on gfx942 (the `rocm` alias).
+        mma_desc = _rocm_mma_descriptor_for(op_name, dtypes)
         entries.append(BackendKernelEntry(
             target="rocm",
             status=mapped,
@@ -2128,6 +2182,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             mfma_shape=mfma,
             hipcc_version_min="7.2.3",
             expected_mfu=mfu,
+            mma_descriptor=mma_desc,
         ))
 
     # CPU numpy reference — always available as fallback

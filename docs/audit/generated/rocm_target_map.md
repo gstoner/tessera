@@ -14,6 +14,22 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | ``artifact_only`` | 32 |
 | **total** | **32** |
 
+## FP8 numeric semantics (per arch)
+
+The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** across AMD generations (FNUZ vs OCP) — a correctness-critical, arch-keyed distinction (A6). Source: `tessera.compiler.rocm_target._FP8_SEMANTICS`.
+
+| arch | FP8 semantics | e4m3 flavor | e5m2 flavor |
+|---|---|---|---|
+| `gfx90a` | none | - | - |
+| `gfx940` | fnuz | e4m3fnuz | e5m2fnuz |
+| `gfx942` | fnuz | e4m3fnuz | e5m2fnuz |
+| `gfx950` | ocp | e4m3 | e5m2 |
+| `gfx1100` | none | - | - |
+| `gfx1151` | none | - | - |
+| `gfx1200` | ocp | e4m3 | e5m2 |
+| `gfx1250` | ocp | e4m3 | e5m2 |
+| `gfx1251` | ocp | e4m3 | e5m2 |
+
 ## activation (5)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |

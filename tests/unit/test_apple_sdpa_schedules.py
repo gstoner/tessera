@@ -69,3 +69,14 @@ def test_spec_carries_mask_causal_sinks():
 def test_rejects_bad_gqa():
     with pytest.raises(ValueError):
         select_attn_schedule(q_len=1, kv_len=64, head_dim=64, q_heads=7, kv_heads=2)
+
+
+def test_rejects_unsupported_head_dim():
+    # full (prefill) supports {64,80,128}; vector (decode) supports {64,96,128,256}.
+    with pytest.raises(ValueError, match="full .*head_dim 96"):
+        select_attn_schedule(q_len=128, kv_len=128, head_dim=96, q_heads=4, kv_heads=4)
+    with pytest.raises(ValueError, match="vector .*head_dim 80"):
+        select_attn_schedule(q_len=1, kv_len=64, head_dim=80, q_heads=4, kv_heads=4)
+    # cross-path: 96 is valid for vector (decode) but not full (prefill).
+    s = select_attn_schedule(q_len=1, kv_len=64, head_dim=96, q_heads=4, kv_heads=4)
+    assert s.path is AttnPath.VECTOR

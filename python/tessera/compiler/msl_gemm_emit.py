@@ -98,21 +98,29 @@ def emit_simdgroup_gemm_msl(
 
     Accumulation is in ``accum`` (fp32 by default — the production pattern that
     matches Tessera's ``numeric_policy{storage, accum}`` and MLX steel's fp32 acc).
-    Skeleton only (see module docstring): the fragment load/store strides are the
-    documented row-major form; threadgroup staging / ragged-edge masking are omitted.
+
+    **Single output fragment** (``m == n == 8``): this emits the canonical
+    single-8×8-output K-loop (the steel *inner* loop). ``k`` may be any positive
+    multiple of 8 (the K-loop handles it), but ``m``/``n`` > 8 is **rejected** —
+    emitting only the top-left 8×8 of a larger tile (and striding the tile origin
+    past the skipped rows) would silently drop output. Use
+    :func:`emit_steel_gemm_msl` for multi-fragment ``M``/``N`` tiling.
     """
     shape = MslGemmShape(m, n, k)
     if not shape.is_valid():
         raise ValueError(
             f"({m},{n},{k}) is not a valid simdgroup_matrix GEMM tile "
             f"(each dim must be a positive multiple of {SIMDGROUP_FRAG}) — refusing to emit")
+    if m != SIMDGROUP_FRAG or n != SIMDGROUP_FRAG:
+        raise ValueError(
+            f"emit_simdgroup_gemm_msl is the single-output-fragment emitter — it "
+            f"requires m == n == {SIMDGROUP_FRAG} (got m={m}, n={n}); larger M/N would "
+            "silently compute only the top-left 8x8. Use emit_steel_gemm_msl for "
+            "multi-fragment M/N tiling.")
     T = _scalar(dtype)
     ACC = _scalar(accum)
     f = SIMDGROUP_FRAG
     name = entry or f"tessera_simdgroup_gemm_{dtype}"
-    # One 8×8 output fragment per simdgroup; m/n/k > 8 loop over fragments. This
-    # slice emits the canonical single-output-fragment K-loop (the steel inner
-    # loop); multi-fragment M/N tiling is the documented next sub-step.
     return f"""//
 // Tessera rung-2.5 emission — Apple simdgroup_matrix {dtype} GEMM (steel-style skeleton).
 // NOT a complete/optimal kernel: a production GEMM also needs threadgroup staging,
@@ -235,13 +243,24 @@ def emit_steel_gemm_msl(
     if double_buffer:
         buffers = (f"  threadgroup {T} As[2][{bm} * {bk}];   // double-buffered staged A (ping-pong)\n"
                    f"  threadgroup {T} Bs[2][{bk} * {bn}];   // double-buffered staged B (ping-pong)")
+        # Barrier-correctness invariant (one barrier per K-step suffices): with the
+        # prefetch at the top of the iteration and the single barrier at the bottom,
+        # every slot's READ (compute of As[buf]) is separated from its producing
+        # WRITE (the prefetch in the *previous* iteration) by exactly that barrier
+        # — RAW safe; and every slot's WRITE (prefetch of As[nbuf]) is separated
+        # from its prior consuming READ (compute two iterations back) by the same
+        # barrier — WAR safe. The intra-iteration prefetch(nbuf) and compute(buf)
+        # touch DISJOINT slots, so they need no barrier between them. (This is why a
+        # second barrier would only cost latency, not add correctness.)
         kloop = f"""  // B2: prologue — prefetch the first tile into slot 0.
   uint buf = 0u;
 {_steel_stage_block(T, "As[0]", "Bs[0]", "0u")}
   threadgroup_barrier(mem_flags::mem_threadgroup);
 
   for (uint k0 = 0; k0 < K; k0 += BK) {{
-    // Prefetch the NEXT tile into the alternate slot while we compute this one.
+    // Prefetch the NEXT tile into the alternate (disjoint) slot while we compute
+    // this one. The trailing barrier makes the prefetch visible to next iter's
+    // compute and guards this slot's reuse — see the invariant above.
     uint nbuf = buf ^ 1u;
     uint nk0 = k0 + BK;
     if (nk0 < K) {{

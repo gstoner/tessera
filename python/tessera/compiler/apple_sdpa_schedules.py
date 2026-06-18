@@ -76,8 +76,14 @@ def full_attn_tile(head_dim: int, *, nax: bool) -> AttnTile:
 
 
 def vector_2pass_blocks(kv_len: int) -> int:
-    """Split-K block count for the long-context decode 2-pass
-    (scaled_dot_product_attention.cpp ~line 449): 128 (N≤8192) / 256 / 1024."""
+    """Split-K block count for the decode 2-pass
+    (scaled_dot_product_attention.cpp ~line 449): 128 (N≤8192) / 256 / 1024.
+
+    Standalone block-count lookup over the **full** ``kv_len`` range. Note the
+    ``≤8192 → 128`` row is only reached when 2-pass is *forced* (a direct call):
+    :func:`select_attn_schedule` auto-selects 2-pass only for ``kv_len > 8192`` (so
+    via the router the count is always ≥256). The two thresholds are independent by
+    design — this is a pure lookup, the router owns the routing policy."""
     if kv_len <= 8192:
         return 128
     if kv_len <= 32768:
@@ -111,12 +117,20 @@ def select_attn_schedule(
 
     # Decode (short query) → vector; long context → 2-pass.
     if q_len <= FULL_MIN_QUERY_LEN:
+        if head_dim not in VECTOR_SUPPORTED_HEAD_DIMS:
+            raise ValueError(
+                f"vector (decode) head_dim {head_dim} unsupported — MLX vector SDPA "
+                f"supports {sorted(VECTOR_SUPPORTED_HEAD_DIMS)}")
         if kv_len > 8192:
             return AttnSchedule(AttnPath.VECTOR_2PASS, spec,
                                 vector_blocks=vector_2pass_blocks(kv_len))
         return AttnSchedule(AttnPath.VECTOR, spec)
 
     # Prefill → full attention (head_dim must match q==v and be supported).
+    if head_dim not in FULL_SUPPORTED_HEAD_DIMS:
+        raise ValueError(
+            f"full (prefill) head_dim {head_dim} unsupported — MLX full SDPA "
+            f"supports {sorted(FULL_SUPPORTED_HEAD_DIMS)}")
     use_nax = nax_available and head_dim != NAX_UNSUPPORTED_HEAD_DIM and head_dim == vhd
     path = AttnPath.FULL_NAX if use_nax else AttnPath.FULL_METAL
     return AttnSchedule(path, spec, tile=full_attn_tile(head_dim, nax=use_nax))

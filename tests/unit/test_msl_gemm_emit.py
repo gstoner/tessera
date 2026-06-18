@@ -75,12 +75,27 @@ def test_bf16_requires_metal_3_1():
 def test_tile_shape_validity(m, n, k, ok):
     assert MslGemmShape(m, n, k).is_valid() is ok
     if ok:
-        msl = emit_simdgroup_gemm_msl("f16", m, n, k)
+        # The single-fragment emitter only accepts m==n==8; larger valid tiles are
+        # the steel (multi-fragment) emitter's job.
+        if m == n == 8:
+            msl = emit_simdgroup_gemm_msl("f16", m, n, k)
+        else:
+            msl = emit_steel_gemm_msl("f16", m, n, k)
         assert validate_msl_gemm_structure(
             msl, dtype="f16", shape=MslGemmShape(m, n, k)).ok
     else:
         with pytest.raises(ValueError):
             emit_simdgroup_gemm_msl("f16", m, n, k)
+
+
+def test_single_fragment_emitter_rejects_multi_fragment_tile():
+    # m/n > 8 would silently compute only the top-left 8x8 -> rejected (use steel).
+    for (m, n) in [(16, 8), (8, 16), (32, 32)]:
+        with pytest.raises(ValueError, match="single-output-fragment"):
+            emit_simdgroup_gemm_msl("f16", m, n, 8)
+    # k > 8 is fine (the K-loop handles it).
+    msl = emit_simdgroup_gemm_msl("f16", 8, 8, 32)
+    assert validate_msl_gemm_structure(msl, dtype="f16").ok
 
 
 def test_fragment_size_is_8():

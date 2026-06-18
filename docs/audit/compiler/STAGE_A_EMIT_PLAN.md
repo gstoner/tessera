@@ -46,11 +46,19 @@ toolchain-vs-hardware distinction for Apple low precision.
 validator** (no GPU, no toolchain — runs in CI on the arm64 dev Mac). Then rung 3 = real toolchain
 assemble (skip-clean when absent), rungs 6–7 = launch + execute-and-compare on owned silicon.
 
-| vendor | emitter | structural validator (rung 2.5) | toolchain rung 3 | status |
-|---|---|---|---|---|
-| **NVIDIA** | `ptx_emit.py` (sm_90a WGMMA PTX) | `validate_ptx_structure` | `ptxas_assemble` (Linux-CI) | landed |
-| **Apple** | **`msl_gemm_emit.py`** (simdgroup_matrix GEMM) | `validate_msl_gemm_structure` | `metal_compile` (Metal toolchain) | **landed (this spike)** |
-| **AMD** | `rocdl_emit.py` (`amdgpu.wmma`→`rocdl.wmma` text) | `validate_rocdl_structure` | `llc -mcpu=gfx1151` / hipcc | TODO |
+| vendor | emitter | structural validator (rung 2.5) | toolchain rung 3 | rung-3 here? | status |
+|---|---|---|---|---|---|
+| **NVIDIA** | `ptx_emit.py` (sm_90a WGMMA PTX) | `validate_ptx_structure` | `ptxas_assemble` | skip (no ptxas) | landed |
+| **Apple** | `msl_gemm_emit.py` (simdgroup_matrix + steel) | `validate_{msl,steel}_gemm_structure` | `metal_compile` | skip (no metal) | landed |
+| **AMD** | `rocdl_emit.py` (`llvm.amdgcn.wmma` LLVM-IR) | `validate_wmma_llvmir_structure` | `llc -mcpu=gfx1151` | **RUNS** (Homebrew LLVM 22) | **landed** |
+
+**AMD is special: its rung 3 actually runs on the dev Mac.** Homebrew LLVM 22 carries the AMDGPU
+backend, so `llc -mcpu=gfx1151` lowers the emitted `llvm.amdgcn.wmma.*` to a real `v_wmma_*` *here* —
+3 of the AMD tests are genuine rung-3 (not skip-clean). This already paid off: the host-free validator
+passed bf16 emitting `<16 x bfloat>`, but **rung-3 `llc` rejected it** — the RDNA bf16 wmma intrinsic
+takes `<16 x i16>` (bf16 bit-patterns). The rung ladder caught a real ABI error the structural check
+could not. (Scoped to RDNA3-class gfx1100/gfx1151; gfx1200/RDNA 4 uses a different gfx12 v2 wmma
+intrinsic ABI — a follow-on.)
 
 ## 3. This spike — Apple `simdgroup_matrix` GEMM lane (landed)
 
@@ -91,13 +99,14 @@ for). The structural validators are what earn rung 2.5.
 
 ## 4. Next steps (in dependency order)
 
-1. **AMD `rocdl_emit.py`** — the third emitter (`amdgpu.wmma`/`rocdl.wmma.f32.16x16x16.bf16` text +
-   structural validator), completing the rung-2.5 set across all three vendors.
-2. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
+1. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
    coordinated edit across `gpu_target.py` / `TesseraToolchainPins.cmake` / the C++ pin header / the
    byte-identical consistency test.
+2. **AMD: grow `rocdl_emit` toward a real GEMM** — operand VGPR layout + lane replication (A/B lanes
+   0-15 → 16-31) + the §7.9.1 V_NOP scheduling hazard + tiling; and add the **gfx12 v2 wmma intrinsic
+   ABI** for gfx1200/RDNA 4 (different operand packing + format/reuse operands). The rung-3 `llc` lane
+   already runs here, so each step is immediately AMDGCN-verifiable on the dev Mac.
 3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
-   async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`
-   compilation (it skip-cleans on the dev Mac today).
+   async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)
    + execute-and-compare, flipping `backend_kernel` to a real-execution status per vendor.

@@ -1,22 +1,24 @@
 """Audit Action 10 — AppleFeatureLimits / AppleGPUTargetProfile.
 
-Per-arch capability table for Apple Silicon GPUs (M1 / M2 / M3 / M4 /
-M5). Mirrors the structure already shipped for NVIDIA (``gpu_target.py``)
-and AMD (``rocm_target.py``).
+Per-arch capability table for Apple Silicon GPUs. Chip→family mapping
+per the Metal Feature Set Tables "Metal GPUs" page: M1=Apple7,
+M2=Apple8, M3/M4=Apple9, M5=Apple10 (no Apple11). Mirrors the structure
+already shipped for NVIDIA (``gpu_target.py``) and AMD
+(``rocm_target.py``).
 
 These tests pin:
 
 * **Feature matrix completeness** — every arch declares a status for
   every feature name (no typo'd / missing rows).
 * **Generation gating** — features that didn't exist on older arches
-  are properly marked ``not_supported`` (bfloat pre-M2, MTL4 pre-M4,
-  neural accelerators pre-M4, ray tracing pre-M3, dynamic caching
-  pre-M3, mesh shaders pre-M3).
-* **dtype set** — pre-M2 lacks ``bf16``; M2+ has it. No Apple arch
-  ships native fp64.
-* **AppleGPUTargetProfile defaults + invariants** — M4 default, valid
-  arch coercion, packaged-ML auto-off on pre-M4, threadgroup-memory
-  override validation.
+  are properly marked ``not_supported`` (MTL4 / GPU neural accelerators
+  pre-Apple10, ray tracing / dynamic caching / mesh shaders pre-Apple9).
+  ``bfloat`` and ``simdgroup_matrix`` are present from Apple7 (M1).
+* **dtype set** — ``bf16`` is native from Apple7 (MTLDataType.bfloat is
+  Apple6+). No Apple arch ships native fp64.
+* **AppleGPUTargetProfile defaults + invariants** — Apple10 (M5)
+  default, valid arch coercion, packaged-ML auto-off on pre-Apple10,
+  threadgroup-memory override validation.
 * **Static limits floor** — simdgroup is 32 across all arches;
   max-threads-per-threadgroup is 1024.
 * **Helper functions** — ``apple_feature_status`` raises on typos;
@@ -49,7 +51,6 @@ ALL_ARCHES = (
     AppleGPUArch.APPLE8,
     AppleGPUArch.APPLE9,
     AppleGPUArch.APPLE10,
-    AppleGPUArch.APPLE11,
 )
 
 
@@ -94,20 +95,28 @@ def test_status_values_only_use_known_strings():
 
 # ---- Generation gating -------------------------------------------------
 
-def test_bfloat_starts_at_m2():
-    assert (apple_feature_status(AppleGPUArch.APPLE7, "bfloat")
-            == "not_supported")
-    for arch in (AppleGPUArch.APPLE8, AppleGPUArch.APPLE9,
-                 AppleGPUArch.APPLE10, AppleGPUArch.APPLE11):
-        assert apple_feature_status(arch, "bfloat") == "ready"
+def test_bfloat_ready_on_all_arches():
+    """``MTLDataType.bfloat`` is Apple6+ (Metal Feature Set Tables), so
+    native bf16 is present on every Apple-Silicon arch Tessera models,
+    including M1 / Apple7."""
+    for arch in ALL_ARCHES:
+        assert apple_feature_status(arch, "bfloat") == "ready", arch.name
+
+
+def test_simdgroup_matrix_ready_on_all_arches():
+    """SIMD-scoped matrix multiply (``simdgroup_matrix``) is available
+    from Apple7 (Metal Feature Set Tables) — the in-repo MSL emitters
+    already target it on M1."""
+    for arch in ALL_ARCHES:
+        assert (apple_feature_status(arch, "simdgroup_matrix")
+                == "ready"), arch.name
 
 
 def test_ray_tracing_starts_at_m3():
     for arch in (AppleGPUArch.APPLE7, AppleGPUArch.APPLE8):
         assert (apple_feature_status(arch, "ray_tracing")
                 == "not_supported")
-    for arch in (AppleGPUArch.APPLE9, AppleGPUArch.APPLE10,
-                 AppleGPUArch.APPLE11):
+    for arch in (AppleGPUArch.APPLE9, AppleGPUArch.APPLE10):
         assert apple_feature_status(arch, "ray_tracing") == "ready"
 
 
@@ -115,13 +124,14 @@ def test_dynamic_caching_starts_at_m3():
     for arch in (AppleGPUArch.APPLE7, AppleGPUArch.APPLE8):
         assert (apple_feature_status(arch, "dynamic_caching")
                 == "not_supported")
-    for arch in (AppleGPUArch.APPLE9, AppleGPUArch.APPLE10,
-                 AppleGPUArch.APPLE11):
+    for arch in (AppleGPUArch.APPLE9, AppleGPUArch.APPLE10):
         assert (apple_feature_status(arch, "dynamic_caching")
                 == "ready")
 
 
-def test_metal4_starts_at_m4():
+def test_metal4_and_neural_accel_start_at_apple10_m5():
+    """Metal 4 / packaged ML / GPU neural accelerators light up at
+    Apple10 (M5). M3 and M4 are both Apple9 and stay pre-Metal-4."""
     for arch in (AppleGPUArch.APPLE7, AppleGPUArch.APPLE8,
                  AppleGPUArch.APPLE9):
         assert apple_feature_status(arch, "metal4") == "not_supported"
@@ -129,12 +139,11 @@ def test_metal4_starts_at_m4():
                 == "not_supported")
         assert (apple_feature_status(arch, "neural_accelerators")
                 == "not_supported")
-    for arch in (AppleGPUArch.APPLE10, AppleGPUArch.APPLE11):
-        assert apple_feature_status(arch, "metal4") == "ready"
-        assert (apple_feature_status(arch, "mtl4_packaged_ml")
-                == "ready")
-        assert (apple_feature_status(arch, "neural_accelerators")
-                == "ready")
+    assert apple_feature_status(AppleGPUArch.APPLE10, "metal4") == "ready"
+    assert (apple_feature_status(AppleGPUArch.APPLE10, "mtl4_packaged_ml")
+            == "ready")
+    assert (apple_feature_status(AppleGPUArch.APPLE10, "neural_accelerators")
+            == "ready")
 
 
 def test_metal3_always_ready():
@@ -153,17 +162,14 @@ def test_simdgroup_async_copy_always_ready():
 
 # ---- dtype matrix ------------------------------------------------------
 
-def test_dtype_set_bfloat_gating():
-    # M1 lacks bf16.
-    p_m1 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE7)
-    assert "bf16" not in p_m1.dtype_set
-    assert "fp16" in p_m1.dtype_set
-    assert "fp32" in p_m1.dtype_set
-    # M2+ has bf16.
-    for arch in (AppleGPUArch.APPLE8, AppleGPUArch.APPLE9,
-                 AppleGPUArch.APPLE10, AppleGPUArch.APPLE11):
+def test_dtype_set_includes_bf16_on_all_arches():
+    # bf16 is a native GPU dtype from Apple6+ (MTLDataType.bfloat), so it
+    # is present on every modeled arch — including M1 / Apple7.
+    for arch in ALL_ARCHES:
         p = AppleGPUTargetProfile(arch=arch)
         assert "bf16" in p.dtype_set, arch.name
+        assert "fp16" in p.dtype_set, arch.name
+        assert "fp32" in p.dtype_set, arch.name
 
 
 def test_no_apple_arch_ships_native_fp64():
@@ -177,9 +183,9 @@ def test_no_apple_arch_ships_native_fp64():
 
 # ---- AppleGPUTargetProfile construction --------------------------------
 
-def test_profile_default_arch_is_m4():
-    """Default arch is APPLE10 (M4) — the first generation where
-    Metal 4 + packaged ML are fully reachable."""
+def test_profile_default_arch_is_apple10_m5():
+    """Default arch is APPLE10 (M5) — the current top generation where
+    Metal 4 + packaged ML + GPU neural accelerators are reachable."""
     p = AppleGPUTargetProfile()
     assert p.arch == AppleGPUArch.APPLE10
 
@@ -199,9 +205,10 @@ def test_profile_rejects_unknown_arch():
         AppleGPUTargetProfile(arch=99)  # type: ignore[arg-type]
 
 
-def test_profile_force_off_packaged_ml_on_pre_m4():
-    """Asking for packaged ML on a pre-M4 arch silently force-disables
-    rather than allowing a misleading flag to flow into the lowering."""
+def test_profile_force_off_packaged_ml_on_pre_apple10():
+    """Asking for packaged ML on a pre-Apple10 (pre-M5) arch silently
+    force-disables rather than allowing a misleading flag to flow into
+    the lowering."""
     for arch in (AppleGPUArch.APPLE7, AppleGPUArch.APPLE8,
                  AppleGPUArch.APPLE9):
         p = AppleGPUTargetProfile(arch=arch, prefer_packaged_ml=True)
@@ -221,28 +228,27 @@ def test_capability_predicates_track_feature_matrix():
     p_m1 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE7)
     assert p_m1.supports_metal4 is False
     assert p_m1.supports_packaged_ml is False
-    assert p_m1.supports_bfloat is False
     assert p_m1.supports_neural_accelerators is False
     assert p_m1.supports_ray_tracing is False
+    # M1/Apple7 DOES have native bfloat + simdgroup_matrix.
+    assert p_m1.supports_bfloat is True
+    assert p_m1.supports_simdgroup_matrix is True
 
-    p_m3 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE9)
-    assert p_m3.supports_metal4 is False
-    assert p_m3.supports_bfloat is True
-    assert p_m3.supports_ray_tracing is True
-    assert p_m3.supports_dynamic_caching is True
-    assert p_m3.supports_neural_accelerators is False
+    # M3/M4 are both Apple9.
+    p_m3_m4 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE9)
+    assert p_m3_m4.supports_metal4 is False
+    assert p_m3_m4.supports_bfloat is True
+    assert p_m3_m4.supports_ray_tracing is True
+    assert p_m3_m4.supports_dynamic_caching is True
+    assert p_m3_m4.supports_neural_accelerators is False
 
-    p_m4 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE10)
-    assert p_m4.supports_metal4 is True
-    assert p_m4.supports_packaged_ml is True
-    assert p_m4.supports_bfloat is True
-    assert p_m4.supports_neural_accelerators is True
-    assert p_m4.supports_simdgroup_matrix is True
-
-    p_m5 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE11)
+    # Apple10 == M5.
+    p_m5 = AppleGPUTargetProfile(arch=AppleGPUArch.APPLE10)
     assert p_m5.supports_metal4 is True
     assert p_m5.supports_packaged_ml is True
+    assert p_m5.supports_bfloat is True
     assert p_m5.supports_neural_accelerators is True
+    assert p_m5.supports_simdgroup_matrix is True
 
 
 # ---- Static limits floor -----------------------------------------------
@@ -280,14 +286,15 @@ def test_apple_feature_set_includes_only_ready_features():
     assert "neural_accelerators" in s
     s_m1 = apple_feature_set(AppleGPUArch.APPLE7)
     assert "metal4" not in s_m1
-    assert "bfloat" not in s_m1
     assert "neural_accelerators" not in s_m1
+    # M1/Apple7 has native bfloat + simdgroup_matrix.
+    assert "bfloat" in s_m1
+    assert "simdgroup_matrix" in s_m1
 
 
 def test_apple_arch_string_returns_apple_n():
     assert apple_arch_string(AppleGPUArch.APPLE7) == "apple7"
     assert apple_arch_string(AppleGPUArch.APPLE10) == "apple10"
-    assert apple_arch_string(AppleGPUArch.APPLE11) == "apple11"
 
 
 def test_apple_arch_defaults_returns_arch_floor():

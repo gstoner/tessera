@@ -6,15 +6,19 @@ Silicon GPUs. Parallels ``gpu_target.py`` (NVIDIA) and
 + instruction-shape table, plus a profile dataclass that exposes
 ``supports_*`` predicates the lowering passes consult.
 
-Architectures tracked:
+Architectures tracked (Apple ``MTLGPUFamily`` numbering — Metal
+Feature Set Tables, "Metal GPUs" page):
 
-* ``M1`` (Apple7, 2020) — first Apple Silicon GPU
-* ``M2`` (Apple8, 2022) — adds native ``bfloat`` + simdgroup matrix
-* ``M3`` (Apple9, 2023) — adds hardware ray tracing, dynamic caching,
-  mesh shaders
-* ``M4`` (Apple10, 2024) — adds Metal 4 + neural accelerators + MTL4
+* ``M1-series`` (Apple7, 2020) — first Apple Silicon GPU; already has
+  native ``MTLDataType.bfloat`` (Apple6+) and SIMD-scoped matrix
+  multiply / ``simdgroup_matrix`` (Apple7+)
+* ``M2-series`` (Apple8, 2022) — sparse depth/stencil, lossy texture
+  compression, SIMD shift-and-fill
+* ``M3/M4-series`` (Apple9, 2023/2024) — hardware ray tracing, dynamic
+  caching, mesh shaders. **M4 shares the Apple9 family** per the
+  Feature Set Tables; it is not a separate family.
+* ``M5-series`` (Apple10, 2025) — GPU neural accelerators + Metal 4
   packaged ML pipelines (``MTL4MachineLearningPipelineState``)
-* ``M5`` (Apple11, 2025) — neural-accelerator throughput improvements
 
 The static table is the COMPILATION-TIME contract — what the backend
 can lower to for each arch. A separate ``probe_apple_runtime_limits()``
@@ -33,12 +37,14 @@ from typing import Optional
 class AppleGPUArch(IntEnum):
     """Apple GPU architecture family identifiers. Integer values
     follow Apple's internal ``MTLGPUFamilyApple*`` numbering so
-    monotone comparisons match generation ordering."""
-    APPLE7 = 7    # M1 (2020 — first Apple Silicon)
-    APPLE8 = 8    # M2 (2022 — bfloat16 + simdgroup matrix)
-    APPLE9 = 9    # M3 (2023 — RT, dynamic caching, mesh shaders)
-    APPLE10 = 10  # M4 (2024 — Metal 4 + neural accelerators)
-    APPLE11 = 11  # M5 (2025 — neural-accelerator throughput)
+    monotone comparisons match generation ordering. Chip→family
+    mapping per the Metal Feature Set Tables "Metal GPUs" page —
+    M3 and M4 are BOTH Apple9, M5 is Apple10, and there is no
+    Apple11 family."""
+    APPLE7 = 7    # M1-series (2020 — first Apple Silicon; bfloat + simdgroup_matrix)
+    APPLE8 = 8    # M2-series (2022)
+    APPLE9 = 9    # M3-series / M4-series (2023/2024 — RT, dynamic caching, mesh shaders)
+    APPLE10 = 10  # M5-series (2025 — GPU neural accelerators + Metal 4 packaged ML)
 
 
 #: Target Metal release that Tessera's Apple GPU backend is built
@@ -57,16 +63,19 @@ TESSERA_TARGET_MACOS_FOR_MTL4: str = "26.0"
 # ---------------------------------------------------------------------
 _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
     AppleGPUArch.APPLE7: {
-        # M1 baseline. No native bfloat, no Metal 4, no neural
-        # accelerators. Metal 3 + MPS / MPSGraph paths are the
-        # entire surface here.
+        # M1-series baseline. Native ``MTLDataType.bfloat`` (Apple6+)
+        # and SIMD-scoped matrix multiply / ``simdgroup_matrix``
+        # (Apple7+) are BOTH present — the in-repo MSL emitters
+        # (fusion.py, runtime.py, msl_gemm_emit.py) already target
+        # ``simdgroup_matrix<...,8,8>`` here. No Metal 4 and no GPU
+        # neural accelerators (those arrive with Apple10 / M5).
         "metal3":                "ready",
         "metal4":                "not_supported",
         "mpsgraph":              "ready",
         "simdgroup":             "ready",
         "simdgroup_async_copy":  "ready",
-        "simdgroup_matrix":      "not_supported",
-        "bfloat":                "not_supported",
+        "simdgroup_matrix":      "ready",
+        "bfloat":                "ready",
         "ray_tracing":           "not_supported",
         "dynamic_caching":       "not_supported",
         "mesh_shaders":          "not_supported",
@@ -78,8 +87,9 @@ _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
         "argument_buffers":      "ready",
     },
     AppleGPUArch.APPLE8: {
-        # M2 — adds native bfloat + simdgroup matrix multiply
-        # (``simdgroup_bfloat8x8`` etc.). Still pre-Metal-4.
+        # M2-series — bfloat + simdgroup_matrix already present since
+        # Apple7; M2 adds sparse depth/stencil, lossy texture
+        # compression, and SIMD shift-and-fill. Still pre-Metal-4.
         "metal3":                "ready",
         "metal4":                "not_supported",
         "mpsgraph":              "ready",
@@ -98,8 +108,10 @@ _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
         "argument_buffers":      "ready",
     },
     AppleGPUArch.APPLE9: {
-        # M3 — hardware RT, dynamic caching, mesh shaders. Still
-        # Metal 3 (Metal 4 ships with M4 + macOS 26).
+        # M3-series AND M4-series — both are Apple9 per the Feature Set
+        # Tables "Metal GPUs" page. Hardware RT, dynamic caching, mesh
+        # shaders. No GPU neural accelerators and no Metal 4 packaged-ML
+        # lane in this family (those land with Apple10 / M5).
         "metal3":                "ready",
         "metal4":                "not_supported",
         "mpsgraph":              "ready",
@@ -118,29 +130,8 @@ _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
         "argument_buffers":      "ready",
     },
     AppleGPUArch.APPLE10: {
-        # M4 — Metal 4 baseline. MTL4 compiler / command queue /
-        # packaged ML all light up. Neural accelerators first appear.
-        "metal3":                "ready",
-        "metal4":                "ready",
-        "mpsgraph":              "ready",
-        "simdgroup":             "ready",
-        "simdgroup_async_copy":  "ready",
-        "simdgroup_matrix":      "ready",
-        "bfloat":                "ready",
-        "ray_tracing":           "ready",
-        "dynamic_caching":       "ready",
-        "mesh_shaders":          "ready",
-        "neural_accelerators":   "ready",
-        "mtl4_packaged_ml":      "ready",
-        "mtl4_compiler":         "ready",
-        "mtl4_command_queue":    "ready",
-        "function_pointers":     "ready",
-        "argument_buffers":      "ready",
-    },
-    AppleGPUArch.APPLE11: {
-        # M5 — Metal 4 + improved neural-accelerator throughput.
-        # Same compile-time surface as M4; throughput differences
-        # surface through benchmark numbers, not the feature matrix.
+        # M5-series — Metal 4 baseline. MTL4 compiler / command queue /
+        # packaged ML all light up. GPU neural accelerators first appear.
         "metal3":                "ready",
         "metal4":                "ready",
         "mpsgraph":              "ready",
@@ -167,7 +158,9 @@ _APPLE_FEATURES: dict[AppleGPUArch, dict[str, str]] = {
 # CPU per Decision #19 (hardware-free Target IR keeps the option open).
 _APPLE_DTYPES: dict[AppleGPUArch, frozenset[str]] = {
     AppleGPUArch.APPLE7: frozenset({
-        "fp32", "fp16", "int8", "int16", "int32", "int64", "bool",
+        # bf16 is a native GPU dtype from Apple6+ (MTLDataType.bfloat).
+        "fp32", "fp16", "bf16",
+        "int8", "int16", "int32", "int64", "bool",
     }),
     AppleGPUArch.APPLE8: frozenset({
         "fp32", "fp16", "bf16",
@@ -178,10 +171,6 @@ _APPLE_DTYPES: dict[AppleGPUArch, frozenset[str]] = {
         "int8", "int16", "int32", "int64", "bool",
     }),
     AppleGPUArch.APPLE10: frozenset({
-        "fp32", "fp16", "bf16",
-        "int8", "int16", "int32", "int64", "bool",
-    }),
-    AppleGPUArch.APPLE11: frozenset({
         "fp32", "fp16", "bf16",
         "int8", "int16", "int32", "int64", "bool",
     }),
@@ -202,15 +191,14 @@ class _ArchDefaults:
 
 _APPLE_ARCH_DEFAULTS: dict[AppleGPUArch, _ArchDefaults] = {
     # All Apple GPUs use a 32-lane SIMD width and a 1024 max threads /
-    # threadgroup ceiling. Threadgroup memory floor is the Apple docs
-    # number: 32 KB on the lowest-end M1, ~64 KB on M2+ (per Apple
-    # GPU family table). M3+ raises further with dynamic caching but
-    # the static floor stays at 32 KB to be safe.
+    # threadgroup ceiling. "Maximum total threadgroup memory allocation"
+    # is a uniform 32 KB across Apple4–Apple10 per the Feature Set Tables
+    # "GPU implementation limits by family" page. Argument-table entries
+    # cap at 31 across every family.
     AppleGPUArch.APPLE7:  _ArchDefaults(32 * 1024, 1024, 32, 31),
     AppleGPUArch.APPLE8:  _ArchDefaults(32 * 1024, 1024, 32, 31),
     AppleGPUArch.APPLE9:  _ArchDefaults(32 * 1024, 1024, 32, 31),
     AppleGPUArch.APPLE10: _ArchDefaults(32 * 1024, 1024, 32, 31),
-    AppleGPUArch.APPLE11: _ArchDefaults(32 * 1024, 1024, 32, 31),
 }
 
 
@@ -221,7 +209,6 @@ _APPLE_ARCH_STRINGS: dict[AppleGPUArch, str] = {
     AppleGPUArch.APPLE8:  "apple8",
     AppleGPUArch.APPLE9:  "apple9",
     AppleGPUArch.APPLE10: "apple10",
-    AppleGPUArch.APPLE11: "apple11",
 }
 
 
@@ -233,9 +220,10 @@ class TesseraAppleGPUTargetError(Exception):
 class AppleGPUTargetProfile:
     """Describes the Apple GPU target for a ``@jit(target=...)`` function.
 
-    Defaults to ``APPLE10`` (M4) — the first arch where Metal 4 +
-    packaged ML are fully reachable. The lowering passes consult
-    ``supports_*`` predicates to decide which kernel variant to emit.
+    Defaults to ``APPLE10`` (M5) — the current top arch, where Metal 4 +
+    packaged ML + GPU neural accelerators are all reachable. The lowering
+    passes consult ``supports_*`` predicates to decide which kernel
+    variant to emit.
 
     Attributes:
         arch                    : ``AppleGPUArch`` enum member
@@ -448,13 +436,15 @@ def apple_supports_native_bf16(
     runtime_limits: "Optional[AppleRuntimeLimits]" = None,
 ) -> bool:
     """P2 (2026-06-09) — bf16 native-vs-host-upcast gate from the feature
-    table (``bfloat`` is ready on apple8+; apple7/M1 host-upcasts).
+    table. ``MTLDataType.bfloat`` is available on Apple6+ (Metal Feature
+    Set Tables), so ``bfloat`` is ``ready`` on every Apple-Silicon arch
+    Tessera models — including M1 / apple7.
 
     When ``runtime_limits`` carries a positive ``MTLGPUFamilyApple*``
-    raw value the live family wins (e.g. 1007 = apple7 ⇒ False); the
-    static arch default is the off-Metal floor."""
+    raw value the live family wins (``>= 1006`` ⇒ native; e.g. 1007 =
+    apple7 ⇒ True); the static arch default is the off-Metal floor."""
     if runtime_limits is not None and runtime_limits.apple_gpu_family > 0:
-        return runtime_limits.apple_gpu_family >= 1008
+        return runtime_limits.apple_gpu_family >= 1006
     return apple_feature_status(arch, "bfloat") == "ready"
 
 

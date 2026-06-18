@@ -105,21 +105,24 @@ def test_threads_per_row_is_simdgroup_size():
 
 
 def test_supports_native_bf16_static_arch_defaults():
-    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7)
-    for arch in (at.AppleGPUArch.APPLE8, at.AppleGPUArch.APPLE9,
-                 at.AppleGPUArch.APPLE10, at.AppleGPUArch.APPLE11):
-        assert at.apple_supports_native_bf16(arch)
+    # MTLDataType.bfloat is Apple6+, so native bf16 is present on every
+    # modeled arch — including M1 / Apple7.
+    for arch in at.AppleGPUArch:
+        assert at.apple_supports_native_bf16(arch), arch.name
 
 
 def test_supports_native_bf16_live_family_wins():
-    m1 = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1007)
-    m2 = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1008)
+    apple7 = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1007)
+    pre = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=1005)
     unknown = at.AppleRuntimeLimits(0, False, False, apple_gpu_family=-1)
-    # Live family overrides the static arch in both directions.
-    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE10, runtime_limits=m1)
-    assert at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=m2)
-    # Unknown family falls back to the static arch default.
-    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=unknown)
+    # A live family at/above the Apple6 bfloat floor (>= 1006) confirms
+    # native bf16 — M1 / Apple7 (1007) qualifies.
+    assert at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=apple7)
+    # A live family below the bfloat floor gates off even on a modern
+    # static arch.
+    assert not at.apple_supports_native_bf16(at.AppleGPUArch.APPLE10, runtime_limits=pre)
+    # Unknown family falls back to the static arch default (native on apple7+).
+    assert at.apple_supports_native_bf16(at.AppleGPUArch.APPLE7, runtime_limits=unknown)
 
 
 def test_runtime_consumes_fused_score_cap_and_bf16_gate():

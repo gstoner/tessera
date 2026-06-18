@@ -3079,7 +3079,8 @@ def _apple_gpu_dispatch_matmul(op_name: str, operands: list[Any], np: Any) -> An
     #   f32:  MTL4 cooperative lane is opt-in (M4)
     #   f16:  MTL4 matmul2d for the M==1 GEMV decode step (P7 — 3.2-3.4x MPS)
     #   bf16: MTL4 matmul2d default (P5 — ~10x the fp32-conversion MPS path),
-    #         capability-gated below (`bfloat` ready on apple8+; M1 upcasts)
+    #         capability-gated below (`bfloat`/MTLDataType.bfloat is Apple6+,
+    #         so native on every modeled arch incl. M1 / apple7)
     # while the ctypes call shape is shared via `_apple_gpu_gemm2d_call`.
     lanes: dict[Any, tuple[Any, Any]] = {
         np.float32: (_mtl4_route_matmul_f32, _apple_gpu_mps_matmul_f32),
@@ -10239,9 +10240,10 @@ def _apple_fused_score_cap() -> int:
 
 def _apple_gpu_supports_native_bf16() -> bool:
     """P2 (2026-06-09) — bf16 native-vs-host-upcast gate via the feature
-    table (apple8+ ready; apple7/M1 upcasts), preferring the live
-    MTLGPUFamily probe. Cached. Used to decide whether to attempt the
-    native bf16 GEMM/conv symbols at all."""
+    table (``MTLDataType.bfloat`` is Apple6+, so native on every modeled
+    arch incl. M1 / apple7), preferring the live MTLGPUFamily probe.
+    Cached. Used to decide whether to attempt the native bf16 GEMM/conv
+    symbols at all."""
     global _NATIVE_BF16_SUPPORTED
     if _NATIVE_BF16_SUPPORTED is None:
         from .compiler.apple_target import (

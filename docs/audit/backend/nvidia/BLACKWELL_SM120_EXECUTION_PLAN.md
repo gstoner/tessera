@@ -101,6 +101,12 @@ makes the Stage-A lowering largely structural:
 | tile loads / `partition_view` | `ct::tensor_span` + `ct::partition_view{…}.load(idx)` | **lowered to TMA automatically on supported HW** |
 | causal / edge masking | `.load_masked()` / `.store_masked()` (OOB→0, `PaddingMode.ZERO`) | the canonical GEMM K-loop zero-pads partial K-tiles, store-side OOB-discard for M/N edges |
 | gather/scatter (our data-movers) | tile-of-pointers `ct::load/store`, `ct.gather/scatter` | |
+| **softmax / layernorm / attention reductions** | `ct::sum/max/...` reduce; `cumsum` scan (§2.4.9.2) | "softmax denominator, layernorm mean/var, attention max all are reductions"; C++ keeps rank, Python drops axis |
+| **transpose data-mover** (Apple-GPU lane) | `ct::transpose(x)` / `ct::permute(x, dimension_map{…})` (§2.4.9.3) | transpose swaps first two axes; permute = arbitrary reorder — "materializing a matmul-operand transpose, attention row/col swap" |
+| `where` / `select` | `ct::select(cond,lhs,rhs)` / `ct.where` (§2.4.9.4) | tile conditional |
+| pointwise activations (gelu/silu decompose) | `ct::exp/log/sqrt/rsqrt/tanh/sin/cos/pow/...` (§2.4.9.5) | full elementwise math in `ct` namespace |
+| cross-block reduce (split-K / MoE) | `ct::atomic_{add,max,min,and,or,xor,xchg,cas}` (§2.4.10) | per-element; `memory_order` + `thread_scope` tags |
+| **autotuner knobs** (cf. `flywheel`/`BayesianAutotuner`) | `cutile::hint(arch, kind=val)` / `@ct.kernel(...=ByTarget(sm_90=…))` (§2.4.11) | semantics-preserving hints: `occupancy`/`latency`/`num_cta_in_cga`/`allow_tma`; **`.replace_hints()` returns a re-tuned kernel with its own JIT cache** — "the natural building block for autotuning loops" |
 | block id / grid | `ct::bid()`, `ct::num_blocks()` | one logical thread/block; launch `<<<grid, 1>>>` |
 | bounded loops | `ct::irange(0, n)` | single control-flow path per block — **no warp-divergence concerns** |
 | `__tile_global__` / `__tile__` | tile-kernel entry / tile-callable | coexist with SIMT in one `.cu` |
@@ -112,10 +118,32 @@ pattern validates Decision #15a (storage on the tensor, accumulator in `numeric_
 **CUDA Tile C++ requires CUDA Toolkit 13.3** ("available from 13.3 onward") — another reason to bump
 the pin. Both Tile C++ and cuTile Python share one backend = **CUDA Tile IR**.
 
-**Verify against the full Tile IR spec (sections 1-8) before committing:** GA-vs-preview status of the
-standalone Tile IR *compiler*; the MLIR dialect name/op set; the SASS-vs-PTX consumption path; concrete
-sm_90/100/120 portability guarantees. (The *programming-model* op surface above is now grounded; the
-Tile-IR-as-backend-target details are not.)
+**Tile IR spec status (grounded from the Tile IR spec TOC + §8 Operations + §10 Stability).** The spec
+has 13 sections (Introduction, Programming Model, Syntax, Binary Format, Type System, Semantics,
+Memory Model, **Operations**, Debug Info, **Stability**, Optimization Guide, Appendix, Release Notes).
+- **Op set (§8)** — grounded for §8.1–8.6: Core (`broadcast`, **`cat`**, `constant`, `extract`,
+  `reduce`, `scan`, `reshape`, **`permute`**, `pack`, `unpack`), Control flow (`if`, `loop`, `for`,
+  `break`, `continue`, `return`, `yield`, `assert`), Memory (`load_view_tko`/`store_view_tko` [the
+  partition-view/TMA loads], `load_ptr_tko`/`store_ptr_tko`, `alloca`, `atomic_rmw_tko`,
+  `atomic_cas_tko`), Conversions (`bitcast`, `exti`, `trunci`, `ftof`, `ftoi`, `itof`, ptr casts).
+  **Notably, Tessera's four data-movers (cat / transpose-permute / reshape / broadcast) are all
+  first-class Tile IR core ops**, and `reduce`/`scan` cover softmax/layernorm — so the data-mover work
+  already shipped on Apple GPU maps directly to Tile IR ops on NVIDIA. *Still missing:* the matmul/MMA
+  op mnemonic (in §8.7+, past the fetch truncation).
+- **Stability (§10)** — Tile IR is **released and versioned** (tracks CUDA 13.1/13.2/**13.3**), with a
+  forward-compat **bytecode** guarantee ("a program conforming to vX.Y is portable to vX.Y or newer"),
+  respecting CUDA minor-version compat. **Caveat, quoted:** "*During the 13.x release cycle, we are
+  bringing up existing hardware targets which may introduce new features on old targets. This 'cold
+  start' period is an exception.*" → production-intent, not "preview", but actively maturing in 13.x.
+- **SASS path** — the optimizing Tile IR compiler ships **in the CUDA driver and as a standalone
+  tool**; the driver loads/interprets the bytecode ("interpreted and loaded by all conforming
+  drivers"). So: emit Tile IR bytecode → driver/standalone compiler → SASS (no PTX in the middle).
+- **MLIR dialect** — mentioned in the Introduction as a *producer surface* ("an MLIR dialect existing
+  compilers can use to target Tile IR as a backend"), but it is **not a TOC section** of the spec (the
+  spec documents the IR itself — syntax/bytecode/operations). So the dialect is a front-end onto Tile
+  IR, separate from the IR spec; its exact op/dialect name still needs the MLIR/headers, not this spec.
+
+*Remaining unknowns:* the MMA op mnemonic (§8.7+) and the MLIR dialect's concrete name/op set.
 
 ## Toolkit: the box runs CUDA 13.3 (bump the pin from 13.2 U1)
 

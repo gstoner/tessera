@@ -106,10 +106,24 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Te
   **LLVM 18.1.8**-based NVVM IR dialect (relevant to a future MLIR→NVVM path).
 - Perf: ~5% FP4 GEMM (Blackwell Ultra), ~27% TF32 GEMM (Blackwell/Ultra). CompileIQ (AI compiler
   autotuning — compare Tessera's flywheel/autotuner). CUDA Python 1.0.
-- **Action:** bump the pin **13.2.1 → 13.3** across `gpu_target.py` (`TESSERA_TARGET_CUDA_TOOLKIT`,
-  driver/PTX-ISA/NCCL values), `cmake/TesseraToolchainPins.cmake`, the C++ pin header, and the
-  byte-identical cross-language consistency test. **Ground the exact 13.3 driver-min / PTX-ISA /
-  NCCL values from the 13.3 release notes first** (do not carry the 13.2 values — 555.85 / 8.6 / 2.22).
+- **Tile coverage is sm_80 and later** (CUDA Toolkit 13.3 release notes, "CUDA TILE Supported
+  Architectures") — the Tile C++/Tile IR path is **not** Blackwell-only; it covers Ampere→Blackwell
+  (sm_80/90/100/103/120/121). So one tile-lowering path serves *every* Tessera NVIDIA target, not just
+  sm_120 — strengthening "lower to Tile IR" over per-arch PTX.
+- **Grounded 13.3 pin values — all four, ready for the bump:**
+
+  | pin | 13.2.1 (current) | **13.3 (target)** | source |
+  |---|---|---|---|
+  | CUDA toolkit | 13.2.1 | **13.3** | release notes |
+  | min Linux driver | 555.85 | **610.43.02** | release notes Table 3 |
+  | PTX ISA | 8.6 | **9.3** | release notes, CUDA Compiler features |
+  | NCCL | 2.22 | **2.30.7** | NCCL release notes (`2.30.7-1+cuda13.3`, 9-Jun-2026) |
+
+  Tile C++ is presented as a shipped feature (nvcc + NVRTC), no "preview" label.
+- **Action:** bump the pin **13.2.1 → 13.3** with the values above across `gpu_target.py`
+  (`TESSERA_TARGET_CUDA_TOOLKIT` / `_CUDA_DRIVER_MIN` / `_PTX_ISA` / `_NCCL_MIN`),
+  `cmake/TesseraToolchainPins.cmake`, the C++ pin header, and the byte-identical cross-language
+  consistency test. All values are now grounded — no blockers.
 
 ### CUDA 13.3 toolchain → Tessera component map (grounded from NVIDIA docs, 2026-06-17)
 

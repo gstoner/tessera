@@ -5,10 +5,10 @@ authority: Companion to Phase G NVIDIA backend pre-work
 last_updated: 2026-05-11
 ---
 
-# NVIDIA CUDA 13.2 Update 1 Kernel Inventory
+# NVIDIA CUDA 13.3 Kernel Inventory
 
 > Hardware-free reference enumerating every fused kernel Tessera plans
-> to ship on NVIDIA SM_90+ under CUDA Toolkit 13.2 Update 1. Companion
+> to ship on NVIDIA SM_90+ under CUDA Toolkit 13.3. Companion
 > to `docs/apple_gpu_kernel_inventory.md` and
 > the backend manifest. Each entry locks the WGMMA tile
 > shape, dtype matrix, cluster size, expected MFU, and roofline target
@@ -17,8 +17,8 @@ last_updated: 2026-05-11
 This document is the **authoritative kernel inventory** for the
 NVIDIA backend. It captures:
 
-1. The **toolchain pin** — CUDA Toolkit 13.2 Update 1 (PTX ISA 8.6,
-   NCCL 2.22, driver ≥555.85).
+1. The **toolchain pin** — CUDA Toolkit 13.3 (PTX ISA 9.3,
+   NCCL ≥2.22 floor (13.3 bundles 2.30.7), driver ≥610.43.02).
 2. The **shipped + planned fused kernel surface** across SM_90 Hopper,
    SM_100 Blackwell, and SM_120 Rubin.
 3. The **WGMMA tile shape contract** per kernel (M × N × K), the
@@ -34,10 +34,10 @@ NVIDIA backend. It captures:
 
 | Pin | Value |
 |---|---|
-| CUDA Toolkit | **13.2 Update 1** |
-| Driver minimum | **555.85** (shipped with 13.2 U1) |
-| PTX ISA | **8.6** |
-| NCCL | **2.22** (bundled with 13.2 U1) |
+| CUDA Toolkit | **13.3** |
+| Driver minimum | **610.43.02** (min for 13.3) |
+| PTX ISA | **9.3** |
+| NCCL | **2.22** floor (13.3 bundles 2.30.7) |
 | nvcc arch strings | `sm_80`, `sm_86`, `sm_89`, `sm_90a`, `sm_100a`, `sm_120a` |
 
 Tessera's NVIDIA backend pins these in
@@ -287,14 +287,14 @@ cp.async.bulk.wait_group
 | Gate | What it means | When it lifts |
 |---|---|---|
 | `artifact_only` (current state) | Target IR + PTX text are well-formed; lit fixtures pass FileCheck; no execution | now |
-| `compileable` | `ptxas -arch=sm_90a` accepts the emitted PTX; produces a valid cubin; **without execution** | once CUDA Toolkit 13.2 U1 is installed on the dev box (no GPU needed) |
+| `compileable` | `ptxas -arch=sm_90a` accepts the emitted PTX; produces a valid cubin; **without execution** | once CUDA Toolkit 13.3 is installed on the dev box (no GPU needed) |
 | `executable` | The cubin loads on a real H100/B100 and produces correct output vs CPU reference (fp64) | requires H100/B100/Rubin hardware |
 | `fused` | Performance characterized; achieves the MFU targets in §4 | requires hardware + perf tuning sprint |
 
 Today the NVIDIA backend sits at `artifact_only` across every entry.
 Sprint G-4 lit fixtures validate the IR + PTX patterns hardware-free.
 Sprint G-6/G-7/G-8 will promote entries to `compileable` once
-`nvcc 13.2 U1` runs the compile-only validation.
+`nvcc 13.3` runs the compile-only validation.
 
 ---
 
@@ -302,7 +302,7 @@ Sprint G-6/G-7/G-8 will promote entries to `compileable` once
 
 | Component | Path |
 |---|---|
-| Toolchain pin + feature matrix | `python/tessera/compiler/gpu_target.py` (CUDA 13.2 U1 block) |
+| Toolchain pin + feature matrix | `python/tessera/compiler/gpu_target.py` (CUDA 13.3 block) |
 | Per-target capability registry | `python/tessera/compiler/capabilities.py` (`nvidia_sm80`..`nvidia_sm120`) |
 | Per-kernel WGMMA shape + MFU + roofline tables | `python/tessera/compiler/backend_manifest.py` (`_NVIDIA_KERNEL_TILE_SHAPES`, `_NVIDIA_KERNEL_MFU`, `_NVIDIA_KERNEL_ROOFLINE`) |
 | BackendKernelEntry schema (G-3) | `python/tessera/compiler/backend_manifest.py` |

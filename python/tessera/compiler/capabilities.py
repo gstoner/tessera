@@ -219,7 +219,7 @@ def _apple_gpu_fused_caps() -> dict[str, OpCapability]:
 
 # Sprint G-2 (2026-05-11): expanded to match the planned NVIDIA kernel
 # inventory in `docs/nvidia_cuda13_kernel_inventory.md`.  Each entry
-# here ships a Target IR artifact under CUDA 13.2 U1.
+# here ships a Target IR artifact under CUDA 13.3.
 _NVIDIA_ARTIFACT = (
     # Matmul / contraction family
     "tessera.matmul", "tessera.batched_gemm", "tessera.einsum",
@@ -301,7 +301,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         features=("reference_execution", "host_runtime"),
     ),
     # Sprint G-1 (2026-05-11): NVIDIA capability matrix pinned to
-    # CUDA 13.2 Update 1.  Each entry's `features` tuple records the
+    # CUDA 13.3.  Each entry's `features` tuple records the
     # subset of `cuda_feature_set(isa)` flags that are functional under
     # 13.2 U1; `supported_dtypes` mirrors `_TENSOR_CORE_DTYPES[isa]`
     # filtered to canonical Tessera dtype strings (TF32 is a math_mode,
@@ -312,7 +312,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="NVIDIA Ampere artifact ships under CUDA 13.2 U1; executable smoke is hardware-gated"),
+        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="NVIDIA Ampere artifact ships under CUDA 13.3; executable smoke is hardware-gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "int8"),
         features=("wmma", "cp_async", "mbarrier", "cuda_13_2_u1"),
     ),
@@ -322,7 +322,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="NVIDIA SM90 WGMMA/TMA artifact ships under CUDA 13.2 U1; executable smoke is hardware-gated"),
+        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="NVIDIA SM90 WGMMA/TMA artifact ships under CUDA 13.3; executable smoke is hardware-gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(
             "wgmma", "wgmma_sparse", "tma", "tma_swizzle_128b",
@@ -336,7 +336,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="Blackwell artifact ships under CUDA 13.2 U1; executable smoke is hardware-gated"),
+        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="Blackwell artifact ships under CUDA 13.3; executable smoke is hardware-gated"),
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp64",
             "fp8_e4m3", "fp8_e5m2",
@@ -357,7 +357,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 Blackwell consumer (RTX 50-series / GB20x) artifact under CUDA 13.2 U1; FP4 via mma.sync.block_scale (no tcgen05/TMEM — those are sm_100a); executable smoke is hardware-gated"),
+        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 Blackwell consumer (RTX 50-series / GB20x) artifact under CUDA 13.3; FP4 via mma.sync.block_scale (no tcgen05/TMEM — those are sm_100a); executable smoke is hardware-gated"),
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp64",
             "fp8_e4m3", "fp8_e5m2",

@@ -18,7 +18,7 @@ in five minutes.
 - Python 3.10+
 - pip
 
-GPU artifact validation is pinned to CUDA 13.2 Update 1 for NVIDIA and ROCm
+GPU artifact validation is pinned to CUDA 13.3 for NVIDIA and ROCm
 7.2.3 for AMD. Native GPU execution is hardware-gated by target; all examples
 here run on CPU so no accelerator is needed to start.
 

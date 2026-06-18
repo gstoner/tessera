@@ -61,7 +61,7 @@ difference from the existing rung-2.5 work: that targets **sm_90a WGMMA** (Hoppe
 | Stage | Rung | What | Gate |
 |-------|------|------|------|
 | **A. Emit (sm_120)** | 2.5 | New emit path: bf16/fp16 `mma.sync.aligned.m16n8k16` PTX for `sm_120a` (parallel to the existing sm_90a `wgmma` emitter). Host-free structural validator. Then the FP4 headline: `mma.sync…block_scale` (m16n8k64, E2M1). | none — **can start now** |
-| **B. Assemble** | 3 | `ptxas --gpu-name=sm_120a` (or `nvcc -arch=sm_120a`) compiles A to a real cubin. CUDA ≥ 12.8 supports sm_120; Tessera pins 13.2 U1. Skip-clean when toolkit absent (like the existing ptxas rung). | CUDA toolkit on the box |
+| **B. Assemble** | 3 | `ptxas --gpu-name=sm_120a` (or `nvcc -arch=sm_120a`) compiles A to a real cubin. CUDA ≥ 12.8 supports sm_120; Tessera pins 13.3. Skip-clean when toolkit absent (like the existing ptxas rung). | CUDA toolkit on the box |
 | **C. Launch** | 6 | Register a CUDA launcher into the C-ABI bridge `tsrRegisterGpuLauncher` (landed G7, `../BACKEND_AUDIT.md`); HIPRTC-equivalent is NVRTC + `cuModuleLoadData` / `cuLaunchKernel`. | the box + R570+ driver |
 | **D. Prove** | 7 | Execute-and-compare the sm_120 bf16 `mma.sync` GEMM vs numpy (Evaluator vertical oracle); flip `backend_kernel` for `tessera.matmul` on `nvidia_sm120` to a real-execution status. **First real NVIDIA `backend_kernel` proof.** Then NVFP4 via block_scale. | the box |
 
@@ -145,10 +145,10 @@ Memory Model, **Operations**, Debug Info, **Stability**, Optimization Guide, App
 
 *Remaining unknowns:* the MMA op mnemonic (§8.7+) and the MLIR dialect's concrete name/op set.
 
-## Toolkit: the box runs CUDA 13.3 (bump the pin from 13.2 U1)
+## Toolkit: the box runs CUDA 13.3 (pin bumped 13.2.1 → 13.3 — LANDED 2026-06-18)
 
-The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Tessera's pinned
-**13.2.1**. 13.3 is materially better for this work:
+The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin **has been bumped
+13.2.1 → 13.3** (this section's table). 13.3 is materially better for this work:
 - **CUDA Tile C++** — tile programming in CUDA C++ with **NVCC *and* NVRTC**. This is the C++ sibling
   of the Tile IR / cuTile path above; the **NVRTC** half is a *runtime* tile-compile lane that drops
   straight onto Tessera's `tsrRegisterGpuLauncher` bridge (emit tile program → NVRTC → load → launch).
@@ -160,20 +160,23 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Te
   Architectures") — the Tile C++/Tile IR path is **not** Blackwell-only; it covers Ampere→Blackwell
   (sm_80/90/100/103/120/121). So one tile-lowering path serves *every* Tessera NVIDIA target, not just
   sm_120 — strengthening "lower to Tile IR" over per-arch PTX.
-- **Grounded 13.3 pin values — all four, ready for the bump:**
+- **Pin values — landed:**
 
-  | pin | 13.2.1 (current) | **13.3 (target)** | source |
+  | pin | was (13.2.1) | **now (13.3)** | source |
   |---|---|---|---|
   | CUDA toolkit | 13.2.1 | **13.3** | release notes |
   | min Linux driver | 555.85 | **610.43.02** | release notes Table 3 |
   | PTX ISA | 8.6 | **9.3** | release notes, CUDA Compiler features |
-  | NCCL | 2.22 | **2.30.7** | NCCL release notes (`2.30.7-1+cuda13.3`, 9-Jun-2026) |
+  | NCCL | 2.22 | **2.22** (floor kept; 13.3 bundles 2.30.7) | NCCL `2.30.7-1+cuda13.3` is the bundle, but the *minimum* floor stays 2.22 (backward-compatible; in sync with RCCL 2.22) |
 
   Tile C++ is presented as a shipped feature (nvcc + NVRTC), no "preview" label.
-- **Action:** bump the pin **13.2.1 → 13.3** with the values above across `gpu_target.py`
-  (`TESSERA_TARGET_CUDA_TOOLKIT` / `_CUDA_DRIVER_MIN` / `_PTX_ISA` / `_NCCL_MIN`),
-  `cmake/TesseraToolchainPins.cmake`, the C++ pin header, and the byte-identical cross-language
-  consistency test. All values are now grounded — no blockers.
+- **Done (2026-06-18):** pin bumped **13.2.1 → 13.3** across `gpu_target.py`
+  (`TESSERA_TARGET_CUDA_TOOLKIT` / `_CUDA_DRIVER_MIN` / `_PTX_ISA`; `_NCCL_MIN` floor unchanged),
+  `cmake/TesseraToolchainPins.cmake`, the C++ pin header (`AdapterVersionPin.h`), `Passes.cpp`,
+  `ptx_emit.py` (PTX `.version 9.3`), `backend_manifest.py` (`nvcc_version_min`), `capabilities.py`
+  provenance, `nvidia_cuda13_kernel_inventory.md`, and the byte-identical cross-language consistency
+  tests. The per-SM `ready/tba` feature readiness was *not* re-evaluated for 13.3 (separate grounded
+  task). Silicon execution (rungs 6-7) still gated on the sm_120 box.
 
 ### CUDA 13.3 toolchain → Tessera component map (grounded from NVIDIA docs, 2026-06-17)
 

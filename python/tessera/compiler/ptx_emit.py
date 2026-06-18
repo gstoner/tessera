@@ -18,7 +18,7 @@ list, which this skeleton deliberately omits (and which cannot be made
 ptxas-correct without the toolchain, absent on the arm64 dev host). So:
 
   * :func:`validate_ptx_structure` checks the PTX scaffolding + that the emitted
-    WGMMA mnemonic matches the requested tile/dtype per the CUDA-13.2 inventory —
+    WGMMA mnemonic matches the requested tile/dtype per the CUDA-13.3 inventory —
     verifiable *here*, no toolchain. This is what earns rung 2.5.
   * :func:`ptxas_assemble` invokes real ``ptxas`` (rung 3) — **Linux-CI only**;
     it skip-cleans when the toolchain is absent. It is expected to report what is
@@ -35,8 +35,8 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-# CUDA Toolkit 13.2 Update 1 → PTX ISA 8.6 (matches gpu_target.py's pin).
-PTX_ISA_VERSION = "8.6"
+# CUDA Toolkit 13.3 → PTX ISA 9.3 (matches gpu_target.py's pin).
+PTX_ISA_VERSION = "9.3"
 
 # Documented canonical Hopper WGMMA bf16 tiles (docs/nvidia_cuda13_kernel_inventory.md).
 _WGMMA_BF16_CANONICAL: frozenset[tuple[int, int, int]] = frozenset(

@@ -260,7 +260,7 @@ def _eval_toolchain(target: str, op_name: Optional[str]) -> GateResult:
         if shutil.which("nvcc"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "nvcc present")
         return GateResult(GATE_TOOLCHAIN, STATUS_FAIL,
-                          "nvcc not on PATH (CUDA Toolkit 13.2.1 not installed)")
+                          "nvcc not on PATH (CUDA Toolkit 13.3 not installed)")
     if target == "rocm":
         if shutil.which("hipcc"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "hipcc present")

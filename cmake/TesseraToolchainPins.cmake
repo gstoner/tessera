@@ -3,7 +3,7 @@
 # Validates that the CUDA / HIP toolchains present on the build box
 # match the versions Tessera's NVIDIA / ROCm backends are pinned to:
 #
-#   * CUDA Toolkit 13.2 Update 1 (matches TESSERA_TARGET_CUDA_TOOLKIT
+#   * CUDA Toolkit 13.3 (matches TESSERA_TARGET_CUDA_TOOLKIT
 #     in python/tessera/compiler/gpu_target.py)
 #   * ROCm 7.2.3 + HIP 7.2.3 (matches TESSERA_TARGET_ROCM in
 #     python/tessera/compiler/rocm_target.py)
@@ -15,7 +15,7 @@
 # Usage from top-level CMakeLists.txt:
 #
 #     include(cmake/TesseraToolchainPins.cmake)
-#     tessera_pin_cuda_toolkit(13.2)        # exits with error if version <13.2
+#     tessera_pin_cuda_toolkit(13.3)        # exits with error if version <13.3
 #     tessera_pin_rocm(7.2.3)               # exits with error if version <7.2.3
 #
 # Both functions are no-ops when TESSERA_SKIP_TOOLCHAIN_PIN is set, so
@@ -25,10 +25,10 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Pinned versions — kept in sync with the Python source of truth.
-set(TESSERA_REQUIRED_CUDA_VERSION   "13.2"   CACHE STRING "Required CUDA Toolkit major.minor version")
-set(TESSERA_REQUIRED_CUDA_DRIVER    "555.85" CACHE STRING "Required minimum CUDA driver version")
-set(TESSERA_REQUIRED_PTX_ISA        "8.6"    CACHE STRING "Required minimum PTX ISA version")
-set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"   CACHE STRING "Required minimum NCCL version")
+set(TESSERA_REQUIRED_CUDA_VERSION   "13.3"      CACHE STRING "Required CUDA Toolkit major.minor version")
+set(TESSERA_REQUIRED_CUDA_DRIVER    "610.43.02" CACHE STRING "Required minimum CUDA driver version")
+set(TESSERA_REQUIRED_PTX_ISA        "9.3"       CACHE STRING "Required minimum PTX ISA version")
+set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum NCCL version (floor; 13.3 bundles 2.30.7)")
 
 set(TESSERA_REQUIRED_ROCM_VERSION   "7.2.3"  CACHE STRING "Required minimum ROCm version")
 set(TESSERA_REQUIRED_HIP_VERSION    "7.2.3"  CACHE STRING "Required minimum HIP version")
@@ -51,7 +51,7 @@ function(tessera_pin_cuda_toolkit required_version)
             "CUDAToolkit version was reported by find_package.")
     endif()
 
-    # CUDAToolkit_VERSION has format like "13.2.123"
+    # CUDAToolkit_VERSION has format like "13.3.0"
     if(CUDAToolkit_VERSION VERSION_LESS ${required_version})
         message(FATAL_ERROR
             "Tessera requires CUDA Toolkit >= ${required_version} (matching the "

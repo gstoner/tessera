@@ -34,11 +34,11 @@ class TestCUDA13ToolchainPin:
             TESSERA_TARGET_PTX_ISA,
             TESSERA_TARGET_NCCL_MIN,
         )
-        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.2.1"
-        # Driver pin should be a 3-part version string like 555.85 etc.
+        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.3"
+        # Driver pin should be a dotted version string like 610.43.02 etc.
         assert "." in TESSERA_TARGET_CUDA_DRIVER_MIN
-        assert TESSERA_TARGET_PTX_ISA == "8.6"
-        assert TESSERA_TARGET_NCCL_MIN == "2.22"
+        assert TESSERA_TARGET_PTX_ISA == "9.3"
+        assert TESSERA_TARGET_NCCL_MIN == "2.22"   # floor stays 2.22 (13.3 bundles 2.30.7)
 
     def test_nvcc_arch_strings(self):
         from tessera.compiler.gpu_target import GPUTargetProfile, ISA

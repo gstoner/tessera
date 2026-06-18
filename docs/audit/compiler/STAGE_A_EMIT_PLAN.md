@@ -33,7 +33,7 @@ storage from accumulator, exactly Tessera's `numeric_policy{storage, accum}`.
 
 **Toolchain (the box runs these):** NVIDIA **CUDA 13.3** (driver 610.43.02 / PTX ISA 9.3 / NCCL
 2.30.7); AMD **ROCm 7.2.x** (gfx1151 officially supported on the Radeon/Ryzen track); Apple **MSL 4.0 /
-macOS 26.5.1** (M1 Max = Apple7). CUDA pin bump 13.2.1 → 13.3 is fully grounded and unblocked.
+macOS 26.5.1** (M1 Max = Apple7). CUDA pin bumped 13.2.1 → 13.3 (landed 2026-06-18).
 
 **Process learning (this whole arc):** ground every hardware/ISA/API claim against the authoritative
 spec, not marketing or memory (Decision #27). It repeatedly mattered — caught the sm_120-as-Rubin
@@ -99,9 +99,13 @@ for). The structural validators are what earn rung 2.5.
 
 ## 4. Next steps (in dependency order)
 
-1. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
-   coordinated edit across `gpu_target.py` / `TesseraToolchainPins.cmake` / the C++ pin header / the
-   byte-identical consistency test.
+1. **CUDA pin bump 13.2.1 → 13.3** — *landed 2026-06-18.* Coordinated edit across `gpu_target.py`
+   (toolkit 13.3 / driver 610.43.02 / PTX ISA 9.3; NCCL floor kept at 2.22 — it's a minimum, 13.3
+   bundles 2.30.7 but backward-compat keeps the floor in sync with RCCL 2.22),
+   `TesseraToolchainPins.cmake`, the C++ pin header (`AdapterVersionPin.h`), `Passes.cpp`, `ptx_emit.py`
+   (PTX `.version 9.3`), `backend_manifest.py` (`nvcc_version_min`), `capabilities.py` provenance, the
+   `nvidia_cuda13_kernel_inventory.md` doc, and the byte-identical cross-language consistency tests.
+   The per-SM `ready/tba` feature readiness was *not* re-evaluated for 13.3 (separate grounded task).
 2. **AMD: grow `rocdl_emit` toward a real GEMM** — *in progress, four steps landed; the operand
    layout is now complete.* `emit_wmma_gemm_llvmir` added the **K-reduction GEMM tile** (`<8 x float>`
    accumulator PHI + global A/B loads + `wmma` in the loop); `emit_wmma_gemm_layout_llvmir` added the

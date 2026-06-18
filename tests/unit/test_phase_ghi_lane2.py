@@ -58,10 +58,10 @@ class TestG5PipelineAlias:
         ):
             assert stage in body, f"pipeline missing {stage}"
 
-    def test_pipeline_description_mentions_cuda_13_2_u1(self):
+    def test_pipeline_description_mentions_cuda_13_3(self):
         body = (REPO / "src" / "transforms" / "lib" / "Passes.cpp").read_text()
-        assert "CUDA 13.2 U1" in body
-        assert "PTX ISA 8.6" in body or "PTX ISA 8.6," in body
+        assert "CUDA 13.3" in body
+        assert "PTX ISA 9.3" in body or "PTX ISA 9.3," in body
 
     def test_lit_fixture_for_pipeline_alias_exists(self):
         fixture = REPO / "tests" / "tessera-ir" / "phase3" / "cuda13" / \
@@ -159,8 +159,8 @@ class TestG6H6CMakeToolchainPin:
 
     def test_pins_required_versions(self):
         body = TOOLCHAIN_CMAKE.read_text()
-        assert 'TESSERA_REQUIRED_CUDA_VERSION   "13.2"' in body
-        assert 'TESSERA_REQUIRED_PTX_ISA        "8.6"' in body
+        assert 'TESSERA_REQUIRED_CUDA_VERSION   "13.3"' in body
+        assert 'TESSERA_REQUIRED_PTX_ISA        "9.3"' in body
         assert 'TESSERA_REQUIRED_NCCL_VERSION   "2.22"' in body
         assert 'TESSERA_REQUIRED_ROCM_VERSION   "7.2.3"' in body
         assert 'TESSERA_REQUIRED_HIP_VERSION    "7.2.3"' in body
@@ -293,10 +293,10 @@ class TestG9H8CollectivePin:
         assert "TESSERA_RCCL_MIN_MAJOR 2" in body
         assert "TESSERA_RCCL_MIN_MINOR 22" in body
 
-    def test_pins_cuda_13_2_u1_marker(self):
+    def test_pins_cuda_13_3_marker(self):
         body = ADAPTER_PIN_HEADER.read_text()
-        assert 'TESSERA_TARGET_CUDA_TOOLKIT "13.2.1"' in body
-        assert 'TESSERA_TARGET_PTX_ISA      "8.6"' in body
+        assert 'TESSERA_TARGET_CUDA_TOOLKIT "13.3"' in body
+        assert 'TESSERA_TARGET_PTX_ISA      "9.3"' in body
 
     def test_pins_rocm_7_2_3(self):
         body = ADAPTER_PIN_HEADER.read_text()
@@ -362,7 +362,7 @@ class TestToolchainPinConsistency:
             TESSERA_TARGET_PTX_ISA,
             TESSERA_TARGET_NCCL_MIN,
         )
-        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.2.1"
+        assert TESSERA_TARGET_CUDA_TOOLKIT == "13.3"
 
         cmake_body = TOOLCHAIN_CMAKE.read_text()
         assert TESSERA_TARGET_PTX_ISA in cmake_body

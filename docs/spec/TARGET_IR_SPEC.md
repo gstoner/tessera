@@ -76,7 +76,7 @@ runtime ABI. Use `RUNTIME_ABI_SPEC.md` for the C ABI contract.
 | x86 AMX / AVX-512 | ✅ `tessera.x86.*` | ✅ Phase 2 | Only fully wired exec path today |
 | Apple CPU | ✅ `tessera_apple.cpu.*` | ✅ Phase 8.2 (Accelerate cblas + BNNS f16/bf16) | bf16 GEMM via BNNS |
 | Apple GPU | ✅ `tessera_apple.gpu.*` plus packaged-kernel binding contracts | ✅ MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and PK1–PK7 packaged `.mtlpackage` lifecycle on capable Darwin hosts | Metal buffer pool, Metal 4 capability gates, `AppleTensorBindingSpec` / `AppleKernelBindingSpec` reflection validation |
-| NVIDIA SM_80+ | ✅ `tessera_nvidia.*` ODS + WGMMA placeholders | 🟡 IR artifact; gated on Phase G hardware | Sprint G-1 pins CUDA 13.2 U1 |
+| NVIDIA SM_80+ | ✅ `tessera_nvidia.*` ODS + WGMMA placeholders | 🟡 IR artifact; gated on Phase G hardware | Sprint G-1 pins CUDA 13.3 |
 | ROCm gfx90a / 940 / 942 / 950 / 1100 | ✅ `tessera_rocm.*` ODS + MFMA table | 🟡 artifact only; gated on Phase H | Sprint H-1 pins ROCm 7.2.3 |
 
 Architecture Decision #21 (CLAUDE.md): when a backend cannot lower an

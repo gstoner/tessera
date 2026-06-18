@@ -100,10 +100,10 @@ class TestG3SchemaExtension:
         from tessera.compiler.backend_manifest import BackendKernelEntry
         e = BackendKernelEntry(
             target="nvidia_sm90", status="artifact_only",
-            nvcc_version_min="13.2.1",
+            nvcc_version_min="13.3",
         )
-        assert e.nvcc_version_min == "13.2.1"
-        assert e.as_dict()["nvcc_version_min"] == "13.2.1"
+        assert e.nvcc_version_min == "13.3"
+        assert e.as_dict()["nvcc_version_min"] == "13.3"
 
     def test_hipcc_version_min_field(self):
         from tessera.compiler.backend_manifest import BackendKernelEntry
@@ -152,7 +152,7 @@ class TestG3ManifestWiring:
         sm90 = entries["nvidia_sm90"]
         assert sm90.wgmma_shape == (64, 256, 16)
         assert sm90.cuda_arch_min == "sm_90a"
-        assert sm90.nvcc_version_min == "13.2.1"
+        assert sm90.nvcc_version_min == "13.3"
 
     def test_nvidia_flash_attn_carries_cluster_size(self):
         from tessera.compiler.backend_manifest import manifest_for
@@ -216,7 +216,7 @@ class TestG2NvidiaInventoryDoc:
             "Planned fused kernel inventory",
             "PTX assembly patterns",
             "Execution gates",
-            "13.2 Update 1",
+            "CUDA 13.3",
         ):
             assert section in doc, f"Section {section!r} missing"
 

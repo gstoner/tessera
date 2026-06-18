@@ -207,7 +207,7 @@ class BackendKernelEntry:
         for non-NVIDIA targets.
     nvcc_version_min : str | None
         Minimum nvcc release that emits this kernel correctly.  Today
-        all NVIDIA entries pin to ``"13.2.1"``.
+        all NVIDIA entries pin to ``"13.3"``.
     wgmma_shape : tuple[int, int, int] | None
         ``(M, N, K)`` for the WGMMA tile.  ``(64, 256, 16)`` is the
         canonical bf16/fp16 Hopper shape; FP8 lowers to
@@ -1924,7 +1924,7 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 "land with the actual Phase G kernel work."
             ),
             cuda_arch_min=arch_min,
-            nvcc_version_min="13.2.1",
+            nvcc_version_min="13.3",
         ))
     # ROCm — planned slot, gated on Phase H.
     entries.append(BackendKernelEntry(
@@ -2097,7 +2097,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                     else ""
                 ),
                 cuda_arch_min=arch_min,
-                nvcc_version_min="13.2.1",
+                nvcc_version_min="13.3",
                 wgmma_shape=wgmma_shape,
                 cluster_size=cluster,
                 expected_mfu=mfu,

@@ -199,14 +199,14 @@ void registerTesseraPasses() {
 
   // ── Sprint G-5 (2026-05-11) — NVIDIATargetPipeline ─────────────────────
   //
-  // CUDA 13.2 Update 1 pinned variant of `tessera-lower-to-gpu`.  The pass
+  // CUDA 13.3 pinned variant of `tessera-lower-to-gpu`.  The pass
   // order is identical (see normative reference above); this alias adds:
   //
   //   * Toolchain pin recorded as the pipeline description (lit fixtures
   //     and `tessera-mlir` introspection can verify the pin via the
   //     `--help` text).
   //   * Hardware-free target contract: every pass below emits IR that
-  //     CUDA 13.2 U1 `nvcc -ptx -arch=sm_90a` accepts — verified by
+  //     CUDA 13.3 `nvcc -ptx -arch=sm_90a` accepts — verified by
   //     Lane-2 compile-only checks (Sprint G-6/G-8).
   //   * Pre-canonical attention-family fusion (SwiGLU / MLA / NSA / hybrid
   //     / Lightning / Delta) so backend lowering sees the fused ops.
@@ -241,28 +241,28 @@ void registerTesseraPasses() {
 
   ::mlir::PassPipelineRegistration<>
     nvidiaPipeline("tessera-nvidia-pipeline",
-                   "Sprint G-5: NVIDIATargetPipeline (CUDA 13.2 U1, default SM_90) — "
+                   "Sprint G-5: NVIDIATargetPipeline (CUDA 13.3, default SM_90) — "
                    "WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering. "
-                   "Toolchain pin: nvcc 13.2 U1, PTX ISA 8.6, NCCL 2.22.",
+                   "Toolchain pin: nvcc 13.3, PTX ISA 9.3, NCCL 2.22.",
                    buildCUDA13Pipeline);
 
   ::mlir::PassPipelineRegistration<>
     nvidiaPipelineSM90("tessera-nvidia-pipeline-sm90",
                        "Sprint G-5: NVIDIATargetPipeline pinned to SM_90 (Hopper) "
-                       "under CUDA 13.2 U1.  Emits WGMMA + TMA + mbarrier paths.",
+                       "under CUDA 13.3.  Emits WGMMA + TMA + mbarrier paths.",
                        buildCUDA13Pipeline);
 
   ::mlir::PassPipelineRegistration<>
     nvidiaPipelineSM100("tessera-nvidia-pipeline-sm100",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_100 (Blackwell) "
-                        "under CUDA 13.2 U1.  Emits TCGEN05 / TMEM / block-scaled MMA "
+                        "under CUDA 13.3.  Emits TCGEN05 / TMEM / block-scaled MMA "
                         "paths via the WGMMA lowering's sm=100 mode.",
                         buildCUDA13Pipeline);
 
   ::mlir::PassPipelineRegistration<>
     nvidiaPipelineSM120("tessera-nvidia-pipeline-sm120",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_120 (Rubin) "
-                        "under CUDA 13.2 U1 (preliminary intrinsic set).",
+                        "under CUDA 13.3 (preliminary intrinsic set).",
                         buildCUDA13Pipeline);
 }
 } // namespace tessera

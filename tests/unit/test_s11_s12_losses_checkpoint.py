@@ -78,11 +78,11 @@ def test_save_load_state_partial_and_migration(tmp_path):
     }
     path = tmp_path / "state.tessera.npz"
     ts.checkpoint.save_state(state, path, version=1, metadata={"model": "tiny"})
-    loaded = ts.checkpoint.load_state(path)
+    loaded = ts.checkpoint.load_state(path, trust_treedef=True)
     np.testing.assert_array_equal(loaded["params"]["w"], state["params"]["w"])
     np.testing.assert_array_equal(loaded["optimizer_slots"]["m"], state["optimizer_slots"]["m"])
 
-    partial = ts.checkpoint.load_state(path, collections=("params",))
+    partial = ts.checkpoint.load_state(path, collections=("params",), trust_treedef=True)
     assert set(partial) == {"params"}
 
     @ts.checkpoint.state_migration(1, 2)
@@ -92,7 +92,7 @@ def test_save_load_state_partial_and_migration(tmp_path):
         tree["metrics"]["version"] = np.array(2, dtype=np.int64)
         return tree
 
-    migrated = ts.checkpoint.load_state(path, target_version=2)
+    migrated = ts.checkpoint.load_state(path, target_version=2, trust_treedef=True)
     assert migrated["metrics"]["version"] == 2
 
 
@@ -106,12 +106,12 @@ def test_save_load_state_detects_checksum_mismatch(tmp_path):
     with path.open("wb") as f:
         np.savez(f, **payload)
     with pytest.raises(ts.checkpoint.CheckpointError, match="checksum mismatch"):
-        ts.checkpoint.load_state(path)
+        ts.checkpoint.load_state(path, trust_treedef=True)
 
 
 def test_save_load_sharded_state_round_trip(tmp_path):
     mesh = ts.NamedMesh(("dp",), (2,))
     state = {"params": {"w": np.array([[1.0, 2.0]], dtype=np.float32)}}
     root = ts.checkpoint.save_sharded(state, tmp_path / "sharded", mesh)
-    loaded = ts.checkpoint.load_sharded(root, mesh)
+    loaded = ts.checkpoint.load_sharded(root, mesh, trust_treedef=True)
     np.testing.assert_array_equal(loaded["params"]["w"], state["params"]["w"])

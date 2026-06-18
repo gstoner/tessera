@@ -404,7 +404,16 @@ def save_sharded(
     return root
 
 
-def load_sharded(path: str | os.PathLike, mesh: Any | None = None) -> Any:
+def load_sharded(
+    path: str | os.PathLike,
+    mesh: Any | None = None,
+    *,
+    trust_treedef: bool | None = None,
+) -> Any:
+    """Load a sharded checkpoint. ``trust_treedef`` is forwarded to
+    :func:`load_state` (the sharded path unpickles a ``__treedef__`` blob exactly
+    like the single-file path) — pass ``trust_treedef=False`` for untrusted sources,
+    ``True`` for your own pipeline. See :func:`load_state` for the security note."""
     root = Path(path)
     manifest_path = root / "manifest.json"
     if not manifest_path.exists() or not (root / "COMMITTED").exists():
@@ -412,7 +421,7 @@ def load_sharded(path: str | os.PathLike, mesh: Any | None = None) -> Any:
     manifest = json.loads(manifest_path.read_text())
     if mesh is not None and manifest.get("mesh", {}).get("size") not in (None, _mesh_metadata(mesh).get("size")):
         raise CheckpointError("mesh size mismatch while loading sharded checkpoint")
-    return load_state(root / manifest["shards"][0]["path"])
+    return load_state(root / manifest["shards"][0]["path"], trust_treedef=trust_treedef)
 
 
 def register_state_migration(from_version: int, to_version: int, fn: Callable[[Any], Any]) -> Callable[[Any], Any]:

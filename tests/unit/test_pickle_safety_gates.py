@@ -63,6 +63,18 @@ def test_checkpoint_load_state_exposes_trust_treedef() -> None:
     )
 
 
+def test_checkpoint_load_sharded_forwards_trust_treedef() -> None:
+    # The sharded loader unpickles a __treedef__ exactly like load_state, so it must
+    # expose the same opt-out (it forwards to load_state internally).
+    from tessera import checkpoint
+
+    sig = inspect.signature(checkpoint.load_sharded)
+    assert "trust_treedef" in sig.parameters, (
+        "checkpoint.load_sharded must forward `trust_treedef` to load_state "
+        "so sharded checkpoints from untrusted sources can opt out of pickle"
+    )
+
+
 def test_checkpoint_load_state_refuses_untrusted_treedef(tmp_path) -> None:
     """``trust_treedef=False`` is the strict path — even on a clean
     artifact it refuses to unpickle the treedef."""
@@ -75,13 +87,31 @@ def test_checkpoint_load_state_refuses_untrusted_treedef(tmp_path) -> None:
     ckpt = tmp_path / "state.npz"
     checkpoint.save_state(state, ckpt)
 
-    # Default path still works (trust_treedef=True).
-    loaded = checkpoint.load_state(ckpt)
+    # Explicit-trust path works (and does not warn).
+    loaded = checkpoint.load_state(ckpt, trust_treedef=True)
     assert "params" in loaded
 
     # Explicit opt-out raises with a precise diagnostic.
     with pytest.raises(checkpoint.CheckpointError, match="trust_treedef=False"):
         checkpoint.load_state(ckpt, trust_treedef=False)
+
+
+def test_checkpoint_load_state_implicit_default_warns(tmp_path) -> None:
+    """Calling ``load_state`` without an explicit ``trust_treedef=`` emits a
+    DeprecationWarning (the implicit-trust default is on its way out). Locking it
+    here keeps the contract covered AND keeps the warning from leaking as test
+    noise elsewhere — every other call site passes ``trust_treedef=`` explicitly."""
+    import numpy as np
+
+    from tessera import checkpoint
+
+    state = {"params": {"w": np.zeros((2, 2), dtype=np.float32)}}
+    ckpt = tmp_path / "state.npz"
+    checkpoint.save_state(state, ckpt)
+
+    with pytest.warns(DeprecationWarning, match="trust_treedef"):
+        loaded = checkpoint.load_state(ckpt)
+    assert "params" in loaded
 
 
 def test_checkpoint_load_state_docstring_warns_about_pickle() -> None:

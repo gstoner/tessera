@@ -124,7 +124,7 @@ def test_s8_cross_cutting_state_rng_data_quant_sharding_checkpoint_and_aot(tmp_p
 
     ckpt = tmp_path / "s8_state.npz"
     ts.checkpoint.save_state({"params": stepped, "metrics": {"loss": np.asarray(first.loss(params, batch))}}, ckpt)
-    loaded = ts.checkpoint.load_state(ckpt, collections=("params",))
+    loaded = ts.checkpoint.load_state(ckpt, collections=("params",), trust_treedef=True)
     np.testing.assert_allclose(loaded["params"]["w"], stepped["w"])
 
     artifact = ts.aot.export(first.compile_fn, *first.compile_inputs, target="cpu", path=tmp_path / "aot")

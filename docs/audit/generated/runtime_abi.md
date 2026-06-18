@@ -171,7 +171,7 @@ Pins declared in Python (`gpu_target.py` / `rocm_target.py`) and CMake (`cmake/T
 | Source | Declared value |
 |--------|----------------|
 | `python_gpu_target` | _not found_ |
-| `cmake_pins` | `13.2` |
+| `cmake_pins` | `13.3` |
 
 ✅ Sources agree.
 

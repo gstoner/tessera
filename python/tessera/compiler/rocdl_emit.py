@@ -287,23 +287,32 @@ def emit_wmma_gemm_store_llvmir(
     arch: str = "gfx1151",
     entry: str | None = None,
 ) -> str:
-    """Emit the WMMA GEMM with the operand layout **and** the grounded **D→C output
-    element store** — the last piece of the WMMA operand layout.
+    """Emit the WMMA GEMM with the **complete operand layout** — lane replication,
+    the **column-major A load**, the nt B load, **and** the grounded **D→C output
+    element store**. The most-complete RDNA3-class WMMA GEMM emit.
 
-    Builds on :func:`emit_wmma_gemm_layout_llvmir` (lane replication + nt loads) and
-    replaces the lane-contiguous store with the grounded mapping: for wave32 fp32
-    output, lane ``L`` register ``ele`` (0-7) → ``D[2*ele + L/16][L % 16]``
-    (8 strided scalar stores). Source: the **GPUOpen RDNA3 WMMA blog** — the
-    RDNA3.5 ISA §7.9 does *not* tabulate this layout (it points to that blog + the
-    AMD Matrix Instruction Calculator; the tabulated "Matrix Element Storage in
-    VGPRs" is an RDNA *4* addition, §7.12.2).
+    Three grounded layout rules, all from the **GPUOpen RDNA3 WMMA blog** (the
+    RDNA3.5 ISA §7.9 references the blog + the AMD Matrix Instruction Calculator
+    rather than tabulating the layout; the tabulated "Matrix Element Storage in
+    VGPRs" is an RDNA *4* §7.12.2 addition):
 
-    **Honesty ceiling.** The store layout is grounded from the blog and `llc`-
-    compiles, but two caveats stand: (1) per the blog, the WMMA **A matrix is
-    column-major** (B/C/D row-major) — the A *load* here is still the row-major nt
-    convention, a load-side correction to make; (2) `llc` verifies the instruction
-    sequence, not the math — *numerical* correctness needs the AMD Matrix
-    Instruction Calculator cross-check or real silicon (rungs 6-7)."""
+      * **A is column-major** — ``a_frag[ele] = a[16*lane + ele]``: the lane selects
+        the K-column, and the contiguous 16-element run walks the A-tile rows
+        (``ele`` = output row m). Generalized across K-tiles, column ``= k0 + lane``
+        and the column-major base ``= (k0+lane)*16`` (leading dim = the 16 A-tile
+        rows). This *corrects* the earlier row-major A load.
+      * **B is row-major** — the blog form is ``b[16*ele + lane]`` (strided). Here B
+        is supplied pre-transposed (``Bt``, N×K) so the per-lane load is the
+        equivalent **contiguous** ``nt`` form (lane = N column, contiguous over K) —
+        a perf layout, same operand values.
+      * **D→C output store** — wave32 fp32 lane ``L`` register ``ele`` (0-7) →
+        ``D[2*ele + L/16][L % 16]`` (8 strided scalar stores).
+
+    **Honesty ceiling.** The full layout is grounded from the blog and `llc`-
+    compiles to a real ``v_wmma_*`` + ``v_and_b32`` + strided ``global_store``, but
+    `llc` verifies the instruction sequence, not the math — *numerical* correctness
+    needs the AMD Matrix Instruction Calculator cross-check or real silicon
+    (rungs 6-7)."""
     if arch not in _RDNA3_CLASS_ARCHES:
         raise ValueError(
             f"arch {arch!r} not supported — RDNA3-class only "
@@ -313,11 +322,11 @@ def emit_wmma_gemm_store_llvmir(
     a_ty = f"<{_A_LEN} x {elem}>"
     acc_ty = f"<{_ACC_LEN} x float>"
     name = entry or f"tessera_wmma_gemm_store_{dtype}"
-    return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM, operand layout + grounded D->C store ({arch}).
-; Lane replication (lane & 15) + nt contiguous loads + the D->C output mapping:
-; wave32 fp32 lane L reg ele(0-7) -> D[2*ele + L/16][L%16] (GPUOpen RDNA3 WMMA blog;
-; the RDNA3.5 ISA 7.9 does NOT tabulate this). Caveats: A is column-major per the blog
-; (load still nt row-major = load-side TODO); numerical correctness needs silicon (rungs 6-7).
+    return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM, complete operand layout ({arch}).
+; Lane replication (lane & 15) + COLUMN-MAJOR A load (a[16*lane+ele]) + nt B load +
+; the D->C output mapping (wave32 fp32 lane L reg ele(0-7) -> D[2*ele + L/16][L%16]).
+; All three grounded in the GPUOpen RDNA3 WMMA blog (the RDNA3.5 ISA 7.9 references it
+; rather than tabulating). numerical correctness needs silicon (rungs 6-7).
 target triple = "amdgcn-amd-amdhsa"
 
 define amdgpu_kernel void @{name}(
@@ -336,10 +345,16 @@ kloop:
   br i1 %done, label %store, label %kbody
 kbody:
   %k64  = sext i32 %k to i64
-  %aidx = add i64 %rowK, %k64
-  %aptr = getelementptr {elem}, ptr addrspace(1) %A, i64 %aidx
-  %a    = load {a_ty}, ptr addrspace(1) %aptr
-  %bptr = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %aidx
+  ; A: COLUMN-MAJOR (blog: a_frag[ele] = a[16*lane + ele]). lane selects the K-column;
+  ; the contiguous 16-run walks the A-tile rows (ele = m). col = k0+lane, base = col*16.
+  %kcol = add i32 %k, %lane16                 ; A column index = k0 + lane
+  %kcol64 = sext i32 %kcol to i64
+  %acolbase = mul i64 %kcol64, 16             ; column-major leading dim = 16 A-tile rows
+  %aptr = getelementptr {elem}, ptr addrspace(1) %A, i64 %acolbase
+  %a    = load {a_ty}, ptr addrspace(1) %aptr ; A[0..15][kcol] contiguous (column-major)
+  ; B: nt pre-transposed (N x K), contiguous over K — perf form of the blog's row-major B.
+  %bidx = add i64 %rowK, %k64                 ; Bt[lane][k0..k0+15] contiguous
+  %bptr = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %bidx
   %b    = load {a_ty}, ptr addrspace(1) %bptr
   %accn = call {acc_ty} @{intr}({a_ty} %a, {a_ty} %b, {acc_ty} %acc)
   %knext = add i32 %k, 16
@@ -437,17 +452,23 @@ def validate_wmma_gemm_layout_structure(
 def validate_wmma_gemm_store_structure(
     ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
 ) -> RocdlValidation:
-    """Host-free rung-2.5 check for the operand-layout GEMM **with the grounded
-    D→C store**: the layout checks (minus the old lane-contiguous ``store <8 x
-    float>``) plus the grounded output-element markers — the ``col = lane & 15`` /
-    ``row_base = lane >> 4`` decomposition and 8 strided scalar ``store float``
-    s (one per accumulator register, the ``D[2*ele + L/16][L%16]`` mapping)."""
+    """Host-free rung-2.5 check for the **complete-layout** GEMM (column-major A +
+    nt B + grounded D→C store): the layout checks (minus the old lane-contiguous
+    ``store <8 x float>``) plus the column-major A markers (``%kcol = add i32 %k,
+    %lane16`` and the column-major ``mul i64 %kcol64, 16``) and the grounded
+    output-element markers — the ``col = lane & 15`` / ``row_base = lane >> 4``
+    decomposition and 8 strided scalar ``store float``s (the ``D[2*ele +
+    L/16][L%16]`` mapping)."""
     # Reuse the layout markers (lane replication + nt loads) but NOT the whole-
     # vector store, which the grounded mapping replaces with strided scalar stores.
     base = validate_wmma_gemm_structure(ir, dtype=dtype, arch=arch, expect_vector_store=False)
     reasons = list(base.reasons)
     if "and i32 %lane, 15" not in ir:
         reasons.append("missing the lane-replication mask (and i32 %lane, 15)")
+    if "%kcol = add i32 %k, %lane16" not in ir:
+        reasons.append("missing the column-major A column index (k0 + lane)")
+    if "mul i64 %kcol64, 16" not in ir:
+        reasons.append("missing the column-major A base (col * 16 leading dim)")
     if "lshr i32 %lane, 4" not in ir:
         reasons.append("missing the output row-base decomposition (lane >> 4)")
     n_stores = ir.count("store float %e")

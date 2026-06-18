@@ -194,6 +194,27 @@ def test_gemm_store_has_grounded_output_mapping():
     assert "extractelement <8 x float>" in ir
 
 
+def test_gemm_store_has_column_major_a_load():
+    # GPUOpen RDNA3 blog: A is column-major, a_frag[ele] = a[16*lane + ele].
+    # Generalized over K-tiles: col = k0 + lane, base = col * 16 (leading dim = 16 rows).
+    ir = emit_wmma_gemm_store_llvmir("f16")
+    assert "%kcol = add i32 %k, %lane16" in ir   # column index = k0 + lane
+    assert "mul i64 %kcol64, 16" in ir           # column-major leading dim = 16 rows
+    # the old row-major A addressing (shared %aidx for A and B) is gone.
+    assert "%aidx = add i64 %rowK" not in ir
+    # B stays nt-contiguous (pre-transposed), a distinct base from A.
+    assert "%bidx = add i64 %rowK, %k64" in ir
+
+
+def test_gemm_store_validator_catches_rowmajor_a_regression():
+    # Reverting A to the row-major shared-index load must fail validation.
+    ir = emit_wmma_gemm_store_llvmir("f16").replace(
+        "%kcol = add i32 %k, %lane16", "%kcol = add i32 %k, 0")
+    v = validate_wmma_gemm_store_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("column-major A column index" in r for r in v.reasons)
+
+
 def test_gemm_store_validator_catches_missing_rowbase():
     ir = emit_wmma_gemm_store_llvmir("f16").replace("lshr i32 %lane, 4", "add i32 %lane, 0")
     v = validate_wmma_gemm_store_structure(ir, dtype="f16")

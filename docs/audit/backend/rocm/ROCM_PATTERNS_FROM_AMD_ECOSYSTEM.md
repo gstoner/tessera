@@ -23,8 +23,9 @@ The patterns below only make sense against the current frontier (mapped from the
   emits legal WMMA LLVM-IR for RDNA 3 / 3.5 / 4 and verifies it lowers to real `v_wmma_*`
   instructions via `llc -mcpu=gfx1151` on the host. Per-arch feature/dtype and
   MFMA/WMMA shape tables are grounded in
-  [`rocm_target.py`](../../../../python/tessera/compiler/rocm_target.py) and
-  [`mfma_table.inc`](../../../../src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/mfma_table.inc).
+  [`rocm_target.py`](../../../../python/tessera/compiler/rocm_target.py) and the C++
+  `mfma_table.inc` (generated from the Python `_MFMA_VARIANTS` by
+  [`generate_mfma_table.py`](../../../../scripts/generate_mfma_table.py)).
 - **Artifact-only:** the C++ backend stops at *placeholder marker ops* in
   [`TesseraTargetToROCDL.cpp`](../../../../src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp)
   — it never emits real `rocdl.mfma.*` / `rocdl.wmma.*` intrinsics. The Python emitter

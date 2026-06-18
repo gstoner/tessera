@@ -242,6 +242,16 @@ machinery are **macOS-27.0 SDK-gated**, not hardware-gated — the same M1 Max g
 unified memory (no CPU↔GPU copies) + custom MSL kernels + `simdgroup_matrix` GEMM — the same path
 Tessera takes. Reference/numeric oracle only, **never a runtime dependency** (Decision #23).
 
+*Architecture finding (MLX source, 2026-06-17):* MLX's Metal backend mirrors Tessera's structure
+(per-op host dispatch; a JIT-MSL + precompiled dual path; a fusion compiler `compiled.cpp`; custom
+MSL kernels). Crucially, **MLX does NOT use MPS for GEMM** — it ships its own templated MSL library
+**"steel"** (`kernels/steel/{gemm,attn,conv}`) built on `metal::simdgroup_matrix` +
+`simdgroup_multiply_accumulate`, structured as a tile-fragment IR (`mma.h` fragments + `loader.h` tile
+loads + `transforms.h` fused `axpby` epilogue). The production framework chose custom
+`simdgroup_matrix` MSL over MPS for the fusion control a compiler needs — concrete support for
+Tessera's "clear-MPS / native MTL4 matmul" direction, and a blueprint for a steel-like
+simdgroup_matrix GEMM lane as the peer of NVIDIA `ct::mma`/Tile-IR and AMD `rocdl.wmma`.
+
 ## Standing Decisions (by design, not tasks)
 
 - **Auto-route is opt-in.** Making the package lane the unconditional apple_gpu

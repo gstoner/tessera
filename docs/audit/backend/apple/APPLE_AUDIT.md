@@ -217,6 +217,31 @@ Open" / "Next Work" has landed and is summarized under **Finished** above. The
 only remaining frontier is cross-backend **real-hardware** proof for NVIDIA /
 ROCm / Metalium — tracked in the per-platform audits, not here.
 
+## Hardware capability reference (grounded 2026-06-17)
+
+Grounded against the Apple **Metal Feature Set Tables** (rev 2026-05-21, the authoritative
+"when each feature is available" doc — Decision #27). GPU-family map: **M1 = Apple7**, M2 = Apple8,
+M3/M4 = Apple9, M5 = Apple10 (A14 = Apple7; all M-series support Metal 3 & 4). A feature is available
+when the Metal column (3 / 3&4 / 4) you target appears *and* the device family ≥ the Apple column.
+
+**This dev Mac (M1 Max = Apple7) already has the full Metal-4 ML *compute* surface:** `bfloat`/bf16
+(Apple6), **`simdgroup_matrix`** SIMD-scoped matrix multiply (Apple7), SIMD-scoped reductions (Apple7),
+**`MTLTensor`** + **machine-learning encoding** (Metal 4, Apple7), float atomics (Apple7). What's gated
+*past* Apple7 is overwhelmingly graphics/sparse/texture, **not** compute: full 64-bit atomics (Apple9),
+lossy/universal texture compression (Apple8/10), SIMD shift-and-fill (Apple8), sampler min-max
+reduction / depth-bounds / sampler-LOD-bias (Apple10), placement sparse (Apple8). So Apple-backend ML
+work is **not** blocked waiting on newer silicon.
+
+**The one ML gap on Apple7 is toolchain, not hardware:** the FP8/FP4/MX `MTLTensor` *dtypes*
+(`MetalFloat8E4M3/E5M2`, `MetalFloat4E2M1`, `MetalFloat8UE8M0` block-scale) + multi-plane scale-tensor
+machinery are **macOS-27.0 SDK-gated**, not hardware-gated — the same M1 Max gets them on a 27.0 SDK
+(this machine is macOS 26.5.1). The hardware-free Tessera bridge for this is
+`python/tessera/compiler/microscaling.py`.
+
+**MLX** (`ml-explore`) is the production Apple-Silicon ML framework and Tessera's Apple-lane reference:
+unified memory (no CPU↔GPU copies) + custom MSL kernels + `simdgroup_matrix` GEMM — the same path
+Tessera takes. Reference/numeric oracle only, **never a runtime dependency** (Decision #23).
+
 ## Standing Decisions (by design, not tasks)
 
 - **Auto-route is opt-in.** Making the package lane the unconditional apple_gpu

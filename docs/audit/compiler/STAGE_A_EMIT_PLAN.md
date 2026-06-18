@@ -102,16 +102,24 @@ for). The structural validators are what earn rung 2.5.
 1. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
    coordinated edit across `gpu_target.py` / `TesseraToolchainPins.cmake` / the C++ pin header / the
    byte-identical consistency test.
-2. **AMD: grow `rocdl_emit` toward a real GEMM** — *in progress, two steps landed.*
+2. **AMD: grow `rocdl_emit` toward a real GEMM** — *in progress, three steps landed.*
    `emit_wmma_gemm_llvmir` added the **K-reduction GEMM tile** (`<8 x float>` accumulator PHI + global
-   A/B loads + `wmma` in the loop), and `emit_wmma_gemm_layout_llvmir` added the **ISA §7.9 operand
+   A/B loads + `wmma` in the loop); `emit_wmma_gemm_layout_llvmir` added the **ISA §7.9 operand
    layout**: wave32 **lane replication** (lanes 0-15 → 16-31 via `lane & 15`) + the **nt contiguous
-   operand layout** (A row-major M×K, Bt transposed N×K). Both verified via `llc -mcpu=gfx1151` —
-   the AMDGCN carries a real `v_wmma_*` *and* `v_and_b32 _,15,_` (the replication) inside the K-loop.
-   Remaining: the exact **D→C output element mapping** (stored lane-contiguous today, needs the ISA D
-   layout), threadgroup tiling, the §7.9.1 V_NOP scheduling hazard, and the **gfx12 v2 wmma intrinsic
-   ABI** for gfx1200/RDNA 4. The rung-3 `llc` lane runs here, so each structural step is immediately
-   AMDGCN-verifiable on the dev Mac; numerical correctness waits for real silicon (rungs 6-7).
+   operand layout** (A row-major M×K, Bt transposed N×K); and `emit_wmma_gemm_store_llvmir` added the
+   **D→C output element mapping** — the last piece of the operand layout. For wave32 fp32 output, lane
+   `L` register `ele` (0-7) → `D[2*ele + L/16][L%16]`, emitted as 8 strided scalar stores (`col =
+   lane & 15`, `row_base = lane >> 4`). **Grounded from the GPUOpen RDNA3 WMMA blog** — the RDNA 3.5
+   ISA §7.9 does *not* tabulate this layout (it points to that blog + the AMD Matrix Instruction
+   Calculator; the tabulated "Matrix Element Storage in VGPRs" is an RDNA *4* addition, §7.12.2). All
+   three verified via `llc -mcpu=gfx1151` — the AMDGCN carries a real `v_wmma_*`, `v_and_b32 _,15,_`
+   (the replication), and strided `global_store`s (the D mapping).
+   Remaining: the **A-column-major load-side correction** (the GPUOpen blog has A column-major / B/C/D
+   row-major; the A load is still the nt row-major convention — a load-side TODO), threadgroup tiling,
+   the §7.9.1 V_NOP scheduling hazard, and the **gfx12 v2 wmma intrinsic ABI** for gfx1200/RDNA 4. The
+   rung-3 `llc` lane runs here, so each structural step is immediately AMDGCN-verifiable on the dev Mac;
+   *numerical* correctness waits for the AMD Matrix Instruction Calculator cross-check or real silicon
+   (rungs 6-7).
 3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
    async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`.
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)

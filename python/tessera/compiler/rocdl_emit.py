@@ -262,6 +262,103 @@ declare i32 @llvm.amdgcn.workitem.id.x()
 """
 
 
+def _grounded_d_store_block() -> str:
+    """The 8 strided scalar stores of the D→C output element mapping. Grounded from
+    the GPUOpen RDNA3 WMMA blog (the RDNA3.5 ISA's referenced source — the spec §7.9
+    does NOT tabulate the layout): for wave32 fp32 output, lane ``L`` register
+    ``ele`` (0-7) holds ``D[2*ele + L/16][L%16]`` (the blog's ``r = ele*2 + lIdx/16``
+    with the fp16-OPSEL packing dropped). ``col = L & 15``, ``row_base = L >> 4``."""
+    out = []
+    for ele in range(_ACC_LEN):
+        out.append(
+            f"  %e{ele} = extractelement <{_ACC_LEN} x float> %acc, i32 {ele}\n"
+            f"  %row{ele} = add i64 {2 * ele}, %rowbase64\n"
+            f"  %ro{ele} = mul i64 %row{ele}, %Nx\n"
+            f"  %ra{ele} = add i64 %ro{ele}, %col64\n"
+            f"  %p{ele} = getelementptr float, ptr addrspace(1) %D, i64 %ra{ele}\n"
+            f"  store float %e{ele}, ptr addrspace(1) %p{ele}")
+    return "\n".join(out)
+
+
+def emit_wmma_gemm_store_llvmir(
+    dtype: str = "bf16",
+    *,
+    acc: str = "f32",
+    arch: str = "gfx1151",
+    entry: str | None = None,
+) -> str:
+    """Emit the WMMA GEMM with the operand layout **and** the grounded **D→C output
+    element store** — the last piece of the WMMA operand layout.
+
+    Builds on :func:`emit_wmma_gemm_layout_llvmir` (lane replication + nt loads) and
+    replaces the lane-contiguous store with the grounded mapping: for wave32 fp32
+    output, lane ``L`` register ``ele`` (0-7) → ``D[2*ele + L/16][L % 16]``
+    (8 strided scalar stores). Source: the **GPUOpen RDNA3 WMMA blog** — the
+    RDNA3.5 ISA §7.9 does *not* tabulate this layout (it points to that blog + the
+    AMD Matrix Instruction Calculator; the tabulated "Matrix Element Storage in
+    VGPRs" is an RDNA *4* addition, §7.12.2).
+
+    **Honesty ceiling.** The store layout is grounded from the blog and `llc`-
+    compiles, but two caveats stand: (1) per the blog, the WMMA **A matrix is
+    column-major** (B/C/D row-major) — the A *load* here is still the row-major nt
+    convention, a load-side correction to make; (2) `llc` verifies the instruction
+    sequence, not the math — *numerical* correctness needs the AMD Matrix
+    Instruction Calculator cross-check or real silicon (rungs 6-7)."""
+    if arch not in _RDNA3_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported — RDNA3-class only "
+            f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
+    intr = wmma_intrinsic(dtype, acc=acc)
+    _, elem = _WMMA_F32_INPUT[dtype]
+    a_ty = f"<{_A_LEN} x {elem}>"
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_gemm_store_{dtype}"
+    return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM, operand layout + grounded D->C store ({arch}).
+; Lane replication (lane & 15) + nt contiguous loads + the D->C output mapping:
+; wave32 fp32 lane L reg ele(0-7) -> D[2*ele + L/16][L%16] (GPUOpen RDNA3 WMMA blog;
+; the RDNA3.5 ISA 7.9 does NOT tabulate this). Caveats: A is column-major per the blog
+; (load still nt row-major = load-side TODO); numerical correctness needs silicon (rungs 6-7).
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(
+    ptr addrspace(1) %A, ptr addrspace(1) %Bt, ptr addrspace(1) %D, i32 %K, i32 %N) {{
+entry:
+  %lane = call i32 @llvm.amdgcn.workitem.id.x()
+  %lane16 = and i32 %lane, 15                 ; lanes 16-31 alias 0-15 (replication)
+  %row = sext i32 %lane16 to i64
+  %Kx = sext i32 %K to i64
+  %rowK = mul i64 %row, %Kx
+  br label %kloop
+kloop:
+  %k   = phi i32 [ 0, %entry ], [ %knext, %kbody ]
+  %acc = phi {acc_ty} [ zeroinitializer, %entry ], [ %accn, %kbody ]
+  %done = icmp sge i32 %k, %K
+  br i1 %done, label %store, label %kbody
+kbody:
+  %k64  = sext i32 %k to i64
+  %aidx = add i64 %rowK, %k64
+  %aptr = getelementptr {elem}, ptr addrspace(1) %A, i64 %aidx
+  %a    = load {a_ty}, ptr addrspace(1) %aptr
+  %bptr = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %aidx
+  %b    = load {a_ty}, ptr addrspace(1) %bptr
+  %accn = call {acc_ty} @{intr}({a_ty} %a, {a_ty} %b, {acc_ty} %acc)
+  %knext = add i32 %k, 16
+  br label %kloop
+store:
+  %col = and i32 %lane, 15                     ; output column = lane % 16
+  %col64 = zext i32 %col to i64
+  %rowbase = lshr i32 %lane, 4                 ; lane / 16  (lower/upper row half)
+  %rowbase64 = zext i32 %rowbase to i64
+  %Nx = sext i32 %N to i64
+{_grounded_d_store_block()}
+  ret void
+}}
+
+declare {acc_ty} @{intr}({a_ty}, {a_ty}, {acc_ty})
+declare i32 @llvm.amdgcn.workitem.id.x()
+"""
+
+
 @dataclass(frozen=True)
 class RocdlValidation:
     ok: bool
@@ -295,11 +392,16 @@ def validate_wmma_llvmir_structure(
 
 def validate_wmma_gemm_structure(
     ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
+    expect_vector_store: bool = True,
 ) -> RocdlValidation:
     """Host-free rung-2.5 check for the K-reduction GEMM emit: on top of the base
     intrinsic/type/kernel checks, assert the GEMM structure — a ``<8 x float>``
     K-loop accumulator PHI, two global operand loads, lane-id addressing, the
-    intrinsic in the loop, the bound check, and the result store."""
+    intrinsic in the loop, the bound check, and the result store.
+
+    ``expect_vector_store=False`` skips the lane-contiguous ``store <8 x float>``
+    assertion — used by the grounded-D-store variant, which replaces that whole-
+    vector store with strided per-register scalar stores."""
     base = validate_wmma_llvmir_structure(ir, dtype=dtype, arch=arch)
     reasons = list(base.reasons)
     if f"phi <{_ACC_LEN} x float>" not in ir:
@@ -311,7 +413,7 @@ def validate_wmma_gemm_structure(
         reasons.append("missing workitem.id.x lane addressing")
     if "icmp sge i32" not in ir:
         reasons.append("missing the K-loop bound check")
-    if f"store <{_ACC_LEN} x float>" not in ir:
+    if expect_vector_store and f"store <{_ACC_LEN} x float>" not in ir:
         reasons.append("missing the D-matrix store")
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
@@ -329,6 +431,31 @@ def validate_wmma_gemm_layout_structure(
         reasons.append("missing the lane-replication mask (and i32 %lane, 15)")
     if "%rowK = mul i64 %row" not in ir:
         reasons.append("missing the per-lane row base (nt contiguous operand layout)")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
+def validate_wmma_gemm_store_structure(
+    ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the operand-layout GEMM **with the grounded
+    D→C store**: the layout checks (minus the old lane-contiguous ``store <8 x
+    float>``) plus the grounded output-element markers — the ``col = lane & 15`` /
+    ``row_base = lane >> 4`` decomposition and 8 strided scalar ``store float``
+    s (one per accumulator register, the ``D[2*ele + L/16][L%16]`` mapping)."""
+    # Reuse the layout markers (lane replication + nt loads) but NOT the whole-
+    # vector store, which the grounded mapping replaces with strided scalar stores.
+    base = validate_wmma_gemm_structure(ir, dtype=dtype, arch=arch, expect_vector_store=False)
+    reasons = list(base.reasons)
+    if "and i32 %lane, 15" not in ir:
+        reasons.append("missing the lane-replication mask (and i32 %lane, 15)")
+    if "lshr i32 %lane, 4" not in ir:
+        reasons.append("missing the output row-base decomposition (lane >> 4)")
+    n_stores = ir.count("store float %e")
+    if n_stores != _ACC_LEN:
+        reasons.append(
+            f"expected {_ACC_LEN} strided scalar D stores (one per acc reg), found {n_stores}")
+    if f"extractelement <{_ACC_LEN} x float>" not in ir:
+        reasons.append("missing per-register extractelement from the accumulator")
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
@@ -385,9 +512,11 @@ __all__ = [
     "emit_wmma_llvmir",
     "emit_wmma_gemm_llvmir",
     "emit_wmma_gemm_layout_llvmir",
+    "emit_wmma_gemm_store_llvmir",
     "validate_wmma_llvmir_structure",
     "validate_wmma_gemm_structure",
     "validate_wmma_gemm_layout_structure",
+    "validate_wmma_gemm_store_structure",
     "llc_assemble",
     "RocdlValidation",
     "LlcResult",

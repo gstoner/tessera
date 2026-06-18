@@ -14,9 +14,11 @@ import pytest
 from tessera.compiler.rocdl_emit import (
     emit_wmma_gemm_layout_llvmir,
     emit_wmma_gemm_llvmir,
+    emit_wmma_gemm_store_llvmir,
     emit_wmma_llvmir,
     llc_assemble,
     validate_wmma_gemm_layout_structure,
+    validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
     validate_wmma_llvmir_structure,
     wmma_intrinsic,
@@ -170,3 +172,60 @@ def test_rung3_layout_gemm_emits_replication_in_amdgcn(dtype, want):
     assert r.status == "ok", r.detail
     assert want in r.wmma_instruction
     assert "v_and_b32" in r.asm   # the (lane & 15) replication landed in the ISA
+
+
+# ── D→C output element mapping: the grounded strided store (GPUOpen RDNA3 blog) ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gemm_store_emit_and_validate(dtype):
+    ir = emit_wmma_gemm_store_llvmir(dtype, arch="gfx1151")
+    v = validate_wmma_gemm_store_structure(ir, dtype=dtype, arch="gfx1151")
+    assert v.ok, v.reasons
+
+
+def test_gemm_store_has_grounded_output_mapping():
+    ir = emit_wmma_gemm_store_llvmir("bf16")
+    # D[2*ele + lane/16][lane%16]: col = lane & 15, row_base = lane >> 4.
+    assert "and i32 %lane, 15" in ir          # output column
+    assert "lshr i32 %lane, 4" in ir          # output row half (lane / 16)
+    # 8 strided scalar stores (one per accumulator register), not a vector store.
+    assert ir.count("store float %e") == 8
+    assert "store <8 x float>" not in ir
+    assert "extractelement <8 x float>" in ir
+
+
+def test_gemm_store_validator_catches_missing_rowbase():
+    ir = emit_wmma_gemm_store_llvmir("f16").replace("lshr i32 %lane, 4", "add i32 %lane, 0")
+    v = validate_wmma_gemm_store_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("row-base decomposition" in r for r in v.reasons)
+
+
+def test_gemm_store_validator_catches_dropped_store():
+    ir = emit_wmma_gemm_store_llvmir("f16").replace(
+        "store float %e7", "; dropped store %e7")
+    v = validate_wmma_gemm_store_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("strided scalar D stores" in r for r in v.reasons)
+
+
+def test_gemm_store_rejects_rdna4():
+    with pytest.raises(ValueError):
+        emit_wmma_gemm_store_llvmir("f16", arch="gfx1200")
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x16_f16"),
+    ("bf16", "v_wmma_f32_16x16x16_bf16"),
+])
+def test_rung3_store_gemm_lowers_with_strided_global_stores(dtype, want):
+    """The grounded-D-store GEMM lowers to AMDGCN with a real v_wmma_*, the lane
+    replication, AND strided per-register global stores — the D->C output mapping,
+    machine-confirmed on this host."""
+    ir = emit_wmma_gemm_store_llvmir(dtype, arch="gfx1151")
+    r = llc_assemble(ir, arch="gfx1151")
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+    assert "v_and_b32" in r.asm        # lane replication + column mask
+    assert "global_store" in r.asm     # the strided D stores landed

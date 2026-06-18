@@ -185,6 +185,83 @@ declare i32 @llvm.amdgcn.workitem.id.x()
 """
 
 
+def emit_wmma_gemm_layout_llvmir(
+    dtype: str = "bf16",
+    *,
+    acc: str = "f32",
+    arch: str = "gfx1151",
+    entry: str | None = None,
+) -> str:
+    """Emit the K-reduction WMMA GEMM **with the ISA §7.9 operand layout** — a step
+    up from :func:`emit_wmma_gemm_llvmir`'s placeholder addressing.
+
+    Implements two grounded RDNA3.5 WMMA operand-layout rules:
+      * **Lane replication** — wave32 requires the A/B data in lanes 0-15 to be
+        replicated into lanes 16-31. Addressing by ``lane & 15`` (= ``lane % 16``)
+        gives that for free: lane 16 reads the same fragment as lane 0. Verified —
+        the emitted AMDGCN carries ``v_and_b32 v?, 15, v?``.
+      * **nt layout** — A row-major (M×K), B **transposed** (N×K), so both the A row
+        and the B "row" (= the logical B column) are **contiguous** ``<16 × {elem}>``
+        loads (this is MLX's fast ``nt`` path / the standard attention layout).
+
+    **Honesty ceiling.** The lane replication + nt contiguous operand load are real
+    and llc-verified; what remains is the exact **D→C output element mapping** (the
+    8 fp32 per lane go to specific (m,n) per the ISA D layout — this skeleton stores
+    them lane-contiguously) and threadgroup tiling. Numerical correctness needs real
+    silicon (rungs 6-7)."""
+    if arch not in _RDNA3_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported — RDNA3-class only "
+            f"({sorted(_RDNA3_CLASS_ARCHES)}); gfx1200/RDNA 4 is the gfx12 v2 follow-on.")
+    intr = wmma_intrinsic(dtype, acc=acc)
+    _, elem = _WMMA_F32_INPUT[dtype]
+    a_ty = f"<{_A_LEN} x {elem}>"
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_gemm_layout_{dtype}"
+    return f"""; Tessera rung-2.5/3 — RDNA WMMA {dtype} GEMM with the ISA 7.9 operand layout ({arch}).
+; Lane replication: lanes 0-15 -> 16-31 via (lane & 15), wave32. nt layout: A row-major MxK,
+; Bt transposed NxK -> both contiguous {a_ty} loads. Verified: llc emits v_and_b32 _,15,_ + a real
+; v_wmma_* in the loop. Remaining: the exact D->C output element mapping (stored lane-contiguous
+; here) + tiling; numerical correctness needs silicon (rungs 6-7).
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(
+    ptr addrspace(1) %A, ptr addrspace(1) %Bt, ptr addrspace(1) %D, i32 %K, i32 %N) {{
+entry:
+  %lane = call i32 @llvm.amdgcn.workitem.id.x()
+  %lane16 = and i32 %lane, 15                 ; lanes 16-31 alias 0-15 (replication)
+  %row = sext i32 %lane16 to i64
+  %Kx = sext i32 %K to i64
+  %rowK = mul i64 %row, %Kx
+  br label %kloop
+kloop:
+  %k   = phi i32 [ 0, %entry ], [ %knext, %kbody ]
+  %acc = phi {acc_ty} [ zeroinitializer, %entry ], [ %accn, %kbody ]
+  %done = icmp sge i32 %k, %K
+  br i1 %done, label %store, label %kbody
+kbody:
+  %k64  = sext i32 %k to i64
+  %aidx = add i64 %rowK, %k64                 ; A[row][k0..k0+15] contiguous (row-major)
+  %aptr = getelementptr {elem}, ptr addrspace(1) %A, i64 %aidx
+  %a    = load {a_ty}, ptr addrspace(1) %aptr
+  %bidx = add i64 %rowK, %k64                 ; Bt[col][k0..k0+15] contiguous (B transposed)
+  %bptr = getelementptr {elem}, ptr addrspace(1) %Bt, i64 %bidx
+  %b    = load {a_ty}, ptr addrspace(1) %bptr
+  %accn = call {acc_ty} @{intr}({a_ty} %a, {a_ty} %b, {acc_ty} %acc)
+  %knext = add i32 %k, 16
+  br label %kloop
+store:
+  %lo = sext i32 %lane to i64
+  %dptr = getelementptr {acc_ty}, ptr addrspace(1) %D, i64 %lo
+  store {acc_ty} %acc, ptr addrspace(1) %dptr
+  ret void
+}}
+
+declare {acc_ty} @{intr}({a_ty}, {a_ty}, {acc_ty})
+declare i32 @llvm.amdgcn.workitem.id.x()
+"""
+
+
 @dataclass(frozen=True)
 class RocdlValidation:
     ok: bool
@@ -236,6 +313,22 @@ def validate_wmma_gemm_structure(
         reasons.append("missing the K-loop bound check")
     if f"store <{_ACC_LEN} x float>" not in ir:
         reasons.append("missing the D-matrix store")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
+def validate_wmma_gemm_layout_structure(
+    ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the operand-layout GEMM: the GEMM checks plus
+    the ISA §7.9 operand-layout markers — **lane replication** (``and i32 %lane,
+    15`` → lanes 0-15 aliased into 16-31) and the row-major/transposed (nt)
+    contiguous operand addressing."""
+    base = validate_wmma_gemm_structure(ir, dtype=dtype, arch=arch)
+    reasons = list(base.reasons)
+    if "and i32 %lane, 15" not in ir:
+        reasons.append("missing the lane-replication mask (and i32 %lane, 15)")
+    if "%rowK = mul i64 %row" not in ir:
+        reasons.append("missing the per-lane row base (nt contiguous operand layout)")
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
@@ -291,8 +384,10 @@ __all__ = [
     "wmma_intrinsic",
     "emit_wmma_llvmir",
     "emit_wmma_gemm_llvmir",
+    "emit_wmma_gemm_layout_llvmir",
     "validate_wmma_llvmir_structure",
     "validate_wmma_gemm_structure",
+    "validate_wmma_gemm_layout_structure",
     "llc_assemble",
     "RocdlValidation",
     "LlcResult",

@@ -12,9 +12,11 @@ from __future__ import annotations
 import pytest
 
 from tessera.compiler.rocdl_emit import (
+    emit_wmma_gemm_layout_llvmir,
     emit_wmma_gemm_llvmir,
     emit_wmma_llvmir,
     llc_assemble,
+    validate_wmma_gemm_layout_structure,
     validate_wmma_gemm_structure,
     validate_wmma_llvmir_structure,
     wmma_intrinsic,
@@ -129,3 +131,42 @@ def test_rung3_gemm_lowers_to_wmma_inside_a_loop(dtype, want):
     assert want in r.wmma_instruction
     # the wmma is inside a loop body (a conditional branch / loop label exists).
     assert "s_cbranch" in r.asm or ".LBB" in r.asm
+
+
+# ── operand layout: lane replication (ISA 7.9) + nt contiguous loads ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gemm_layout_emit_and_validate(dtype):
+    ir = emit_wmma_gemm_layout_llvmir(dtype, arch="gfx1151")
+    v = validate_wmma_gemm_layout_structure(ir, dtype=dtype, arch="gfx1151")
+    assert v.ok, v.reasons
+
+
+def test_gemm_layout_has_lane_replication():
+    ir = emit_wmma_gemm_layout_llvmir("f16")
+    # wave32 lanes 0-15 replicated into 16-31 via (lane & 15).
+    assert "and i32 %lane, 15" in ir
+    assert "%rowK = mul i64 %row" in ir   # per-lane row base (nt contiguous layout)
+
+
+def test_gemm_layout_validator_catches_dropped_replication():
+    ir = emit_wmma_gemm_layout_llvmir("f16").replace("and i32 %lane, 15", "add i32 %lane, 0")
+    v = validate_wmma_gemm_layout_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("lane-replication" in r for r in v.reasons)
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x16_f16"),
+    ("bf16", "v_wmma_f32_16x16x16_bf16"),
+])
+def test_rung3_layout_gemm_emits_replication_in_amdgcn(dtype, want):
+    """The operand-layout GEMM lowers to AMDGCN carrying BOTH a real v_wmma_* and
+    the lane-replication mask (`v_and_b32 _, 15, _`) — the ISA 7.9 requirement,
+    machine-confirmed on this host."""
+    ir = emit_wmma_gemm_layout_llvmir(dtype, arch="gfx1151")
+    r = llc_assemble(ir, arch="gfx1151")
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+    assert "v_and_b32" in r.asm   # the (lane & 15) replication landed in the ISA

@@ -9,9 +9,11 @@ module {
   }
 }
 
-// CHECK: llvm.func @llvm.amdgcn.mfma.contract
-// CHECK: llvm.func @llvm.amdgcn.raw.buffer.copy.contract
-// CHECK: llvm.func @llvm.amdgcn.s.barrier.contract
+// All three ROCDL marker declarations are emitted; CHECK-DAG is order-robust
+// (the pass declares them in dependency order, not source order).
+// CHECK-DAG: llvm.func @llvm.amdgcn.mfma.contract
+// CHECK-DAG: llvm.func @llvm.amdgcn.raw.buffer.copy.contract
+// CHECK-DAG: llvm.func @llvm.amdgcn.s.barrier.contract
 // CHECK-NOT: tessera_rocm.mfma
 // CHECK-NOT: tessera_rocm.async_copy
 // CHECK-NOT: tessera_rocm.wait

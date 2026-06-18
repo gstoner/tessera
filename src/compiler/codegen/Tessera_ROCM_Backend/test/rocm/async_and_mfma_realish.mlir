@@ -9,9 +9,11 @@ module {
     %b = arith.constant 2.0 : f32
     %c = arith.constant 0.0 : f32
     %r = "tessera_rocm.mfma"(%a,%b,%c) {gelu} : (f32,f32,f32) -> f32
-    // CHECK: llvm.call @llvm.amdgcn.mfma.contract
-    // CHECK: llvm.call @llvm.amdgcn.raw.buffer.copy.contract
-    // CHECK: llvm.call @llvm.amdgcn.s.barrier.contract
+    // All three marker calls are emitted; CHECK-DAG is order-robust (the
+    // emission order follows source order: copy, barrier, then mfma).
+    // CHECK-DAG: llvm.call @llvm.amdgcn.mfma.contract
+    // CHECK-DAG: llvm.call @llvm.amdgcn.raw.buffer.copy.contract
+    // CHECK-DAG: llvm.call @llvm.amdgcn.s.barrier.contract
     // CHECK-NOT: tessera_rocm.
     return
   }

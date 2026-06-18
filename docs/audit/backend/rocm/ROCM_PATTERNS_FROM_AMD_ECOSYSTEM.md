@@ -396,15 +396,24 @@ The follow-on pass that the 2.5 batch had deferred is now landed.
   C++-emitted flavor equals `rocm_target.fp8_dtype_flavor` — so the C++ and
   Python FP8 tables can never drift. Skips cleanly if the binary isn't built.
 
-**Still genuinely deferred (hardware-gated or infra):**
+**Lit-runner infra — fixed (2026-06-18).** The backend's lit wiring (which had
+never actually run) now works end-to-end: the generated `lit.site.cfg.py`
+`load_config`s the source `lit.cfg.py`; `lit.cfg.py` prepends `llvm_tools_dir`
+to the RUN-line PATH (self-contained — no `lit.llvm` dependency); the test
+`CMakeLists.txt` robustly locates `lit` + the LLVM tools dir (bypassing a
+polluted empty-string `LLVM_EXTERNAL_LIT` cache var); the `.txt` suffix that
+spuriously matched `CMakeLists.txt` was dropped; and two latent-broken
+pre-existing fixtures (`async_and_mfma_realish`, `rocm_target_to_rocdl_contract`)
+were fixed with order-robust `CHECK-DAG`. `check-tessera-rocm` now reports
+**9/9 passing**, and `tests/unit/test_rocm_lit_suite.py` runs the suite in the
+normal pytest lane (skips when the backend isn't built) so the wiring can't
+silently regress.
+
+**Still genuinely deferred (hardware-gated):**
 - *Full numeric* `rocdl.mfma/wmma` intrinsic emission — `TesseraTargetToROCDL.cpp`
   still emits marker ops; a complete, assemblable, numerically-correct kernel
   needs the offline emitter + real silicon (the rest of B4). The `fp8_flavor`
   attribute is now in place to carry the flavor down to that emitter when it lands.
-- The backend's lit *runner* wiring is incomplete (the generated
-  `lit.site.cfg.py` doesn't `load_config`, and CMake doesn't find `llvm-lit`), so
-  `check-tessera-rocm` skips — a pre-existing infra gap. The fixtures are proven
-  via direct FileCheck + the Python consistency test (the durable CI guard).
 
 ---
 

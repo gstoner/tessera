@@ -353,11 +353,11 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
     "nvidia_sm120": TargetCapability(
         name="nvidia_sm120",
-        aliases=("sm120", "sm_120"),
+        aliases=("sm120", "sm_120", "blackwell_consumer", "rtx50", "gb20x"),
         family="nvidia",
         runtime_backend="cuda",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 (Rubin) artifact ships under CUDA 13.2 U1 with preliminary intrinsics; executable smoke is hardware-gated"),
+        supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="SM120 Blackwell consumer (RTX 50-series / GB20x) artifact under CUDA 13.2 U1; FP4 via mma.sync.block_scale (no tcgen05/TMEM — those are sm_100a); executable smoke is hardware-gated"),
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp64",
             "fp8_e4m3", "fp8_e5m2",

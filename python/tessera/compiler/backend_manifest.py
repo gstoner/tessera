@@ -967,8 +967,10 @@ _NVIDIA_KERNEL_TILE_SHAPES: dict[str, dict[str, tuple]] = {
 }
 
 
-# Per-(op, target) expected MFU targets.  Conservative for SM_120 since
-# Rubin numbers aren't fully published; use the SM_100 number until then.
+# Per-(op, target) expected MFU targets.  Conservative for SM_120 (Blackwell
+# consumer, RTX 50-series): it lacks the datacenter sm_100 tcgen05/TMEM path and
+# uses warp-level mma.sync.block_scale, so its achievable MFU differs from sm_100
+# — pending on-silicon measurement on the RTX 5070 Ti.
 _NVIDIA_KERNEL_MFU: dict[tuple[str, str], float] = {
     # cuBLAS WGMMA GEMM hits ~80% MFU on large M/N.
     ("matmul",     "nvidia_sm90"):  0.80,

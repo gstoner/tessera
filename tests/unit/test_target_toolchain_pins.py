@@ -87,13 +87,26 @@ class TestCUDA13FeatureMatrix:
         assert p.supports_tma_swizzle_128b
         assert p.supports_cluster_launch
 
-    def test_sm120_rubin_inherits_blackwell(self):
-        from tessera.compiler.gpu_target import GPUTargetProfile, ISA
-        p100 = GPUTargetProfile(isa=ISA.SM_100)
+    def test_sm120_is_blackwell_consumer_not_datacenter_superset(self):
+        """SM_120 is Blackwell CONSUMER (RTX 50-series), NOT a superset of the
+        datacenter sm_100. It lacks tcgen05 / TMEM (sm_100a-only) and Hopper's
+        wgmma; its FP4 path is warp-level mma.sync.block_scale. Grounded in
+        NVIDIA/cutlass#2800 + modular#5707."""
+        from tessera.compiler.gpu_target import (
+            GPUTargetProfile, ISA, cuda_feature_status)
         p120 = GPUTargetProfile(isa=ISA.SM_120)
-        # Rubin is at least a superset of Blackwell in CUDA 13.2 U1.
-        for feature in p100.cuda_features:
-            assert feature in p120.cuda_features, f"{feature} regressed on SM_120"
+        # The datacenter-only tensor-core features must be ABSENT on consumer sm_120.
+        for absent in ("tcgen05", "tcgen05_pair", "tmem", "wgmma", "wgmma_sparse"):
+            assert cuda_feature_status(ISA.SM_120, absent) == "not_supported", absent
+            assert absent not in p120.cuda_features
+        # But the consumer FP4 path (block-scaled mma.sync) IS present.
+        assert cuda_feature_status(ISA.SM_120, "block_scaled_mma") == "ready"
+        assert "nvfp4" in p120.tensor_core_dtypes
+        assert "fp4_e2m1" in p120.tensor_core_dtypes
+        assert p120.nvcc_arch == "sm_120a"
+        # sm_100 datacenter has the tensor-memory path that sm_120 lacks — the
+        # asymmetry that disproves the old "superset" assumption.
+        assert cuda_feature_status(ISA.SM_100, "tcgen05") == "ready"
 
 
 class TestNVIDIACapabilityRegistry:

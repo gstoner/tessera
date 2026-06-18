@@ -24,8 +24,8 @@ class ISA(IntEnum):
     SM_86  = 86   # RTX 30xx — Ampere consumer
     SM_89  = 89   # RTX 40xx — Ada Lovelace
     SM_90  = 90   # H100 / GH200 — Hopper; WGMMA + TMA available
-    SM_100 = 100  # B100 / GB200 — Blackwell
-    SM_120 = 120  # Rubin placeholder until NVIDIA publishes final CC numbering
+    SM_100 = 100  # B100 / GB200 — Blackwell datacenter (GB100)
+    SM_120 = 120  # RTX 50-series — Blackwell consumer (GB20x), compute capability 12.0
 
 
 # Shared memory capacities in bytes per SM for each generation.
@@ -35,7 +35,10 @@ _SMEM_BYTES: dict[ISA, int] = {
     ISA.SM_89:  100352,   # RTX 4090: 98 KB
     ISA.SM_90:  233472,   # H100: 228 KB
     ISA.SM_100: 262144,   # B100: 256 KB
-    ISA.SM_120: 262144,   # Rubin: preliminary placeholder
+    # RTX 50-series consumer SM is the Ada-class (~100 KB opt-in), NOT the 256 KB
+    # datacenter B100 SM.  Set to the consumer class pending on-silicon
+    # cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin) confirmation.
+    ISA.SM_120: 100352,   # RTX 50-series: ~98 KB (consumer Blackwell) — verify on box
 }
 
 # Maximum warps per CTA for each generation.
@@ -210,23 +213,29 @@ _CUDA_13_2_FEATURES: dict[ISA, dict[str, str]] = {
         "async_proxy_fence":       "ready",
     },
     ISA.SM_120: {
-        # Rubin — preliminary capability matrix; superset of Blackwell
-        # plus expanded FP4/FP6 lanes.  Marked "tba" where CUDA 13.2 U1
-        # exposes the architecture but final intrinsics aren't finalized.
+        # Blackwell CONSUMER (RTX 50-series, GB20x; compile target sm_120a).
+        # CRITICAL: consumer Blackwell is NOT a superset of datacenter sm_100.
+        # It does **not** have tcgen05 / TMEM (those are sm_100a only), and
+        # like all Blackwell it does **not** have Hopper's wgmma.  Its FP4 /
+        # block-scaled path goes through warp-level `mma.sync.aligned...
+        # block_scale` (E2M1 + block scaling), not `tcgen05.mma`.  Grounded in
+        # NVIDIA/cutlass#2800 (BlockScaledMmaOp restricts FP4 to sm_100a, blocks
+        # sm_120) + modular#5707 ("tcgen05 not supported" on sm_120) + the
+        # SM120 mma.sync FP4 fragment-layout forum thread.
         "wmma":                    "ready",
-        "wgmma":                   "ready",
-        "wgmma_sparse":            "ready",
+        "wgmma":                   "not_supported",   # Hopper sm_90a only
+        "wgmma_sparse":            "not_supported",
         "tma":                     "ready",
         "tma_swizzle_128b":        "ready",
         "cluster_launch":          "ready",
         "mbarrier":                "ready",
         "mbarrier_arrive_tx":      "ready",
-        "tcgen05":                 "ready",
-        "tcgen05_pair":            "ready",
-        "tmem":                    "ready",
+        "tcgen05":                 "not_supported",   # datacenter sm_100a only
+        "tcgen05_pair":            "not_supported",   # datacenter sm_100a only
+        "tmem":                    "not_supported",   # datacenter sm_100a only
         "cp_async":                "ready",
         "cp_async_bulk":           "ready",
-        "block_scaled_mma":        "ready",
+        "block_scaled_mma":        "ready",           # FP4 via mma.sync.block_scale
         "async_proxy_fence":       "ready",
     },
 }
@@ -240,7 +249,7 @@ _CUDA_13_2_ARCH_STRINGS: dict[ISA, str] = {
     ISA.SM_89:  "sm_89",
     ISA.SM_90:  "sm_90a",   # Hopper architectural variant
     ISA.SM_100: "sm_100a",  # Blackwell architectural variant
-    ISA.SM_120: "sm_120a",  # Rubin architectural variant (preliminary)
+    ISA.SM_120: "sm_120a",  # Blackwell consumer arch-specific (FP4 mma.sync block-scale)
 }
 
 

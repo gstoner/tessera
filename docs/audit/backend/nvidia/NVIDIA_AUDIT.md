@@ -2,6 +2,13 @@
 
 This document consolidates NVIDIA-specific audit material.
 
+> **Real-hardware bring-up:** see [`BLACKWELL_SM120_EXECUTION_PLAN.md`](BLACKWELL_SM120_EXECUTION_PLAN.md)
+> — the sm_120 target model is now correctly grounded as **Blackwell consumer** (RTX 5070 Ti),
+> not the old "Rubin placeholder" (no wgmma/tcgen05/TMEM; FP4 via `mma.sync.block_scale`). The doc
+> lays out the rung ladder to the first real NVIDIA `backend_kernel` proof. **Key gap it surfaces:**
+> the existing `ptx_emit.py` emits sm_90a WGMMA, which won't run on sm_120 — executing on this card
+> needs a new sm_120 `mma.sync` emit path. This is the unblock for the "Still Open" items below.
+
 ## Finished
 
 - NVIDIA target-map generation exists at

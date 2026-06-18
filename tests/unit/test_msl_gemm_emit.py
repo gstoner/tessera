@@ -9,14 +9,34 @@ from __future__ import annotations
 
 import pytest
 
+import shutil
+
 from tessera.compiler.msl_gemm_emit import (
     SIMDGROUP_FRAG,
     MslGemmShape,
     emit_simdgroup_gemm_msl,
+    emit_steel_gemm_msl,
     metal_compile,
     min_metal_std,
     validate_msl_gemm_structure,
+    validate_steel_gemm_structure,
 )
+
+# Metal-CI rung-3: real on a Metal-capable host, skip-clean otherwise (arm64 dev
+# Mac w/ CommandLineTools only, Linux). Mirrors ptx_emit's ptxas gate.
+def _has_metal_compiler() -> bool:
+    if shutil.which("metal") is not None:
+        return True
+    import subprocess
+    try:
+        return bool(subprocess.run(
+            ["xcrun", "-f", "metal"], capture_output=True, text=True, timeout=20
+        ).stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+_HAVE_METAL = _has_metal_compiler()
 
 
 @pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
@@ -97,3 +117,65 @@ def test_metal_compile_is_skip_clean_without_toolchain():
     # If skipped, it's because the toolchain is absent — not a crash.
     if r.status == "skipped":
         assert "not available" in r.detail
+
+
+# ── steel-structured emit (multi-fragment + threadgroup staging + edge masking) ──
+
+@pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
+def test_steel_emit_and_validate(dtype):
+    msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
+    v = validate_steel_gemm_structure(msl, dtype=dtype)
+    assert v.ok, v.reasons
+
+
+def test_steel_has_production_shape_features():
+    msl = emit_steel_gemm_msl("bf16", 32, 32, 16)
+    # 4x4 output fragments per threadgroup.
+    assert "simdgroup_matrix<float, 8, 8> acc[4 * 4]" in msl
+    # threadgroup staging + barrier.
+    assert "threadgroup bfloat As[32 * 16]" in msl
+    assert "threadgroup bfloat Bs[16 * 32]" in msl
+    assert "threadgroup_barrier(mem_flags::mem_threadgroup)" in msl
+    # ragged-edge masking on the staged load (zero-pad out-of-bounds).
+    assert "(m0 + r < M && k0 + c < K) ? A[(m0 + r) * K + (k0 + c)] : bfloat(0)" in msl
+    # whole-fragment guarded store.
+    assert "if (cr + F <= M && cc + F <= N)" in msl
+
+
+def test_steel_fragment_count_scales_with_tile():
+    # 64x32 tile -> 8x4 = 32 output fragments.
+    msl = emit_steel_gemm_msl("f16", 64, 32, 16)
+    assert "simdgroup_matrix<float, 8, 8> acc[8 * 4]" in msl
+
+
+def test_steel_rejects_non_fragment_multiple_tile():
+    with pytest.raises(ValueError):
+        emit_steel_gemm_msl("f16", 20, 32, 16)   # BM not a multiple of 8
+
+
+def test_steel_validator_catches_dropped_staging():
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16)
+    broken = msl.replace("threadgroup_barrier(mem_flags::mem_threadgroup)", "/*dropped*/")
+    v = validate_steel_gemm_structure(broken, dtype="f16")
+    assert not v.ok
+    assert any("barrier" in r for r in v.reasons)
+
+
+# ── Metal-CI rung-3 lane: actually compile when a Metal toolchain is present ──
+
+@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
+def test_rung3_simdgroup_gemm_compiles_on_metal_host(dtype):
+    """On a Metal-capable runner, the emitted minimal kernel must actually compile
+    to AIR — the rung-3 gate that catches MSL the host-free validator can't."""
+    msl = emit_simdgroup_gemm_msl(dtype, 8, 8, 8)
+    r = metal_compile(msl, dtype=dtype)
+    assert r.status == "ok", f"{dtype}: {r.detail}"
+
+
+@pytest.mark.skipif(not _HAVE_METAL, reason="offline `metal` compiler not available (rung-3 host)")
+@pytest.mark.parametrize("dtype", ["f16", "bf16", "f32"])
+def test_rung3_steel_gemm_compiles_on_metal_host(dtype):
+    msl = emit_steel_gemm_msl(dtype, 32, 32, 16)
+    r = metal_compile(msl, dtype=dtype)
+    assert r.status == "ok", f"{dtype}: {r.detail}"

@@ -69,11 +69,25 @@ analog of `ptx_emit.py`, motivated by the MLX "steel" finding (the production fr
 - `metal_compile(...)` — rung 3; **skip-cleans** when the offline `metal` compiler is absent (the case
   on this CommandLineTools-only arm64 Mac, exactly like `ptxas`).
 
-**Honesty ceiling (in the module docstring + the emitted kernel comment):** a documented
-single-output-fragment skeleton, **not** a perf-optimal or boundary-correct kernel — production needs
-threadgroup staging, cooperative simdgroup loads, multi-fragment M/N tiling, and ragged-edge masking.
-The API is grounded from MLX `steel/gemm/mma.h` + the MSL spec ch.6; **not compile-verified on this
-host** (no Metal toolchain). The structural validator is what earns rung 2.5.
+**Steel-structured emit (landed — the production shape):** `emit_steel_gemm_msl(dtype, bm, bn, bk)` +
+`validate_steel_gemm_structure` grow the lane from the single-fragment skeleton to the MLX-steel shape:
+a threadgroup computes a `BM×BN` tile (an `MF×NF` grid of 8×8 output fragments) over `BK`-deep steps,
+each step doing a **cooperative bounds-guarded load** of A/B into **threadgroup memory** (zero-padded
+at edges = ragged-edge masking on the load side) → `threadgroup_barrier` → fragment `simdgroup_load`
+from threadgroup memory → the `MF×NF` fragment `simdgroup_multiply_accumulate` inner product →
+whole-fragment guarded store. The structural validator asserts all of these.
+
+**Metal-CI rung-3 lane (landed):** `tests/unit/test_msl_gemm_emit.py` adds rung-3 tests
+(`test_rung3_*_compiles_on_metal_host`) that invoke the offline `metal` compiler on **both** emitters'
+output and assert it compiles to AIR — `@pytest.mark.skipif` when `metal` is absent (the arm64 dev Mac
+/ Linux), so they run only on a Metal-capable runner. 23 host-free tests pass here; 6 rung-3 tests skip.
+
+**Honesty ceiling (still in the docstrings + emitted kernel comments):** even the steel form is a
+documented skeleton — single-buffered staging (no double-buffer / async copy), a naive cooperative
+load, and **whole-fragment** store guards; *partial* output-fragment edge handling (M/N not a multiple
+of 8) is the named next sub-step. The API is grounded from MLX `steel/gemm/mma.h` + MSL spec ch.6;
+**not compile-verified on this host** (no Metal toolchain — that is exactly what the rung-3 CI lane is
+for). The structural validators are what earn rung 2.5.
 
 ## 4. Next steps (in dependency order)
 
@@ -82,8 +96,8 @@ host** (no Metal toolchain). The structural validator is what earns rung 2.5.
 2. **CUDA pin bump 13.2.1 → 13.3** — fully grounded (driver 610.43.02 / PTX 9.3 / NCCL 2.30.7); a
    coordinated edit across `gpu_target.py` / `TesseraToolchainPins.cmake` / the C++ pin header / the
    byte-identical consistency test.
-3. **Apple GEMM completeness** — extend `msl_gemm_emit` from the single-fragment skeleton toward the
-   steel structure (multi-fragment tiling + threadgroup staging + edge masking), then wire the
-   `metal_compile` rung in a Metal-capable CI lane (rung 3 → real `.air`).
+3. **Apple GEMM remaining sub-steps** — partial-edge store handling + double-buffered staging /
+   async copy (perf), then run the rung-3 lane on a Metal-capable runner to confirm real `.air`
+   compilation (it skip-cleans on the dev Mac today).
 4. **Silicon rungs (6–7)** once the boxes land — launch via the C-ABI bridge (`tsrRegisterGpuLauncher`)
    + execute-and-compare, flipping `backend_kernel` to a real-execution status per vendor.

@@ -150,6 +150,115 @@ kernel void {name}(
 """
 
 
+def emit_steel_gemm_msl(
+    dtype: str = "bf16",
+    bm: int = 32,
+    bn: int = 32,
+    bk: int = 16,
+    *,
+    accum: str = "f32",
+    entry: str | None = None,
+) -> str:
+    """Emit the **steel-structured** MSL ``simdgroup_matrix`` GEMM — the production
+    shape MLX uses (``kernels/steel/gemm``), a step up from the single-fragment
+    :func:`emit_simdgroup_gemm_msl` skeleton.
+
+    A threadgroup computes a ``BM×BN`` output tile (a grid of ``MF×NF`` 8×8 output
+    fragments, ``MF=BM/8``, ``NF=BN/8``) by accumulating ``BK``-deep contraction
+    steps. Each step: a **cooperative, bounds-guarded load** of the ``A``/``B``
+    tiles into **threadgroup memory** (zero-padded at edges = ragged-edge masking
+    on the load side) → ``threadgroup_barrier`` → ``simdgroup_load`` the fragments
+    from threadgroup memory → the ``MF×NF`` fragment ``simdgroup_multiply_
+    accumulate`` inner product.
+
+    Still a documented skeleton (not perf-tuned): single-buffered staging (no
+    double-buffer / async copy), a naive cooperative load, and **whole-fragment**
+    store guards — *partial* output-fragment edge handling (when ``M``/``N`` aren't
+    multiples of 8) is the named next sub-step. Honesty ceiling + grounding as in
+    the module docstring; not compile-verified on this host.
+    """
+    tile = MslGemmShape(bm, bn, bk)
+    if not tile.is_valid():
+        raise ValueError(
+            f"steel tile ({bm},{bn},{bk}) invalid — each must be a positive "
+            f"multiple of {SIMDGROUP_FRAG}")
+    T, ACC, f = _scalar(dtype), _scalar(accum), SIMDGROUP_FRAG
+    mf, nf = bm // f, bn // f
+    name = entry or f"tessera_steel_gemm_{dtype}"
+    return f"""//
+// Tessera rung-2.5 emission — Apple simdgroup_matrix {dtype} GEMM, STEEL-structured
+// (BM={bm} BN={bn} BK={bk}; {mf}x{nf} output fragments per threadgroup). Multi-fragment
+// tiling + threadgroup staging + edge-masked load — the production MLX-steel shape.
+// Skeleton: single-buffered staging, naive cooperative load, whole-fragment store
+// guards (partial-edge store is the next sub-step). metal-compile = rung 3. API
+// grounded from MLX steel/gemm/mma.h + MSL spec ch.6; not compile-verified here.
+//
+#include <metal_stdlib>
+#include <metal_simdgroup_matrix>
+using namespace metal;
+
+kernel void {name}(
+    device const {T}* A [[buffer(0)]],   // M x K row-major
+    device const {T}* B [[buffer(1)]],   // K x N row-major
+    device {ACC}*     C [[buffer(2)]],   // M x N row-major
+    constant uint& M [[buffer(3)]],
+    constant uint& N [[buffer(4)]],
+    constant uint& K [[buffer(5)]],
+    uint2 tgid   [[threadgroup_position_in_grid]],
+    uint  tid    [[thread_index_in_threadgroup]],
+    uint  tcount [[threads_per_threadgroup]])
+{{
+  const uint BM = {bm}u, BN = {bn}u, BK = {bk}u, F = {f}u;
+  const uint m0 = tgid.y * BM;
+  const uint n0 = tgid.x * BN;
+
+  threadgroup {T} As[{bm} * {bk}];   // staged A tile (zero-padded at edges)
+  threadgroup {T} Bs[{bk} * {bn}];   // staged B tile
+
+  // {mf}x{nf} accumulator fragments ({ACC}).
+  simdgroup_matrix<{ACC}, {f}, {f}> acc[{mf} * {nf}];
+  for (uint i = 0; i < {mf}u * {nf}u; ++i)
+    acc[i] = make_filled_simdgroup_matrix<{ACC}, {f}, {f}>({ACC}(0));
+
+  for (uint k0 = 0; k0 < K; k0 += BK) {{
+    // Cooperative, bounds-guarded staging load (ragged edges -> zero pad).
+    for (uint i = tid; i < BM * BK; i += tcount) {{
+      uint r = i / BK, c = i % BK;
+      As[i] = (m0 + r < M && k0 + c < K) ? A[(m0 + r) * K + (k0 + c)] : {T}(0);
+    }}
+    for (uint i = tid; i < BK * BN; i += tcount) {{
+      uint r = i / BN, c = i % BN;
+      Bs[i] = (k0 + r < K && n0 + c < N) ? B[(k0 + r) * N + (n0 + c)] : {T}(0);
+    }}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Fragment inner product over the staged tiles.
+    for (uint kf = 0; kf < BK; kf += F) {{
+      simdgroup_matrix<{T}, {f}, {f}> a[{mf}], b[{nf}];
+      for (uint im = 0; im < {mf}u; ++im)
+        simdgroup_load(a[im], As + (im * F) * BK + kf, BK);
+      for (uint in = 0; in < {nf}u; ++in)
+        simdgroup_load(b[in], Bs + kf * BN + (in * F), BN);
+      for (uint im = 0; im < {mf}u; ++im)
+        for (uint in = 0; in < {nf}u; ++in)
+          simdgroup_multiply_accumulate(
+              acc[im * {nf}u + in], a[im], b[in], acc[im * {nf}u + in]);
+    }}
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+  }}
+
+  // Whole-fragment guarded store of the {mf}x{nf} output fragments.
+  for (uint im = 0; im < {mf}u; ++im) {{
+    for (uint in = 0; in < {nf}u; ++in) {{
+      uint cr = m0 + im * F, cc = n0 + in * F;
+      if (cr + F <= M && cc + F <= N)
+        simdgroup_store(acc[im * {nf}u + in], C + cr * N + cc, N);
+    }}
+  }}
+}}
+"""
+
+
 # Structural tokens every emitted simdgroup_matrix GEMM must carry (host-free check).
 _REQUIRED_TOKENS: tuple[str, ...] = (
     "#include <metal_simdgroup_matrix>",
@@ -189,6 +298,33 @@ def validate_msl_gemm_structure(
         reasons.append("missing the K-reduction loop over 8-wide fragments")
     if shape is not None and not shape.is_valid():
         reasons.append(f"invalid tile shape {(shape.m, shape.n, shape.k)}")
+    return MslValidation(ok=not reasons, reasons=tuple(reasons))
+
+
+def validate_steel_gemm_structure(
+    msl: str, *, dtype: str = "bf16", accum: str = "f32",
+) -> MslValidation:
+    """Host-free rung-2.5 check for the steel-structured emit: on top of the base
+    ``simdgroup_matrix`` GEMM tokens, assert the production-shape features —
+    threadgroup-memory staging, a barrier, an accumulator-fragment array, the
+    multi-fragment accumulate, and ragged-edge masking on the staged load."""
+    base = validate_msl_gemm_structure(msl, dtype=dtype, accum=accum)
+    reasons = list(base.reasons)
+    ACC = _scalar(accum)
+    # threadgroup-memory staging of both operands.
+    if "threadgroup " not in msl or "As[" not in msl or "Bs[" not in msl:
+        reasons.append("missing threadgroup-memory staging buffers (As/Bs)")
+    if "threadgroup_barrier(mem_flags::mem_threadgroup)" not in msl:
+        reasons.append("missing threadgroup_barrier after staging")
+    # MF x NF accumulator-fragment ARRAY (vs the single-fragment skeleton).
+    if f"simdgroup_matrix<{ACC}, {SIMDGROUP_FRAG}, {SIMDGROUP_FRAG}> acc[" not in msl:
+        reasons.append("missing the MFxNF accumulator-fragment array acc[…]")
+    # the nested multi-fragment multiply-accumulate.
+    if "acc[im *" not in msl:
+        reasons.append("missing the multi-fragment (MFxNF) multiply-accumulate")
+    # edge masking: zero-padded staged load (bounds-guarded).
+    if "< M && " not in msl or f": {_scalar(dtype)}(0)" not in msl:
+        reasons.append("missing ragged-edge masking (bounds-guarded zero-pad load)")
     return MslValidation(ok=not reasons, reasons=tuple(reasons))
 
 
@@ -246,7 +382,9 @@ __all__ = [
     "MslValidation",
     "MetalCompileResult",
     "emit_simdgroup_gemm_msl",
+    "emit_steel_gemm_msl",
     "validate_msl_gemm_structure",
+    "validate_steel_gemm_structure",
     "min_metal_std",
     "metal_compile",
 ]

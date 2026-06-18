@@ -144,8 +144,15 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Te
   **128 KB**. Likely the 128 KB is the *unified data cache* (Table 32) and 100 KB is the shared-memory
   carve-out. `gpu_target.py` keeps 100 KB (Table 31); confirm with
   `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)` on the box.
-- **sm_120 uses `sm_120a` (arch-specific) for FP4 block-scale**; a `compute_120f` family variant also
-  exists (CUDA 13.0+). Use `sm_120a` for the block-scaled mma path.
+- **`sm_120a` vs `sm_120f` — grounded from the 13.3 Programming Guide §5.1.2 + Table 28.** There are
+  three compiler-target tiers: **baseline** (`compute_120`, no arch-specific features, runs CC 12.0+);
+  **family-specific** (`compute_120f`, the arch-specific subset *common to the consumer-Blackwell
+  family* — Table 28: **runs on CC 12.0 AND 12.1**); **architecture-specific** (`compute_120a`, the
+  *full* arch-specific set incl. the FP4 `mma.sync.block_scale` Tensor-Core path — **runs ONLY on
+  exactly CC 12.0**). So: use **`sm_120a`** for the FP4/block-scale matmul proof (needs the full
+  arch-specific set); use **`sm_120f`** if/when Tessera wants one binary portable across the consumer
+  family (sm_120 + sm_121). `gpu_target.py` keeps `sm_120a` as the default (correct for the FP4 path);
+  adding an `sm_120f` family target is a clean follow-on for portable artifacts.
 - **Do NOT reuse the sm_90a WGMMA artifact as the execution proof here** — it won't run on sm_120.
   The sm_90a WGMMA path stays valid for an actual Hopper box; it is not this card.
 - **Intel 265F host:** no AVX-512/AMX — drive CUDA from it, but build Tessera's x86 backend on the

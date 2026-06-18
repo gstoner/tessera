@@ -337,9 +337,12 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
     AMDArch.GFX_950:  frozenset(),
     AMDArch.GFX_1100: frozenset({(16, 16, 16)}),   # RDNA 3 WMMA
     AMDArch.GFX_1151: frozenset({(16, 16, 16)}),   # RDNA 3.5 WMMA (ISA §7.9)
-    # RDNA 4 keeps the 16x16x16 base tile; additional GFX12 SWMMAC / larger-K
-    # shapes are deferred until grounded against the RDNA 4 ISA (not this doc).
-    AMDArch.GFX_1200: frozenset({(16, 16, 16)}),
+    # RDNA 4 dense WMMA shapes, grounded in the RDNA4 ISA §7.12 Table 41:
+    # 16x16x16 (F16/BF16/FP8/BF8/IU8/IU4) + 16x16x32 (IU4 large-K).  RDNA 4 also
+    # adds FP8/BF8 WMMA (the load-bearing gain over RDNA 3.5), a SWMMAC 4:2 sparse
+    # family (16x16x32 / 16x16x64, A-matrix expanded — a separate sparse-op set
+    # not modeled here), and WMMA load-transpose (§11.6).  No FP4 (E2M1) WMMA.
+    AMDArch.GFX_1200: frozenset({(16, 16, 16), (16, 16, 32)}),
 }
 
 

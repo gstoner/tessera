@@ -284,10 +284,21 @@ class TestROCmMFMAShapeTable:
 class TestROCmWMMAShapeTable:
     """RDNA WMMA shapes (the matrix path on RDNA, parallel to MFMA on CDNA)."""
 
-    def test_rdna_arches_expose_16x16x16(self):
+    def test_rdna3_arches_expose_16x16x16(self):
+        """RDNA 3 / 3.5 (gfx1100/gfx1151): single 16x16x16 WMMA tile (ISA Table 33)."""
         from tessera.compiler.rocm_target import wmma_variants, AMDArch
-        for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200):
+        for arch in (AMDArch.GFX_1100, AMDArch.GFX_1151):
             assert wmma_variants(arch) == frozenset({(16, 16, 16)}), arch.name
+
+    def test_rdna4_adds_16x16x32(self):
+        """RDNA 4 (gfx1200) dense WMMA adds the 16x16x32 (IU4 large-K) tile
+        alongside 16x16x16 — grounded in the RDNA4 ISA §7.12 Table 41 (which also
+        adds FP8/BF8 WMMA + SWMMAC sparse, not modeled as shapes here)."""
+        from tessera.compiler.rocm_target import wmma_variants, AMDArch
+        assert wmma_variants(AMDArch.GFX_1200) == frozenset({(16, 16, 16), (16, 16, 32)})
+        # RDNA 4 still has WMMA, not MFMA.
+        from tessera.compiler.rocm_target import mfma_variants
+        assert mfma_variants(AMDArch.GFX_1200) == frozenset()
 
     def test_cdna_arches_have_no_wmma(self):
         from tessera.compiler.rocm_target import wmma_variants, AMDArch

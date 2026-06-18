@@ -75,11 +75,21 @@ emit → structurally validate (host-free) → assemble (toolchain) → execute-
 | **D. Prove** | 7 | Execute-and-compare the WMMA GEMM vs numpy (Evaluator vertical oracle); flip `backend_kernel` for `tessera.matmul` on `rocm_gfx1151` to a real-execution status. **First non-Apple `backend_kernel` proof.** | the box |
 
 Two viable emit paths for Stage A (pick after a spike):
-- **(i) MLIR-native:** extend the `tessera-emit-rocdl` pipeline (already scaffolded in `tessera-opt`)
-  so `tessera.matmul` → `linalg` → `rocdl.wmma.f32.16x16x16.f16` → LLVM → AMDGPU. This is the
-  "MLIR/LLVM foundation" strategy and the most reusable.
-- **(ii) HIP-source:** synthesize a HIP C++ kernel using `__builtin_amdgcn_wmma_f32_16x16x16_f16_w32`,
-  compile with hipcc. Faster to first-light, less reusable; good as a correctness oracle for (i).
+- **(i) MLIR-native (preferred):** the AMD analog of the NVIDIA NVVM/Tile-IR path, through the MLIR
+  **`amdgpu` → `rocdl`** two-layer (grounded from the [ROCDL dialect docs](https://mlir.llvm.org/docs/Dialects/ROCDLDialect/)).
+  ROCDL is the low-level "wrappers around AMD-specific intrinsics" dialect (the AMD NVVM); the
+  higher-level `amdgpu` dialect (`amdgpu.wmma`) lowers to it. Target `amdgpu.wmma` and let it lower to
+  `rocdl.wmma.*` → LLVM AMDGPU → GCN. **gfx1151 (RDNA 3.5) op family — the 16×16×16 WMMA set, matching
+  the ISA Table 33:** `rocdl.wmma.f32.16x16x16.{f16,bf16}`, `rocdl.wmma.f16.16x16x16.f16`,
+  `rocdl.wmma.bf16.16x16x16.bf16`, `rocdl.wmma.i32.16x16x16.{iu8,iu4}`. Kernel scaffold uses
+  `rocdl.workgroup.id.{x,y,z}` / `rocdl.workitem.id.*` / `rocdl.barrier`. **⚠️ Correctness gate:** the
+  ROCDL dialect ALSO exposes RDNA4/gfx12 FP8 WMMA ops (e.g. `rocdl.wmma.f32.16x16x128.bf8_bf8`) — but
+  **RDNA 3.5 has no FP8 WMMA**, so the gfx1151 lowering must NOT emit the `bf8`/larger-K ops (this is
+  exactly the `wmma_f8 = not_supported` gate already in `rocm_target.py`). `tessera-emit-rocdl` is
+  scaffolded in `tessera-opt`.
+- **(ii) HIP-source (oracle):** synthesize a HIP C++ kernel using
+  `__builtin_amdgcn_wmma_f32_16x16x16_f16_w32`, compile with hipcc. Faster to first-light, less
+  reusable; good as a correctness oracle for (i).
 
 ### Honest external gates
 

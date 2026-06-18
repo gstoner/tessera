@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from .diffusion_gemma import GraphNode
 
 
@@ -28,6 +30,17 @@ class MoETransformerDimError(ValueError):
 ATTENTION_KINDS = ("mla", "gqa")
 SPARSE_KINDS = (None, "dsa", "lsa")
 QUANT_DTYPES = (None, "int4", "fp8_e4m3", "fp8_e5m2")
+
+
+@dataclass(frozen=True)
+class SharedTopKIndexGroup:
+    """DSA IndexShare contract for one producer layer and its consumers."""
+
+    producer_layer: int
+    consumer_layers: tuple[int, ...]
+    top_k: int
+    tie_break: str = "stable_lowest_index"
+    storage_policy: str = "current_query_only"
 
 
 @dataclass(frozen=True)
@@ -55,16 +68,28 @@ class MoETransformerConfig:
     num_attention_heads: int = 16
     num_kv_heads: int = 4
     head_dim: int = 128
+    qk_head_dim: int = 0
+    qk_nope_head_dim: int = 0
+    qk_rope_head_dim: int = 0
+    v_head_dim: int = 0
     # MLA latent ranks (attn_kind == "mla")
     q_lora_rank: int = 0          # 0 → no query down-projection
     kv_lora_rank: int = 512
     rope_head_dim: int = 64       # decoupled-RoPE head dim (partial RoPE)
     rope_variant: str = "rope"
+    rope_theta: float = 10000.0
 
     # ── sparse / hybrid attention ─────────────────────────────────────────────
     sparse: str | None = None     # None | "dsa" (DeepSeek block-sparse) | "lsa"
     dsa_top_k_blocks: int = 0
     dsa_block_size: int = 64       # block size for DSA *and* LSA
+    index_n_heads: int = 0
+    index_head_dim: int = 0
+    index_topk: int = 0
+    index_topk_freq: int = 0
+    index_skip_topk_offset: int = 0
+    indexer_types: tuple[str, ...] = ()
+    indexer_rope_interleave: bool = False
     sliding_window: int = 0       # 0 → dense; >0 → sliding-window layers
     layer_types: tuple[str, ...] = ("full",)
     # Lookahead Sparse Attention (sparse == "lsa"): local window ∪ threshold-
@@ -90,14 +115,39 @@ class MoETransformerConfig:
     dtype: str = "bf16"
     total_params_b: float = 0.0   # 0 → budget unchecked (placeholder configs)
     active_params_b: float = 0.0
+    hf_model_size_b: float = 0.0
+    rollout_kv_dtype: str = ""
+
+    # ── MTP / speculative decode ──────────────────────────────────────────────
+    mtp_num_steps: int = 0
+    mtp_num_layers: int = 0
+    mtp_share_parameters: bool = False
+    mtp_index_share: bool = False
+    mtp_kv_share: bool = False
 
     @property
     def attn_dim(self) -> int:
-        return self.num_attention_heads * self.head_dim
+        return self.num_attention_heads * self.qk_per_head_dim
 
     @property
     def kv_dim(self) -> int:
-        return self.num_kv_heads * self.head_dim
+        return self.num_kv_heads * self.qk_per_head_dim
+
+    @property
+    def qk_per_head_dim(self) -> int:
+        return self.qk_head_dim or self.head_dim
+
+    @property
+    def value_per_head_dim(self) -> int:
+        return self.v_head_dim or self.head_dim
+
+    @property
+    def value_dim(self) -> int:
+        return self.num_attention_heads * self.value_per_head_dim
+
+    @property
+    def kv_value_dim(self) -> int:
+        return self.num_kv_heads * self.value_per_head_dim
 
     def is_moe_layer(self, layer_index: int) -> bool:
         return layer_index >= self.first_k_dense
@@ -106,6 +156,53 @@ class MoETransformerConfig:
         if not self.layer_types:
             return "full"
         return self.layer_types[layer_index % len(self.layer_types)]
+
+    def indexer_mode(self, layer_index: int) -> str:
+        if not self.indexer_types:
+            return "full" if self.sparse == "dsa" else "none"
+        return self.indexer_types[layer_index % len(self.indexer_types)]
+
+
+def shared_topk_index_groups(config: MoETransformerConfig) -> tuple[SharedTopKIndexGroup, ...]:
+    """Return the explicit DSA IndexShare groups implied by ``indexer_types``."""
+    if not config.indexer_types:
+        return ()
+    groups: list[SharedTopKIndexGroup] = []
+    producer: int | None = None
+    consumers: list[int] = []
+    for layer, mode in enumerate(config.indexer_types):
+        if mode == "full":
+            if producer is not None:
+                groups.append(SharedTopKIndexGroup(
+                    producer_layer=producer,
+                    consumer_layers=tuple(consumers),
+                    top_k=config.index_topk or config.dsa_top_k_blocks,
+                ))
+            producer = layer
+            consumers = []
+        elif mode == "shared":
+            if producer is None:
+                raise MoETransformerDimError(
+                    f"indexer_types[{layer}]='shared' has no previous full producer")
+            consumers.append(layer)
+        else:
+            raise MoETransformerDimError(
+                f"indexer_types entries must be 'full' or 'shared'; got {mode!r}")
+    if producer is not None:
+        groups.append(SharedTopKIndexGroup(
+            producer_layer=producer,
+            consumer_layers=tuple(consumers),
+            top_k=config.index_topk or config.dsa_top_k_blocks,
+        ))
+    return tuple(groups)
+
+
+def deterministic_topk_indices(scores, top_k: int) -> np.ndarray:
+    """Stable descending top-k indices with ties resolved by lower index."""
+    s = np.asarray(scores)
+    if top_k < 1 or top_k > s.shape[-1]:
+        raise ValueError(f"top_k={top_k} out of [1, {s.shape[-1]}]")
+    return np.argsort(-s, axis=-1, kind="stable")[..., :top_k].astype(np.int64)
 
 
 def verify_config(config: MoETransformerConfig) -> None:
@@ -132,14 +229,30 @@ def verify_config(config: MoETransformerConfig) -> None:
     else:  # mla
         if config.kv_lora_rank <= 0:
             raise MoETransformerDimError("MLA requires kv_lora_rank > 0")
-        if config.rope_head_dim < 0 or config.rope_head_dim > config.head_dim:
+        if config.rope_head_dim < 0 or config.rope_head_dim > config.qk_per_head_dim:
             raise MoETransformerDimError(
-                f"rope_head_dim={config.rope_head_dim} must be in [0, head_dim={config.head_dim}]")
+                f"rope_head_dim={config.rope_head_dim} must be in "
+                f"[0, qk_head_dim={config.qk_per_head_dim}]")
+        if config.qk_head_dim and config.qk_nope_head_dim + config.qk_rope_head_dim != config.qk_head_dim:
+            raise MoETransformerDimError(
+                "qk_nope_head_dim + qk_rope_head_dim must equal qk_head_dim")
+        if config.qk_rope_head_dim and config.qk_rope_head_dim != config.rope_head_dim:
+            raise MoETransformerDimError("qk_rope_head_dim must match rope_head_dim")
 
     if config.sparse == "dsa":
         if config.dsa_top_k_blocks <= 0 or config.dsa_block_size <= 0:
             raise MoETransformerDimError(
                 "DSA requires dsa_top_k_blocks > 0 and dsa_block_size > 0")
+        if config.indexer_types:
+            if len(config.indexer_types) != config.num_layers:
+                raise MoETransformerDimError(
+                    f"indexer_types length {len(config.indexer_types)} must equal "
+                    f"num_layers={config.num_layers}")
+            if config.index_topk <= 0:
+                raise MoETransformerDimError("DSA IndexShare requires index_topk > 0")
+            if config.index_topk_freq <= 0:
+                raise MoETransformerDimError("DSA IndexShare requires index_topk_freq > 0")
+            shared_topk_index_groups(config)
     if config.sparse == "lsa":
         if config.lsa_window_size <= 0 or config.dsa_block_size <= 0:
             raise MoETransformerDimError(
@@ -200,19 +313,23 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
 
     if config.attn_kind == "mla":
         R = config.kv_lora_rank
+        qk_dim = config.attn_dim
+        v_dim = config.value_dim
         # compress hidden → latent, cache latent, expand to K/V (the MLA chain
         # the M3 FlashMLA kernel will absorb).
         add("latent_kv_compress", [(T, H), (H, R)], (T, R), kv_lora_rank=R)
-        add("q_proj", [(T, H), (H, config.attn_dim)], (T, config.attn_dim))
-        add("latent_kv_expand_k", [(T, R), (R, config.attn_dim)], (T, config.attn_dim))
-        add("latent_kv_expand_v", [(T, R), (R, config.attn_dim)], (T, config.attn_dim))
-        kv_dim = config.attn_dim
+        add("q_proj", [(T, H), (H, qk_dim)], (T, qk_dim))
+        add("latent_kv_expand_k", [(T, R), (R, qk_dim)], (T, qk_dim))
+        add("latent_kv_expand_v", [(T, R), (R, v_dim)], (T, v_dim))
+        kv_dim = qk_dim
+        kv_value_dim = v_dim
         unified_kv = True
     else:  # gqa
         kv_dim = config.kv_dim
+        kv_value_dim = config.kv_value_dim
         add("q_proj", [(T, H), (H, config.attn_dim)], (T, config.attn_dim))
         add("k_proj", [(T, H), (H, kv_dim)], (T, kv_dim))
-        add("v_proj", [(T, H), (H, kv_dim)], (T, kv_dim))
+        add("v_proj", [(T, H), (H, kv_value_dim)], (T, kv_value_dim))
         unified_kv = False
 
     # decoupled / partial RoPE on the rope_head_dim slice (MLA) or full (GQA)
@@ -229,16 +346,47 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
         sliding_window=(config.sliding_window if mode == "sliding" else None),
         unified_kv=unified_kv, rope_variant=config.rope_variant)
     if sparse == "dsa":
+        index_mode = config.indexer_mode(layer_index)
+        group = None
+        if config.indexer_types:
+            groups = shared_topk_index_groups(config)
+            group = next((g for g in groups
+                          if layer_index == g.producer_layer
+                          or layer_index in g.consumer_layers), None)
+            if index_mode == "full":
+                add("dsa_topk_indexer", [(T, config.attn_dim), (T, kv_dim)], (T, config.index_topk),
+                    index_n_heads=config.index_n_heads,
+                    index_head_dim=config.index_head_dim,
+                    index_topk=config.index_topk,
+                    index_topk_freq=config.index_topk_freq,
+                    index_skip_topk_offset=config.index_skip_topk_offset,
+                    tie_break="stable_lowest_index",
+                    storage_policy="current_query_only",
+                    group_producer_layer=layer_index,
+                    group_consumer_layers=(group.consumer_layers if group else ()))
+            else:
+                add("shared_topk_index", [], (T, config.index_topk),
+                    source_layer=(group.producer_layer if group else None),
+                    consumer_layer=layer_index,
+                    index_topk=config.index_topk,
+                    tie_break="stable_lowest_index",
+                    storage_policy="current_query_only")
         attn_attrs.update(top_k_blocks=config.dsa_top_k_blocks,
-                          block_size=config.dsa_block_size)
+                          block_size=config.dsa_block_size,
+                          indexer_mode=index_mode,
+                          index_topk=config.index_topk or None,
+                          index_share_group=(
+                              group.producer_layer if group is not None else None),
+                          index_storage_policy=(
+                              "current_query_only" if config.indexer_types else None))
     elif sparse == "lsa":
         attn_attrs.update(window_size=config.lsa_window_size,
                           block_size=config.dsa_block_size,
                           threshold=config.lsa_threshold)
     add(attn_op,
         [(T, config.attn_dim), (T, kv_dim), (T, kv_dim)],
-        (T, config.attn_dim), **attn_attrs)
-    add("o_proj", [(T, config.attn_dim), (config.attn_dim, H)], (T, H))
+        (T, config.value_dim), **attn_attrs)
+    add("o_proj", [(T, config.value_dim), (config.value_dim, H)], (T, H))
     add("residual_add", [(T, H), (T, H)], (T, H), source="attn")
 
 
@@ -312,16 +460,34 @@ def verify_block(graph: BlockGraph, config: MoETransformerConfig) -> None:
             raise MoETransformerDimError(
                 f"latent_kv_compress out {comp.output[-1]} != kv_lora_rank="
                 f"{config.kv_lora_rank}")
+        v = graph.find("latent_kv_expand_v")
+        if v.output[-1] != config.value_dim:
+            raise MoETransformerDimError(
+                f"latent_kv_expand_v out {v.output[-1]} != value_dim={config.value_dim}")
     else:
         k = graph.find("k_proj")
         if k.output[-1] != config.kv_dim:
             raise MoETransformerDimError(
                 f"k_proj out width {k.output[-1]} != kv_dim={config.kv_dim}")
+        v = graph.find("v_proj")
+        if v.output[-1] != config.kv_value_dim:
+            raise MoETransformerDimError(
+                f"v_proj out width {v.output[-1]} != kv_value_dim={config.kv_value_dim}")
+
+    o = graph.find("o_proj")
+    if o.inputs[0][-1] != config.value_dim:
+        raise MoETransformerDimError("o_proj input width must match value_dim")
 
     if config.sparse == "dsa":
         attn = graph.find("deepseek_sparse_attention")
         if int(attn.attrs.get("top_k_blocks", 0)) != config.dsa_top_k_blocks:
             raise MoETransformerDimError("DSA top_k_blocks attr mismatch")
+        if config.indexer_types:
+            mode = config.indexer_mode(graph.layer_index)
+            if attn.attrs.get("indexer_mode") != mode:
+                raise MoETransformerDimError("DSA indexer_mode attr mismatch")
+            op = "dsa_topk_indexer" if mode == "full" else "shared_topk_index"
+            graph.find(op)
     if config.sparse == "lsa":
         attn = graph.find("lookahead_sparse_attention")
         if int(attn.attrs.get("window_size", 0)) != config.lsa_window_size:
@@ -356,9 +522,9 @@ def estimated_param_counts(config: MoETransformerConfig) -> dict:
     embed = config.vocab_size * H
     if config.attn_kind == "mla":
         R = config.kv_lora_rank
-        attn = H * config.attn_dim + H * R + 2 * R * config.attn_dim + config.attn_dim * H
+        attn = H * config.attn_dim + H * R + R * config.attn_dim + R * config.value_dim + config.value_dim * H
     else:
-        attn = H * config.attn_dim + 2 * H * config.kv_dim + config.attn_dim * H
+        attn = H * config.attn_dim + H * config.kv_dim + H * config.kv_value_dim + config.value_dim * H
     router = H * E
     expert_one = 3 * H * F
     shared = (3 * H * Fs) if config.num_shared_experts > 0 else 0
@@ -404,10 +570,13 @@ def verify_param_budget(config: MoETransformerConfig, *, rel_tol: float = 0.15) 
 __all__ = [
     "MoETransformerConfig",
     "MoETransformerDimError",
+    "SharedTopKIndexGroup",
     "BlockGraph",
     "build_block",
     "verify_config",
     "verify_block",
+    "shared_topk_index_groups",
+    "deterministic_topk_indices",
     "estimated_param_counts",
     "verify_param_budget",
     "ATTENTION_KINDS",

@@ -19,7 +19,7 @@ than hidden behind indirection.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -44,6 +44,65 @@ class GRPOConfig:
     lr: float = 0.05             # AdamW learning rate for grpo_train_step
 
 
+@dataclass(frozen=True)
+class RolloutTokenMetadata:
+    """Per-token metadata needed to diagnose MTP/DSA RL rollouts."""
+
+    token_id: int
+    behavior_logprob: float
+    policy_version: int
+    token_entropy: float
+    draft_entropy: float = 0.0
+    target_entropy: float = 0.0
+    per_step_acceptance: tuple[float, ...] = ()
+    accepted_length: int = 0
+    tv_overlap: float = 0.0
+    sampler_temperature: float = 1.0
+    sampler_top_p: float = 0.0
+    index_share_group_id: int | None = None
+    deterministic_topk_hash: str = ""
+    kv_bytes: int = 0
+    cache_hits: int = 0
+    cache_reuse_affinity_id: str = ""
+
+
+@dataclass(frozen=True)
+class RolloutDiagnostics:
+    """Serializable rollout-level telemetry independent of the GRPO objective."""
+
+    rollout_id: str
+    tokens: tuple[RolloutTokenMetadata, ...] = field(default_factory=tuple)
+
+    def summary(self) -> dict[str, float | int | str]:
+        n = len(self.tokens)
+        if n == 0:
+            return {
+                "rollout_id": self.rollout_id,
+                "num_tokens": 0,
+                "mean_entropy": 0.0,
+                "mean_target_entropy": 0.0,
+                "mean_draft_entropy": 0.0,
+                "mean_accepted_length": 0.0,
+                "mean_tv_overlap": 0.0,
+                "kv_bytes": 0,
+                "cache_hits": 0,
+            }
+        return {
+            "rollout_id": self.rollout_id,
+            "num_tokens": n,
+            "mean_entropy": float(np.mean([t.token_entropy for t in self.tokens])),
+            "mean_target_entropy": float(np.mean([t.target_entropy for t in self.tokens])),
+            "mean_draft_entropy": float(np.mean([t.draft_entropy for t in self.tokens])),
+            "mean_accepted_length": float(np.mean([t.accepted_length for t in self.tokens])),
+            "mean_tv_overlap": float(np.mean([t.tv_overlap for t in self.tokens])),
+            "kv_bytes": int(sum(t.kv_bytes for t in self.tokens)),
+            "cache_hits": int(sum(t.cache_hits for t in self.tokens)),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def grpo_step(
     logp_new,
     logp_old,
@@ -52,7 +111,8 @@ def grpo_step(
     aux_losses: dict[str, float] | None = None,
     config: GRPOConfig | None = None,
     ref_logp: Any | None = None,
-) -> dict[str, float]:
+    rollout_diagnostics: RolloutDiagnostics | None = None,
+) -> dict[str, Any]:
     """One GRPO objective evaluation, including MoE auxiliary terms.
 
     Returns a dict of scalar losses: ``policy``, ``load_balancing``,
@@ -69,12 +129,15 @@ def grpo_step(
     lb = float(aux.get("load_balancing_loss", 0.0))
     z = float(aux.get("router_z_loss", 0.0))
     total = policy + cfg.lb_loss_coef * lb + cfg.z_loss_coef * z
-    return {
+    metrics: dict[str, Any] = {
         "policy": policy,
         "load_balancing": lb,
         "router_z": z,
         "total": total,
     }
+    if rollout_diagnostics is not None:
+        metrics["rollout"] = rollout_diagnostics.summary()
+    return metrics
 
 
 # ─────────────────────────────────────────────────────────────────────────────

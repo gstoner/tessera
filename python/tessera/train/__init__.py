@@ -87,7 +87,14 @@ from .models.qwen3_moe import (
 )
 from .models.traced_moe_policy import TracedMoEPolicy
 from .loop.optimizer import adamw_step
-from .loop.rl import GRPOConfig, grpo_step, grpo_surrogate, grpo_train_step
+from .loop.rl import (
+    GRPOConfig,
+    RolloutDiagnostics,
+    RolloutTokenMetadata,
+    grpo_step,
+    grpo_surrogate,
+    grpo_train_step,
+)
 
 __all__ = [
     # engine
@@ -105,6 +112,8 @@ __all__ = [
     # training loop (Tier-2 tape + AdamW)
     "adamw_step",
     "GRPOConfig",
+    "RolloutDiagnostics",
+    "RolloutTokenMetadata",
     "grpo_step",
     "grpo_surrogate",
     "grpo_train_step",

@@ -22,12 +22,16 @@ import pytest
 import tessera as ts
 from tessera.speculative import (
     DraftTree,
+    SpeculativeSamplingConfig,
     SpeculativeStep,
     VerificationResult,
     acceptance_probabilities,
     advance_kv,
     batch_verify,
     expand_tree,
+    rejection_verify_chain,
+    residual_distribution,
+    sample_draft_chain,
 )
 
 
@@ -202,6 +206,91 @@ class TestBatchVerify:
         # All accept so every entry of the mask is True and prefix len = 4.
         assert res.acceptance_mask.all()
         assert res.accepted_prefix_length == 4
+
+
+class TestRejectionSamplingChain:
+    def test_residual_distribution_is_exact_on_toy_vocab(self):
+        p = np.array([0.5, 0.3, 0.2])
+        q = np.array([0.1, 0.4, 0.5])
+        resid = residual_distribution(p, q)
+        np.testing.assert_allclose(resid, np.array([1.0, 0.0, 0.0]))
+
+    def test_chain_rejects_and_samples_from_residual(self):
+        rng = np.random.default_rng(0)
+        draft_tokens = np.array([1])
+        q = np.array([[0.1, 0.9, 0.0]])
+        p = np.array([[0.8, 0.1, 0.1]])
+        res = rejection_verify_chain(draft_tokens, q, p, rng=rng)
+        assert res.accepted == 0
+        assert res.rejected_at == 0
+        assert res.emitted_from == "residual"
+        np.testing.assert_allclose(res.residual_probs, np.array([7 / 8, 0.0, 1 / 8]))
+
+    def test_all_accepted_emits_target_bonus(self):
+        rng = np.random.default_rng(1)
+        draft_tokens = np.array([0, 1])
+        q = np.array([[0.4, 0.6], [0.6, 0.4]])
+        p = np.array([[0.9, 0.1], [0.1, 0.9], [0.0, 1.0]])
+        res = rejection_verify_chain(draft_tokens, q, p, rng=rng)
+        assert res.accepted == 2
+        assert res.rejected_at is None
+        assert res.emitted_from == "target_bonus"
+        np.testing.assert_array_equal(res.new_tokens, np.array([0, 1, 1]))
+
+    def test_sample_draft_chain_caches_probabilities(self):
+        rng = np.random.default_rng(2)
+        logits = np.array([[10.0, -10.0], [-10.0, 10.0]])
+        sample = sample_draft_chain(
+            logits,
+            config=SpeculativeSamplingConfig(temperature=1.0),
+            rng=rng,
+        )
+        np.testing.assert_array_equal(sample.tokens, np.array([0, 1]))
+        assert sample.probs.shape == logits.shape
+        np.testing.assert_allclose(
+            sample.token_probs,
+            sample.probs[np.arange(2), sample.tokens],
+        )
+
+    def test_rejection_verify_normalizes_probability_rows(self):
+        rng = np.random.default_rng(4)
+        q = np.array([[7.0, 3.0]])
+        p = np.array([[2.0, 8.0], [1.0, 0.0]])
+        res = rejection_verify_chain(np.array([1]), q, p, rng=rng)
+        assert res.accepted == 1
+        np.testing.assert_allclose(res.residual_probs.sum(), 1.0)
+
+    def test_rejection_verify_rejects_bad_probability_rows(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            rejection_verify_chain(
+                np.array([0]),
+                np.array([[1.0, -0.1]]),
+                np.array([[1.0, 0.0]]),
+            )
+        with pytest.raises(ValueError, match="positive mass"):
+            rejection_verify_chain(
+                np.array([0]),
+                np.array([[0.0, 0.0]]),
+                np.array([[1.0, 0.0]]),
+            )
+        with pytest.raises(ValueError, match="outside the vocabulary"):
+            rejection_verify_chain(
+                np.array([2]),
+                np.array([[0.5, 0.5]]),
+                np.array([[0.5, 0.5]]),
+            )
+
+    def test_monte_carlo_rejection_matches_target_distribution(self):
+        rng = np.random.default_rng(3)
+        q = np.array([[0.7, 0.3]])
+        p = np.array([[0.2, 0.8]])
+        counts = np.zeros(2, dtype=np.int64)
+        for _ in range(4000):
+            tok = int(rng.choice(2, p=q[0]))
+            res = rejection_verify_chain(np.array([tok]), q, p, rng=rng)
+            counts[res.new_tokens[0]] += 1
+        empirical = counts / counts.sum()
+        np.testing.assert_allclose(empirical, p[0], atol=0.035)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

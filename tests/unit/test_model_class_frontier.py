@@ -74,10 +74,10 @@ def test_param_estimate_order_of_magnitude(model):
 
 
 def test_declared_budgets_are_in_range_where_published():
-    # DeepSeek-V3.2 and Kimi-K2 publish sizes; verify the estimator lands close.
+    # DeepSeek-V3.2, Kimi-K2, and GLM-5.2 publish sizes; verify the estimator
+    # lands close to the contract-level parameter budgets.
     mt.verify_param_budget(deepseek_v32.config(), rel_tol=0.30)
     mt.verify_param_budget(kimi_k2.config(), rel_tol=0.30)
-    # GLM-5 declares no budget (unconfirmed) → no-op, must not raise.
     mt.verify_param_budget(glm5.config())
 
 

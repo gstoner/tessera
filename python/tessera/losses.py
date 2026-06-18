@@ -279,6 +279,71 @@ def seq2seq_loss(logits, targets, mask=None, reduction: str = "mean"):
     return _reduce(loss, reduction)
 
 
+def mtp_e2e_tv_loss(
+    target_logits,
+    draft_logits,
+    *,
+    mask=None,
+    reduction: str = "mean",
+    detach_target: bool = True,
+    return_metrics: bool = False,
+):
+    """End-to-end TV loss for multi-step MTP rejection sampling.
+
+    Inputs are ``(batch, positions, mtp_steps, vocab)``.  The loss directly
+    optimizes normalized expected accepted length:
+    ``1 - gamma^-1 * sum_j prod_{i<=j} (1 - TV(p_i, q_i))``.
+    """
+    del detach_target  # numpy reference path treats both inputs as arrays.
+    target = _asarray(target_logits).astype(np.float64, copy=False)
+    draft = _asarray(draft_logits).astype(np.float64, copy=False)
+    if target.shape != draft.shape:
+        raise ValueError(f"target/draft logits must match; got {target.shape} vs {draft.shape}")
+    if target.ndim != 4:
+        raise ValueError(
+            "mtp_e2e_tv_loss expects (batch, positions, mtp_steps, vocab) logits")
+    p = np.exp(_log_softmax(target, axis=-1))
+    q = np.exp(_log_softmax(draft, axis=-1))
+    tv = 0.5 * np.sum(np.abs(p - q), axis=-1)       # (B,P,G)
+    alpha = np.clip(1.0 - tv, 0.0, 1.0)
+    prefix = np.cumprod(alpha, axis=-1)
+    expected_accept_len = np.sum(prefix, axis=-1)   # (B,P)
+    gamma = target.shape[-2]
+    loss = 1.0 - expected_accept_len / max(gamma, 1)
+
+    weight = None
+    if mask is not None:
+        weight = _asarray(mask).astype(np.float64, copy=False)
+        if weight.shape != loss.shape:
+            raise ValueError(f"mask must have shape {loss.shape}; got {weight.shape}")
+        if not np.isfinite(weight).all() or np.any(weight < 0.0):
+            raise ValueError("mask must be finite and non-negative")
+        loss = loss * weight
+
+    if reduction == "none":
+        reduced = loss
+    elif reduction == "sum":
+        reduced = np.sum(loss)
+    elif reduction == "mean":
+        denom = np.sum(weight) if weight is not None else loss.size
+        reduced = np.sum(loss) / max(float(denom), 1.0)
+    else:
+        raise ValueError("reduction must be 'none', 'mean', or 'sum'")
+
+    if not return_metrics:
+        return reduced
+    target_entropy = -np.sum(p * np.log(np.maximum(p, 1e-12)), axis=-1)
+    draft_entropy = -np.sum(q * np.log(np.maximum(q, 1e-12)), axis=-1)
+    metrics = {
+        "per_step_tv": tv,
+        "per_step_alpha": alpha,
+        "expected_accept_len": expected_accept_len,
+        "target_entropy": target_entropy,
+        "draft_entropy": draft_entropy,
+    }
+    return reduced, metrics
+
+
 # ---------------------------------------------------------------------------
 # EBM4 — Energy-based-model training losses.
 #
@@ -402,6 +467,7 @@ __all__ = [
     "log_cosh_loss",
     "mae_loss",
     "mse_loss",
+    "mtp_e2e_tv_loss",
     "nt_xent_loss",
     "score_matching_loss",
     "seq2seq_loss",

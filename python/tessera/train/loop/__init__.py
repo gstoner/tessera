@@ -10,6 +10,21 @@ updates (the integration seam documented in ``rl.py``).
 from __future__ import annotations
 
 from .optimizer import adamw_step
-from .rl import GRPOConfig, grpo_step, grpo_surrogate, grpo_train_step
+from .rl import (
+    GRPOConfig,
+    RolloutDiagnostics,
+    RolloutTokenMetadata,
+    grpo_step,
+    grpo_surrogate,
+    grpo_train_step,
+)
 
-__all__ = ["GRPOConfig", "grpo_step", "grpo_surrogate", "grpo_train_step", "adamw_step"]
+__all__ = [
+    "GRPOConfig",
+    "RolloutDiagnostics",
+    "RolloutTokenMetadata",
+    "grpo_step",
+    "grpo_surrogate",
+    "grpo_train_step",
+    "adamw_step",
+]

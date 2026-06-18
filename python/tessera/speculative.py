@@ -178,6 +178,185 @@ class VerificationResult:
     accepted_prefix: np.ndarray
 
 
+@dataclass(frozen=True)
+class SpeculativeSamplingConfig:
+    """Sampling policy used for draft and target probability accounting."""
+
+    temperature: float = 1.0
+    top_k: int = 0
+    top_p: float = 0.0
+    eps: float = 1e-12
+
+
+@dataclass(frozen=True)
+class DraftSample:
+    """A sampled MTP draft chain with cached draft distributions."""
+
+    tokens: np.ndarray
+    probs: np.ndarray
+    token_probs: np.ndarray
+    log_probs: np.ndarray
+
+
+@dataclass(frozen=True)
+class RejectionSamplingResult:
+    """Distribution-preserving chain verification result."""
+
+    accepted: int
+    new_tokens: np.ndarray
+    acceptance_mask: np.ndarray
+    acceptance_probs: np.ndarray
+    rejected_at: int | None
+    residual_probs: np.ndarray
+    emitted_from: str
+
+
+def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
+    z = np.asarray(x, dtype=np.float64)
+    if not np.isfinite(z).all():
+        raise ValueError("sampling logits must be finite")
+    z = z - np.max(z, axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / np.sum(e, axis=axis, keepdims=True)
+
+
+def _normalize_probs(x: np.ndarray, *, eps: float = 1e-12, name: str = "probs") -> np.ndarray:
+    p = np.asarray(x, dtype=np.float64)
+    if not np.isfinite(p).all() or np.any(p < 0.0):
+        raise ValueError(f"{name} must be finite and non-negative")
+    total = p.sum(axis=-1, keepdims=True)
+    if np.any(total <= eps):
+        raise ValueError(f"{name} rows must have positive mass")
+    return p / total
+
+
+def _sampling_probs(logits: np.ndarray, config: SpeculativeSamplingConfig) -> np.ndarray:
+    lg = np.asarray(logits, dtype=np.float64)
+    temp = max(float(config.temperature), config.eps)
+    flat = (lg / temp).reshape(-1, lg.shape[-1])
+    V = flat.shape[-1]
+    out = np.empty_like(flat)
+    for i, row0 in enumerate(flat):
+        row = row0.copy()
+        if config.top_k and 0 < config.top_k < V:
+            kth = np.partition(row, -config.top_k)[-config.top_k]
+            row = np.where(row < kth, -np.inf, row)
+        p = _softmax(row)
+        if config.top_p and 0.0 < config.top_p < 1.0:
+            order = np.argsort(-p, kind="stable")
+            csum = np.cumsum(p[order])
+            cut = int(np.searchsorted(csum, config.top_p, side="left")) + 1
+            keep = order[:cut]
+            masked = np.zeros_like(p)
+            masked[keep] = p[keep]
+            p = masked / max(masked.sum(), config.eps)
+        out[i] = p
+    return out.reshape(lg.shape)
+
+
+def sample_draft_chain(
+    draft_logits: np.ndarray,
+    *,
+    config: SpeculativeSamplingConfig | None = None,
+    rng: Optional[np.random.Generator] = None,
+) -> DraftSample:
+    """Sample a linear MTP draft chain from ``q`` and cache draft probabilities."""
+    cfg = config or SpeculativeSamplingConfig()
+    probs = _sampling_probs(np.asarray(draft_logits), cfg)
+    flat = probs.reshape(-1, probs.shape[-1])
+    gen = rng if rng is not None else np.random.default_rng()
+    tokens = np.empty(flat.shape[0], dtype=np.int64)
+    for i, p in enumerate(flat):
+        tokens[i] = int(gen.choice(p.shape[0], p=p))
+    token_probs = flat[np.arange(flat.shape[0]), tokens]
+    log_probs = np.log(np.maximum(token_probs, cfg.eps))
+    return DraftSample(
+        tokens=tokens.reshape(probs.shape[:-1]),
+        probs=probs,
+        token_probs=token_probs.reshape(probs.shape[:-1]),
+        log_probs=log_probs.reshape(probs.shape[:-1]),
+    )
+
+
+def residual_distribution(target_probs: np.ndarray, draft_probs: np.ndarray, *,
+                          eps: float = 1e-12) -> np.ndarray:
+    """Return ``normalize(max(0, p - q))`` for a rejected speculative step."""
+    p = np.asarray(target_probs, dtype=np.float64)
+    q = np.asarray(draft_probs, dtype=np.float64)
+    if p.shape != q.shape:
+        raise ValueError(f"target/draft prob shapes must match; got {p.shape} vs {q.shape}")
+    p = _normalize_probs(p, eps=eps, name="target_probs")
+    q = _normalize_probs(q, eps=eps, name="draft_probs")
+    resid = np.maximum(p - q, 0.0)
+    total = resid.sum(axis=-1, keepdims=True)
+    fallback = p / np.maximum(p.sum(axis=-1, keepdims=True), eps)
+    return np.where(total > eps, resid / np.maximum(total, eps), fallback)
+
+
+def rejection_verify_chain(
+    draft_tokens: np.ndarray,
+    draft_probs: np.ndarray,
+    target_probs: np.ndarray,
+    *,
+    rng: Optional[np.random.Generator] = None,
+    eps: float = 1e-12,
+) -> RejectionSamplingResult:
+    """Verify a linear MTP draft with distribution-preserving rejection sampling.
+
+    ``target_probs`` may have one extra row for the all-accepted bonus token.
+    """
+    d = np.asarray(draft_tokens, dtype=np.int64).reshape(-1)
+    q = np.asarray(draft_probs, dtype=np.float64)
+    p = np.asarray(target_probs, dtype=np.float64)
+    if q.ndim != 2 or p.ndim != 2:
+        raise ValueError("draft_probs and target_probs must be rank-2")
+    if q.shape[0] != d.shape[0] or p.shape[0] < d.shape[0] or q.shape[1] != p.shape[1]:
+        raise ValueError(
+            "draft tokens/probs and target probs must have compatible "
+            f"chain/vocab shapes; got tokens={d.shape}, q={q.shape}, p={p.shape}")
+    if np.any(d < 0) or np.any(d >= q.shape[1]):
+        raise ValueError("draft_tokens contain ids outside the vocabulary")
+    q = _normalize_probs(q, eps=eps, name="draft_probs")
+    p = _normalize_probs(p, eps=eps, name="target_probs")
+    gen = rng if rng is not None else np.random.default_rng()
+    V = q.shape[1]
+    acceptance_probs = np.zeros(d.shape[0], dtype=np.float64)
+    acceptance_mask = np.zeros(d.shape[0], dtype=bool)
+    new_tokens: list[int] = []
+    for i, tok in enumerate(d):
+        q_tok = q[i, tok]
+        p_tok = p[i, tok]
+        accept_prob = 1.0 if q_tok <= eps and p_tok > eps else min(1.0, p_tok / max(q_tok, eps))
+        acceptance_probs[i] = accept_prob
+        if gen.random() <= accept_prob:
+            acceptance_mask[i] = True
+            new_tokens.append(int(tok))
+            continue
+        resid = residual_distribution(p[i], q[i], eps=eps)
+        new_tokens.append(int(gen.choice(V, p=resid)))
+        return RejectionSamplingResult(
+            accepted=i,
+            new_tokens=np.asarray(new_tokens, dtype=np.int64),
+            acceptance_mask=acceptance_mask,
+            acceptance_probs=acceptance_probs,
+            rejected_at=i,
+            residual_probs=resid,
+            emitted_from="residual",
+        )
+    bonus_row = p[d.shape[0]] if p.shape[0] > d.shape[0] else p[-1]
+    bonus = bonus_row / np.maximum(bonus_row.sum(), eps)
+    new_tokens.append(int(gen.choice(V, p=bonus)))
+    return RejectionSamplingResult(
+        accepted=d.shape[0],
+        new_tokens=np.asarray(new_tokens, dtype=np.int64),
+        acceptance_mask=acceptance_mask,
+        acceptance_probs=acceptance_probs,
+        rejected_at=None,
+        residual_probs=bonus,
+        emitted_from="target_bonus",
+    )
+
+
 def acceptance_probabilities(
     target_log_probs: np.ndarray, draft_log_probs: np.ndarray,
 ) -> np.ndarray:
@@ -414,8 +593,14 @@ class SpeculativeStep:
 __all__ = [
     "DraftTree",
     "VerificationResult",
+    "SpeculativeSamplingConfig",
+    "DraftSample",
+    "RejectionSamplingResult",
     "SpeculativeStep",
     "expand_tree",
+    "sample_draft_chain",
+    "rejection_verify_chain",
+    "residual_distribution",
     "acceptance_probabilities",
     "batch_verify",
     "advance_kv",

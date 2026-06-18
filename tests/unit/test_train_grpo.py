@@ -14,8 +14,11 @@ import tessera as ts
 from tessera import nn, ops, rl
 from tessera.train import (
     GRPOConfig,
+    RolloutDiagnostics,
+    RolloutTokenMetadata,
     TracedMoEPolicy,
     adamw_step,
+    grpo_step,
     grpo_surrogate,
     grpo_train_step,
 )
@@ -105,6 +108,45 @@ def test_grpo_surrogate_matches_rl_loss_at_ratio_one():
     rl_v = float(rl.grpo_policy_loss(logp_old, logp_old, advantages=adv))
     assert surr_v == _approx(-float(adv.mean()))
     assert surr_v == _approx(rl_v)
+
+
+def test_grpo_step_telemetry_is_optional_and_serializable():
+    logp = np.log(np.array([0.4, 0.6], dtype=np.float32))
+    rewards = np.array([1.0, -1.0], dtype=np.float32)
+    plain = grpo_step(logp, logp, rewards, config=GRPOConfig(group_axis=0))
+    diag = RolloutDiagnostics(
+        rollout_id="rollout-a",
+        tokens=(
+            RolloutTokenMetadata(
+                token_id=7,
+                behavior_logprob=-0.2,
+                policy_version=3,
+                token_entropy=1.1,
+                draft_entropy=1.0,
+                target_entropy=1.2,
+                per_step_acceptance=(1.0, 0.5),
+                accepted_length=2,
+                tv_overlap=0.9,
+                sampler_temperature=0.8,
+                sampler_top_p=0.95,
+                index_share_group_id=2,
+                deterministic_topk_hash="abc",
+                kv_bytes=128,
+                cache_hits=1,
+                cache_reuse_affinity_id="agent-1",
+            ),
+        ),
+    )
+    with_diag = grpo_step(
+        logp, logp, rewards, config=GRPOConfig(group_axis=0),
+        rollout_diagnostics=diag,
+    )
+    for key in ("policy", "load_balancing", "router_z", "total"):
+        assert with_diag[key] == plain[key]
+    assert with_diag["rollout"]["rollout_id"] == "rollout-a"
+    assert with_diag["rollout"]["num_tokens"] == 1
+    assert with_diag["rollout"]["mean_accepted_length"] == 2.0
+    assert diag.to_dict()["tokens"][0]["deterministic_topk_hash"] == "abc"
 
 
 def _approx(x, tol=1e-5):

@@ -84,9 +84,12 @@ from .mixture_transformer import (
 from .moe_transformer import (
     MoETransformerConfig,
     MoETransformerDimError,
+    SharedTopKIndexGroup,
     BlockGraph,
     build_block,
     verify_block,
+    shared_topk_index_groups,
+    deterministic_topk_indices,
     estimated_param_counts as moe_estimated_param_counts,
     verify_param_budget as moe_verify_param_budget,
 )
@@ -94,9 +97,12 @@ from .moe_transformer import (
 __all__ = [
     "MoETransformerConfig",
     "MoETransformerDimError",
+    "SharedTopKIndexGroup",
     "BlockGraph",
     "build_block",
     "verify_block",
+    "shared_topk_index_groups",
+    "deterministic_topk_indices",
     "moe_estimated_param_counts",
     "moe_verify_param_budget",
     "deepseek_v32",

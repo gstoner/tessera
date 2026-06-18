@@ -95,12 +95,32 @@ GA-vs-preview status; whether the standalone Tile IR compiler ships in the pinne
 MLIR dialect name/op set; the SASS-vs-PTX consumption path; concrete sm_90/100/120 portability
 guarantees. (Grounded so far from the spec landing + Introduction only.)
 
+## Toolkit: the box runs CUDA 13.3 (bump the pin from 13.2 U1)
+
+The target system loads **CUDA 13.3** (release notes 27-May-2026), newer than Tessera's pinned
+**13.2.1**. 13.3 is materially better for this work:
+- **CUDA Tile C++** — tile programming in CUDA C++ with **NVCC *and* NVRTC**. This is the C++ sibling
+  of the Tile IR / cuTile path above; the **NVRTC** half is a *runtime* tile-compile lane that drops
+  straight onto Tessera's `tsrRegisterGpuLauncher` bridge (emit tile program → NVRTC → load → launch).
+- **Full Blackwell compiler support** (SM_100/101/120); **libNVVM** Blackwell codegen on an
+  **LLVM 18.1.8**-based NVVM IR dialect (relevant to a future MLIR→NVVM path).
+- Perf: ~5% FP4 GEMM (Blackwell Ultra), ~27% TF32 GEMM (Blackwell/Ultra). CompileIQ (AI compiler
+  autotuning — compare Tessera's flywheel/autotuner). CUDA Python 1.0.
+- **Action:** bump the pin **13.2.1 → 13.3** across `gpu_target.py` (`TESSERA_TARGET_CUDA_TOOLKIT`,
+  driver/PTX-ISA/NCCL values), `cmake/TesseraToolchainPins.cmake`, the C++ pin header, and the
+  byte-identical cross-language consistency test. **Ground the exact 13.3 driver-min / PTX-ISA /
+  NCCL values from the 13.3 release notes first** (do not carry the 13.2 values — 555.85 / 8.6 / 2.22).
+
 ## Honest external gates
 
-- **CUDA toolkit ≥ 12.8 is required for sm_120** (Tessera pins 13.2 U1 — fine). The widely-reported
-  "RTX 5070 Ti not supported" noise is about **framework wheels** (PyTorch/TF prebuilt binaries
-  lagging sm_120), **not** the CUDA toolkit — `nvcc`/`ptxas` 12.8+ assemble `sm_120a` cleanly, which
-  is all Tessera needs. Driver **R570+**.
+- The "RTX 5070 Ti not supported" noise is about **framework wheels** (PyTorch/TF prebuilt binaries
+  lagging sm_120), **not** the CUDA toolkit — `nvcc`/`ptxas` 13.x assemble `sm_120a` cleanly, which is
+  all Tessera needs.
+- **Shared-memory discrepancy to resolve on-silicon:** the compute-capabilities appendix (Table 31)
+  says CC 12.0 max shared memory/SM = **100 KB** (99 KB/block); the 13.3 release-note summary says
+  **128 KB**. Likely the 128 KB is the *unified data cache* (Table 32) and 100 KB is the shared-memory
+  carve-out. `gpu_target.py` keeps 100 KB (Table 31); confirm with
+  `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)` on the box.
 - **sm_120 uses `sm_120a` (arch-specific) for FP4 block-scale**; a `compute_120f` family variant also
   exists (CUDA 13.0+). Use `sm_120a` for the block-scaled mma path.
 - **Do NOT reuse the sm_90a WGMMA artifact as the execution proof here** — it won't run on sm_120.

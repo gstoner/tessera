@@ -109,9 +109,10 @@ _TENSOR_CORE_DTYPES: dict[ISA, frozenset[str]] = {
 # the per-SM ready/tba feature readiness was NOT re-evaluated for 13.3 — that is a
 # separate grounded task.)
 #
-# Reference: CUDA Toolkit 13.3 release notes + PTX ISA 9.3.  Values that the ISA
-# spec leaves open are marked with "tba" so the lowering passes can pin them once
-# NVIDIA publishes final guidance.
+# Reference: CUDA Toolkit 13.3 release notes + PTX ISA 9.3.  The "tba" status
+# (below) is reserved for a future SM whose ISA guidance is still pending — the
+# matrix is currently fully resolved (every modeled SM flag is "ready" or
+# "not_supported"; there are no live "tba" entries today).
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: Target CUDA Toolkit release that Tessera's NVIDIA backend is built against.
@@ -129,7 +130,7 @@ TESSERA_TARGET_NCCL_MIN: str = "2.22"
 #   "ready"          — feature is functional under CUDA 13.3 on this ISA
 #   "tba"            — present in the architecture but not enabled in 13.3
 #   "not_supported"  — architecturally unavailable
-_CUDA_13_2_FEATURES: dict[ISA, dict[str, str]] = {
+_CUDA_13_3_FEATURES: dict[ISA, dict[str, str]] = {
     ISA.SM_80: {
         # Ampere — WMMA only; no WGMMA / TMA / clusters.
         "wmma":                    "ready",
@@ -251,7 +252,7 @@ _CUDA_13_2_FEATURES: dict[ISA, dict[str, str]] = {
 
 # Per-SM nvcc / ptxas compile-target arch strings under CUDA 13.3.
 # These are passed to ``nvcc -arch=...`` and ``ptxas --gpu-name=...``.
-_CUDA_13_2_ARCH_STRINGS: dict[ISA, str] = {
+_CUDA_13_3_ARCH_STRINGS: dict[ISA, str] = {
     ISA.SM_80:  "sm_80",
     ISA.SM_86:  "sm_86",
     ISA.SM_89:  "sm_89",
@@ -267,18 +268,18 @@ def cuda_feature_status(isa: ISA, feature: str) -> str:
     Values: ``"ready"`` | ``"tba"`` | ``"not_supported"``.  Unknown
     feature names raise ``KeyError``.
     """
-    return _CUDA_13_2_FEATURES[isa][feature]
+    return _CUDA_13_3_FEATURES[isa][feature]
 
 
 def cuda_arch_string(isa: ISA) -> str:
     """Return the ``nvcc -arch=...`` string for ``isa`` under CUDA 13.3."""
-    return _CUDA_13_2_ARCH_STRINGS[isa]
+    return _CUDA_13_3_ARCH_STRINGS[isa]
 
 
 def cuda_feature_set(isa: ISA) -> frozenset[str]:
     """Return the set of features that are ``ready`` for ``isa``."""
     return frozenset(
-        name for name, status in _CUDA_13_2_FEATURES[isa].items()
+        name for name, status in _CUDA_13_3_FEATURES[isa].items()
         if status == "ready"
     )
 

@@ -561,13 +561,28 @@ class ROCmTargetProfile:
         return _WMMA_VARIANTS[self.arch]
 
     @property
-    def is_rdna(self) -> bool:
+    def is_wave32(self) -> bool:
+        """True when the arch uses a 32-lane wavefront + the WMMA matrix path (vs
+        CDNA wave64 + MFMA). This is the precise operational predicate; ``is_rdna``
+        is the historical alias (gfx125x is wave32/WMMA but not asserted-RDNA)."""
         return self.arch in _RDNA_ARCHES
+
+    @property
+    def is_rdna(self) -> bool:
+        """Alias of :attr:`is_wave32` — kept for back-compat. NOTE: a literal RDNA
+        family claim is *not* implied for gfx125x (see ``_RDNA_ARCHES``)."""
+        return self.is_wave32
 
 
 def rocm_feature_status(arch: AMDArch, feature: str) -> str:
-    """Return ROCm 7.2.3 status for a per-arch feature."""
-    return _ROCM_7_2_FEATURES[arch][feature]
+    """Return the ROCm 7.2.3 status for a per-arch feature. Raises ``KeyError`` with
+    a clear message for an unknown feature name."""
+    try:
+        return _ROCM_7_2_FEATURES[arch][feature]
+    except KeyError as e:
+        raise KeyError(
+            f"unknown ROCm feature {feature!r} for {arch.name} "
+            f"(known: {sorted(_ROCM_7_2_FEATURES[arch])})") from e
 
 
 def rocm_feature_set(arch: AMDArch) -> frozenset[str]:

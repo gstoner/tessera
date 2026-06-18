@@ -403,3 +403,18 @@ class TestCompileableStatus:
         from tessera.compiler.backend_manifest import BackendKernelEntry
         with pytest.raises(ValueError, match="status must be one of"):
             BackendKernelEntry(target="cpu", status="halfway_there")
+
+
+class TestROCmReviewHardening:
+    def test_is_wave32_alias_matches_is_rdna(self):
+        from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch
+        for arch in AMDArch:
+            p = ROCmTargetProfile(arch=arch)
+            assert p.is_wave32 == p.is_rdna
+        # gfx1250 is wave32 (llc-grounded) even though its family isn't asserted RDNA.
+        assert ROCmTargetProfile(arch=AMDArch.GFX_1250).is_wave32
+
+    def test_feature_status_unknown_name_raises_clearly(self):
+        from tessera.compiler.rocm_target import rocm_feature_status, AMDArch
+        with pytest.raises(KeyError, match="unknown ROCm feature"):
+            rocm_feature_status(AMDArch.GFX_1200, "nonexistent_feature")

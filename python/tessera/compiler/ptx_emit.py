@@ -35,8 +35,12 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-# CUDA Toolkit 13.3 → PTX ISA 9.3 (matches gpu_target.py's pin).
-PTX_ISA_VERSION = "9.3"
+# PTX ISA version — imported from the single source of truth (gpu_target.py's
+# CUDA pin) so the emitted `.version` directive can never drift from the toolchain
+# pin. CUDA Toolkit 13.3 → PTX ISA 9.3.
+from .gpu_target import TESSERA_TARGET_PTX_ISA
+
+PTX_ISA_VERSION = TESSERA_TARGET_PTX_ISA
 
 # Documented canonical Hopper WGMMA bf16 tiles (docs/nvidia_cuda13_kernel_inventory.md).
 _WGMMA_BF16_CANONICAL: frozenset[tuple[int, int, int]] = frozenset(

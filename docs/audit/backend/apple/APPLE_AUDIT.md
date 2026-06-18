@@ -252,6 +252,19 @@ loads + `transforms.h` fused `axpby` epilogue). The production framework chose c
 Tessera's "clear-MPS / native MTL4 matmul" direction, and a blueprint for a steel-like
 simdgroup_matrix GEMM lane as the peer of NVIDIA `ct::mma`/Tile-IR and AMD `rocdl.wmma`.
 
+*MLX mining pass (2026-06-17) — 5 areas to harvest as Tessera POLICY (not copied kernels):*
+**(1) GEMM/attention autotune seeds** — MLX's `matmul.cpp` tile heuristic (`bm/bn/bk/wm/wn` keyed on
+device-class × dtype × transpose × size + `align_M/N/K` / `do_axpby` / `swizzle_log` function
+constants) is now encoded as Tessera **schedule candidates** in
+`python/tessera/compiler/apple_gemm_schedules.py` (`MLX_SEED_TILES` sweep set + `select_seed_tile`
+seed + `schedule_axes_for`), every tile feeding `emit_steel_gemm_msl`. SDPA seeds
+(`scaled_dot_product_attention.cpp`: block × mask × causal × sinks × GQA × NAX) are the attention
+follow-on. **(2) Feature probes** — runtime MTLLanguageVersion + NAX-availability + arch-generation
+into the Apple target descriptor. **(3) Allocator/residency** — MLX's memory/cache/wired-limit + heap
++ residency-set policy as a pool checklist. **(4) Microscaling oracle** — MLX's software-packed
+`fp4.h`/`fp8.h` MSL as a bridge for the fp8/fp4/MX/NVFP4 contract before native MTLTensor (macOS-27.0
+gated). **(5) Custom MSL hook** — `mx.fast.metal_kernel` as a debug/escape-hatch reference.
+
 ## Standing Decisions (by design, not tasks)
 
 - **Auto-route is opt-in.** Making the package lane the unconditional apple_gpu

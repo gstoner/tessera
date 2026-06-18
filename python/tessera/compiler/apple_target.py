@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Optional
 
 
@@ -540,10 +540,79 @@ def probe_apple_runtime_limits() -> Optional[AppleRuntimeLimits]:
     )
 
 
+# ---------------------------------------------------------------------
+# Feature-probe vocabulary (MLX mining, 2026-06-17). The static
+# ``_APPLE_ARCH_DEFAULTS`` floor above is the COMPILE-REQUIRED surface;
+# ``probe_apple_runtime_limits`` is the RUNTIME-OBSERVED surface. MLX's
+# ``device.cpp`` surfaces sharper probes — Metal language version, OS
+# availability, architecture generation, and **NAX availability** (the
+# M5/Apple10-class matrix unit). This section adds the explicit kind
+# classification + the grounded NAX gate (consumed by the steel-attention
+# NAX path in ``apple_sdpa_schedules.select_attn_schedule``).
+# ---------------------------------------------------------------------
+class AppleProbeKind(Enum):
+    COMPILE_REQUIRED = "compile_required"   # baked into the kernel; must hold to build
+    RUNTIME_OBSERVED = "runtime_observed"   # queried from MTLDevice; varies per machine
+
+
+@dataclass(frozen=True)
+class AppleFeatureProbe:
+    name: str
+    kind: AppleProbeKind
+    detail: str
+
+
+#: The sharper probe vocabulary MLX surfaces (the four the deep-dive called out).
+APPLE_FEATURE_PROBES: tuple[AppleFeatureProbe, ...] = (
+    AppleFeatureProbe(
+        "metal_language_version", AppleProbeKind.COMPILE_REQUIRED,
+        "MTLLanguageVersion the kernel compiles at (bf16→3.1, tensors/ML→4.0)"),
+    AppleFeatureProbe(
+        "apple_gpu_family", AppleProbeKind.COMPILE_REQUIRED,
+        "MTLGPUFamily — gates simdgroup_matrix / MTLTensor / ML encoding (Apple7+)"),
+    AppleFeatureProbe(
+        "os_availability", AppleProbeKind.RUNTIME_OBSERVED,
+        "__builtin_available(macOS X) — NAX needs 26.2; FP8/FP4 MTLTensor need 27.0"),
+    AppleFeatureProbe(
+        "arch_generation", AppleProbeKind.RUNTIME_OBSERVED,
+        "GPU architecture generation (MLX device.cpp get_architecture_gen) — gates NAX"),
+    AppleFeatureProbe(
+        "nax_available", AppleProbeKind.RUNTIME_OBSERVED,
+        "NAX matrix unit (M5/Apple10-class): macOS 26.2+ AND arch_gen ≥ (arch=='p'?18:17)"),
+)
+
+
+#: NAX requires at least this macOS (MLX ``device.cpp`` ``__builtin_available``).
+NAX_MIN_MACOS: tuple[int, int] = (26, 2)
+
+
+def nax_available(
+    macos_version: tuple[int, int], arch_char: str, arch_gen: int,
+) -> bool:
+    """Whether the NAX matrix unit is usable — a RUNTIME-OBSERVED probe grounded
+    from MLX ``device.cpp:899-916``: ``macOS ≥ 26.2`` AND
+    ``arch_gen ≥ (arch=='p' ? 18 : 17)`` (``arch_char`` = last char of the device
+    architecture string). The M5/Apple10-class gate the steel-attention NAX path
+    uses (``apple_sdpa_schedules``)."""
+    if macos_version < NAX_MIN_MACOS:
+        return False
+    return arch_gen >= (18 if arch_char == "p" else 17)
+
+
+def apple_probes_by_kind(kind: AppleProbeKind) -> tuple[AppleFeatureProbe, ...]:
+    return tuple(p for p in APPLE_FEATURE_PROBES if p.kind is kind)
+
+
 __all__ = [
     "AppleGPUArch",
     "AppleGPUTargetProfile",
     "AppleRuntimeLimits",
+    "AppleProbeKind",
+    "AppleFeatureProbe",
+    "APPLE_FEATURE_PROBES",
+    "NAX_MIN_MACOS",
+    "nax_available",
+    "apple_probes_by_kind",
     "TesseraAppleGPUTargetError",
     "TESSERA_TARGET_METAL",
     "TESSERA_TARGET_MACOS_FOR_MTL4",

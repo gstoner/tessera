@@ -257,10 +257,14 @@ simdgroup_matrix GEMM lane as the peer of NVIDIA `ct::mma`/Tile-IR and AMD `rocd
 device-class × dtype × transpose × size + `align_M/N/K` / `do_axpby` / `swizzle_log` function
 constants) is now encoded as Tessera **schedule candidates** in
 `python/tessera/compiler/apple_gemm_schedules.py` (`MLX_SEED_TILES` sweep set + `select_seed_tile`
-seed + `schedule_axes_for`), every tile feeding `emit_steel_gemm_msl`. SDPA seeds
-(`scaled_dot_product_attention.cpp`: block × mask × causal × sinks × GQA × NAX) are the attention
-follow-on. **(2) Feature probes** — runtime MTLLanguageVersion + NAX-availability + arch-generation
-into the Apple target descriptor. **(3) Allocator/residency** — MLX's memory/cache/wired-limit + heap
+seed + `schedule_axes_for`), every tile feeding `emit_steel_gemm_msl`. **SDPA seeds landed** →
+`apple_sdpa_schedules.py` (`scaled_dot_product_attention.cpp`: full NAX/Metal vs vector-decode vs
+vector-2pass routing; `bq/bk/bd/wm/wn` block; `has_mask/do_causal/has_sinks`+GQA specialization).
+**(2) Feature probes — NAX landed** → `apple_target.py` `nax_available()` (macOS 26.2+ AND
+arch_gen≥(arch=='p'?18:17), MLX device.cpp:899) + the `AppleProbeKind` compile-required-vs-runtime
+vocabulary. *(Grounded bug found, spun off task_fbb4d13b: `_APPLE_FEATURES[APPLE7]` wrongly marks
+simdgroup_matrix/bfloat `not_supported` vs the Feature Set Tables + the in-repo simdgroup_matrix
+emitters; M4/M5 family map also off.)* **(3) Allocator/residency** — MLX's memory/cache/wired-limit + heap
 + residency-set policy as a pool checklist. **(4) Microscaling oracle** — MLX's software-packed
 `fp4.h`/`fp8.h` MSL as a bridge for the fp8/fp4/MX/NVFP4 contract before native MTLTensor (macOS-27.0
 gated). **(5) Custom MSL hook** — `mx.fast.metal_kernel` as a debug/escape-hatch reference.

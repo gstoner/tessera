@@ -76,6 +76,24 @@ _RDNA4_INPUT: dict[str, tuple[str, str, str]] = {
     "fp8_e5m2": ("bf8.bf8", "<2 x i32>",                "bf8_bf8"),
 }
 
+# gfx1250/gfx1251 WMMA — the "v2" mods/reuse ABI (grounded by `llc` on this host,
+# LLVM 22 AMDGPU; distinct from RDNA 4). Two differences from every prior AMD WMMA:
+#   1. K is DOUBLED — the f16/bf16 tile is 16×16×**32** (A/B = <16 x elem>).
+#   2. The intrinsic takes 5 extra IMMEDIATE operands: per-operand negate modifiers
+#      (i1 A_mod / i1 B_mod / i16 C_mod) + two operand-reuse flags (i1 a_reuse /
+#      i1 b_reuse) — `wmma(i1 A_mod, A, i1 B_mod, B, i16 C_mod, C, i1 a_reuse, i1 b_reuse)`.
+# Also bf16 is NATIVE `<16 x bfloat>` here (gfx11/RDNA 4 use the <_ x i16> bit-pattern).
+# FP8 on gfx1250 uses a *different* class again (16×16×64/128, ModsC ABI) — scoped
+# out of this slice like iu4/iu8 were for RDNA 4; the float paths are grounded here.
+_GFX1250_CLASS_ARCHES: frozenset[str] = frozenset({"gfx1250", "gfx1251"})
+_GFX1250_A_LEN = 16
+_GFX1250_SHAPE = (16, 16, 32)
+_GFX1250_INPUT: dict[str, tuple[str, str, str]] = {
+    "f16":  ("f16",  f"<{_GFX1250_A_LEN} x half>",   "f16"),
+    "fp16": ("f16",  f"<{_GFX1250_A_LEN} x half>",   "f16"),
+    "bf16": ("bf16", f"<{_GFX1250_A_LEN} x bfloat>", "bf16"),  # NATIVE bfloat (not i16)
+}
+
 
 def wmma_intrinsic(dtype: str, *, acc: str = "f32") -> str:
     """The documented ``llvm.amdgcn.wmma`` intrinsic for one input dtype +
@@ -147,6 +165,65 @@ entry:
 }}
 
 declare {acc_ty} @{intr}({abty}, {abty}, {acc_ty})
+"""
+
+
+def wmma_intrinsic_gfx1250(dtype: str) -> str:
+    """The documented ``llvm.amdgcn.wmma`` intrinsic for one input dtype on the
+    **gfx1250/gfx1251** v2 ABI (fp32 accumulator, 16×16×**32**)."""
+    if dtype not in _GFX1250_INPUT:
+        raise ValueError(
+            f"unsupported gfx1250 WMMA input dtype {dtype!r} "
+            f"(float paths: {sorted(_GFX1250_INPUT)}); FP8 (16×16×64/128, ModsC ABI) "
+            "is a documented follow-on")
+    suffix, _, _ = _GFX1250_INPUT[dtype]
+    return f"llvm.amdgcn.wmma.f32.16x16x32.{suffix}"
+
+
+def emit_wmma_gfx1250_llvmir(
+    dtype: str = "bf16", *, arch: str = "gfx1250", entry: str | None = None,
+) -> str:
+    """Emit the **gfx1250/gfx1251** WMMA intrinsic — the "v2" mods/reuse ABI,
+    grounded by `llc` on this host (LLVM 22 AMDGPU).
+
+    Differs from every prior AMD WMMA slice (gfx11 / RDNA 4), all `llc`-verified:
+      * **K is doubled** — the f16/bf16 tile is 16×16×**32** (A/B = ``<16 x elem>``).
+      * **5 extra immediate operands** — the call is ``wmma(i1 A_mod, A, i1 B_mod, B,
+        i16 C_mod, C, i1 a_reuse, i1 b_reuse)``: per-operand negate modifiers + two
+        operand-reuse flags. (All passed as ``0`` here — the plain product. They are
+        ``ImmArg`` in the intrinsic; non-constant values would fail to select.)
+      * **native ``bfloat``** — bf16 is ``<16 x bfloat>``, not the ``<_ x i16>``
+        bit-pattern gfx11/RDNA 4 require.
+
+    **Honesty ceiling.** Single-intrinsic ABI proof (the gfx11 path's starting
+    point); the GEMM/operand-layout/threadgroup generalizations are follow-ons, and
+    gfx1250's own VGPR layout means its D→C mapping is its own grounding job. FP8
+    (16×16×64/128, the ModsC ABI) is scoped out of this slice. `llc` verifies the
+    instruction; numbers wait for silicon (rungs 6-7)."""
+    if arch not in _GFX1250_CLASS_ARCHES:
+        raise ValueError(
+            f"arch {arch!r} not supported by the gfx1250 emitter "
+            f"({sorted(_GFX1250_CLASS_ARCHES)}); gfx1100/gfx1151 use emit_wmma_llvmir, "
+            "gfx1200/gfx1201 use emit_wmma_rdna4_llvmir.")
+    intr = wmma_intrinsic_gfx1250(dtype)
+    _, abty, _ = _GFX1250_INPUT[dtype]
+    acc_ty = f"<{_ACC_LEN} x float>"
+    name = entry or f"tessera_wmma_gfx1250_{dtype}"
+    return f"""; Tessera rung-2.5/3 — gfx1250/1251 WMMA {dtype} ({arch}). v2 mods/reuse ABI:
+; wmma(i1 A_mod, A, i1 B_mod, B, i16 C_mod, C, i1 a_reuse, i1 b_reuse); 16x16x32 (K doubled);
+; native bfloat; fp32 accumulator. Modifiers/reuse flags all 0 = the plain product.
+target triple = "amdgcn-amd-amdhsa"
+
+define amdgpu_kernel void @{name}(ptr addrspace(1) %A, ptr addrspace(1) %D) {{
+entry:
+  %a = load {abty}, ptr addrspace(1) %A
+  %c = call {acc_ty} @{intr}(
+      i1 0, {abty} %a, i1 0, {abty} %a, i16 0, {acc_ty} zeroinitializer, i1 0, i1 0)
+  store {acc_ty} %c, ptr addrspace(1) %D
+  ret void
+}}
+
+declare {acc_ty} @{intr}(i1, {abty}, i1, {abty}, i16, {acc_ty}, i1, i1)
 """
 
 
@@ -778,6 +855,39 @@ def validate_wmma_rdna4_structure(
     return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
 
 
+def validate_wmma_gfx1250_structure(
+    ir: str, *, dtype: str = "f16", arch: str = "gfx1250",
+) -> RocdlValidation:
+    """Host-free rung-2.5 check for the gfx1250/1251 v2 emit: the intrinsic call, the
+    ``amdgpu_kernel`` def, the fp32 accumulator, the target triple, and the v2-ABI
+    hallmarks — the **16×16×32** shape (``<16 x elem>`` A/B), the **mods/reuse**
+    immediate operands (``i16 0,`` C-mod + the two trailing ``i1 0`` reuse flags),
+    and **native ``bfloat``** for bf16."""
+    reasons: list[str] = []
+    intr = wmma_intrinsic_gfx1250(dtype)
+    _, abty, _ = _GFX1250_INPUT[dtype]
+    if f"@{intr}(" not in ir:
+        reasons.append(f"missing the {intr} intrinsic call")
+    if "16x16x32" not in ir:
+        reasons.append("missing the gfx1250 16x16x32 (K-doubled) shape")
+    if "amdgpu_kernel" not in ir:
+        reasons.append("missing amdgpu_kernel definition")
+    if abty not in ir:
+        reasons.append(f"missing the A/B operand type {abty}")
+    if f"<{_ACC_LEN} x float>" not in ir:
+        reasons.append(f"missing the fp32 accumulator type <{_ACC_LEN} x float>")
+    if "amdgcn-amd-amdhsa" not in ir:
+        reasons.append("missing the amdgcn target triple")
+    # v2 ABI: the i16 C-mod immediate + the two trailing i1 operand-reuse flags.
+    if "i16 0," not in ir:
+        reasons.append("missing the v2 i16 C-mod immediate operand")
+    if "i1 0, i1 0)" not in ir:
+        reasons.append("missing the v2 operand-reuse flags (i1 a_reuse, i1 b_reuse)")
+    if dtype == "bf16" and "x i16>" in ir:
+        reasons.append("bf16 emitted as <_ x i16> (gfx1250 uses native <16 x bfloat>)")
+    return RocdlValidation(ok=not reasons, reasons=tuple(reasons))
+
+
 def validate_wmma_gemm_structure(
     ir: str, *, dtype: str = "bf16", arch: str = "gfx1151",
     expect_vector_store: bool = True,
@@ -938,9 +1048,12 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
 __all__ = [
     "wmma_intrinsic",
     "wmma_intrinsic_rdna4",
+    "wmma_intrinsic_gfx1250",
     "emit_wmma_llvmir",
     "emit_wmma_rdna4_llvmir",
+    "emit_wmma_gfx1250_llvmir",
     "validate_wmma_rdna4_structure",
+    "validate_wmma_gfx1250_structure",
     "emit_wmma_gemm_llvmir",
     "emit_wmma_gemm_layout_llvmir",
     "emit_wmma_gemm_store_llvmir",

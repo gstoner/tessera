@@ -17,6 +17,7 @@ from tessera.compiler.rocdl_emit import (
     emit_wmma_gemm_store_llvmir,
     emit_dependent_wmma_chain_llvmir,
     emit_wmma_gemm_threadgroup_llvmir,
+    emit_wmma_gfx1250_llvmir,
     emit_wmma_llvmir,
     emit_wmma_rdna4_llvmir,
     llc_assemble,
@@ -24,9 +25,11 @@ from tessera.compiler.rocdl_emit import (
     validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
     validate_wmma_gemm_threadgroup_structure,
+    validate_wmma_gfx1250_structure,
     validate_wmma_llvmir_structure,
     validate_wmma_rdna4_structure,
     wmma_intrinsic,
+    wmma_intrinsic_gfx1250,
     wmma_intrinsic_rdna4,
     wmma_scheduling,
 )
@@ -434,4 +437,78 @@ def test_rung3_rdna4_fp8_is_not_selectable_on_rdna3():
     unlock is genuinely RDNA-4-only, not a naming nicety."""
     ir = emit_wmma_rdna4_llvmir("fp8_e4m3", arch="gfx1200")
     r = llc_assemble(ir, arch="gfx1151")   # try to lower the fp8 form on RDNA 3.5
+    assert r.status == "failed"
+
+
+# ── gfx1250/1251: the v2 mods/reuse ABI (K-doubled 16x16x32, native bfloat) ──
+
+@pytest.mark.parametrize("arch", ["gfx1250", "gfx1251"])
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_gfx1250_emit_and_validate(arch, dtype):
+    ir = emit_wmma_gfx1250_llvmir(dtype, arch=arch)
+    v = validate_wmma_gfx1250_structure(ir, dtype=dtype, arch=arch)
+    assert v.ok, v.reasons
+
+
+def test_gfx1250_intrinsic_names_are_k32():
+    assert wmma_intrinsic_gfx1250("f16") == "llvm.amdgcn.wmma.f32.16x16x32.f16"
+    assert wmma_intrinsic_gfx1250("bf16") == "llvm.amdgcn.wmma.f32.16x16x32.bf16"
+
+
+def test_gfx1250_carries_v2_mods_reuse_abi():
+    ir = emit_wmma_gfx1250_llvmir("f16")
+    assert "i16 0," in ir            # C-mod immediate
+    assert "i1 0, i1 0)" in ir       # the two operand-reuse flags
+    assert "16x16x32" in ir          # K doubled vs gfx11/RDNA4's 16x16x16
+    assert "<16 x half>" in ir       # wave32 K=32 -> 16 elements/lane
+
+
+def test_gfx1250_bf16_is_native_bfloat_not_i16():
+    # The grounded gfx1250 difference: bf16 is native <16 x bfloat>, NOT the
+    # <_ x i16> bit-pattern gfx11/RDNA4 require.
+    ir = emit_wmma_gfx1250_llvmir("bf16")
+    assert "<16 x bfloat>" in ir
+    assert "x i16>" not in ir
+
+
+def test_gfx1250_rejects_other_arch_classes():
+    for bad in ("gfx1151", "gfx1100", "gfx1200", "gfx1201"):
+        with pytest.raises(ValueError):
+            emit_wmma_gfx1250_llvmir("f16", arch=bad)
+
+
+def test_gfx1250_fp8_is_scoped_out():
+    # FP8 on gfx1250 uses a different class (16x16x64/128, ModsC) — a follow-on.
+    with pytest.raises(ValueError):
+        wmma_intrinsic_gfx1250("fp8_e4m3")
+
+
+def test_gfx1250_validator_catches_dropped_reuse_flags():
+    ir = emit_wmma_gfx1250_llvmir("f16").replace("i1 0, i1 0)", "i1 0)")
+    v = validate_wmma_gfx1250_structure(ir, dtype="f16")
+    assert not v.ok
+    assert any("reuse" in r for r in v.reasons)
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("arch", ["gfx1250", "gfx1251"])
+@pytest.mark.parametrize("dtype,want", [
+    ("f16", "v_wmma_f32_16x16x32_f16"),
+    ("bf16", "v_wmma_f32_16x16x32_bf16"),
+])
+def test_rung3_gfx1250_lowers_with_k32_wmma(arch, dtype, want):
+    """gfx1250/1251 lower the v2 16x16x32 WMMA — machine-confirmed here. The K=32
+    mnemonic distinguishes it from the gfx11/RDNA4 16x16x16 forms."""
+    ir = emit_wmma_gfx1250_llvmir(dtype, arch=arch)
+    r = llc_assemble(ir, arch=arch)
+    assert r.status == "ok", r.detail
+    assert want in r.wmma_instruction
+
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+def test_rung3_gfx1250_k32_not_selectable_on_rdna4():
+    """Cross-check: the gfx1250 16x16x32 v2 intrinsic 'Cannot select' on gfx1200 —
+    the K-doubled mods/reuse ABI is genuinely gfx1250-class, not RDNA 4."""
+    ir = emit_wmma_gfx1250_llvmir("f16", arch="gfx1250")
+    r = llc_assemble(ir, arch="gfx1200")
     assert r.status == "failed"

@@ -25,6 +25,7 @@ ecosystems independently converged on.
 | Apple7 (M1 Max) | 8×8 simdgroup_matrix | f16/bf16; FP8/FP4/MX = **macOS-27.0 toolchain-gated**, not hardware |
 | gfx1151 (RDNA 3.5) | 16×16×16 | f16/bf16/int8/int4 — **no FP8** |
 | gfx1200 (RDNA 4) | 16×16×16 + 16×16×32 | + **FP8/BF8** + SWMMAC sparse — **no FP4** |
+| gfx1250/1251 (v2 ABI) | 16×16×**32** + fp8 16×16×64/128 | f16/bf16 (**native `bfloat`**) + FP8/BF8; **K doubled**; mods/reuse immediate operands. `llc`-grounded (LLVM 22), distinct from RDNA 4. |
 | sm_120 (Blackwell consumer) | 16×16×16 (mma.sync) | + **FP8 + FP4** (no tcgen05/TMEM/wgmma — those are datacenter sm_100) |
 
 So NVIDIA consumer goes one precision tier lower (FP4) than AMD consumer (FP8-only); Apple has the
@@ -169,7 +170,18 @@ MLX `steel/gemm/mma.h` + MSL spec ch.6.
    genuinely RDNA-4-only. 7 new tests (5 rung-3). Honesty ceiling: single-intrinsic ABI proof (the
    gfx11 path's starting point) — RDNA 4's GEMM/operand-layout/threadgroup generalizations are
    follow-ons, and its denser VGPR layout means the D→C mapping is its own grounding job (not a reuse
-   of the gfx11 one). The **AMD Stage-A emit track (A1–A4) is now complete**: the gfx11/RDNA3-class
+   of the gfx11 one).
+
+   **gfx1250/1251 v2 ABI landed** — `emit_wmma_gfx1250_llvmir` + `validate_wmma_gfx1250_structure` +
+   `wmma_intrinsic_gfx1250`: the **K-doubled 16×16×32** mods/reuse ABI (`wmma(i1 A_mod, A, i1 B_mod, B,
+   i16 C_mod, C, i1 a_reuse, i1 b_reuse)`, **native `<16 x bfloat>`**), `llc`-verified on gfx1250/1251
+   for f16/bf16 — cross-checked "Cannot select" on gfx1200, confirming it's a distinct arch class. FP8
+   (16×16×64/128, the `ModsC` ABI — `(A, B, i16 C_mod, C, reuse, reuse)`, no A/B negate) scoped out as a
+   follow-on. Also registered gfx1250/1251 in `rocm_target.py` (AMDArch enum + WMMA variants + wave32 +
+   arch strings grounded; LDS/occupancy/non-WMMA features marked **provisional**/`tba` — no gfx1250 ISA
+   consulted, per Decision #27). 9 new tests (3 rung-3 + a target-profile guard).
+
+   The **AMD Stage-A emit track (A1–A4) is now complete**: the gfx11/RDNA3-class
    GEMM has the full operand layout + threadgroup tiling + the §7.9.1 hazard locked, and the RDNA 4 ABI
    path is grounded and emitting. *Numerical* correctness across both waits for the AMD Matrix
    Instruction Calculator cross-check or real silicon (rungs 6-7).

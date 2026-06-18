@@ -48,12 +48,20 @@ class AMDArch(IntEnum):
     GFX_1100 = 1100    # RDNA 3 prosumer (RX 7900-series)
     GFX_1151 = 1151    # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
     GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
+    # gfx1250/1251 — the "v2" mods/reuse WMMA ABI (K-doubled 16x16x32, native
+    # bfloat).  Family designation NOT asserted (no public ISA consulted); grounded
+    # only by `llc` (LLVM 22 AMDGPU) + LLVM IntrinsicsAMDGPU.td.  See rocdl_emit.py.
+    GFX_1250 = 1250
+    GFX_1251 = 1251
 
 
-#: RDNA-family arches (wave32, WMMA matrix path).  Everything else is CDNA
-#: (wave64, MFMA).  Used by lane-width and matrix-path gates.
+#: wave32 / WMMA-matrix-path arches (vs CDNA wave64 / MFMA).  Used by lane-width and
+#: matrix-path gates.  "RDNA" historically, now also the gfx125x WMMA targets —
+#: ``is_rdna`` here means "wave32 + WMMA path", an operational gate, not a strict
+#: family claim (gfx125x wave32 is `llc`-grounded; its family is not asserted).
 _RDNA_ARCHES: frozenset[AMDArch] = frozenset({
     AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
+    AMDArch.GFX_1250, AMDArch.GFX_1251,
 })
 
 
@@ -74,6 +82,11 @@ _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_1100: 65536,
     AMDArch.GFX_1151: 65536,    # RDNA 3.5 — 128 KiB per WGP (2 CUs); 64 KiB/CU view
     AMDArch.GFX_1200: 65536,
+    # gfx1250/1251 — PROVISIONAL (no gfx1250 ISA consulted; mirrors the RDNA 3/4
+    # 64 KiB/CU value).  Not used in any execution path; the grounded gfx1250 surface
+    # is the WMMA emitter (rocdl_emit.py).  Replace once a gfx1250 ISA is available.
+    AMDArch.GFX_1250: 65536,
+    AMDArch.GFX_1251: 65536,
 }
 
 
@@ -86,6 +99,8 @@ _MAX_WAVES: dict[AMDArch, int] = {
     AMDArch.GFX_1100: 16,
     AMDArch.GFX_1151: 16,       # RDNA 3.5 wave32 occupancy (same as RDNA 3)
     AMDArch.GFX_1200: 16,
+    AMDArch.GFX_1250: 16,       # PROVISIONAL (no gfx1250 ISA; mirrors RDNA wave32)
+    AMDArch.GFX_1251: 16,       # PROVISIONAL
 }
 
 
@@ -135,6 +150,19 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
         "fp8_e4m3", "fp8_e5m2",
         "int8", "int32",
         "int4",
+    }),
+    AMDArch.GFX_1250: frozenset({
+        # gfx1250/1251 — the v2 mods/reuse WMMA ABI.  f16/bf16 (16x16x32) are
+        # `llc`-verified (rocdl_emit.py); fp8_e4m3/e5m2 (16x16x64/128, the ModsC
+        # ABI) + int8 are from LLVM IntrinsicsAMDGPU.td.  int4 stays planned-gated.
+        "fp32", "bf16", "fp16",
+        "fp8_e4m3", "fp8_e5m2",
+        "int8",
+    }),
+    AMDArch.GFX_1251: frozenset({
+        "fp32", "bf16", "fp16",
+        "fp8_e4m3", "fp8_e5m2",
+        "int8",
     }),
 }
 
@@ -277,6 +305,43 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "xnack":               "not_supported",
         "sram_ecc":            "not_supported",
     },
+    AMDArch.GFX_1250: {
+        # gfx1250/1251 — WMMA-class (v2 mods/reuse ABI).  WMMA float + fp8 flags
+        # are grounded (`llc` for f16/bf16 16x16x32; LLVM IntrinsicsAMDGPU.td for
+        # the fp8 16x16x64/128 forms).  Everything else is "tba": NOT grounded —
+        # no gfx1250 ISA was consulted, so async-copy / cluster / ECC readiness is
+        # genuinely unknown rather than asserted.
+        "mfma":                "not_supported",
+        "mfma_f8":             "not_supported",
+        "mfma_xf32":           "not_supported",
+        "mfma_f4":             "not_supported",
+        "mfma_f6":             "not_supported",
+        "wmma_f16":            "ready",
+        "wmma_bf16":           "ready",
+        "wmma_f8":             "ready",
+        "lds_async_copy":      "tba",
+        "buffer_load_lds":     "tba",
+        "global_load_lds":     "tba",
+        "cluster_mode":        "tba",
+        "xnack":               "tba",
+        "sram_ecc":            "tba",
+    },
+    AMDArch.GFX_1251: {
+        "mfma":                "not_supported",
+        "mfma_f8":             "not_supported",
+        "mfma_xf32":           "not_supported",
+        "mfma_f4":             "not_supported",
+        "mfma_f6":             "not_supported",
+        "wmma_f16":            "ready",
+        "wmma_bf16":           "ready",
+        "wmma_f8":             "ready",
+        "lds_async_copy":      "tba",
+        "buffer_load_lds":     "tba",
+        "global_load_lds":     "tba",
+        "cluster_mode":        "tba",
+        "xnack":               "tba",
+        "sram_ecc":            "tba",
+    },
 }
 
 
@@ -321,6 +386,8 @@ _MFMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int, int]]] = {
     AMDArch.GFX_1100: frozenset(),  # RDNA 3 has WMMA, not MFMA
     AMDArch.GFX_1151: frozenset(),  # RDNA 3.5 has WMMA, not MFMA
     AMDArch.GFX_1200: frozenset(),  # RDNA 4 has WMMA, not MFMA
+    AMDArch.GFX_1250: frozenset(),  # gfx1250 has WMMA (v2 ABI), not MFMA
+    AMDArch.GFX_1251: frozenset(),
 }
 
 
@@ -343,6 +410,11 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
     # family (16x16x32 / 16x16x64, A-matrix expanded — a separate sparse-op set
     # not modeled here), and WMMA load-transpose (§11.6).  No FP4 (E2M1) WMMA.
     AMDArch.GFX_1200: frozenset({(16, 16, 16), (16, 16, 32)}),
+    # gfx1250/1251 — the v2 mods/reuse WMMA ABI.  The K is DOUBLED: f16/bf16 are
+    # 16x16x32 (`llc`-verified, rocdl_emit.py), and the fp8/bf8 forms are 16x16x64 /
+    # 16x16x128 (LLVM IntrinsicsAMDGPU.td, ModsC ABI).  bf16 is native `<16 x bfloat>`.
+    AMDArch.GFX_1250: frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)}),
+    AMDArch.GFX_1251: frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)}),
 }
 
 
@@ -355,6 +427,8 @@ _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_1100: "gfx1100",
     AMDArch.GFX_1151: "gfx1151",
     AMDArch.GFX_1200: "gfx1200",
+    AMDArch.GFX_1250: "gfx1250",   # `llc`-accepted target string (LLVM 22 AMDGPU)
+    AMDArch.GFX_1251: "gfx1251",
 }
 
 

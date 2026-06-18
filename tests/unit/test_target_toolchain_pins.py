@@ -300,6 +300,21 @@ class TestROCmWMMAShapeTable:
         from tessera.compiler.rocm_target import mfma_variants
         assert mfma_variants(AMDArch.GFX_1200) == frozenset()
 
+    def test_gfx1250_v2_abi_doubles_k(self):
+        """gfx1250/1251 — the v2 mods/reuse WMMA ABI: K is doubled (16x16x32 for
+        f16/bf16, llc-verified; 16x16x64/128 fp8 from LLVM IntrinsicsAMDGPU.td)."""
+        from tessera.compiler.rocm_target import (
+            wmma_variants, mfma_variants, ROCmTargetProfile, AMDArch,
+            rocm_feature_status)
+        for arch in (AMDArch.GFX_1250, AMDArch.GFX_1251):
+            assert wmma_variants(arch) == frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)})
+            assert mfma_variants(arch) == frozenset()        # WMMA arch, not MFMA
+            assert ROCmTargetProfile(arch=arch).threads_per_wave == 32  # wave32 (llc-grounded)
+            # WMMA float + fp8 flags grounded; everything else honestly "tba".
+            assert rocm_feature_status(arch, "wmma_bf16") == "ready"
+            assert rocm_feature_status(arch, "wmma_f8") == "ready"
+            assert rocm_feature_status(arch, "lds_async_copy") == "tba"
+
     def test_cdna_arches_have_no_wmma(self):
         from tessera.compiler.rocm_target import wmma_variants, AMDArch
         for arch in (AMDArch.GFX_90A, AMDArch.GFX_940,

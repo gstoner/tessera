@@ -24,6 +24,24 @@ CPU_TARGET = "cpu"
 ROCM_TARGET = "rocm"
 NVIDIA_TARGETS = {"nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120"}
 SUPPORTED_TARGETS = {APPLE_CPU_TARGET, APPLE_GPU_TARGET, CPU_TARGET, ROCM_TARGET, *NVIDIA_TARGETS}
+MEDIA_SOURCES = {
+    "tessera.image_preprocess",
+    "tessera.video_frame_sample",
+    "tessera.patch_embed",
+    "tessera.patch_merge",
+    "tessera.media_project",
+    "tessera.splice_embeddings",
+}
+JEPA_SOURCES = {
+    "tessera.jepa.mask_blocks_2d",
+    "tessera.jepa.mask_tubes_3d",
+    "tessera.jepa.gather_context",
+    "tessera.jepa.gather_targets",
+    "tessera.jepa.stop_gradient",
+    "tessera.jepa.ema_update",
+    "tessera.jepa.latent_predict",
+    "tessera.jepa.l2_loss",
+}
 
 
 # Phase 8.4 — embedded MSL source for the rope custom kernel. Carried as a
@@ -1229,6 +1247,24 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "tile_kv": int(op.attrs.get("tile_kv", 128)),
             "kv_traversal": "kv_outer",
         })]
+    if source in MEDIA_SOURCES:
+        return [TargetOp("tessera_nvidia.cuda_kernel", {
+            **base,
+            "arch": arch,
+            "kernel": _contract_kernel_name(source),
+            "status": op.attrs.get("status", "artifact_only"),
+            "contract": op.attrs.get("contract", source.removeprefix("tessera.")),
+            "execution": op.attrs.get("execution", "projected_embeddings"),
+        })]
+    if source in JEPA_SOURCES:
+        return [TargetOp("tessera_nvidia.cuda_kernel", {
+            **base,
+            "arch": arch,
+            "kernel": _contract_kernel_name(source),
+            "status": op.attrs.get("status", "artifact_only"),
+            "contract": op.attrs.get("contract", source.removeprefix("tessera.jepa.")),
+            "latent_space": op.attrs.get("latent_space", "continuous"),
+        })]
     kernel = "flash_attn_contract" if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn.") else "elementwise_contract"
     return [TargetOp("tessera_nvidia.cuda_kernel", {**base, "arch": arch, "kernel": kernel, "status": "artifact_only"})]
 
@@ -1431,6 +1467,20 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
 
 
 def _apple_gpu_kernel_contract(source: str) -> tuple[str, str, dict[str, Any]]:
+    if source in MEDIA_SOURCES:
+        return _contract_kernel_name(source), "Metal", {
+            "status": "artifact_only",
+            "grid": "tokens_or_patches",
+            "threadgroup": "128x1x1",
+            "temporary_memory": "media_metadata",
+        }
+    if source in JEPA_SOURCES:
+        return _contract_kernel_name(source), "Metal", {
+            "status": "artifact_only",
+            "grid": "latent_tokens",
+            "threadgroup": "128x1x1",
+            "temporary_memory": "mask_or_target_index",
+        }
     if source == "tessera.flash_attn":
         return "flash_attn_contract", "Metal", {"status": "artifact_only", "grid": "bhn", "threadgroup": "64x1x1", "temporary_memory": "scores_lse"}
     if source in {"tessera.matmul", "tessera.gemm"}:
@@ -1444,6 +1494,10 @@ def _apple_gpu_kernel_contract(source: str) -> tuple[str, str, dict[str, Any]]:
     if source == "tessera.moe":
         return "moe_contract", "MPSGraph", {"status": "artifact_only", "grid": "tokens_experts", "threadgroup": "128x1x1", "temporary_memory": "routing"}
     return "elementwise_contract", "Metal", {"status": "artifact_only", "grid": "elements", "threadgroup": "256x1x1", "temporary_memory": "none"}
+
+
+def _contract_kernel_name(source: str) -> str:
+    return source.removeprefix("tessera.").replace(".", "_") + "_contract"
 
 
 def _base_attrs(op: TileOp, *, target: Optional[str] = None) -> dict[str, Any]:

@@ -326,9 +326,20 @@ def embed_tokens(weights: ModelWeights, token_ids) -> np.ndarray:
     return weights.embed[ids].astype(np.float64)
 
 
-def forward(config: MoETransformerConfig, weights: ModelWeights, token_ids) -> np.ndarray:
-    """Full causal forward → logits ``(S, vocab)`` (the recompute reference)."""
-    x = embed_tokens(weights, token_ids)
+def _coerce_input_embeds(config: MoETransformerConfig, input_embeds) -> np.ndarray:
+    x = np.asarray(input_embeds, dtype=np.float64)
+    if x.ndim != 2:
+        raise ValueError(f"input_embeds must be rank-2 (S,H), got shape {x.shape}")
+    if x.shape[1] != config.hidden_size:
+        raise ValueError(
+            f"input_embeds hidden size {x.shape[1]} != config.hidden_size {config.hidden_size}")
+    if x.shape[0] < 1:
+        raise ValueError("input_embeds must contain at least one token")
+    return x.copy()
+
+
+def _forward_from_embeddings(config: MoETransformerConfig, weights: ModelWeights, x: np.ndarray) -> np.ndarray:
+    """Decoder stack over already-materialized token/media embeddings."""
     eps = config.rms_norm_eps
     S = x.shape[0]
     for li, lw in enumerate(weights.layers):
@@ -337,6 +348,44 @@ def forward(config: MoETransformerConfig, weights: ModelWeights, token_ids) -> n
         x = x + _ffn(rmsnorm(x, lw.norm2, eps), lw, config)
     x = rmsnorm(x, weights.final_norm, eps)
     return x @ weights.lm_head
+
+
+def forward(config: MoETransformerConfig, weights: ModelWeights, token_ids) -> np.ndarray:
+    """Full causal forward → logits ``(S, vocab)`` (the recompute reference)."""
+    x = embed_tokens(weights, token_ids)
+    return _forward_from_embeddings(config, weights, x)
+
+
+def forward_embeds(config: MoETransformerConfig, weights: ModelWeights, input_embeds) -> np.ndarray:
+    """Full causal forward from precomputed embeddings.
+
+    This is the multimodal bridge: text embeddings and projected media
+    embeddings can be spliced before entering the shared decoder stack.
+    """
+    return _forward_from_embeddings(config, weights, _coerce_input_embeds(config, input_embeds))
+
+
+def _prefill_from_embeddings(
+    config: MoETransformerConfig,
+    weights: ModelWeights,
+    x: np.ndarray,
+    *,
+    max_seq: int | None = None,
+):
+    """Prefill the KV caches from already-materialized embeddings."""
+    eps = config.rms_norm_eps
+    S = x.shape[0]
+    cap = max_seq if max_seq is not None else S
+    if cap < S:
+        raise ValueError(f"max_seq={cap} must be >= prompt length {S}")
+    caches = []
+    for li, lw in enumerate(weights.layers):
+        a, cache = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, cap, li)
+        x = x + a
+        x = x + _ffn(rmsnorm(x, lw.norm2, eps), lw, config)
+        caches.append(cache)
+    logits = rmsnorm(x, weights.final_norm, eps) @ weights.lm_head
+    return logits[-1], DecodeState(caches=caches, position=S)
 
 
 @dataclass
@@ -352,17 +401,19 @@ def prefill(config: MoETransformerConfig, weights: ModelWeights, token_ids,
     ``max_seq`` (≥ prompt + planned new tokens) sizes the per-layer MLA caches.
     """
     x = embed_tokens(weights, token_ids)
-    eps = config.rms_norm_eps
-    S = x.shape[0]
-    cap = max_seq if max_seq is not None else S
-    caches = []
-    for li, lw in enumerate(weights.layers):
-        a, cache = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, cap, li)
-        x = x + a
-        x = x + _ffn(rmsnorm(x, lw.norm2, eps), lw, config)
-        caches.append(cache)
-    logits = rmsnorm(x, weights.final_norm, eps) @ weights.lm_head
-    return logits[-1], DecodeState(caches=caches, position=S)
+    return _prefill_from_embeddings(config, weights, x, max_seq=max_seq)
+
+
+def prefill_embeds(
+    config: MoETransformerConfig,
+    weights: ModelWeights,
+    input_embeds,
+    *,
+    max_seq: int | None = None,
+):
+    """Run prefill from precomputed embeddings and return ``(last_logits, state)``."""
+    return _prefill_from_embeddings(
+        config, weights, _coerce_input_embeds(config, input_embeds), max_seq=max_seq)
 
 
 def decode_step(config: MoETransformerConfig, weights: ModelWeights,
@@ -395,6 +446,7 @@ def greedy_generate(config: MoETransformerConfig, weights: ModelWeights,
 
 __all__ = [
     "LayerWeights", "ModelWeights", "synthetic_weights",
-    "rmsnorm", "forward", "prefill", "decode_step", "greedy_generate",
+    "rmsnorm", "forward", "forward_embeds", "prefill", "prefill_embeds",
+    "decode_step", "greedy_generate",
     "embed_tokens", "DecodeState",
 ]

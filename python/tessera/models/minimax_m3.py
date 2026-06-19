@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .moe_transformer import MoETransformerConfig
+from .multimodal import MediaProcessorConfig, processor_config_from_metadata
+from .vision_transformer import VisionTransformerConfig, config_from_processor
 
 
 MINIMAX_M3_SPARSE_LAYER_FREQ: tuple[int, ...] = (0, 0, 0) + (1,) * 57
@@ -35,6 +37,51 @@ class MiniMaxM3VisionMetadata:
 
 
 VISION_METADATA = MiniMaxM3VisionMetadata()
+
+
+def processor_config(vision: MiniMaxM3VisionMetadata = VISION_METADATA) -> MediaProcessorConfig:
+    return processor_config_from_metadata(
+        image_size=vision.image_size,
+        patch_size=vision.patch_size,
+        image_seq_length=vision.image_seq_length,
+        spatial_merge_size=vision.spatial_merge_size,
+        temporal_patch_size=vision.temporal_patch_size,
+        max_frames=vision.vision_segment_max_frames,
+    )
+
+
+def vision_transformer_config(
+    *,
+    text_hidden_size: int | None = None,
+    vision: MiniMaxM3VisionMetadata = VISION_METADATA,
+    vision_hidden_size: int | None = None,
+    num_layers: int = 1,
+    num_heads: int = 4,
+) -> VisionTransformerConfig:
+    text_hidden = text_hidden_size or vision.projector_hidden_size
+    return config_from_processor(
+        processor_config(vision),
+        output_hidden_size=text_hidden,
+        hidden_size=vision_hidden_size or min(text_hidden, 1024),
+        num_layers=num_layers,
+        num_heads=num_heads,
+    )
+
+
+def scaled_vision_metadata() -> MiniMaxM3VisionMetadata:
+    """Small executable metadata for reference image/video tower tests."""
+    return MiniMaxM3VisionMetadata(
+        image_token_index=2000,
+        video_token_index=2001,
+        image_seq_length=4,
+        patch_size=2,
+        image_size=8,
+        projector_hidden_size=256,
+        spatial_merge_size=2,
+        temporal_patch_size=1,
+        vision_segment_max_frames=2,
+        vision_execution_supported=True,
+    )
 
 
 def config() -> MoETransformerConfig:
@@ -114,5 +161,8 @@ __all__ = [
     "MINIMAX_M3_SPARSE_LAYER_FREQ",
     "VISION_METADATA",
     "config",
+    "processor_config",
     "scaled_config",
+    "scaled_vision_metadata",
+    "vision_transformer_config",
 ]

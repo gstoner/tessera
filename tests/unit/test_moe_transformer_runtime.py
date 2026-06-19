@@ -42,6 +42,36 @@ def test_forward_shape_and_finite(make_cfg):
 
 
 @pytest.mark.parametrize("make_cfg", SCALED, ids=IDS)
+def test_forward_embeds_matches_token_forward(make_cfg):
+    cfg = make_cfg()
+    w = rt.synthetic_weights(cfg, seed=20)
+    ids = [1, 5, 9, 2, 7]
+    embeds = rt.embed_tokens(w, ids)
+
+    np.testing.assert_allclose(
+        rt.forward_embeds(cfg, w, embeds),
+        rt.forward(cfg, w, ids),
+        rtol=1e-9,
+        atol=1e-9,
+    )
+
+
+@pytest.mark.parametrize("make_cfg", SCALED, ids=IDS)
+def test_prefill_embeds_matches_token_prefill(make_cfg):
+    cfg = make_cfg()
+    w = rt.synthetic_weights(cfg, seed=21)
+    ids = [2, 4, 6, 8]
+    embeds = rt.embed_tokens(w, ids)
+
+    logits_from_embeds, state_from_embeds = rt.prefill_embeds(cfg, w, embeds, max_seq=10)
+    logits_from_ids, state_from_ids = rt.prefill(cfg, w, ids, max_seq=10)
+
+    np.testing.assert_allclose(logits_from_embeds, logits_from_ids, rtol=1e-9, atol=1e-9)
+    assert state_from_embeds.position == state_from_ids.position == len(ids)
+    assert [cache[0] for cache in state_from_embeds.caches] == [cache[0] for cache in state_from_ids.caches]
+
+
+@pytest.mark.parametrize("make_cfg", SCALED, ids=IDS)
 def test_kv_cached_decode_equals_recompute(make_cfg):
     """The M5 capstone oracle."""
     cfg = make_cfg()

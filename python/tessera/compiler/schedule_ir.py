@@ -24,6 +24,32 @@ SCHEDULE_OVERLAPS = {"none", "compute", "collective"}
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
 CONV2D_OPS = {"tessera.conv2d_nhwc", "tessera.conv2d"}
 ROPE_OPS = {"tessera.rope"}
+MEDIA_OPS = {
+    "tessera.image_preprocess",
+    "tessera.video_frame_sample",
+    "tessera.patch_embed",
+    "tessera.patch_merge",
+    "tessera.media_project",
+    "tessera.splice_embeddings",
+}
+JEPA_OPS = {
+    "tessera.jepa.mask_blocks_2d",
+    "tessera.jepa.mask_tubes_3d",
+    "tessera.jepa.gather_context",
+    "tessera.jepa.gather_targets",
+    "tessera.jepa.stop_gradient",
+    "tessera.jepa.ema_update",
+    "tessera.jepa.latent_predict",
+    "tessera.jepa.l2_loss",
+    "tessera.jepa_mask_blocks_2d",
+    "tessera.jepa_mask_tubes_3d",
+    "tessera.jepa_gather_context",
+    "tessera.jepa_gather_targets",
+    "tessera.jepa_stop_gradient",
+    "tessera.jepa_ema_update",
+    "tessera.jepa_latent_predict",
+    "tessera.jepa_l2_loss",
+}
 
 
 @dataclass(frozen=True)
@@ -323,6 +349,10 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
             scheduled.append(_flash_attention_pipeline(op, idx))
         elif op_name == "tessera.msa_sparse_attention":
             scheduled.append(_msa_kv_outer_sparse(op, idx))
+        elif op_name in MEDIA_OPS:
+            scheduled.append(_media_op(op, idx))
+        elif op_name in JEPA_OPS:
+            scheduled.append(_jepa_op(op, idx))
         elif op_name in ROPE_OPS:
             scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"}))
         elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:
@@ -407,6 +437,47 @@ def _msa_kv_outer_sparse(op: IROp, ordinal: int) -> ScheduleOp:
             "dense_equivalence_oracle": bool(attrs.get("dense_equivalence_oracle", False)),
             "kv_traversal": "kv_outer",
             "online_softmax": True,
+        },
+        operands=list(op.operands),
+        result=op.result,
+        source_op=op,
+    )
+
+
+def _media_op(op: IROp, ordinal: int) -> ScheduleOp:
+    op_name = canonical_graph_op_name(op.op_name)
+    attrs = {**_base_attrs(op, ordinal), **dict(op.kwargs)}
+    op_kind = op_name.removeprefix("tessera.")
+    return ScheduleOp(
+        f"schedule.media.{op_kind}",
+        {
+            **attrs,
+            "contract": op_kind,
+            "execution": attrs.get("execution", "projected_embeddings"),
+            "status": attrs.get("status", "artifact_only"),
+        },
+        operands=list(op.operands),
+        result=op.result,
+        source_op=op,
+    )
+
+
+def _jepa_op(op: IROp, ordinal: int) -> ScheduleOp:
+    op_name = canonical_graph_op_name(op.op_name)
+    attrs = {**_base_attrs(op, ordinal), **dict(op.kwargs)}
+    op_kind = (
+        op_name.removeprefix("tessera.jepa.")
+        if op_name.startswith("tessera.jepa.")
+        else op_name.removeprefix("tessera.jepa_")
+    )
+    attrs["source"] = f"tessera.jepa.{op_kind}"
+    return ScheduleOp(
+        f"schedule.jepa.{op_kind}",
+        {
+            **attrs,
+            "contract": op_kind,
+            "latent_space": attrs.get("latent_space", "continuous"),
+            "status": attrs.get("status", "artifact_only"),
         },
         operands=list(op.operands),
         result=op.result,

@@ -19,9 +19,13 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from ..data import ByteTokenizer, Tokenizer, VocabTokenizer
+from . import vision_transformer as vt
+from .multimodal import MediaProcessorConfig, MediaSpan, ProjectedMediaEmbeddings, processor_config_from_hf
 from . import moe_transformer_runtime as rt
 from .moe_transformer import MoETransformerConfig, verify_config
 from .minimax_m3 import MiniMaxM3VisionMetadata, VISION_METADATA, config as minimax_m3_config
+from .minimax_m3 import processor_config as minimax_processor_config
+from .minimax_m3 import vision_transformer_config as minimax_vision_transformer_config
 
 
 class MiniMaxM3ImportError(ValueError):
@@ -76,6 +80,7 @@ class MiniMaxM3ImportManifest:
     tokenizer: MiniMaxM3TokenizerImport | None
     safetensors: SafetensorsManifest | None
     vision: MiniMaxM3VisionMetadata
+    processor: MediaProcessorConfig | None = None
     text_execution_supported: bool = True
     vision_execution_supported: bool = False
 
@@ -105,6 +110,27 @@ class PreparedMultimodalPrompt:
     @property
     def has_vision(self) -> bool:
         return bool(self.spans)
+
+
+MediaEmbeddingInput = Sequence[np.ndarray] | Mapping[int | str, np.ndarray]
+MediaInput = Sequence[Any] | Mapping[int | str, Any]
+
+
+@dataclass(frozen=True)
+class MiniMaxM3VisionWeights:
+    tower: vt.VisionTowerWeights
+
+
+@dataclass(frozen=True)
+class MiniMaxM3ProjectorWeights:
+    projector: vt.VisionProjectorWeights
+
+
+@dataclass(frozen=True)
+class MiniMaxM3VisionRuntime:
+    config: vt.VisionTransformerConfig
+    processor: MediaProcessorConfig
+    weights: vt.VisionRuntimeWeights
 
 
 _ST_DTYPE_NBYTES = {
@@ -407,6 +433,39 @@ def expected_hf_text_tensor_shapes(
     return out
 
 
+def expected_hf_vision_tensor_shapes(
+    text_cfg: MoETransformerConfig,
+    vision_cfg: vt.VisionTransformerConfig,
+    *,
+    layers: Sequence[int] = (0,),
+) -> dict[str, tuple[int, ...]]:
+    """Expected HF-style vision/projector tensor shapes for MiniMax-M3.
+
+    Linear weights use the PyTorch convention ``(out_features, in_features)``;
+    the loader transposes them into the reference runtime's ``x @ W`` layout.
+    """
+    H = vision_cfg.hidden_size
+    F = vision_cfg.mlp_hidden_size or 4 * H
+    out = {
+        "vision_tower.patch_embed.weight": (H, vision_cfg.patch_dim),
+        "vision_tower.patch_embed.bias": (H,),
+        "vision_tower.pos_embed": (max(vision_cfg.image_seq_length, vision_cfg.merged_tokens), H),
+        "vision_tower.norm.weight": (H,),
+        "multi_modal_projector.weight": (text_cfg.hidden_size, H),
+        "multi_modal_projector.bias": (text_cfg.hidden_size,),
+    }
+    for li in layers:
+        prefix = f"vision_tower.layers.{li}."
+        out[prefix + "norm1.weight"] = (H,)
+        out[prefix + "qkv.weight"] = (3 * H, H)
+        out[prefix + "o_proj.weight"] = (H, H)
+        out[prefix + "norm2.weight"] = (H,)
+        out[prefix + "mlp.gate_proj.weight"] = (F, H)
+        out[prefix + "mlp.up_proj.weight"] = (F, H)
+        out[prefix + "mlp.down_proj.weight"] = (H, F)
+    return out
+
+
 def validate_safetensors_shapes(
     manifest: SafetensorsManifest,
     expected_shapes: Mapping[str, tuple[int, ...]],
@@ -432,6 +491,86 @@ def validate_safetensors_shapes(
         raise MiniMaxM3ImportError("; ".join(parts))
 
 
+def load_vision_runtime_weights(
+    tensors: Mapping[str, np.ndarray],
+    vision_cfg: vt.VisionTransformerConfig,
+) -> vt.VisionRuntimeWeights:
+    """Map HF-style MiniMax vision/projector tensors into runtime weights."""
+    H = vision_cfg.hidden_size
+    F = vision_cfg.mlp_hidden_size or 4 * H
+
+    def need(name: str, shape: tuple[int, ...]) -> np.ndarray:
+        arr = np.asarray(tensors.get(name))
+        if arr.shape != shape:
+            raise MiniMaxM3ImportError(f"{name} shape {arr.shape} != expected {shape}")
+        return arr.astype(np.float64)
+
+    layers: list[vt.VisionLayerWeights] = []
+    for li in range(vision_cfg.num_layers):
+        prefix = f"vision_tower.layers.{li}."
+        layers.append(vt.VisionLayerWeights(
+            norm1=need(prefix + "norm1.weight", (H,)),
+            qkv=need(prefix + "qkv.weight", (3 * H, H)).T,
+            o=need(prefix + "o_proj.weight", (H, H)).T,
+            norm2=need(prefix + "norm2.weight", (H,)),
+            gate=need(prefix + "mlp.gate_proj.weight", (F, H)).T,
+            up=need(prefix + "mlp.up_proj.weight", (F, H)).T,
+            down=need(prefix + "mlp.down_proj.weight", (H, F)).T,
+        ))
+    tower = vt.VisionTowerWeights(
+        patch_weight=need("vision_tower.patch_embed.weight", (H, vision_cfg.patch_dim)).T,
+        patch_bias=need("vision_tower.patch_embed.bias", (H,)),
+        pos_embed=need("vision_tower.pos_embed", (max(vision_cfg.image_seq_length, vision_cfg.merged_tokens), H)),
+        layers=tuple(layers),
+        norm=need("vision_tower.norm.weight", (H,)),
+    )
+    projector = vt.VisionProjectorWeights(
+        weight=need("multi_modal_projector.weight", (vision_cfg.output_hidden_size, H)).T,
+        bias=need("multi_modal_projector.bias", (vision_cfg.output_hidden_size,)),
+    )
+    return vt.VisionRuntimeWeights(tower=tower, projector=projector)
+
+
+def import_processor_config(
+    root: str | Path,
+    *,
+    vision: MiniMaxM3VisionMetadata = VISION_METADATA,
+) -> MediaProcessorConfig:
+    """Import local HF processor metadata, falling back to MiniMax config facts."""
+    root_path = _root(root)
+    default = minimax_processor_config(vision)
+    for name in ("processor_config.json", "preprocessor_config.json", "image_processor_config.json"):
+        path = root_path / name
+        if path.exists():
+            return processor_config_from_hf(_read_json(path), default=default)
+    return default
+
+
+def synthetic_vision_runtime(
+    text_cfg: MoETransformerConfig,
+    *,
+    vision: MiniMaxM3VisionMetadata = VISION_METADATA,
+    seed: int = 0,
+    vision_hidden_size: int | None = None,
+    num_layers: int = 1,
+    num_heads: int = 4,
+) -> MiniMaxM3VisionRuntime:
+    """Construct a deterministic reference MiniMax vision runtime."""
+    processor = minimax_processor_config(vision)
+    vision_cfg = minimax_vision_transformer_config(
+        text_hidden_size=text_cfg.hidden_size,
+        vision=vision,
+        vision_hidden_size=vision_hidden_size,
+        num_layers=num_layers,
+        num_heads=num_heads,
+    )
+    return MiniMaxM3VisionRuntime(
+        config=vision_cfg,
+        processor=processor,
+        weights=vt.synthetic_weights(vision_cfg, seed=seed),
+    )
+
+
 def import_minimax_m3_hf(
     root: str | Path,
     *,
@@ -450,6 +589,7 @@ def import_minimax_m3_hf(
     ):
         raise MiniMaxM3ImportError(f"missing tokenizer.json/tokenizer_config.json under {root_path}")
     tok = import_tokenizer(root_path) if require_tokenizer else None
+    processor = import_processor_config(root_path, vision=VISION_METADATA)
     st: SafetensorsManifest | None = None
     try:
         st = read_safetensors_manifest(root_path)
@@ -463,6 +603,7 @@ def import_minimax_m3_hf(
         tokenizer=tok,
         safetensors=st,
         vision=VISION_METADATA,
+        processor=processor,
         text_execution_supported=True,
         vision_execution_supported=VISION_METADATA.vision_execution_supported,
     )
@@ -514,22 +655,184 @@ def execute_multimodal_prompt(
     config: MoETransformerConfig,
     weights: rt.ModelWeights,
     prepared: PreparedMultimodalPrompt,
+    *,
+    media_embeddings: MediaEmbeddingInput | None = None,
+    media_inputs: MediaInput | None = None,
+    vision_runtime: MiniMaxM3VisionRuntime | None = None,
 ):
-    """Execute a prepared prompt through the text tower when no media is present.
+    """Execute a prepared prompt through the shared decoder stack.
 
-    Media spans require a vision/video encoder + projector to replace placeholder
-    token embeddings. Until that exists, image/video prompts are rejected before
-    they can silently run as fake text tokens.
+    Image/video spans require projected media embeddings with one row per
+    placeholder token. Without those embeddings, media prompts still fail
+    loudly instead of silently running as fake text tokens.
     """
     if prepared.has_vision:
-        raise MiniMaxM3VisionExecutionError(
-            "MiniMax-M3 vision/video execution is not implemented; prompt contains "
-            f"{len(prepared.spans)} media span(s)")
+        if media_embeddings is None and media_inputs is not None and vision_runtime is not None:
+            media_embeddings = encode_media_inputs(
+                config, prepared, media_inputs=media_inputs, vision_runtime=vision_runtime).embeddings
+        if media_embeddings is None:
+            raise MiniMaxM3VisionExecutionError(
+                "MiniMax-M3 vision/video execution requires projected media embeddings "
+                "or raw media_inputs plus a vision_runtime; "
+                f"prompt contains {len(prepared.spans)} media span(s)")
+        input_embeds = splice_media_embeddings(
+            config, weights, prepared, media_embeddings=media_embeddings)
+        return rt.forward_embeds(config, weights, input_embeds)
     bad_ids = [tok for tok in prepared.token_ids if tok < 0 or tok >= config.vocab_size]
     if bad_ids:
         raise MiniMaxM3ImportError(
             f"text token ids outside vocab_size={config.vocab_size}: {bad_ids[:5]}")
     return rt.forward(config, weights, list(prepared.token_ids))
+
+
+def prefill_multimodal_prompt(
+    config: MoETransformerConfig,
+    weights: rt.ModelWeights,
+    prepared: PreparedMultimodalPrompt,
+    *,
+    media_embeddings: MediaEmbeddingInput | None = None,
+    media_inputs: MediaInput | None = None,
+    vision_runtime: MiniMaxM3VisionRuntime | None = None,
+    max_seq: int | None = None,
+):
+    """Prefill decoder KV caches for a text or projected-media prompt."""
+    if prepared.has_vision:
+        if media_embeddings is None and media_inputs is not None and vision_runtime is not None:
+            media_embeddings = encode_media_inputs(
+                config, prepared, media_inputs=media_inputs, vision_runtime=vision_runtime).embeddings
+        if media_embeddings is None:
+            raise MiniMaxM3VisionExecutionError(
+                "MiniMax-M3 vision/video prefill requires projected media embeddings "
+                "or raw media_inputs plus a vision_runtime; "
+                f"prompt contains {len(prepared.spans)} media span(s)")
+        input_embeds = splice_media_embeddings(
+            config, weights, prepared, media_embeddings=media_embeddings)
+        return rt.prefill_embeds(config, weights, input_embeds, max_seq=max_seq)
+    return rt.prefill(config, weights, list(prepared.token_ids), max_seq=max_seq)
+
+
+def encode_media_inputs(
+    config: MoETransformerConfig,
+    prepared: PreparedMultimodalPrompt,
+    *,
+    media_inputs: MediaInput,
+    vision_runtime: MiniMaxM3VisionRuntime,
+) -> ProjectedMediaEmbeddings:
+    """Run raw image/video tensors through the reference tower + projector."""
+    if vision_runtime.config.output_hidden_size != config.hidden_size:
+        raise MiniMaxM3ImportError(
+            "vision runtime projector hidden size "
+            f"{vision_runtime.config.output_hidden_size} != text hidden size {config.hidden_size}")
+    embeddings: list[np.ndarray] = []
+    spans = tuple(MediaSpan(span.kind, span.start, span.end, frames=span.frames) for span in prepared.spans)
+    for ordinal, span in enumerate(prepared.spans):
+        media = _media_input_for_span(media_inputs, span, ordinal)
+        if span.kind == "image":
+            emb = vt.encode_image(
+                media,
+                vision_runtime.config,
+                vision_runtime.weights,
+                processor=vision_runtime.processor,
+            )
+        elif span.kind == "video":
+            emb = vt.encode_video(
+                media,
+                vision_runtime.config,
+                vision_runtime.weights,
+                processor=vision_runtime.processor,
+                frames=span.frames,
+            )
+        else:
+            raise MiniMaxM3ImportError(f"unsupported media span kind {span.kind!r}")
+        expected = (span.end - span.start, config.hidden_size)
+        if emb.shape != expected:
+            raise MiniMaxM3ImportError(
+                f"encoded media span {ordinal} shape {emb.shape}, expected {expected}")
+        embeddings.append(emb)
+    projected = ProjectedMediaEmbeddings(tuple(embeddings), spans=spans, hidden_size=config.hidden_size)
+    projected.validate()
+    return projected
+
+
+def _media_input_for_span(media_inputs: MediaInput, span: PromptSpan, ordinal: int):
+    if isinstance(media_inputs, Mapping):
+        candidates: tuple[int | str, ...] = (
+            ordinal,
+            str(ordinal),
+            span.kind,
+            f"{span.kind}:{ordinal}",
+        )
+        for key in candidates:
+            if key in media_inputs:
+                return media_inputs[key]
+        raise MiniMaxM3ImportError(f"missing media input for span {ordinal} ({span.kind})")
+    if ordinal >= len(media_inputs):
+        raise MiniMaxM3ImportError(f"missing media input for span {ordinal} ({span.kind})")
+    return media_inputs[ordinal]
+
+
+def splice_media_embeddings(
+    config: MoETransformerConfig,
+    weights: rt.ModelWeights,
+    prepared: PreparedMultimodalPrompt,
+    *,
+    media_embeddings: MediaEmbeddingInput,
+) -> np.ndarray:
+    """Replace image/video placeholder-token positions with projector outputs.
+
+    ``media_embeddings`` may be a sequence aligned to ``prepared.spans`` or a
+    mapping keyed by span ordinal (``0``), span kind (``"image"``/``"video"``),
+    or ``"{kind}:{ordinal}"``. Each value must be shaped
+    ``(span.end - span.start, hidden_size)``.
+    """
+    token_ids = np.asarray(prepared.token_ids, dtype=np.int64)
+    x = np.zeros((token_ids.size, config.hidden_size), dtype=np.float64)
+    media_mask = np.zeros(token_ids.size, dtype=bool)
+    for span in prepared.spans:
+        media_mask[span.start:span.end] = True
+
+    text_positions = np.nonzero(~media_mask)[0]
+    if text_positions.size:
+        text_ids = token_ids[text_positions]
+        bad_ids = [int(tok) for tok in text_ids if tok < 0 or tok >= config.vocab_size]
+        if bad_ids:
+            raise MiniMaxM3ImportError(
+                f"text token ids outside vocab_size={config.vocab_size}: {bad_ids[:5]}")
+        x[text_positions] = weights.embed[text_ids].astype(np.float64)
+
+    if len(prepared.spans) == 0:
+        return x
+
+    for ordinal, span in enumerate(prepared.spans):
+        emb = _media_embedding_for_span(media_embeddings, span, ordinal)
+        arr = np.asarray(emb, dtype=np.float64)
+        expected = (span.end - span.start, config.hidden_size)
+        if arr.shape != expected:
+            raise MiniMaxM3ImportError(
+                f"media embedding for span {ordinal} has shape {arr.shape}, expected {expected}")
+        x[span.start:span.end] = arr
+    return x
+
+
+def _media_embedding_for_span(
+    media_embeddings: MediaEmbeddingInput,
+    span: PromptSpan,
+    ordinal: int,
+) -> np.ndarray:
+    if isinstance(media_embeddings, Mapping):
+        candidates: tuple[int | str, ...] = (
+            ordinal,
+            str(ordinal),
+            span.kind,
+            f"{span.kind}:{ordinal}",
+        )
+        for key in candidates:
+            if key in media_embeddings:
+                return media_embeddings[key]
+        raise MiniMaxM3ImportError(f"missing media embedding for span {ordinal} ({span.kind})")
+    if ordinal >= len(media_embeddings):
+        raise MiniMaxM3ImportError(f"missing media embedding for span {ordinal} ({span.kind})")
+    return media_embeddings[ordinal]
 
 
 __all__ = [
@@ -548,8 +851,18 @@ __all__ = [
     "read_safetensors_manifest",
     "load_safetensors_tensors",
     "expected_hf_text_tensor_shapes",
+    "expected_hf_vision_tensor_shapes",
+    "import_processor_config",
+    "load_vision_runtime_weights",
     "validate_safetensors_shapes",
     "import_minimax_m3_hf",
     "prepare_multimodal_prompt",
+    "encode_media_inputs",
+    "synthetic_vision_runtime",
+    "splice_media_embeddings",
     "execute_multimodal_prompt",
+    "prefill_multimodal_prompt",
+    "MiniMaxM3VisionRuntime",
+    "MiniMaxM3VisionWeights",
+    "MiniMaxM3ProjectorWeights",
 ]

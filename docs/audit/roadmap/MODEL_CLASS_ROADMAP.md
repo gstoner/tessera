@@ -3,9 +3,9 @@
 > Status: **M0–M5 landed** (scaffolding + quant + MoE + MLA + DSA + full stack &
 > autoregressive decode), plus the M3.1/M4.1 composed Apple GPU attention lanes
 > and the MiniMax-M3 text-tower graph contract/runtime decode/artifact KV-outer
-> lowering path plus local HF tokenizer/safetensors import gates.
-> Remaining: fused MSL attention kernels + native NVIDIA MiniMax-M3 KV-outer
-> kernel + real vision/video tower execution.
+> lowering path plus local HF tokenizer/safetensors import gates and projected
+> media embedding splice/reference vision tower.
+> Remaining work is aggregated in **Open Closure Backlog** below.
 > Last updated: 2026-06-19.
 
 ## Goal & definition of done
@@ -54,6 +54,27 @@ is **shared stdlib pillars** built once + thin per-model configs:
 Sequencing: **M1 unblocks M2** (and dense projections); M3 and M4 are
 independent; M5 integrates. Every kernel lands a perf ratchet; a contract cell
 flips to `complete` only when an oracle independently re-derives it.
+
+## Open Closure Backlog
+
+This is the single aggregate list of known opens from the model-class track.
+Milestone sections below may mention context, but closure should be tracked here.
+
+| ID | Area | Open item | Close condition / acceptance |
+|----|------|-----------|------------------------------|
+| O1 | Attention kernels | Fused MSL attention kernels for MLA absorb / DSA block-sparse paths remain open; current Apple GPU support is composed over existing matmul lanes. | Single fused Apple GPU kernel path lands with parity vs numpy/reference and a perf ratchet that beats the composed path on representative scaled configs. |
+| O2 | MiniMax-M3 MSA backend | Native NVIDIA CUDA/H800/Blackwell KV-outer sparse MSA kernel is still artifact-only. | `tessera.attn.msa_kv_outer_sparse` lowers to a native executable backend kernel with dense-equivalence oracle, decode/prefill coverage, and target-specific lit/runtime gates. |
+| O3 | Full text checkpoint materialization | MiniMax-M3 text safetensors are parsed and shape-validated, but full HF checkpoint materialization into `ModelWeights` is not complete. | Full text-tower tensor-name map loads at least one realistic sharded HF-style fixture into typed runtime weights; selected layer outputs match the synthetic/reference loader layout expectations. |
+| O4 | Tokenizer parity | Importer has deterministic vocab/byte fallback but not exact HF tokenizer/BPE/chat-template parity. | HF tokenizer path can round-trip fixture prompts, special image/video tokens, and chat templates with token IDs matching upstream tokenizer output. |
+| O5 | HF processor pixel parity | Reference image/video preprocessing is executable, but exact MiniMax/HF processor pixel parity is not claimed. | `processor_config.json` / image processor fixtures reproduce upstream resize/rescale/normalize/frame-sampling outputs within a defined numeric tolerance. |
+| O6 | Full vision/projector checkpoint aliases | Vision/projector safetensors mapping has a stable test contract, but broad HF tensor-name alias coverage is incomplete. | Loader accepts observed upstream MiniMax-M3 vision/projector key aliases and rejects ambiguous/missing aliases with precise diagnostics. |
+| O7 | Native/fused vision tower lowering | Reference `vision_transformer` execution is numpy-level; backend-native/fused patch embed, ViT block, patch merge, and projector lowering are not complete. | Full multimodal graph lowers through native/composed backend kernels for patch/project/splice surfaces with parity against the reference tower. |
+| O8 | Full MiniMax multimodal execution at production geometry | Scaled raw image/video prompts run through the reference tower; full production geometry remains shape/import contract. | Full MiniMax-M3 image+text and video+text graph builds at production dimensions, and a scaled execution gate covers image and video prompts end-to-end with decode after multimodal prefill. |
+| O9 | JEPA native training lowering | JEPA model contract and artifact ops exist, but native training lowering for masks, stop-grad/EMA state updates, latent prediction, and losses is not complete. | JEPA training step lowers as a compiler-visible stateful training graph with mask RNG determinism, EMA update semantics, and latent-loss parity against the reference. |
+| O10 | VL-JEPA selective decoder integration | Selective decode exists as a reference downstream consumer, not an integrated compile-time conditional decoder flow. | Conditional/selective decoder graph compiles with latent-score gating, retrieval/classification/decode branches, and tests proving decoder invocation is data-dependent and optional. |
+| O11 | Quantized model-weight runtime bridge | INT4/FP8 packed dequant kernels are landed, but some model-family full-weight runtime paths still use synthetic/reference weights. | Frontier model configs can load quantized weight fixtures into runtime-compatible typed weights and hit the fused dequant path in model-level tests. |
+| O12 | Quantized packed-byte fused-kernel memory path | The fused dequant-GEMM kernel exists, but native packed-byte INT4 nibble / FP8 operands still need the full no-materialization memory path. | Fused dequant kernels consume packed-byte operands directly, preserve separate scale operands, avoid full-weight materialization, and pass parity/perf ratchets. |
+| O13 | Distributed/full-scale execution | Full-scale execution, distributed MoE, and NVIDIA FP8/sparse performance remain hardware-gated. | Hardware-backed CI or reproducible artifact gate covers full-scale launch metadata, distributed routing, and target-specific performance/regression thresholds. |
 
 ## What M0–M2 landed (2026-06-14)
 
@@ -120,8 +141,8 @@ flips to `complete` only when an oracle independently re-derives it.
   backend="apple_gpu")` runs the per-head QKᵀ / weights·V matmuls on Metal.
   Both numpy-fallback on a Metal miss; parity-gated vs the reference
   (`test_stdlib_attention.py`, skipped when Metal absent).
-- Still open: a *single fused* MLA-absorb / block-sparse MSL kernel (the perf
-  win); these lanes compose existing Metal matmuls.
+- Open closure item O1 tracks the single fused MLA-absorb / block-sparse MSL
+  kernel promotion; these lanes currently compose existing Metal matmuls.
 
 ### M5 — full stack + autoregressive decode (`models.moe_transformer_runtime`)
 - `synthetic_weights` + `forward` (full causal forward, all layers: RMSNorm →
@@ -148,26 +169,17 @@ flips to `complete` only when an oracle independently re-derives it.
   tracked for M1.1 / M2.1.
 - **MiniMax-M3** in this slice is a text-tower compiler contract with scaled
   MSA runtime decode parity, artifact KV-outer lowering, and local
-  tokenizer/safetensors import gates. Full weight materialization, native
-  NVIDIA kernel execution, and real vision/video tower execution are not
-  claimed.
+  tokenizer/safetensors import gates. Open closure items O2-O8 track the
+  remaining MiniMax-M3 backend, checkpoint, tokenizer, processor, and
+  multimodal execution work.
 
 ## Open work
 
-- **Fused MSL kernels** (M1.1 / M3.1 / M4.1 perf follow-ups): single-kernel
-  dequant-into-GEMM, MLA-absorb, and block-sparse Metal kernels. The composed
-  lanes execute on Metal today; these are the perf wins.
-- **MiniMax-M3 native kernel promotion**: turn the artifact-only
-  `msa_kv_outer_sparse` NVIDIA target contract into a hardware-proven kernel,
-  including real H800/Blackwell decode/prefill benchmark gates.
-- **MiniMax-M3 vision tower promotion**: replace placeholder media spans with
-  real image/video encoder + projector execution and feed projected embeddings
-  into the text tower.
-- **Hardware-gated** (Phase G/H, lit-provable only here): NVIDIA WGMMA FP8 +
-  sparse kernels, distributed dispatch/combine collectives.
-- **Future**: fused MSL *attention* kernels (MLA-absorb, block-sparse — the
-  dequant-GEMM kernel landed below); native packed-byte (INT4 nibble / FP8)
-  operands to the fused dequant kernel for the full memory win.
+The authoritative closure list is **Open Closure Backlog** above. Short map:
+fused/composed kernel promotion is O1 and O12; MiniMax-M3 native MSA is O2;
+MiniMax-M3 checkpoint/tokenizer/processor/multimodal closure is O3-O8; JEPA
+native training and selective decode are O9-O10; model-weight and hardware-gated
+execution closure is O11-O13.
 
 ## Perf follow-ups (landed)
 
@@ -279,9 +291,9 @@ The attention pillars already have catalog anchors (`mla_decode_fused`,
   decode ≡ recompute, MSA genuinely engaged ≠ dense, and dense-warmup-vs-MSA
   cache kinds. `tests/unit/test_msa_kv_outer_schedule.py` covers the
   Graph→Schedule→Tile→Target artifact path.
-- **Still open**: native NVIDIA CUDA/H800/Blackwell kernel implementation and
-  hardware benchmark proof; this slice intentionally stops at a verified
-  compiler artifact contract.
+- **Open closure item**: O2 tracks native NVIDIA CUDA/H800/Blackwell kernel
+  implementation and hardware benchmark proof; this slice intentionally stops
+  at a verified compiler artifact contract.
 
 ## M5.4 — MiniMax-M3 tokenizer/safetensors importer + multimodal execution gate (landed)
 
@@ -302,11 +314,76 @@ The attention pillars already have catalog anchors (`mla_decode_fused`,
 - **Multimodal execution gate**: prompt preparation expands text, image, and
   video segments into token ids plus explicit media spans. Text-only prepared
   prompts execute through `moe_transformer_runtime.forward`; image/video spans
-  raise `MiniMaxM3VisionExecutionError` until a real vision encoder/projector
-  path exists.
+  raise `MiniMaxM3VisionExecutionError` unless projected media embeddings are
+  supplied through the M5.5 splice path.
 - **Guards**: `tests/unit/test_minimax_m3_importer.py` covers config mismatch
   rejection, tokenizer import, safetensors manifest/shape validation, multimodal
   span construction, text-only execution, and image/video execution rejection.
-- **Still open**: full HF checkpoint mapping into `ModelWeights`, exact BPE
-  tokenizer parity, processor pixel preprocessing, and real multimodal tower
-  execution.
+- **Open closure items**: O3-O8 track full HF checkpoint mapping into
+  `ModelWeights`, exact BPE tokenizer parity, exact HF processor pixel parity,
+  and native/fused multimodal tower execution.
+
+## M5.5 / M6 — projected-media runtime, reference vision tower, and JEPA contracts (landed)
+
+- **Embedding-first decoder substrate**:
+  `python/tessera/models/moe_transformer_runtime.py` now exposes
+  `forward_embeds` and `prefill_embeds` alongside the token-id APIs. The old
+  `forward` / `prefill` path is now a thin embedding lookup wrapper, and tests
+  prove token IDs and precomputed embeddings produce identical logits/cache
+  states.
+- **MiniMax-M3 projected media splice**:
+  `python/tessera/models/minimax_m3_importer.py` adds
+  `splice_media_embeddings` plus projected-media and raw-media execution/prefill
+  paths. Media placeholder token IDs do not need to be inside the scaled
+  synthetic vocab: text positions are embedded from token IDs, media spans are
+  replaced with caller-supplied `(span_tokens, hidden_size)` projector outputs
+  or reference tower outputs, and missing or wrong-shaped media embeddings fail
+  before decoder execution.
+- **Decode after multimodal prefill**: `prefill_multimodal_prompt(...,
+  media_embeddings=...)` feeds projected media through the same per-layer KV
+  cache path as text. The guard compares the next decoded logits against full
+  recompute over the spliced embedding prefix plus generated token embedding.
+- **Reusable multimodal contracts**:
+  `python/tessera/models/multimodal.py` adds `MediaSegment`, `MediaSpan`,
+  `MediaBatch`, `PatchGrid`, `ProjectedMediaEmbeddings`, and
+  `MediaProcessorConfig`, plus HF processor metadata import for
+  `processor_config.json` / image-processor configs.
+- **Reference vision tower**:
+  `python/tessera/models/vision_transformer.py` implements numpy image/video
+  preprocessing, patch embedding, patch merge/resampling, tiny ViT blocks, and
+  projection into text hidden size. MiniMax-M3 exposes scaled executable vision
+  metadata for local tests while full metadata remains a shape/import contract.
+- **HF vision/projector mapping**:
+  `minimax_m3_importer.expected_hf_vision_tensor_shapes` and
+  `load_vision_runtime_weights` map HF-style `(out, in)` linear/patch/projector
+  tensors into typed `VisionRuntimeWeights`. Tiny safetensors fixtures round-trip
+  into the typed runtime and reproduce identical reference outputs.
+- **Compiler-visible multimodal contracts**:
+  Graph IR ops for `tessera.image_preprocess`, `tessera.video_frame_sample`,
+  `tessera.patch_embed`, `tessera.patch_merge`, `tessera.media_project`, and
+  `tessera.splice_embeddings` now lower as named `schedule.media.*` /
+  `tile.media.*` artifacts and reach target-level backend contract kernels.
+- **JEPA-ready latent contracts**:
+  `tessera.jepa.{mask_blocks_2d,mask_tubes_3d,gather_context,gather_targets,
+  stop_gradient,ema_update,latent_predict,l2_loss}` lower through
+  `schedule.jepa.*` / `tile.jepa.*` and target artifact kernels. This gives
+  multimodal JEPA work a shared mask/target/predictor vocabulary without
+  claiming a full training backend.
+- **First-class JEPA model contract**:
+  `python/tessera/models/jepa.py` adds an executable reference for deterministic
+  2-D/3-D masks, context/target gathers, stop-gradient target latents, EMA
+  target encoder updates, latent prediction/loss, multimodal shared-latent
+  encoding, and optional selective decoding as a downstream consumer.
+- **Guards**: `tests/unit/test_moe_transformer_runtime.py` covers
+  token-vs-embedding parity; `tests/unit/test_minimax_m3_importer.py` covers
+  projected media splice, raw image/video tower execution, prefill+decode,
+  processor metadata import, vision safetensors shape/weight mapping, and shape
+  rejection; `tests/unit/test_jepa_model_contract.py` covers JEPA masks,
+  latent prediction/loss, EMA, multimodal latent contracts, and selective
+  decoding;
+  `tests/unit/test_multimodal_jepa_contracts.py` covers
+  Graph→Schedule→Tile→NVIDIA Target contract preservation.
+- **Open closure items**: O5-O10 track exact MiniMax/HF processor parity, full
+  checkpoint tensor-name aliases beyond the stable test contract,
+  native/fused vision-tower lowering, native JEPA training lowering, and
+  selective decoder integration.

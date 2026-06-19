@@ -252,6 +252,30 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
                 "selected_block_layout": op.attrs.get("block_ids_layout", "B,Hkv,Sq,top_k"),
             }))
             continue
+        if op.op_name.startswith("schedule.media."):
+            lowered.append(TileOp(
+                "tile." + op.op_name.removeprefix("schedule."),
+                {
+                    **dict(op.attrs),
+                    "lowering": "multimodal_contract",
+                    "resource": _media_resource_estimate(str(op.attrs.get("source", ""))),
+                },
+                operands=list(op.operands),
+                result=op.result,
+            ))
+            continue
+        if op.op_name.startswith("schedule.jepa."):
+            lowered.append(TileOp(
+                "tile." + op.op_name.removeprefix("schedule."),
+                {
+                    **dict(op.attrs),
+                    "lowering": "latent_prediction_contract",
+                    "resource": _jepa_resource_estimate(str(op.attrs.get("source", ""))),
+                },
+                operands=list(op.operands),
+                result=op.result,
+            ))
+            continue
         if op.op_name == "schedule.elementwise":
             lowered.append(_elementwise_op(op))
             continue
@@ -372,6 +396,22 @@ def _elementwise_resource_estimate(source: str) -> dict[str, Any]:
     if source in {"tessera.softmax", "tessera.softmax_safe", "tessera.reduce"}:
         return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
     return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+
+
+def _media_resource_estimate(source: str) -> dict[str, Any]:
+    if source in {"tessera.patch_embed", "tessera.media_project"}:
+        return {"shared_memory_bytes": 4096, "register_estimate": 48, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+    if source == "tessera.splice_embeddings":
+        return {"shared_memory_bytes": 0, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+    return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+
+
+def _jepa_resource_estimate(source: str) -> dict[str, Any]:
+    if source in {"tessera.jepa.mask_blocks_2d", "tessera.jepa.mask_tubes_3d"}:
+        return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+    if source in {"tessera.jepa.latent_predict", "tessera.jepa.l2_loss"}:
+        return {"shared_memory_bytes": 1024, "register_estimate": 32, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
+    return {"shared_memory_bytes": 0, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
 
 
 def _lowering_kind(op_name: str) -> str:

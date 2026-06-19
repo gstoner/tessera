@@ -1668,6 +1668,141 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             return_debug=return_debug,
         )
 
+    # ── Multimodal compiler contracts ───────────────────────────────────────
+    def image_preprocess(image, *, image_size=None, dtype="f32"):
+        """Compiler-visible image preprocess contract.
+
+        Reference behavior is intentionally minimal: convert to a numeric array.
+        Production preprocessors can replace this with decode/resize/normalize
+        lowering while preserving the op name.
+        """
+        arr = np.asarray(image)
+        if dtype in {"f32", "float32"}:
+            return arr.astype(np.float32, copy=False)
+        return arr
+
+    def video_frame_sample(video, *, max_frames: int = 4, strategy: str = "uniform"):
+        """Compiler-visible video frame sampling contract."""
+        frames = np.asarray(video)
+        if frames.shape[0] <= max_frames:
+            return frames
+        if strategy == "first":
+            return frames[:max_frames]
+        idx = np.linspace(0, frames.shape[0] - 1, max_frames).round().astype(np.int64)
+        return frames[idx]
+
+    def patch_embed(media, *, patch_size: int = 14, weight=None, bias=None):
+        """Patchify media and optionally project flattened patches."""
+        x = np.asarray(media, dtype=np.float32)
+        if x.ndim == 3:
+            x = x[None]
+        if x.ndim != 4:
+            raise ValueError(f"patch_embed expects HWC or NHWC input, got shape {x.shape}")
+        n, h, w, c = x.shape
+        ph = h // patch_size
+        pw = w // patch_size
+        if ph < 1 or pw < 1:
+            raise ValueError("patch_size is larger than the media spatial dimensions")
+        cropped = x[:, :ph * patch_size, :pw * patch_size, :]
+        patches = cropped.reshape(n, ph, patch_size, pw, patch_size, c)
+        flat = patches.transpose(0, 1, 3, 2, 4, 5).reshape(n, ph * pw, patch_size * patch_size * c)
+        if weight is None:
+            return flat
+        out = flat @ np.asarray(weight)
+        if bias is not None:
+            out = out + np.asarray(bias)
+        return out
+
+    def patch_merge(patches, *, spatial_merge_size: int = 2, temporal_merge_size: int = 1):
+        """Merge neighboring patch tokens for image/video towers."""
+        x = np.asarray(patches)
+        merge = max(1, int(spatial_merge_size) * int(spatial_merge_size) * int(temporal_merge_size))
+        usable = (x.shape[-2] // merge) * merge
+        if usable == 0:
+            return x
+        merged = x[..., :usable, :].reshape(*x.shape[:-2], usable // merge, merge, x.shape[-1]).mean(axis=-2)
+        if usable == x.shape[-2]:
+            return merged
+        return np.concatenate([merged, x[..., usable:, :]], axis=-2)
+
+    def media_project(media_tokens, weight=None, bias=None):
+        """Project image/video tower tokens into decoder hidden space."""
+        x = np.asarray(media_tokens, dtype=np.float32)
+        if weight is None:
+            return x
+        out = x @ np.asarray(weight)
+        if bias is not None:
+            out = out + np.asarray(bias)
+        return out
+
+    def splice_embeddings(text_embeddings, media_embeddings, spans):
+        """Replace span rows in a decoder embedding matrix with media rows."""
+        x = np.asarray(text_embeddings, dtype=np.float64).copy()
+        if isinstance(media_embeddings, dict):
+            lookup = media_embeddings
+        else:
+            lookup = {i: value for i, value in enumerate(media_embeddings)}
+        for ordinal, span in enumerate(spans):
+            start = int(span["start"] if isinstance(span, dict) else span.start)
+            end = int(span["end"] if isinstance(span, dict) else span.end)
+            kind = str(span.get("kind", "") if isinstance(span, dict) else getattr(span, "kind", ""))
+            value = None
+            for key in (ordinal, str(ordinal), kind, f"{kind}:{ordinal}"):
+                if key in lookup:
+                    value = lookup[key]
+                    break
+            if value is None:
+                raise ValueError(f"missing media embedding for span {ordinal}")
+            arr = np.asarray(value, dtype=np.float64)
+            if arr.shape != x[start:end].shape:
+                raise ValueError(f"media span {ordinal} shape {arr.shape} != {x[start:end].shape}")
+            x[start:end] = arr
+        return x
+
+    # ── JEPA / latent prediction compiler contracts ─────────────────────────
+    def jepa_mask_blocks_2d(shape, *, block_size: int, mask_ratio: float, seed: int = 0):
+        h, w = (int(v) for v in tuple(shape)[-2:])
+        bh = max(1, (h + block_size - 1) // block_size)
+        bw = max(1, (w + block_size - 1) // block_size)
+        rng = np.random.default_rng(seed)
+        mask = rng.random((bh, bw)) < float(mask_ratio)
+        return mask
+
+    def jepa_mask_tubes_3d(shape, *, tube_size: int, mask_ratio: float, seed: int = 0):
+        t, h, w = (int(v) for v in tuple(shape)[-3:])
+        tt = max(1, (t + tube_size - 1) // tube_size)
+        rng = np.random.default_rng(seed)
+        return rng.random((tt, h, w)) < float(mask_ratio)
+
+    def jepa_gather_context(tokens, mask):
+        x = np.asarray(tokens)
+        m = np.asarray(mask, dtype=bool).reshape(-1)
+        return x[..., ~m, :]
+
+    def jepa_gather_targets(tokens, mask):
+        x = np.asarray(tokens)
+        m = np.asarray(mask, dtype=bool).reshape(-1)
+        return x[..., m, :]
+
+    def jepa_stop_gradient(x):
+        return np.asarray(x).copy()
+
+    def jepa_ema_update(target, source, *, decay: float):
+        return np.asarray(target) * float(decay) + np.asarray(source) * (1.0 - float(decay))
+
+    def jepa_latent_predict(context, predictor_weight=None, predictor_bias=None):
+        x = np.asarray(context, dtype=np.float32)
+        if predictor_weight is None:
+            return x
+        out = x @ np.asarray(predictor_weight)
+        if predictor_bias is not None:
+            out = out + np.asarray(predictor_bias)
+        return out
+
+    def jepa_l2_loss(prediction, target):
+        diff = np.asarray(prediction, dtype=np.float64) - np.asarray(target, dtype=np.float64)
+        return np.mean(diff * diff)
+
     def memory_index_select(indexer_keys, query, *, block_size: int,
                             threshold: float = 0.5, causal: bool = True,
                             scale=None, fallback_local: bool = True):
@@ -3823,6 +3958,20 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "msa_index_scores": msa_index_scores,
         "msa_select_blocks": msa_select_blocks,
         "msa_sparse_attention": msa_sparse_attention,
+        "image_preprocess": image_preprocess,
+        "video_frame_sample": video_frame_sample,
+        "patch_embed": patch_embed,
+        "patch_merge": patch_merge,
+        "media_project": media_project,
+        "splice_embeddings": splice_embeddings,
+        "jepa_mask_blocks_2d": jepa_mask_blocks_2d,
+        "jepa_mask_tubes_3d": jepa_mask_tubes_3d,
+        "jepa_gather_context": jepa_gather_context,
+        "jepa_gather_targets": jepa_gather_targets,
+        "jepa_stop_gradient": jepa_stop_gradient,
+        "jepa_ema_update": jepa_ema_update,
+        "jepa_latent_predict": jepa_latent_predict,
+        "jepa_l2_loss": jepa_l2_loss,
         "memory_index_select": memory_index_select,
         "memory_index_score": memory_index_score,
         "memory_index_select_ste": memory_index_select_ste,
@@ -3998,6 +4147,20 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         msa_index_scores=msa_index_scores,
         msa_select_blocks=msa_select_blocks,
         msa_sparse_attention=msa_sparse_attention,
+        image_preprocess=image_preprocess,
+        video_frame_sample=video_frame_sample,
+        patch_embed=patch_embed,
+        patch_merge=patch_merge,
+        media_project=media_project,
+        splice_embeddings=splice_embeddings,
+        jepa_mask_blocks_2d=jepa_mask_blocks_2d,
+        jepa_mask_tubes_3d=jepa_mask_tubes_3d,
+        jepa_gather_context=jepa_gather_context,
+        jepa_gather_targets=jepa_gather_targets,
+        jepa_stop_gradient=jepa_stop_gradient,
+        jepa_ema_update=jepa_ema_update,
+        jepa_latent_predict=jepa_latent_predict,
+        jepa_l2_loss=jepa_l2_loss,
         memory_index_select=memory_index_select,
         memory_index_score=memory_index_score,
         memory_index_select_ste=memory_index_select_ste,

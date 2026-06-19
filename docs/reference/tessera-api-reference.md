@@ -264,7 +264,7 @@ with full-scale + NVIDIA execution hardware-gated. Roadmap:
 **Model graphs** (`tessera.models`):
 
 ```python
-from tessera.models import deepseek_v32, glm5, kimi_k2, minimax_m3
+from tessera.models import deepseek_v32, glm5, jepa, kimi_k2, minimax_m3
 from tessera.models import minimax_m3_importer
 from tessera.models import moe_transformer as mt
 from tessera.models import moe_transformer_runtime as rt
@@ -279,17 +279,38 @@ tokens = rt.greedy_generate(cfg, w, [1, 2, 3], max_new_tokens=8)  # KV-cached de
 - `deepseek_v32` / `glm5` / `kimi_k2` / `minimax_m3` each export `config()`
   (full scale) and `scaled_config()` (small structural surrogate). MiniMax-M3
   also exposes staged multimodal metadata.
-- `minimax_m3_importer` reads local HF-style config/tokenizer/safetensors
-  metadata, prepares multimodal prompt spans, executes text-only prompts through
-  the reference text tower, loads selected safetensors tensors by name, and
-  rejects image/video execution until a real vision encoder/projector path lands.
+- `minimax_m3_importer` reads local HF-style config/tokenizer/processor/
+  safetensors metadata, prepares multimodal prompt spans, executes text-only
+  prompts through the reference text tower, loads selected safetensors tensors
+  by name, and can either splice caller-supplied projected image/video
+  embeddings or run raw media tensors through a reference
+  `vision_transformer` runtime before decoder `forward_embeds` /
+  `prefill_embeds`. It still rejects media prompts when no projected embeddings
+  or vision runtime is supplied.
+- `vision_transformer` is a numpy reference tower/projector for multimodal
+  contracts: image/video preprocess, patch embedding, patch merge/resampling,
+  tiny ViT blocks, and projection into decoder hidden size. It is the executable
+  reference path for scaled MiniMax-M3 tests, not a claim of full HF processor
+  pixel parity.
+- `jepa` is a first-class latent-prediction model contract: deterministic
+  2-D/3-D masks, context/target gathers, stop-gradient target latents, EMA
+  state update, latent predictor/loss, multimodal shared-latent encoding, and
+  optional selective decode as a downstream consumer.
 - `moe_transformer.MoETransformerConfig` is the shared shape contract;
   `attn_kind ∈ {"mla","gqa"}`, `sparse ∈ {None, "dsa", "lsa", "msa"}`,
   `weight_dtype ∈ {None, "int4", "fp8_e4m3", "fp8_e5m2"}`.
-- `moe_transformer_runtime` runs `forward` / `prefill` / `decode_step` /
-  `greedy_generate` with per-layer KV caches (MLA latent cache; materialized K/V
-  for GQA/DSA/LSA/MSA). The headline guarantee is **KV-cached greedy decode ≡
-  full recompute**, including with sparse attention in the decode loop.
+- `moe_transformer_runtime` runs `forward` / `forward_embeds` / `prefill` /
+  `prefill_embeds` / `decode_step` / `greedy_generate` with per-layer KV caches
+  (MLA latent cache; materialized K/V for GQA/DSA/LSA/MSA). The headline
+  guarantee is **KV-cached greedy decode ≡ full recompute**, including with
+  sparse attention in the decode loop.
+- Multimodal + JEPA compiler contracts now have named Graph→Schedule→Tile→Target
+  artifact paths for `splice_embeddings`, `patch_embed`, `media_project`, and
+  JEPA latent-mask/prediction ops (`jepa.mask_blocks_2d`, `jepa.mask_tubes_3d`,
+  `jepa.gather_context`, `jepa.gather_targets`, `jepa.stop_gradient`,
+  `jepa.ema_update`, `jepa.latent_predict`, `jepa.l2_loss`). These are contract
+  artifacts today; native fused vision tower and JEPA training kernels remain
+  future backend work.
 
 ### Lookahead Sparse Attention (`tessera.lsa`)
 

@@ -10,6 +10,7 @@ from tessera.data import VocabTokenizer
 from tessera.models import minimax_m3
 from tessera.models import minimax_m3_importer as imp
 from tessera.models import moe_transformer_runtime as rt
+from tessera.models import vision_transformer as vt
 
 
 def _write_json(path, payload):
@@ -95,6 +96,7 @@ def test_import_minimax_m3_hf_manifest_reads_config_tokenizer_and_safetensors(tm
     assert manifest.safetensors is not None
     assert "model.embed_tokens.weight" in manifest.safetensors.tensors
     imp.validate_safetensors_shapes(manifest.safetensors, shapes)
+    assert manifest.processor is not None
     assert manifest.vision_execution_supported is False
 
 
@@ -181,12 +183,159 @@ def test_text_only_multimodal_prompt_executes_through_text_tower():
     assert np.isfinite(logits).all()
 
 
-def test_image_prompt_requires_real_vision_execution():
+def test_image_prompt_requires_projected_media_embeddings():
     cfg = minimax_m3.scaled_config()
     weights = rt.synthetic_weights(cfg, seed=13)
     tok = VocabTokenizer({"<unk>": 0, "hello": 1})
     vision = minimax_m3.MiniMaxM3VisionMetadata(image_token_index=101, image_seq_length=2)
     prepared = imp.prepare_multimodal_prompt(["hello", imp.PromptSegment("image")], tok, vision=vision)
 
-    with pytest.raises(imp.MiniMaxM3VisionExecutionError, match="vision/video execution is not implemented"):
+    with pytest.raises(imp.MiniMaxM3VisionExecutionError, match="requires projected media embeddings"):
         imp.execute_multimodal_prompt(cfg, weights, prepared)
+
+
+def test_projected_media_embeddings_splice_and_execute():
+    cfg = minimax_m3.scaled_config()
+    weights = rt.synthetic_weights(cfg, seed=14)
+    tok = VocabTokenizer({"<unk>": 0, "hello": 1, "world": 2})
+    vision = minimax_m3.MiniMaxM3VisionMetadata(image_token_index=200061, image_seq_length=2)
+    prepared = imp.prepare_multimodal_prompt(
+        ["hello", imp.PromptSegment("image"), "world"], tok, vision=vision)
+    media = [np.full((2, cfg.hidden_size), 0.125, dtype=np.float32)]
+
+    spliced = imp.splice_media_embeddings(cfg, weights, prepared, media_embeddings=media)
+    logits = imp.execute_multimodal_prompt(cfg, weights, prepared, media_embeddings=media)
+
+    assert spliced.shape == (4, cfg.hidden_size)
+    np.testing.assert_allclose(spliced[1:3], media[0])
+    np.testing.assert_allclose(logits, rt.forward_embeds(cfg, weights, spliced))
+
+
+def test_projected_media_prefill_can_continue_decode():
+    cfg = minimax_m3.scaled_config()
+    weights = rt.synthetic_weights(cfg, seed=15)
+    tok = VocabTokenizer({"<unk>": 0, "hello": 1})
+    vision = minimax_m3.MiniMaxM3VisionMetadata(image_token_index=200061, image_seq_length=2)
+    prepared = imp.prepare_multimodal_prompt(["hello", imp.PromptSegment("image")], tok, vision=vision)
+    media = {"image": np.full((2, cfg.hidden_size), -0.25, dtype=np.float32)}
+    spliced = imp.splice_media_embeddings(cfg, weights, prepared, media_embeddings=media)
+
+    logits, state = imp.prefill_multimodal_prompt(
+        cfg, weights, prepared, media_embeddings=media, max_seq=spliced.shape[0] + 1)
+    next_token = int(np.argmax(logits))
+    decoded_logits, _ = rt.decode_step(cfg, weights, state, next_token)
+    recompute_embeds = np.concatenate([spliced, rt.embed_tokens(weights, [next_token])], axis=0)
+
+    np.testing.assert_allclose(
+        decoded_logits,
+        rt.forward_embeds(cfg, weights, recompute_embeds)[-1],
+        rtol=1e-8,
+        atol=1e-8,
+    )
+
+
+def test_projected_media_embedding_shape_is_validated():
+    cfg = minimax_m3.scaled_config()
+    weights = rt.synthetic_weights(cfg, seed=16)
+    tok = VocabTokenizer({"<unk>": 0, "hello": 1})
+    vision = minimax_m3.MiniMaxM3VisionMetadata(image_token_index=101, image_seq_length=2)
+    prepared = imp.prepare_multimodal_prompt(["hello", imp.PromptSegment("image")], tok, vision=vision)
+
+    with pytest.raises(imp.MiniMaxM3ImportError, match="media embedding"):
+        imp.splice_media_embeddings(
+            cfg, weights, prepared,
+            media_embeddings=[np.zeros((1, cfg.hidden_size), dtype=np.float32)],
+        )
+
+
+def test_processor_config_imports_hf_metadata(tmp_path):
+    vision = minimax_m3.scaled_vision_metadata()
+    _write_json(tmp_path / "processor_config.json", {
+        "size": {"height": 8, "width": 8},
+        "patch_size": 2,
+        "image_seq_length": 4,
+        "spatial_merge_size": 2,
+        "temporal_patch_size": 1,
+        "max_frames": 2,
+        "num_channels": 3,
+        "image_mean": [0.1, 0.2, 0.3],
+        "image_std": [1.0, 1.0, 1.0],
+    })
+
+    processor = imp.import_processor_config(tmp_path, vision=vision)
+
+    assert processor.image_size == 8
+    assert processor.patch_size == 2
+    assert processor.image_seq_length == 4
+    assert processor.max_frames == 2
+    assert processor.image_mean == (0.1, 0.2, 0.3)
+
+
+def test_reference_vision_runtime_executes_image_and_video():
+    cfg = minimax_m3.scaled_config()
+    vision = minimax_m3.scaled_vision_metadata()
+    runtime = imp.synthetic_vision_runtime(cfg, vision=vision, seed=17)
+    image = np.arange(8 * 8 * 3, dtype=np.uint8).reshape(8, 8, 3)
+    video = np.stack([image, image[::-1]], axis=0)
+
+    image_emb = imp.encode_media_inputs(
+        cfg,
+        imp.prepare_multimodal_prompt([imp.PromptSegment("image")], VocabTokenizer({"<unk>": 0}), vision=vision),
+        media_inputs=[image],
+        vision_runtime=runtime,
+    )
+    video_emb = imp.encode_media_inputs(
+        cfg,
+        imp.prepare_multimodal_prompt([imp.PromptSegment("video", frames=2)], VocabTokenizer({"<unk>": 0}), vision=vision),
+        media_inputs=[video],
+        vision_runtime=runtime,
+    )
+
+    assert image_emb.embeddings[0].shape == (vision.image_seq_length, cfg.hidden_size)
+    assert video_emb.embeddings[0].shape == (2 * vision.image_seq_length, cfg.hidden_size)
+    assert np.isfinite(image_emb.embeddings[0]).all()
+    assert np.isfinite(video_emb.embeddings[0]).all()
+
+
+def test_raw_media_inputs_execute_through_reference_vision_tower():
+    cfg = minimax_m3.scaled_config()
+    weights = rt.synthetic_weights(cfg, seed=18)
+    vision = minimax_m3.scaled_vision_metadata()
+    runtime = imp.synthetic_vision_runtime(cfg, vision=vision, seed=19)
+    tok = VocabTokenizer({"<unk>": 0, "hello": 1, "world": 2})
+    image = np.arange(8 * 8 * 3, dtype=np.uint8).reshape(8, 8, 3)
+    prepared = imp.prepare_multimodal_prompt(["hello", imp.PromptSegment("image"), "world"], tok, vision=vision)
+
+    projected = imp.encode_media_inputs(cfg, prepared, media_inputs={"image": image}, vision_runtime=runtime)
+    logits = imp.execute_multimodal_prompt(
+        cfg, weights, prepared, media_inputs={"image": image}, vision_runtime=runtime)
+    spliced = imp.splice_media_embeddings(cfg, weights, prepared, media_embeddings=projected.embeddings)
+
+    assert logits.shape == (len(prepared.token_ids), cfg.vocab_size)
+    np.testing.assert_allclose(logits, rt.forward_embeds(cfg, weights, spliced), rtol=1e-9, atol=1e-9)
+
+
+def test_vision_safetensors_roundtrip_into_typed_runtime_weights(tmp_path):
+    cfg = minimax_m3.scaled_config()
+    vision = minimax_m3.scaled_vision_metadata()
+    processor = minimax_m3.processor_config(vision)
+    vision_cfg = minimax_m3.vision_transformer_config(
+        text_hidden_size=cfg.hidden_size,
+        vision=vision,
+        num_layers=1,
+        num_heads=4,
+    )
+    shapes = imp.expected_hf_vision_tensor_shapes(cfg, vision_cfg, layers=(0,))
+    rng = np.random.default_rng(20)
+    tensors = {name: rng.standard_normal(shape).astype(np.float16) for name, shape in shapes.items()}
+    safeio.save_safetensors(tmp_path / "vision.safetensors", tensors)
+
+    direct = imp.load_vision_runtime_weights(tensors, vision_cfg)
+    loaded_tensors = imp.load_safetensors_tensors(tmp_path / "vision.safetensors", names=sorted(tensors))
+    loaded = imp.load_vision_runtime_weights(loaded_tensors, vision_cfg)
+    image = np.arange(8 * 8 * 3, dtype=np.uint8).reshape(8, 8, 3)
+
+    direct_out = vt.encode_image(image, vision_cfg, direct, processor=processor)
+    loaded_out = vt.encode_image(image, vision_cfg, loaded, processor=processor)
+
+    np.testing.assert_allclose(loaded_out, direct_out, rtol=0, atol=0)

@@ -41,6 +41,8 @@ JEPA_OPS = {
     "tessera.jepa.ema_update",
     "tessera.jepa.latent_predict",
     "tessera.jepa.l2_loss",
+    "tessera.jepa.selective_decode",
+    "tessera.jepa.train_step",
     "tessera.jepa_mask_blocks_2d",
     "tessera.jepa_mask_tubes_3d",
     "tessera.jepa_gather_context",
@@ -49,6 +51,8 @@ JEPA_OPS = {
     "tessera.jepa_ema_update",
     "tessera.jepa_latent_predict",
     "tessera.jepa_l2_loss",
+    "tessera.jepa_selective_decode",
+    "tessera.jepa_train_step",
 }
 
 

@@ -121,6 +121,39 @@ def test_minimax_m3_multimodal_metadata_is_importer_only():
     assert meta.vision_execution_supported is False
 
 
+def test_minimax_m3_full_multimodal_graph_builds_for_image_and_video():
+    cfg = minimax_m3.config()
+    graph = minimax_m3.build_multimodal_graph(cfg, frames=4)
+
+    minimax_m3.verify_multimodal_graph(graph)
+    ops = graph.op_sequence()
+    assert ops.count("image_preprocess") == 1
+    assert ops.count("video_frame_sample") == 1
+    assert ops.count("patch_embed") == 2
+    assert ops.count("patch_merge") == 2
+    assert ops.count("media_project") == 2
+    assert ops[-1] == "splice_embeddings"
+
+    image_project, video_project = graph.find_all("media_project")
+    assert image_project.output == (576, 6144)
+    assert video_project.output == (4 * 576, 6144)
+    assert graph.find("image_preprocess").attrs["image_size"] == 2016
+    assert graph.find("image_preprocess").attrs["patch_size"] == 14
+    assert graph.find("splice_embeddings").attrs["vision_execution_supported"] is False
+
+
+def test_minimax_m3_scaled_multimodal_graph_preserves_executable_shape():
+    cfg = minimax_m3.scaled_config()
+    vision = minimax_m3.scaled_vision_metadata()
+    graph = minimax_m3.build_multimodal_graph(cfg, vision=vision, frames=2)
+
+    minimax_m3.verify_multimodal_graph(graph)
+    image_project, video_project = graph.find_all("media_project")
+    assert image_project.output == (vision.image_seq_length, cfg.hidden_size)
+    assert video_project.output == (2 * vision.image_seq_length, cfg.hidden_size)
+    assert graph.find("splice_embeddings").output == ("T+media", cfg.hidden_size)
+
+
 def test_msa_config_rejects_missing_or_bad_shape_contracts():
     cfg = minimax_m3.scaled_config()
     with pytest.raises(mt.MoETransformerDimError, match="msa_top_k_blocks"):

@@ -34,6 +34,25 @@ def test_jepa_step_predicts_target_latents_not_logits():
     np.testing.assert_allclose(result.target_latents, jepa.encode_target(tokens[mask], weights))
 
 
+def test_jepa_training_step_is_deterministic_and_loss_matches_reference():
+    cfg = jepa.JEPAConfig(input_dim=4, latent_dim=3, predictor_hidden_size=5, mask_ratio=0.5)
+    weights = jepa.synthetic_weights(cfg, seed=33)
+    tokens = np.linspace(-1.0, 1.0, 16 * cfg.input_dim, dtype=np.float64).reshape(16, cfg.input_dim)
+    mask = jepa.mask_blocks_2d((4, 4), block_size=1, mask_ratio=cfg.mask_ratio, seed=123).reshape(-1)
+
+    first = jepa.run_jepa_step(tokens, mask, weights)
+    second = jepa.run_jepa_step(tokens, mask, weights)
+    expected_loss = jepa.jepa_l2_loss(first.predictions, first.target_latents)
+    target_state = {"proj": np.zeros_like(weights.target_proj)}
+    online_state = {"proj": weights.context_proj}
+    ema = jepa.ema_update(target_state, online_state, decay=0.9)
+
+    np.testing.assert_array_equal(first.mask, second.mask)
+    np.testing.assert_allclose(first.predictions, second.predictions)
+    assert first.loss == pytest.approx(expected_loss)
+    np.testing.assert_allclose(ema["proj"], 0.1 * weights.context_proj)
+
+
 def test_jepa_rejects_empty_context_or_targets():
     cfg = jepa.JEPAConfig(input_dim=3, latent_dim=2, predictor_hidden_size=4)
     weights = jepa.synthetic_weights(cfg, seed=4)
@@ -87,3 +106,8 @@ def test_jepa_selective_decode_is_downstream_optional():
     assert result.decode_mask.tolist() == [False, True, True]
     assert result.logits.shape == (2, 3)
     assert result.decoded_token_ids.tolist() == [2, 1]
+
+    skipped = jepa.selective_decode(latents, decoder_w, threshold=10.0)
+    assert skipped.decode_mask.tolist() == [False, False, False]
+    assert skipped.logits.shape == (0, 3)
+    assert skipped.decoded_token_ids.shape == (0,)

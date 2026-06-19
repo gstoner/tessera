@@ -41,6 +41,8 @@ JEPA_SOURCES = {
     "tessera.jepa.ema_update",
     "tessera.jepa.latent_predict",
     "tessera.jepa.l2_loss",
+    "tessera.jepa.selective_decode",
+    "tessera.jepa.train_step",
 }
 
 
@@ -1257,6 +1259,21 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "execution": op.attrs.get("execution", "projected_embeddings"),
         })]
     if source in JEPA_SOURCES:
+        preserved = {
+            key: op.attrs[key]
+            for key in (
+                "decay",
+                "stateful",
+                "gating",
+                "optional",
+                "branches",
+                "mask_rng_deterministic",
+                "ema_update",
+                "latent_loss",
+                "gradient",
+            )
+            if key in op.attrs
+        }
         return [TargetOp("tessera_nvidia.cuda_kernel", {
             **base,
             "arch": arch,
@@ -1264,6 +1281,7 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             "status": op.attrs.get("status", "artifact_only"),
             "contract": op.attrs.get("contract", source.removeprefix("tessera.jepa.")),
             "latent_space": op.attrs.get("latent_space", "continuous"),
+            **preserved,
         })]
     kernel = "flash_attn_contract" if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn.") else "elementwise_contract"
     return [TargetOp("tessera_nvidia.cuda_kernel", {**base, "arch": arch, "kernel": kernel, "status": "artifact_only"})]

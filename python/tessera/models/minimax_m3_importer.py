@@ -44,12 +44,38 @@ class MiniMaxM3TokenizerSpec:
     tokenizer_file: str | None = None
     tokenizer_config_file: str | None = None
     chat_template_present: bool = False
+    chat_template: str | None = None
 
 
 @dataclass(frozen=True)
 class MiniMaxM3TokenizerImport:
     tokenizer: Tokenizer
     spec: MiniMaxM3TokenizerSpec
+
+
+class HFTokenizerAdapter(Tokenizer):
+    """Thin wrapper over Hugging Face `tokenizers.Tokenizer`."""
+
+    def __init__(self, tokenizer: Any, *, specials: Mapping[str, int] | None = None):
+        self._tokenizer = tokenizer
+        self._specials = dict(specials or {})
+
+    def encode(self, text: str) -> list[int]:
+        return [int(i) for i in self._tokenizer.encode(text).ids]
+
+    def decode(self, ids: Sequence[int]) -> str:
+        return str(self._tokenizer.decode(
+            [int(i) for i in ids],
+            skip_special_tokens=False,
+        ))
+
+    @property
+    def vocab_size(self) -> int:
+        return int(self._tokenizer.get_vocab_size(with_added_tokens=True))
+
+    @property
+    def special_tokens(self) -> dict[str, int]:
+        return dict(self._specials)
 
 
 @dataclass(frozen=True)
@@ -249,6 +275,18 @@ def import_tokenizer(root: str | Path) -> MiniMaxM3TokenizerImport:
         tok = _read_json(tok_path)
         model = tok.get("model", {})
         vocab = model.get("vocab")
+        hf_tokenizer = _try_import_hf_tokenizer(tok_path, specials)
+        if hf_tokenizer is not None:
+            spec = MiniMaxM3TokenizerSpec(
+                kind=str(model.get("type", "hf")).lower(),
+                vocab_size=hf_tokenizer.vocab_size,
+                special_tokens=specials,
+                tokenizer_file=str(tok_path),
+                tokenizer_config_file=str(cfg_path) if cfg_path.exists() else None,
+                chat_template_present=chat_template_present,
+                chat_template=str(cfg["chat_template"]) if chat_template_present else None,
+            )
+            return MiniMaxM3TokenizerImport(tokenizer=hf_tokenizer, spec=spec)
         if not isinstance(vocab, Mapping):
             raise MiniMaxM3ImportError("tokenizer.json exists but model.vocab is missing")
         str_vocab = {str(k): int(v) for k, v in vocab.items()}
@@ -262,6 +300,7 @@ def import_tokenizer(root: str | Path) -> MiniMaxM3TokenizerImport:
             tokenizer_file=str(tok_path),
             tokenizer_config_file=str(cfg_path) if cfg_path.exists() else None,
             chat_template_present=chat_template_present,
+            chat_template=str(cfg["chat_template"]) if chat_template_present else None,
         )
         return MiniMaxM3TokenizerImport(tokenizer=tokenizer, spec=spec)
     byte_tokenizer = ByteTokenizer(specials=specials)
@@ -273,8 +312,49 @@ def import_tokenizer(root: str | Path) -> MiniMaxM3TokenizerImport:
             special_tokens=specials,
             tokenizer_config_file=str(cfg_path) if cfg_path.exists() else None,
             chat_template_present=chat_template_present,
+            chat_template=str(cfg["chat_template"]) if chat_template_present else None,
         ),
     )
+
+
+def _try_import_hf_tokenizer(tok_path: Path, specials: Mapping[str, int]) -> HFTokenizerAdapter | None:
+    try:
+        from tokenizers import Tokenizer as _HFTokenizer
+    except Exception:  # pragma: no cover - optional dependency
+        return None
+    try:
+        return HFTokenizerAdapter(_HFTokenizer.from_file(str(tok_path)), specials=specials)
+    except Exception:
+        return None
+
+
+def apply_chat_template(
+    tokenizer_import: MiniMaxM3TokenizerImport,
+    messages: Sequence[Mapping[str, str]],
+    *,
+    add_generation_prompt: bool = False,
+    tokenize: bool = False,
+) -> str | list[int]:
+    if not tokenizer_import.spec.chat_template:
+        raise MiniMaxM3ImportError("tokenizer config does not define chat_template")
+    try:
+        from jinja2 import Template
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise MiniMaxM3ImportError("chat_template rendering requires jinja2") from exc
+    rendered = Template(tokenizer_import.spec.chat_template).render(
+        messages=list(messages),
+        add_generation_prompt=add_generation_prompt,
+        bos_token=_token_for_special(tokenizer_import, "bos"),
+        eos_token=_token_for_special(tokenizer_import, "eos"),
+    )
+    return tokenizer_import.tokenizer.encode(rendered) if tokenize else str(rendered)
+
+
+def _token_for_special(tokenizer_import: MiniMaxM3TokenizerImport, key: str) -> str:
+    for token in tokenizer_import.spec.special_tokens:
+        if key in token.lower():
+            return token
+    return ""
 
 
 def _special_tokens_from_config(cfg: Mapping[str, Any]) -> dict[str, int]:
@@ -425,12 +505,27 @@ def expected_hf_text_tensor_shapes(
         out[prefix + "self_attn.o_proj.weight"] = (H, Hq * Dv)
         if cfg.is_moe_layer(li):
             out[prefix + "mlp.router.weight"] = (cfg.num_experts, H)
+            F = cfg.moe_intermediate_size
+            for expert in range(cfg.num_experts):
+                ep = prefix + f"mlp.experts.{expert}."
+                out[ep + "gate_proj.weight"] = (F, H)
+                out[ep + "up_proj.weight"] = (F, H)
+                out[ep + "down_proj.weight"] = (H, F)
+            if cfg.num_shared_experts > 0:
+                Fs = cfg.shared_expert_intermediate_size
+                out[prefix + "mlp.shared_expert.gate_proj.weight"] = (Fs, H)
+                out[prefix + "mlp.shared_expert.up_proj.weight"] = (Fs, H)
+                out[prefix + "mlp.shared_expert.down_proj.weight"] = (H, Fs)
         else:
             F = cfg.dense_intermediate_size or cfg.shared_expert_intermediate_size
             out[prefix + "mlp.gate_proj.weight"] = (F, H)
             out[prefix + "mlp.up_proj.weight"] = (F, H)
             out[prefix + "mlp.down_proj.weight"] = (H, F)
     return out
+
+
+def expected_hf_text_tensor_shapes_all_layers(cfg: MoETransformerConfig) -> dict[str, tuple[int, ...]]:
+    return expected_hf_text_tensor_shapes(cfg, layers=tuple(range(cfg.num_layers)))
 
 
 def expected_hf_vision_tensor_shapes(
@@ -500,10 +595,7 @@ def load_vision_runtime_weights(
     F = vision_cfg.mlp_hidden_size or 4 * H
 
     def need(name: str, shape: tuple[int, ...]) -> np.ndarray:
-        arr = np.asarray(tensors.get(name))
-        if arr.shape != shape:
-            raise MiniMaxM3ImportError(f"{name} shape {arr.shape} != expected {shape}")
-        return arr.astype(np.float64)
+        return _resolve_tensor(tensors, name, shape).astype(np.float64)
 
     layers: list[vt.VisionLayerWeights] = []
     for li in range(vision_cfg.num_layers):
@@ -529,6 +621,129 @@ def load_vision_runtime_weights(
         bias=need("multi_modal_projector.bias", (vision_cfg.output_hidden_size,)),
     )
     return vt.VisionRuntimeWeights(tower=tower, projector=projector)
+
+
+def load_text_runtime_weights(
+    tensors: Mapping[str, np.ndarray],
+    cfg: MoETransformerConfig,
+) -> rt.ModelWeights:
+    """Map HF-style MiniMax text tensors into executable ``ModelWeights``.
+
+    HF linear weights are stored as ``(out_features, in_features)``; the
+    reference runtime stores projections in ``x @ W`` layout.
+    """
+    H, Hq, Hkv = cfg.hidden_size, cfg.num_attention_heads, cfg.num_kv_heads
+    D, Dv = cfg.qk_per_head_dim, cfg.value_per_head_dim
+
+    def need(name: str, shape: tuple[int, ...]) -> np.ndarray:
+        arr = _resolve_tensor(tensors, name, shape)
+        return arr.astype(np.float64)
+
+    layers: list[rt.LayerWeights] = []
+    for li in range(cfg.num_layers):
+        prefix = f"model.layers.{li}."
+        attn = {
+            "kind": "gqa",
+            "w_q": need(prefix + "self_attn.q_proj.weight", (Hq * D, H)).T,
+            "w_k": need(prefix + "self_attn.k_proj.weight", (Hkv * D, H)).T,
+            "w_v": need(prefix + "self_attn.v_proj.weight", (Hkv * Dv, H)).T,
+            "w_o": need(prefix + "self_attn.o_proj.weight", (H, Hq * Dv)).T,
+        }
+        is_moe = cfg.is_moe_layer(li)
+        if is_moe:
+            F = cfg.moe_intermediate_size
+            E = cfg.num_experts
+            ffn: dict[str, Any] = {
+                "router": need(prefix + "mlp.router.weight", (E, H)).T,
+                "gate": np.stack([
+                    need(prefix + f"mlp.experts.{expert}.gate_proj.weight", (F, H)).T
+                    for expert in range(E)
+                ], axis=0),
+                "up": np.stack([
+                    need(prefix + f"mlp.experts.{expert}.up_proj.weight", (F, H)).T
+                    for expert in range(E)
+                ], axis=0),
+                "down": np.stack([
+                    need(prefix + f"mlp.experts.{expert}.down_proj.weight", (H, F)).T
+                    for expert in range(E)
+                ], axis=0),
+            }
+            if cfg.num_shared_experts > 0:
+                Fs = cfg.shared_expert_intermediate_size
+                ffn["shared"] = (
+                    need(prefix + "mlp.shared_expert.gate_proj.weight", (Fs, H)).T,
+                    need(prefix + "mlp.shared_expert.up_proj.weight", (Fs, H)).T,
+                    need(prefix + "mlp.shared_expert.down_proj.weight", (H, Fs)).T,
+                )
+        else:
+            F = cfg.dense_intermediate_size or cfg.shared_expert_intermediate_size
+            ffn = {
+                "w_gate": need(prefix + "mlp.gate_proj.weight", (F, H)).T,
+                "w_up": need(prefix + "mlp.up_proj.weight", (F, H)).T,
+                "w_down": need(prefix + "mlp.down_proj.weight", (H, F)).T,
+            }
+        layers.append(rt.LayerWeights(
+            norm1=need(prefix + "input_layernorm.weight", (H,)),
+            norm2=need(prefix + "post_attention_layernorm.weight", (H,)),
+            attn=attn,
+            ffn=ffn,
+            is_moe=is_moe,
+        ))
+    return rt.ModelWeights(
+        embed=need("model.embed_tokens.weight", (cfg.vocab_size, H)),
+        layers=layers,
+        final_norm=need("model.norm.weight", (H,)),
+        lm_head=need("lm_head.weight", (cfg.vocab_size, H)).T,
+    )
+
+
+def load_text_runtime_weights_from_safetensors(
+    path: str | Path,
+    cfg: MoETransformerConfig,
+) -> rt.ModelWeights:
+    names = sorted(expected_hf_text_tensor_shapes_all_layers(cfg))
+    return load_text_runtime_weights(load_safetensors_tensors(path, names=names), cfg)
+
+
+def _resolve_tensor(
+    tensors: Mapping[str, np.ndarray],
+    canonical: str,
+    shape: tuple[int, ...],
+) -> np.ndarray:
+    aliases = _tensor_aliases(canonical)
+    tried = (canonical, *aliases)
+    for name in tried:
+        if name in tensors:
+            arr = np.asarray(tensors[name])
+            if arr.shape != shape:
+                raise MiniMaxM3ImportError(
+                    f"{name} shape {arr.shape} != expected {shape} for {canonical}")
+            return arr
+    raise MiniMaxM3ImportError(f"missing tensor {canonical!r}; tried aliases {tried!r}")
+
+
+def _tensor_aliases(canonical: str) -> tuple[str, ...]:
+    aliases = [
+        "language_model." + canonical,
+        "model.language_model." + canonical,
+    ]
+    if canonical.startswith("vision_tower."):
+        suffix = canonical.removeprefix("vision_tower.")
+        aliases.extend([
+            "visual." + suffix,
+            "vision_model." + suffix,
+            "model.vision_tower." + suffix,
+            "model.visual." + suffix,
+        ])
+    if canonical.startswith("multi_modal_projector."):
+        suffix = canonical.removeprefix("multi_modal_projector.")
+        aliases.extend([
+            "mm_projector." + suffix,
+            "model.mm_projector." + suffix,
+            "visual_projector." + suffix,
+            "model.visual_projector." + suffix,
+        ])
+    return tuple(aliases)
 
 
 def import_processor_config(
@@ -759,8 +974,8 @@ def _media_input_for_span(media_inputs: MediaInput, span: PromptSpan, ordinal: i
         candidates: tuple[int | str, ...] = (
             ordinal,
             str(ordinal),
-            span.kind,
             f"{span.kind}:{ordinal}",
+            span.kind,
         )
         for key in candidates:
             if key in media_inputs:
@@ -823,8 +1038,8 @@ def _media_embedding_for_span(
         candidates: tuple[int | str, ...] = (
             ordinal,
             str(ordinal),
-            span.kind,
             f"{span.kind}:{ordinal}",
+            span.kind,
         )
         for key in candidates:
             if key in media_embeddings:
@@ -838,6 +1053,7 @@ def _media_embedding_for_span(
 __all__ = [
     "MiniMaxM3ImportError",
     "MiniMaxM3VisionExecutionError",
+    "HFTokenizerAdapter",
     "MiniMaxM3TokenizerSpec",
     "MiniMaxM3TokenizerImport",
     "TensorSpec",
@@ -847,12 +1063,16 @@ __all__ = [
     "PromptSpan",
     "PreparedMultimodalPrompt",
     "validate_hf_config",
+    "apply_chat_template",
     "import_tokenizer",
     "read_safetensors_manifest",
     "load_safetensors_tensors",
     "expected_hf_text_tensor_shapes",
+    "expected_hf_text_tensor_shapes_all_layers",
     "expected_hf_vision_tensor_shapes",
     "import_processor_config",
+    "load_text_runtime_weights",
+    "load_text_runtime_weights_from_safetensors",
     "load_vision_runtime_weights",
     "validate_safetensors_shapes",
     "import_minimax_m3_hf",

@@ -409,7 +409,12 @@ def _media_resource_estimate(source: str) -> dict[str, Any]:
 def _jepa_resource_estimate(source: str) -> dict[str, Any]:
     if source in {"tessera.jepa.mask_blocks_2d", "tessera.jepa.mask_tubes_3d"}:
         return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
-    if source in {"tessera.jepa.latent_predict", "tessera.jepa.l2_loss"}:
+    if source in {
+        "tessera.jepa.latent_predict",
+        "tessera.jepa.l2_loss",
+        "tessera.jepa.selective_decode",
+        "tessera.jepa.train_step",
+    }:
         return {"shared_memory_bytes": 1024, "register_estimate": 32, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
     return {"shared_memory_bytes": 0, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
 

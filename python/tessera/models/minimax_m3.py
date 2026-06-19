@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .diffusion_gemma import GraphNode
 from .moe_transformer import MoETransformerConfig
 from .multimodal import MediaProcessorConfig, processor_config_from_metadata
 from .vision_transformer import VisionTransformerConfig, config_from_processor
@@ -37,6 +38,28 @@ class MiniMaxM3VisionMetadata:
 
 
 VISION_METADATA = MiniMaxM3VisionMetadata()
+
+
+@dataclass(frozen=True)
+class MiniMaxM3MultimodalGraph:
+    """Shape-only MiniMax-M3 image/video tower + splice contract graph."""
+
+    nodes: tuple[GraphNode, ...]
+    text_config: MoETransformerConfig
+    vision: MiniMaxM3VisionMetadata
+    frames: int
+
+    def op_sequence(self) -> tuple[str, ...]:
+        return tuple(n.op for n in self.nodes)
+
+    def find(self, op: str) -> GraphNode:
+        for n in self.nodes:
+            if n.op == op:
+                return n
+        raise KeyError(op)
+
+    def find_all(self, op: str) -> tuple[GraphNode, ...]:
+        return tuple(n for n in self.nodes if n.op == op)
 
 
 def processor_config(vision: MiniMaxM3VisionMetadata = VISION_METADATA) -> MediaProcessorConfig:
@@ -82,6 +105,139 @@ def scaled_vision_metadata() -> MiniMaxM3VisionMetadata:
         vision_segment_max_frames=2,
         vision_execution_supported=True,
     )
+
+
+def build_multimodal_graph(
+    text_config: MoETransformerConfig | None = None,
+    *,
+    vision: MiniMaxM3VisionMetadata = VISION_METADATA,
+    frames: int = 1,
+    include_image: bool = True,
+    include_video: bool = True,
+) -> MiniMaxM3MultimodalGraph:
+    """Build a compiler-visible MiniMax-M3 media tower/splice graph.
+
+    Full MiniMax geometry is a shape/import contract.  Scaled configs can run
+    through the numpy reference tower, while this graph records the backend
+    surfaces expected to lower natively later: preprocess/frame sampling, patch
+    embed, patch merge, projector, and text/media splice.
+    """
+    cfg = text_config or config()
+    if frames < 1 or frames > vision.vision_segment_max_frames:
+        raise ValueError(f"frames={frames} outside [1, {vision.vision_segment_max_frames}]")
+    if vision.projector_hidden_size != cfg.hidden_size:
+        raise ValueError(
+            f"projector_hidden_size={vision.projector_hidden_size} != hidden_size={cfg.hidden_size}")
+
+    nodes: list[GraphNode] = []
+    raw_patches = (vision.image_size // vision.patch_size) ** 2
+
+    def add(op: str, inputs, output, **attrs) -> None:
+        nodes.append(GraphNode(op=op, inputs=tuple(inputs), output=tuple(output), attrs=attrs))
+
+    media_inputs: list[tuple] = []
+    if include_image:
+        add(
+            "image_preprocess",
+            [("image_pixels", vision.image_size, vision.image_size, 3)],
+            (vision.image_size, vision.image_size, 3),
+            image_size=vision.image_size,
+            patch_size=vision.patch_size,
+            image_seq_length=vision.image_seq_length,
+        )
+        add(
+            "patch_embed",
+            [(vision.image_size, vision.image_size, 3)],
+            (raw_patches, vision.projector_hidden_size),
+            patch_size=vision.patch_size,
+            media_kind="image",
+        )
+        add(
+            "patch_merge",
+            [(raw_patches, vision.projector_hidden_size)],
+            (vision.image_seq_length, vision.projector_hidden_size),
+            spatial_merge_size=vision.spatial_merge_size,
+            temporal_patch_size=1,
+            media_kind="image",
+        )
+        add(
+            "media_project",
+            [(vision.image_seq_length, vision.projector_hidden_size),
+             (vision.projector_hidden_size, cfg.hidden_size)],
+            (vision.image_seq_length, cfg.hidden_size),
+            media_kind="image",
+        )
+        media_inputs.append(("image_projected", vision.image_seq_length, cfg.hidden_size))
+
+    if include_video:
+        add(
+            "video_frame_sample",
+            [("video_pixels", frames, vision.image_size, vision.image_size, 3)],
+            (frames, vision.image_size, vision.image_size, 3),
+            frames=frames,
+            max_frames=vision.vision_segment_max_frames,
+            temporal_patch_size=vision.temporal_patch_size,
+        )
+        add(
+            "patch_embed",
+            [(frames, vision.image_size, vision.image_size, 3)],
+            (frames * raw_patches, vision.projector_hidden_size),
+            patch_size=vision.patch_size,
+            media_kind="video",
+        )
+        add(
+            "patch_merge",
+            [(frames * raw_patches, vision.projector_hidden_size)],
+            (frames * vision.image_seq_length, vision.projector_hidden_size),
+            spatial_merge_size=vision.spatial_merge_size,
+            temporal_patch_size=vision.temporal_patch_size,
+            media_kind="video",
+        )
+        add(
+            "media_project",
+            [(frames * vision.image_seq_length, vision.projector_hidden_size),
+             (vision.projector_hidden_size, cfg.hidden_size)],
+            (frames * vision.image_seq_length, cfg.hidden_size),
+            media_kind="video",
+        )
+        media_inputs.append(("video_projected", frames * vision.image_seq_length, cfg.hidden_size))
+
+    add(
+        "splice_embeddings",
+        [("text_embeddings", "T", cfg.hidden_size), *media_inputs],
+        ("T+media", cfg.hidden_size),
+        image_token_index=vision.image_token_index,
+        video_token_index=vision.video_token_index,
+        vision_execution_supported=vision.vision_execution_supported,
+    )
+    graph = MiniMaxM3MultimodalGraph(
+        nodes=tuple(nodes),
+        text_config=cfg,
+        vision=vision,
+        frames=frames,
+    )
+    verify_multimodal_graph(graph)
+    return graph
+
+
+def verify_multimodal_graph(graph: MiniMaxM3MultimodalGraph) -> None:
+    cfg = graph.text_config
+    vision = graph.vision
+    projects = graph.find_all("media_project")
+    if not projects:
+        raise ValueError("multimodal graph must project at least one media stream")
+    for node in projects:
+        if node.output[-1] != cfg.hidden_size:
+            raise ValueError("media_project output width must match text hidden_size")
+    splice = graph.find("splice_embeddings")
+    if splice.output[-1] != cfg.hidden_size:
+        raise ValueError("splice_embeddings output width must match text hidden_size")
+    image_projects = tuple(n for n in projects if n.attrs.get("media_kind") == "image")
+    if image_projects and image_projects[0].output[0] != vision.image_seq_length:
+        raise ValueError("image media_project length must equal image_seq_length")
+    video_projects = tuple(n for n in projects if n.attrs.get("media_kind") == "video")
+    if video_projects and video_projects[0].output[0] != graph.frames * vision.image_seq_length:
+        raise ValueError("video media_project length must equal frames * image_seq_length")
 
 
 def config() -> MoETransformerConfig:
@@ -157,12 +313,15 @@ def scaled_config() -> MoETransformerConfig:
 
 
 __all__ = [
+    "MiniMaxM3MultimodalGraph",
     "MiniMaxM3VisionMetadata",
     "MINIMAX_M3_SPARSE_LAYER_FREQ",
     "VISION_METADATA",
+    "build_multimodal_graph",
     "config",
     "processor_config",
     "scaled_config",
     "scaled_vision_metadata",
+    "verify_multimodal_graph",
     "vision_transformer_config",
 ]

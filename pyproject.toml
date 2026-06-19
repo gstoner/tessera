@@ -247,5 +247,11 @@ module = [
     # try/except (Decision #23 keeps Tessera torch-free at runtime). It is not a
     # dependency, so there are no stubs; ignore the missing import.
     "torch.*",
+    # tokenizers / jinja2 are optional importer conveniences (HF tokenizer
+    # round-trip + chat-template rendering), soft-imported behind try/except in
+    # models/minimax_m3_importer.py. Not runtime dependencies and stubless;
+    # ignore the missing import.
+    "tokenizers.*",
+    "jinja2.*",
 ]
 ignore_missing_imports = true

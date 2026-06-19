@@ -23,7 +23,11 @@ QUEUE_OPS = {"tessera.queue.create", "tessera.queue.push", "tessera.queue.pop", 
 # recurses into tile.mesh.region bodies). See _lower_schedule_ops / target_ir.
 TILE_METADATA_OPS = {"tile.mesh.define", "tile.layout", "tile.placement",
                      "tile.artifact", "tile.mesh.region", "tile.debug_artifact"}
-ATTN_OPS = {"tessera.attn.scaled_dot_product", "tessera.attn.online_softmax", "tessera.attn.lse_save", "tessera.attn.attend_v"}
+ATTN_OPS = {
+    "tessera.attn.scaled_dot_product", "tessera.attn.online_softmax",
+    "tessera.attn.lse_save", "tessera.attn.attend_v",
+    "tessera.attn.msa_kv_outer_sparse",
+}
 
 
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
@@ -240,6 +244,13 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
             continue
         if op.op_name == "schedule.tile":
             lowered.append(_tile_compute_op(op))
+            continue
+        if op.op_name == "schedule.attn.kv_outer_sparse":
+            lowered.append(TileOp("tessera.attn.msa_kv_outer_sparse", {
+                **dict(op.attrs),
+                "lowering": "attention",
+                "selected_block_layout": op.attrs.get("block_ids_layout", "B,Hkv,Sq,top_k"),
+            }))
             continue
         if op.op_name == "schedule.elementwise":
             lowered.append(_elementwise_op(op))

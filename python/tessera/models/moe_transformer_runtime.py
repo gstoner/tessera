@@ -12,10 +12,9 @@ incremental decode loop (per-layer attention caches — MLA latent cache / GQA
 K/V cache) must produce the same tokens as recomputing the full forward on the
 growing prefix.  A non-circular, whole-model cache-consistency proof.
 
-Scope honesty (M5.1): the runtime attention uses dense MLA (absorbed, the M3
-primitive) / dense GQA. Wiring *DSA block-sparsity into the decode loop* (an
-offset-aware indexer) is the M5.1 extension — DSA is proven at the primitive
-level in M4 and at the graph level in :mod:`moe_transformer`.
+Scope honesty: DSA/LSA/MSA are wired as reference sparse policies in the
+KV-cached runtime decode loop. Backend-native fused sparse kernels remain a
+separate lowering/performance track.
 """
 
 from __future__ import annotations
@@ -220,20 +219,52 @@ def _lsa_attend(Q, K, V, config, q_positions):
     return out.reshape(Sq, Hq * Dv)
 
 
-def _attn_prefill(x, lw, config, max_seq):
+def _msa_attend(Q, K, V, config, q_positions):
+    """MiniMax Sparse Attention over materialized per-head Q/K/V.
+
+    Uses the shared stdlib MSA reference with global query positions so prefill
+    and single-token decode choose the same strictly-past blocks plus forced
+    local block.
+    """
+    Sq, Hq, _ = Q.shape
+    Dv = V.shape[-1]
+    num_blocks = max(1, (K.shape[0] + config.msa_block_size - 1) // config.msa_block_size)
+    top_k = min(config.msa_top_k_blocks, num_blocks)
+    Q4 = Q.transpose(1, 0, 2)[None]
+    K4 = K.transpose(1, 0, 2)[None]
+    V4 = V.transpose(1, 0, 2)[None]
+    out = _attn.msa_sparse_attention(
+        Q4, K4, V4,
+        block_size=config.msa_block_size,
+        top_k=top_k,
+        force_local_block=True,
+        causal=True,
+        q_positions=np.asarray(q_positions),
+    )[0]
+    return out.transpose(1, 0, 2).reshape(Sq, Hq * Dv)
+
+
+def _effective_sparse(config: MoETransformerConfig, layer_index: int) -> str | None:
+    if config.sparse == "msa" and not config.uses_msa_layer(layer_index):
+        return None
+    return config.sparse
+
+
+def _attn_prefill(x, lw, config, max_seq, layer_index: int = 0):
     """Full causal attention over a prompt; returns (out (S,H), cache).
 
     ``max_seq`` sizes the MLA latent cache for the whole decode (prompt + new
     tokens). For the recompute ``forward`` path the cache is unused, so
     ``max_seq = S`` is fine."""
-    if config.sparse in ("dsa", "lsa"):
+    sparse = _effective_sparse(config, layer_index)
+    if sparse in ("dsa", "lsa", "msa"):
         # Sparse layers materialize K/V (the indexer needs real keys) and cache
         # them for an offset-aware decode step.
         S = x.shape[0]
         Q, K, V = _project_qkv_materialized(x, lw, config, np.arange(S))
-        attend = _dsa_attend if config.sparse == "dsa" else _lsa_attend
+        attend = {"dsa": _dsa_attend, "lsa": _lsa_attend, "msa": _msa_attend}[sparse]
         out = attend(Q, K, V, config, np.arange(S))
-        return out @ lw.attn["w_o"], (config.sparse, K, V)
+        return out @ lw.attn["w_o"], (sparse, K, V)
     if lw.attn["kind"] == "mla":
         mlaw = lw.attn["mla"]
         o, c, kr = _attn.mla_prefill(x, mlaw)
@@ -258,12 +289,12 @@ def _attn_prefill(x, lw, config, max_seq):
 def _attn_decode(x_t, lw, cache, config, position):
     """Single-token attention against the cache; returns (out (1,H), cache)."""
     Hq, Hkv, D = config.num_attention_heads, config.num_kv_heads, config.head_dim
-    if cache[0] in ("dsa", "lsa"):
+    if cache[0] in ("dsa", "lsa", "msa"):
         _, K_prev, V_prev = cache                      # materialized (P,Hkv,D)/(P,Hkv,Dv)
         Qn, Kn, Vn = _project_qkv_materialized(x_t, lw, config, np.array([position]))
         K = np.concatenate([K_prev, Kn], axis=0)       # (P+1,Hkv,D)
         V = np.concatenate([V_prev, Vn], axis=0)
-        attend = _dsa_attend if cache[0] == "dsa" else _lsa_attend
+        attend = {"dsa": _dsa_attend, "lsa": _lsa_attend, "msa": _msa_attend}[cache[0]]
         out = attend(Qn, K, V, config, np.array([position]))
         return out @ lw.attn["w_o"], (cache[0], K, V)
     if cache[0] == "mla":
@@ -300,8 +331,8 @@ def forward(config: MoETransformerConfig, weights: ModelWeights, token_ids) -> n
     x = embed_tokens(weights, token_ids)
     eps = config.rms_norm_eps
     S = x.shape[0]
-    for lw in weights.layers:
-        a, _ = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, S)
+    for li, lw in enumerate(weights.layers):
+        a, _ = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, S, li)
         x = x + a
         x = x + _ffn(rmsnorm(x, lw.norm2, eps), lw, config)
     x = rmsnorm(x, weights.final_norm, eps)
@@ -325,8 +356,8 @@ def prefill(config: MoETransformerConfig, weights: ModelWeights, token_ids,
     S = x.shape[0]
     cap = max_seq if max_seq is not None else S
     caches = []
-    for lw in weights.layers:
-        a, cache = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, cap)
+    for li, lw in enumerate(weights.layers):
+        a, cache = _attn_prefill(rmsnorm(x, lw.norm1, eps), lw, config, cap, li)
         x = x + a
         x = x + _ffn(rmsnorm(x, lw.norm2, eps), lw, config)
         caches.append(cache)

@@ -1,21 +1,23 @@
 """M5 — full MoE-transformer stack + autoregressive decode loop.
 
 Headline oracle: KV-cached greedy decode ≡ full recompute (a non-circular,
-whole-model cache-consistency proof), run for all three scaled frontier models
-(DeepSeek-V3.2 MLA+MoE, GLM-5 GQA+MoE, Kimi-K2 MLA+MoE).
+whole-model cache-consistency proof), run for the scaled frontier models
+(DeepSeek-V3.2 MLA+MoE, GLM-5 GQA+MoE, Kimi-K2 MLA+MoE, MiniMax-M3 GQA+MSA+MoE).
 """
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
-from tessera.models import deepseek_v32, glm5, kimi_k2
+from tessera.models import deepseek_v32, glm5, kimi_k2, minimax_m3
 from tessera.models import moe_transformer as mt
 from tessera.models import moe_transformer_runtime as rt
 
-SCALED = [deepseek_v32.scaled_config, glm5.scaled_config, kimi_k2.scaled_config]
-IDS = ["deepseek_v32", "glm5", "kimi_k2"]
+SCALED = [deepseek_v32.scaled_config, glm5.scaled_config, kimi_k2.scaled_config, minimax_m3.scaled_config]
+IDS = ["deepseek_v32", "glm5", "kimi_k2", "minimax_m3"]
 
 
 def _recompute_generate(cfg, weights, prompt, n):
@@ -76,7 +78,6 @@ def test_dsa_is_genuinely_engaged_not_dense():
     attention — the DSA forward must differ from the same model run dense,
     proving the block-sparsity is actually wired in (not degenerating to dense).
     """
-    import dataclasses
     cfg = deepseek_v32.scaled_config()           # MLA + DSA, block_size=4, top_k=2
     w = rt.synthetic_weights(cfg, seed=5)
     seq = list(range(20))                         # 20 tokens → 5 blocks > top_k+local
@@ -122,7 +123,6 @@ def test_lsa_decode_equals_recompute():
 def test_lsa_is_genuinely_engaged_not_dense():
     """Over a long-enough sequence the LSA layers prune history — the LSA forward
     must differ from a dense run (threshold below 1 would otherwise select all)."""
-    import dataclasses
     cfg = dataclasses.replace(_lsa_config(), lsa_threshold=0.9, lsa_window_size=2)
     w = rt.synthetic_weights(cfg, seed=8)
     seq = list(range(20))
@@ -136,6 +136,37 @@ def test_lsa_graph_builds_and_verifies():
     g = mt.build_block(cfg, layer_index=cfg.num_layers - 1)
     assert "lookahead_sparse_attention" in g.op_sequence()
     mt.verify_block(g, cfg)
+
+
+def test_msa_decode_equals_recompute_long():
+    """MiniMax-style MSA decode uses offset-aware block selection, so cached
+    greedy decode matches full recompute across several selected-block changes."""
+    cfg = minimax_m3.scaled_config()
+    w = rt.synthetic_weights(cfg, seed=9)
+    prompt = list(range(11))                      # spans multiple MSA blocks
+    cached = rt.greedy_generate(cfg, w, prompt, 6)
+    recompute = _recompute_generate(cfg, w, prompt, 6)
+    assert cached == recompute
+
+
+def test_msa_is_genuinely_engaged_not_dense():
+    """Over multiple blocks, MSA layers must prune history rather than falling
+    through to dense GQA attention."""
+    cfg = minimax_m3.scaled_config()
+    w = rt.synthetic_weights(cfg, seed=10)
+    seq = list(range(20))
+    msa_logits = rt.forward(cfg, w, seq)
+    dense_logits = rt.forward(dataclasses.replace(cfg, sparse=None), w, seq)
+    assert not np.allclose(msa_logits, dense_logits), "MSA collapsed to dense"
+
+
+def test_minimax_m3_dense_warmup_runtime_cache_is_dense_then_msa():
+    """The runtime honors MiniMax's dense warmup layers before sparse MSA."""
+    cfg = minimax_m3.scaled_config()
+    w = rt.synthetic_weights(cfg, seed=11)
+    _, state = rt.prefill(cfg, w, list(range(9)), max_seq=16)
+    assert state.caches[0][0] == "gqa"
+    assert all(cache[0] == "msa" for cache in state.caches[1:])
 
 
 def test_first_layer_dense_rest_moe():

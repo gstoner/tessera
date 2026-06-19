@@ -9,14 +9,36 @@ land the rest).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from tessera.models import deepseek_v32, glm5, kimi_k2
+from tessera.models import deepseek_v32, glm5, kimi_k2, minimax_m3
 from tessera.models import moe_transformer as mt
 
-ALL_MODELS = [deepseek_v32, glm5, kimi_k2]
-MODEL_IDS = ["deepseek_v32", "glm5", "kimi_k2"]
+ALL_MODELS = [deepseek_v32, glm5, kimi_k2, minimax_m3]
+MODEL_IDS = ["deepseek_v32", "glm5", "kimi_k2", "minimax_m3"]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MODEL_CLASS_FIXTURES = {
+    "deepseek_v32": ("deepseek_v32_block.mlir", ("tessera.deepseek_sparse_attention", "tessera.moe_swiglu_block")),
+    "glm5": (
+        "glm5_block.mlir",
+        ("tessera.latent_kv_compress", "tessera.deepseek_sparse_attention", "tessera.moe_swiglu_block"),
+    ),
+    "kimi_k2": ("kimi_k2_block.mlir", ("tessera.latent_kv_compress", "tessera.moe_swiglu_block")),
+    "minimax_m3": ("minimax_m3_block.mlir", ("tessera.msa_sparse_attention", "tessera.moe_swiglu_block")),
+}
+
+
+def _expected_attention_op(cfg: mt.MoETransformerConfig, layer_index: int) -> str:
+    if cfg.sparse == "dsa":
+        return "deepseek_sparse_attention"
+    if cfg.sparse == "lsa":
+        return "lookahead_sparse_attention"
+    if cfg.sparse == "msa" and cfg.uses_msa_layer(layer_index):
+        return "msa_sparse_attention"
+    return "attention"
 
 
 # ── M0: full-config graphs build + verify (artifact target) ───────────────────
@@ -33,8 +55,7 @@ def test_full_config_block_graph_builds_and_verifies(model):
     # the MoE layer's op vocabulary names the pillars the kernels implement
     ops = moe.op_sequence()
     assert "router" in ops and "moe_swiglu_block" in ops
-    attn_op = "deepseek_sparse_attention" if cfg.sparse == "dsa" else "attention"
-    assert attn_op in ops
+    assert _expected_attention_op(cfg, cfg.num_layers - 1) in ops
     if cfg.attn_kind == "mla":
         assert "latent_kv_compress" in ops
 
@@ -56,9 +77,25 @@ def test_full_config_artifact_all_layers_anchored(model):
         core |= {"latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v"}
     if cfg.sparse == "dsa":
         core.add("deepseek_sparse_attention")
+    if cfg.sparse == "msa":
+        core.add("msa_sparse_attention")
     for op in core:
         assert op in ops_seen, f"{cfg.name}: core op {op} not emitted"
         assert op in OP_SPECS, f"{cfg.name}: core op {op} not catalog-anchored"
+
+
+@pytest.mark.parametrize("model_id", MODEL_IDS)
+def test_model_class_lit_fixture_anchors_core_ops(model_id):
+    fixture_name, expected_ops = MODEL_CLASS_FIXTURES[model_id]
+    path = REPO_ROOT / "tests" / "tessera-ir" / "model_class" / fixture_name
+    text = path.read_text(encoding="utf-8")
+    assert "RUN: tessera-opt" in text
+    assert f"func.func @{model_id}_block" in text
+    for op in expected_ops:
+        assert op in text
+    if model_id == "minimax_m3":
+        assert "artifact contract only" in text
+        assert "MSA runtime decode" in text
 
 
 @pytest.mark.parametrize("model", ALL_MODELS, ids=MODEL_IDS)
@@ -79,6 +116,7 @@ def test_declared_budgets_are_in_range_where_published():
     mt.verify_param_budget(deepseek_v32.config(), rel_tol=0.30)
     mt.verify_param_budget(kimi_k2.config(), rel_tol=0.30)
     mt.verify_param_budget(glm5.config())
+    mt.verify_param_budget(minimax_m3.config())
 
 
 def test_bad_config_rejected():

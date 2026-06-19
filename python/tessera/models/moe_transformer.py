@@ -1,12 +1,14 @@
 """Shared MoE-transformer contract layer for the model-class roadmap.
 
-Kimi-K2, DeepSeek-V3.2, and GLM-5 are the *same* architecture family —
+Kimi-K2, DeepSeek-V3.2, GLM-5.2, and MiniMax-M3 are the *same* architecture family —
 MoE-FFN transformers with latent (MLA) or grouped (GQA) attention, optional
-DeepSeek-style sparse attention (DSA), and low-precision (INT4 / FP8) weights.
-Rather than three near-duplicate graphs, this module is the shared, shape-only
+DeepSeek-style sparse attention (DSA), MiniMax Sparse Attention (MSA), and
+low-precision (INT4 / FP8) weights.
+Rather than near-duplicate graphs, this module is the shared, shape-only
 contract: one :class:`MoETransformerConfig`, one config verifier, one
 block-graph builder, and a parameter-budget estimator.  The per-model modules
-(``deepseek_v32`` / ``glm5`` / ``kimi_k2``) are thin config factories on top.
+(``deepseek_v32`` / ``glm5`` / ``kimi_k2`` / ``minimax_m3``) are thin config
+factories on top.
 
 This is the **M0 scaffolding**: it builds and verifies the op graph (the
 vocabulary the M3/M4 attention kernels and M1/M2 quant+MoE lowering must
@@ -28,8 +30,9 @@ class MoETransformerDimError(ValueError):
 
 
 ATTENTION_KINDS = ("mla", "gqa")
-SPARSE_KINDS = (None, "dsa", "lsa")
+SPARSE_KINDS = (None, "dsa", "lsa", "msa")
 QUANT_DTYPES = (None, "int4", "fp8_e4m3", "fp8_e5m2")
+MSA_SCORE_TYPES = ("max", "mean_reference")
 
 
 @dataclass(frozen=True)
@@ -52,9 +55,11 @@ class MoETransformerConfig:
     position) or ``"gqa"`` (``num_attention_heads`` query heads share
     ``num_kv_heads``).  ``sparse="dsa"`` adds DeepSeek sparse attention (top-k
     block selection); ``sparse="lsa"`` adds Lookahead Sparse Attention (local
-    window ∪ threshold-selected past blocks).  ``weight_dtype`` selects the packed quant scheme the
-    expert/dense GEMMs lower through (``stdlib.quant``).  ``first_k_dense`` leading
-    layers use a plain FFN before the MoE layers begin (DeepSeek convention).
+    window ∪ threshold-selected past blocks); ``sparse="msa"`` adds MiniMax
+    Sparse Attention with per-layer enablement.  ``weight_dtype`` selects the
+    packed quant scheme the expert/dense GEMMs lower through (``stdlib.quant``).
+    ``first_k_dense`` leading layers use a plain FFN before the MoE layers begin
+    (DeepSeek convention).
     """
 
     name: str = "moe_transformer"
@@ -80,7 +85,7 @@ class MoETransformerConfig:
     rope_theta: float = 10000.0
 
     # ── sparse / hybrid attention ─────────────────────────────────────────────
-    sparse: str | None = None     # None | "dsa" (DeepSeek block-sparse) | "lsa"
+    sparse: str | None = None     # None | "dsa" | "lsa" | "msa"
     dsa_top_k_blocks: int = 0
     dsa_block_size: int = 64       # block size for DSA *and* LSA
     index_n_heads: int = 0
@@ -96,6 +101,15 @@ class MoETransformerConfig:
     # selected strictly-past blocks (block size = dsa_block_size).
     lsa_window_size: int = 0
     lsa_threshold: float = 0.5
+    # MiniMax Sparse Attention (sparse == "msa"): exact block-sparse attention
+    # driven by an Index Branch. ``msa_sparse_layer_freq`` mirrors HF's per-layer
+    # sparse_attention_freq: 0 = dense attention, 1 = MSA.
+    msa_top_k_blocks: int = 0
+    msa_block_size: int = 0
+    msa_index_dim: int = 0
+    msa_num_index_heads: int = 0
+    msa_score_type: str = "mean_reference"
+    msa_sparse_layer_freq: tuple[int, ...] = ()
 
     # ── MoE ────────────────────────────────────────────────────────────────────
     num_experts: int = 16
@@ -161,6 +175,13 @@ class MoETransformerConfig:
         if not self.indexer_types:
             return "full" if self.sparse == "dsa" else "none"
         return self.indexer_types[layer_index % len(self.indexer_types)]
+
+    def uses_msa_layer(self, layer_index: int) -> bool:
+        if self.sparse != "msa":
+            return False
+        if not self.msa_sparse_layer_freq:
+            return True
+        return bool(self.msa_sparse_layer_freq[layer_index % len(self.msa_sparse_layer_freq)])
 
 
 def shared_topk_index_groups(config: MoETransformerConfig) -> tuple[SharedTopKIndexGroup, ...]:
@@ -259,6 +280,23 @@ def verify_config(config: MoETransformerConfig) -> None:
                 "LSA requires lsa_window_size > 0 and dsa_block_size > 0")
         if not (0.0 <= config.lsa_threshold <= 1.0):
             raise MoETransformerDimError("lsa_threshold must be in [0, 1]")
+    if config.sparse == "msa":
+        if config.msa_top_k_blocks <= 0 or config.msa_block_size <= 0:
+            raise MoETransformerDimError(
+                "MSA requires msa_top_k_blocks > 0 and msa_block_size > 0")
+        if config.msa_score_type not in MSA_SCORE_TYPES:
+            raise MoETransformerDimError(
+                f"msa_score_type must be one of {MSA_SCORE_TYPES}; got "
+                f"{config.msa_score_type!r}")
+        if config.msa_sparse_layer_freq:
+            if len(config.msa_sparse_layer_freq) != config.num_layers:
+                raise MoETransformerDimError(
+                    f"msa_sparse_layer_freq length {len(config.msa_sparse_layer_freq)} "
+                    f"must equal num_layers={config.num_layers}")
+            bad = tuple(v for v in config.msa_sparse_layer_freq if v not in (0, 1))
+            if bad:
+                raise MoETransformerDimError(
+                    "msa_sparse_layer_freq entries must be 0 or 1")
 
     if config.num_experts < 1:
         raise MoETransformerDimError("num_experts must be >= 1")
@@ -332,13 +370,15 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
         add("v_proj", [(T, H), (H, kv_value_dim)], (T, kv_value_dim))
         unified_kv = False
 
-    # decoupled / partial RoPE on the rope_head_dim slice (MLA) or full (GQA)
+    # decoupled / partial RoPE on the rope_head_dim slice when configured.
     add("rope", [(T, config.attn_dim)], (T, config.attn_dim),
         applies_to="q", variant=config.rope_variant,
-        rope_head_dim=(config.rope_head_dim if config.attn_kind == "mla" else config.head_dim))
+        rope_head_dim=(config.rope_head_dim or config.head_dim))
 
     attn_op = {"dsa": "deepseek_sparse_attention",
                "lsa": "lookahead_sparse_attention"}.get(sparse or "", "attention")
+    if sparse == "msa" and config.uses_msa_layer(layer_index):
+        attn_op = "msa_sparse_attention"
     attn_attrs = dict(
         mode=mode, num_heads=config.num_attention_heads,
         num_kv_heads=(config.num_attention_heads if unified_kv else config.num_kv_heads),
@@ -383,6 +423,14 @@ def _add_attention(nodes: list[GraphNode], config: MoETransformerConfig,
         attn_attrs.update(window_size=config.lsa_window_size,
                           block_size=config.dsa_block_size,
                           threshold=config.lsa_threshold)
+    elif sparse == "msa" and config.uses_msa_layer(layer_index):
+        attn_attrs.update(top_k_blocks=config.msa_top_k_blocks,
+                          block_size=config.msa_block_size,
+                          index_dim=config.msa_index_dim,
+                          num_index_heads=config.msa_num_index_heads,
+                          score_type=config.msa_score_type,
+                          force_local_block=True,
+                          causal=True)
     add(attn_op,
         [(T, config.attn_dim), (T, kv_dim), (T, kv_dim)],
         (T, config.value_dim), **attn_attrs)
@@ -492,6 +540,17 @@ def verify_block(graph: BlockGraph, config: MoETransformerConfig) -> None:
         attn = graph.find("lookahead_sparse_attention")
         if int(attn.attrs.get("window_size", 0)) != config.lsa_window_size:
             raise MoETransformerDimError("LSA window_size attr mismatch")
+    if config.sparse == "msa":
+        if config.uses_msa_layer(graph.layer_index):
+            attn = graph.find("msa_sparse_attention")
+            if int(attn.attrs.get("top_k_blocks", 0)) != config.msa_top_k_blocks:
+                raise MoETransformerDimError("MSA top_k_blocks attr mismatch")
+            if int(attn.attrs.get("block_size", 0)) != config.msa_block_size:
+                raise MoETransformerDimError("MSA block_size attr mismatch")
+            if attn.attrs.get("score_type") != config.msa_score_type:
+                raise MoETransformerDimError("MSA score_type attr mismatch")
+        else:
+            graph.find("attention")
 
     if graph.is_moe:
         router = graph.find("router")
@@ -552,8 +611,7 @@ def estimated_param_counts(config: MoETransformerConfig) -> dict:
 def verify_param_budget(config: MoETransformerConfig, *, rel_tol: float = 0.15) -> None:
     """Reject a config whose estimated total/active miss its declared budget.
 
-    Skipped when the config declares no budget (``total_params_b == 0``), as the
-    placeholder configs (e.g. GLM-5, whose dims are unconfirmed) do.
+    Skipped when the config declares no budget (``total_params_b == 0``).
     """
     if config.total_params_b <= 0:
         return
@@ -582,4 +640,5 @@ __all__ = [
     "ATTENTION_KINDS",
     "SPARSE_KINDS",
     "QUANT_DTYPES",
+    "MSA_SCORE_TYPES",
 ]

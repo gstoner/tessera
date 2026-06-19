@@ -2,7 +2,8 @@
 
 > Status: **survey + grounded re-ranked roadmap**. No code landed yet.
 > Companion to [`MODEL_CLASS_ROADMAP.md`](MODEL_CLASS_ROADMAP.md) (which stood up
-> DeepSeek-V3.2 / GLM-5 / Kimi-K2, M0–M5). This doc covers the *next* wave — hybrid
+> DeepSeek-V3.2 / GLM-5.2 / Kimi-K2 / MiniMax-M3, M0–M5 plus the MiniMax-M3
+> text-tower graph/runtime/importer contracts). This doc covers the *next* wave — hybrid
 > linear-attention models, dual-stream world models, native MTP, agent serving —
 > and defines **Track L** (the linear-mixer keystone) as the M6-equivalent.
 > Last updated: 2026-06-15.

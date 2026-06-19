@@ -1216,6 +1216,19 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
             }),
             TargetOp("tessera_nvidia.mbarrier", {"ordinal": base["ordinal"], "arch": arch, "scope": "cta"}),
         ]
+    if op.op_name == "tessera.attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+        return [TargetOp("tessera_nvidia.cuda_kernel", {
+            **base,
+            "arch": arch,
+            "kernel": "msa_kv_outer_sparse",
+            "status": "artifact_only",
+            "mode": op.attrs.get("mode", "prefill"),
+            "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
+            "gqa_group_size": int(op.attrs.get("gqa_group_size", 1)),
+            "tile_q": int(op.attrs.get("tile_q", 64)),
+            "tile_kv": int(op.attrs.get("tile_kv", 128)),
+            "kv_traversal": "kv_outer",
+        })]
     kernel = "flash_attn_contract" if source == "tessera.flash_attn" or op.op_name.startswith("tessera.attn.") else "elementwise_contract"
     return [TargetOp("tessera_nvidia.cuda_kernel", {**base, "arch": arch, "kernel": kernel, "status": "artifact_only"})]
 
@@ -1464,6 +1477,8 @@ def _launch_metadata(op: TileOp) -> dict[str, Any]:
 def _source_from_tile_op(op: TileOp) -> str:
     if op.op_name == "tile.mma":
         return "tessera.matmul"
+    if op.op_name == "tessera.attn.msa_kv_outer_sparse":
+        return "tessera.msa_sparse_attention"
     if op.op_name.startswith("tessera.attn."):
         return "tessera.flash_attn"
     if op.op_name.startswith("tile."):

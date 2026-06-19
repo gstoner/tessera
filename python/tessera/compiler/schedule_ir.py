@@ -321,6 +321,8 @@ def _lower_graph_ops(ops: list[IROp], *, tile: tuple[int, int, int]) -> list[Sch
             ))
         elif op_name == "tessera.flash_attn":
             scheduled.append(_flash_attention_pipeline(op, idx))
+        elif op_name == "tessera.msa_sparse_attention":
+            scheduled.append(_msa_kv_outer_sparse(op, idx))
         elif op_name in ROPE_OPS:
             scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"}))
         elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:
@@ -374,6 +376,41 @@ def _flash_attention_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
             ),
             ScheduleOp("schedule.yield"),
         ],
+    )
+
+
+def _msa_kv_outer_sparse(op: IROp, ordinal: int) -> ScheduleOp:
+    attrs = {**_base_attrs(op, ordinal), **dict(op.kwargs)}
+    top_k = int(attrs.get("top_k", attrs.get("top_k_blocks", 1)))
+    block_size = int(attrs.get("block_size", 64))
+    num_heads = int(attrs.get("num_heads", attrs.get("num_attention_heads", 1)))
+    num_kv_heads = int(attrs.get("num_kv_heads", attrs.get("num_key_value_heads", 1)))
+    gqa_group_size = int(attrs.get("gqa_group_size", max(1, num_heads // max(1, num_kv_heads))))
+    mode = str(attrs.get("mode", "decode" if int(attrs.get("tile_q", 64)) == 1 else "prefill"))
+    tile_q = int(attrs.get("tile_q", 1 if mode == "decode" else 64))
+    tile_kv = int(attrs.get("tile_kv", max(block_size, 128)))
+    head_dim = int(attrs.get("head_dim", 128))
+    return ScheduleOp(
+        "schedule.attn.kv_outer_sparse",
+        {
+            **attrs,
+            "target_op": "tessera.attn.msa_kv_outer_sparse",
+            "block_ids_layout": "B,Hkv,Sq,top_k",
+            "block_size": block_size,
+            "top_k": top_k,
+            "gqa_group_size": gqa_group_size,
+            "tile_q": tile_q,
+            "tile_kv": tile_kv,
+            "head_dim": head_dim,
+            "mode": mode,
+            "acc_dtype": attrs.get("acc_dtype", "fp32"),
+            "dense_equivalence_oracle": bool(attrs.get("dense_equivalence_oracle", False)),
+            "kv_traversal": "kv_outer",
+            "online_softmax": True,
+        },
+        operands=list(op.operands),
+        result=op.result,
+        source_op=op,
     )
 
 

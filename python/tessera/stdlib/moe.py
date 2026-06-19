@@ -2,7 +2,7 @@
 
 ``tessera.models.moe_routing`` proved the *exact* (no-capacity) route → pack →
 grouped-SwiGLU → combine pipeline.  Production MoE for Kimi-K2 / DeepSeek-V3.2 /
-GLM-5 adds the parts a real router/dispatcher must own:
+GLM-5.2 / MiniMax-M3 adds the parts a real router/dispatcher must own:
 
 * **capacity & bucketing** — each expert processes at most ``capacity`` tokens;
   overflow slots are dropped (their combine contribution is zero), so the launch

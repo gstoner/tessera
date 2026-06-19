@@ -1,36 +1,43 @@
-# Model-Class Roadmap — compiling Kimi-K2 / DeepSeek-V3.2 / GLM-5
+# Model-Class Roadmap — compiling Kimi-K2 / DeepSeek-V3.2 / GLM-5.2 / MiniMax-M3
 
 > Status: **M0–M5 landed** (scaffolding + quant + MoE + MLA + DSA + full stack &
-> autoregressive decode), plus the M3.1/M4.1 composed Apple GPU attention lanes.
-> Remaining: fused MSL attention kernels + DSA-in-decode-loop + full-config lit.
-> Last updated: 2026-06-14.
+> autoregressive decode), plus the M3.1/M4.1 composed Apple GPU attention lanes
+> and the MiniMax-M3 text-tower graph contract/runtime decode/artifact KV-outer
+> lowering path plus local HF tokenizer/safetensors import gates.
+> Remaining: fused MSL attention kernels + native NVIDIA MiniMax-M3 KV-outer
+> kernel + real vision/video tower execution.
+> Last updated: 2026-06-19.
 
 ## Goal & definition of done
 
-Stand up the three frontier MoE models as Tessera model graphs. On this Apple
+Stand up the frontier MoE models as Tessera model graphs. On this Apple
 Silicon machine "compile model X" is two provable claims:
 
 1. **Artifact at full config** — the full-scale architecture lowers to a valid,
-   verified op graph (lit + verifier + conformance evaluator). Provable here;
-   no execution.
-2. **Scaled execution** — a structurally-faithful, shrunk instance runs
-   end-to-end on Apple GPU, gated against a numpy reference.
+   verified op graph (lit + verifier where native IR fixtures exist; full-layer
+   graph verifier for shape/config-only contracts). Provable here; no execution.
+2. **Scaled execution where runtime-wired** — a structurally-faithful, shrunk
+   instance runs end-to-end on Apple GPU, gated against a numpy reference. For
+   newly staged graph contracts, the scaled gate starts as build/verify and is
+   promoted to decode/recompute parity once the runtime path is wired.
 
 Full-scale execution + NVIDIA FP8/sparse kernels + distributed MoE stay
-**hardware-gated** (Phase G/H) but lit-provable. Frontend depth (HF weight
-loading, real tokenizer, serving) is a separate, later workstream — this roadmap
-is **compiler-core**: graph + kernels + decode math, weights/tokens assumed
-provided.
+**hardware-gated** (Phase G/H) but lit-provable. HF tokenizer/safetensors
+metadata import is now staged for MiniMax-M3; full weight materialization,
+serving, and real vision/video tower execution remain later workstreams. This
+roadmap is **compiler-core**: graph + kernels + decode math, weights/tokens
+assumed provided.
 
-The three models are one architecture family (MoE-FFN transformer with latent or
+The models are one architecture family (MoE-FFN transformer with latent or
 grouped attention, optional sparse attention, low-precision weights), so the work
 is **shared stdlib pillars** built once + thin per-model configs:
 
 | Model | Attention | Sparse | Quant |
 |-------|-----------|--------|-------|
 | DeepSeek-V3.2 (north-star) | MLA | DSA | FP8 |
-| GLM-5 (placeholder dims) | GQA | DSA | FP8 |
+| GLM-5.2 | MLA | DSA + IndexShare | BF16 / rollout KV FP8 |
 | Kimi-K2 | MLA | — | INT4 |
+| MiniMax-M3 | GQA | MSA | BF16 + staged multimodal metadata |
 
 ## Milestone ladder
 
@@ -42,7 +49,7 @@ is **shared stdlib pillars** built once + thin per-model configs:
 | M3 | MLA as production decode primitive (absorption + prefill + decoupled-RoPE + paged latent cache) | `stdlib.attention` | ✅ landed |
 | M4 | DSA native block-sparse lowering (indexer + selection + exact block-sparse attention) | `stdlib.attention` | ✅ landed |
 | M3.1/M4.1 | Composed Apple GPU attention lanes (MLA absorb + DSA per-head matmuls on Metal) | `stdlib.attention` | ✅ landed (composed; fused MSL still open) |
-| M5 | Full layer stack + autoregressive KV-cached decode loop; per-model scaled-exec gates | `tessera.models.moe_transformer_runtime` | ✅ landed (decode ≡ recompute, 3 models) |
+| M5 | Full layer stack + autoregressive KV-cached decode loop; per-model scaled-exec gates | `tessera.models.moe_transformer_runtime` | ✅ landed (decode ≡ recompute for the runtime-gated families, including MiniMax-M3 MSA) |
 
 Sequencing: **M1 unblocks M2** (and dense projections); M3 and M4 are
 independent; M5 integrates. Every kernel lands a perf ratchet; a contract cell
@@ -56,10 +63,10 @@ flips to `complete` only when an oracle independently re-derives it.
   milestone stubs that raise a clear pointer (never a silent dense fallback).
 - `python/tessera/models/moe_transformer.py` — one shape-only
   `MoETransformerConfig` + verifier + `build_block` graph builder + param-budget
-  estimator, covering MLA/GQA × DSA/dense × INT4/FP8/none.
-- `python/tessera/models/{deepseek_v32,glm5,kimi_k2}.py` — thin `config()` +
-  `scaled_config()` factories. GLM-5 dims are an **unconfirmed placeholder**
-  (no budget declared).
+  estimator, covering MLA/GQA × DSA/LSA/MSA/dense × INT4/FP8/BF16/none.
+- `python/tessera/models/{deepseek_v32,glm5,kimi_k2,minimax_m3}.py` — thin
+  `config()` + `scaled_config()` factories. GLM-5.2 and MiniMax-M3 use
+  released HF-shape contracts.
 - North-star integration test (`test_model_class_frontier.py`) — full configs
   build+verify; scaled MoE pillar executes vs reference; the full scaled forward
   is a `strict xfail` until M3/M4.
@@ -122,11 +129,11 @@ flips to `complete` only when an oracle independently re-derives it.
   `prefill` / `decode_step` / `greedy_generate` (KV-cached: MLA latent cache for
   MLA layers, K/V cache for GQA).
 - Oracle (`test_moe_transformer_runtime.py`): **KV-cached greedy decode ≡ full
-  recompute** for all three scaled models, with per-step logit parity (not just
-  argmax) so the equality isn't a tie coincidence.
-- Open (M5.1): wire DSA block-sparsity into the decode loop (offset-aware
-  indexer) — DSA is proven at the primitive (M4) and graph (M0) levels; the
-  runtime currently uses dense MLA / dense GQA in the loop.
+  recompute** for the runtime-gated scaled models, with per-step logit parity
+  (not just argmax) so the equality isn't a tie coincidence. MiniMax-M3 now
+  joins this gate through the offset-aware MSA path.
+- DSA block-sparsity in the decode loop is closed in M5.1 below via the
+  offset-aware indexer; MiniMax-M3 MSA runtime wiring is closed in M5.3.
 
 ### Honesty notes
 - **Composed vs fused on Apple GPU**: `dequant_matmul` runs the heavy matmul on
@@ -139,13 +146,23 @@ flips to `complete` only when an oracle independently re-derives it.
   `quantize_fp8`). Promoting `dequant_matmul` to a `tessera.*` Graph IR op +
   `primitive_coverage` row (so it is compiler-visible and lit-lowerable) is
   tracked for M1.1 / M2.1.
-- **GLM-5** dimensions are a placeholder until the model is published.
+- **MiniMax-M3** in this slice is a text-tower compiler contract with scaled
+  MSA runtime decode parity, artifact KV-outer lowering, and local
+  tokenizer/safetensors import gates. Full weight materialization, native
+  NVIDIA kernel execution, and real vision/video tower execution are not
+  claimed.
 
 ## Open work
 
 - **Fused MSL kernels** (M1.1 / M3.1 / M4.1 perf follow-ups): single-kernel
   dequant-into-GEMM, MLA-absorb, and block-sparse Metal kernels. The composed
   lanes execute on Metal today; these are the perf wins.
+- **MiniMax-M3 native kernel promotion**: turn the artifact-only
+  `msa_kv_outer_sparse` NVIDIA target contract into a hardware-proven kernel,
+  including real H800/Blackwell decode/prefill benchmark gates.
+- **MiniMax-M3 vision tower promotion**: replace placeholder media spans with
+  real image/video encoder + projector execution and feed projected embeddings
+  into the text tower.
 - **Hardware-gated** (Phase G/H, lit-provable only here): NVIDIA WGMMA FP8 +
   sparse kernels, distributed dispatch/combine collectives.
 - **Future**: fused MSL *attention* kernels (MLA-absorb, block-sparse — the
@@ -210,11 +227,86 @@ The attention pillars already have catalog anchors (`mla_decode_fused`,
   decode (materialized K/V cache; MLA expands the latent, GQA projects).
   Guards: `tests/unit/test_moe_transformer_runtime.py` — decode ≡ recompute with
   real multi-block sparsity, plus a "DSA genuinely engaged ≠ dense" check.
-- **Full-config artifact lit fixtures**: `tests/tessera-ir/model_class/{deepseek_v32,glm5,kimi_k2}_block.mlir`
+- **Full-config artifact lit fixtures**: `tests/tessera-ir/model_class/{deepseek_v32,glm5,kimi_k2,minimax_m3}_block.mlir`
   — each model's decoder-block core at production dims (DeepSeek H=7168/256
-  experts FP8, GLM-5 H=5120/160 experts FP8, Kimi H=7168/384 experts INT4), run
+  experts FP8, GLM-5.2 H=6144/256 experts BF16, Kimi H=7168/384 experts INT4,
+  MiniMax-M3 H=6144/128 experts BF16 + MSA), run
   through `tessera-opt` so the registered `moe_swiglu_block` /
-  `deepseek_sparse_attention` / `latent_kv_compress` ops are **verified at full
-  scale**. A runnable Python companion
+  `deepseek_sparse_attention` / `msa_sparse_attention` / `latent_kv_compress`
+  ops are **verified at full scale**. A runnable Python companion
   (`test_full_config_artifact_all_layers_anchored`) builds every layer at full
   config and checks each compute-core op is catalog-anchored.
+
+## M5.2 — MiniMax-M3 text-tower contract (landed)
+
+- **Model family config**: `python/tessera/models/minimax_m3.py` adds the
+  released text contract: 60 layers, hidden size 6144, 64 Q heads / 4 KV heads,
+  1M context, first 3 dense layers, 128 routed experts, top-4 routing, one
+  shared expert, BF16 weights, and MSA block size 128 / top-16.
+- **Shared graph emission**: `MoETransformerConfig` now accepts `sparse="msa"`
+  with per-layer sparse frequency; dense early layers emit plain `attention`,
+  later layers emit `msa_sparse_attention` with `top_k_blocks`, `block_size`,
+  `index_dim`, `num_index_heads`, `score_type`, `force_local_block=True`, and
+  `causal=True`.
+- **Staged multimodal metadata**: MiniMax image/video token ids, image sequence
+  shape, patch/merge sizes, projector hidden size, and max-frame metadata are
+  exposed for future import work with `vision_execution_supported=False`.
+- **Guards**: `tests/unit/test_minimax_m3_contract.py` verifies the full config,
+  the exact dense/MSA frequency over all 60 production layers, MSA attrs and
+  verifier failures, scaled config, and parameter-budget estimates. The
+  model-class lit fixture `tests/tessera-ir/model_class/minimax_m3_block.mlir`
+  verifies the production-dim MSA + BF16 MoE artifact.
+
+## M5.3 — MiniMax-M3 MSA runtime decode + KV-outer artifact lowering (landed)
+
+- **Runtime decode**: `models.moe_transformer_runtime` now honors
+  `msa_sparse_layer_freq`, emitting dense GQA cache entries for MiniMax's warmup
+  layers and materialized MSA K/V cache entries for sparse layers. The shared
+  MSA reference path accepts global `q_positions`, ranks strictly-past blocks,
+  force-adds the local block, and pads non-divisible K/V lengths internally, so
+  KV-cached decode and full recompute choose consistent selected blocks.
+- **MSA primitive reuse**: the public `tessera.ops.msa_*` wrappers delegate to
+  `stdlib.attention`, keeping model runtime, examples, and op tests on one
+  reference implementation. `selected_block_ids` is accepted as an explicit
+  backend worklist contract and bounds-checked.
+- **Backend artifact path**: Graph IR `tessera.msa_sparse_attention` lowers to
+  `schedule.attn.kv_outer_sparse`, then Tile IR
+  `tessera.attn.msa_kv_outer_sparse`, then NVIDIA Target IR
+  `kernel = "msa_kv_outer_sparse"` with `status = "artifact_only"`,
+  `block_ids_layout = "B,Hkv,Sq,top_k"`, `gqa_group_size`, `tile_q`, `tile_kv`,
+  `mode`, and `kv_traversal = "kv_outer"`.
+- **Guards**: `tests/unit/test_moe_transformer_runtime.py` covers MiniMax-M3
+  decode ≡ recompute, MSA genuinely engaged ≠ dense, and dense-warmup-vs-MSA
+  cache kinds. `tests/unit/test_msa_kv_outer_schedule.py` covers the
+  Graph→Schedule→Tile→Target artifact path.
+- **Still open**: native NVIDIA CUDA/H800/Blackwell kernel implementation and
+  hardware benchmark proof; this slice intentionally stops at a verified
+  compiler artifact contract.
+
+## M5.4 — MiniMax-M3 tokenizer/safetensors importer + multimodal execution gate (landed)
+
+- **HF metadata importer**: `python/tessera/models/minimax_m3_importer.py`
+  reads local HF-style `config.json`, `tokenizer_config.json`, `tokenizer.json`,
+  `.safetensors`, and `.safetensors.index.json` files. It validates present
+  config fields against Tessera's MiniMax-M3 contract and exposes a
+  `MiniMaxM3ImportManifest`.
+- **Tokenizer contract**: tokenizer import records special tokens, chat-template
+  presence, and a deterministic `VocabTokenizer` surface when `tokenizer.json`
+  carries a vocab map. Full BPE parity remains a frontend/importer integration
+  concern; missing tokenizer files are rejected when requested.
+- **Safetensors manifest**: dependency-free safetensors header parsing produces
+  `TensorSpec` entries without loading the full checkpoint payload. Shape
+  validators cover the HF-layout text-tower tensors used by the Tessera runtime
+  mapping work, and selected named tensors can be materialized from a
+  file/index/directory without loading every shard.
+- **Multimodal execution gate**: prompt preparation expands text, image, and
+  video segments into token ids plus explicit media spans. Text-only prepared
+  prompts execute through `moe_transformer_runtime.forward`; image/video spans
+  raise `MiniMaxM3VisionExecutionError` until a real vision encoder/projector
+  path exists.
+- **Guards**: `tests/unit/test_minimax_m3_importer.py` covers config mismatch
+  rejection, tokenizer import, safetensors manifest/shape validation, multimodal
+  span construction, text-only execution, and image/video execution rejection.
+- **Still open**: full HF checkpoint mapping into `ModelWeights`, exact BPE
+  tokenizer parity, processor pixel preprocessing, and real multimodal tower
+  execution.

@@ -8,7 +8,8 @@ deferred items, sprint planning, and crosscut prioritization.
 - Start with [ROADMAP_AUDIT.md](ROADMAP_AUDIT.md) for the consolidated roadmap
   audit: current priority queue plus historical sprint/deferred-item provenance.
 - [MODEL_CLASS_ROADMAP.md](MODEL_CLASS_ROADMAP.md) — frontier MoE models
-  (DeepSeek-V3.2 / GLM-5 / Kimi-K2), milestone ladder M0–M5 landed.
+  (DeepSeek-V3.2 / GLM-5.2 / Kimi-K2 / MiniMax-M3), milestone ladder M0–M5
+  landed plus MiniMax-M3 text-tower graph/runtime/importer contracts.
 - [FRONTIER_MODEL_SURVEY_2026.md](FRONTIER_MODEL_SURVEY_2026.md) — 2026-H1
   paper survey → grounded per-model contract table + re-ranked roadmap; defines
   **Track L** (dual-form linear mixer + hybrid schedule), the next keystone.

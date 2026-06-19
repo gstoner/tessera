@@ -29,8 +29,10 @@ public API, and how MSA differs from the existing
 > (composed bmm path remains the fallback), and its latency scales ~linearly with
 > `top_k` — a measured ~10.6× wall-clock reduction at `top_k=1` (6% coverage) vs
 > the dense-equivalent on this M1 Max. The exp-free Top-k *selection* still runs
-> on the host (a small data-dependent step), and the CUDA KV-outer lowering
-> remains lit-fixture-only (no NVIDIA hardware here). **Phase 4**
+> on the host (a small data-dependent step). The CUDA/NVIDIA path now has a
+> Python Graph→Schedule→Tile→Target artifact lowering for the KV-outer
+> selected-block contract, while the native CUDA/H800/Blackwell kernel remains
+> future work. **Phase 4**
 > (`nn.MinimaxSparseAttention` GQA layer + `from_gqa` conversion) and **Phase 5**
 > (the `examples/attention/minimax_sparse_attention.py` dense-vs-sparse example +
 > theoretical-compute benchmark) landed. All six phases (0–5) are complete on the
@@ -46,7 +48,7 @@ public API, and how MSA differs from the existing
 | `Q` | `(B, Hq, Sq, D)` | query heads |
 | `K`, `V` | `(B, Hkv, Sk, D)` | KV heads; `Dv` may differ for `V` |
 | GQA constraint | `Hq % Hkv == 0` | group size `g = Hq // Hkv`; query head `h` ∈ group `h // g` |
-| block constraint | `Sk % block_size == 0` | `num_blocks = Sk // block_size` |
+| block constraint | `Sk` may be non-divisible in the reference/runtime path | K/V are padded internally; static MLIR verifier paths may still require known-divisible blocks |
 
 **Block metadata:** `block_size`, `top_k` (`1 ≤ top_k ≤ num_blocks`),
 `force_local_block` (default `True`), `causal` (default `True`).
@@ -188,17 +190,21 @@ The single-source envelope auto-feeds the driver gate, the C++
 end-to-end `@jit` paths validated vs the reference at fp32 tolerance, incl. GQA
 and dense-equivalence (`top_k == num_blocks`).
 
-## 7. Phase 3 CUDA/NVIDIA lowering target (planned)
+## 7. Phase 3 CUDA/NVIDIA lowering target (artifact path landed)
 
-The CUDA path should lower the selected-block layout to a KV-outer sparse
-attention target, not to a monolithic opaque model op. The planned Tile IR
-contract is `tessera.attn.msa_kv_outer_sparse(Q, K, V, block_ids, O)` with
-`block_ids` shaped `(B,Hkv,Sq,top_k)`, `gqa_group_size = Hq / Hkv`, and explicit
-`mode = "prefill" | "decode"` metadata. Dense-equivalence remains the first
-oracle: when `top_k == Sk / block_size`, the sparse target must match dense GQA.
+The CUDA/NVIDIA artifact path lowers the selected-block layout to a KV-outer
+sparse attention target, not to a monolithic opaque model op. Graph IR
+`tessera.msa_sparse_attention` becomes `schedule.attn.kv_outer_sparse`, then
+Tile IR `tessera.attn.msa_kv_outer_sparse`, then an `artifact_only` NVIDIA
+Target IR kernel contract named `msa_kv_outer_sparse`. The contract carries
+`block_ids` shaped `(B,Hkv,Sq,top_k)`, `gqa_group_size = Hq / Hkv`, explicit
+`mode = "prefill" | "decode"` metadata, and `kv_traversal = "kv_outer"`.
+Dense-equivalence remains the first oracle: when `top_k == num_blocks`, the
+sparse target must match dense GQA.
 
 See [msa_cuda_phase3_plan.md](msa_cuda_phase3_plan.md) and
 [`msa_kv_outer_sparse_attention.mlir`](../tests/tessera-ir/phase3/cuda13/msa_kv_outer_sparse_attention.mlir).
+Guard: `tests/unit/test_msa_kv_outer_schedule.py`.
 
 **Execution-mode reality.** The program reports `execution_mode = "metal_runtime"`
 (`compiler_path = apple_gpu_mps`) — identical to the rest of the sparse-attn lane:
@@ -324,8 +330,10 @@ end-to-end, small-shape gating).
 
 ## 11. Open frontier
 
-The only remaining item is **(c)** the CUDA KV-outer lowering + a real
-H800/Blackwell speedup proof — **hardware-gated on NVIDIA**, lit-fixture-only on
-this Mac. The Apple-GPU surface is now: native fused kernel (sparsity → 10.6×) →
-tiled f32/f16 (3.9–5.2× over scalar) → GPU-resident Index Branch (2.4× at scale),
-all measured on this M1 Max.
+The remaining item is the **native** CUDA KV-outer kernel plus a real
+H800/Blackwell speedup proof — **hardware-gated on NVIDIA**. The compiler
+artifact path now carries the selected-block KV-outer schedule to NVIDIA Target
+IR; this Mac still cannot prove native NVIDIA execution. The Apple-GPU surface
+is now: native fused kernel (sparsity → 10.6×) → tiled f32/f16 (3.9–5.2× over
+scalar) → GPU-resident Index Branch (2.4× at scale), all measured on this M1
+Max.

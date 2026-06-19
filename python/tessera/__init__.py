@@ -1617,34 +1617,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         one score per (GQA group, query position, KV block). Intentionally
         exp-free: Top-k selection consumes the raw dot products directly.
         """
-        if hasattr(Q, "_data"): Q = Q._data
-        if hasattr(K, "_data"): K = K._data
-        Q = np.asarray(Q); K = np.asarray(K)
-        if Q.ndim != 4 or K.ndim != 4:
-            raise ValueError("msa_index_scores expects rank-4 Q and K")
-        B, Hq, Sq, D = Q.shape
-        Bk, Hkv, Sk, Dk = K.shape
-        if B != Bk or D != Dk:
-            raise ValueError(
-                f"Q/K batch+head_dim must match; got Q {Q.shape}, K {K.shape}"
-            )
-        if Hkv == 0 or Hq % Hkv != 0:
-            raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
-        if Sk % block_size != 0:
-            raise ValueError(f"Sk={Sk} not divisible by block_size={block_size}")
-        g = Hq // Hkv
-        num_blocks = Sk // block_size
-        # Per-block mean key summary: (B, Hkv, num_blocks, D).
-        K_c = K.reshape(B, Hkv, num_blocks, block_size, D).mean(axis=3)
-        # Group query: mean over the g query heads in each group → (B, Hkv, Sq, D).
-        q_grp = Q.reshape(B, Hkv, g, Sq, D).mean(axis=2)
-        if scale is None:
-            scale = 1.0 / np.sqrt(D)
-        scores = np.matmul(q_grp, np.swapaxes(K_c, -1, -2)) * scale
-        return scores  # (B, Hkv, Sq, num_blocks)
+        from tessera.stdlib import attention as _attn
+        return _attn.msa_index_scores(Q, K, block_size=block_size, scale=scale)
 
     def msa_select_blocks(scores, *, top_k: int, block_size: int,
-                          force_local_block: bool = True, causal: bool = True):
+                          force_local_block: bool = True, causal: bool = True,
+                          q_positions=None):
         """MSA Top-k block selection (per GQA group, per query position).
 
         ``scores`` ``(B, Hkv, Sq, num_blocks)`` from ``msa_index_scores``.
@@ -1656,31 +1634,17 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         valid blocks, the extra slots fall onto future blocks whose tokens are
         fully masked by the Main Branch (so they contribute nothing).
         """
-        if hasattr(scores, "_data"): scores = scores._data
-        scores = np.asarray(scores)
-        if scores.ndim != 4:
-            raise ValueError("msa_select_blocks expects rank-4 scores")
-        B, Hkv, Sq, num_blocks = scores.shape
-        if not (1 <= top_k <= num_blocks):
-            raise ValueError(f"top_k={top_k} must be in [1, num_blocks={num_blocks}]")
-        # Each query's local block id (clipped for cross-attn where Sq > Sk maps out).
-        local = np.minimum(np.arange(Sq) // block_size, num_blocks - 1)
-        masked = scores.astype(np.float64, copy=True)
-        if causal:
-            blk = np.arange(num_blocks)[None, None, None, :]
-            qb = local[None, None, :, None]
-            masked = np.where(blk > qb, -np.inf, masked)
-        if force_local_block:
-            bi, hi = np.arange(B)[:, None, None], np.arange(Hkv)[None, :, None]
-            si = np.arange(Sq)[None, None, :]
-            masked[bi, hi, si, local[None, None, :]] = np.inf
-        topk_idx = np.argpartition(-masked, top_k - 1, axis=-1)[..., :top_k]
-        topk_idx = np.sort(topk_idx, axis=-1)
-        return topk_idx.astype(np.int64)
+        from tessera.stdlib import attention as _attn
+        return _attn.msa_select_blocks(
+            scores, top_k=top_k, block_size=block_size,
+            force_local_block=force_local_block, causal=causal,
+            q_positions=q_positions,
+        )
 
     def msa_sparse_attention(Q, K, V, *, block_size: int, top_k: int,
                              force_local_block: bool = True, causal: bool = True,
-                             scale=None, return_debug: bool = False):
+                             scale=None, q_positions=None, selected_block_ids=None,
+                             return_debug: bool = False):
         """MiniMax Sparse Attention — exact block-sparse attention over the
         Index-Branch-selected KV blocks.
 
@@ -1696,68 +1660,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         fraction of causally-valid KV blocks attended), and ``local_block_hit``
         (fraction of rows whose own block was selected).
         """
-        if hasattr(Q, "_data"): Q = Q._data
-        if hasattr(K, "_data"): K = K._data
-        if hasattr(V, "_data"): V = V._data
-        Q = np.asarray(Q); K = np.asarray(K); V = np.asarray(V)
-        if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
-            raise ValueError("msa_sparse_attention expects rank-4 Q/K/V")
-        B, Hq, Sq, D = Q.shape
-        Hkv, Sk, Dv = K.shape[1], K.shape[2], V.shape[-1]
-        if Hq % Hkv != 0:
-            raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
-        g = Hq // Hkv
-        num_blocks = Sk // block_size
-        scores = msa_index_scores(Q, K, block_size=block_size, scale=scale)
-        sel = msa_select_blocks(
-            scores, top_k=top_k, block_size=block_size,
-            force_local_block=force_local_block, causal=causal,
-        )  # (B, Hkv, Sq, top_k)
-        attn_scale = (1.0 / np.sqrt(D)) if scale is None else scale
-        out = np.zeros((B, Hq, Sq, Dv), dtype=np.result_type(Q, K, V))
-        local = np.minimum(np.arange(Sq) // block_size, num_blocks - 1)
-        cov_sum = 0.0
-        local_hit = 0
-        n_rows = 0
-        for b in range(B):
-            for grp in range(Hkv):
-                for sq in range(Sq):
-                    blocks = np.unique(sel[b, grp, sq])
-                    idxs = np.concatenate([
-                        np.arange(blk * block_size, blk * block_size + block_size)
-                        for blk in blocks
-                    ])
-                    if causal:
-                        valid_idxs = idxs[idxs <= sq]
-                    else:
-                        valid_idxs = idxs
-                    # Debug accounting (over causally-valid blocks only).
-                    valid_blocks = np.unique(valid_idxs // block_size) if valid_idxs.size else np.array([], dtype=np.int64)
-                    avail = (local[sq] + 1) if causal else num_blocks
-                    cov_sum += (valid_blocks.size / avail) if avail else 0.0
-                    if local[sq] in blocks:
-                        local_hit += 1
-                    n_rows += 1
-                    if valid_idxs.size == 0:
-                        continue
-                    K_sel = K[b, grp, valid_idxs, :]
-                    V_sel = V[b, grp, valid_idxs, :]
-                    for hh in range(g):
-                        h = grp * g + hh
-                        s = (Q[b, h, sq, :] @ K_sel.T) * attn_scale
-                        e = np.exp(s - s.max())
-                        w = e / e.sum()
-                        out[b, h, sq, :] = w @ V_sel
-        out = out.astype(np.result_type(Q, K, V), copy=False)
-        if return_debug:
-            debug = {
-                "selected_block_ids": sel,
-                "coverage": float(cov_sum / n_rows) if n_rows else 0.0,
-                "local_block_hit": float(local_hit / n_rows) if n_rows else 0.0,
-                "num_blocks": int(num_blocks),
-            }
-            return out, debug
-        return out
+        from tessera.stdlib import attention as _attn
+        return _attn.msa_sparse_attention(
+            Q, K, V, block_size=block_size, top_k=top_k,
+            force_local_block=force_local_block, causal=causal, scale=scale,
+            q_positions=q_positions, selected_block_ids=selected_block_ids,
+            return_debug=return_debug,
+        )
 
     def memory_index_select(indexer_keys, query, *, block_size: int,
                             threshold: float = 0.5, causal: bool = True,

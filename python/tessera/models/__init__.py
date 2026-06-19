@@ -65,7 +65,7 @@ from .staging import (
     vision_execution_supported,
     import_model_metadata,
 )
-from . import deepseek_v32, glm5, kimi_k2
+from . import deepseek_v32, glm5, kimi_k2, minimax_m3, minimax_m3_importer
 from . import moe_transformer_runtime
 from . import mixture_transformer
 from .mixture_transformer import (
@@ -108,6 +108,8 @@ __all__ = [
     "deepseek_v32",
     "glm5",
     "kimi_k2",
+    "minimax_m3",
+    "minimax_m3_importer",
     "moe_transformer_runtime",
     "mixture_transformer",
     "REASONER",

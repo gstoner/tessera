@@ -245,10 +245,11 @@ Use `ts.ops`.
 
 ## Model-class compiler track (`tessera.models` + `tessera.stdlib`)
 
-The frontier MoE architectures — **Kimi-K2**, **DeepSeek-V3.2**, **GLM-5** — are
-expressed as shared-pillar model graphs (added June 2026). On Apple Silicon a
-structurally-faithful *scaled* instance executes end-to-end (oracle-gated vs.
-numpy); the *full-config* graph is a valid lowered artifact (lit + verifier),
+The frontier MoE architectures — **Kimi-K2**, **DeepSeek-V3.2**, **GLM-5.2**,
+**MiniMax-M3** — are expressed as shared-pillar model graphs (added June 2026).
+On Apple Silicon a structurally-faithful *scaled* instance executes end-to-end
+for the runtime-gated families (oracle-gated vs. numpy); the *full-config* graph
+is a valid compiler contract (lit/verifier or full-layer graph verifier),
 with full-scale + NVIDIA execution hardware-gated. Roadmap:
 [`docs/audit/roadmap/MODEL_CLASS_ROADMAP.md`](../audit/roadmap/MODEL_CLASS_ROADMAP.md).
 
@@ -258,12 +259,13 @@ with full-scale + NVIDIA execution hardware-gated. Roadmap:
 |--------|---------|
 | `stdlib.quant` | `PackedQuantTensor`, `quantize_weight` (per-channel / group-wise INT4·INT8·FP8, genuine int4 nibble-packing), `dequant_matmul` / `dequant_grouped_gemm` (fused, fp32 accum; `backend="apple_gpu"` uses the fused Metal kernel), `unit_codes_and_scales`. |
 | `stdlib.moe` | `compute_capacity`, `plan_dispatch` (capacity/bucketing + token permutation), `dispatch` / `combine`, `shared_expert_swiglu`, `grouped_swiglu`, `moe_swiglu_quantized`, `moe_forward` (capacity-aware, returns a `MoEResult`). |
-| `stdlib.attention` | `MLAWeights` + `mla_attention` (decoupled-RoPE + weight absorption), `mla_prefill` / `mla_decode_step` (paged latent cache); `dsa_block_index` / `dsa_select_blocks` / `dsa_block_sparse_attention` (offset-aware block-sparse). LSA primitives live in `tessera.lsa`. |
+| `stdlib.attention` | `MLAWeights` + `mla_attention` (decoupled-RoPE + weight absorption), `mla_prefill` / `mla_decode_step` (paged latent cache); `dsa_block_index` / `dsa_select_blocks` / `dsa_block_sparse_attention` (offset-aware block-sparse); `msa_index_scores` / `msa_select_blocks` / `msa_sparse_attention` (MiniMax Sparse Attention reference). LSA primitives live in `tessera.lsa`. |
 
 **Model graphs** (`tessera.models`):
 
 ```python
-from tessera.models import deepseek_v32, glm5, kimi_k2
+from tessera.models import deepseek_v32, glm5, kimi_k2, minimax_m3
+from tessera.models import minimax_m3_importer
 from tessera.models import moe_transformer as mt
 from tessera.models import moe_transformer_runtime as rt
 
@@ -274,15 +276,20 @@ logits = rt.forward(cfg, w, [1, 2, 3])     # full decoder stack → logits
 tokens = rt.greedy_generate(cfg, w, [1, 2, 3], max_new_tokens=8)  # KV-cached decode
 ```
 
-- `deepseek_v32` / `glm5` / `kimi_k2` each export `config()` (full scale) and
-  `scaled_config()` (Mac-executable). GLM-5 dims are an unconfirmed placeholder.
+- `deepseek_v32` / `glm5` / `kimi_k2` / `minimax_m3` each export `config()`
+  (full scale) and `scaled_config()` (small structural surrogate). MiniMax-M3
+  also exposes staged multimodal metadata.
+- `minimax_m3_importer` reads local HF-style config/tokenizer/safetensors
+  metadata, prepares multimodal prompt spans, executes text-only prompts through
+  the reference text tower, loads selected safetensors tensors by name, and
+  rejects image/video execution until a real vision encoder/projector path lands.
 - `moe_transformer.MoETransformerConfig` is the shared shape contract;
-  `attn_kind ∈ {"mla","gqa"}`, `sparse ∈ {None, "dsa", "lsa"}`,
+  `attn_kind ∈ {"mla","gqa"}`, `sparse ∈ {None, "dsa", "lsa", "msa"}`,
   `weight_dtype ∈ {None, "int4", "fp8_e4m3", "fp8_e5m2"}`.
 - `moe_transformer_runtime` runs `forward` / `prefill` / `decode_step` /
   `greedy_generate` with per-layer KV caches (MLA latent cache; materialized K/V
-  for GQA/DSA/LSA). The headline guarantee is **KV-cached greedy decode ≡ full
-  recompute**, including with DSA and LSA block-sparsity in the decode loop.
+  for GQA/DSA/LSA/MSA). The headline guarantee is **KV-cached greedy decode ≡
+  full recompute**, including with sparse attention in the decode loop.
 
 ### Lookahead Sparse Attention (`tessera.lsa`)
 

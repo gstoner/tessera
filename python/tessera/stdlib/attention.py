@@ -1,4 +1,4 @@
-"""``tessera.stdlib.attention`` — production attention pillars (M3 + M4).
+"""``tessera.stdlib.attention`` — production attention pillars (M3 + M4 + MSA).
 
 Two model-class attention primitives the frontier models need, built as
 compiler-lowerable reference algorithms with oracle gates (the pattern M1/M2
@@ -28,7 +28,7 @@ Honesty: the heavy matmuls compose on the Metal lane (``backend="apple_gpu"``)
 where batchable; a single fused MLA-absorb / block-sparse MSL kernel is the
 M3.1 / M4.1 follow-up.  What is real today: the absorption algorithm + decoupled
 RoPE + latent-cache paging (M3), and the indexer + exact block-sparse algorithm
-+ oracles (M4).
++ oracles (M4/MSA).
 """
 
 from __future__ import annotations
@@ -370,6 +370,171 @@ def dsa_block_sparse_attention(Q, K, V, *, top_k_blocks: int, block_size: int,
     return out
 
 
+def msa_index_scores(Q, K, *, block_size: int, scale=None):
+    """MiniMax Sparse Attention Index Branch scores.
+
+    ``Q`` ``(B,Hq,Sq,D)`` and ``K`` ``(B,Hkv,Sk,D)`` with ``Hq % Hkv == 0``.
+    Query heads are mean-pooled per GQA group and KV blocks are represented by
+    mean keys. ``Sk`` may be non-divisible by ``block_size``; zero-padding is
+    internal so decode steps over a growing KV cache do not need prompt lengths
+    aligned to a block boundary.
+    """
+    Qa, Ka = _arr(Q).astype(np.float64), _arr(K).astype(np.float64)
+    if Qa.ndim != 4 or Ka.ndim != 4:
+        raise ValueError("msa_index_scores expects rank-4 Q and K")
+    B, Hq, Sq, D = Qa.shape
+    Bk, Hkv, Sk_real, Dk = Ka.shape
+    if B != Bk or D != Dk:
+        raise ValueError(f"Q/K batch+head_dim must match; got Q {Qa.shape}, K {Ka.shape}")
+    if Hkv == 0 or Hq % Hkv != 0:
+        raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
+    if block_size <= 0:
+        raise ValueError("block_size must be > 0")
+    pad = (-Sk_real) % block_size
+    if pad:
+        Ka = np.concatenate([Ka, np.zeros((B, Hkv, pad, D), dtype=Ka.dtype)], axis=2)
+    num_blocks = Ka.shape[2] // block_size
+    g = Hq // Hkv
+    if scale is None:
+        scale = 1.0 / np.sqrt(D)
+    k_c = Ka.reshape(B, Hkv, num_blocks, block_size, D).mean(axis=3)
+    q_grp = Qa.reshape(B, Hkv, g, Sq, D).mean(axis=2)
+    return np.matmul(q_grp, np.swapaxes(k_c, -1, -2)) * scale
+
+
+def msa_select_blocks(scores, *, top_k: int, block_size: int,
+                      force_local_block: bool = True, causal: bool = True,
+                      q_positions=None):
+    """Deterministic MSA Top-k block ids ``(B,Hkv,Sq,top_k)``.
+
+    ``q_positions`` gives global query positions. Under causal forced-local
+    selection, only strictly-past blocks are ranked and the current/local block
+    is inserted explicitly. That makes incremental decode consistent with full
+    recompute: other block choices cannot depend on a partially-filled current
+    block summary.
+    """
+    s = _arr(scores).astype(np.float64)
+    if s.ndim != 4:
+        raise ValueError("msa_select_blocks expects rank-4 scores")
+    B, Hkv, Sq, num_blocks = s.shape
+    if not (1 <= top_k <= num_blocks):
+        raise ValueError(f"top_k={top_k} must be in [1, num_blocks={num_blocks}]")
+    if block_size <= 0:
+        raise ValueError("block_size must be > 0")
+    qpos = np.arange(Sq) if q_positions is None else np.asarray(q_positions).reshape(-1)
+    if qpos.shape[0] != Sq:
+        raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+    local = np.minimum(qpos // block_size, num_blocks - 1).astype(np.int64)
+    blk = np.arange(num_blocks)
+    out = np.empty((B, Hkv, Sq, top_k), dtype=np.int64)
+    for b in range(B):
+        for h in range(Hkv):
+            for q in range(Sq):
+                row = s[b, h, q].copy()
+                if causal:
+                    future = blk > local[q]
+                    row[future] = -np.inf
+                    if force_local_block:
+                        row[local[q]] = -np.inf
+                order = np.argsort(np.where(np.isneginf(row), np.inf, -row), kind="stable")
+                if force_local_block:
+                    order = np.concatenate([[local[q]], order[order != local[q]]])
+                out[b, h, q] = np.sort(order[:top_k])
+    return out
+
+
+def msa_sparse_attention(Q, K, V, *, block_size: int, top_k: int,
+                         force_local_block: bool = True, causal: bool = True,
+                         scale=None, q_positions=None, selected_block_ids=None,
+                         return_debug: bool = False):
+    """Exact MiniMax Sparse Attention over selected KV blocks.
+
+    ``q_positions`` makes the token-level causal mask and local-block selection
+    offset-aware for decode. ``selected_block_ids`` lets backend/lowering tests
+    feed the explicit KV-outer worklist contract directly.
+    """
+    Qa, Ka, Va = (_arr(Q).astype(np.float64), _arr(K).astype(np.float64),
+                  _arr(V).astype(np.float64))
+    if Qa.ndim != 4 or Ka.ndim != 4 or Va.ndim != 4:
+        raise ValueError("msa_sparse_attention expects rank-4 Q/K/V")
+    B, Hq, Sq, D = Qa.shape
+    Bk, Hkv, Sk_real, Dk = Ka.shape
+    Bv, Hkv_v, Sk_v, Dv = Va.shape
+    if (B, Hkv, Sk_real) != (Bv, Hkv_v, Sk_v) or B != Bk or D != Dk:
+        raise ValueError(f"Q/K/V shape mismatch: Q={Qa.shape}, K={Ka.shape}, V={Va.shape}")
+    if Hkv == 0 or Hq % Hkv != 0:
+        raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
+    if block_size <= 0:
+        raise ValueError("block_size must be > 0")
+    pad = (-Sk_real) % block_size
+    if pad:
+        Ka = np.concatenate([Ka, np.zeros((B, Hkv, pad, D), dtype=Ka.dtype)], axis=2)
+        Va = np.concatenate([Va, np.zeros((B, Hkv, pad, Dv), dtype=Va.dtype)], axis=2)
+    num_blocks = Ka.shape[2] // block_size
+    if not (1 <= top_k <= num_blocks):
+        raise ValueError(f"top_k={top_k} must be in [1, num_blocks={num_blocks}]")
+    qpos = np.arange(Sq) if q_positions is None else np.asarray(q_positions).reshape(-1)
+    if qpos.shape[0] != Sq:
+        raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+    if selected_block_ids is None:
+        scores = msa_index_scores(Qa, Ka, block_size=block_size, scale=scale)
+        sel = msa_select_blocks(
+            scores, top_k=top_k, block_size=block_size,
+            force_local_block=force_local_block, causal=causal,
+            q_positions=qpos,
+        )
+    else:
+        sel = np.asarray(selected_block_ids, dtype=np.int64)
+        if sel.shape != (B, Hkv, Sq, top_k):
+            raise ValueError(
+                f"selected_block_ids must have shape {(B, Hkv, Sq, top_k)}; got {sel.shape}")
+        if np.any(sel < 0) or np.any(sel >= num_blocks):
+            raise ValueError(
+                f"selected_block_ids entries must be in [0, num_blocks={num_blocks})")
+    attn_scale = (1.0 / np.sqrt(D)) if scale is None else scale
+    g = Hq // Hkv
+    out = np.zeros((B, Hq, Sq, Dv), dtype=np.float64)
+    cov_sum = 0.0
+    local_hit = 0
+    n_rows = 0
+    local = np.minimum(qpos // block_size, num_blocks - 1).astype(np.int64)
+    for b in range(B):
+        for grp in range(Hkv):
+            for sq in range(Sq):
+                blocks = np.unique(sel[b, grp, sq])
+                idxs = np.concatenate([
+                    np.arange(int(blk) * block_size, int(blk) * block_size + block_size)
+                    for blk in blocks
+                ])
+                valid = idxs[idxs < Sk_real]
+                if causal:
+                    valid = valid[valid <= qpos[sq]]
+                valid_blocks = np.unique(valid // block_size) if valid.size else np.array([], dtype=np.int64)
+                avail = (local[sq] + 1) if causal else num_blocks
+                cov_sum += (valid_blocks.size / avail) if avail else 0.0
+                if local[sq] in blocks:
+                    local_hit += 1
+                n_rows += 1
+                if valid.size == 0:
+                    continue
+                K_sel = Ka[b, grp, valid]
+                V_sel = Va[b, grp, valid]
+                for hh in range(g):
+                    h = grp * g + hh
+                    scores = (Qa[b, h, sq] @ K_sel.T) * attn_scale
+                    w = _softmax_last(scores)
+                    out[b, h, sq] = w @ V_sel
+    out = out.astype(np.result_type(_arr(Q), _arr(K), _arr(V)), copy=False)
+    if return_debug:
+        return out, {
+            "selected_block_ids": sel,
+            "coverage": float(cov_sum / n_rows) if n_rows else 0.0,
+            "local_block_hit": float(local_hit / n_rows) if n_rows else 0.0,
+            "num_blocks": int(num_blocks),
+        }
+    return out
+
+
 def dense_causal_attention(Q, K, V, *, scale=None):
     """Dense causal reference (the DSA select-all oracle).  GQA-aware."""
     Qa, Ka, Va = (_arr(Q).astype(np.float64), _arr(K).astype(np.float64),
@@ -403,5 +568,9 @@ __all__ = [
     "dsa_block_index",
     "dsa_select_blocks",
     "dsa_block_sparse_attention",
+    # MSA
+    "msa_index_scores",
+    "msa_select_blocks",
+    "msa_sparse_attention",
     "dense_causal_attention",
 ]

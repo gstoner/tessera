@@ -127,6 +127,10 @@ def test_import_minimax_m3_hf_manifest_reads_config_tokenizer_and_safetensors(tm
 
 
 def test_hf_tokenizer_roundtrips_specials_and_chat_template(tmp_path):
+    # tokenizers + jinja2 are optional importer conveniences (soft-imported in
+    # the importer); skip cleanly when they are absent (e.g. CI without them).
+    pytest.importorskip("tokenizers")
+    pytest.importorskip("jinja2")
     from tokenizers import AddedToken
     from tokenizers import Tokenizer
     from tokenizers.models import WordLevel

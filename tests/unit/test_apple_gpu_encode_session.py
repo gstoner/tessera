@@ -76,6 +76,56 @@ def test_deep_dependent_chain():
     np.testing.assert_allclose(acc.numpy(), ref, rtol=1e-3, atol=1e-3)
 
 
+def test_long_chain_auto_flushes_across_command_buffers():
+    """A chain longer than a single Metal command buffer can hold must not
+    crash. A single MTLCommandBuffer has finite command space; encoding an
+    unbounded op-chain into one buffer overflows it and segfaults at commit
+    (encodeSignalEvent / _reserveKernelCommandBufferSpace). The session
+    auto-flushes across several command buffers — correctness is preserved
+    (each flush commits + waits before the next buffer reads the result) and
+    only the commit count grows."""
+    s = _require()
+    rng = np.random.RandomState(7)
+    n = 50  # past the default 24-op per-command-buffer ceiling
+    # scale by 1/sqrt(dim) so the deep product stays finite (numerics aside,
+    # this exercises the cross-command-buffer ordering, not overflow).
+    mats = [(rng.randn(1, 8, 8) / np.sqrt(8)).astype(np.float32) for _ in range(n + 1)]
+    dts = [DeviceTensor.from_numpy(m) for m in mats]
+    with s:
+        acc = dts[0]
+        for nxt in dts[1:]:
+            acc = s.bmm(acc, nxt)
+            assert acc is not None
+    assert s.commits > 1, "a 50-op chain must span multiple command buffers"
+    ref = mats[0].astype(np.float64)
+    for m in mats[1:]:
+        ref = np.matmul(ref, m.astype(np.float64))
+    np.testing.assert_allclose(acc.numpy(), ref, rtol=1e-3, atol=1e-3)
+
+
+def test_explicit_flush_threshold_is_correct():
+    """A small ``max_ops_per_cb`` forces an auto-flush mid-chain; the result
+    must still match numpy (the committed buffer's outputs are valid before the
+    next buffer reads them) and the commit count must reflect the flushes."""
+    s = AppleGPUEncodeSession(max_ops_per_cb=4)
+    if not s.available:
+        s.commit()
+        pytest.skip("encode-session ABI unavailable")
+    rng = np.random.RandomState(11)
+    n = 10  # -> flush after 4 and 8 ops, final commit -> 3 command buffers
+    mats = [(rng.randn(1, 6, 6) / np.sqrt(6)).astype(np.float32) for _ in range(n + 1)]
+    dts = [DeviceTensor.from_numpy(m) for m in mats]
+    with s:
+        acc = dts[0]
+        for nxt in dts[1:]:
+            acc = s.bmm(acc, nxt)
+    assert s.commits == 3
+    ref = mats[0].astype(np.float64)
+    for m in mats[1:]:
+        ref = np.matmul(ref, m.astype(np.float64))
+    np.testing.assert_allclose(acc.numpy(), ref, rtol=1e-3, atol=1e-3)
+
+
 def test_independent_ops_one_commit():
     """Two independent bmms batched into one command buffer; both correct."""
     s = _require()

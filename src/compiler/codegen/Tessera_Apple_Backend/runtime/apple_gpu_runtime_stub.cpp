@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -26,10 +27,26 @@ struct TsDeviceTensor {
   void* data;
   int64_t nbytes;
 };
+
+// P5 — memory budget accounting (host-memory reference parity with the .mm).
+// There is no pool off Darwin, so only resident device-tensor bytes are tracked.
+static std::atomic<int64_t> g_mem_active{0};
+static std::atomic<int64_t> g_mem_peak{0};
+static std::atomic<int64_t> g_mem_limit{0};
+static inline void stub_mem_bump_peak() {
+  int64_t cur = g_mem_active.load(std::memory_order_relaxed);
+  int64_t p = g_mem_peak.load(std::memory_order_relaxed);
+  while (cur > p &&
+         !g_mem_peak.compare_exchange_weak(p, cur, std::memory_order_relaxed)) {
+  }
+}
+
 extern "C" TsDeviceTensor* ts_dev_alloc(int64_t nbytes) {
   if (nbytes <= 0) return nullptr;
   void* p = std::calloc(1, static_cast<std::size_t>(nbytes));
   if (!p) return nullptr;
+  g_mem_active.fetch_add(nbytes, std::memory_order_relaxed);
+  stub_mem_bump_peak();
   return new TsDeviceTensor{p, nbytes};
 }
 extern "C" void* ts_dev_contents(TsDeviceTensor* t) { return t ? t->data : nullptr; }
@@ -46,8 +63,33 @@ extern "C" void ts_dev_download(TsDeviceTensor* t, void* dst, int64_t n) {
   if (t && dst && n > 0 && n <= t->nbytes) std::memcpy(dst, t->data, static_cast<std::size_t>(n));
 }
 extern "C" void ts_dev_free(TsDeviceTensor* t) {
-  if (t) { std::free(t->data); delete t; }
+  if (t) {
+    g_mem_active.fetch_sub(t->nbytes, std::memory_order_relaxed);
+    std::free(t->data);
+    delete t;
+  }
 }
+
+// P5 — memory budget ABI (parity stubs; cache is always 0 off Darwin).
+extern "C" int64_t tessera_apple_gpu_get_active_memory(void) {
+  return g_mem_active.load(std::memory_order_relaxed);
+}
+extern "C" int64_t tessera_apple_gpu_get_cache_memory(void) { return 0; }
+extern "C" int64_t tessera_apple_gpu_get_peak_memory(void) {
+  return g_mem_peak.load(std::memory_order_relaxed);
+}
+extern "C" void tessera_apple_gpu_reset_peak_memory(void) {
+  g_mem_peak.store(g_mem_active.load(std::memory_order_relaxed),
+                   std::memory_order_relaxed);
+}
+extern "C" int64_t tessera_apple_gpu_set_memory_limit(int64_t bytes) {
+  if (bytes < 0) bytes = 0;
+  return g_mem_limit.exchange(bytes, std::memory_order_relaxed);
+}
+extern "C" int64_t tessera_apple_gpu_get_memory_limit(void) {
+  return g_mem_limit.load(std::memory_order_relaxed);
+}
+extern "C" int64_t tessera_apple_gpu_clear_cache(void) { return 0; }
 extern "C" int32_t ts_dev_is_metal(void) { return 0; }
 // Interop escape hatches — no Metal device off Darwin, so no raw handles.
 extern "C" void* ts_dev_mtl_buffer(TsDeviceTensor*) { return nullptr; }
@@ -2517,6 +2559,85 @@ extern "C" void tessera_apple_gpu_dequant_matmul_f32(
       }
       O[static_cast<std::size_t>(m) * N + n] = acc;
     }
+}
+
+// P3 — packed int4 quantized matmul (non-Darwin reference parity). W[N,K] codes
+// packed 2 nibbles/byte; affine dequant w = scale*code + bias.
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_f32(
+    const float* X, const uint8_t* Wq, const float* scales, const float* biases,
+    float* O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  int32_t NG = (K + GS - 1) / GS;
+  int32_t pitch = (K + 1) / 2;
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      const uint8_t* wrow = Wq + static_cast<std::size_t>(n) * pitch;
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / GS;
+        uint8_t byte = wrow[k >> 1];
+        int32_t code = (k & 1) ? (byte >> 4) : (byte & 0x0F);
+        float w = scales[static_cast<std::size_t>(n) * NG + g] *
+                      static_cast<float>(code) +
+                  biases[static_cast<std::size_t>(n) * NG + g];
+        acc += X[static_cast<std::size_t>(m) * K + k] * w;
+      }
+      O[static_cast<std::size_t>(m) * N + n] = acc;
+    }
+}
+
+// Tiled f32 — identical numerics to the untiled lane (no tgmem off Darwin).
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_tiled_f32(
+    const float* X, const uint8_t* Wq, const float* scales, const float* biases,
+    float* O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  tessera_apple_gpu_quantized_matmul_i4_f32(X, Wq, scales, biases, O, M, K, N,
+                                            group_size);
+}
+
+// Split-K f32 — identical numerics (no GPU off Darwin).
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_splitk_f32(
+    const float* X, const uint8_t* Wq, const float* scales, const float* biases,
+    float* O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  tessera_apple_gpu_quantized_matmul_i4_f32(X, Wq, scales, biases, O, M, K, N,
+                                            group_size);
+}
+
+// FP4 (e2m1) packed matmul (non-Darwin reference). Per-group symmetric scale,
+// no bias; e2m1 magnitude LUT (bits 0-2) + sign (bit 3).
+extern "C" void tessera_apple_gpu_quantized_matmul_fp4_f32(
+    const float* X, const uint8_t* Wq, const float* scales, float* O, int32_t M,
+    int32_t K, int32_t N, int32_t group_size) {
+  static const float FP4LUT[8] = {0.0f, 0.5f, 1.0f, 1.5f,
+                                  2.0f, 3.0f, 4.0f, 6.0f};
+  int32_t GS = group_size > 0 ? group_size : K;
+  int32_t ng = (K + GS - 1) / GS;
+  int32_t pitch = (K + 1) / 2;
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      const uint8_t* wrow = Wq + static_cast<std::size_t>(n) * pitch;
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / GS;
+        uint8_t byte = wrow[k >> 1];
+        int32_t code = (k & 1) ? (byte >> 4) : (byte & 0x0F);
+        float mag = FP4LUT[code & 7];
+        float w = scales[static_cast<std::size_t>(n) * ng + g] *
+                  ((code & 8) ? -mag : mag);
+        acc += X[static_cast<std::size_t>(m) * K + k] * w;
+      }
+      O[static_cast<std::size_t>(m) * N + n] = acc;
+    }
+}
+
+// f16 X (decode to f32, then the f32 reference).
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_f16(
+    const uint16_t* X, const uint8_t* Wq, const float* scales,
+    const float* biases, float* O, int32_t M, int32_t K, int32_t N,
+    int32_t group_size) {
+  std::vector<float> xf(static_cast<std::size_t>(M) * K);
+  for (std::size_t i = 0; i < xf.size(); ++i) xf[i] = half_to_float_stub(X[i]);
+  tessera_apple_gpu_quantized_matmul_i4_f32(xf.data(), Wq, scales, biases, O, M,
+                                            K, N, group_size);
 }
 
 // Fused ragged SwiGLU MoE expert-FFN block (non-Darwin reference parity).

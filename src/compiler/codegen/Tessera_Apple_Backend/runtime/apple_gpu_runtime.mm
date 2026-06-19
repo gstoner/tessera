@@ -219,7 +219,31 @@ struct MetalDeviceContext {
   static constexpr size_t kMinBucketLog2 = 4;  // log2(16)
   std::vector<id<MTLBuffer>> buffer_pool[kBucketCount];
   std::mutex                 buffer_pool_mu;
+
+  // P5 — allocator byte accounting (MLX-style introspection; see
+  // ``apple_backend_capability_roadmap.md`` P5). ``active`` = bytes of live
+  // resident DeviceTensors checked out via ts_dev_alloc; ``cache`` = bytes
+  // parked in ``buffer_pool`` for reuse (mutated under ``buffer_pool_mu``);
+  // ``peak`` = high-water of ``active`` since process start / last reset;
+  // ``mem_limit`` = advisory ceiling (0 = unlimited, queryable, not enforced).
+  std::atomic<int64_t> active_bytes{0};
+  std::atomic<int64_t> peak_bytes{0};
+  std::atomic<int64_t> cache_bytes{0};
+  std::atomic<int64_t> mem_limit{0};
 };
+
+// Bump ``active`` by ``delta`` (may be negative) and lift ``peak`` to the new
+// high-water with a lock-free CAS. Called from ts_dev_alloc / ts_dev_free.
+static inline void ts_account_active(MetalDeviceContext &ctx, int64_t delta) {
+  int64_t now = ctx.active_bytes.fetch_add(delta) + delta;
+  if (delta > 0) {
+    int64_t prev = ctx.peak_bytes.load(std::memory_order_relaxed);
+    while (now > prev &&
+           !ctx.peak_bytes.compare_exchange_weak(prev, now,
+                                                 std::memory_order_relaxed)) {
+    }
+  }
+}
 
 // Pick the smallest bucket whose capacity ≥ requested size.
 static inline size_t metal_buffer_bucket(size_t bytes) {
@@ -254,6 +278,8 @@ static id<MTLBuffer> metal_buffer_acquire(MetalDeviceContext &ctx,
     if (!pool.empty()) {
       id<MTLBuffer> buf = pool.back();
       pool.pop_back();
+      // Left the cache (parked → checked out): P5 accounting.
+      ctx.cache_bytes.fetch_sub((int64_t)1 << (bucket + MetalDeviceContext::kMinBucketLog2));
       return buf;
     }
   }
@@ -274,6 +300,8 @@ static void metal_buffer_release(MetalDeviceContext &ctx,
   // Cap each bucket so the pool's footprint stays bounded.
   if (ctx.buffer_pool[bucket].size() < 8) {
     ctx.buffer_pool[bucket].push_back(buf);
+    // Entered the cache (checked out → parked): P5 accounting.
+    ctx.cache_bytes.fetch_add((int64_t)1 << (bucket + MetalDeviceContext::kMinBucketLog2));
   }
 }
 
@@ -367,6 +395,53 @@ extern "C" int32_t tessera_apple_gpu_simd_caps(void) {
 }
 
 //===----------------------------------------------------------------------===//
+// P5 — memory-budget introspection (MLX-style allocator accounting). Mirrors
+// the non-Darwin stub's surface so the Python ctypes layer is platform-agnostic
+// (see ``apple_backend_capability_roadmap.md`` P5). Counters live on the device
+// context: ``active`` (live resident DeviceTensor bytes), ``cache`` (bytes
+// parked in the buffer pool), ``peak`` (high-water of active), ``mem_limit``
+// (advisory ceiling; queryable, not enforced).
+//===----------------------------------------------------------------------===//
+
+extern "C" int64_t tessera_apple_gpu_get_active_memory(void) {
+  return deviceContext().active_bytes.load();
+}
+
+extern "C" int64_t tessera_apple_gpu_get_cache_memory(void) {
+  return deviceContext().cache_bytes.load();
+}
+
+extern "C" int64_t tessera_apple_gpu_get_peak_memory(void) {
+  return deviceContext().peak_bytes.load();
+}
+
+extern "C" int64_t tessera_apple_gpu_get_memory_limit(void) {
+  return deviceContext().mem_limit.load();
+}
+
+// Pin the peak high-water back down to the current active level.
+extern "C" void tessera_apple_gpu_reset_peak_memory(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  ctx.peak_bytes.store(ctx.active_bytes.load());
+}
+
+// Set the advisory ceiling (<=0 clears to unlimited); returns the previous one.
+extern "C" int64_t tessera_apple_gpu_set_memory_limit(int64_t nbytes) {
+  return deviceContext().mem_limit.exchange(nbytes > 0 ? nbytes : 0);
+}
+
+// Drop every pooled (cached) buffer; returns the bytes reclaimed. Live
+// checked-out buffers + resident tensors are untouched.
+extern "C" int64_t tessera_apple_gpu_clear_cache(void) {
+  MetalDeviceContext &ctx = deviceContext();
+  std::lock_guard<std::mutex> lock(ctx.buffer_pool_mu);
+  for (size_t b = 0; b < MetalDeviceContext::kBucketCount; ++b) {
+    ctx.buffer_pool[b].clear();  // ARC releases each parked buffer
+  }
+  return ctx.cache_bytes.exchange(0);
+}
+
+//===----------------------------------------------------------------------===//
 // R0 — persistent device-tensor handle (GPU-resident activations).
 //
 // A TsDeviceTensor owns one shared (`MTLResourceStorageModeShared`) MTLBuffer.
@@ -398,6 +473,7 @@ extern "C" TsDeviceTensor *ts_dev_alloc(int64_t nbytes) {
     id<MTLBuffer> b = [ctx.device newBufferWithLength:(NSUInteger)nbytes
                                               options:MTLResourceStorageModeShared];
     if (!b) return nullptr;
+    ts_account_active(ctx, nbytes);  // P5: resident tensor enters "active"
     return new TsDeviceTensor{b, nbytes, nil, 0, 0, -1};
   }
 }
@@ -441,6 +517,7 @@ extern "C" void ts_dev_download(TsDeviceTensor *t, void *dst, int64_t n) {
 
 extern "C" void ts_dev_free(TsDeviceTensor *t) {
   if (t) {
+    ts_account_active(deviceContext(), -t->nbytes);  // P5: leaves "active"
     t->tensorView = nil;  // ARC releases the cached MTLTensor view
     t->buf = nil;  // ARC releases the buffer
     delete t;
@@ -19232,15 +19309,23 @@ extern "C" TsEncodeSession *ts_enc_begin(void) {
 extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
   if (!s) return;
   // waitUntilCompleted migration batch 5 (2026-06-01) — encode-session
-  // path. ``s->mtlcb`` is the session-owned MTLCommandBuffer (NOT the
-  // generic ``cb`` the Pattern-4 wrapper takes), so we re-encode the
-  // Pattern-4 sequence inline: encode + signal into the session's cb,
-  // commit through MPSCommandBuffer, wait on the shared event with a
-  // timeout. Honors the same 30 s cap as the rest of the migrated
-  // dispatchers. The session-side ``s->cb`` is an ``MPSCommandBuffer``
-  // wrapper around ``s->mtlcb``; the underlying signal goes through
-  // ``s->mtlcb`` so the wait observes encode→commit→GPU-finish.
+  // path. Encode + signal into the session's cb, commit through
+  // MPSCommandBuffer, wait on the shared event with a timeout. Honors the
+  // same 30 s cap as the rest of the migrated dispatchers.
+  //
+  // The signal/wait MUST target ``s->cb.rootCommandBuffer``, NOT the
+  // ``s->mtlcb`` captured at ts_enc_begin: a heavy command buffer (many ops
+  // and/or large matrices) makes MPSGraph's encode call ``commitAndContinue``
+  // internally, which commits the original underlying MTLCommandBuffer and
+  // swaps in a fresh one. Signaling on the stale ``s->mtlcb`` then waits on a
+  // value that never fires → a 30 s timeout (the work itself still completes,
+  // so outputs are correct — just preceded by a 30 s stall). The SDK is
+  // explicit about this (MPSCommandBuffer.h: "Please use the rootCommandBuffer
+  // method to get the current alive underlying MTLCommandBuffer"). Capturing
+  // the live root right before commit is what makes long auto-flushed chains
+  // (AppleGPUEncodeSession) and any heavy single-commit reliable.
   MetalDeviceContext &ctx = deviceContext();
+  id<MTLCommandBuffer> root = s->cb.rootCommandBuffer;
   id<MTLSharedEvent> ev = nil;
   uint64_t signal_val = 0;
   if (ctx.ok) {
@@ -19252,7 +19337,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
     if (ev) signal_val = ++ctx.legacy_event_val;
   }
   if (ev) {
-    [s->mtlcb encodeSignalEvent:ev value:signal_val];
+    [root encodeSignalEvent:ev value:signal_val];
   }
   [s->cb commit];
   if (ev) {
@@ -19269,7 +19354,7 @@ extern "C" void ts_enc_commit_wait(TsEncodeSession *s) {
     // Shared-event init failed — fall back to the legacy synchronous
     // wait so the caller doesn't crash. No timeout protection in this
     // path (matches the helper's own fallback).
-    [s->mtlcb waitUntilCompleted];
+    [root waitUntilCompleted];
   }
   s->cb = nil;
   s->mtlcb = nil;
@@ -20144,6 +20229,500 @@ extern "C" void tessera_apple_gpu_dequant_matmul_f32(
       dispatch_dequant_matmul_msl(ctx, X, Wcodes, Wscale, O, M, K, N, GS, NG))
     return;
   reference_dequant_matmul_f32(X, Wcodes, Wscale, O, M, K, N, GS);
+}
+
+//===---------------------------------------------------------------------===//
+// P3 — packed-int4 quantized matmul. Weights are stored as 4-bit codes packed
+// 2 nibbles/byte (low nibble = even k, high = odd k) in ``Wq[N, (K+1)/2]``, with
+// per-group affine scale + bias in ``scales``/``biases`` ``[N, NG]`` (NG =
+// ceil(K/GS)). Dequant ``w = scale*code + bias`` happens in-register inside the
+// contraction (fp32 accumulator) — the full-width weight is never materialized,
+// and the weight operand reads at ~0.5 bytes/elem (vs 4 for f32 codes), the
+// bandwidth-bound decode win. Computes ``O[m,n] = sum_k X[m,k] * w(n,k)``.
+// Numerically validated against dequantize-then-matmul (the same packed weights)
+// in ``tests/unit/test_apple_gpu_quantized_matmul.py``.
+//===---------------------------------------------------------------------===//
+namespace {
+
+// Untiled QMV/QMM (one thread per output element). ``half`` activations swap the
+// X buffer's element type via the ``%s`` substitution; everything else matches.
+static NSString *qmm_i4_source(NSString *entry, NSString *xtype) {
+  return [NSString stringWithFormat:@R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void %@(
+    device const %@*    X      [[buffer(0)]],   // (M, K)
+    device const uchar* Wq     [[buffer(1)]],   // (N, (K+1)/2) packed nibbles
+    device const float* scales [[buffer(2)]],   // (N, NG)
+    device const float* biases [[buffer(3)]],   // (N, NG)
+    device float*       O      [[buffer(4)]],   // (M, N)
+    constant int& M  [[buffer(5)]],
+    constant int& K  [[buffer(6)]],
+    constant int& N  [[buffer(7)]],
+    constant int& GS [[buffer(8)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int m = (int)gid.x;
+    int n = (int)gid.y;
+    if (m >= M || n >= N) return;
+    int gs = GS > 0 ? GS : K;
+    int ng = (K + gs - 1) / gs;
+    int pitch = (K + 1) / 2;
+    device const uchar* wrow = Wq + (uint)n * pitch;
+    device const %@* xrow = X + (uint)m * K;
+    float acc = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        int g = k / gs;
+        uchar byte = wrow[k >> 1];
+        int code = (k & 1) ? (int)(byte >> 4) : (int)(byte & 0x0F);
+        float w = scales[(uint)n * ng + g] * (float)code + biases[(uint)n * ng + g];
+        acc += (float)xrow[k] * w;
+    }
+    O[(uint)m * N + n] = acc;
+}
+)MSL", entry, xtype, xtype];
+}
+
+// Tiled f32 — one threadgroup per (m, n-block); the X row chunk is cached in
+// threadgroup memory so the TX threads sharing an m reuse it across the chunk.
+// No early return before the barriers (all threads load + sync uniformly).
+static NSString *const kQuantMatmulI4TiledSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void quant_matmul_i4_tiled_f32(
+    device const float* X      [[buffer(0)]],
+    device const uchar* Wq     [[buffer(1)]],
+    device const float* scales [[buffer(2)]],
+    device const float* biases [[buffer(3)]],
+    device float*       O      [[buffer(4)]],
+    constant int& M  [[buffer(5)]],
+    constant int& K  [[buffer(6)]],
+    constant int& N  [[buffer(7)]],
+    constant int& GS [[buffer(8)]],
+    uint2 gid [[thread_position_in_grid]],
+    uint2 tid [[thread_position_in_threadgroup]],
+    uint2 tpg [[threads_per_threadgroup]])
+{
+    threadgroup float xs[512];
+    int m = (int)gid.y;     // one m-row per threadgroup (y extent == 1)
+    int n = (int)gid.x;
+    int gs = GS > 0 ? GS : K;
+    int ng = (K + gs - 1) / gs;
+    int pitch = (K + 1) / 2;
+    float acc = 0.0f;
+    for (int k0 = 0; k0 < K; k0 += 512) {
+        int clen = min(512, K - k0);
+        for (int i = (int)tid.x; i < clen; i += (int)tpg.x)
+            xs[i] = (m < M) ? X[(uint)m * K + k0 + i] : 0.0f;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        if (m < M && n < N) {
+            device const uchar* wrow = Wq + (uint)n * pitch;
+            for (int kk = 0; kk < clen; ++kk) {
+                int k = k0 + kk;
+                int g = k / gs;
+                uchar byte = wrow[k >> 1];
+                int code = (k & 1) ? (int)(byte >> 4) : (int)(byte & 0x0F);
+                float w = scales[(uint)n * ng + g] * (float)code + biases[(uint)n * ng + g];
+                acc += xs[kk] * w;
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (m < M && n < N) O[(uint)m * N + n] = acc;
+}
+)MSL";
+
+bool dispatch_quant_matmul_i4(MetalDeviceContext &ctx, NSString *source,
+                              NSString *entry, const void *X, size_t elemX,
+                              const uint8_t *Wq, const float *scales,
+                              const float *biases, float *O, int32_t M,
+                              int32_t K, int32_t N, int32_t GS, bool tiled) {
+  int32_t gs = GS > 0 ? GS : K;
+  int32_t ng = (K + gs - 1) / gs;
+  int32_t pitch = (K + 1) / 2;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, source, entry);
+    if (!pso) return false;
+
+    NSUInteger xBytes = elemX * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger wBytes = (NSUInteger)N * (NSUInteger)pitch;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)N * (NSUInteger)ng;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, Wq, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS, ctx, scales, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, biases, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufW || !bufS || !bufB || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufW offset:0 atIndex:1];
+    [enc setBuffer:bufS offset:0 atIndex:2];
+    [enc setBuffer:bufB offset:0 atIndex:3];
+    [enc setBuffer:bufO offset:0 atIndex:4];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&gs length:sizeof(int32_t) atIndex:8];
+
+    if (tiled) {
+      // One threadgroup per (m-row, n-block); TX threads cooperate on the X
+      // chunk. dispatchThreads handles a non-multiple N (excess threads no-op).
+      NSUInteger TX = pso.threadExecutionWidth;
+      if (TX == 0) TX = 32;
+      MTLSize grid = MTLSizeMake((NSUInteger)N, (NSUInteger)M, 1);
+      MTLSize tg = MTLSizeMake(TX, 1, 1);
+      [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    } else {
+      MTLSize grid = MTLSizeMake((NSUInteger)M, (NSUInteger)N, 1);
+      NSUInteger w = pso.threadExecutionWidth;
+      if (w == 0) w = 1;
+      NSUInteger h = pso.maxTotalThreadsPerThreadgroup / w;
+      if (h == 0) h = 1;
+      MTLSize tg = MTLSizeMake(w, h, 1);
+      [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    }
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "quant_matmul_i4_msl"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+// Split-K f32 — splits the K reduction across S parallel slices (grid plane z),
+// each thread writing its partial dot product to P[S,M,N]; the S partials are
+// summed on the host (S is small). Lifts the parallelism from M·N to M·N·S, the
+// occupancy win for large-K / small-N decode (e.g. MLP down-proj). Avoids
+// device float atomics (not reliably supported on Apple7/M1).
+static NSString *const kQuantMatmulI4SplitKSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void quant_matmul_i4_splitk_f32(
+    device const float* X      [[buffer(0)]],
+    device const uchar* Wq     [[buffer(1)]],
+    device const float* scales [[buffer(2)]],
+    device const float* biases [[buffer(3)]],
+    device float*       P      [[buffer(4)]],   // [S, M, N] partials
+    constant int& M  [[buffer(5)]],
+    constant int& K  [[buffer(6)]],
+    constant int& N  [[buffer(7)]],
+    constant int& GS [[buffer(8)]],
+    constant int& S  [[buffer(9)]],             // number of K-splits
+    uint3 gid [[thread_position_in_grid]])
+{
+    int m = (int)gid.x;
+    int n = (int)gid.y;
+    int s = (int)gid.z;
+    if (m >= M || n >= N || s >= S) return;
+    int gs = GS > 0 ? GS : K;
+    int ng = (K + gs - 1) / gs;
+    int pitch = (K + 1) / 2;
+    device const uchar* wrow = Wq + (uint)n * pitch;
+    int kchunk = (K + S - 1) / S;
+    int k0 = s * kchunk;
+    int k1 = min(k0 + kchunk, K);
+    float acc = 0.0f;
+    for (int k = k0; k < k1; ++k) {
+        int g = k / gs;
+        uchar byte = wrow[k >> 1];
+        int code = (k & 1) ? (int)(byte >> 4) : (int)(byte & 0x0F);
+        float w = scales[(uint)n * ng + g] * (float)code + biases[(uint)n * ng + g];
+        acc += X[(uint)m * K + k] * w;
+    }
+    P[((uint)s * M + m) * N + n] = acc;
+}
+)MSL";
+
+bool dispatch_quant_matmul_i4_splitk(MetalDeviceContext &ctx, const float *X,
+                                     const uint8_t *Wq, const float *scales,
+                                     const float *biases, float *O, int32_t M,
+                                     int32_t K, int32_t N, int32_t GS,
+                                     int32_t S) {
+  int32_t gs = GS > 0 ? GS : K;
+  int32_t ng = (K + gs - 1) / gs;
+  int32_t pitch = (K + 1) / 2;
+  if (S < 1) S = 1;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso = compile_msl_kernel(
+        ctx, kQuantMatmulI4SplitKSource, @"quant_matmul_i4_splitk_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger wBytes = (NSUInteger)N * (NSUInteger)pitch;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)N * (NSUInteger)ng;
+    NSUInteger pBytes = sizeof(float) * (NSUInteger)S * (NSUInteger)M * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, Wq, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS, ctx, scales, sBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufB, ctx, biases, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufP, ctx, pBytes);
+    if (!bufX || !bufW || !bufS || !bufB || !bufP) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufW offset:0 atIndex:1];
+    [enc setBuffer:bufS offset:0 atIndex:2];
+    [enc setBuffer:bufB offset:0 atIndex:3];
+    [enc setBuffer:bufP offset:0 atIndex:4];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&gs length:sizeof(int32_t) atIndex:8];
+    [enc setBytes:&S length:sizeof(int32_t) atIndex:9];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, (NSUInteger)N, (NSUInteger)S);
+    NSUInteger w = pso.threadExecutionWidth;
+    if (w == 0) w = 1;
+    NSUInteger h = pso.maxTotalThreadsPerThreadgroup / w;
+    if (h == 0) h = 1;
+    MTLSize tg = MTLSizeMake(w, h, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "quant_matmul_i4_splitk"))
+      return false;
+
+    // Sum the S partials per output element (cheap: M·N·S adds).
+    const float *P = (const float *)[bufP contents];
+    for (int32_t m = 0; m < M; ++m)
+      for (int32_t n = 0; n < N; ++n) {
+        float acc = 0.0f;
+        for (int32_t s = 0; s < S; ++s)
+          acc += P[((std::size_t)s * M + m) * N + n];
+        O[(std::size_t)m * N + n] = acc;
+      }
+    return true;
+  }
+}
+
+// Heuristic split count: more slices for larger K, capped so partials stay small.
+static inline int32_t quant_i4_splitk_count(int32_t K) {
+  int32_t S = (K + 511) / 512;
+  if (S < 1) S = 1;
+  if (S > 16) S = 16;
+  return S;
+}
+
+// Reference fallbacks (headless / no Metal device) — identical numerics.
+template <typename XT>
+inline void reference_quant_matmul_i4(const XT *X, const uint8_t *Wq,
+                                      const float *scales, const float *biases,
+                                      float *O, int32_t M, int32_t K, int32_t N,
+                                      int32_t GS) {
+  int32_t gs = GS > 0 ? GS : K;
+  int32_t ng = (K + gs - 1) / gs;
+  int32_t pitch = (K + 1) / 2;
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      const uint8_t *wrow = Wq + (std::size_t)n * pitch;
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / gs;
+        uint8_t byte = wrow[k >> 1];
+        int32_t code = (k & 1) ? (byte >> 4) : (byte & 0x0F);
+        float w = scales[(std::size_t)n * ng + g] * (float)code +
+                  biases[(std::size_t)n * ng + g];
+        float xv;
+        if (sizeof(XT) == 2)
+          xv = half_to_float_gpu((uint16_t)X[(std::size_t)m * K + k]);
+        else
+          xv = (float)X[(std::size_t)m * K + k];
+        acc += xv * w;
+      }
+      O[(std::size_t)m * N + n] = acc;
+    }
+}
+
+// FP4 (e2m1) packed matmul — the MXFP4 / NVFP4 packed layout. Weights are 4-bit
+// e2m1 codes (2/byte) + a per-group *symmetric* scale (no bias); the code decodes
+// via the OCP e2m1 magnitude LUT (bits 0-2) with bit 3 the sign. Runs in fp32
+// today (native FP4 matrix ops are gated on the macOS 27.0 SDK).
+static NSString *const kQuantMatmulFp4Source = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+constant float FP4LUT[8] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0};
+
+kernel void quant_matmul_fp4_f32(
+    device const float* X      [[buffer(0)]],
+    device const uchar* Wq     [[buffer(1)]],
+    device const float* scales [[buffer(2)]],
+    device float*       O      [[buffer(3)]],
+    constant int& M  [[buffer(4)]],
+    constant int& K  [[buffer(5)]],
+    constant int& N  [[buffer(6)]],
+    constant int& GS [[buffer(7)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int m = (int)gid.x;
+    int n = (int)gid.y;
+    if (m >= M || n >= N) return;
+    int gs = GS > 0 ? GS : K;
+    int ng = (K + gs - 1) / gs;
+    int pitch = (K + 1) / 2;
+    device const uchar* wrow = Wq + (uint)n * pitch;
+    float acc = 0.0f;
+    for (int k = 0; k < K; ++k) {
+        int g = k / gs;
+        uchar byte = wrow[k >> 1];
+        int code = (k & 1) ? (int)(byte >> 4) : (int)(byte & 0x0F);
+        float mag = FP4LUT[code & 7];
+        float w = scales[(uint)n * ng + g] * ((code & 8) ? -mag : mag);
+        acc += X[(uint)m * K + k] * w;
+    }
+    O[(uint)m * N + n] = acc;
+}
+)MSL";
+
+bool dispatch_quant_matmul_fp4(MetalDeviceContext &ctx, const float *X,
+                               const uint8_t *Wq, const float *scales, float *O,
+                               int32_t M, int32_t K, int32_t N, int32_t GS) {
+  int32_t gs = GS > 0 ? GS : K;
+  int32_t ng = (K + gs - 1) / gs;
+  int32_t pitch = (K + 1) / 2;
+  @autoreleasepool {
+    id<MTLComputePipelineState> pso =
+        compile_msl_kernel(ctx, kQuantMatmulFp4Source, @"quant_matmul_fp4_f32");
+    if (!pso) return false;
+
+    NSUInteger xBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)K;
+    NSUInteger wBytes = (NSUInteger)N * (NSUInteger)pitch;
+    NSUInteger sBytes = sizeof(float) * (NSUInteger)N * (NSUInteger)ng;
+    NSUInteger oBytes = sizeof(float) * (NSUInteger)M * (NSUInteger)N;
+
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, X, xBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufW, ctx, Wq, wBytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufS, ctx, scales, sBytes);
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufX || !bufW || !bufS || !bufO) return false;
+
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufW offset:0 atIndex:1];
+    [enc setBuffer:bufS offset:0 atIndex:2];
+    [enc setBuffer:bufO offset:0 atIndex:3];
+    [enc setBytes:&M length:sizeof(int32_t) atIndex:4];
+    [enc setBytes:&K length:sizeof(int32_t) atIndex:5];
+    [enc setBytes:&N length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&gs length:sizeof(int32_t) atIndex:7];
+
+    MTLSize grid = MTLSizeMake((NSUInteger)M, (NSUInteger)N, 1);
+    NSUInteger w = pso.threadExecutionWidth;
+    if (w == 0) w = 1;
+    NSUInteger h = pso.maxTotalThreadsPerThreadgroup / w;
+    if (h == 0) h = 1;
+    MTLSize tg = MTLSizeMake(w, h, 1);
+    [enc dispatchThreads:grid threadsPerThreadgroup:tg];
+    [enc endEncoding];
+    if (!commit_and_wait_with_timeout(ctx, cb, 60000, "quant_matmul_fp4"))
+      return false;
+    std::memcpy(O, [bufO contents], oBytes);
+    return true;
+  }
+}
+
+inline void reference_quant_matmul_fp4(const float *X, const uint8_t *Wq,
+                                       const float *scales, float *O, int32_t M,
+                                       int32_t K, int32_t N, int32_t GS) {
+  static const float FP4LUT[8] = {0.0f, 0.5f, 1.0f, 1.5f,
+                                  2.0f, 3.0f, 4.0f, 6.0f};
+  int32_t gs = GS > 0 ? GS : K;
+  int32_t ng = (K + gs - 1) / gs;
+  int32_t pitch = (K + 1) / 2;
+  for (int32_t m = 0; m < M; ++m)
+    for (int32_t n = 0; n < N; ++n) {
+      const uint8_t *wrow = Wq + (std::size_t)n * pitch;
+      float acc = 0.0f;
+      for (int32_t k = 0; k < K; ++k) {
+        int32_t g = k / gs;
+        uint8_t byte = wrow[k >> 1];
+        int32_t code = (k & 1) ? (byte >> 4) : (byte & 0x0F);
+        float mag = FP4LUT[code & 7];
+        float w = scales[(std::size_t)n * ng + g] * ((code & 8) ? -mag : mag);
+        acc += X[(std::size_t)m * K + k] * w;
+      }
+      O[(std::size_t)m * N + n] = acc;
+    }
+}
+
+}  // namespace
+
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_f32(
+    const float *X, const uint8_t *Wq, const float *scales, const float *biases,
+    float *O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 &&
+      dispatch_quant_matmul_i4(ctx, qmm_i4_source(@"quant_matmul_i4_f32", @"float"),
+                               @"quant_matmul_i4_f32", X, sizeof(float), Wq,
+                               scales, biases, O, M, K, N, GS, /*tiled=*/false))
+    return;
+  reference_quant_matmul_i4<float>(X, Wq, scales, biases, O, M, K, N, GS);
+}
+
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_tiled_f32(
+    const float *X, const uint8_t *Wq, const float *scales, const float *biases,
+    float *O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 &&
+      dispatch_quant_matmul_i4(ctx, kQuantMatmulI4TiledSource,
+                               @"quant_matmul_i4_tiled_f32", X, sizeof(float), Wq,
+                               scales, biases, O, M, K, N, GS, /*tiled=*/true))
+    return;
+  reference_quant_matmul_i4<float>(X, Wq, scales, biases, O, M, K, N, GS);
+}
+
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_f16(
+    const uint16_t *X, const uint8_t *Wq, const float *scales,
+    const float *biases, float *O, int32_t M, int32_t K, int32_t N,
+    int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 &&
+      dispatch_quant_matmul_i4(ctx, qmm_i4_source(@"quant_matmul_i4_f16", @"half"),
+                               @"quant_matmul_i4_f16", X, sizeof(uint16_t), Wq,
+                               scales, biases, O, M, K, N, GS, /*tiled=*/false))
+    return;
+  reference_quant_matmul_i4<uint16_t>(X, Wq, scales, biases, O, M, K, N, GS);
+}
+
+// Split-K f32 — parallel K-reduction (M·N·S threads) + host partial-sum.
+extern "C" void tessera_apple_gpu_quantized_matmul_i4_splitk_f32(
+    const float *X, const uint8_t *Wq, const float *scales, const float *biases,
+    float *O, int32_t M, int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 && K > 0 &&
+      dispatch_quant_matmul_i4_splitk(ctx, X, Wq, scales, biases, O, M, K, N, GS,
+                                      quant_i4_splitk_count(K)))
+    return;
+  reference_quant_matmul_i4<float>(X, Wq, scales, biases, O, M, K, N, GS);
+}
+
+// FP4 (e2m1) packed matmul — MXFP4 / NVFP4 layout (per-group symmetric scale, no
+// bias). f32 decode today (native FP4 matrix ops gated on the macOS 27.0 SDK).
+extern "C" void tessera_apple_gpu_quantized_matmul_fp4_f32(
+    const float *X, const uint8_t *Wq, const float *scales, float *O, int32_t M,
+    int32_t K, int32_t N, int32_t group_size) {
+  int32_t GS = group_size > 0 ? group_size : K;
+  MetalDeviceContext &ctx = deviceContext();
+  if (ctx.ok && M > 0 && N > 0 && K > 0 &&
+      dispatch_quant_matmul_fp4(ctx, X, Wq, scales, O, M, K, N, GS))
+    return;
+  reference_quant_matmul_fp4(X, Wq, scales, O, M, K, N, GS);
 }
 
 //===---------------------------------------------------------------------===//

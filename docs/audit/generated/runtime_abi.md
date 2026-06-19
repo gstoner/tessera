@@ -4,9 +4,9 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 ## Headline
 
-- **303** unique `extern "C" tessera_*` C ABI symbols across all backends.
+- **315** unique `extern "C" tessera_*` C ABI symbols across all backends.
 - **6 / 6** core runtime headers present.
-- **130** Apple GPU kernel families with per-dtype variants.
+- **134** Apple GPU kernel families with per-dtype variants.
 
 ## Core runtime headers
 
@@ -23,7 +23,7 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 
 | Backend | Unique tessera_* symbols |
 |---------|-------------------------:|
-| `apple` | 292 |
+| `apple` | 304 |
 | `nvidia` | 3 |
 | `x86` | 8 |
 
@@ -130,6 +130,10 @@ Human-readable view. The canonical machine-readable artifact is `runtime_abi.csv
 | `popcount` | `i32` |
 | `ppo_policy_loss` | `f32` |
 | `ppo_policy_loss_ex` | `f32` |
+| `quantized_matmul_fp4` | `f32` |
+| `quantized_matmul_i4` | `f16`, `f32` |
+| `quantized_matmul_i4_splitk` | `f32` |
+| `quantized_matmul_i4_tiled` | `f32` |
 | `random_normal` | `f32` |
 | `random_uniform` | `f32` |
 | `rmsnorm_gpu` | `bf16`, `f16`, `f32` |

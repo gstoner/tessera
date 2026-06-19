@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 37 |
-| ``runnable_reference`` | 269 |
+| ``runnable_reference`` | 270 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 2 |
 | ``planned`` | 0 |
-| **total** | **308** |
+| **total** | **309** |
 
 ## complete (37)
 
@@ -73,7 +73,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (269)
+## runnable_reference (270)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -223,6 +223,7 @@ each row into a single E2E tier.
 | ``latent_kv_compress`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |
+| ``quantized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``asymmetric_bce`` | loss | public | public | registered | partial | reference | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | partial | reference | ready | none |

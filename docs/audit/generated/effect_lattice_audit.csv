@@ -226,6 +226,7 @@ quantize_fp4,pure,,1,1,0
 quantize_fp6,pure,,1,1,0
 quantize_fp8,pure,,1,1,0
 quantize_nvfp4,pure,,1,1,0
+quantized_matmul,pure,,1,0,0
 rearrange,pure,,1,0,0
 reciprocal,pure,,1,0,0
 reduce,pure,,1,0,0

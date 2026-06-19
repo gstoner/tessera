@@ -83,7 +83,21 @@ def main(argv: list[str] | None = None) -> int:
                 acc = dts[0]
                 for nxt in dts[1:]:
                     acc = s.bmm(acc, nxt)
+            # Read the result only AFTER the session's __exit__ commits the
+            # command buffer — the deferred-encode result handles are not valid
+            # device memory until commit (reading inside the `with` segfaults).
             return acc.numpy()
+
+        # Probe the actual number of command-buffer commits the batched path
+        # performs: a long chain auto-flushes across several command buffers to
+        # stay within Metal's per-command-buffer capacity, so syncs can exceed 1.
+        probe = AppleGPUEncodeSession()
+        with probe:
+            acc = dts[0]
+            for nxt in dts[1:]:
+                acc = probe.bmm(acc, nxt)
+        _ = acc.numpy()
+        batched_syncs = probe.commits
 
         for mode, fn in (("per_op_r1", per_op), ("batched_r2", batched)):
             ms, stdev_ms = _time(fn, args.reps)
@@ -94,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                 "dtype": "f32",
                 "mode": mode,
                 "chain_len": N,
-                "syncs": (N - 1) if mode == "per_op_r1" else 1,
+                "syncs": (N - 1) if mode == "per_op_r1" else batched_syncs,
                 "reps": args.reps,
                 "latency_ms": ms,
                 "stdev_ms": stdev_ms,

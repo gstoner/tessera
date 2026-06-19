@@ -37,7 +37,7 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
@@ -2911,6 +2911,30 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     return values[output_name]
 
 
+def _apple_gpu_dispatch_quantized_matmul(arrays: list[Any], kwargs: Mapping[str, Any],
+                                         np: Any) -> Any:
+    """P3 lane handler — packed-int4 quantized matmul from a metadata artifact.
+    operands: (x[M,K], w_packed[N,(K+1)/2] uint8, scales[N,NG], biases[N,NG]);
+    ``group_size`` attr. Selects the f16 kernel when X is fp16, else f32. Falls
+    back to a dequantize+matmul host reference when the Metal runtime is absent."""
+    X, Wq, scales, biases = arrays[0], arrays[1], arrays[2], arrays[3]
+    Xa = np.asarray(X)
+    if Xa.ndim != 2:
+        raise ValueError(
+            f"quantized_matmul expects a 2-D activation [M,K], got shape {Xa.shape}")
+    K = int(Xa.shape[1])
+    group_size = int(kwargs.get("group_size", 64))
+    variant = "f16" if Xa.dtype == np.float16 else "f32"
+    out = apple_gpu_quantized_matmul_i4(
+        Xa, Wq, scales, biases, K=K, group_size=group_size, variant=variant)
+    if out is not None:
+        return out
+    # Host fallback (no Metal device): dequantize the packed weights + matmul.
+    from .quantization import dequantize_int4_packed
+    Wdq = dequantize_int4_packed(Wq, scales, biases, k=K, group_size=group_size)
+    return np.asarray(Xa, np.float32) @ np.asarray(Wdq, np.float32).T
+
+
 _APPLE_GPU_LANE_HANDLERS: dict[str, Any] | None = None
 
 
@@ -2958,6 +2982,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "topk": _apple_gpu_dispatch_topk,
         "conv2d": lambda op, a, k, np: _apple_gpu_dispatch_conv2d(a, k, np),
         "conv3d": lambda op, a, k, np: _apple_gpu_dispatch_conv3d(a, k, np),
+        "quant_matmul": lambda op, a, k, np: _apple_gpu_dispatch_quantized_matmul(a, k, np),
         "linalg": _apple_gpu_dispatch_linalg,
         "ssm": lambda op, a, k, np: _apple_gpu_dispatch_selective_ssm(a, k, np),
         "moe_swiglu_block": lambda op, a, k, np: _apple_gpu_dispatch_moe_swiglu_block(a, k, np),
@@ -10861,6 +10886,207 @@ def _apple_gpu_devtensor_api() -> Any:
     return runtime
 
 
+_MEMORY_API_CONFIGURED = False
+
+
+def _apple_gpu_memory_api() -> Any:
+    """Configure + return the P5 memory-budget C ABI. None when unavailable.
+
+    Exposes the buffer-pool + device-tensor byte accounting added in
+    ``apple_gpu_runtime.mm`` (see ``apple_backend_capability_roadmap.md`` P5).
+    """
+    runtime = _load_apple_gpu_runtime()
+    if getattr(runtime, "tessera_apple_gpu_get_active_memory", None) is None:
+        return None
+    global _MEMORY_API_CONFIGURED
+    if not _MEMORY_API_CONFIGURED:
+        i64 = ctypes.c_int64
+        for name in (
+            "tessera_apple_gpu_get_active_memory",
+            "tessera_apple_gpu_get_cache_memory",
+            "tessera_apple_gpu_get_peak_memory",
+            "tessera_apple_gpu_get_memory_limit",
+        ):
+            fn = getattr(runtime, name)
+            fn.argtypes = []
+            fn.restype = i64
+        runtime.tessera_apple_gpu_reset_peak_memory.argtypes = []
+        runtime.tessera_apple_gpu_reset_peak_memory.restype = None
+        runtime.tessera_apple_gpu_set_memory_limit.argtypes = [i64]
+        runtime.tessera_apple_gpu_set_memory_limit.restype = i64
+        runtime.tessera_apple_gpu_clear_cache.argtypes = []
+        runtime.tessera_apple_gpu_clear_cache.restype = i64
+        _MEMORY_API_CONFIGURED = True
+    return runtime
+
+
+def apple_gpu_memory_stats() -> Optional[Dict[str, int]]:
+    """Snapshot of Apple GPU allocator accounting, or None when unavailable.
+
+    Keys: ``active`` (bytes checked out of the pool + live resident tensors),
+    ``cache`` (bytes parked in the pool for reuse), ``peak`` (high-water of
+    active since process start / last reset), ``limit`` (advisory ceiling, 0 =
+    unlimited). Mirrors MLX's allocator introspection.
+    """
+    rt = _apple_gpu_memory_api()
+    if rt is None:
+        return None
+    return {
+        "active": int(rt.tessera_apple_gpu_get_active_memory()),
+        "cache": int(rt.tessera_apple_gpu_get_cache_memory()),
+        "peak": int(rt.tessera_apple_gpu_get_peak_memory()),
+        "limit": int(rt.tessera_apple_gpu_get_memory_limit()),
+    }
+
+
+def apple_gpu_set_memory_limit(nbytes: int) -> Optional[int]:
+    """Set the advisory memory ceiling (bytes; <=0 clears). Returns the previous
+    limit, or None when the runtime is unavailable. Advisory: queryable for the
+    serving-tier ProcessMemoryEnforcer; it does not hard-fail allocation."""
+    rt = _apple_gpu_memory_api()
+    if rt is None:
+        return None
+    return int(rt.tessera_apple_gpu_set_memory_limit(int(nbytes)))
+
+
+def apple_gpu_reset_peak_memory() -> bool:
+    """Reset the peak high-water mark to the current active level. False when
+    the runtime is unavailable."""
+    rt = _apple_gpu_memory_api()
+    if rt is None:
+        return False
+    rt.tessera_apple_gpu_reset_peak_memory()
+    return True
+
+
+def apple_gpu_clear_cache() -> Optional[int]:
+    """Drop every pooled buffer, returning bytes reclaimed (None when
+    unavailable). Live checked-out buffers + resident tensors are untouched."""
+    rt = _apple_gpu_memory_api()
+    if rt is None:
+        return None
+    return int(rt.tessera_apple_gpu_clear_cache())
+
+
+_QUANT_MATMUL_CONFIGURED: set[str] = set()
+
+_QUANT_MATMUL_SYMBOLS = {
+    "f32": "tessera_apple_gpu_quantized_matmul_i4_f32",
+    "f16": "tessera_apple_gpu_quantized_matmul_i4_f16",
+    "tiled": "tessera_apple_gpu_quantized_matmul_i4_tiled_f32",
+    "splitk": "tessera_apple_gpu_quantized_matmul_i4_splitk_f32",
+}
+
+
+def apple_gpu_quantized_matmul_i4(
+    X: Any,
+    packed: Any,
+    scales: Any,
+    biases: Any,
+    K: int,
+    group_size: int = 64,
+    *,
+    variant: str = "f32",
+) -> Optional[Any]:
+    """P3 — packed-int4 quantized matmul on Apple GPU.
+
+    Computes ``O[M, N] = X[M, K] @ dequant(W[N, K])^T`` where ``W`` is stored as
+    packed 4-bit codes + per-group affine scale/bias (see
+    ``tessera.quantization.quantize_int4_packed``). The weight operand is read at
+    ~0.5 bytes/element (vs 4 for f32 codes) — the bandwidth-bound decode win.
+
+    ``variant`` selects the kernel: ``"f32"`` (default, untiled QMV/QMM), ``"f16"``
+    (half activation upload — X cast to fp16, f32 accumulation), ``"tiled"``
+    (threadgroup-cached X, f32 — prefill/large-M throughput), or ``"splitk"``
+    (parallel K-reduction, f32 — large-K / small-N decode). Returns ``O`` f32
+    ``[M, N]`` (real Metal kernel on Darwin, reference on the stub), or None when
+    the runtime is unavailable.
+    """
+    import numpy as _np
+
+    sym = _QUANT_MATMUL_SYMBOLS.get(variant)
+    if sym is None:
+        raise ValueError(f"unknown variant {variant!r}; pick f32/f16/tiled")
+    rt = _load_apple_gpu_runtime()
+    fn = getattr(rt, sym, None)
+    if fn is None:
+        return None
+    if variant not in _QUANT_MATMUL_CONFIGURED:
+        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        fn.argtypes = [vp, vp, vp, vp, vp, i32, i32, i32, i32]
+        fn.restype = None
+        _QUANT_MATMUL_CONFIGURED.add(variant)
+
+    x_dtype = _np.float16 if variant == "f16" else _np.float32
+    Xc = _np.ascontiguousarray(X, dtype=x_dtype)
+    Pc = _np.ascontiguousarray(packed, dtype=_np.uint8)
+    Sc = _np.ascontiguousarray(scales, dtype=_np.float32)
+    Bc = _np.ascontiguousarray(biases, dtype=_np.float32)
+    M, Kx = int(Xc.shape[0]), int(Xc.shape[1])
+    if Kx != int(K):
+        raise ValueError(f"X has K={Kx} but K={K} was declared")
+    N = int(Pc.shape[0])
+    O = _np.empty((M, N), _np.float32)
+    fn(
+        Xc.ctypes.data_as(ctypes.c_void_p),
+        Pc.ctypes.data_as(ctypes.c_void_p),
+        Sc.ctypes.data_as(ctypes.c_void_p),
+        Bc.ctypes.data_as(ctypes.c_void_p),
+        O.ctypes.data_as(ctypes.c_void_p),
+        M,
+        int(K),
+        N,
+        int(group_size),
+    )
+    return O
+
+
+_FP4_MATMUL_CONFIGURED = False
+
+
+def apple_gpu_quantized_matmul_fp4(
+    X: Any, packed: Any, scales: Any, K: int, group_size: int = 32
+) -> Optional[Any]:
+    """P3 follow-up — FP4 (e2m1) packed quantized matmul on Apple GPU (MXFP4 /
+    NVFP4 layout). ``O[M,N] = X[M,K] @ dequant(W[N,K])^T`` where ``W`` is packed
+    4-bit e2m1 codes + a per-group symmetric scale (no bias — see
+    ``tessera.quantization.quantize_fp4_packed``). f32 decode (native FP4 matrix
+    ops are gated on the macOS 27.0 SDK). Returns ``O`` f32 ``[M,N]`` or None when
+    the runtime is unavailable."""
+    import numpy as _np
+
+    rt = _load_apple_gpu_runtime()
+    fn = getattr(rt, "tessera_apple_gpu_quantized_matmul_fp4_f32", None)
+    if fn is None:
+        return None
+    global _FP4_MATMUL_CONFIGURED
+    if not _FP4_MATMUL_CONFIGURED:
+        vp, i32 = ctypes.c_void_p, ctypes.c_int32
+        fn.argtypes = [vp, vp, vp, vp, i32, i32, i32, i32]
+        fn.restype = None
+        _FP4_MATMUL_CONFIGURED = True
+
+    Xc = _np.ascontiguousarray(X, dtype=_np.float32)
+    Pc = _np.ascontiguousarray(packed, dtype=_np.uint8)
+    Sc = _np.ascontiguousarray(scales, dtype=_np.float32)
+    M, Kx = int(Xc.shape[0]), int(Xc.shape[1])
+    if Kx != int(K):
+        raise ValueError(f"X has K={Kx} but K={K} was declared")
+    N = int(Pc.shape[0])
+    O = _np.empty((M, N), _np.float32)
+    fn(
+        Xc.ctypes.data_as(ctypes.c_void_p),
+        Pc.ctypes.data_as(ctypes.c_void_p),
+        Sc.ctypes.data_as(ctypes.c_void_p),
+        O.ctypes.data_as(ctypes.c_void_p),
+        M,
+        int(K),
+        N,
+        int(group_size),
+    )
+    return O
+
+
 class DeviceTensor:
     """An opaque, GPU-resident tensor (R0).
 
@@ -11213,10 +11439,44 @@ def _apple_gpu_enc_api() -> Any:
     return runtime
 
 
+_ENC_DEFAULT_MAX_OPS_PER_CB = 24
+
+
+def _enc_max_ops_per_cb(override: "int | None" = None) -> int:
+    """Resolve the per-command-buffer op ceiling for ``AppleGPUEncodeSession``.
+
+    A single ``MTLCommandBuffer`` has finite command space; encoding an unbounded
+    op-chain into one buffer overflows it and crashes at commit — the trailing
+    ``encodeSignalEvent`` hits ``-[IOGPUMetalCommandBuffer
+    _reserveKernelCommandBufferSpace:]`` with no room (EXC_BAD_ACCESS). The
+    session auto-flushes (commit + wait + fresh buffer) every this-many ops to
+    stay well clear of that ceiling. Override via the ``max_ops_per_cb`` ctor
+    arg or the ``TESSERA_ENC_MAX_OPS_PER_CB`` env var.
+    """
+    if override is not None:
+        return max(1, int(override))
+    import os
+    env = os.environ.get("TESSERA_ENC_MAX_OPS_PER_CB")
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return _ENC_DEFAULT_MAX_OPS_PER_CB
+
+
 class AppleGPUEncodeSession:
     """R2 — command-buffer batching. Encode a chain of device-resident ops into
     **one** command buffer and commit + wait **once**, removing the per-op
     CPU↔GPU sync that dominates small-batch decode.
+
+    A single Metal command buffer has finite command space, so a long op-chain
+    is **auto-flushed** across several command buffers (commit + wait, then a
+    fresh buffer) once it reaches a safe ceiling — see ``_enc_max_ops_per_cb``.
+    The committed outputs hold their results (commit waits) before the next
+    buffer reads them, so correctness matches R1; only the commit count grows
+    (a few syncs for a very long chain instead of one). ``commits`` reports the
+    actual number of command-buffer commits performed.
 
     Encoded outputs are **deferred**: a returned ``DeviceTensor`` is only valid
     after ``commit()`` (or the ``with`` block exits). Use as a context manager::
@@ -11227,20 +11487,60 @@ class AppleGPUEncodeSession:
         result = d.numpy()         # valid after the block commits + waits
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_ops_per_cb: "int | None" = None) -> None:
         self._rt = _apple_gpu_enc_api()
         self._handle = None if self._rt is None else self._rt.ts_enc_begin()
+        self._available = self._handle is not None
         self._committed = False
         self._outputs: list = []
+        self._op_count = 0
+        self._commits = 0
+        self._max_ops_per_cb = _enc_max_ops_per_cb(max_ops_per_cb)
 
     @property
     def available(self) -> bool:
-        return self._handle is not None
+        # NOT ``self._handle is not None``: an auto-flush transiently leaves the
+        # handle None between command buffers, but the session stays usable.
+        return self._available
+
+    @property
+    def commits(self) -> int:
+        """Number of command-buffer commits performed by this session. 1 for a
+        short chain; grows by one per auto-flush for a long chain (see
+        ``_enc_max_ops_per_cb``). Valid during and after the session."""
+        return self._commits
+
+    def _ensure_handle(self) -> Any:
+        """Lazily (re)open a command buffer. After an auto-flush the handle is
+        None until the next encode re-begins it here. Returns None when Metal is
+        unavailable or the session is already committed."""
+        if self._handle is None and self._available and not self._committed:
+            self._handle = self._rt.ts_enc_begin()
+        return self._handle
+
+    def _record(self, out: Any) -> None:
+        """Account for one encoded op and auto-flush before the command buffer
+        overflows Metal's finite per-command-buffer capacity."""
+        self._outputs.append(out)
+        self._op_count += 1
+        if self._op_count >= self._max_ops_per_cb:
+            self._flush()
+
+    def _flush(self) -> None:
+        """Commit + wait the current command buffer and drop the handle so the
+        next encode opens a fresh one. The committed outputs hold their results
+        (commit waits), so ops in the next buffer can read them safely — the
+        same cross-buffer ordering R1 (per-op) relies on."""
+        if self._handle is not None and not self._committed:
+            self._rt.ts_enc_commit_wait(self._handle)
+            self._commits += 1
+            self._handle = None
+            self._op_count = 0
 
     def bmm(self, A: "DeviceTensor", B: "DeviceTensor",
             b_broadcast: bool = False) -> "DeviceTensor | None":
         import numpy as _np
-        if self._handle is None or self._committed:
+        if self._committed or self._ensure_handle() is None:
             return None
         if A.dtype != _np.float32 or B.dtype != _np.float32:
             return None
@@ -11261,7 +11561,7 @@ class AppleGPUEncodeSession:
         if rc != 1:
             out.free()
             return None
-        self._outputs.append(out)
+        self._record(out)
         return out
 
     def rowop(self, X: "DeviceTensor", kind: int, gamma: "DeviceTensor | None" = None,
@@ -11269,7 +11569,7 @@ class AppleGPUEncodeSession:
         """Encode a row op: kind 0 layer_norm, 1 rmsnorm, 2 softmax, 3
         log_softmax. ``X`` is ``[rows, cols]``; optional ``gamma`` is ``[cols]``."""
         import numpy as _np
-        if self._handle is None or self._committed or X.dtype != _np.float32:
+        if self._committed or self._ensure_handle() is None or X.dtype != _np.float32:
             return None
         if len(X.shape) != 2:
             return None
@@ -11286,7 +11586,7 @@ class AppleGPUEncodeSession:
         if rc != 1:
             out.free()
             return None
-        self._outputs.append(out)
+        self._record(out)
         return out
 
     def rmsnorm(self, X: "DeviceTensor", gamma: "DeviceTensor | None" = None,
@@ -11302,7 +11602,7 @@ class AppleGPUEncodeSession:
         row. ``logits`` / ``gumbel_noise`` are ``[rows, vocab]`` f32; returns an
         int32 ``[rows]`` device tensor of token ids (valid after commit)."""
         import numpy as _np
-        if self._handle is None or self._committed or logits.dtype != _np.float32:
+        if self._committed or self._ensure_handle() is None or logits.dtype != _np.float32:
             return None
         if len(logits.shape) != 2 or gumbel_noise.shape != logits.shape:
             return None
@@ -11317,12 +11617,12 @@ class AppleGPUEncodeSession:
         if rc != 1:
             out.free()
             return None
-        self._outputs.append(out)
+        self._record(out)
         return out
 
     def _unary(self, X: "DeviceTensor", op: int) -> "DeviceTensor | None":
         import numpy as _np
-        if self._handle is None or self._committed or X.dtype != _np.float32:
+        if self._committed or self._ensure_handle() is None or X.dtype != _np.float32:
             return None
         n = int(_np.prod(X.shape)) if X.shape else 1
         out = DeviceTensor.empty(X.shape, _np.float32)
@@ -11334,13 +11634,13 @@ class AppleGPUEncodeSession:
         if rc != 1:
             out.free()
             return None
-        self._outputs.append(out)
+        self._record(out)
         return out
 
     def _binary(self, A: "DeviceTensor", B: "DeviceTensor",
                 op: int) -> "DeviceTensor | None":
         import numpy as _np
-        if self._handle is None or self._committed:
+        if self._committed or self._ensure_handle() is None:
             return None
         if A.dtype != _np.float32 or B.dtype != _np.float32:
             return None
@@ -11356,7 +11656,7 @@ class AppleGPUEncodeSession:
         if rc != 1:
             out.free()
             return None
-        self._outputs.append(out)
+        self._record(out)
         return out
 
     def relu(self, X: "DeviceTensor") -> "DeviceTensor | None":
@@ -11381,12 +11681,15 @@ class AppleGPUEncodeSession:
         return self._binary(t, B, 2) if t is not None else None
 
     def commit(self) -> None:
-        """Commit the encoded command buffer and wait for completion. After
-        this, every encoded output's storage holds its result."""
+        """Commit the (final) encoded command buffer and wait for completion.
+        After this, every encoded output's storage holds its result. A no-op on
+        the handle when the last op already triggered an auto-flush (nothing new
+        encoded since), so it never commits an empty buffer."""
         if self._handle is not None and not self._committed:
             self._rt.ts_enc_commit_wait(self._handle)
-            self._committed = True
+            self._commits += 1
             self._handle = None
+        self._committed = True
 
     def __enter__(self) -> "AppleGPUEncodeSession":
         return self

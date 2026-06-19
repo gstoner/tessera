@@ -151,13 +151,163 @@ def grad_scaler_step(
     return unscale(grads), np.float32(scale_f), tracker, True
 
 
+def quantize_int4_packed(w: Any, group_size: int = 64):
+    """Affine per-group int4 packing of a 2-D weight ``W[N, K]`` for the Apple GPU
+    packed quantized-matmul lane (P3).
+
+    Each group of ``group_size`` columns gets its own affine scale + bias; codes
+    are 4-bit (``[0, 15]``) and packed 2 nibbles per byte (low nibble = even k,
+    high nibble = odd k) so weight storage is ``0.5`` bytes/element — ~8× less
+    than full-width f32 codes. Dequant is ``w ≈ scale·code + bias`` (MLX
+    convention).
+
+    Returns ``(packed, scales, biases)`` where ``packed`` is ``uint8
+    [N, ceil(K/2)]`` and ``scales``/``biases`` are ``f32 [N, NG]`` with
+    ``NG = ceil(K/group_size)``.
+    """
+    w = _asarray(w).astype(np.float32, copy=False)
+    if w.ndim != 2:
+        raise ValueError("quantize_int4_packed expects a 2-D weight [N, K]")
+    n, k = w.shape
+    gs = int(group_size) if group_size and group_size > 0 else k
+    ng = (k + gs - 1) // gs
+    scales = np.empty((n, ng), np.float32)
+    biases = np.empty((n, ng), np.float32)
+    codes = np.empty((n, k), np.uint8)
+    for g in range(ng):
+        k0 = g * gs
+        k1 = min(k0 + gs, k)
+        sl = w[:, k0:k1]
+        wmin = sl.min(axis=1)
+        wmax = sl.max(axis=1)
+        scale = (wmax - wmin) / 15.0
+        scale = np.where(scale > 0.0, scale, 1.0).astype(np.float32)
+        biases[:, g] = wmin.astype(np.float32)
+        scales[:, g] = scale
+        q = np.rint((sl - wmin[:, None]) / scale[:, None])
+        codes[:, k0:k1] = np.clip(q, 0, 15).astype(np.uint8)
+    evens = codes[:, 0:k:2]                  # length ceil(K/2) = pitch
+    odds = codes[:, 1:k:2]                    # length floor(K/2)
+    packed = evens.astype(np.uint8, copy=True)
+    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4)
+    return packed, scales, biases
+
+
+#: OCP FP4 e2m1 positive magnitudes, indexed by the low 3 code bits; bit 3 = sign.
+_FP4_E2M1_LUT = np.array(
+    [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], np.float32)
+
+
+def quantize_fp4_packed(w: Any, group_size: int = 32, scale_mode: str = "mx"):
+    """FP4 e2m1 packing — the MXFP4 / NVFP4 packed layout for the Apple GPU
+    quantized-matmul lane (P3 follow-up).
+
+    Per-group *symmetric* scale + 4-bit e2m1 codes packed 2 nibbles/byte (low =
+    even k, high = odd k; bit 3 of each code is the sign, bits 0-2 index
+    :data:`_FP4_E2M1_LUT`). ``scale_mode="mx"`` rounds the group scale up to a
+    power of two (MXFP4 shared exponent, group 32); ``"nv"`` keeps an fp32 scale
+    (NVFP4 uses group 16 + an fp8 scale — pass ``group_size=16``). Dequant is
+    ``w ≈ scale_g · sign · e2m1_lut[code]`` (no bias — FP4 is symmetric).
+
+    Returns ``(packed uint8 [N, ceil(K/2)], scales f32 [N, NG])`` with
+    ``NG = ceil(K/group_size)``.
+    """
+    w = _asarray(w).astype(np.float32, copy=False)
+    if w.ndim != 2:
+        raise ValueError("quantize_fp4_packed expects a 2-D weight [N, K]")
+    n, k = w.shape
+    gs = int(group_size) if group_size and group_size > 0 else k
+    ng = (k + gs - 1) // gs
+    lut = _FP4_E2M1_LUT
+    scales = np.empty((n, ng), np.float32)
+    codes = np.zeros((n, k), np.uint8)
+    for g in range(ng):
+        k0 = g * gs
+        k1 = min(k0 + gs, k)
+        sl = w[:, k0:k1]
+        amax = np.max(np.abs(sl), axis=1)
+        scale = amax / 6.0  # largest |w| maps to the max FP4 magnitude (6)
+        scale = np.where(scale > 0.0, scale, 1.0).astype(np.float32)
+        if scale_mode == "mx":
+            scale = np.exp2(np.ceil(np.log2(scale))).astype(np.float32)
+        scales[:, g] = scale
+        t = sl / scale[:, None]
+        idx = np.argmin(
+            np.abs(np.abs(t)[..., None] - lut), axis=-1).astype(np.uint8)
+        sign = (t < 0.0).astype(np.uint8) * 8
+        codes[:, k0:k1] = idx | sign
+    evens = codes[:, 0:k:2]
+    odds = codes[:, 1:k:2]
+    packed = evens.astype(np.uint8, copy=True)
+    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4)
+    return packed, scales
+
+
+def dequantize_fp4_packed(
+    packed: Any, scales: Any, k: int, group_size: int = 32
+) -> np.ndarray:
+    """Inverse of :func:`quantize_fp4_packed` — reconstruct ``W[N,K]`` f32 from
+    packed FP4 e2m1 codes + per-group scale."""
+    packed = _asarray(packed).astype(np.uint8, copy=False)
+    scales = _asarray(scales).astype(np.float32, copy=False)
+    n = packed.shape[0]
+    k = int(k)
+    gs = int(group_size) if group_size and group_size > 0 else k
+    ng = (k + gs - 1) // gs
+    codes = np.empty((n, k), np.uint8)
+    low = packed & 0x0F
+    high = packed >> 4
+    codes[:, 0:k:2] = low[:, : len(range(0, k, 2))]
+    codes[:, 1:k:2] = high[:, : len(range(1, k, 2))]
+    mag = _FP4_E2M1_LUT[codes & 7]
+    sign = np.where((codes & 8) > 0, -1.0, 1.0).astype(np.float32)
+    w = np.empty((n, k), np.float32)
+    for g in range(ng):
+        k0 = g * gs
+        k1 = min(k0 + gs, k)
+        w[:, k0:k1] = scales[:, g : g + 1] * sign[:, k0:k1] * mag[:, k0:k1]
+    return w
+
+
+def dequantize_int4_packed(
+    packed: Any, scales: Any, biases: Any, k: int, group_size: int = 64
+) -> np.ndarray:
+    """Inverse of :func:`quantize_int4_packed` — reconstruct ``W[N, K]`` f32 from
+    packed int4 codes + per-group affine scale/bias."""
+    packed = _asarray(packed).astype(np.uint8, copy=False)
+    scales = _asarray(scales).astype(np.float32, copy=False)
+    biases = _asarray(biases).astype(np.float32, copy=False)
+    n = packed.shape[0]
+    k = int(k)
+    gs = int(group_size) if group_size and group_size > 0 else k
+    ng = (k + gs - 1) // gs
+    codes = np.empty((n, k), np.uint8)
+    low = packed & 0x0F
+    high = packed >> 4
+    codes[:, 0:k:2] = low[:, : len(range(0, k, 2))]
+    codes[:, 1:k:2] = high[:, : len(range(1, k, 2))]
+    w = np.empty((n, k), np.float32)
+    for g in range(ng):
+        k0 = g * gs
+        k1 = min(k0 + gs, k)
+        w[:, k0:k1] = (
+            scales[:, g : g + 1] * codes[:, k0:k1].astype(np.float32)
+            + biases[:, g : g + 1]
+        )
+    return w
+
+
 __all__ = [
     "CalibrationObserver",
     "calibration_observer",
+    "dequantize_fp4_packed",
     "dequantize_int4",
+    "dequantize_int4_packed",
     "dequantize_int8",
     "fake_quantize",
     "grad_scaler_step",
+    "quantize_fp4_packed",
     "quantize_int4",
+    "quantize_int4_packed",
     "quantize_int8",
 ]

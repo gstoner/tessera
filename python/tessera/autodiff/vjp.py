@@ -186,6 +186,25 @@ def vjp_dequant_matmul(dout, x, w, **_):
     return vjp_gemm(dout, x, w)
 
 
+@_vjp("quantized_matmul")
+def vjp_quantized_matmul(dout, x, w_packed, scales, biases, *,
+                         group_size=64, **_):
+    """``y = x @ dequant(w_packed)^T`` (P3 packed-int4 + per-group affine).
+
+    Straight-through w.r.t. the *frozen* quantized weight: the packed codes /
+    scales / biases are non-differentiable (inference / QAT-with-frozen-weights),
+    so only ``dx = dout @ dequant(w)`` flows. ``w_packed`` is ``[N,K]`` so
+    ``dequant`` is ``[N,K]`` and ``dx = dout[M,N] @ Wdq[N,K] = [M,K]`` (no
+    transpose). Returns ``(dx, None, None, None)``."""
+    from ..quantization import dequantize_int4_packed
+    K = int(np.asarray(x).shape[-1])
+    Wdq = dequantize_int4_packed(
+        w_packed, scales, biases, k=K, group_size=int(group_size))
+    dx = np.matmul(np.asarray(dout, np.float32), np.asarray(Wdq, np.float32))
+    dx = _sum_to_shape(dx, np.asarray(x).shape)
+    return (dx, None, None, None)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Elementwise binary
 # ─────────────────────────────────────────────────────────────────────────────

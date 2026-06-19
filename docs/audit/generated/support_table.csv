@@ -179,6 +179,7 @@ latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,reference
 latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference,ready,none
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 moe_swiglu_block,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
+quantized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none
 asymmetric_bce,loss,public,public,registered,complete,partial,reference,ready,none
 binary_cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 contrastive_divergence_loss,loss,public,public,registered,complete,partial,reference,ready,none

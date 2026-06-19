@@ -5,13 +5,13 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**180/457 primitives are accelerator-proven on Apple GPU today.** Of the 315 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**181/458 primitives are accelerator-proven on Apple GPU today.** Of the 316 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
 | Class | Count | Meaning |
 |-------|------:|---------|
-| `proven` | 180 | executes on Apple GPU today (`metal_runtime`) |
+| `proven` | 181 | executes on Apple GPU today (`metal_runtime`) |
 | `eligible` | 123 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
@@ -41,7 +41,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `linalg_decomposition` | 4 | 1 | 0 | `host` |
 | `linalg_solver` | 2 | 1 | 0 | `host` |
 | `logical` | 8 | 8 | 0 | `eligible` |
-| `loop_nest` | 9 | 5 | 4 | `eligible` |
+| `loop_nest` | 10 | 6 | 4 | `eligible` |
 | `loss` | 29 | 19 | 10 | `eligible` |
 | `memory` | 3 | 0 | 3 | `eligible` |
 | `model_layer` | 4 | 1 | 3 | `eligible` |

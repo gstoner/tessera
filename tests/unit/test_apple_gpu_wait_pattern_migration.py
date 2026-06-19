@@ -198,7 +198,11 @@ def test_only_documented_waituntilcompleted_sites_remain():
     * The fallback INSIDE ``ts_enc_commit_wait`` for the case where
       shared-event init failed (the encode-session path also keeps a
       legacy synchronous wait as a no-crash fallback, mirroring the
-      helper's own).
+      helper's own). This waits on ``[root waitUntilCompleted]`` — the
+      *live* ``s->cb.rootCommandBuffer`` — NOT the ``s->mtlcb`` captured
+      at ts_enc_begin: MPSGraph's encode may call ``commitAndContinue``
+      and rotate the underlying buffer, so the captured handle can be
+      stale. (See ``ts_enc_commit_wait`` + MPSCommandBuffer.h.)
 
     Any OTHER site is a regression. This test fires loud."""
     src = _RUNTIME_SRC.read_text()
@@ -206,15 +210,19 @@ def test_only_documented_waituntilcompleted_sites_remain():
     cb_calls = [m for m in re.finditer(
         r"\[cb waitUntilCompleted\]", src)]
     session_calls = [m for m in re.finditer(
-        r"\[s->mtlcb waitUntilCompleted\]", src)]
+        r"\[root waitUntilCompleted\]", src)]
     # Exactly 1 each — both fallbacks inside Pattern-4 paths.
     assert len(cb_calls) == 1, (
         f"expected exactly 1 [cb waitUntilCompleted] (the wrapper's "
         f"own fallback), found {len(cb_calls)}")
     assert len(session_calls) == 1, (
-        f"expected exactly 1 [s->mtlcb waitUntilCompleted] (the "
-        f"ts_enc_commit_wait fallback for shared-event init failure), "
-        f"found {len(session_calls)}")
+        f"expected exactly 1 [root waitUntilCompleted] (the "
+        f"ts_enc_commit_wait fallback on the live root command buffer "
+        f"for shared-event init failure), found {len(session_calls)}")
+    # The pre-fix stale-handle wait must be gone (commitAndContinue safety).
+    assert "[s->mtlcb waitUntilCompleted]" not in src, (
+        "stale [s->mtlcb waitUntilCompleted] reintroduced — must wait on "
+        "the live rootCommandBuffer, not the handle captured at begin")
 
 
 def test_runtime_source_includes_pattern_4_helper():

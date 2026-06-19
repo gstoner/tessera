@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from .handle import KVCacheHandle
 from .latent import LatentKVCacheHandle
+from .paged_kv import (PagedKVState, PageTier, KVKind, KVGeometry,
+                       PageTableEntry, as_paged_kv_state, paged_attention)
 from .memory_state import MemoryStateHandle
 from .mla_block_paged import MLABlockPagedCache, MLABlockPagedCacheError
 from .mla_paged import MLAPagedDecoder
@@ -38,6 +40,13 @@ __all__ = [
     "lookahead_attention_tiered",
     "KVCacheHandle",
     "LatentKVCacheHandle",
+    "PagedKVState",
+    "PageTier",
+    "KVKind",
+    "KVGeometry",
+    "PageTableEntry",
+    "as_paged_kv_state",
+    "paged_attention",
     "MemoryStateHandle",
     "SSMStateHandle",
     "DeltaNetStateHandle",

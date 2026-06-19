@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 453 |
-| `transpose_rule` | 0 | 457 |
-| `sharding_rule` | 39 | 418 |
-| `lowering_rule` | 0 | 457 |
-| `backend_kernel` | 457 | 0 |
+| `batching_rule` | 4 | 454 |
+| `transpose_rule` | 0 | 458 |
+| `sharding_rule` | 39 | 419 |
+| `lowering_rule` | 0 | 458 |
+| `backend_kernel` | 458 | 0 |
 
 ## Per-category breakdown
 
@@ -55,7 +55,7 @@
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |
-| other | `loop_nest` | 9 | — | — | 1 | — | 9 |
+| other | `loop_nest` | 10 | — | — | 1 | — | 10 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
 | other | `moe` | 1 | 1 | — | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | — | 2 | — | 2 |
@@ -93,7 +93,7 @@
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 258 | 4 | 0 | 21 | 258 |
+| other | 259 | 4 | 0 | 21 | 259 |
 
 ## Closure trajectory
 

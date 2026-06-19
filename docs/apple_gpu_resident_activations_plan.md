@@ -1,11 +1,34 @@
 # Apple GPU — GPU-resident activations / persistent device-handle model (scoping)
 
-> Status: **scoping only — not yet implemented.** This doc sizes the
-> runtime-architecture change needed to stop activations round-tripping to the
-> host between ops and across decode steps. It follows the Gumbel-sampler
-> finding that the sampler (and, by extension, the whole per-token decode loop)
-> is **sync-bound, not compute-bound**, in the current per-op host-dispatch
-> runtime.
+> Status: **R0/R1/R2 landed; measured + decision recorded (2026-06-19).** This
+> doc originally sized the runtime-architecture change to stop activations
+> round-tripping to the host between ops and across decode steps. **R0** (resident
+> `DeviceTensor`), **R1** (producer→consumer, no host round-trip), and **R2**
+> (`AppleGPUEncodeSession` command-buffer batching) are all implemented (159
+> resident/encode unit tests green). It followed the Gumbel-sampler finding that
+> the per-token decode loop is **sync-bound, not compute-bound**.
+>
+> ### P1 measurement + decision (2026-06-19)
+>
+> `benchmarks/apple_gpu/benchmark_decoder_layer_one_cb.py` (8-op Llama attention
+> block: rmsnorm + Q/K/V proj + rope + flash_attn + out proj) — per-op (R1, 8
+> syncs) vs one-command-buffer (R2, 1 sync) on this M-series Mac:
+>
+> | shape (B×S×D) | per-op R1 | one-CB R2 | speedup |
+> |---|---|---|---|
+> | 1×8×16 | 2.29 ms | 0.73 ms | **3.13×** |
+> | 1×32×64 | 2.61 ms | 1.16 ms | **2.25×** |
+> | 1×64×128 | 4.47 ms | 3.07 ms | **1.45×** |
+>
+> **Decision: R2 command-buffer batching is justified and worth extending.** The
+> sync overhead dominates exactly in the small-batch decode regime (3.1× at the
+> smallest shape), and the win shrinks as shapes grow (1.45× at 64×128) — exactly
+> the §7 prediction. Extending R2 to the *whole* per-token decode step (the
+> R2-lite "fused decode step" of §8, or broader encoded chains) is warranted for
+> batch-1 serving latency. (A pre-existing benchmark-harness segfault in
+> `benchmark_encode_session.py` — a deferred-session result read *inside* the
+> `with` block before commit — is tracked separately; the decoder-layer benchmark
+> is the sound measurement.)
 
 ## 1. Current runtime model (verified in-tree)
 

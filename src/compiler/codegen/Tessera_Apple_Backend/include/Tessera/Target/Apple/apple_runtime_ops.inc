@@ -177,6 +177,9 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.popcount")
 // lane: qkv_projection (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.qkv_projection")
 
+// lane: quant_matmul (1 ops)
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.quantized_matmul")
+
 // lane: reduce (16 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.amax")
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.amin")
@@ -289,5 +292,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 183
+// Total runtime-executable ops: 184
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

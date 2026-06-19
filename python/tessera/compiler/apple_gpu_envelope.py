@@ -36,6 +36,11 @@ _APPLE_GPU_MSL_OPS = frozenset({
     "tessera.gelu",
 })
 
+# P3 — packed-weight int4 quantized matmul (custom MSL kernels;
+# quantized_matmul_i4_{f32,f16,tiled_f32}). Operands (x, w_packed, scales,
+# biases); group_size attr. See apple_backend_capability_roadmap.md P3.
+_APPLE_GPU_QUANT_OPS = frozenset({"tessera.quantized_matmul"})
+
 # 2026-05-29 — MetalPerformanceShadersGraph-backed Tier-1 / long-tail lane.
 # op_name -> unary opcode (must match apple_gpu_runtime.mm mpsg_unary_node).
 _APPLE_GPU_UNARY_OPCODES = {
@@ -271,6 +276,7 @@ _APPLE_GPU_EBM_LOSS_OPS = frozenset({
 })
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
+    | _APPLE_GPU_QUANT_OPS
     | _APPLE_GPU_PROJECTION_OPS | _APPLE_GPU_REDUCTION_OPS | _APPLE_GPU_TOPK_OPS
     | _APPLE_GPU_CONV_OPS
     | _APPLE_GPU_LINALG_OPS | _APPLE_GPU_SSM_OPS | _APPLE_GPU_MOE_OPS
@@ -325,6 +331,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_TOPK_OPS, "topk")
     put({"tessera.conv2d"}, "conv2d")
     put({"tessera.conv3d"}, "conv3d")
+    put(_APPLE_GPU_QUANT_OPS, "quant_matmul")
     put(_APPLE_GPU_LINALG_OPS, "linalg")
     put(_APPLE_GPU_SSM_OPS, "ssm")
     put({"tessera.moe_swiglu_block"}, "moe_swiglu_block")

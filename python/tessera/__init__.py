@@ -330,6 +330,19 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         from .stdlib import quant as _q
         return _q.dequant_grouped_gemm(x, packed_experts, group_sizes, backend=backend)
 
+    def quantized_matmul(x, w_packed, scales, biases, *, group_size: int = 64):
+        """P3 packed-int4 quantized matmul: ``y = x @ dequant(w_packed)^T`` where
+        ``w_packed`` is packed 4-bit codes + per-group affine ``scale·code + bias``
+        (see :func:`tessera.quantization.quantize_int4_packed`). Graph IR op
+        ``tessera.quantized_matmul``; ``@jit(target="apple_gpu")`` runs the packed
+        Metal kernel. This numpy reference dequantizes then matmuls."""
+        from .quantization import dequantize_int4_packed
+        xa = np.asarray(x._data if hasattr(x, "_data") else x, dtype=np.float32)
+        k = int(xa.shape[-1])
+        wdq = dequantize_int4_packed(
+            w_packed, scales, biases, k=k, group_size=int(group_size))
+        return xa @ np.asarray(wdq, np.float32).T
+
     def tri_solve(A, b, lower: bool = True):
         if hasattr(A, "_data"):
             A = A._data
@@ -3697,6 +3710,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "moe_swiglu_block": moe_swiglu_block,
         "dequant_matmul": dequant_matmul,
         "dequant_grouped_gemm": dequant_grouped_gemm,
+        "quantized_matmul": quantized_matmul,
         "tri_solve": tri_solve,
         "cholesky": cholesky,
         "cholesky_solve": cholesky_solve,
@@ -4096,6 +4110,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         moe_swiglu_block=moe_swiglu_block,
         dequant_matmul=dequant_matmul,
         dequant_grouped_gemm=dequant_grouped_gemm,
+        quantized_matmul=quantized_matmul,
         tri_solve=tri_solve,
         cholesky=cholesky,
         cholesky_solve=cholesky_solve,

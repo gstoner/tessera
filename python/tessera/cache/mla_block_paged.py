@@ -214,6 +214,46 @@ class MLABlockPagedCache:
             self._rope_pool[blk, off] = r_arr[t]
         st.length += n_new
 
+    def is_trimmable(self, seq_id: Hashable | None = None) -> bool:
+        """Whether one sequence, or all live sequences, can rollback tail tokens."""
+        if seq_id is not None:
+            self._seq(seq_id)
+        return True
+
+    def trim(self, seq_id: Hashable, n: int) -> None:
+        """Rollback the newest ``n`` tokens for ``seq_id``.
+
+        This preserves the sequence prefix, zeros freed slots, and returns fully
+        unused physical blocks to the shared pool so another request can reuse
+        them immediately.
+        """
+        if n < 0:
+            raise ValueError("trim n must be non-negative")
+        st = self._seq(seq_id)
+        if n == 0 or st.length == 0:
+            return
+        n = min(int(n), st.length)
+        old_len = st.length
+        new_len = old_len - n
+        first_clear_block = new_len // self.block_size
+        first_clear_off = new_len % self.block_size
+        last_block = (old_len - 1) // self.block_size
+
+        if first_clear_off != 0 and first_clear_block <= last_block:
+            blk = st.block_table[first_clear_block]
+            self._latent_pool[blk, first_clear_off:] = 0
+            self._rope_pool[blk, first_clear_off:] = 0
+            release_from = first_clear_block + 1
+        else:
+            release_from = first_clear_block
+
+        for blk in st.block_table[release_from:]:
+            self._latent_pool[blk] = 0
+            self._rope_pool[blk] = 0
+            self._free.append(blk)
+        del st.block_table[release_from:]
+        st.length = new_len
+
     # ------------------------------------------------------------------
     # Gather + decode
     # ------------------------------------------------------------------

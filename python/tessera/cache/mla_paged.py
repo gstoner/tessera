@@ -277,6 +277,25 @@ class MLAPagedDecoder:
         self._abs_base += n
         return self
 
+    def is_trimmable(self) -> bool:
+        """Whether ``trim(n)`` can rollback newest decode tokens in-place."""
+        return self.latent_cache.is_trimmable() and self.rope_cache.is_trimmable()
+
+    def trim(self, n: int) -> "MLAPagedDecoder":
+        """Rollback the newest ``n`` cached tokens.
+
+        Unlike :meth:`evict_oldest`, this leaves ``_abs_base`` unchanged because
+        the surviving prefix keeps the same absolute RoPE positions.
+        """
+        if n < 0:
+            raise ValueError("trim n must be non-negative")
+        if n == 0:
+            return self
+        n = min(int(n), self.current_seq)
+        self.latent_cache.trim(n)
+        self.rope_cache.trim(n)
+        return self
+
     # ------------------------------------------------------------------
     def decode(self, q_nope: Any, q_rope: Any,
                query_pos: Optional[int] = None) -> np.ndarray:

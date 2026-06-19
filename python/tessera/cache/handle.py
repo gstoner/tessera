@@ -232,6 +232,31 @@ class KVCacheHandle:
         self.current_seq = keep
         return self
 
+    def is_trimmable(self) -> bool:
+        """Whether ``trim(n)`` can rollback newest tokens in-place."""
+        return True
+
+    def trim(self, n: int) -> "KVCacheHandle":
+        """Rollback the newest ``n`` tokens.
+
+        This is the speculative-decode / prompt-cache rewind complement to
+        :meth:`evict_oldest`: eviction drops the oldest context for sliding
+        windows, while trim removes unaccepted tail tokens and preserves the
+        prefix byte-for-byte.
+        """
+        if n < 0:
+            raise ValueError("trim n must be non-negative")
+        if n == 0:
+            return self
+        n = min(int(n), self.current_seq)
+        new_len = self.current_seq - n
+        self.keys[new_len:self.current_seq] = 0
+        self.values[new_len:self.current_seq] = 0
+        if self._scales is not None:
+            self._scales[:, new_len:self.current_seq] = 0
+        self.current_seq = new_len
+        return self
+
     def read(self, start: int, end: Optional[int] = None) -> tuple[np.ndarray, np.ndarray]:
         """Read a slice of the cache as ``(K_slice, V_slice)`` arrays.
 

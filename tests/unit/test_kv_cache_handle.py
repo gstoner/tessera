@@ -179,6 +179,34 @@ class TestPrune:
         assert c.current_seq == 3
 
 
+class TestTrim:
+    def test_trim_rolls_back_newest_tokens_and_preserves_prefix(self):
+        c = ts.cache.KVCacheHandle(num_heads=1, head_dim=2, max_seq=10)
+        k = np.arange(6 * 1 * 2, dtype=np.float32).reshape(6, 1, 2)
+        v = k + 100
+        c.append(k, v)
+        assert c.is_trimmable()
+        c.trim(2)
+        assert c.current_seq == 4
+        ks, vs = c.read(0, 4)
+        np.testing.assert_allclose(ks, k[:4])
+        np.testing.assert_allclose(vs, v[:4])
+        assert (c.keys[4:6] == 0).all()
+        assert (c.values[4:6] == 0).all()
+
+    def test_trim_oversized_clears_cache(self):
+        c = ts.cache.KVCacheHandle(num_heads=1, head_dim=2, max_seq=4)
+        c.append(np.ones((3, 1, 2), dtype=np.float32), np.ones((3, 1, 2), dtype=np.float32))
+        c.trim(99)
+        assert c.current_seq == 0
+        assert (c.keys[:3] == 0).all()
+
+    def test_trim_negative_rejected(self):
+        c = ts.cache.KVCacheHandle(num_heads=1, head_dim=2, max_seq=4)
+        with pytest.raises(ValueError, match="non-negative"):
+            c.trim(-1)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Ops dispatch — handle vs. legacy ReferenceKVCache
 # ─────────────────────────────────────────────────────────────────────────────

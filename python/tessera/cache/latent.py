@@ -166,6 +166,22 @@ class LatentKVCacheHandle:
         self.current_seq = keep
         return self
 
+    def is_trimmable(self) -> bool:
+        """Whether ``trim(n)`` can rollback newest tokens in-place."""
+        return True
+
+    def trim(self, n: int) -> "LatentKVCacheHandle":
+        """Rollback the newest ``n`` tokens while preserving the prefix."""
+        if n < 0:
+            raise ValueError("trim n must be non-negative")
+        if n == 0:
+            return self
+        n = min(int(n), self.current_seq)
+        new_len = self.current_seq - n
+        self.latents[new_len:self.current_seq] = 0
+        self.current_seq = new_len
+        return self
+
     def read(self, start: int, end: Optional[int] = None) -> np.ndarray:
         """Read a slice of compressed latents as a ``(end - start, latent_dim)``
         array. With one arg ``start``, returns the single-token chunk

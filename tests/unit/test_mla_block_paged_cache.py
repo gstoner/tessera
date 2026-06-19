@@ -162,6 +162,64 @@ def test_pool_exhaustion_then_recovery():
     assert pool.sequence_length("b") == 1
 
 
+def test_trim_sequence_rolls_back_tail_and_frees_blocks():
+    pool, Wuk_t, Wuv, dims = _pool(num_blocks=6, block_size=4)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(30)
+    pool.add_sequence("a")
+    c = rng.randn(10, Dl).astype(np.float32)
+    r = rng.randn(10, dr).astype(np.float32)
+    pool.append("a", c, r)
+    assert pool.is_trimmable("a")
+    assert pool.sequence_length("a") == 10
+    assert pool.num_used_blocks == 3
+
+    pool.trim("a", 5)
+    assert pool.sequence_length("a") == 5
+    assert pool.num_used_blocks == 2
+    assert len(pool.block_table("a")) == 2
+
+    ref = _ref_decoder(Wuk_t, Wuv, dims)
+    ref.append(c[:5], r[:5])
+    qn = rng.randn(H, dn).astype(np.float32)
+    qr = rng.randn(H, dr).astype(np.float32)
+    np.testing.assert_allclose(pool.decode("a", qn, qr), ref.decode(qn, qr),
+                               rtol=1e-4, atol=1e-4)
+
+
+def test_trim_sequence_oversized_clears_and_reuses_all_blocks():
+    pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=3, block_size=2)
+    rng = np.random.RandomState(31)
+    pool.add_sequence("a")
+    pool.append("a", rng.randn(5, Dl).astype(np.float32),
+                rng.randn(5, dr).astype(np.float32))
+    assert pool.num_free_blocks == 0
+    pool.trim("a", 99)
+    assert pool.sequence_length("a") == 0
+    assert pool.block_table("a") == []
+    assert pool.num_free_blocks == 3
+
+
+def test_mla_paged_decoder_trim_preserves_prefix_decode():
+    Wuk_t, Wuv, dims = _weights(seed=32)
+    H, dn, dr, dv, Dl = dims
+    rng = np.random.RandomState(32)
+    dec = _ref_decoder(Wuk_t, Wuv, dims, max_seq=16)
+    c = rng.randn(7, Dl).astype(np.float32)
+    r = rng.randn(7, dr).astype(np.float32)
+    dec.append(c, r)
+    assert dec.is_trimmable()
+    dec.trim(3)
+    assert dec.current_seq == 4
+
+    ref = _ref_decoder(Wuk_t, Wuv, dims, max_seq=16)
+    ref.append(c[:4], r[:4])
+    qn = rng.randn(H, dn).astype(np.float32)
+    qr = rng.randn(H, dr).astype(np.float32)
+    np.testing.assert_allclose(dec.decode(qn, qr), ref.decode(qn, qr),
+                               rtol=1e-5, atol=1e-5)
+
+
 def test_utilization_and_footprint():
     pool, _, _, (H, dn, dr, dv, Dl) = _pool(num_blocks=10, block_size=4,
                                             H=128, dn=128, dr=64, dv=128, Dl=512)

@@ -58,6 +58,16 @@ _AUDIT = _REPO_ROOT / "docs" / "audit"
 # ─────────────────────────────────────────────────────────────────────────
 
 
+def _r_contract_consumers() -> str:
+    from . import contract_consumers
+    return contract_consumers.render_markdown()
+
+
+def _r_contract_consumers_csv() -> str:
+    from . import contract_consumers
+    return contract_consumers.render_csv()
+
+
 def _r_support_table() -> str:
     from . import audit
     return audit.render_markdown()
@@ -363,6 +373,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     GeneratedDoc(
         "support_table", "op_coverage", _GEN / "support_table.md", _r_support_table,
         csv_path=_GEN / "support_table.csv", render_csv=_r_support_table_csv,
+    ),
+    # ── Contract-pass plan meta-gap tracker (Phase 0) ──
+    GeneratedDoc(
+        "contract_consumers", "op_coverage",
+        _GEN / "contract_consumers.md", _r_contract_consumers,
+        csv_path=_GEN / "contract_consumers.csv",
+        render_csv=_r_contract_consumers_csv,
     ),
     GeneratedDoc(
         "op_target_conformance", "op_coverage",

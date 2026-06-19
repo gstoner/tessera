@@ -189,7 +189,7 @@ def quantize_int4_packed(w: Any, group_size: int = 64):
     evens = codes[:, 0:k:2]                  # length ceil(K/2) = pitch
     odds = codes[:, 1:k:2]                    # length floor(K/2)
     packed = evens.astype(np.uint8, copy=True)
-    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4)
+    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4).astype(np.uint8)
     return packed, scales, biases
 
 
@@ -239,7 +239,7 @@ def quantize_fp4_packed(w: Any, group_size: int = 32, scale_mode: str = "mx"):
     evens = codes[:, 0:k:2]
     odds = codes[:, 1:k:2]
     packed = evens.astype(np.uint8, copy=True)
-    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4)
+    packed[:, : odds.shape[1]] |= (odds.astype(np.uint8) << 4).astype(np.uint8)
     return packed, scales
 
 

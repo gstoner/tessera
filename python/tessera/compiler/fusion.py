@@ -2097,17 +2097,21 @@ def run_fused_attention(region: AttentionRegion, Q: np.ndarray, K: np.ndarray,
     if Nv != Nk:
         raise ValueError(f"K/V seqlen mismatch: K {Kn.shape}, V {Vn.shape}")
 
-    # Pick the kernel: materialized-scores for Nk ≤ SYNTH_MAX_N (no head_dim cap),
-    # else the ONLINE-softmax kernel for larger Nk (Nk unbounded, head_dim ≤
-    # SYNTH_MAX_D). Beyond both caps, fall to the numpy reference. Both kernels
-    # ride one symbol per dtype (it takes the MSL source + entry as params).
+    # Pick the kernel by IO cost, not a hard threshold (Workstream C): the
+    # selector scores materialized / online / reference by off-chip byte movement
+    # and returns the minimum-byte feasible variant. For small Nk it returns
+    # "materialized"; past the on-chip stack cap it crosses to "online"; beyond
+    # both caps only "reference" is feasible — reproducing the old branch, now as
+    # one scored decision point. Both kernels ride one symbol per dtype.
     sym = _attn_symbol() if tag == "f32" else _attn_f16_symbol()
     source: bytes | None = None
     entry = b""
-    if sym is not None and Nk <= SYNTH_MAX_N:
+    elt = 4 if tag == "f32" else 2
+    choice = select_attention_lowering(M, Nk, D, Dv, elt_bytes=elt)
+    if sym is not None and choice.variant == "materialized":
         source = synthesize_attention_msl(region, tag).encode("utf-8")
         entry = _ATTN_ENTRY.encode("utf-8")
-    elif sym is not None and Dv <= SYNTH_MAX_D:
+    elif sym is not None and choice.variant == "online":
         source = synthesize_attention_online_msl(region, tag).encode("utf-8")
         entry = _ATTN_ONLINE_ENTRY.encode("utf-8")
     if sym is not None and source is not None:
@@ -2396,6 +2400,122 @@ def should_fuse_region(region: FusedRegion, M: int, N: int, K: int) -> bool:
 def should_fuse_attention(region: AttentionRegion, M: int, Nk: int, D: int,
                           Dv: int) -> bool:
     return attention_cost(region, M, Nk, D, Dv).score > 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F3b — attention lowering SELECTOR (Workstream C)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# FlashAttention's deeper lesson is "choose lowering by IO traffic," not "have a
+# flash kernel." `attention_cost` above is a *gate* (fuse or not); this is a
+# *selector* — it scores every feasible attention kernel variant by total
+# off-chip byte movement (the FA currency) and picks the minimum, replacing the
+# hard `Nk <= SYNTH_MAX_N` branch in `run_fused_attention`. Page-gather / offload
+# staging bytes from a Workstream-A PagedKVState enter the score directly.
+
+
+@dataclass(frozen=True)
+class AttnLoweringCost:
+    """The IO cost of one attention lowering variant.
+
+    ``dram_bytes`` is the off-chip traffic that decides profitability: the fused
+    kernels keep the M×Nk score matrix on-chip (no round-trip); the unfused
+    reference writes and re-reads it. ``feasible`` encodes the hardware on-chip
+    bound (stack/threadgroup capacity), not an arbitrary perf threshold.
+    """
+
+    variant: str            # "materialized" | "online" | "reference"
+    feasible: bool
+    dram_bytes: int
+    flops: int
+    reason: str = ""
+
+
+def _attn_dram_bytes(M: int, Nk: int, D: int, Dv: int, elt: int, *,
+                     score_roundtrip: bool, stage_bytes: int = 0) -> int:
+    """Off-chip bytes: Q+K+V reads + O write (+ optional score round-trip and
+    page-staging transfers)."""
+    io = (M * D + Nk * D + Nk * Dv + M * Dv) * elt
+    score = (2 * M * Nk * elt) if score_roundtrip else 0
+    return io + score + stage_bytes
+
+
+def attention_lowering_costs(
+    M: int, Nk: int, D: int, Dv: int, *, elt_bytes: int = 4, stage_bytes: int = 0,
+) -> tuple[AttnLoweringCost, ...]:
+    """Score the three attention kernel variants at one shape.
+
+    ``stage_bytes`` is the host→device transfer a paged/tiered KV gather adds
+    (0 for resident/contiguous KV); it rides on the fused variants since they are
+    what a paged consumer would dispatch.
+    """
+    qk = 2 * M * Nk * D          # QKᵀ
+    pv = 2 * M * Nk * Dv         # P·V
+    materialized = AttnLoweringCost(
+        "materialized", Nk <= SYNTH_MAX_N,
+        _attn_dram_bytes(M, Nk, D, Dv, elt_bytes, score_roundtrip=False,
+                         stage_bytes=stage_bytes),
+        qk + pv,
+        "on-chip scores[Nk] stack" if Nk <= SYNTH_MAX_N
+        else f"Nk={Nk} exceeds stack cap {SYNTH_MAX_N}",
+    )
+    online = AttnLoweringCost(
+        "online", Dv <= SYNTH_MAX_D,
+        _attn_dram_bytes(M, Nk, D, Dv, elt_bytes, score_roundtrip=False,
+                         stage_bytes=stage_bytes),
+        qk + pv + M * Nk,        # + streaming-softmax rescale
+        "streaming softmax (Nk unbounded)" if Dv <= SYNTH_MAX_D
+        else f"Dv={Dv} exceeds online head_dim cap {SYNTH_MAX_D}",
+    )
+    reference = AttnLoweringCost(
+        "reference", True,
+        _attn_dram_bytes(M, Nk, D, Dv, elt_bytes, score_roundtrip=True,
+                         stage_bytes=stage_bytes),
+        qk + pv,
+        "unfused numpy — score matrix round-trips through DRAM",
+    )
+    return (materialized, online, reference)
+
+
+def select_attention_lowering(
+    M: int, Nk: int, D: int, Dv: int, *, elt_bytes: int = 4, stage_bytes: int = 0,
+) -> AttnLoweringCost:
+    """Pick the minimum-byte *feasible* attention lowering.
+
+    Among feasible variants, rank by ``(dram_bytes, flops)`` — fewest off-chip
+    bytes first (the FA objective), ties broken toward fewer FLOPs (materialized
+    over online when both fit). The reference variant is always feasible but
+    carries the score round-trip, so it loses whenever a fused kernel fits.
+    """
+    feasible = [c for c in attention_lowering_costs(
+        M, Nk, D, Dv, elt_bytes=elt_bytes, stage_bytes=stage_bytes) if c.feasible]
+    return min(feasible, key=lambda c: (c.dram_bytes, c.flops))
+
+
+def paged_stage_bytes(kv_state: Any, token_indices: "list[int] | None" = None,
+                      *, elt_bytes: int = 4) -> int:
+    """Host→device staging bytes a gather over ``kv_state`` (a PagedKVState) adds.
+
+    Connects Workstream A to the cost model: non-resident pages touched by the
+    gather cost a transfer; resident/contiguous KV costs nothing. Returns 0 for
+    states without a tiered page table.
+    """
+    try:
+        from ..cache.paged_kv import as_paged_kv_state, PageTier
+        state = as_paged_kv_state(kv_state)
+        geo = state.kv_geometry()
+        table = state.page_table()
+    except Exception:
+        return 0
+    if token_indices is None:
+        touched = {e.page_id for e in table}
+    else:
+        ps = geo.page_size
+        touched = {int(t) // ps for t in token_indices}
+    page_elems = geo.page_size * geo.num_heads * geo.head_dim
+    cold = sum(1 for e in table
+               if e.page_id in touched and e.tier is not PageTier.RESIDENT)
+    return cold * page_elems * 2 * elt_bytes   # K + V per page
 
 
 # ─────────────────────────────────────────────────────────────────────────────

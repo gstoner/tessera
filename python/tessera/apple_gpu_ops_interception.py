@@ -246,7 +246,7 @@ def _wrap_gelu(original_fn: Optional[Callable]) -> Callable:
 
 def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
     @functools.wraps(original_fn or (lambda *a, **k: None))
-    def flash_attn(Q, K, V, *,
+    def flash_attn(Q, K=None, V=None, *,
                     # apple_gpu_ops-shaped kwargs (trace mode):
                     B: Optional[int] = None,
                     Sq: Optional[int] = None,
@@ -264,7 +264,16 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
                     dropout_p: float = 0.0,
                     params: Any = None,
                     deterministic: Any = None,
-                    seed: Optional[int] = None):
+                    seed: Optional[int] = None,
+                    # PagedKVState consumer alias (Workstream A) — routes to the
+                    # unifying KV ABI instead of dense K/V.
+                    kv_state: Any = None):
+        if kv_state is not None:
+            if original_fn is None:
+                raise NotImplementedError(
+                    "tessera.ops.flash_attn(kv_state=...) needs the eager "
+                    "reference (paged_attention) to be available")
+            return original_fn(Q, kv_state=kv_state, scale=scale, causal=causal)
         if _active_trace() is not None:
             if (B is None or Sq is None or Sk is None or D is None):
                 # Infer from Q/K shapes (B, S, D).

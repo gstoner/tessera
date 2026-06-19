@@ -349,6 +349,10 @@ class JitFn:
         self.deterministic = deterministic
         self.seed = seed
         self.target = target
+        # Workstream B — phase specialization metadata (set by @jit(phase=...)).
+        self.phase: Optional[Any] = None
+        self.slo: Optional[Any] = None
+        self.schedule_policy: Optional[Any] = None
         # Phase-F F5 — surgical tracer gate (supersedes the retired AST bridge).
         # A control-flow apple_gpu function (raw for/if → tessera.scf.* markers,
         # or an explicit tessera.control.* call) routes through the trace-by-
@@ -1632,6 +1636,8 @@ def jit(
     max_ops_per_cb: Optional[int] = None,
     emit_package: "bool | str" = False,
     dispatch_via_package: "bool | str | None" = None,
+    phase: Optional[str] = None,
+    slo: Optional[Any] = None,
 ) -> Any:
     """
     Tessera JIT decorator — drives the compiler pipeline.
@@ -1870,6 +1876,21 @@ def jit(
                 "@jit(dispatch_via_package=True) is only meaningful with "
                 f"target='apple_gpu'; got target={target!r} "
                 f"(normalized={target_kind!r}).")
+
+        # Workstream B — phase specialization metadata. Prefill and decode are
+        # compiled from the same source but scheduled differently; the
+        # PhaseSpecializationPass (compiler/phase_specialization.py) reads these
+        # to pick a schedule policy and thread the CacheHandoff. Lightweight
+        # passthrough: attached for inspection/consumption, no behavior change.
+        if phase is not None:
+            from .phase_specialization import Phase, SchedulePolicy
+            jitfn.phase = Phase(phase)
+            jitfn.slo = slo
+            jitfn.schedule_policy = SchedulePolicy.for_phase(jitfn.phase, slo)
+        else:
+            jitfn.phase = None
+            jitfn.slo = slo
+            jitfn.schedule_policy = None
 
         return jitfn
 

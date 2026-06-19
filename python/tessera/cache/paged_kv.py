@@ -232,6 +232,162 @@ class _TieredPagedKV:
         return out_k, out_v
 
 
+@dataclass
+class _LatentPagedKV:
+    """Adapter: an MLA latent cache (the LATENT kind, ShadowKV #6).
+
+    Stores only the compressed ``[S, latent_dim]`` latents; ``gather`` reconstructs
+    per-head K/V via the expand projections ``W_k``/``W_v`` — the dequant/expand
+    stage the lowering pass owns. ~93% of the memory of a full K/V cache.
+    """
+
+    handle: Any                # LatentKVCacheHandle
+    w_k: np.ndarray            # (latent_dim, num_heads*head_dim)
+    w_v: np.ndarray
+    num_heads: int
+    head_dim: int
+    kind: KVKind = KVKind.LATENT
+
+    def kv_geometry(self) -> KVGeometry:
+        h = self.handle
+        return KVGeometry(self.num_heads, self.head_dim, h.max_seq,
+                          h.page_size, h.dtype)
+
+    def seq_len(self) -> int:
+        return int(self.handle.current_seq)
+
+    def quant_bits(self) -> int | None:
+        return None
+
+    def page_table(self) -> list[PageTableEntry]:
+        h = self.handle
+        ps = h.page_size
+        n = (int(h.current_seq) + ps - 1) // ps if h.current_seq else 0
+        return [PageTableEntry(p, PageTier.RESIDENT) for p in range(n)]
+
+    def tier(self, page_id: int) -> PageTier:
+        return PageTier.RESIDENT
+
+    def gather(self, token_indices: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
+        idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
+        lat = np.asarray(self.handle.latents, np.float32)[idx]   # (m, latent_dim)
+        m = lat.shape[0]
+        k = (lat @ self.w_k).reshape(m, self.num_heads, self.head_dim)
+        v = (lat @ self.w_v).reshape(m, self.num_heads, self.head_dim)
+        return np.asarray(k, np.float32), np.asarray(v, np.float32)
+
+
+@dataclass
+class _QuantizedTailPagedKV:
+    """Adapter: a hot fp window + an int8-quantized cold tail (QUANTIZED_TAIL).
+
+    Recent tokens ``[split, S)`` stay fp32 (the hot window the model attends most
+    precisely); older tokens ``[0, split)`` are stored int8 with per-token scales
+    and dequantized on ``gather`` — the quantized-tail memory tradeoff under the
+    same ABI.
+    """
+
+    k_hot: np.ndarray          # (S-split, H, hd) fp32
+    v_hot: np.ndarray
+    k_tail_q: np.ndarray       # (split, H, hd) int8
+    v_tail_q: np.ndarray
+    tail_scale_k: np.ndarray   # (split, 1, 1) fp32
+    tail_scale_v: np.ndarray
+    split: int
+    page_size: int = 128
+    dtype: str = "fp32"
+    kind: KVKind = KVKind.QUANTIZED_TAIL
+
+    @property
+    def _S(self) -> int:
+        return self.split + self.k_hot.shape[0]
+
+    def kv_geometry(self) -> KVGeometry:
+        H, hd = self.k_hot.shape[1], self.k_hot.shape[2]
+        return KVGeometry(H, hd, self._S, self.page_size, self.dtype)
+
+    def seq_len(self) -> int:
+        return self._S
+
+    def quant_bits(self) -> int | None:
+        return 8
+
+    def page_table(self) -> list[PageTableEntry]:
+        ps = self.page_size
+        n = (self._S + ps - 1) // ps if self._S else 0
+        return [PageTableEntry(p, PageTier.RESIDENT) for p in range(n)]
+
+    def tier(self, page_id: int) -> PageTier:
+        return PageTier.RESIDENT
+
+    def gather(self, token_indices: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
+        idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
+        H, hd = self.k_hot.shape[1], self.k_hot.shape[2]
+        out_k = np.empty((idx.shape[0], H, hd), np.float32)
+        out_v = np.empty((idx.shape[0], H, hd), np.float32)
+        for pos, tok in enumerate(idx.tolist()):
+            if tok >= self.split:                       # hot fp window
+                out_k[pos] = self.k_hot[tok - self.split]
+                out_v[pos] = self.v_hot[tok - self.split]
+            else:                                        # cold int8 tail → dequant
+                out_k[pos] = self.k_tail_q[tok].astype(np.float32) * self.tail_scale_k[tok]
+                out_v[pos] = self.v_tail_q[tok].astype(np.float32) * self.tail_scale_v[tok]
+        return out_k, out_v
+
+
+def latent_paged_kv(handle: Any, w_k: np.ndarray, w_v: np.ndarray, *,
+                    num_heads: int, head_dim: int) -> PagedKVState:
+    """Wrap an MLA ``LatentKVCacheHandle`` + expand projections as a PagedKVState."""
+    w_k = np.asarray(w_k, np.float32)
+    w_v = np.asarray(w_v, np.float32)
+    if w_k.shape[1] != num_heads * head_dim or w_v.shape[1] != num_heads * head_dim:
+        raise ValueError(
+            f"expand weights must map latent_dim → {num_heads}*{head_dim}; "
+            f"got w_k {w_k.shape}, w_v {w_v.shape}")
+    return _LatentPagedKV(handle, w_k, w_v, num_heads, head_dim)
+
+
+def _quantize_per_token_int8(M: np.ndarray):
+    """Symmetric int8 per-token (axis 0) quantize → (q int8, scale (n,1,1))."""
+    absmax = np.maximum(np.abs(M).reshape(M.shape[0], -1).max(axis=1), 1e-12)
+    scale = (absmax / 127.0).reshape(-1, 1, 1)
+    q = np.round(M / scale).clip(-127, 127).astype(np.int8)
+    return q, scale.astype(np.float32)
+
+
+def quantized_tail_paged_kv(K_full: np.ndarray, V_full: np.ndarray, *,
+                            hot_window: int, page_size: int = 128) -> PagedKVState:
+    """Build a QUANTIZED_TAIL state from full fp K/V: keep the most-recent
+    ``hot_window`` tokens fp32, quantize the older tail to int8."""
+    K_full = np.asarray(K_full, np.float32)
+    V_full = np.asarray(V_full, np.float32)
+    S = K_full.shape[0]
+    split = max(0, S - hot_window)
+    k_tail_q, sk = _quantize_per_token_int8(K_full[:split]) if split else (
+        np.zeros((0,) + K_full.shape[1:], np.int8), np.zeros((0, 1, 1), np.float32))
+    v_tail_q, sv = _quantize_per_token_int8(V_full[:split]) if split else (
+        np.zeros((0,) + V_full.shape[1:], np.int8), np.zeros((0, 1, 1), np.float32))
+    return _QuantizedTailPagedKV(
+        k_hot=K_full[split:], v_hot=V_full[split:],
+        k_tail_q=k_tail_q, v_tail_q=v_tail_q, tail_scale_k=sk, tail_scale_v=sv,
+        split=split, page_size=page_size)
+
+
+def _reference_attention(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                         scale: float, causal: bool) -> np.ndarray:
+    """Per-head numpy attention. Q (H,q,d), K/V (H,S,d) → (H,q,d)."""
+    scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
+    if causal:
+        q_len, k_len = scores.shape[-2], scores.shape[-1]
+        mask = np.triu(np.ones((q_len, k_len), dtype=bool),
+                       k=1 + max(k_len - q_len, 0))
+        scores = np.where(mask, -np.inf, scores)
+    scores = scores - scores.max(axis=-1, keepdims=True)
+    w = np.exp(scores)
+    w = w / w.sum(axis=-1, keepdims=True)
+    return np.matmul(w, V)
+
+
 def paged_attention(
     Q: np.ndarray,
     kv_state: Any,
@@ -239,20 +395,29 @@ def paged_attention(
     scale: float | None = None,
     causal: bool = False,
     token_indices: Sequence[int] | None = None,
-) -> np.ndarray:
+    backend: str = "reference",
+    return_execution: bool = False,
+) -> Any:
     """Attention that consumes a :class:`PagedKVState` instead of dense K/V.
 
-    This is the first consumer of the unifying ABI — the proof the contract is
-    not an orphan. It reads the page table, gathers the requested tokens (staging
-    + dequantizing through the protocol), and runs reference attention per head.
+    The consumer of the unifying ABI: it reads the page table, gathers the
+    requested tokens (staging + dequantizing through the protocol — the
+    prefetch/gather/dequant stages), then runs attention.
 
-    ``Q`` is ``(num_heads, q_len, head_dim)``. When ``token_indices`` is ``None``
-    the full logical sequence ``[0, seq_len)`` is attended. Returns
-    ``(num_heads, q_len, head_dim)``.
+    ``Q`` is ``(num_heads, q_len, head_dim)``. ``token_indices=None`` attends the
+    full logical sequence ``[0, seq_len)``. Returns ``(num_heads, q_len, head_dim)``.
 
-    The lowering pass (next slice) will replace the eager gather with staged
-    prefetch/gather/dequant stages on the backend; the numerics defined here are
-    the oracle those stages must reproduce.
+    ``backend``:
+      * ``"reference"`` (default) — numpy attention over the gathered K/V.
+      * ``"apple_gpu"`` — the gathered (staged + dequantized) dense K/V feeds the
+        shipped fused matmul→softmax→matmul Metal kernel **per head**
+        (``run_fused_attention``). This is #8's native execution path: gather is
+        the staging stage; the contraction runs on ``metal_runtime``.
+
+    With ``return_execution=True`` returns ``(out, execution_kind)`` where
+    ``execution_kind`` is ``"metal_runtime"`` only if **every** head genuinely ran
+    the Metal kernel (no silent fallback), else ``"reference"`` — the provenance
+    signal A's native oracle gates on.
     """
     state = as_paged_kv_state(kv_state)
     Q = np.asarray(Q._data if hasattr(Q, "_data") else Q, dtype=np.float32)
@@ -262,6 +427,8 @@ def paged_attention(
     n = state.seq_len()
     idx = list(range(n)) if token_indices is None else list(token_indices)
     # gather → (S, num_heads, head_dim); transpose to per-head (num_heads, S, hd).
+    # This is the staging + dequant stage — host→resident waves + int/latent
+    # decode happen inside the PagedKVState.gather the lowering pass owns.
     gk, gv = state.gather(idx)
     K = np.transpose(gk, (1, 0, 2))
     V = np.transpose(gv, (1, 0, 2))
@@ -269,16 +436,39 @@ def paged_attention(
     d = Q.shape[-1]
     if scale is None:
         scale = 1.0 / np.sqrt(d)
-    scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
-    if causal:
-        q_len, k_len = scores.shape[-2], scores.shape[-1]
-        mask = np.triu(np.ones((q_len, k_len), dtype=bool),
-                       k=1 + max(k_len - q_len, 0))
-        scores = np.where(mask, -np.inf, scores)
-    scores = scores - scores.max(axis=-1, keepdims=True)
-    weights = np.exp(scores)
-    weights = weights / weights.sum(axis=-1, keepdims=True)
-    return np.matmul(weights, V)
+
+    if backend == "apple_gpu":
+        out, exe = _paged_attention_apple_gpu(Q, K, V, float(scale), causal)
+    elif backend == "reference":
+        out, exe = _reference_attention(Q, K, V, float(scale), causal), "reference"
+    else:
+        raise ValueError(f"unknown backend {backend!r}; use 'reference' or 'apple_gpu'")
+
+    return (out, exe) if return_execution else out
+
+
+def _paged_attention_apple_gpu(Q: np.ndarray, K: np.ndarray, V: np.ndarray,
+                               scale: float, causal: bool) -> tuple[np.ndarray, str]:
+    """Run the gathered per-head attention on the Apple GPU fused kernel.
+
+    Loops heads through the shipped ``matmul→softmax→matmul`` Metal kernel (the
+    same one the MLA-E2E proof uses). Reports ``metal_runtime`` only if every head
+    ran natively; any fallback demotes the whole call to ``reference`` so the
+    provenance signal can never overclaim.
+    """
+    from ..compiler.fusion import run_fused_attention, AttentionRegion
+
+    H, q_len, d = Q.shape
+    Dv = V.shape[-1]
+    region = AttentionRegion(scale=scale, causal=causal)
+    out = np.empty((H, q_len, Dv), np.float32)
+    all_native = True
+    for h in range(H):
+        o_h, exe_h = run_fused_attention(region, Q[h], K[h], V[h])
+        out[h] = o_h
+        if exe_h != "metal_runtime":
+            all_native = False
+    return out, ("metal_runtime" if all_native else "reference")
 
 
 def as_paged_kv_state(cache: Any, *, kind: KVKind | None = None) -> PagedKVState:
@@ -315,4 +505,6 @@ __all__ = [
     "PagedKVState",
     "as_paged_kv_state",
     "paged_attention",
+    "latent_paged_kv",
+    "quantized_tail_paged_kv",
 ]

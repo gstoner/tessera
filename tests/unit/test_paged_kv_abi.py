@@ -186,6 +186,29 @@ def test_paged_attention_equals_contiguous(causal, n_tokens, page_size, cap):
     np.testing.assert_array_equal(o_contig, o_tiered)
 
 
+def test_ops_namespace_exposes_paged_attention():
+    import tessera
+    h, k, v = _fill_contiguous(2, 4, 6)
+    Q = _rng(3).standard_normal((2, 2, 4)).astype(np.float32)
+    o_ops = tessera.ops.paged_attention(Q, h)
+    o_flash = tessera.ops.flash_attn(Q, kv_state=h)  # kv_state alias
+    np.testing.assert_array_equal(o_ops, o_flash)
+
+
+def test_evaluator_paged_kv_oracle_equivalent():
+    from tessera.compiler.evaluator import paged_kv_equivalence
+    n_tokens = 12
+    h, k, v = _fill_contiguous(4, 8, n_tokens, page_size=4)
+    c1 = _fill_tiered(4, 8, n_tokens, k, v, page_size=4, resident_capacity=1)
+    c_all = _fill_tiered(4, 8, n_tokens, k, v, page_size=4, resident_capacity=3)
+    Q = _rng(5).standard_normal((4, 3, 8)).astype(np.float32)
+
+    verdict = paged_kv_equivalence(
+        [("contiguous", h), ("tiered_cap1", c1), ("tiered_capAll", c_all)], Q)
+    assert verdict.relation == "equivalent", verdict.detail
+    assert verdict.max_abs_err == 0.0  # bit-identical: residency schedule is inert
+
+
 def test_quantized_contiguous_gather_dequantizes():
     rng = _rng(1)
     h = KVCacheHandle(num_heads=2, head_dim=4, max_seq=8, page_size=4,

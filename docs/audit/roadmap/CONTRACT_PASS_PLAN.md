@@ -37,6 +37,13 @@ Every workstream follows one pattern:
 
 ## Phase 0 — Make "is the contract consumed?" an audited axis
 
+> **Status (2026-06-19): LANDED.** `compiler/contract_consumers.py` — one row per
+> workstream contract, `status` **probed live** (the probe imports the consumer;
+> `live` vs `declared`). Registered as generated doc `contract_consumers`
+> (`docs/audit/generated/contract_consumers.{md,csv}`), drift-gated. A/B report
+> `live`; C/D/E/F `declared` and flip automatically as their passes land. 8 guard
+> tests in `test_contract_consumers.py`.
+
 Without this we re-accumulate orphaned contracts.
 
 - Add `contract_consumer: live | declared | none` to `primitive_coverage.py` metadata,
@@ -49,6 +56,24 @@ Without this we re-accumulate orphaned contracts.
 ## Workstreams
 
 ### A — Unifying KV ABI + paged-attention consumer (#1, keystone)
+
+> **Status (2026-06-19): core LANDED.** `cache/paged_kv.py` (`PagedKVState` +
+> `PageTier`/`KVKind` + adapters for `KVCacheHandle`/`TieredKVCache` +
+> `paged_attention`); `ops.paged_attention` + `flash_attn(kv_state=)`;
+> `evaluator.paged_kv_equivalence` differential oracle (residency-schedule
+> invariant). 17 ABI tests + 648 attention regression tests green; mypy clean.
+> **Follow-on (task #8): LANDED (2026-06-19, Metal 4.0 path).**
+> `paged_attention(backend="apple_gpu")` runs the gathered KV through the shipped
+> fused matmul→softmax→matmul Metal kernel per head with honest provenance
+> (`metal_runtime` only if every head fired, else `reference`).
+> `evaluator.paged_kv_native_equivalence` is the native rung — earned only when
+> Metal actually ran AND agrees with the numpy reference (provenance-gated, so a
+> silent fallback stays `inconclusive`). LATENT (MLA expand via `latent_paged_kv`)
+> and QUANTIZED_TAIL (`quantized_tail_paged_kv`, hot fp window + int8 cold tail)
+> kinds route through the same consumer. 7 tests in `test_paged_kv_native.py`
+> (native parity, provenance gate, latent ≡ expanded-full, quantized-tail ≈ fp);
+> mypy clean. The FP8-native perf rung waits on Metal 4.1 / macOS 27.0 — a
+> throughput upgrade, not a correctness gate.
 
 **Contract** `python/tessera/cache/paged_kv.py` — `PagedKVState` protocol implemented by
 *both* substrates (adapter, not rewrite):
@@ -72,11 +97,26 @@ metamorphic oracle on Apple GPU.
 
 ### B — Prefill and decode as different compiled programs (#2)
 
+> **Status (2026-06-19): LANDED.** `compiler/phase_specialization.py` (`Phase`,
+> `SLO`, `SchedulePolicy.for_phase` — prefill=bulk_throughput/materialize vs
+> decode=low_latency/resident-pinned; `CacheHandoff` carrying a `PagedKVState`;
+> `specialize` + `PhaseSpecializedProgram`; `verify_phase_split` oracle).
+> `@jit(phase=, slo=)` attaches the policy. 16 tests green (oracle across
+> seeds/lengths proves prefill▸decode ≡ monolithic forward); mypy clean.
+
 Depends on A. `@jit(phase="prefill"|"decode", slo=...)` + a `CacheHandoff` ABI that *is*
 a `PagedKVState`. `PhaseSpecializationPass` emits two programs: prefill = throughput
 schedule, decode = latency schedule. Oracle: `prefill ▸ decode_loop == forward`.
 
 ### C — Promote IO cost model from gate to selector (#3)
+
+> **Status (2026-06-19): LANDED.** `fusion.select_attention_lowering` +
+> `attention_lowering_costs` score materialized/online/reference by off-chip
+> bytes (the FA currency); `paged_stage_bytes` feeds page-staging cost from a
+> Workstream-A PagedKVState. The hard `Nk <= SYNTH_MAX_N` branch in
+> `run_fused_attention` now routes through the selector (behavior-preserving).
+> 29 tests (cost-monotonicity, feasibility invariant, crossover-at-cap,
+> staging-bytes, numerical preservation); 920 fusion/attention tests green.
 
 Contract exists (`FusionCost` + Schedule IR `bytes_moved`/`flops`,
 `compiler/schedule_ir.py:292`). Add `select_attention_lowering()` scoring every
@@ -87,12 +127,28 @@ cost-monotonicity + feasibility invariant.
 
 ### D — SmoothQuant activation-scale migration pass (#4)
 
+> **Status (2026-06-19): LANDED.** `compiler/smoothquant.py` —
+> `migrate_activation_scale` folds per-channel activation scale into weights
+> (`s_j = max|X|^α/max|W|^(1-α)`) and emits int8 W8A8 operands;
+> `smoothquant_matmul` runs the direct-consume int8×int8→int32 path;
+> `verify_w8a8` oracle proves fp parity + the **anti-fallback invariant**
+> (operands stay int8). 8 tests incl. exact-fp factorization + beats-naive on
+> outliers; mypy clean.
+
 Direct-consume already works; the gap is the producer. `ActivationScaleMigrationPass`
 folds per-channel activation scale into weights (from `CalibrationObserver`) and emits
 calibrated W8A8/int4 operands consumed by the existing direct-consume kernel. Oracle:
 W8A8 parity vs fp16 + **anti-fallback assertion** (provenance proves no dequant-then-GEMM).
 
 ### E — Megatron TP rewrite + cross-rank gradient equivalence (#5)
+
+> **Status (2026-06-19): LANDED.** `compiler/tensor_parallel.py` —
+> `rewrite_linear(W, TPSpec)` auto-rewrites a plain linear into column/row/
+> sequence parallel with the correct collectives (E1); `ParallelLinear`
+> forward/backward run over `MockRankGroup` threads. `verify_tp_gradient_
+> equivalence` is the E2 oracle — sharded dX/dW recombined equal single-rank
+> gradients to ~1e-9. 20 tests across 3 modes × world sizes 2/4 + rectangular;
+> mypy clean. Sequence-parallel (the declared-not-consumed `cyclic`) is now wired.
 
 Adjoint collective insertion exists. **E1**: `TensorParallelRewritePass` lowers plain
 `nn.Linear` → col/row-parallel + collectives from a `TPSpec`; wire sequence parallelism
@@ -101,6 +157,14 @@ cross-rank gradient equivalence via `MockRankGroup` — sharded grad == single-r
 for col/row/seq-parallel.
 
 ### F — Named multimodal walks + encoder-free ops (#7/#8)
+
+> **Status (2026-06-19): LANDED.** `compiler/model_walk.py` — `ModelWalk` +
+> `partition_walks` split the MiniMax-M3 graph into named entry points
+> (vision_prefill / video_prefill / splice); `walks_reconstruct_graph` proves the
+> partition is lossless. First-class encoder-free ops (`patch_embed`,
+> `coordinate_lookup`, `audio_frame_projection`, `splice_embeddings`) + an
+> executable `EncoderFreeVLM` whose named walks recompose into the monolith,
+> proven by `verify_walk_parity`. 13 tests; mypy clean.
 
 MiniMax-M3 graph builder + JEPA tests exist. `ModelWalk` contract: named entry points
 (`vision_prefill`, `text_decode`, `image_gen`) over existing nodes, each a separately

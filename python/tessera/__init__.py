@@ -801,10 +801,23 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             out = fused_epilogue(out, **epilogue)
         return out
 
+    def paged_attention(Q, kv_state, *, scale=None, causal: bool = False,
+                        token_indices=None):
+        """Attention that consumes a :class:`tessera.cache.PagedKVState`.
+
+        The unifying KV-ABI consumer (Workstream A): reads the page table,
+        gathers (staging + dequantizing through the protocol), runs attention.
+        ``Q`` is ``(num_heads, q_len, head_dim)``. Lazy import avoids an
+        import-time cycle with the cache package.
+        """
+        from .cache.paged_kv import paged_attention as _pa
+        return _pa(Q, kv_state, scale=scale, causal=causal,
+                   token_indices=token_indices)
+
     def flash_attn(
         Q,
-        K,
-        V,
+        K=None,
+        V=None,
         scale=None,
         causal: bool = False,
         cache=None,
@@ -813,7 +826,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         deterministic=None,
         seed: int | None = None,
         attn_bias=None,
+        kv_state=None,
     ):
+        # PagedKVState consumer alias: flash_attn(Q, kv_state=state) routes to
+        # the unifying KV ABI instead of dense K/V (Workstream A).
+        if kv_state is not None:
+            return paged_attention(Q, kv_state, scale=scale, causal=causal)
         # Phase 1: naive attention (Phase 3: tile-level FA-4)
         for arr in [Q, K, V]:
             if hasattr(arr, "_data"):
@@ -4076,6 +4094,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     _ns = types.SimpleNamespace(
         varlen_sdpa=varlen_sdpa,
+        paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,
         clifford_left_contraction=_clifford_ops_mod.clifford_left_contraction,

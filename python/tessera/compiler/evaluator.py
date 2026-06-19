@@ -370,6 +370,96 @@ def cross_path_equivalence(
     return CrossPathVerdict(relation, tuple(t for t, _ in outs), max_abs_err, detail)
 
 
+# ── DESIL at the KV-ABI level — PagedKVState differential oracle ─────────────
+#
+# Workstream A. The same logical KV sequence held by independent substrates
+# (contiguous KVCacheHandle, tiered cap=1, tiered cap=all) must produce identical
+# attention. Two invariants in one verdict: (1) a paged layout ≡ a contiguous one,
+# and (2) the prefetch/residency *schedule* must not change numerics — a
+# miscompiled PagedAttentionLoweringPass that, say, gathered a stale page would
+# diverge here. Reuses the cross-path classifier so it speaks the evaluator's
+# vocabulary. See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream A).
+
+
+def paged_kv_equivalence(
+    states: list[tuple[str, Any]],
+    Q: Any,
+    *,
+    causal: bool = False,
+    rtol: float = 1e-5,
+    atol: float = 1e-5,
+) -> CrossPathVerdict:
+    """Assert ``paged_attention(Q, state)`` agrees across independent KV substrates.
+
+    ``states`` is ``[(name, kv_state), ...]`` — each a different physical layout
+    (contiguous / tiered with varying residency capacity / latent) holding the
+    *same* logical sequence. The verdict is ``inconclusive`` with <2 states.
+    """
+    import numpy as np
+
+    from ..cache.paged_kv import paged_attention
+
+    outs: list[tuple[str, Any]] = []
+    for name, state in states:
+        out = np.asarray(paged_attention(Q, state, causal=causal), dtype=np.float64)
+        if np.all(np.isfinite(out)):
+            outs.append((name, out))
+
+    max_abs_err: float | None = None
+    ref_scale = 1.0
+    if len(outs) >= 2:
+        ref = outs[0][1]
+        errs = [float(np.max(np.abs(o - ref))) for _, o in outs[1:]
+                if o.shape == ref.shape]
+        if len(errs) == len(outs) - 1:
+            max_abs_err = max(errs)
+            ref_scale = float(np.max(np.abs(ref))) or 1.0
+
+    tol = atol + rtol * ref_scale
+    relation, detail = _cross_path_relation(len(outs), max_abs_err, tol=tol)
+    return CrossPathVerdict(relation, tuple(n for n, _ in outs), max_abs_err, detail)
+
+
+def paged_kv_native_equivalence(
+    kv_state: Any,
+    Q: Any,
+    *,
+    causal: bool = False,
+    rtol: float = 1e-3,
+    atol: float = 1e-4,
+) -> CrossPathVerdict:
+    """Native rung for the PagedKVState ABI (#8): the Apple-GPU paged-attention
+    path must run on ``metal_runtime`` **and** agree with the numpy reference.
+
+    Two genuinely-independent lowering paths over the same staged KV — the Metal
+    fused matmul→softmax→matmul kernel vs numpy — cross-check each other (DESIL).
+    The verdict is ``inconclusive`` unless the GPU path actually fired (provenance
+    gate: a silent fallback cannot earn the native rung), and ``divergent`` if the
+    two paths disagree (a Metal miscompile).
+    """
+    import numpy as np
+
+    from ..cache.paged_kv import paged_attention
+
+    ref = np.asarray(paged_attention(Q, kv_state, causal=causal,
+                                     backend="reference"), dtype=np.float64)
+    gpu_out, exe = paged_attention(Q, kv_state, causal=causal,
+                                   backend="apple_gpu", return_execution=True)
+    native_ran = (exe == "metal_runtime")
+    gpu = np.asarray(gpu_out, dtype=np.float64)
+
+    if not native_ran:
+        return CrossPathVerdict(
+            "inconclusive", ("reference",), None,
+            f"apple_gpu paged attention fell back ({exe!r}) — native rung unearned")
+    max_abs_err = float(np.max(np.abs(gpu - ref))) if gpu.shape == ref.shape else None
+    ref_scale = float(np.max(np.abs(ref))) or 1.0
+    tol = atol + rtol * ref_scale
+    relation, detail = _cross_path_relation(2, max_abs_err, tol=tol)
+    return CrossPathVerdict(relation, ("apple_gpu:metal_runtime", "reference"),
+                            max_abs_err, detail)
+
+
 # ── NVIDIA/ROCm emission rung (rung 2.5) ─────────────────────────────────────
 #
 # These backends do not execute here; their honest forward progress is measured

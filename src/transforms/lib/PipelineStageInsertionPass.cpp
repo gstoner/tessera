@@ -206,32 +206,33 @@ struct PipelineStageInsertionPass
           }
           if (!crossesBoundary) continue;
 
-          // Tag op as a pipeline boundary producer
+          // Tag op as a pipeline boundary producer and record the micro-batch
+          // count as metadata. (Previously this emitted one send PER micro-batch
+          // of the same single SSA `result`, but only mb==0 was ever wired to a
+          // recv — the mb>0 sends were dead and inflated sendCount. The scaffold
+          // models one boundary data-dependency per value; per-mb pipelining is
+          // a scheduler concern driven by this attribute.)
           op->setAttr("tessera.pp_boundary_send", b.getI64IntegerAttr(stage));
+          op->setAttr("tessera.pp_micro_batches", b.getI64IntegerAttr(numMicroBatches));
 
-          // Emit send/recv for each micro-batch
-          for (int64_t mb = 0; mb < numMicroBatches; ++mb) {
-            b.setInsertionPointAfter(op);
-            emitPipelineSend(b, op->getLoc(), result, stage, mb);
-            ++sendCount;
+          // Emit exactly one send after the producer.
+          b.setInsertionPointAfter(op);
+          emitPipelineSend(b, op->getLoc(), result, stage, /*mb=*/0);
+          ++sendCount;
 
-            // Find the first consuming op in stage+1 and insert recv before it
-            for (Operation *user : result.getUsers()) {
-              if (getOpStage(user) == stage + 1) {
-                b.setInsertionPoint(user);
-                Value recvVal = emitPipelineRecv(
-                    b, user->getLoc(), result.getType(), stage + 1, mb);
-                // Replace the use of the original result with the received value
-                // (only for ops in stage+1 and for mb=0 to avoid duplicate repls)
-                if (mb == 0) {
-                  for (OpOperand &use : llvm::make_early_inc_range(result.getUses())) {
-                    if (getOpStage(use.getOwner()) == stage + 1)
-                      use.set(recvVal);
-                  }
-                }
-                ++recvCount;
-                break; // one recv point per boundary value
+          // Insert one recv before the first stage+1 consumer and rewire the
+          // boundary uses to it.
+          for (Operation *user : result.getUsers()) {
+            if (getOpStage(user) == stage + 1) {
+              b.setInsertionPoint(user);
+              Value recvVal = emitPipelineRecv(
+                  b, user->getLoc(), result.getType(), stage + 1, /*mb=*/0);
+              for (OpOperand &use : llvm::make_early_inc_range(result.getUses())) {
+                if (getOpStage(use.getOwner()) == stage + 1)
+                  use.set(recvVal);
               }
+              ++recvCount;
+              break; // one recv point per boundary value
             }
           }
         }

@@ -112,9 +112,13 @@ struct DistributionLowering
         }
       }
 
-      // Prefer pass-option axes; fall back to shard attrs.
-      SmallVector<std::string> &axes  = optAxes.empty()  ? shardAxes  : optAxes;
-      SmallVector<int64_t>     &sizes = optSizes.empty() ? shardSizes : optSizes;
+      // Choose axes + sizes from ONE source so they stay paired. Pass options
+      // win only when axes are supplied there; selecting axes and sizes from
+      // independent sources (e.g. --mesh-sizes without --mesh-axes) desynced
+      // the axis↔size pairing, and the pad loop below silently masked it.
+      bool useOpt = !optAxes.empty();
+      SmallVector<std::string> &axes  = useOpt ? optAxes  : shardAxes;
+      SmallVector<int64_t>     &sizes = useOpt ? optSizes : shardSizes;
       while (sizes.size() < axes.size()) sizes.push_back(1);
 
       if (axes.empty()) return; // nothing to do

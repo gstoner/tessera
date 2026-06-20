@@ -204,20 +204,28 @@ struct GPUCollectiveInsertionPass
       auto effectAttr = fn->getAttrOfType<StringAttr>("tessera.effect");
       if (!effectAttr || effectAttr.getValue() != "memory") return;
 
-      // Find ops that write gradient tensors (ops with "reduce_sum" region mode)
+      // Collect gradient-writing ops FIRST, then insert collectives — mutating
+      // the IR while walking it is the iterator-invalidation anti-pattern (the
+      // new reduce_scatter happens not to re-match today, but this is brittle).
+      SmallVector<Operation *> gradOps;
       fn.walk([&](Operation *op) {
         if (op->getName().getStringRef().contains("tessera.reduce") ||
             op->getAttrOfType<UnitAttr>("tessera.is_grad")) {
-          if (op->getResults().empty()) return;
-          StringRef axis = getMeshAxis(op, "dp");
-          if (axis.empty()) axis = dpAxis;
-          insertReduceScatter(b, op, op->getResult(0), axis, /*scatterDim=*/0);
-          ++rsInserted;
+          if (!op->getResults().empty())
+            gradOps.push_back(op);
         }
       });
+      for (Operation *op : gradOps) {
+        StringRef axis = getMeshAxis(op, "dp");
+        if (axis.empty()) axis = dpAxis;
+        insertReduceScatter(b, op, op->getResult(0), axis, /*scatterDim=*/0);
+        ++rsInserted;
+      }
     });
 
     // ── Pass 3: Annotate schedule.mesh.region ops with collective counts ───
+    // NOTE: these are module-wide totals (every region gets the same count),
+    // not per-region tallies — consumers should read them as a module summary.
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef().contains("schedule.mesh.region")) {
         op->setAttr("tessera.collective_rs_count",

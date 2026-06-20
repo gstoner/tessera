@@ -41,6 +41,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -60,7 +61,8 @@ constexpr const char *kAutodiffMarker = "tessera.autodiff";
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
 
 /// Accumulate `g` into `cotan[v]`. First contribution stores directly; later
-/// contributions add via `arith.addf`.
+/// contributions add (float → arith.addf, integer → arith.addi) so an integer
+/// cotangent path doesn't feed addf an int type and trip the op verifier.
 void accumulateCotangent(mlir::OpBuilder &builder,
                           CotangentMap &cotan,
                           mlir::Value v,
@@ -73,8 +75,13 @@ void accumulateCotangent(mlir::OpBuilder &builder,
     return;
   }
   auto loc = g.getLoc();
-  auto add = builder.create<mlir::arith::AddFOp>(loc, it->second, g);
-  cotan[v] = add.getResult();
+  mlir::Type elemTy = mlir::getElementTypeOrSelf(g.getType());
+  mlir::Value sum;
+  if (llvm::isa<mlir::FloatType>(elemTy))
+    sum = builder.create<mlir::arith::AddFOp>(loc, it->second, g).getResult();
+  else
+    sum = builder.create<mlir::arith::AddIOp>(loc, it->second, g).getResult();
+  cotan[v] = sum;
 }
 
 class AutodiffPass : public mlir::PassWrapper<
@@ -101,14 +108,25 @@ public:
       return;
 
     // Step 1: collect ops in forward program order.
+    // NOTE: only top-level body ops are collected. Reverse-iterating a flat
+    // walk that descended into nested regions (scf.for / scf.if) would
+    // interleave parent/child adjoints out of structured order, so we restrict
+    // to the function body's top level and reject nested control-flow regions
+    // until structured reverse-mode lands.
     llvm::SmallVector<mlir::Operation *> forwardOps;
-    func.walk([&](mlir::Operation *op) {
-      if (op == func.getOperation())
-        return;
+    for (mlir::Operation &opRef : func.getBody().front()) {
+      mlir::Operation *op = &opRef;
       if (mlir::isa<mlir::func::ReturnOp>(op))
+        continue;
+      if (op->getNumRegions() != 0) {
+        op->emitError() << "[AUTODIFF_NESTED_REGION] reverse-mode autodiff does "
+                           "not yet support ops with nested regions ('"
+                        << op->getName().getStringRef() << "')";
+        signalPassFailure();
         return;
+      }
       forwardOps.push_back(op);
-    });
+    }
 
     // Step 2: identify scalar terminator (the loss seed) — convention is
     // that the function's single return is the seed for backward.

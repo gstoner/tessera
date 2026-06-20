@@ -63,6 +63,16 @@ shipped kernels**, not missing capability — and the honesty guards (conformanc
 Evaluator, envelope-dispatch lane check) correctly blocked the one case
 (conv2d/kv_cache_read) where the kernel exists but the launch path doesn't.
 
+## Phase 5 pipelining (2026-06-19) — assessed, no new HF work
+
+The hardware-free structural core (1F1B ordering) already exists:
+`compiler/pipeline_planner.py` (full 1F1B schedule — warmup/steady/cooldown +
+interleaved Megatron variant) + `PipelineStageInsertionPass.cpp` (C++ insertion).
+The remaining Phase 5 items — async overlap, collective↔compute overlap, GPU MMA
+register accumulator — are the collectives / multi-GPU / overlap bucket that is
+intended-open and hardware-gated (overlap value needs real silicon to measure).
+No new hardware-free work remains here.
+
 ## IR contract legality (2026-06-19) — dtype / aliasing / buffer-binding
 
 Closes COMPILER_AUDIT's "Layout and binding contracts are uneven" (layout was

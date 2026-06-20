@@ -162,7 +162,10 @@ struct LowerFlashAttnToAppleGPU : public RewritePattern {
     // runtime read past the single-batch buffer. Reject it so it falls back to
     // the reference path (which numpy-broadcasts the bias correctly).
     if (hasBias) {
-      auto bTy = cast<RankedTensorType>(bias.getType());
+      auto bTy = dyn_cast<RankedTensorType>(bias.getType());
+      if (!bTy)
+        return rewriter.notifyMatchFailure(
+            op, "AppleGPU bias attn path needs a ranked attn_bias tensor");
       if (bTy.getDimSize(0) != B || bTy.getDimSize(1) != Sq ||
           bTy.getDimSize(2) != Sk)
         return rewriter.notifyMatchFailure(

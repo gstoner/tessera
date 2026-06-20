@@ -740,13 +740,18 @@ struct LowerTileToAppleCPUPass
         // Graph IR op spelling as `kind` so the Python runtime can
         // dispatch correctly without re-parsing the source string.
         llvm::StringRef kind = isKVCache(name) ? name : src;
-        llvm::SmallVector<NamedAttribute, 3> extra;
+        llvm::SmallVector<NamedAttribute, 4> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Tessera"));
         extra.emplace_back(builder.getStringAttr("abi"),
                            builder.getStringAttr("kv_cache_handle"));
         extra.emplace_back(builder.getStringAttr("kind"),
                            builder.getStringAttr(kind));
+        // Carry the same `status` every other emitted Apple op has, so the
+        // runtime envelope can tell this is executable (KVCacheHandle dispatch)
+        // rather than inspection-only.
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr("executable"));
         buildAppleOp(builder, op, kCPUKVCacheOp, ordinal, extra);
       } else if (const LinalgSpec *sp =
                      linalgSpecFor(name) ? linalgSpecFor(name)
@@ -1044,13 +1049,17 @@ struct LowerTileToAppleGPUPass
         // Metal kernel for the in-cache score-matrix path is gated on
         // Phase G.
         llvm::StringRef kind = isKVCache(name) ? name : src;
-        llvm::SmallVector<NamedAttribute, 3> extra;
+        llvm::SmallVector<NamedAttribute, 4> extra;
         extra.emplace_back(builder.getStringAttr("framework"),
                            builder.getStringAttr("Metal"));
         extra.emplace_back(builder.getStringAttr("abi"),
                            builder.getStringAttr("kv_cache_handle"));
         extra.emplace_back(builder.getStringAttr("kind"),
                            builder.getStringAttr(kind));
+        // Tag the same status the rest of the GPU envelope uses so the runtime
+        // can distinguish executable (metal_runtime) from artifact_only.
+        extra.emplace_back(builder.getStringAttr("status"),
+                           builder.getStringAttr(execStatus));
         buildAppleOp(builder, op, kGPUKVCacheOp, ordinal, extra);
       } else if (isFlashAttn(name) || isFlashAttn(src)) {
         llvm::SmallVector<NamedAttribute, 6> extra;

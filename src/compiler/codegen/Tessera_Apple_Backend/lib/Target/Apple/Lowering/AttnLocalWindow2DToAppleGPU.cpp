@@ -102,8 +102,13 @@ struct LowerAttnLocalWindow2DToAppleGPU : public RewritePattern {
     if (!window || window.size() != 2)
       return rewriter.notifyMatchFailure(
           op, "attn_local_window_2d AppleGPU path: missing/invalid window attr");
-    int64_t rh = llvm::cast<IntegerAttr>(window[0]).getInt();
-    int64_t rw = llvm::cast<IntegerAttr>(window[1]).getInt();
+    auto rhAttr = llvm::dyn_cast<IntegerAttr>(window[0]);
+    auto rwAttr = llvm::dyn_cast<IntegerAttr>(window[1]);
+    if (!rhAttr || !rwAttr)
+      return rewriter.notifyMatchFailure(
+          op, "attn_local_window_2d AppleGPU path: window entries must be integers");
+    int64_t rh = rhAttr.getInt();
+    int64_t rw = rwAttr.getInt();
     if (rh < 0 || rw < 0)
       return rewriter.notifyMatchFailure(
           op, "attn_local_window_2d AppleGPU path: window half-widths must be >= 0");

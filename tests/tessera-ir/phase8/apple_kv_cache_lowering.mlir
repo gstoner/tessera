@@ -11,6 +11,7 @@ module {
   // CPU:       tessera_apple.cpu.kv_cache_cpu
   // CPU-SAME:    abi = "kv_cache_handle"
   // CPU-SAME:    kind = "tessera.kv_cache.append"
+  // CPU-SAME:    status = "executable"
   // CPU-NOT:   tessera_apple.diagnostic
 
   // GPU-LABEL: module
@@ -18,6 +19,7 @@ module {
   // GPU-SAME:    abi = "kv_cache_handle"
   // GPU-SAME:    framework = "Metal"
   // GPU-SAME:    kind = "tessera.kv_cache.append"
+  // GPU-SAME:    status = "artifact_only"
   // GPU-NOT:   tessera_apple.diagnostic
 
   func.func @kv_pipeline(%c: !tessera.kv_cache,

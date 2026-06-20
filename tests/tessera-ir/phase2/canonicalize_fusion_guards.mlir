@@ -59,6 +59,13 @@
 // CHECK-SAME:    epilogue = 1
 // CHECK-NOT:     tessera.relu
 
+// (2f) conv that already carries a non-identity epilogue (gelu=2) must NOT be
+// clobbered to relu (epilogue=1); the relu must stay separate.
+// CHECK-LABEL: func.func @no_clobber_existing_conv_epilogue
+// CHECK:         tessera.conv2d_nhwc
+// CHECK-SAME:    epilogue = 2
+// CHECK:         tessera.relu
+
 module attributes {tessera.ir.version = "1.0"} {
 
   // matmul(transpose(A), B) with transposeA already true:
@@ -139,6 +146,17 @@ module attributes {tessera.ir.version = "1.0"} {
   ) -> tensor<1x8x8x8xf32> {
     %c = "tessera.conv2d_nhwc"(%input, %filter)
         {strides = [1, 1], dilations = [1, 1]}
+        : (tensor<1x8x8x4xf32>, tensor<3x3x4x8xf32>) -> tensor<1x8x8x8xf32>
+    %r = "tessera.relu"(%c) : (tensor<1x8x8x8xf32>) -> tensor<1x8x8x8xf32>
+    return %r : tensor<1x8x8x8xf32>
+  }
+
+  func.func @no_clobber_existing_conv_epilogue(
+      %input: tensor<1x8x8x4xf32>,
+      %filter: tensor<3x3x4x8xf32>
+  ) -> tensor<1x8x8x8xf32> {
+    %c = "tessera.conv2d_nhwc"(%input, %filter)
+        {strides = [1, 1], dilations = [1, 1], epilogue = 2 : i32}
         : (tensor<1x8x8x4xf32>, tensor<3x3x4x8xf32>) -> tensor<1x8x8x8xf32>
     %r = "tessera.relu"(%c) : (tensor<1x8x8x8xf32>) -> tensor<1x8x8x8xf32>
     return %r : tensor<1x8x8x8xf32>

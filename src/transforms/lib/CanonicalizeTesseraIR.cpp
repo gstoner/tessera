@@ -44,6 +44,11 @@ struct FuseConvRelu : public RewritePattern {
     // The conv result is folded into the epilogue'd replacement; another
     // consumer would keep the original conv alive and duplicate the work.
     if (!conv->getResult(0).hasOneUse()) return failure();
+    // Don't clobber an epilogue the conv already carries (e.g. a previously
+    // fused gelu, epilogue=2): overwriting it with relu would silently change
+    // the computation. Only fuse into an identity (absent/0) epilogue.
+    if (auto ep = conv->getAttrOfType<IntegerAttr>("epilogue"))
+      if (ep.getInt() != 0) return failure();
     OperationState st(conv->getLoc(), "tessera.conv2d_nhwc");
     st.addOperands(conv->getOperands());
     st.addTypes(relu->getResult(0).getType());

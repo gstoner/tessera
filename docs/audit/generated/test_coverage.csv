@@ -332,7 +332,7 @@ rearrange,2,0,0,2,0,,directly_tested,2 direct test references
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,83 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
-relu,103,16,9,119,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,119 direct test references
+relu,103,18,9,121,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,121 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,7,7,0,14,0,,directly_tested,14 direct test references

@@ -43,7 +43,7 @@ extern "C" void tessera_x86_amx_gemm_s8s8_s32(const int8_t* A, const int8_t* B, 
     if (beta == 0) {
         std::memset(C, 0, sizeof(int32_t)*(size_t)M*(size_t)N);
     } else if (beta != 1) {
-        for (int i=0;i<M*N;i++) C[i] *= beta;
+        for (size_t i=0, mn=(size_t)M*N; i<mn; ++i) C[i] *= beta;
     }
 
     const int BM = 16, BN = 16;
@@ -55,8 +55,9 @@ extern "C" void tessera_x86_amx_gemm_s8s8_s32(const int8_t* A, const int8_t* B, 
 
             if (mb==BM && nb==BN && (K % TK)==0) {
                 // Fast path: direct tiles from original matrices
-                // Note: lda/ldb/ldc for _tile_loadd/_tile_stored are bytes-per-row
-                amx_block_s8s8_s32(A + m*K, B + n, C + m*N + n, K, N, N*4, K);
+                // Note: lda/ldb/ldc for _tile_loadd/_tile_stored are bytes-per-row.
+                // size_t offsets so large M/N/K don't overflow int.
+                amx_block_s8s8_s32(A + (size_t)m*K, B + n, C + (size_t)m*N + n, K, N, N*4, K);
             } else {
                 // Edge: pack into padded buffers, tiling over K in TK-wide
                 // chunks. (Previously only the first min(K,TK) of K was packed

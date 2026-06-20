@@ -10,7 +10,16 @@ import tessera as ts
 def test_s7_linear_general_lora_and_norms():
     x = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
     w = np.arange(20, dtype=np.float32).reshape(4, 5) / 10.0
-    np.testing.assert_allclose(ts.nn.linear_general(x, w), np.tensordot(x, w, axes=((-1,), (0,))))
+    # linear_general routes its contraction through autodiff-visible ops (so a
+    # tape sees the projection); that path's fp32 accumulation order differs
+    # from the BLAS reference at the ULP level, so compare at an fp32-realistic
+    # tolerance rather than near-bit-exact.
+    np.testing.assert_allclose(
+        ts.nn.linear_general(x, w),
+        np.tensordot(x, w, axes=((-1,), (0,))),
+        rtol=1e-6,
+        atol=1e-5,
+    )
 
     a = np.ones((4, 2), dtype=np.float32)
     b = np.ones((2, 5), dtype=np.float32) * 0.5

@@ -256,6 +256,15 @@ std::unique_ptr<mlir::Pass> createLayoutLegalityPass();
 // consumes them yet (an IR-completeness milestone).
 std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 
+// ── 2026-06-19 — IRContractLegalityPass (dtype / aliasing / buffer-binding) ──
+// LayoutLegalityPass's sibling for the three remaining contract families in
+// COMPILER_AUDIT's "Layout and binding contracts are uneven" item: dtype
+// (numeric_policy storage/accum coupling + TF32-as-storage + unknown storage,
+// Decision #15a), aliasing (tessera.inplace requires an in-range tessera.aliases),
+// and buffer-binding (tessera.buffer_role accept-set + no conflicting role per
+// tessera.binding). Registered standalone as `--tessera-ir-contracts`.
+std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
+
 // ── Sprint V5 (2026-05-22) — SymbolicDimEqualityPass ─────────────────────
 //
 // Closes the 4th and final MLIR-verifier gap in SHAPE_SYSTEM.md §11.2:

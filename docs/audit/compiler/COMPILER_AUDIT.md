@@ -666,8 +666,24 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   standalone `--tessera-layout-legality`). Proven firing end-to-end by
   `tests/tessera-ir/phase2/layout_legality_in_pipeline.mlir` (x86) +
   `tests/unit/test_layout_legality_pipeline_wiring.py` (all three builders,
-  before-symdim ordering). Still open: dtype / aliasing / buffer-binding
-  contracts. **Phase 1** of the closure plan
+  before-symdim ordering). **dtype / aliasing / buffer-binding contracts landed
+  2026-06-19:** `IRContractLegalityPass` (`--tessera-ir-contracts`,
+  `src/transforms/lib/IRContractLegalityPass.cpp`) is LayoutLegalityPass's sibling
+  — one `ModuleOp` walk, 7 stable-coded rules across three families: **dtype**
+  (numeric_policy storage/accum coupling, `DTYPE_LEGALITY_TF32_AS_STORAGE`,
+  `DTYPE_LEGALITY_LOWP_WITHOUT_WIDE_ACCUM`, `DTYPE_LEGALITY_UNKNOWN_STORAGE` —
+  enforces Decision #15a: storage≠accum, TF32 is a math_mode not a storage dtype);
+  **aliasing** (`tessera.inplace` requires an in-range `tessera.aliases` —
+  `ALIAS_LEGALITY_MISSING_ALIASES` / `_OPERAND_OOB`); **buffer-binding**
+  (`tessera.buffer_role` accept-set + no conflicting role per `tessera.binding` —
+  `BUFFER_BINDING_UNKNOWN_ROLE` / `_CONFLICT`). Lit:
+  `tests/tessera-ir/phase2/ir_contract_legality.mlir` (13 cases); Python:
+  `tests/unit/test_ir_contract_legality.py` (12). **Wired into all three named
+  lowering pipelines** (`tessera-lower-to-x86`, `tessera-lower-to-gpu`,
+  `buildCUDA13Pipeline`) right after `LayoutLegalityPass`, so the contracts fire
+  during real lowering — full tessera-ir lit sweep 148 PASS / 19 UNSUPPORTED /
+  0 FAIL confirms no existing fixture violates them. The earlier-open
+  **Phase 1** of the closure plan
   adds the missing *assignment* half — `LayoutAssignmentPass` (seed kernel layouts
   → propagate through pointwise → insert `cast{layout}`), with the legality pass
   reused as its verifier. Phase 1 also covers the Graph-IR `hasFolder`/

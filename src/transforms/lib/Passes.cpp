@@ -70,6 +70,9 @@ void registerTesseraPasses() {
         // scale-without-layout violations surface with the other structural
         // diagnostics before lowering.
         pm.addPass(createLayoutLegalityPass());
+        // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
+        // #15a) alongside layout legality — same early placement.
+        pm.addPass(createIRContractLegalityPass());
         // Sprint V6b (2026-05-22): re-check symbolic-dim equality
         // AFTER DistributionLoweringPass so a downstream pass that
         // accidentally breaks a `where D = H * Dh` clause fails
@@ -141,6 +144,10 @@ void registerTesseraPasses() {
   // verified by LayoutLegalityPass. Standalone for now (no backend consumes the
   // assignments yet); registered as --tessera-layout-assignment.
   ::mlir::registerPass([]() { return createLayoutAssignmentPass(); });
+  // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
+  // LayoutLegalityPass's sibling for the remaining contract families;
+  // registered standalone as --tessera-ir-contracts.
+  ::mlir::registerPass([]() { return createIRContractLegalityPass(); });
 
   // ── Sprint V5 (2026-05-22) — Symbolic dim equality verifier ───────────
   // Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
@@ -229,6 +236,8 @@ void registerTesseraPasses() {
     pm.addPass(createDistributionLoweringPass());
     // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
     pm.addPass(createLayoutLegalityPass());
+    // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
+    pm.addPass(createIRContractLegalityPass());
     // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
     pm.addPass(createSymbolicDimEqualityPass());
     pm.addPass(createTileIRLoweringPass());

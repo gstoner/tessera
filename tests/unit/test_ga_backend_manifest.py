@@ -266,10 +266,22 @@ def test_all_manifests_includes_clifford_primitives() -> None:
 
 
 def test_all_manifests_total_count_grew_by_17() -> None:
-    """Baseline manifest count + 17 clifford ops = new total."""
+    """The 17 GA primitives are all present in ``all_manifests()``.
+
+    The clifford-prefixed key count is 18, not 17: ``clifford_norm_squared``
+    is a fused reduction op registered in ``OP_SPECS`` (a fusion op, not a GA
+    primitive — it stays out of ``_CLIFFORD_PRIMITIVES``), so it surfaces as an
+    extra ``clifford_*`` manifest key on top of the 17 primitives.
+    """
     all_m = bm.all_manifests()
     clifford = [k for k in all_m if k.startswith("clifford_")]
-    assert len(clifford) == 17
+    # All 17 GA primitives are present...
+    assert set(bm._CLIFFORD_PRIMITIVES).issubset(set(clifford))
+    assert len(bm._CLIFFORD_PRIMITIVES) == 17
+    # ...plus the one OP_SPECS-registered clifford fusion op (norm_squared).
+    extras = sorted(set(clifford) - set(bm._CLIFFORD_PRIMITIVES))
+    assert extras == ["clifford_norm_squared"]
+    assert len(clifford) == 18
 
 
 # ---------------------------------------------------------------------------

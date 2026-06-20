@@ -838,6 +838,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("clifford_grade_projection", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
     ("clifford_geometric_product", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_lane.py",
     ("clifford_rotor_sandwich", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl.py",
+    # ‖x‖² fused reduction (test_norm_squared_matches_python_reference):
+    ("clifford_norm_squared", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_full.py",
     # GA differential-operator family (GA(1,1) field ops):
     ("clifford_codiff", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
     ("clifford_exp", "apple_gpu"): "tests/unit/test_apple_gpu_clifford_msl_ga11.py",
@@ -848,7 +850,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # Complex-number kernels:
     ("complex_mul", "apple_gpu"): "tests/unit/test_complex_runtime.py",
     ("complex_exp", "apple_gpu"): "tests/unit/test_complex_runtime.py",
-    # EBM refinement / inner-step (Langevin descent), vs the numpy reference:
+    # EBM quadratic energy + refinement / inner-step (Langevin descent), vs the
+    # numpy reference (test_energy_quadratic_jit_metal_runtime et al.):
+    ("ebm_energy_quadratic", "apple_gpu"): "tests/unit/test_apple_gpu_ebm_lane.py",
     ("ebm_refinement", "apple_gpu"): "tests/unit/test_apple_gpu_ebm_lane.py",
     ("ebm_inner_step", "apple_gpu"): "tests/unit/test_apple_gpu_ebm_lane.py",
 }

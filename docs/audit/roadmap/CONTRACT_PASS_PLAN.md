@@ -63,6 +63,28 @@ shipped kernels**, not missing capability — and the honesty guards (conformanc
 Evaluator, envelope-dispatch lane check) correctly blocked the one case
 (conv2d/kv_cache_read) where the kernel exists but the launch path doesn't.
 
+## IR contract legality (2026-06-19) — dtype / aliasing / buffer-binding
+
+Closes COMPILER_AUDIT's "Layout and binding contracts are uneven" (layout was
+already done). New C++ `IRContractLegalityPass`
+(`src/transforms/lib/IRContractLegalityPass.cpp`, `--tessera-ir-contracts`) is
+LayoutLegalityPass's sibling — one `ModuleOp` walk, 7 stable-coded rules:
+
+- **dtype** (enforces Decision #15a): `DTYPE_LEGALITY_TF32_AS_STORAGE` (TF32 is a
+  math_mode, not storage), `DTYPE_LEGALITY_LOWP_WITHOUT_WIDE_ACCUM` (fp8/fp6/fp4/
+  nvfp4/int4/int8 storage must declare a wider accum — storage≠accum),
+  `DTYPE_LEGALITY_UNKNOWN_STORAGE`.
+- **aliasing**: `tessera.inplace=true` requires an in-range `tessera.aliases`
+  (`ALIAS_LEGALITY_MISSING_ALIASES` / `_OPERAND_OOB`).
+- **buffer-binding**: `tessera.buffer_role` accept-set + no conflicting role per
+  `tessera.binding` (`BUFFER_BINDING_UNKNOWN_ROLE` / `_CONFLICT`).
+
+**Wired into all three named pipelines** (x86 / gpu / CUDA13) after
+LayoutLegalityPass, so it fires during real lowering. Lit
+`tests/tessera-ir/phase2/ir_contract_legality.mlir` (13 cases) + 12 Python guards;
+full tessera-ir lit sweep 148 PASS / 0 FAIL. With layout (done earlier), the
+Graph/Schedule/Tile/Target IR contract surface is now closed front-to-back.
+
 ## AMD / NVIDIA emission readiness (2026-06-19) — toward bring-up
 
 The single biggest "hardware-gated" bucket every dashboard named is the

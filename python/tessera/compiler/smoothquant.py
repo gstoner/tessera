@@ -130,6 +130,7 @@ class W8A8Verdict:
     rel_err: float
     operands_int8: bool      # the anti-fallback invariant
     detail: str = ""
+    exact_residual: float = 0.0   # relative error of the *pre-quant* rewrite (must be ~0)
 
     @property
     def is_equivalent(self) -> bool:
@@ -138,12 +139,23 @@ class W8A8Verdict:
 
 def verify_w8a8(
     X: np.ndarray, W: np.ndarray, migrated: MigratedLinear, *, rtol: float = 0.06,
+    exact_rtol: float = 1e-4,
 ) -> W8A8Verdict:
     """Oracle: smoothed W8A8 matmul ≈ fp ``X @ W`` AND operands stayed int8.
 
-    The fp parity proves the migration is semantics-preserving up to int8 quant
-    error; the int8-operand check is the anti-fallback invariant — a path that
-    silently dequantized to fp would still be "correct" but would not be the win.
+    Three checks, not one — because the ``rtol`` parity bound has to be loose
+    (~6%) to admit genuine int8×int8 quant error, which would also mask a real
+    regression in the *migration*. So we additionally pin the part that must be
+    tight:
+
+      1. ``rel_err ≤ rtol`` — the end-to-end W8A8 result tracks fp ``X @ W`` up to
+         int8 quant error.
+      2. ``operands_int8`` — the anti-fallback invariant; a path that silently
+         dequantized to fp would still be "correct" but would not be the win.
+      3. ``exact_residual ≤ exact_rtol`` — the smoothing factorization
+         ``X̂ @ Ŵ`` is an *exact* fp rewrite of ``X @ W``; all admissible error must
+         come from quantization, not from the migration. This catches a buggy
+         smoothing factor that the loose ``rtol`` would otherwise wave through.
     """
     X = np.asarray(X, np.float32)
     W = np.asarray(W, np.float32)
@@ -151,12 +163,19 @@ def verify_w8a8(
     y_sq = smoothquant_matmul(X, migrated)
     scale = float(np.max(np.abs(y_ref))) or 1.0
     rel_err = float(np.max(np.abs(y_sq - y_ref)) / scale)
+    exact_residual = exact_smoothing_residual(X, W, migrated) / scale
     operands_int8 = (migrated.w_q.dtype == np.int8)
-    rel = "equivalent" if rel_err <= rtol else "divergent"
-    detail = (f"W8A8 rel_err={rel_err:.3e} (≤ {rtol}); operands int8={operands_int8}"
-              if rel == "equivalent" else
-              f"W8A8 rel_err={rel_err:.3e} exceeds {rtol}")
-    return W8A8Verdict(rel, rel_err, operands_int8, detail)
+    smoothing_exact = exact_residual <= exact_rtol
+    rel = "equivalent" if (rel_err <= rtol and smoothing_exact) else "divergent"
+    if rel == "equivalent":
+        detail = (f"W8A8 rel_err={rel_err:.3e} (≤ {rtol}); smoothing exact "
+                  f"(residual={exact_residual:.2e}); operands int8={operands_int8}")
+    elif not smoothing_exact:
+        detail = (f"smoothing factorization not exact: residual={exact_residual:.3e} "
+                  f"exceeds {exact_rtol} — the migration itself is wrong")
+    else:
+        detail = f"W8A8 rel_err={rel_err:.3e} exceeds {rtol}"
+    return W8A8Verdict(rel, rel_err, operands_int8, detail, exact_residual)
 
 
 def exact_smoothing_residual(X: np.ndarray, W: np.ndarray,

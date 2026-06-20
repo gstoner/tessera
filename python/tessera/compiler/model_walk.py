@@ -62,6 +62,23 @@ _VIDEO_OPS = ("video_frame_sample", "patch_embed", "patch_merge", "media_project
 _AUDIO_OPS = ("audio_frame_sample", "audio_frame_projection", "media_project")
 
 
+def _first_input_name(node: Any, *, default: str) -> str:
+    """Best-effort name of a node's first input edge, robust to shape.
+
+    A node's ``inputs`` may be empty, or hold bare names or ``(name, port)``
+    tuples; reaching ``inputs[0][0]`` blindly would ``IndexError`` on an
+    input-less node (e.g. a source) before the lossless-partition oracle could
+    report the real issue. Falls back to ``default`` whenever the name is absent
+    or not a string."""
+    inputs = getattr(node, "inputs", None) or ()
+    if inputs:
+        first = inputs[0]
+        name = first[0] if isinstance(first, (tuple, list)) and first else first
+        if isinstance(name, str):
+            return name
+    return default
+
+
 def partition_walks(graph: Any) -> dict[str, ModelWalk]:
     """Split a multimodal graph into named walks.
 
@@ -102,8 +119,7 @@ def partition_walks(graph: Any) -> dict[str, ModelWalk]:
     for name, nodes in buckets.items():
         walks[name] = ModelWalk(
             name=name, nodes=tuple(nodes),
-            consumes=(nodes[0].inputs[0][0] if isinstance(nodes[0].inputs[0][0], str)
-                      else "pixels",),
+            consumes=(_first_input_name(nodes[0], default="pixels"),),
             produces=(f"{name.replace('_prefill', '')}_projected",),
         )
     if splice_nodes:

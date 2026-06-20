@@ -179,7 +179,7 @@ def _infer_position(state: Any, args: tuple[Any, ...]) -> int:
 @dataclass(frozen=True)
 class PhaseSplitVerdict:
     relation: str            # "equivalent" | "divergent" | "inconclusive"
-    max_abs_err: float | None
+    max_abs_err: float | None  # last-position logit distance, or None if not measurable
     tokens_match: bool
     detail: str = ""
 
@@ -209,28 +209,52 @@ def verify_phase_split(
     sampler = sampler or (lambda lg: int(np.argmax(np.asarray(lg))))
     prompt = list(np.asarray(prompt_tokens).reshape(-1).tolist())
 
-    # Phase-split path.
-    gen = program.generate(prompt, max_new_tokens=max_new_tokens,
-                           sampler=sampler, prompt_len=len(prompt))
+    # Phase-split path — driven step by step so we capture the *logits* it
+    # produces at each generation boundary, not just the sampled tokens.
+    split_last: list[np.ndarray] = []
+    gen: list[int] = []
+    logits, handoff = program.run_prefill(prompt, prompt_len=len(prompt))
+    for _ in range(max_new_tokens):
+        lg = np.asarray(logits, dtype=np.float64)
+        split_last.append(lg[-1] if lg.ndim == 2 else lg)
+        tok = sampler(logits)
+        gen.append(tok)
+        logits, handoff = program.decode_step(handoff, tok)
 
     # Monolithic reference: teacher-force the same prompt+gen stream and read the
-    # argmax at each generation boundary.
+    # argmax (and last-position logits) at each generation boundary.
     ref_tokens: list[int] = []
     stream = list(prompt)
-    last_err = 0.0
+    errs: list[float] = []
+    measurable = True
     for i in range(max_new_tokens):
         logits_all = np.asarray(forward_fn(stream), dtype=np.float64)
         last = logits_all[-1] if logits_all.ndim == 2 else logits_all
-        ref_tok = sampler(last)
-        ref_tokens.append(ref_tok)
+        ref_tokens.append(sampler(last))
+        if split_last[i].shape == last.shape:
+            errs.append(float(np.max(np.abs(split_last[i] - last))))
+        else:
+            measurable = False   # logit vectors incomparable → don't fabricate a distance
         stream.append(gen[i])   # follow the split program's actual choices
     tokens_match = ref_tokens == gen
+    max_abs_err = max(errs) if (measurable and errs) else None
 
+    # The contract is argmax stability (decode's online softmax differs in the
+    # low bits from prefill's materialized path by design); the logit distance is
+    # reported as supporting evidence, not the pass/fail signal.
     relation = "equivalent" if tokens_match else "divergent"
-    detail = ("prefill▸decode token stream matches monolithic forward"
+    if max_abs_err is None:
+        err_note = ""
+    else:
+        ref_mag = max((float(np.max(np.abs(s))) for s in split_last), default=1.0)
+        within = max_abs_err <= atol + rtol * (ref_mag or 1.0)
+        err_note = (f"; max last-logit Δ={max_abs_err:.2e}"
+                    + ("" if within else " (exceeds tol — numerics drifted, "
+                       "argmax still held)"))
+    detail = (f"prefill▸decode token stream matches monolithic forward{err_note}"
               if tokens_match else
-              f"token streams diverge: split={gen} ref={ref_tokens}")
-    return PhaseSplitVerdict(relation, last_err, tokens_match, detail)
+              f"token streams diverge: split={gen} ref={ref_tokens}{err_note}")
+    return PhaseSplitVerdict(relation, max_abs_err, tokens_match, detail)
 
 
 __all__ = [

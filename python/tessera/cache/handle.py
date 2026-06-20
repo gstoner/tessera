@@ -288,6 +288,26 @@ class KVCacheHandle:
             k_slice, v_slice = _ops.dequantize_kv(k_slice, v_slice, scale)
         return k_slice, v_slice
 
+    def gather(self, indices: Any) -> tuple[np.ndarray, np.ndarray]:
+        """Dequantized ``(K, V)`` for an arbitrary set of token indices.
+
+        Like :meth:`read` but for a fancy index set rather than a contiguous
+        range — the access pattern the ``PagedKVState`` contiguous adapter needs.
+        Keeping the quant-scale read here (rather than reaching into ``_scales``
+        from outside) keeps the quantization layout private to the handle.
+        """
+        idx = np.asarray(indices, dtype=np.int64).reshape(-1)
+        if idx.size and (idx.min() < 0 or idx.max() >= self.current_seq):
+            raise IndexError(
+                f"KVCacheHandle.gather: index out of range [0, {self.current_seq})")
+        k = np.asarray(self.keys)[idx]
+        v = np.asarray(self.values)[idx]
+        if self.quantize_bits is not None:
+            from .. import ops as _ops
+            scale = self._scales[:, idx]
+            k, v = _ops.dequantize_kv(k, v, scale)
+        return k, v
+
     def prune(self, max_entries: int) -> "KVCacheHandle":
         """Drop everything before the trailing ``max_entries`` tokens.
 

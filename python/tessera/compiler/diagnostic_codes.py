@@ -589,6 +589,114 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="DeepGEMM-keystone",
     ),
 
+    # ── IRContractLegalityPass (dtype / aliasing / buffer-binding) ───────
+    DiagnosticCode(
+        code="DTYPE_LEGALITY_TF32_AS_STORAGE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "`numeric_policy.storage = \"tf32\"` is illegal — TF32 is a "
+            "`math_mode` on fp32 storage, not a storage dtype."
+        ),
+        fix_hint=(
+            "Set `numeric_policy.storage = \"fp32\"` and express TF32 via "
+            "`numeric_policy.math_mode = \"tf32\"`."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="DTYPE_LEGALITY_UNKNOWN_STORAGE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "`numeric_policy.storage` names a dtype outside the canonical + "
+            "known-gated storage set."
+        ),
+        fix_hint=(
+            "Use a canonical dtype name from "
+            "docs/reference/tessera_tensor_attributes.md, or declare the "
+            "planned-gated dtype in the known-gated storage set."
+        ),
+        spec="docs/reference/tessera_tensor_attributes.md",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="DTYPE_LEGALITY_LOWP_WITHOUT_WIDE_ACCUM",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "A low-precision storage (fp8*/fp6*/fp4*/nvfp4/int4/int8) must "
+            "declare a wider accumulator (fp32/fp16/bf16/int32); storage and "
+            "accumulator are distinct contracts (Decision #15a)."
+        ),
+        fix_hint=(
+            "Declare `numeric_policy.accum` as a wider dtype than the "
+            "low-precision storage instead of relying on a single fused dtype."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="ALIAS_LEGALITY_MISSING_ALIASES",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "An op marked `tessera.inplace = true` must declare "
+            "`tessera.aliases` (the operand index its result aliases) — an "
+            "undeclared in-place mutation has no aliasing contract the "
+            "scheduler can honor."
+        ),
+        fix_hint=(
+            "Add a `tessera.aliases` integer attribute naming the operand "
+            "index the in-place result aliases, or drop `tessera.inplace`."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="ALIAS_LEGALITY_OPERAND_OOB",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary="`tessera.aliases` indexes past the operand list.",
+        fix_hint=(
+            "Set `tessera.aliases` to a valid operand index in "
+            "[0, num_operands)."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="BUFFER_BINDING_UNKNOWN_ROLE",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "`tessera.buffer_role` is outside the accept-set "
+            "{input, output, scratch, accumulator, weight}."
+        ),
+        fix_hint=(
+            "Use one of the canonical buffer roles "
+            "{input, output, scratch, accumulator, weight}."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+    DiagnosticCode(
+        code="BUFFER_BINDING_CONFLICT",
+        pass_origin="IRContractLegalityPass",
+        severity="error",
+        summary=(
+            "Two ops bind the same `tessera.binding` id to different roles — a "
+            "buffer can't be both (e.g.) an input and a scratch in one program."
+        ),
+        fix_hint=(
+            "Give the conflicting buffers distinct `tessera.binding` ids, or "
+            "reconcile their `tessera.buffer_role` to a single role."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="IRContractLegality",
+    ),
+
     # ── Queue dialect verifiers (V8) ─────────────────────────────────────
     DiagnosticCode(
         code="QUEUE_CREATE_OPERAND_COUNT",

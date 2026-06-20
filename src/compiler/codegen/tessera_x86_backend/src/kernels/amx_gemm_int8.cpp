@@ -58,35 +58,41 @@ extern "C" void tessera_x86_amx_gemm_s8s8_s32(const int8_t* A, const int8_t* B, 
                 // Note: lda/ldb/ldc for _tile_loadd/_tile_stored are bytes-per-row
                 amx_block_s8s8_s32(A + m*K, B + n, C + m*N + n, K, N, N*4, K);
             } else {
-                // Edge: pack into padded buffers
+                // Edge: pack into padded buffers, tiling over K in TK-wide
+                // chunks. (Previously only the first min(K,TK) of K was packed
+                // and contracted, silently truncating the GEMM for K>64.)
                 alignas(64) int8_t  Ablk[BM*TK];
                 alignas(64) int8_t  Bblk[TK*BN];
                 alignas(64) int32_t Cblk[BM*BN];
+                alignas(64) int32_t Ctmp[BM*BN];
 
-                // Zero buffers
-                std::memset(Ablk, 0, sizeof(Ablk));
-                std::memset(Bblk, 0, sizeof(Bblk));
                 std::memset(Cblk, 0, sizeof(Cblk));
 
-                // Pack A (mb x K) in 16x64 chunks
-                for (int i=0; i<mb; ++i) {
-                    const int8_t* src = A + (m+i)*K;
-                    int8_t* dst = Ablk + i*TK;
-                    int kk = std::min(K, TK);
-                    std::memcpy(dst, src, kk);
-                }
-                // Pack B (K x nb)
-                for (int k=0; k<std::min(K,TK); ++k) {
-                    const int8_t* src = B + k*N + n;
-                    int8_t* dst = Bblk + k*BN;
-                    std::memcpy(dst, src, nb);
+                for (int k0=0; k0<K; k0+=TK) {
+                    const int kc = std::min(TK, K - k0);
+
+                    // Re-zero the packed operands so the [kc,TK) tail is padding.
+                    std::memset(Ablk, 0, sizeof(Ablk));
+                    std::memset(Bblk, 0, sizeof(Bblk));
+
+                    // Pack A (mb x kc) for this K-chunk.
+                    for (int i=0; i<mb; ++i) {
+                        std::memcpy(Ablk + i*TK, A + (m+i)*K + k0, (size_t)kc);
+                    }
+                    // Pack B (kc x nb) for this K-chunk.
+                    for (int k=0; k<kc; ++k) {
+                        std::memcpy(Bblk + k*BN, B + (size_t)(k0+k)*N + n, (size_t)nb);
+                    }
+
+                    // Zero-padded operands make the full-TK contract exact.
+                    amx_block_s8s8_s32(Ablk, Bblk, Ctmp, TK, BN, BN*4, TK);
+
+                    for (int t=0; t<BM*BN; ++t) Cblk[t] += Ctmp[t];
                 }
 
-                amx_block_s8s8_s32(Ablk, Bblk, Cblk, TK, BN, BN*4, std::min(K,TK));
-
-                // Accumulate into C
+                // Write the accumulated tile back to C.
                 for (int i=0;i<mb;i++) {
-                    std::memcpy(C + (m+i)*N + n, Cblk + i*BN, nb*sizeof(int32_t));
+                    std::memcpy(C + (size_t)(m+i)*N + n, Cblk + i*BN, (size_t)nb*sizeof(int32_t));
                 }
             }
         }

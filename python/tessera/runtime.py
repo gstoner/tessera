@@ -32,7 +32,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from enum import IntEnum
@@ -11881,6 +11880,31 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
     return _apple_gpu_runtime
 
 
+def _tessera_runtime_cache_dir(name: str) -> Path:
+    """Return a private, per-user cache directory for compiled runtime libs.
+
+    Building into a predictable world-writable temp path (``/tmp/...``) and then
+    loading it via ``ctypes.CDLL`` is a local code-injection / TOCTOU vector:
+    another user could pre-create or overwrite the ``.dylib``/``.so`` between
+    build and load. We build under a per-user directory (``$TESSERA_CACHE_DIR``
+    or ``~/.cache/tessera``) restricted to ``0700`` and refuse to use it if it
+    is not owned by the current user.
+    """
+    base = os.environ.get("TESSERA_CACHE_DIR")
+    root = Path(base) if base else (Path.home() / ".cache" / "tessera")
+    out_dir = root / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(out_dir, 0o700)
+    if hasattr(os, "geteuid"):
+        st = out_dir.stat()
+        if st.st_uid != os.geteuid():
+            raise RuntimeError(
+                f"refusing to use runtime cache dir {out_dir!s}: owned by uid "
+                f"{st.st_uid}, not the current user — possible tampering."
+            )
+    return out_dir
+
+
 def _build_apple_gpu_runtime_shared(root: Path) -> Path:
     backend_dir = root / "src/compiler/codegen/Tessera_Apple_Backend/runtime"
     if sys.platform == "darwin":
@@ -11896,8 +11920,7 @@ def _build_apple_gpu_runtime_shared(root: Path) -> Path:
             "Apple GPU runtime library is not available; set "
             "TESSERA_APPLE_GPU_RUNTIME_LIB or install a C++ compiler"
         )
-    out_dir = Path(tempfile.gettempdir()) / "tessera_apple_gpu_runtime"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _tessera_runtime_cache_dir("apple_gpu_runtime")
     suffix = ".dylib" if sys.platform == "darwin" else ".so"
     out = out_dir / f"libtessera_apple_gpu_runtime{suffix}"
     if out.exists() and all(
@@ -11940,8 +11963,7 @@ def _build_apple_cpu_runtime_shared(root: Path) -> Path:
             "Apple CPU runtime library is not available; set "
             "TESSERA_APPLE_CPU_RUNTIME_LIB or install a C++ compiler"
         )
-    out_dir = Path(tempfile.gettempdir()) / "tessera_apple_cpu_runtime"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _tessera_runtime_cache_dir("apple_cpu_runtime")
     suffix = ".dylib" if sys.platform == "darwin" else ".so"
     out = out_dir / f"libtessera_apple_cpu_runtime{suffix}"
     if out.exists() and out.stat().st_mtime >= source.stat().st_mtime:

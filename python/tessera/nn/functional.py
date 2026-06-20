@@ -65,9 +65,25 @@ def linear_general(x, W, bias=None, axis=-1):
                 f"contracted dim mismatch: x axis {x_ax} has {x_arr.shape[x_ax]}, "
                 f"weight dim has {w_dim}"
             )
-    y = np.tensordot(x_arr, w_arr, axes=(axes, tuple(range(len(axes)))))
+    # Route the contraction through ops.einsum (not np.tensordot) so an active
+    # autodiff tape sees the projection — functional.* must decompose through
+    # ops.* (mirrors linear()). einsum has a registered VJP/JVP.
+    pool = [chr(c) for c in range(ord("a"), ord("z") + 1)]
+    n_out_feat = w_arr.ndim - len(axes)
+    if x_arr.ndim + n_out_feat > len(pool):
+        # Degenerate very-high-rank case: fall back to the numpy reference
+        # (autodiff unavailable, correctness preserved).
+        y = np.tensordot(x_arr, w_arr, axes=(axes, tuple(range(len(axes)))))
+    else:
+        x_letters = pool[: x_arr.ndim]
+        contract = set(axes)
+        w_trailing = pool[x_arr.ndim : x_arr.ndim + n_out_feat]
+        w_letters = [x_letters[ax] for ax in axes] + w_trailing
+        out_letters = [l for i, l in enumerate(x_letters) if i not in contract] + w_trailing
+        spec = "".join(x_letters) + "," + "".join(w_letters) + "->" + "".join(out_letters)
+        y = ops.einsum(spec, x_arr, w_arr)
     if bias is not None:
-        y = y + _asarray(bias)
+        y = ops.add(y, _asarray(bias))
     return y
 
 

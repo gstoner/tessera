@@ -848,8 +848,20 @@ def vjp_sum(dout, x, *, axis=None, keepdims=False, **_):
 def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
     if not training or p == 0.0:
         return (dout,)
-    # Recompute the same mask using the seed (deterministic only if seed given).
-    rng = np.random.default_rng(None if seed is None else int(seed))
+    if seed is None:
+        # The mask is not stored on the tape; backward can only reproduce it
+        # from a seed. With seed=None we would draw a *fresh, independent*
+        # mask and multiply gradients by it — silently wrong gradients. Fail
+        # loudly instead. `nn.Dropout` materializes a per-call seed while
+        # training so the high-level path stays differentiable.
+        raise ValueError(
+            "dropout is not differentiable without a reproducible seed: the "
+            "backward pass cannot recover the forward mask, so it would corrupt "
+            "gradients. Pass seed=… to ops.dropout (nn.Dropout assigns one "
+            "automatically while training). See docs/spec/AUTODIFF_SPEC.md."
+        )
+    # Recompute the exact forward mask from the seed.
+    rng = np.random.default_rng(int(seed))
     mask = rng.binomial(1, 1.0 - p, x.shape) / (1.0 - p)
     return (dout * mask,)
 
@@ -2062,20 +2074,27 @@ def vjp_exp(dout, x, **_):
     return (np.asarray(dout) * np.exp(np.asarray(x)),)
 
 
+# Floor for derivative denominators so boundary inputs yield large-but-finite
+# gradients instead of inf/NaN (away from the boundary the clamp is inactive).
+_VJP_DOMAIN_EPS = 1e-12
+
+
 @_vjp("log")
 def vjp_log(dout, x, **_):
-    return (np.asarray(dout) / np.asarray(x),)
+    a = np.asarray(x)
+    safe = np.where(np.abs(a) < _VJP_DOMAIN_EPS, np.copysign(_VJP_DOMAIN_EPS, a + 0.0), a)
+    return (np.asarray(dout) / safe,)
 
 
 @_vjp("sqrt")
 def vjp_sqrt(dout, x, **_):
     a = np.asarray(x)
-    return (np.asarray(dout) * 0.5 / np.sqrt(a),)
+    return (np.asarray(dout) * 0.5 / np.sqrt(np.maximum(a, _VJP_DOMAIN_EPS)),)
 
 
 @_vjp("rsqrt")
 def vjp_rsqrt(dout, x, **_):
-    a = np.asarray(x)
+    a = np.maximum(np.asarray(x), _VJP_DOMAIN_EPS)
     return (np.asarray(dout) * -0.5 * np.power(a, -1.5),)
 
 
@@ -2115,13 +2134,13 @@ def vjp_cosh(dout, x, **_):
 @_vjp("asin")
 def vjp_asin(dout, x, **_):
     a = np.asarray(x)
-    return (np.asarray(dout) / np.sqrt(1.0 - a * a),)
+    return (np.asarray(dout) / np.sqrt(np.maximum(1.0 - a * a, _VJP_DOMAIN_EPS)),)
 
 
 @_vjp("acos")
 def vjp_acos(dout, x, **_):
     a = np.asarray(x)
-    return (-np.asarray(dout) / np.sqrt(1.0 - a * a),)
+    return (-np.asarray(dout) / np.sqrt(np.maximum(1.0 - a * a, _VJP_DOMAIN_EPS)),)
 
 
 @_vjp("atan")
@@ -2360,6 +2379,13 @@ def vjp_cross_entropy_loss(dout, logits, targets, *, reduction="mean", **_):
     scale_shape = probs.shape[:-1]
     scale = _reduction_cotangent(dout, scale_shape, reduction)[..., None]
     grad_logits = (probs - one_hot) * scale
+    if target_grad is not None:
+        # d/d(soft targets) of -sum(targets * log_softmax(logits)) is
+        # -log_softmax(logits); it must carry the SAME reduction scaling /
+        # upstream cotangent as grad_logits. Previously returned unscaled,
+        # which is a factor of N too large for reduction="mean" and ignores
+        # dout for reduction="none".
+        target_grad = _sum_to_shape(target_grad * scale, targets_arr.shape)
     return (_sum_to_shape(grad_logits, logits_arr.shape), target_grad)
 
 

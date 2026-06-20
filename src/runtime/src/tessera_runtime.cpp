@@ -1,6 +1,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 #include <cstring>
 #include <string>
 #include <sstream>
@@ -73,6 +74,17 @@ void* g_gpu_launcher_user = nullptr;
 std::mutex g_profile_callback_mu;
 tsrProfileEventFn g_profile_callback = nullptr;
 void* g_profile_callback_user = nullptr;
+// Number of profile callbacks currently executing (any thread). Guarded by
+// g_profile_callback_mu; g_profile_callback_cv signals when it returns to 0 so
+// tsrSetProfileEventCallback can drain in-flight calls before the caller frees
+// the previous sink (closes the copy-then-unlock-then-invoke UAF window).
+std::condition_variable g_profile_callback_cv;
+int g_profile_callback_inflight = 0;
+// Re-entrancy guard: true while THIS thread is inside a profile callback. Used
+// to (a) suppress recursive emission if a callback re-enters the runtime, and
+// (b) skip the in-flight drain when a callback reconfigures the callback
+// (waiting on its own in-flight slot would self-deadlock).
+thread_local bool g_in_profile_callback = false;
 
 constexpr const char *kArtifactMagicV1 = "TSRART1";
 constexpr const char *kArtifactMagicV2 = "TSRART2";
@@ -252,14 +264,34 @@ static void EmitProfileEvent(TsrProfileEventKind kind,
                              TsrStatus status,
                              const std::string& extra_json = std::string()) {
   if (!g_profiling_enabled.load(std::memory_order_relaxed)) return;
+  // Re-entrancy guard: if a callback re-enters the runtime, the nested call's
+  // emission is suppressed — otherwise a callback that touches any tsr_* API
+  // would recurse unboundedly.
+  if (g_in_profile_callback) return;
+
   tsrProfileEventFn callback = nullptr;
   void* user = nullptr;
   {
     std::lock_guard<std::mutex> lk(g_profile_callback_mu);
     callback = g_profile_callback;
+    if (!callback) return;
     user = g_profile_callback_user;
+    // Mark in-flight UNDER the lock so a concurrent tsrSetProfileEventCallback
+    // drains us before its caller can free the sink (no copy-then-free UAF).
+    ++g_profile_callback_inflight;
   }
-  if (!callback) return;
+
+  // RAII: always clear the re-entrancy flag and release the in-flight slot,
+  // even if the user callback throws — otherwise a drain would hang forever.
+  struct InFlightScope {
+    ~InFlightScope() {
+      g_in_profile_callback = false;
+      std::lock_guard<std::mutex> lk(g_profile_callback_mu);
+      if (--g_profile_callback_inflight == 0) g_profile_callback_cv.notify_all();
+    }
+  } in_flight_scope;
+  g_in_profile_callback = true;
+
   uint64_t end_ns = NowNs();
   double duration_us = static_cast<double>(end_ns - start_ns) / 1000.0;
   std::ostringstream payload;
@@ -312,9 +344,17 @@ uint64_t tsrTimestampNowNs(void) { return NowNs(); }
 TsrStatus tsrSetProfileEventCallback(tsrProfileEventFn fn, void* user) {
   uint64_t start = NowNs();
   {
-    std::lock_guard<std::mutex> lk(g_profile_callback_mu);
+    std::unique_lock<std::mutex> lk(g_profile_callback_mu);
     g_profile_callback = fn;
     g_profile_callback_user = fn ? user : nullptr;
+    // Drain in-flight callbacks so the caller may safely free the previous sink
+    // the instant this returns. Skip the wait when called from within a callback
+    // on this thread — that callback holds an in-flight slot, so waiting on the
+    // count would self-deadlock (the re-entrancy flag detects this).
+    if (!g_in_profile_callback) {
+      g_profile_callback_cv.wait(
+          lk, [] { return g_profile_callback_inflight == 0; });
+    }
   }
   EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrSetProfileEventCallback", start,
                    TSR_STATUS_SUCCESS,

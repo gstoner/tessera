@@ -207,6 +207,97 @@ int main(int argc, char** argv) {
 """
 
 
+_HARDENING_HARNESS = r"""
+#include "tessera/tessera_runtime.h"
+#include <atomic>
+#include <thread>
+#include <cstdio>
+
+// (1) Re-entrancy: a callback that re-enters the runtime. The nested emission
+// must be suppressed (depth never exceeds 1) — otherwise unbounded recursion.
+static thread_local int tl_depth = 0;
+static std::atomic<int> g_reentrant_calls{0};
+static std::atomic<bool> g_saw_recursion{false};
+static void cb_reentrant(TsrProfileEventKind, const char*, const char*, double, void*) {
+  if (tl_depth > 0) { g_saw_recursion.store(true); return; }
+  ++tl_depth;
+  g_reentrant_calls.fetch_add(1);
+  int c = 0;
+  tsrGetDeviceCount(&c);   // re-enters the runtime; must NOT call us again
+  --tl_depth;
+}
+
+// (2) Reconfigure-from-within: a callback that resets the callback. Must not
+// self-deadlock on the in-flight drain (the program returning is the proof).
+static void cb_self_reconfigure(TsrProfileEventKind, const char*, const char*, double, void*) {
+  tsrSetProfileEventCallback(nullptr, nullptr);
+}
+
+// (3) Concurrent emit + swap: cb_A must NEVER run after the swap to cb_B
+// returns — the drain closes the copy-then-free use-after-free window.
+static std::atomic<bool> g_swapped{false};
+static std::atomic<int> g_a_after_swap{0};
+static std::atomic<bool> g_stop{false};
+static void cb_A(TsrProfileEventKind, const char*, const char*, double, void*) {
+  if (g_swapped.load()) g_a_after_swap.fetch_add(1);
+}
+static void cb_B(TsrProfileEventKind, const char*, const char*, double, void*) {}
+
+int main() {
+  tsrEnableProfiling(1);
+
+  if (tsrSetProfileEventCallback(cb_reentrant, nullptr) != TSR_STATUS_SUCCESS) return 2;
+  int c = 0;
+  tsrGetDeviceCount(&c);
+  tsrSetProfileEventCallback(nullptr, nullptr);
+  if (g_saw_recursion.load()) return 10;        // re-entrancy guard failed
+  if (g_reentrant_calls.load() < 1) return 11;  // callback never fired
+
+  if (tsrSetProfileEventCallback(cb_self_reconfigure, nullptr) != TSR_STATUS_SUCCESS) return 3;
+  tsrGetDeviceCount(&c);                         // hangs here if drain self-deadlocks
+  tsrSetProfileEventCallback(nullptr, nullptr);
+
+  if (tsrSetProfileEventCallback(cb_A, nullptr) != TSR_STATUS_SUCCESS) return 4;
+  std::thread emitter([]{ int cc = 0; while (!g_stop.load()) tsrGetDeviceCount(&cc); });
+  for (int i = 0; i < 100000; ++i) { int cc = 0; tsrGetDeviceCount(&cc); }
+  tsrSetProfileEventCallback(cb_B, nullptr);     // drains in-flight cb_A before returning
+  g_swapped.store(true);                         // from now cb_A must never run
+  for (int i = 0; i < 100000; ++i) { int cc = 0; tsrGetDeviceCount(&cc); }
+  g_stop.store(true);
+  emitter.join();
+  tsrSetProfileEventCallback(nullptr, nullptr);
+  if (g_a_after_swap.load() != 0) return 12;     // cb_A ran after swap returned -> UAF window
+
+  std::printf("OK reentrant=%d\n", g_reentrant_calls.load());
+  return 0;
+}
+"""
+
+
+def test_runtime_profile_callback_hardening(tmp_path: Path) -> None:
+    """Re-entrancy guard + callback-lifetime drain (no recursion, no deadlock when
+    a callback reconfigures the callback, no use-after-free under concurrent swap)."""
+    if not RUNTIME_LIB.is_file() or _CXX is None or not _runtime_lib_has_profile_callback():
+        pytest.skip(
+            "requires built libtessera_runtime.a with tsrSetProfileEventCallback "
+            "(run `ninja -C build tessera_runtime`) and a C++ compiler"
+        )
+    src_path = tmp_path / "profile_hardening.cpp"
+    bin_path = tmp_path / "profile_hardening"
+    src_path.write_text(_HARDENING_HARNESS)
+    compile_cmd = [
+        _CXX, "-std=c++17", "-O2", "-I", str(RUNTIME_INCLUDE),
+        str(src_path), str(RUNTIME_LIB), "-lpthread", "-o", str(bin_path),
+    ]
+    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[:4000]
+    # A hang (self-deadlock) trips the timeout; a non-zero exit pinpoints which
+    # invariant broke (10=recursion, 11=no fire, 12=UAF window).
+    run = subprocess.run([str(bin_path)], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, f"exit {run.returncode}\nstdout:{run.stdout}\nstderr:{run.stderr}"
+    assert run.stdout.startswith("OK "), run.stdout
+
+
 def test_runtime_profile_callback_functional_trace_spine(tmp_path: Path) -> None:
     if not RUNTIME_LIB.is_file() or _CXX is None or not _runtime_lib_has_profile_callback():
         pytest.skip(

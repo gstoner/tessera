@@ -16,9 +16,16 @@ surfaces used as design anchors:
   and sampling, filters, and paused/resumed collection.
 * NVIDIA CUPTI / Triton Model Analyzer: runtime callbacks, activity records,
   PC/range profiling, and model-configuration sweeps with reports.
+* NVIDIA NVML / DCGM: lower-frequency system context for utilization, power,
+  thermals, clocks, memory, PCIe/NVLink, and reliability signals.
 * AMD ROCprofiler-SDK: HIP/HSA/marker/memory tracing, hardware counters,
   dispatch/device counter collection, PC sampling, and thread trace.
+* AMD SMI / RDC: lower-frequency system context for utilization, power,
+  thermals, clocks, memory, PCIe/XGMI, and RAS signals.
 * Apple Metal counters: counter sample buffers and timestamp correlation.
+* SiliconScope-style Apple system context: sudoless IOReport deltas for GPU
+  residency/clock, unified-memory bandwidth, power domains, thermal pressure,
+  and workload bottleneck classification.
 
 The contract does not claim that all vendor collectors are linked into Tessera
 today; rows carry ``available`` / ``planned`` / ``unsupported`` status so reports
@@ -517,6 +524,10 @@ _SOURCE_NOTES = (
     "filters, and paused/resumed collection.",
     "Backend providers remain explicit so reports never confuse planned "
     "instrumentation with native runtime proof.",
+    "Apple system-context telemetry can be correlated from a native IOReport/"
+    "SMC/HID helper, but it is separate from Metal command-buffer proof.",
+    "NVIDIA/AMD system-context telemetry should come from NVML/DCGM or AMD "
+    "SMI/RDC and remain separate from CUPTI/ROCprofiler trace proof.",
 )
 
 
@@ -577,10 +588,13 @@ _PROVIDER_TABLE: dict[str, tuple[ProviderCapability, ...]] = {
     "nvidia": (
         ProviderCapability(
             HOST_CONTEXT,
-            "tprof+nvtx",
+            "tprof+nvtx+nvidia-system-context",
             AVAILABLE,
-            "chrome_trace/perfetto_json",
-            "Tessera ranges map to NVTX when built with NVTX.",
+            "chrome_trace/perfetto_json+nvidia_context_json",
+            "Tessera ranges map to NVTX when built with NVTX; NVML/DCGM-style "
+            "context can add utilization, clocks, power, thermals, memory, "
+            "PCIe/NVLink, and reliability signals.",
+            controls=("sample_interval_ms", "include_nvml", "include_dcgm"),
         ),
         ProviderCapability(
             RUNTIME_API,
@@ -633,10 +647,13 @@ _PROVIDER_TABLE: dict[str, tuple[ProviderCapability, ...]] = {
     "rocm": (
         ProviderCapability(
             HOST_CONTEXT,
-            "tprof+roctx",
+            "tprof+roctx+rocm-system-context",
             PLANNED,
-            "chrome_trace/perfetto_json",
-            "Tessera ranges should map to ROCTx markers for ROCm traces.",
+            "chrome_trace/perfetto_json+rocm_context_json",
+            "Tessera ranges should map to ROCTx markers for ROCm traces; "
+            "AMD SMI/RDC-style context can add utilization, clocks, power, "
+            "thermals, memory, PCIe/XGMI, and RAS signals.",
+            controls=("sample_interval_ms", "include_amd_smi", "include_rdc"),
         ),
         ProviderCapability(
             RUNTIME_API,
@@ -690,10 +707,13 @@ _PROVIDER_TABLE: dict[str, tuple[ProviderCapability, ...]] = {
     "apple_gpu": (
         ProviderCapability(
             HOST_CONTEXT,
-            "tprof+os-signpost",
+            "tprof+os-signpost+apple-silicon-system-context",
             PLANNED,
-            "chrome_trace/perfetto_json",
-            "Tessera ranges should bridge to os_signpost/Instruments metadata.",
+            "chrome_trace/perfetto_json+apple_context_json",
+            "Tessera ranges should bridge to os_signpost/Instruments metadata; "
+            "SiliconScope-style IOReport context can add GPU residency/clock, "
+            "unified-memory bandwidth, power, thermal, and bottleneck signals.",
+            controls=("sample_interval_ms", "include_ioreport", "include_sensors"),
         ),
         ProviderCapability(
             RUNTIME_API,

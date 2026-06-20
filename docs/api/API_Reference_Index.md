@@ -116,6 +116,8 @@
 | `model_analyzer_manifest`, `ModelAnalyzerManifest` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `run_model_analyzer_manifest`, `AnalyzerTrial` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `annotate_target_ir_with_probes` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `AppleProfilerContext`, `classify_apple_profiler_context`, `apple_unified_memory_bandwidth_ceiling_gbs` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `AcceleratorProfilerContext`, `classify_accelerator_profiler_context`, `accelerator_profiler_context_contract` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `tprof::attach_tessera_runtime_trace`, `tprof::detach_tessera_runtime_trace` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 
 ### Runtime C ABI

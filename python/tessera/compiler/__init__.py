@@ -133,6 +133,19 @@ from .model_analyzer import (
     run_model_analyzer_manifest,
     write_model_analyzer_result,
 )
+from .apple_profiler_context import (
+    APPLE_PROFILER_CONTEXT_SCHEMA_VERSION,
+    AppleProfilerContext,
+    apple_profiler_context_contract,
+    apple_unified_memory_bandwidth_ceiling_gbs,
+    classify_apple_profiler_context,
+)
+from .accelerator_profiler_context import (
+    ACCELERATOR_PROFILER_CONTEXT_SCHEMA_VERSION,
+    AcceleratorProfilerContext,
+    accelerator_profiler_context_contract,
+    classify_accelerator_profiler_context,
+)
 
 __all__ = [
     "ConstraintSolver",
@@ -272,4 +285,13 @@ __all__ = [
     "load_model_analyzer_manifest",
     "run_model_analyzer_manifest",
     "write_model_analyzer_result",
+    "APPLE_PROFILER_CONTEXT_SCHEMA_VERSION",
+    "AppleProfilerContext",
+    "apple_profiler_context_contract",
+    "apple_unified_memory_bandwidth_ceiling_gbs",
+    "classify_apple_profiler_context",
+    "ACCELERATOR_PROFILER_CONTEXT_SCHEMA_VERSION",
+    "AcceleratorProfilerContext",
+    "accelerator_profiler_context_contract",
+    "classify_accelerator_profiler_context",
 ]

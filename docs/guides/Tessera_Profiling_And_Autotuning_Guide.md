@@ -116,6 +116,22 @@ probe specs to backend-facing Target IR as per-target profiler marker ops
 verify like any other Target IR op and provide the compiler-side anchor that a
 later backend can lower to native counters or inserted instrumentation.
 
+Apple support also has a system-context lane inspired by SiliconScope. Tessera
+models the pure part in `tessera.compiler.apple_profiler_context`: unified
+memory bandwidth ceilings, GPU-usage/bandwidth bottleneck classification, and a
+JSON contract for future IOReport/SMC/HID samples. This context can explain why
+an Apple run is `bandwidth_bound`, `compute_bound`, `thermal_throttled`, or
+`memory_pressured`, but it is not a replacement for Metal System Trace or Metal
+counter sample buffers.
+
+The same separation applies to NVIDIA and AMD. Use
+`tessera.compiler.accelerator_profiler_context` for hardware-free classification
+of NVML/DCGM-style or AMD SMI/RDC-style samples: utilization, memory residency,
+power, thermals, clocks, PCIe/NVLink/XGMI pressure, and reliability events. The
+context lane can label a run `bandwidth_bound`, `compute_bound`, `power_capped`,
+`fabric_limited`, or `reliability_risk`; CUPTI and ROCprofiler-SDK still own the
+runtime/activity/counter records that prove what kernels actually did.
+
 Profiler events carry:
 
 - Latency in milliseconds.

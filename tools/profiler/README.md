@@ -35,7 +35,17 @@ Design anchors:
   query/sampling, include/exclude filters, and paused/resumed collection.
 - ROCprofiler-SDK: the ROCm path for HIP/HSA/marker/memory tracing, counters,
   PC sampling, and thread trace.
+- NVIDIA system context: NVML/DCGM for utilization, memory residency, clocks,
+  power, thermals, PCIe/NVLink, and reliability state. This complements CUPTI;
+  it does not replace CUPTI activity/profiler records.
+- AMD system context: AMD SMI/RDC for utilization, memory residency, clocks,
+  power, thermals, PCIe/XGMI, and RAS state. This complements ROCprofiler-SDK;
+  it does not replace ROCprofiler dispatch/counter records.
 - Apple Metal: counter sample buffers and timestamp/counter-set correlation.
+- SiliconScope-style Apple context: sudoless IOReport deltas for GPU residency,
+  GPU clock, unified-memory bandwidth, power domains, memory pressure, and
+  thermal throttling. Tessera models the pure classification contract today;
+  a native collector remains separate from Metal timeline/counter proof.
 
 Apple GPU validation on this host needs native, out-of-sandbox execution before
 turning any `planned` row into `available`.
@@ -110,6 +120,22 @@ tessera-prof my_model.py \
 planned probes to Target IR as backend-specific profiler marker ops, providing
 the compiler-side anchor for future CUPTI, ROCprofiler-SDK, Metal counter, or
 inserted-counter lowering.
+
+For Apple support, `tessera.compiler.apple_profiler_context` provides a
+hardware-free version of the SiliconScope-style context layer: a bandwidth
+ceiling table, bottleneck classifier, and JSON contract for future IOReport /
+SMC / HID samples. Use it to correlate Tessera runtime traces with system-level
+signals such as `bandwidth_bound`, `compute_bound`, `thermal_throttled`, or
+`memory_pressured`; do not treat those signals as native Metal command-buffer
+activity until the Metal/System Trace collector lands.
+
+The same pattern applies to NVIDIA and AMD through
+`tessera.compiler.accelerator_profiler_context`. NVIDIA context should come from
+NVML/DCGM, while AMD context should come from AMD SMI/RDC. The normalized
+classifier adds accelerator-specific verdicts such as `power_capped`,
+`fabric_limited`, and `reliability_risk`, while CUPTI and ROCprofiler-SDK remain
+the authoritative providers for runtime/device activity and hardware-counter
+proof.
 
 ## Examples
 

@@ -1,117 +1,117 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
-abs,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+abs,2,0,0,2,0,,directly_tested,2 direct test references
 absolute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 acos,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-adafactor,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-adam,7,0,0,7,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-adamw,6,0,0,6,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-adaptive_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-add,92,13,8,105,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
-add_decoupled_weight_decay,2,0,0,2,0,,structural_only,category default for 'grad_transform'
+adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
+adam,7,0,0,7,0,fp32 fp64,directly_tested,7 direct test references
+adamw,6,0,0,6,0,fp32 fp64,directly_tested,6 direct test references
+adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
+add,92,13,8,105,0,bf16 f16 f32 f64 fp32,directly_tested,105 direct test references
+add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
-all_gather,1,2,0,3,0,fp32,needs_direct_test,category default for 'collective'
-all_reduce,7,0,1,7,0,f32 fp32 fp8_e4m3 int8,needs_direct_test,category default for 'collective'
-all_to_all,3,0,0,3,0,fp32,needs_direct_test,category default for 'collective'
-amax,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
-amin,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
+all_reduce,7,0,1,7,0,f32 fp32 fp8_e4m3 int8,directly_tested,7 direct test references
+all_to_all,3,0,0,3,0,fp32,directly_tested,3 direct test references
+amax,3,0,0,3,0,,directly_tested,3 direct test references
+amin,3,0,0,3,0,,directly_tested,3 direct test references
 aot_export,0,0,0,0,1,,structural_only,category default for 'aot'
 aot_load,0,0,0,0,1,,structural_only,category default for 'aot'
-arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-argmax,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-argmin,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-argsort,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
+argmax,2,0,0,2,0,,directly_tested,2 direct test references
+argmin,2,0,0,2,0,,directly_tested,2 direct test references
+argsort,2,0,0,2,0,,directly_tested,2 direct test references
 asin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
-asymmetric_bce,3,0,0,3,0,,covered_by_family,category default for 'loss'
+asymmetric_bce,3,0,0,3,0,,directly_tested,3 direct test references
 atan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-atan2,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-attn_compressed_blocks,7,2,0,9,0,,needs_direct_test,category default for 'attention'
-attn_local_window_2d,34,25,1,59,0,fp32,needs_direct_test,category default for 'attention'
-attn_sliding_window,13,2,1,15,0,,needs_direct_test,category default for 'attention'
-attn_top_k_blocks,7,2,1,9,0,,needs_direct_test,category default for 'attention'
+atan2,2,0,0,2,0,,directly_tested,2 direct test references
+attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
+attn_local_window_2d,34,25,1,59,0,fp32,directly_tested,59 direct test references
+attn_sliding_window,13,2,1,15,0,,directly_tested,15 direct test references
+attn_top_k_blocks,7,2,1,9,0,,directly_tested,9 direct test references
 autocast,0,0,0,0,1,,structural_only,category default for 'transform'
-avg_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
+avg_pool,2,0,0,2,0,,directly_tested,2 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
-batched_gemm,13,4,0,17,0,bf16 f16 f32 fp16 fp32,structural_only,unclassified — defaults to structural_only
-bidirectional_scan,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
+batched_gemm,13,4,0,17,0,bf16 f16 f32 fp16 fp32,directly_tested,17 direct test references
+bidirectional_scan,2,0,0,2,0,,directly_tested,2 direct test references
 binary_cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 bitwise_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-bitwise_not,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+bitwise_not,2,0,0,2,0,,directly_tested,2 direct test references
 bitwise_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 bitwise_xor,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 broadcast,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-broadcast_to_axis,3,0,0,3,0,,needs_direct_test,category default for 'collective'
-bsmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
+broadcast_to_axis,3,0,0,3,0,,directly_tested,3 direct test references
+bsmm,2,0,0,2,0,,directly_tested,2 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,10,40,0,50,0,fp32,needs_direct_test,category default for 'layout_transform'
-cat,12,0,0,12,0,,structural_only,unclassified — defaults to structural_only
+cast,10,40,0,50,0,fp32,directly_tested,50 direct test references
+cat,12,0,0,12,0,,directly_tested,12 direct test references
 ceil,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 chained_schedule,1,0,0,1,1,,structural_only,category default for 'schedule'
 check_cauchy_riemann,0,0,0,0,1,,covered_by_family,exercised by complex_jit / CR conformance tests
 checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
-cholesky,15,30,0,45,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
-cholesky_solve,1,1,0,2,0,bf16 f16 f32 fp16 fp32,structural_only,unclassified — defaults to structural_only
+cholesky,15,30,0,45,0,bf16 f16 f32 fp16 fp32,directly_tested,45 direct test references
+cholesky_solve,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-cispo_policy_loss,2,2,0,4,0,,needs_direct_test,category default for 'rl_loss'
-clamp,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+cispo_policy_loss,2,2,0,4,0,,directly_tested,4 direct test references
+clamp,3,0,0,3,0,,directly_tested,3 direct test references
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_exp,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_ext_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
-clifford_geometric_product,5,0,0,5,0,,covered_by_family,category default for 'geometric_algebra'
+clifford_geometric_product,5,0,0,5,0,,directly_tested,5 direct test references
 clifford_grade_involution,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clifford_grade_projection,3,0,0,3,0,,covered_by_family,category default for 'geometric_algebra'
+clifford_grade_projection,3,0,0,3,0,,directly_tested,3 direct test references
 clifford_hodge_star,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_inner,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_integral,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_left_contraction,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_log,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
-clifford_norm,3,0,0,3,0,,covered_by_family,category default for 'geometric_algebra'
+clifford_norm,3,0,0,3,0,,directly_tested,3 direct test references
 clifford_norm_squared,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 clifford_reverse,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clifford_rotor_sandwich,2,0,0,2,0,,covered_by_family,category default for 'geometric_algebra'
+clifford_rotor_sandwich,2,0,0,2,0,,directly_tested,2 direct test references
 clifford_vec_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_wedge,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clip,11,0,1,11,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,covered_by_family,category default for 'elementwise'
-clip_grad_norm,3,0,0,3,0,,structural_only,category default for 'grad_transform'
-clip_grad_value,2,0,0,2,0,,structural_only,category default for 'grad_transform'
-collective_permute,2,0,0,2,0,,needs_direct_test,category default for 'collective'
-compilation_cache,2,0,0,2,0,,structural_only,category default for 'aot'
-complex_abs,3,0,1,3,0,,covered_by_family,category default for 'elementwise'
+clip,11,0,1,11,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,11 direct test references
+clip_grad_norm,3,0,0,3,0,,directly_tested,3 direct test references
+clip_grad_value,2,0,0,2,0,,directly_tested,2 direct test references
+collective_permute,2,0,0,2,0,,directly_tested,2 direct test references
+compilation_cache,2,0,0,2,0,,directly_tested,2 direct test references
+complex_abs,3,0,1,3,0,,directly_tested,3 direct test references
 complex_arg,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-complex_conjugate,4,0,1,4,0,,covered_by_family,category default for 'elementwise'
+complex_conjugate,4,0,1,4,0,,directly_tested,4 direct test references
 complex_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-complex_exp,3,0,1,3,0,,covered_by_family,category default for 'elementwise'
+complex_exp,3,0,1,3,0,,directly_tested,3 direct test references
 complex_log,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-complex_mul,11,0,1,11,0,,covered_by_family,category default for 'elementwise'
+complex_mul,11,0,1,11,0,,directly_tested,11 direct test references
 complex_pow,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 complex_sqrt,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-cond,14,0,1,14,0,,structural_only,category default for 'control_flow'
-conformal_energy_on_sphere,2,0,0,2,0,,needs_direct_test,category default for 'stable_reduction'
+cond,14,0,1,14,0,,directly_tested,14 direct test references
+conformal_energy_on_sphere,2,0,0,2,0,,directly_tested,2 direct test references
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
-constant_lr,3,0,0,3,0,,structural_only,category default for 'schedule'
-contrastive_divergence_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
-contrastive_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
-conv1d,2,0,0,2,0,,needs_direct_test,category default for 'model_layer'
-conv2d,9,2,0,11,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'stencil'
-conv3d,8,0,0,8,0,,needs_direct_test,category default for 'stencil'
-conv_transpose,3,0,0,3,0,,needs_direct_test,category default for 'model_layer'
-cos,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
+constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
+contrastive_divergence_loss,2,0,0,2,0,,directly_tested,2 direct test references
+contrastive_loss,5,0,0,5,0,,directly_tested,5 direct test references
+conv1d,2,0,0,2,0,,directly_tested,2 direct test references
+conv2d,10,2,0,12,0,bf16 f16 f32 fp16 fp32,directly_tested,12 direct test references
+conv3d,8,0,0,8,0,,directly_tested,8 direct test references
+conv_transpose,3,0,0,3,0,,directly_tested,3 direct test references
+cos,2,0,0,2,0,,directly_tested,2 direct test references
 cosh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-cosine_embedding_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
-cosine_lr,2,0,0,2,0,,structural_only,category default for 'schedule'
+cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
+cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-count_nonzero,9,0,0,9,0,,structural_only,unclassified — defaults to structural_only
+count_nonzero,9,0,0,9,0,,directly_tested,9 direct test references
 cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-ctc_loss,7,0,0,7,0,,covered_by_family,category default for 'loss'
-cummax,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
-cummin,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-cumprod,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-cumsum,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+ctc_loss,7,0,0,7,0,,directly_tested,7 direct test references
+cummax,4,0,0,4,0,,directly_tested,4 direct test references
+cummin,2,0,0,2,0,,directly_tested,2 direct test references
+cumprod,2,0,0,2,0,,directly_tested,2 direct test references
+cumsum,3,0,0,3,0,,directly_tested,3 direct test references
 custom_batching,0,0,0,0,1,,structural_only,category default for 'extension'
 custom_call,0,0,0,0,1,,structural_only,category default for 'extension'
 custom_jvp,0,0,0,0,1,,structural_only,category default for 'extension'
@@ -129,22 +129,22 @@ dataset_repeat,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_shuffle,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
-dct,5,0,0,5,0,fp32,needs_direct_test,category default for 'spectral'
+dct,5,0,0,5,0,fp32,directly_tested,5 direct test references
 ddpm_noise_pred_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-deepseek_sparse_attention,12,5,0,17,0,,needs_direct_test,category default for 'attention'
+deepseek_sparse_attention,12,5,0,17,0,,directly_tested,17 direct test references
 denoising_score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-depthwise_conv1d,10,0,1,10,0,,needs_direct_test,category default for 'stencil'
-dequant_grouped_gemm,0,4,0,4,0,,needs_direct_test,category default for 'quantization'
-dequant_matmul,1,4,0,5,0,fp32,needs_direct_test,category default for 'quantization'
-dequantize_fp4,2,0,0,2,0,,needs_direct_test,category default for 'quantize'
-dequantize_fp6,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
-dequantize_fp8,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
-dequantize_int4,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-dequantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-dequantize_nvfp4,8,0,1,8,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,needs_direct_test,category default for 'quantize'
-digamma,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-div,5,2,0,7,0,bf16 f16,covered_by_family,category default for 'elementwise'
-dropout,18,5,3,23,0,f32 fp32 fp64,structural_only,unclassified — defaults to structural_only
+depthwise_conv1d,10,0,1,10,0,,directly_tested,10 direct test references
+dequant_grouped_gemm,0,4,0,4,0,,directly_tested,4 direct test references
+dequant_matmul,1,4,0,5,0,fp32,directly_tested,5 direct test references
+dequantize_fp4,2,0,0,2,0,,directly_tested,2 direct test references
+dequantize_fp6,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,2 direct test references
+dequantize_fp8,2,0,1,2,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,2 direct test references
+dequantize_int4,3,0,0,3,0,,directly_tested,3 direct test references
+dequantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
+dequantize_nvfp4,8,0,1,8,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,8 direct test references
+digamma,2,0,0,2,0,,directly_tested,2 direct test references
+div,5,2,0,7,0,bf16 f16,directly_tested,7 direct test references
+dropout,18,5,3,23,0,f32 fp32 fp64,directly_tested,23 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
@@ -152,194 +152,194 @@ ebm_bivector_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs r
 ebm_bivector_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_decode_init,0,0,0,0,1,,covered_by_family,scaffold for ebm decode tests
 ebm_energy,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_energy_quadratic,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
-ebm_inner_step,3,0,0,3,0,,covered_by_family,covered by ebm_step / ebm_step_chain tests
+ebm_energy_quadratic,4,0,0,4,0,,directly_tested,4 direct test references
+ebm_inner_step,3,0,0,3,0,,directly_tested,3 direct test references
 ebm_langevin_step,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_ais,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_exact,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_monte_carlo,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_refinement,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
+ebm_refinement,3,0,0,3,0,,directly_tested,3 direct test references
 ebm_self_verify,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
-einsum,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,structural_only,unclassified — defaults to structural_only
+einsum,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,7 direct test references
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-exp,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
+exp,4,0,0,4,0,,directly_tested,4 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-factorized_matmul,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
-fake_quantize,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-fft,11,2,0,13,0,f32 fp32,needs_direct_test,category default for 'spectral'
-flash_attn,94,57,5,151,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'attention'
-flatten,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
+fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
+fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
+flash_attn,94,57,5,151,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,151 direct test references
+flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-floor,3,0,1,3,0,fp32,structural_only,unclassified — defaults to structural_only
+floor,3,0,1,3,0,fp32,directly_tested,3 direct test references
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-focal_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
-fori_loop,19,0,1,19,0,,structural_only,category default for 'control_flow'
-fused_epilogue,2,6,0,8,0,,structural_only,unclassified — defaults to structural_only
-gated_attention,6,0,0,6,0,,needs_direct_test,category default for 'attention'
-gated_deltanet,21,4,0,25,0,fp64,needs_direct_test,category default for 'attention'
-gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
+focal_loss,4,0,0,4,0,,directly_tested,4 direct test references
+fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
+fused_epilogue,2,6,0,8,0,,directly_tested,8 direct test references
+gated_attention,6,0,0,6,0,,directly_tested,6 direct test references
+gated_deltanet,21,4,0,25,0,fp64,directly_tested,25 direct test references
+gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-gelu,44,19,1,63,0,bf16 f16 f32 f64 fp16 fp32,covered_by_family,category default for 'elementwise'
-gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
+gelu,44,19,1,63,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,63 direct test references
+gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
-gqa_attention,5,0,0,5,0,,needs_direct_test,category default for 'attention'
-grad_scaler_step,3,0,0,3,0,,needs_direct_test,category default for 'numerics'
-group_norm,6,0,0,6,0,,needs_direct_test,category default for 'normalization'
-grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
-grpo_policy_loss,6,3,0,9,0,,needs_direct_test,category default for 'rl_loss'
-gru_cell,2,0,0,2,0,,needs_direct_test,category default for 'recurrent'
+gqa_attention,5,0,0,5,0,,directly_tested,5 direct test references
+grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
+group_norm,6,0,0,6,0,,directly_tested,6 direct test references
+grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
+grpo_policy_loss,6,3,0,9,0,,directly_tested,9 direct test references
+gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
 gt,1,0,0,1,1,,covered_by_family,category default for 'comparison'
-huber_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
-hybrid_attention,11,2,0,13,0,,needs_direct_test,category default for 'attention'
-ifft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
+huber_loss,2,0,0,2,0,,directly_tested,2 direct test references
+hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
+ifft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 index_update,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-info_nce_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'
-instance_norm,6,0,0,6,0,,needs_direct_test,category default for 'normalization'
+info_nce_loss,3,0,0,3,0,,directly_tested,3 direct test references
+instance_norm,6,0,0,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-irfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
+irfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 isfinite,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 isinf,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-isnan,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-istft,4,0,0,4,0,,needs_direct_test,category default for 'spectral'
+isnan,2,0,0,2,0,,directly_tested,2 direct test references
+istft,4,0,0,4,0,,directly_tested,4 direct test references
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
-js_divergence,6,0,0,6,0,,covered_by_family,category default for 'loss'
+js_divergence,6,0,0,6,0,,directly_tested,6 direct test references
 jvp,0,0,0,0,1,,structural_only,category default for 'transform'
-kimi_delta_attention,8,4,0,12,0,fp64,needs_direct_test,category default for 'attention'
-kl_divergence,5,0,0,5,0,,covered_by_family,category default for 'loss'
-kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,needs_direct_test,category default for 'state_update'
-kv_cache_prune,1,0,1,1,1,fp16 fp32,needs_direct_test,category default for 'state_update'
-kv_cache_read,2,0,1,2,0,fp16 fp32,needs_direct_test,category default for 'state_update'
-label_smoothed_cross_entropy,4,0,0,4,0,,covered_by_family,category default for 'loss'
-lamb,4,0,0,4,0,,needs_direct_test,category default for 'optimizer'
-laplacian_2d,2,0,0,2,0,,needs_direct_test,category default for 'stencil'
-latent_kv_compress,6,19,0,25,0,fp16 fp32,structural_only,unclassified — defaults to structural_only
-latent_kv_expand_k,3,8,0,11,0,fp16 fp32,structural_only,unclassified — defaults to structural_only
-latent_kv_expand_v,2,7,0,9,0,fp16 fp32,structural_only,unclassified — defaults to structural_only
-layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'normalization'
+kimi_delta_attention,8,4,0,12,0,fp64,directly_tested,12 direct test references
+kl_divergence,5,0,0,5,0,,directly_tested,5 direct test references
+kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,directly_tested,5 direct test references
+kv_cache_prune,4,0,1,4,0,fp16 fp32,directly_tested,4 direct test references
+kv_cache_read,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
+label_smoothed_cross_entropy,4,0,0,4,0,,directly_tested,4 direct test references
+lamb,4,0,0,4,0,,directly_tested,4 direct test references
+laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
+latent_kv_compress,6,19,0,25,0,fp16 fp32,directly_tested,25 direct test references
+latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test references
+latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
+layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,27 direct test references
 le,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-lightning_attention,12,2,0,14,0,,needs_direct_test,category default for 'attention'
-linear_attn,31,8,1,39,0,,needs_direct_test,category default for 'attention'
-linear_attn_state,5,0,1,5,0,,needs_direct_test,category default for 'attention'
-linear_general,13,0,0,13,0,,needs_direct_test,category default for 'model_layer'
+lightning_attention,12,2,0,14,0,,directly_tested,14 direct test references
+linear_attn,31,8,1,39,0,,directly_tested,39 direct test references
+linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
+linear_general,13,0,0,13,0,,directly_tested,13 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-lion,4,0,0,4,0,fp32 fp64,needs_direct_test,category default for 'functional_optimizer_step'
-load_balance_loss,2,0,0,2,0,,covered_by_family,category default for 'loss'
-load_sharded,3,0,1,3,0,,structural_only,category default for 'serialization'
-load_state,14,0,2,14,0,,structural_only,category default for 'serialization'
-log,3,0,0,3,0,,covered_by_family,category default for 'elementwise'
-log1p,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
+lion,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
+load_balance_loss,2,0,0,2,0,,directly_tested,2 direct test references
+load_sharded,3,0,1,3,0,,directly_tested,3 direct test references
+load_state,14,0,2,14,0,,directly_tested,14 direct test references
+log,3,0,0,3,0,,directly_tested,3 direct test references
+log1p,2,0,0,2,0,,directly_tested,2 direct test references
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-log_softmax,5,5,0,10,0,,needs_direct_test,category default for 'stable_reduction'
+log_softmax,5,5,0,10,0,,directly_tested,10 direct test references
 logical_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-logical_not,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+logical_not,2,0,0,2,0,,directly_tested,2 direct test references
 logical_or,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 logical_xor,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-logsumexp,4,3,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-lookahead_sparse_attention,15,4,1,19,0,,needs_direct_test,category default for 'attention'
-lora_linear,5,0,0,5,0,,needs_direct_test,category default for 'model_layer'
+logsumexp,4,3,0,7,0,,directly_tested,7 direct test references
+lookahead_sparse_attention,15,4,1,19,0,,directly_tested,19 direct test references
+lora_linear,5,0,0,5,0,,directly_tested,5 direct test references
 lt,0,0,0,0,1,,covered_by_family,category default for 'comparison'
-lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
+lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
-masked_categorical,10,0,0,10,0,,structural_only,unclassified — defaults to structural_only
-masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,needs_direct_test,category default for 'layout_transform'
-matmul,376,173,15,549,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,structural_only,unclassified — defaults to structural_only
+masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
+masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
+matmul,376,173,15,549,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,549 direct test references
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-max_pool,4,0,0,4,0,,needs_direct_test,category default for 'pooling'
-maximum,4,0,0,4,0,,structural_only,unclassified — defaults to structural_only
-mean,11,0,0,11,0,bf16 f16,structural_only,unclassified — defaults to structural_only
+max_pool,4,0,0,4,0,,directly_tested,4 direct test references
+maximum,4,0,0,4,0,,directly_tested,4 direct test references
+mean,11,0,0,11,0,bf16 f16,directly_tested,11 direct test references
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
-memory_index_score,1,0,0,1,1,,needs_direct_test,category default for 'attention'
-memory_index_select,4,0,1,4,0,,structural_only,unclassified — defaults to structural_only
+memory_index_score,4,0,1,4,0,,directly_tested,4 direct test references
+memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
 memory_index_select_ste,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-memory_read,2,0,0,2,0,,needs_direct_test,category default for 'memory'
-memory_write,4,0,0,4,0,,needs_direct_test,category default for 'memory'
+memory_read,2,0,0,2,0,,directly_tested,2 direct test references
+memory_write,4,0,0,4,0,,directly_tested,4 direct test references
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-min_pool,2,0,0,2,0,,needs_direct_test,category default for 'pooling'
-minimum,6,0,0,6,0,,structural_only,unclassified — defaults to structural_only
-mla_decode,3,2,0,5,0,,needs_direct_test,category default for 'attention'
-mla_decode_fused,4,9,0,13,0,,needs_direct_test,category default for 'attention'
+min_pool,2,0,0,2,0,,directly_tested,2 direct test references
+minimum,6,0,0,6,0,,directly_tested,6 direct test references
+mla_decode,3,2,0,5,0,,directly_tested,5 direct test references
+mla_decode_fused,4,9,0,13,0,,directly_tested,13 direct test references
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-mod,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-modified_delta_attention,7,0,0,7,0,fp64,needs_direct_test,category default for 'attention'
+mod,2,0,0,2,0,,directly_tested,2 direct test references
+modified_delta_attention,7,0,0,7,0,fp64,directly_tested,7 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
-moe,9,0,0,9,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
-moe_combine,4,0,0,4,0,,needs_direct_test,category default for 'moe_transport'
-moe_dispatch,1,3,0,4,0,,needs_direct_test,category default for 'moe_transport'
-moe_swiglu_block,14,19,1,33,0,fp8_e4m3 nvfp4,structural_only,unclassified — defaults to structural_only
-momentum,3,0,0,3,0,,needs_direct_test,category default for 'functional_optimizer_step'
-mor_partition,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
-mor_router,5,3,1,8,0,,needs_direct_test,category default for 'layout_transform'
-mor_scatter,3,2,1,5,0,,needs_direct_test,category default for 'layout_transform'
-mqa_attention,3,0,0,3,0,,covered_by_family,covered by attention family + scaled_dot_product tests
-msa_index_scores,8,4,1,12,0,,needs_direct_test,category default for 'attention'
-msa_select_blocks,8,6,1,14,0,,structural_only,unclassified — defaults to structural_only
-msa_sparse_attention,39,11,1,50,0,,needs_direct_test,category default for 'attention'
-mse_loss,5,0,0,5,0,,covered_by_family,category default for 'loss'
-mul,84,4,7,88,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
-multi_head_attention,5,0,0,5,0,,covered_by_family,covered by attention family + flash_attn tests
-muon,5,0,0,5,0,,needs_direct_test,category default for 'optimizer'
+moe,9,0,0,9,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,9 direct test references
+moe_combine,4,0,0,4,0,,directly_tested,4 direct test references
+moe_dispatch,1,3,0,4,0,,directly_tested,4 direct test references
+moe_swiglu_block,14,19,1,33,0,fp8_e4m3 nvfp4,directly_tested,33 direct test references
+momentum,3,0,0,3,0,,directly_tested,3 direct test references
+mor_partition,3,2,1,5,0,,directly_tested,5 direct test references
+mor_router,5,3,1,8,0,,directly_tested,8 direct test references
+mor_scatter,3,2,1,5,0,,directly_tested,5 direct test references
+mqa_attention,3,0,0,3,0,,directly_tested,3 direct test references
+msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
+msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
+msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
+mse_loss,5,0,0,5,0,,directly_tested,5 direct test references
+mul,84,4,7,88,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,88 direct test references
+multi_head_attention,5,0,0,5,0,,directly_tested,5 direct test references
+muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,0,0,0,0,1,,covered_by_family,category default for 'comparison'
-nesterov,4,0,0,4,0,,needs_direct_test,category default for 'optimizer'
+nesterov,4,0,0,4,0,,directly_tested,4 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-normalize_group_advantages,2,0,0,2,0,,needs_direct_test,category default for 'rl_loss'
-nt_xent_loss,4,0,0,4,0,,covered_by_family,category default for 'loss'
-ntk_rope,2,0,0,2,0,,needs_direct_test,category default for 'position_encoding'
-online_softmax,5,2,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-online_softmax_state,4,0,0,4,0,,needs_direct_test,category default for 'state_update'
+normalize_group_advantages,2,0,0,2,0,,directly_tested,2 direct test references
+nt_xent_loss,4,0,0,4,0,,directly_tested,4 direct test references
+ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
+online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
+online_softmax_state,4,0,0,4,0,,directly_tested,4 direct test references
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
-pack,3,0,0,3,0,,needs_direct_test,category default for 'layout_transform'
-pad,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+pack,3,0,0,3,0,,directly_tested,3 direct test references
+pad,2,0,0,2,0,,directly_tested,2 direct test references
 partial_state_load,0,0,0,0,1,,structural_only,category default for 'serialization'
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 permute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 persistent_cd_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 pmap,0,0,0,0,1,,structural_only,category default for 'transform'
-pmax,2,0,0,2,0,,needs_direct_test,category default for 'collective'
-pmean,2,0,0,2,0,,needs_direct_test,category default for 'collective'
-pmin,2,0,0,2,0,,needs_direct_test,category default for 'collective'
+pmax,2,0,0,2,0,,directly_tested,2 direct test references
+pmean,2,0,0,2,0,,directly_tested,2 direct test references
+pmin,2,0,0,2,0,,directly_tested,2 direct test references
 polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-popcount,7,0,0,7,0,,covered_by_family,category default for 'elementwise'
+popcount,7,0,0,7,0,,directly_tested,7 direct test references
 pow,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-power_attn,6,0,1,6,0,,needs_direct_test,category default for 'attention'
-ppo_policy_loss,8,11,0,19,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'rl_loss'
-prod,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-psum,2,0,0,2,0,,needs_direct_test,category default for 'collective'
-qkv_projection,7,0,0,7,0,fp32,structural_only,unclassified — defaults to structural_only
-qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
-quantize_fp4,8,0,1,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
-quantize_fp6,7,0,1,7,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'quantize'
-quantize_fp8,21,3,3,24,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,needs_direct_test,category default for 'quantize'
-quantize_int4,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-quantize_int8,3,0,0,3,0,,needs_direct_test,category default for 'quantization'
-quantize_nvfp4,11,0,2,11,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,needs_direct_test,category default for 'quantize'
-quantized_matmul,5,0,0,5,0,f16,structural_only,unclassified — defaults to structural_only
-rearrange,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
+power_attn,6,0,1,6,0,,directly_tested,6 direct test references
+ppo_policy_loss,8,11,0,19,0,bf16 f16 f32 fp16 fp32,directly_tested,19 direct test references
+prod,2,0,0,2,0,,directly_tested,2 direct test references
+psum,2,0,0,2,0,,directly_tested,2 direct test references
+qkv_projection,7,0,0,7,0,fp32,directly_tested,7 direct test references
+qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,directly_tested,8 direct test references
+quantize_fp4,8,0,1,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,8 direct test references
+quantize_fp6,7,0,1,7,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,7 direct test references
+quantize_fp8,21,3,3,24,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,24 direct test references
+quantize_int4,3,0,0,3,0,,directly_tested,3 direct test references
+quantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
+quantize_nvfp4,11,0,2,11,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,11 direct test references
+quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
+rearrange,2,0,0,2,0,,directly_tested,2 direct test references
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
-reduce_scatter,0,4,0,4,0,,needs_direct_test,category default for 'collective'
-relu,98,9,9,107,0,bf16 f16 f32 f64 fp32,covered_by_family,category default for 'elementwise'
+reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,83 direct test references
+reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
+relu,98,9,9,107,0,bf16 f16 f32 f64 fp32,directly_tested,107 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reshape,7,7,0,14,0,,structural_only,unclassified — defaults to structural_only
-retention,6,0,1,6,0,,needs_direct_test,category default for 'attention'
-rfft,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
-rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,needs_direct_test,category default for 'normalization'
-rmsnorm_safe,5,5,0,10,0,bf16 f16 f32,needs_direct_test,category default for 'normalization'
+reshape,7,7,0,14,0,,directly_tested,14 direct test references
+retention,6,0,1,6,0,,directly_tested,6 direct test references
+rfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
+rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,directly_tested,79 direct test references
+rmsnorm_safe,5,5,0,10,0,bf16 f16 f32,directly_tested,10 direct test references
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_categorical,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -353,107 +353,107 @@ rng_key,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_langevin_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_mala_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_multinomial,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_normal,3,0,0,3,0,fp32,structural_only,unclassified — defaults to structural_only
+rng_normal,3,0,0,3,0,fp32,directly_tested,3 direct test references
 rng_permutation,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_poisson,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_randint,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_split,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_truncated_normal,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_uniform,3,0,0,3,0,fp32,structural_only,unclassified — defaults to structural_only
+rng_uniform,3,0,0,3,0,fp32,directly_tested,3 direct test references
 roll,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-rope,17,10,0,27,0,,structural_only,unclassified — defaults to structural_only
-rope_merge,2,0,1,2,0,fp16 fp32,needs_direct_test,category default for 'layout_transform'
-rope_split,8,0,1,8,0,fp16 fp32,needs_direct_test,category default for 'layout_transform'
+rope,17,10,0,27,0,,directly_tested,27 direct test references
+rope_merge,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
+rope_split,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
 round,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-rsqrt,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
+rsqrt,2,0,0,2,0,,directly_tested,2 direct test references
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
-save_state,6,0,2,6,0,,structural_only,category default for 'serialization'
-scan,8,0,0,8,0,,structural_only,category default for 'control_flow'
+save_state,6,0,2,6,0,,directly_tested,6 direct test references
+scan,8,0,0,8,0,,directly_tested,8 direct test references
 scatter,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_add,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 scatter_reduce,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-score_combine,3,6,1,9,0,,covered_by_family,category default for 'elementwise'
+score_combine,3,6,1,9,0,,directly_tested,9 direct test references
 score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-sddmm,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
-segment_reduce,4,0,0,4,0,fp32,structural_only,unclassified — defaults to structural_only
+sddmm,2,0,0,2,0,,directly_tested,2 direct test references
+segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,51,10,2,61,0,bf16 fp16 fp32,structural_only,unclassified — defaults to structural_only
-seq2seq_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'
-sgd,6,0,0,6,0,,needs_direct_test,category default for 'functional_optimizer_step'
+selective_ssm,51,10,2,61,0,bf16 fp16 fp32,directly_tested,61 direct test references
+seq2seq_loss,3,0,0,3,0,,directly_tested,3 direct test references
+sgd,6,0,0,6,0,,directly_tested,6 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
-sharded_dataset,2,0,0,2,0,,structural_only,category default for 'data'
-sigmoid,4,0,0,4,0,bf16 f16 f32 fp32,covered_by_family,category default for 'elementwise'
-sigmoid_safe,4,0,0,4,0,,needs_direct_test,category default for 'stable_reduction'
-sign,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-silu,82,2,5,84,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,covered_by_family,category default for 'elementwise'
-silu_mul,13,13,0,26,0,fp32,covered_by_family,category default for 'elementwise'
-simple_rnn_cell,5,0,0,5,0,,needs_direct_test,category default for 'recurrent'
+sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
+sigmoid,4,0,0,4,0,bf16 f16 f32 fp32,directly_tested,4 direct test references
+sigmoid_safe,4,0,0,4,0,,directly_tested,4 direct test references
+sign,2,0,0,2,0,,directly_tested,2 direct test references
+silu,82,2,5,84,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,84 direct test references
+silu_mul,13,13,0,26,0,fp32,directly_tested,26 direct test references
+simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-slice,11,0,0,11,0,,structural_only,unclassified — defaults to structural_only
+slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-softcap,7,0,1,7,0,,covered_by_family,category default for 'elementwise'
-softmax,92,37,5,129,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,needs_direct_test,category default for 'stable_reduction'
-softmax_safe,3,4,0,7,0,,needs_direct_test,category default for 'stable_reduction'
-softplus,2,0,0,2,0,,covered_by_family,category default for 'elementwise'
-sort,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
-spectral_conv,5,0,0,5,0,fp32,needs_direct_test,category default for 'spectral'
-spectral_filter,3,0,0,3,0,fp32,needs_direct_test,category default for 'spectral'
-spectral_norm,2,0,0,2,0,,needs_direct_test,category default for 'normalization'
+softcap,7,0,1,7,0,,directly_tested,7 direct test references
+softmax,92,37,5,129,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,129 direct test references
+softmax_safe,3,4,0,7,0,,directly_tested,7 direct test references
+softplus,2,0,0,2,0,,directly_tested,2 direct test references
+sort,3,0,0,3,0,,directly_tested,3 direct test references
+spectral_conv,5,0,0,5,0,fp32,directly_tested,5 direct test references
+spectral_filter,3,0,0,3,0,fp32,directly_tested,3 direct test references
+spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-spmm_coo,3,0,0,3,0,,needs_direct_test,category default for 'sparse'
-spmm_csr,2,0,0,2,0,,needs_direct_test,category default for 'sparse'
-sqrt,4,0,0,4,0,,covered_by_family,category default for 'elementwise'
+spmm_coo,3,0,0,3,0,,directly_tested,3 direct test references
+spmm_csr,2,0,0,2,0,,directly_tested,2 direct test references
+sqrt,4,0,0,4,0,,directly_tested,4 direct test references
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-stablehlo_export,2,0,0,2,0,,structural_only,category default for 'aot'
-stack,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references
+stack,2,0,0,2,0,,directly_tested,2 direct test references
 state_collection_spec,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_filter,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_migration,1,0,1,1,1,,structural_only,category default for 'serialization'
 state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
-std,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
+std,2,0,0,2,0,,directly_tested,2 direct test references
 stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-stft,5,0,0,5,0,,needs_direct_test,category default for 'spectral'
-sub,8,4,0,12,0,bf16 f16 f32,covered_by_family,category default for 'elementwise'
-sum,4,0,0,4,0,f32,needs_direct_test,category default for 'stable_reduction'
-svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,needs_direct_test,category default for 'linalg_decomposition'
+stft,5,0,0,5,0,,directly_tested,5 direct test references
+sub,8,4,0,12,0,bf16 f16 f32,directly_tested,12 direct test references
+sum,4,0,0,4,0,f32,directly_tested,4 direct test references
+svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-tanh,4,0,1,4,0,bf16 f16 f32,covered_by_family,category default for 'elementwise'
+tanh,4,0,1,4,0,bf16 f16 f32,directly_tested,4 direct test references
 tile,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-tile_view,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
+tile_view,2,0,0,2,0,,directly_tested,2 direct test references
 tiny_attention_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'
 tiny_diffusion_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'
 tiny_recurrent_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'
 tiny_training_step_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'
-tokenizer_bpe,3,0,0,3,0,,structural_only,category default for 'tokenizer'
+tokenizer_bpe,3,0,0,3,0,,directly_tested,3 direct test references
 tokenizer_byte,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
-top_k,14,0,0,14,0,,structural_only,unclassified — defaults to structural_only
-transpose,23,27,0,50,0,bf16 f16 fp32,needs_direct_test,category default for 'layout_transform'
-tree_flatten,2,0,0,2,0,,structural_only,category default for 'state_tree'
+top_k,14,0,0,14,0,,directly_tested,14 direct test references
+transpose,23,27,0,50,0,bf16 f16 fp32,directly_tested,50 direct test references
+tree_flatten,2,0,0,2,0,,directly_tested,2 direct test references
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_transpose,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_unflatten,1,0,0,1,1,,structural_only,category default for 'state_tree'
-tri_solve,5,2,0,7,0,bf16 f16 f32 fp16 fp32,structural_only,unclassified — defaults to structural_only
-triplet_loss,6,0,0,6,0,,covered_by_family,category default for 'loss'
+tri_solve,5,2,0,7,0,bf16 f16 f32 fp16 fp32,directly_tested,7 direct test references
+triplet_loss,6,0,0,6,0,,directly_tested,6 direct test references
 trunc,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-unpack,2,0,0,2,0,,needs_direct_test,category default for 'layout_transform'
+unpack,2,0,0,2,0,,directly_tested,2 direct test references
 unsqueeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 value_and_grad,0,0,0,0,1,,structural_only,category default for 'transform'
-var,2,0,0,2,0,,structural_only,unclassified — defaults to structural_only
-varlen_sdpa,3,19,0,22,0,,needs_direct_test,category default for 'attention'
+var,2,0,0,2,0,,directly_tested,2 direct test references
+varlen_sdpa,3,19,0,22,0,,directly_tested,22 direct test references
 view,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 vjp,0,0,0,0,1,,structural_only,category default for 'transform'
 vlb_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'
-wasserstein_distance,6,0,0,6,0,,covered_by_family,category default for 'loss'
-weight_norm,7,0,0,7,0,,needs_direct_test,category default for 'normalization'
-where,3,0,0,3,0,,structural_only,unclassified — defaults to structural_only
-while_loop,4,0,1,4,0,,structural_only,category default for 'control_flow'
-z_loss,3,0,0,3,0,,covered_by_family,category default for 'loss'
+wasserstein_distance,6,0,0,6,0,,directly_tested,6 direct test references
+weight_norm,7,0,0,7,0,,directly_tested,7 direct test references
+where,3,0,0,3,0,,directly_tested,3 direct test references
+while_loop,4,0,1,4,0,,directly_tested,4 direct test references
+z_loss,3,0,0,3,0,,directly_tested,3 direct test references

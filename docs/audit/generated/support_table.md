@@ -92,7 +92,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
 | `ebm_energy` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
-| `ebm_energy_quadratic` | energy_based_models | public | public | missing | complete | planned | planned | ready | none |
+| `ebm_energy_quadratic` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | none |
 | `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
@@ -119,7 +119,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_left_contraction` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_log` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_norm_squared` | geometric_algebra | public | public | registered | complete | partial | planned | ready | none |
+| `clifford_norm_squared` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | none |
 | `clifford_reverse` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_vec_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -334,10 +334,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | contraction | 1 | PPGCpRN· |
 | elementwise | 37 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PP·C··N· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
+| energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |
-| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPGCp·N· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
+| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |

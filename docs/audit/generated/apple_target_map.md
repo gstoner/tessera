@@ -55,8 +55,8 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | Family | Rows | apple_gpu fused | apple_cpu accelerate_native |
 |---|---:|---:|---:|
 | tensor | 17 | 6 | 2 |
-| ga | 18 | 18 | 0 |
-| ebm | 13 | 13 | 0 |
+| ga | 19 | 19 | 0 |
+| ebm | 14 | 14 | 0 |
 | m7 | 4 | 4 | 0 |
 
 ## tensor (17)
@@ -81,7 +81,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | softmax | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 | softmax_safe | reference | numpy_reference | fp32 | - | numpy_reference | hardware_verified | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_softmax_f32 | driver | tests/unit/test_apple_backend_roadmap.py |
 
-## ga (18)
+## ga (19)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -98,13 +98,14 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | clifford_left_contraction | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_left_contraction_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_log | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_log_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_norm | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_norm_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
+| clifford_norm_squared | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_norm_squared_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_reverse | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_reverse_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_rotor_sandwich | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32,fp16,bf16 | tessera_apple_gpu_clifford_rotor_sandwich_cl30_{fp32,fp16,bf16} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_rotor_sandwich_norm | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_rotor_sandwich_norm_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_vec_deriv | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_vec_deriv_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | clifford_wedge | reference | numpy_reference | fp32 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_clifford_wedge_cl30_{fp32} | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 
-## ebm (13)
+## ebm (14)
 
 | Op | apple_cpu status | cpu framework | cpu dtypes | cpu symbol | execution_kind | apple_gpu status | gpu framework | gpu dtypes | gpu symbol | gpu_dispatch | proof |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -113,6 +114,7 @@ and ``docs/apple_backend.md`` (Metal 4 implementation-state review):
 | ebm_decode_init | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_decode_init_noise_apply_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_ebt_tiny | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_energy | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_energy_quadratic_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
+| ebm_energy_quadratic | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_energy_quadratic_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_inner_step | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_inner_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_langevin_step | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_langevin_step_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |
 | ebm_langevin_step_philox | reference | numpy_reference | fp32,fp64 | - | numpy_reference | fused | Metal (MSL) | fp32 | tessera_apple_gpu_ebm_langevin_step_philox_f32 | manifest | benchmarks/apple_gpu/benchmark_ga_ebm.py |

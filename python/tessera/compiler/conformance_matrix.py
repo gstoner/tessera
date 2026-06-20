@@ -228,18 +228,27 @@ def _execution_matrix_targets() -> set[str]:
 
 
 def _apple_gpu_envelope_ops() -> set[str]:
-    """Union of the three Apple-GPU runtime envelope sets (without the
-    ``tessera.`` prefix)."""
+    """Apple-GPU ops whose **@jit→launch** path executes (without the ``tessera.``
+    prefix).
+
+    NOTE (2026-06-19): this deliberately reads only the three core lanes
+    (MPS / MSL / MPSGraph) — the ones the standard ``runtime.launch`` path
+    dispatches end-to-end. Ops like ``conv2d`` have a working *direct* dispatcher
+    (``_apple_gpu_dispatch_conv2d``) and live in the broader
+    ``_APPLE_GPU_RUNTIME_OPS`` union, but their ``@jit→launch`` integration is
+    still ``unimplemented`` (verified: launch returns ``artifact_only`` /
+    ``unimplemented`` for ``conv2d``). Widening this proxy to the full union
+    would flip those cells to ``complete``, which the conformance Evaluator then
+    refuses to corroborate at rung 7 (correctly) — so the proxy stays scoped to
+    the genuinely launch-wired lanes until that integration lands.
+    """
     from tessera.compiler import driver as _drv
 
     out: set[str] = set()
     for attr in ("_APPLE_GPU_MPS_OPS", "_APPLE_GPU_MSL_OPS",
                  "_APPLE_GPU_MPSGRAPH_OPS"):
         for name in getattr(_drv, attr, ()):
-            if name.startswith("tessera."):
-                out.add(name[len("tessera."):])
-            else:
-                out.add(name)
+            out.add(name[len("tessera."):] if name.startswith("tessera.") else name)
     return out
 
 

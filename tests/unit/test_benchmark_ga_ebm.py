@@ -81,6 +81,10 @@ ALL_NATIVE_EBM_MANIFEST_KEYS = (
     # Apple GPU kernels (sphere: dedicated MSL; bivector: reuses the affine
     # ebm_langevin_step kernel on grade-2 coeffs).
     | {"ebm_sphere_langevin_step", "ebm_bivector_langevin_step"}
+    # 2026-06-19: the tensor-clean registry name `ebm_energy_quadratic` is now
+    # carried in the manifest alongside the `ebm_energy` alias (same fused MSL
+    # kernel) so the registry op reports fused instead of planned.
+    | {"ebm_energy_quadratic"}
 )
 
 # EBM ops that still have no native dispatch.  Empty after the 9/9

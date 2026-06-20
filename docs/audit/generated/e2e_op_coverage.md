@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 37 |
+| ``complete`` | 39 |
 | ``runnable_reference`` | 270 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 2 |
+| ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (37)
+## complete (39)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -39,6 +39,7 @@ each row into a single E2E tier.
 | ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``ebm_energy_quadratic`` | energy_based_models | public | public | not_applicable | fused | fused | ready | none |
 | ``ebm_inner_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_langevin_step`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_partition_exact`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
@@ -58,6 +59,7 @@ each row into a single E2E tier.
 | ``clifford_left_contraction`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_log`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_norm`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``clifford_norm_squared`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | none |
 | ``clifford_reverse`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
@@ -347,13 +349,6 @@ each row into a single E2E tier.
 | ``is_concyclic`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
-
-## partial (2)
-
-| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
-|---|---|---|---|---|---|---|---|---|
-| ``ebm_energy_quadratic`` | energy_based_models | public | public | missing | planned | planned | ready | none |
-| ``clifford_norm_squared`` | geometric_algebra | public | public | registered | partial | planned | ready | none |
 
 ## How to extend
 

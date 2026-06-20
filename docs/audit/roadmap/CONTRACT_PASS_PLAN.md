@@ -35,6 +35,34 @@ Every workstream follows one pattern:
 
 > **Contract (typed object) → Consuming Pass (rewrites/selects) → Oracle (proves it).**
 
+## Dashboard closeout (2026-06-19) — front-to-back hardening
+
+A sweep to clear the small concrete dashboard gaps ahead of AMD/NVIDIA bring-up:
+
+- **2 partial ops → complete** (`e2e_op_coverage`): `clifford_norm_squared` and
+  `ebm_energy_quadratic` both had shipped Apple-GPU MSL kernels but missing
+  *manifest registration* — added `clifford_norm_squared` to `_CLIFFORD_FUSION_OPS`
+  + `_CLIFFORD_APPLE_GPU_FUSED`, and `ebm_energy_quadratic` to `_EBM_PRIMITIVES` +
+  `_EBM_APPLE_GPU_FUSED` (same fused kernel as the `ebm_energy` alias). graph_ir
+  auto-resolved to `not_applicable`.
+- **2 thinly-tested ops cleared** (`test_coverage`): direct numerical tests for
+  `kv_cache_prune` + `memory_index_score`. Rippled into a classifier fix —
+  `classify_op` now returns `directly_tested` for any op with >1 real reference
+  (was mislabeling 263 well-tested ops by category default); the actionable
+  `needs_direct_test` bucket is now **0**.
+- **conv2d / kv_cache_read** (`op_target_conformance`): conv2d computes on Metal
+  via its direct dispatcher (tested) and `apple_gpu_kv_cache_read` lands a genuine
+  device-resident (DeviceTensor) read with a provenance gate. The conformance
+  "complete" flip was **deliberately not taken** — the `@jit→launch` path for both
+  is `unimplemented`, and the conformance Evaluator correctly refuses rung-7
+  corroboration; forcing it would be a provenance overclaim. The launch wiring is
+  the real conformance closer (tracked follow-on).
+
+The recurring lesson: most "partial" dashboard cells were **registration gaps over
+shipped kernels**, not missing capability — and the honesty guards (conformance
+Evaluator, envelope-dispatch lane check) correctly blocked the one case
+(conv2d/kv_cache_read) where the kernel exists but the launch path doesn't.
+
 ## Phase 0 — Make "is the contract consumed?" an audited axis
 
 > **Status (2026-06-19): LANDED.** `compiler/contract_consumers.py` — one row per

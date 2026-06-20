@@ -1208,6 +1208,13 @@ _CLIFFORD_APPLE_GPU_FUSED = {
         "symbol_prefix": "tessera_apple_gpu_clifford_norm_cl30_",
         "dtypes": ("fp32",),
     },
+    # ‖x‖² (norm without the sqrt) — derived reduction op with its own fused
+    # MSL kernel (apple_gpu_runtime.mm:tessera_apple_gpu_clifford_norm_squared_cl30_f32).
+    # In _CLIFFORD_FUSION_OPS, not _CLIFFORD_PRIMITIVES (keeps the 17-primitive count).
+    "clifford_norm_squared": {
+        "symbol_prefix": "tessera_apple_gpu_clifford_norm_squared_cl30_",
+        "dtypes": ("fp32",),
+    },
     "clifford_wedge": {
         "symbol_prefix": "tessera_apple_gpu_clifford_wedge_cl30_",
         "dtypes": ("fp32",),
@@ -1282,7 +1289,8 @@ _CLIFFORD_PRIMITIVES = (
 # kernel + a CPU reference (the unfused composition), so `clifford_manifest_for`
 # reports them. Kept separate from `_CLIFFORD_PRIMITIVES` so the "17 primitives"
 # audits/counts stay exact.
-_CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm"})
+_CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
+                                  "clifford_norm_squared"})
 
 
 def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
@@ -1549,6 +1557,21 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
             "Arbitrary user energy_fn lifts to MSL is a follow-up sprint."
         ),
     },
+    # ebm_energy_quadratic — the tensor-clean registry name for the SAME fused
+    # kernel as ``ebm_energy`` (runtime.py uses this canonical name + the
+    # value-call lane ``tessera_apple_gpu_ebm_energy_quadratic_value_f32``).
+    # Both names map to one Metal kernel; carried here so the registry op
+    # ``ebm_energy_quadratic`` reports fused instead of planned.
+    "ebm_energy_quadratic": {
+        "symbol": "tessera_apple_gpu_ebm_energy_quadratic_f32",
+        "dtypes": ("fp32",),
+        "abi": "(x:f32*[BxD], y:f32*[BxD], energies:f32*[B], B:i32, D:i32)",
+        "notes": (
+            "Tensor-clean quadratic energy E_b = 0.5 * ||x_b - y_b||^2; same "
+            "fused MSL kernel as ``ebm_energy`` + a value-call lane "
+            "(``ebm_energy_quadratic_value_f32``) for @jit(target='apple_gpu')."
+        ),
+    },
     # ebm_partition_exact — stable logsumexp on a precomputed energies
     # array.  Caller hands the kernel the per-state energies (typically
     # produced by `ebm.energy_quadratic` or another `ebm_energy_*` call)
@@ -1594,6 +1617,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
 _EBM_PRIMITIVES: tuple[str, ...] = (
     # EBM1 — core energy/inner-loop primitives.
     "ebm_energy",
+    "ebm_energy_quadratic",  # tensor-clean alias of ebm_energy (same fused kernel)
     "ebm_inner_step",
     "ebm_refinement",       # EBT-style refinement loop
     "ebm_langevin_step",

@@ -24,7 +24,7 @@ See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream F).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np

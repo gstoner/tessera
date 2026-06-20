@@ -27,8 +27,8 @@ See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream B).
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from dataclasses import dataclass
+from typing import Any, Callable
 
 import numpy as np
 

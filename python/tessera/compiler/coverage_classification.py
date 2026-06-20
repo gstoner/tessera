@@ -64,6 +64,9 @@ NEEDS_DIRECT_TEST = "needs_direct_test"
 HARDWARE_GATED = "hardware_gated"
 #: Deprecated / internal helper; not public test debt.
 DEPRECATED_OR_INTERNAL = "deprecated_or_internal"
+#: Op carries real direct test coverage (>1 reference) — not test debt, whatever
+#: its category default would say.  Only assigned to non-thin ops.
+DIRECTLY_TESTED = "directly_tested"
 
 ALL_BUCKETS = (
     COVERED_BY_FAMILY,
@@ -71,6 +74,7 @@ ALL_BUCKETS = (
     NEEDS_DIRECT_TEST,
     HARDWARE_GATED,
     DEPRECATED_OR_INTERNAL,
+    DIRECTLY_TESTED,
 )
 
 
@@ -274,10 +278,21 @@ def classify_op(op_name: str, coverage: OpTestCoverage) -> OpClassification:
     """Classify a single op.
 
     Priority order:
+      0. Op with real direct coverage (>1 ref) → ``directly_tested`` (not debt).
       1. Explicit per-name override
       2. Category default
       3. Fallback: ``structural_only`` (with explicit reason)
+
+    Rule 0 keeps the bucket honest for *every* op the per-op CSV renders: the
+    triage buckets only mean something for thinly-tested ops, so a well-tested op
+    is never test debt regardless of its category default.
     """
+    # 0) real direct coverage outranks any category default
+    if not coverage.is_thinly_tested:
+        return OpClassification(
+            op_name, DIRECTLY_TESTED,
+            f"{coverage.total_refs} direct test references", coverage)
+
     # 1) per-name override always wins
     if op_name in _NAME_OVERRIDES:
         bucket, reason = _NAME_OVERRIDES[op_name]

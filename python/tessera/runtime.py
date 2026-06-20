@@ -5543,6 +5543,33 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict,
     return res
 
 
+def apple_gpu_kv_cache_read(cache: Any, start: int, end: "int | None" = None
+                            ) -> "tuple[Any, Any, str]":
+    """Device-resident KV-cache slice read on the apple_gpu lane.
+
+    Reads ``[start, end)`` from ``cache`` and places K/V in shared (unified-memory)
+    ``DeviceTensor`` buffers, returning zero-copy device-resident views — the GPU
+    sees the same bytes the attention kernel consumes, with no host round-trip
+    (the residency model ``cache.ResidentLatentKVCache`` uses).
+
+    Returns ``(k_view, v_view, execution_mode)`` where ``execution_mode`` is
+    ``"metal_runtime"`` only when the DeviceTensor ABI is live on this machine,
+    else ``"reference"`` (host read). Provenance-honest: a host fallback never
+    claims native execution.
+    """
+    import numpy as _np
+    k_host, v_host = cache.read(start, end)
+    k_host = _np.ascontiguousarray(k_host, dtype=_np.float32)
+    v_host = _np.ascontiguousarray(v_host, dtype=_np.float32)
+    if DeviceTensor.is_metal():
+        k_dev = DeviceTensor.from_numpy(k_host)
+        v_dev = DeviceTensor.from_numpy(v_host)
+        if k_dev is not None and v_dev is not None:
+            # Zero-copy device-resident views over the shared Metal buffers.
+            return k_dev.numpy(), v_dev.numpy(), "metal_runtime"
+    return k_host, v_host, "reference"
+
+
 def _apple_gpu_conv2d_f32() -> Any:
     runtime = _load_apple_gpu_runtime()
     sym = getattr(runtime, "tessera_apple_gpu_conv2d_f32", None)

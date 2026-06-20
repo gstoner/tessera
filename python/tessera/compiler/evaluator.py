@@ -497,6 +497,56 @@ def nvidia_emission_verdict(jitted_fn: Any) -> BackendVerdict:
     )
 
 
+def rocm_emission_verdict(arch: str = "gfx1151", dtype: str = "f16") -> BackendVerdict:
+    """Derive an AMD program's emission rung from `rocdl_emit`.
+
+    Unlike NVIDIA (where ``ptxas`` is Linux-CI-only, capping the host at rung 3
+    ``EMITS_ASM_TEXT``), the LLVM 22 **AMDGPU backend ships in the host toolchain**,
+    so ``llc -mcpu=<gfx>`` lowers ``llvm.amdgcn.wmma.*`` to a real ``v_wmma_*``
+    instruction *here* — a genuine rung-4 ``ASSEMBLES`` with no GPU. Rungs 6–7
+    (execute / hardware-verified) still gate on real silicon.
+
+    Ladder:
+      * ``ASSEMBLES`` — ``llc`` lowered the WMMA GEMM IR to AMDGCN containing the
+        ``v_wmma_*`` instruction on this host.
+      * ``EMITS_ASM_TEXT`` — IR emitted + structurally valid, but ``llc`` absent.
+      * ``ARTIFACT_ONLY`` — neither.
+    """
+    target = f"rocm:{arch}"
+    try:
+        from . import rocdl_emit as _r
+        ir = _r.emit_wmma_gemm_llvmir(dtype, arch=arch)
+        validation = _r.validate_wmma_gemm_structure(ir, dtype=dtype, arch=arch)
+    except Exception as exc:
+        return BackendVerdict(
+            target=target, rung=Rung.ARTIFACT_ONLY, execution_kind="none",
+            runtime_status="invalid_artifact", provenance_ok=False,
+            correctness="unproven", detail=f"emission failed: {exc!r}")
+
+    if not validation.ok:
+        return BackendVerdict(
+            target=target, rung=Rung.ARTIFACT_ONLY, execution_kind="none",
+            runtime_status="invalid_artifact", provenance_ok=False,
+            correctness="unproven",
+            detail=f"WMMA IR structurally invalid: {validation.reasons}")
+
+    res = _r.llc_assemble(ir, arch=arch)
+    if getattr(res, "status", "") == "ok" and getattr(res, "wmma_instruction", ""):
+        return BackendVerdict(
+            target=target, rung=Rung.ASSEMBLES,
+            execution_kind="amdgcn_assembled", runtime_status="assembled",
+            provenance_ok=False, correctness="unproven",
+            detail=(f"llc lowered WMMA GEMM to {arch} AMDGCN on this host: "
+                    f"{res.wmma_instruction!r}; execution (rungs 6-7) gates on "
+                    "real silicon"))
+    return BackendVerdict(
+        target=target, rung=Rung.EMITS_ASM_TEXT,
+        execution_kind="amdgcn_emitted", runtime_status="artifact_only",
+        provenance_ok=False, correctness="unproven",
+        detail="emits structurally-valid llvm.amdgcn.wmma LLVM-IR; llc assembly "
+               "unavailable on this host")
+
+
 # ── E2: legal-by-construction inputs (DESIL UB-elim / NNSmith safe inputs) ────
 #
 # Generated-program inputs must be legal by construction so a tolerance compare

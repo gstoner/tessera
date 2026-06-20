@@ -63,6 +63,30 @@ shipped kernels**, not missing capability — and the honesty guards (conformanc
 Evaluator, envelope-dispatch lane check) correctly blocked the one case
 (conv2d/kv_cache_read) where the kernel exists but the launch path doesn't.
 
+## AMD / NVIDIA emission readiness (2026-06-19) — toward bring-up
+
+The single biggest "hardware-gated" bucket every dashboard named is the
+NVIDIA/ROCm backend-kernel axis. With the Strix Halo (gfx1151) + Blackwell
+(sm_120) boxes coming online, the hardware-free ceiling for each was pushed and
+**scored in the Evaluator**:
+
+- **AMD — rung 4 (ASSEMBLES), on this Mac.** `rocdl_emit` already emits
+  `llvm.amdgcn.wmma` IR for gfx1100 / **gfx1151** / RDNA4 / gfx1250 + a full
+  K-loop GEMM; the LLVM 22 AMDGPU backend means `llc -mcpu=gfx1151` lowers it to
+  real `v_wmma_f32_16x16x16_f16 …` AMDGCN **here, no GPU**. New
+  `evaluator.rocm_emission_verdict` scores this at rung 4 (parallel to
+  `nvidia_emission_verdict`), provenance-honest (never claims execution / rungs
+  6–7 without silicon). 86 rocdl tests + 5 new verdict tests.
+- **NVIDIA — rung 3 (EMITS_ASM_TEXT) ceiling, here.** `ptx_emit` emits valid
+  WGMMA PTX text + structural validation; `ptxas` (rung 4 → SASS) and execution
+  (rungs 6–7) need the Linux/CUDA Blackwell box — the genuinely hardware-gated
+  remainder the plan leaves open.
+
+The asymmetry is honest: AMD assembles on-host because the AMDGPU backend ships
+in LLVM; NVIDIA's SASS assembler does not. Both are at their true hardware-free
+max. Remaining = rungs 6–7 on real silicon (multi-GPU / collectives / PeerSync
+/ DMA-Buf / NVIDIA low-level), as scoped.
+
 ## Phase 0 — Make "is the contract consumed?" an audited axis
 
 > **Status (2026-06-19): LANDED.** `compiler/contract_consumers.py` — one row per

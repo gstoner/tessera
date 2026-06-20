@@ -21,6 +21,7 @@ import ast
 import enum
 import inspect
 import textwrap
+import weakref
 from typing import Callable, Dict, FrozenSet, List, Optional
 
 from .op_catalog import OP_SPECS
@@ -233,8 +234,10 @@ class EffectLattice:
     """
 
     def __init__(self) -> None:
-        # Cache: fn_id → inferred Effect
-        self._cache: Dict[int, Effect] = {}
+        # Cache keyed by the function object via a weak reference, so a GC'd
+        # function cannot have its id() reused by a different function and return
+        # a stale inferred effect (and the cache can't grow unbounded).
+        self._cache: "weakref.WeakKeyDictionary[Callable, Effect]" = weakref.WeakKeyDictionary()
 
     def infer(self, fn: Callable, source_text: Optional[str] = None) -> Effect:
         """
@@ -246,10 +249,15 @@ class EffectLattice:
         Note: Functions whose source cannot be retrieved (built-ins, C
         extensions) are conservatively assigned Effect.top.
         """
-        fn_id = id(fn)
         use_cache = source_text is None
-        if use_cache and fn_id in self._cache:
-            return self._cache[fn_id]
+        if use_cache:
+            try:
+                cached = self._cache.get(fn)
+            except TypeError:
+                use_cache = False  # fn not weak-referenceable (e.g. a builtin)
+            else:
+                if cached is not None:
+                    return cached
 
         try:
             source = source_text if source_text is not None else inspect.getsource(fn)
@@ -258,14 +266,14 @@ class EffectLattice:
         except (OSError, TypeError, SyntaxError):
             # Cannot inspect — conservative fallback
             if use_cache:
-                self._cache[fn_id] = Effect.top
+                self._cache[fn] = Effect.top
             return Effect.top
 
         visitor = _EffectVisitor()
         visitor.visit(tree)
         result = visitor.inferred
         if use_cache:
-            self._cache[fn_id] = result
+            self._cache[fn] = result
         return result
 
     def infer_with_ops(self, fn: Callable, source_text: Optional[str] = None):
@@ -350,7 +358,10 @@ class EffectLattice:
 
     def invalidate(self, fn: Callable) -> None:
         """Remove a cached inference result (e.g., after function mutation)."""
-        self._cache.pop(id(fn), None)
+        try:
+            self._cache.pop(fn, None)
+        except TypeError:
+            pass  # not weak-referenceable → was never cached
 
     def __repr__(self) -> str:
         return f"EffectLattice(cached={len(self._cache)} functions)"

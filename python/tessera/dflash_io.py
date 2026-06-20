@@ -43,7 +43,13 @@ except Exception:  # pragma: no cover
 def load_safetensors(path) -> Dict[str, np.ndarray]:
     """Read a ``.safetensors`` file into a ``{name: ndarray}`` dict."""
     data = Path(path).read_bytes()
+    if len(data) < 8:
+        raise ValueError("safetensors file too small for an 8-byte header length")
     (n,) = struct.unpack("<Q", data[:8])
+    if 8 + n > len(data):
+        raise ValueError(
+            f"safetensors header length {n} exceeds file size {len(data)} — truncated/corrupt"
+        )
     header = json.loads(data[8:8 + n])
     base = 8 + n
     out: Dict[str, np.ndarray] = {}
@@ -54,8 +60,19 @@ def load_safetensors(path) -> Dict[str, np.ndarray]:
         if dt is None:
             raise ValueError(f"unsupported safetensors dtype {meta['dtype']!r}")
         s, e = meta["data_offsets"]
+        if not (0 <= s <= e and base + e <= len(data)):
+            raise ValueError(
+                f"safetensors tensor {name!r} data_offsets [{s}, {e}] out of bounds "
+                f"for file size {len(data)}"
+            )
         buf = data[base + s:base + e]
-        out[name] = np.frombuffer(buf, dtype=dt).reshape(meta["shape"]).copy()
+        arr: np.ndarray = np.frombuffer(buf, dtype=dt)
+        expected = int(np.prod(meta["shape"])) if meta["shape"] else 1
+        if arr.size != expected:
+            raise ValueError(
+                f"safetensors tensor {name!r}: {arr.size} elements != prod(shape)={expected}"
+            )
+        out[name] = arr.reshape(meta["shape"]).copy()
     return out
 
 

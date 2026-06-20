@@ -190,17 +190,32 @@ class CompilationCache:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
 
+    def _resolve(self, key: str) -> Path:
+        """Resolve ``key`` under ``root``, rejecting path traversal.
+
+        A caller-supplied key containing ``..`` or an absolute path would
+        otherwise escape the cache root — benign for get(), but invalidate()
+        deletes the resolved tree, so an unchecked key is an arbitrary-delete.
+        """
+        root = self.root.resolve()
+        path = (self.root / key).resolve()
+        if path != root and root not in path.parents:
+            raise ValueError(
+                f"unsafe compilation-cache key {key!r}: resolves outside the cache root"
+            )
+        return path
+
     def put(self, key: str, artifact: AOTArtifact) -> Path:
-        return artifact.save(self.root / key)
+        return artifact.save(self._resolve(key))
 
     def get(self, key: str) -> AOTArtifact | None:
-        path = self.root / key
+        path = self._resolve(key)
         if not (path / "artifact.json").exists():
             return None
         return load(path)
 
     def invalidate(self, key: str) -> None:
-        path = self.root / key
+        path = self._resolve(key)
         if path.exists():
             _remove_tree(path)
 

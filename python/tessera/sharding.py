@@ -307,7 +307,15 @@ class MemoryShardSpec:
             return 0
         if self.mode == MemoryMode.KEY_HASH:
             arr = np.ascontiguousarray(key)
-            h = _fnv1a_64(arr.tobytes())
+            if arr.dtype.kind == "f":
+                # Collapse -0.0 -> +0.0 so keys that compare equal hash equally.
+                arr = arr.copy()
+                arr[arr == 0.0] = 0.0
+            # Fold dtype + shape into the digest so different-typed or
+            # different-shaped keys with identical raw bytes (e.g. (2,) vs (1,2))
+            # don't collide onto the same shard.
+            payload = f"{arr.dtype.str}|{arr.shape}|".encode() + arr.tobytes()
+            h = _fnv1a_64(payload)
             return int(h % n_shards)
         if self.mode == MemoryMode.BUCKET:
             fn = _MEMORY_BUCKET_FUNCTIONS.get(self.bucket_fn or "")

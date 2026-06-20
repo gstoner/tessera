@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import platform
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any
 
 SCHEMA_VERSION = 1
@@ -309,10 +309,14 @@ def load_corpus(path: str) -> list[AutotuneRecord]:
 
     with open(path) as fh:
         rows = json.load(fh)
+    # Tolerate forward/backward-incompatible corpora: keep only known fields
+    # instead of letting an extra/renamed key crash AutotuneRecord(**d).
+    valid = {f.name for f in fields(AutotuneRecord)}
     out: list[AutotuneRecord] = []
     for d in rows:
         lat = d.get("latency")
-        d = {**d, "latency": LatencyStats(**lat) if lat is not None else None}
+        d = {k: v for k, v in d.items() if k in valid}
+        d["latency"] = LatencyStats(**lat) if lat is not None else None
         out.append(AutotuneRecord(**d))
     return out
 

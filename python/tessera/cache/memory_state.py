@@ -227,7 +227,11 @@ class MemoryStateHandle:
         if self.eviction == "fifo":
             keep_idx = np.arange(n, self._size)
         elif self.eviction == "lru" or self.eviction == "oldest":
-            # Highest age = least recently used.
+            # NOTE: `age` is incremented on write() and never refreshed on
+            # read(), so this is least-recently-*written* (insertion recency),
+            # not access-recency LRU. True access-LRU would require read() to
+            # reset accessed rows' age, which this reference handle does not do
+            # (read() is a pure top-k attention via memory_read).
             ages = self._metadata["age"][: self._size]
             evict_idx = np.argsort(-ages)[:n]
             mask = np.ones(self._size, dtype=bool)

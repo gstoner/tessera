@@ -1,6 +1,6 @@
 op,target,overall,graph_emitted,schedule_legal,tile_legal,target_legal,backend_compile,runtime_execute,numerical_check,first_failing_gate
 conv2d,apple_cpu,partial,complete,complete,complete,complete,complete,partial,partial,hardware_smoke
-conv2d,apple_gpu,missing,complete,complete,complete,complete,complete,missing,complete,hardware_smoke
+conv2d,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 conv2d,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 conv2d,nvidia,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 conv2d,rocm,missing,complete,complete,complete,missing,missing,missing,partial,codegen

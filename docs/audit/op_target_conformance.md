@@ -26,11 +26,11 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 5 |
+| ✅ `complete` | 6 |
 | ⚙️ `partial` | 14 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
-| ❌ `missing` | 16 |
+| ❌ `missing` | 15 |
 | **total cells** | **35** |
 
 ## `matmul`
@@ -87,7 +87,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 |--------|---------|-------|----------|------|--------------|-----------------|---------|-----------|------------------------|-------|
 | `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
-| `apple_gpu` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
+| `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'conv2d' on 'nvidia' |  |
 | `rocm` | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ⚙️ | `codegen` — no backend_manifest entry for 'conv2d' on 'rocm' |  |
 

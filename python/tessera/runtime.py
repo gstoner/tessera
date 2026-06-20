@@ -2386,9 +2386,15 @@ def _apple_gpu_known_chain_from_fusion_groups(
 def _execute_apple_gpu_mps_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     """Public entry: dispatch an apple_gpu MPS artifact. Delegates to the
     metadata dispatcher so the JIT hot-path can skip the artifact wrapper +
-    hash + JSON serialization (see `JitFn._apple_gpu_fast_call`)."""
+    hash + JSON serialization (see `JitFn._apple_gpu_fast_call`).
 
-    return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args)
+    Launches request provenance so ``launch`` reports ``execution_kind`` honestly:
+    a lane that fell back to the host returns ``(output, "reference")`` here,
+    which ``launch`` unwraps (it never reports native execution for a fallback).
+    """
+
+    return _execute_apple_gpu_mps_metadata(artifact.metadata or {}, args,
+                                           return_provenance=True)
 
 
 def _apple_gpu_synth_fusion_dtype(a: Any, b: Any, np: Any) -> Any:
@@ -2708,7 +2714,8 @@ def _apple_gpu_resolve_authoritative_plan(
     return None
 
 
-def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> Any:
+def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any,
+                                    *, return_provenance: bool = False) -> Any:
     """Phase 8.3 + 8.4: run an apple_gpu plan from a metadata dict directly.
 
     Single-op programs dispatch through the per-op envelope (matmul/gemm via
@@ -2719,6 +2726,14 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
     `_is_apple_gpu_mps_executable` in driver.py rejects anything outside
     these patterns at compile time, so the per-op fallthrough below is just
     a defensive guard against gating drift.
+
+    ``return_provenance`` (set by the launch artifact wrapper) makes the per-op
+    path return ``(output, execution_kind)`` where ``execution_kind`` is
+    ``"native_gpu"`` unless a lane could not run on Metal and fell back to the
+    host reference (then ``"reference"``). The direct JIT hot-path
+    (``_apple_gpu_fast_call``) leaves it ``False`` and gets a bare array, so the
+    call API is unchanged. This is the rung-7 provenance gate: a silent host
+    fallback must never be reported as native execution.
     """
 
     import numpy as np
@@ -2730,6 +2745,17 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
         raise ValueError("apple_gpu_mps artifact has no ops")
 
     values = _bind_launch_args(args, arg_names)
+
+    # Provenance: stays native_gpu unless a lane falls back to the host below.
+    # The fusion early-returns are all genuinely native (MPS/MSL always present
+    # on Metal), so they return bare arrays and launch stamps the row's
+    # native_gpu; only the per-op loop can demote via _ret().
+    _native = True
+
+    def _ret(out: Any) -> Any:
+        if not return_provenance:
+            return out
+        return (out, "native_gpu" if _native else "reference")
 
     # Phase 0b — authoritative fusion dispatch. When a whole-program known_chain
     # group carries operand/result roles (Phase 0a), dispatch the fused kernel
@@ -2913,16 +2939,22 @@ def _execute_apple_gpu_mps_metadata(metadata: Mapping[str, Any], args: Any) -> A
                  if isinstance(vv, str) and vv.lstrip("%") in values else vv)
             for kk, vv in kwargs.items()
         }
-        values[str(result)] = handler(
-            op_name,
-            [_as_numpy(values[name]) for name in operand_names],
-            resolved_kwargs,
-            np,
-        )
+        op_operands = [_as_numpy(values[name]) for name in operand_names]
+        op_out = handler(op_name, op_operands, resolved_kwargs, np)
+        if op_out is None:
+            # The native lane could not run this op on Metal here (e.g. the conv
+            # symbol is unavailable on this host / for this dtype). Compute the
+            # honest host reference and DEMOTE provenance — a fallback must never
+            # be reported as native execution (the rung-7 provenance gate). If no
+            # host reference exists for the op, raise rather than fabricate.
+            op_out = _apple_gpu_host_reference(op_name, op_operands,
+                                               resolved_kwargs, np)
+            _native = False
+        values[str(result)] = op_out
 
     if output_name not in values:
         raise ValueError(f"artifact did not produce output {output_name!r}")
-    return values[output_name]
+    return _ret(values[output_name])
 
 
 def _apple_gpu_dispatch_quantized_matmul(arrays: list[Any], kwargs: Mapping[str, Any],
@@ -6175,6 +6207,60 @@ def _apple_gpu_dispatch_linalg(op_name: str, operands: list[Any], kwargs: dict,
         return apple_gpu_tri_solve(np.asarray(operands[0]), np.asarray(operands[1]),
                                    np, lower=bool(lower))[0]
     raise ValueError(f"_apple_gpu_dispatch_linalg: unsupported op {op_name!r}")
+
+
+def _host_conv2d_nhwc(operands: list[Any], kwargs: dict, np: Any) -> Any:
+    """Numpy NHWC/HWIO conv2d reference — the honest host fallback used when the
+    Metal conv symbol is unavailable. Supports stride/padding/dilation/groups +
+    optional bias. Correctness over speed (it only runs off-Metal)."""
+    X = np.asarray(operands[0], np.float32)
+    W = np.asarray(operands[1], np.float32)
+    bias = (np.asarray(operands[2], np.float32)
+            if len(operands) > 2 and operands[2] is not None else None)
+
+    def _pair(v: Any) -> tuple[int, int]:
+        return (int(v[0]), int(v[1])) if isinstance(v, (tuple, list)) else (int(v), int(v))
+
+    sH, sW = _pair(kwargs.get("stride", 1))
+    pH, pW = _pair(kwargs.get("padding", 0))
+    dH, dW = _pair(kwargs.get("dilation", 1))
+    groups = int(kwargs.get("groups", 1))
+    N, H, Wd, Cin = (int(s) for s in X.shape)
+    kH, kW, cinG, Cout = (int(s) for s in W.shape)
+    if groups <= 0 or Cin % groups or Cout % groups or cinG != Cin // groups:
+        raise ValueError(f"host conv2d: bad groups={groups} for Cin={Cin}, Cout={Cout}")
+    outH = (H + 2 * pH - dH * (kH - 1) - 1) // sH + 1
+    outW = (Wd + 2 * pW - dW * (kW - 1) - 1) // sW + 1
+    if outH <= 0 or outW <= 0:
+        raise ValueError(f"host conv2d: non-positive output {outH}x{outW}")
+    Xp = np.pad(X, ((0, 0), (pH, pH), (pW, pW), (0, 0))) if (pH or pW) else X
+    Y = np.zeros((N, outH, outW, Cout), np.float32)
+    cinPerG, coutPerG = Cin // groups, Cout // groups
+    for g in range(groups):
+        ci0, co0 = g * cinPerG, g * coutPerG
+        for i in range(outH):
+            for j in range(outW):
+                hs, ws = i * sH, j * sW
+                patch = Xp[:, hs:hs + dH * (kH - 1) + 1:dH,
+                           ws:ws + dW * (kW - 1) + 1:dW, ci0:ci0 + cinPerG]
+                wg = W[:, :, :, co0:co0 + coutPerG]
+                Y[:, i, j, co0:co0 + coutPerG] = np.tensordot(
+                    patch, wg, axes=([1, 2, 3], [0, 1, 2]))
+    if bias is not None:
+        Y = Y + bias.reshape(1, 1, 1, -1)
+    return Y.astype(np.asarray(operands[0]).dtype)
+
+
+def _apple_gpu_host_reference(op_name: str, operands: list[Any], kwargs: dict,
+                              np: Any) -> Any:
+    """Honest host reference for a lane that could not run on Metal. Only ops
+    with a defined reference are handled; anything else raises (never fabricate a
+    result for an op we cannot honestly compute on the host)."""
+    if op_name in ("tessera.conv2d", "tessera.conv2d_nhwc"):
+        return _host_conv2d_nhwc(operands, kwargs, np)
+    raise ValueError(
+        f"apple_gpu lane for {op_name!r} returned no result and has no host "
+        f"reference fallback — cannot honestly complete the launch")
 
 
 def _apple_gpu_dispatch_conv2d(operands: list[Any], kwargs: dict, np: Any) -> Any:

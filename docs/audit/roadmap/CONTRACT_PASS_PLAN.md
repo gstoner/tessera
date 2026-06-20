@@ -53,15 +53,46 @@ A sweep to clear the small concrete dashboard gaps ahead of AMD/NVIDIA bring-up:
 - **conv2d / kv_cache_read** (`op_target_conformance`): conv2d computes on Metal
   via its direct dispatcher (tested) and `apple_gpu_kv_cache_read` lands a genuine
   device-resident (DeviceTensor) read with a provenance gate. The conformance
-  "complete" flip was **deliberately not taken** — the `@jit→launch` path for both
-  is `unimplemented`, and the conformance Evaluator correctly refuses rung-7
-  corroboration; forcing it would be a provenance overclaim. The launch wiring is
-  the real conformance closer (tracked follow-on).
+  "complete" flip was **deliberately not taken** at first — the `@jit→launch` path
+  for both was `unimplemented`, and the conformance Evaluator correctly refuses
+  rung-7 corroboration; forcing it would be a provenance overclaim. The launch
+  wiring is the real conformance closer — landed as **#17** below.
 
 The recurring lesson: most "partial" dashboard cells were **registration gaps over
 shipped kernels**, not missing capability — and the honesty guards (conformance
 Evaluator, envelope-dispatch lane check) correctly blocked the one case
 (conv2d/kv_cache_read) where the kernel exists but the launch path doesn't.
+
+## #17 conformance closer (2026-06-20) — conv2d @jit→launch + kv_cache_read verdict
+
+The follow-on the closeout deferred. Findings on the way in: `kv_cache_read` **is**
+a Graph IR op (`tessera.kv_cache.read`) but a *stateful* one (over `KVCacheType`);
+`conv2d` is a pure-tensor op already carrying every conformance column except
+`runtime_execute`. So the two split:
+
+- **conv2d — fully closed (missing → complete).** The only blocker was a name
+  mismatch: the `@jit` lowering emits `tessera.conv2d_nhwc` but the envelope only
+  knew `tessera.conv2d`. Adding the `_nhwc` spelling to `_APPLE_GPU_CONV_OPS` +
+  the lane map makes the driver's executable gate accept it and the runtime per-op
+  loop dispatch it to the Metal conv lane. **Honest provenance**: the executor now
+  returns `(output, execution_kind)` — `native_gpu` only when the Metal conv
+  symbol ran, else a host `reference` fallback (`_apple_gpu_host_reference`,
+  numpy NHWC conv), never a fake native success (the direct JIT call API is
+  unchanged — bare array via the default `return_provenance=False`).
+  `conv2d`/`apple_gpu` now reads `runtime_execute=complete` → **overall complete**,
+  and the generic Evaluator corroborates it at **rung 8 (HARDWARE_VERIFIED)** on
+  this Mac. `conformance_evaluator` gained a conv2d builder so the cell is
+  corroborated (`uncovered_complete_cells()` stays empty). Cross-language contract
+  held: the C++ `apple_runtime_ops.inc` was regenerated so `TileToApple.cpp` tags
+  `conv2d_nhwc` `metal_runtime` (Python↔C++ envelope sync test).
+- **kv_cache_read — execution-proven via a dedicated verdict (stays < complete,
+  honestly).** A stateful cache op does not flow the pure-tensor `@jit→launch`
+  conformance matrix; forcing it there would be the dishonest move. Instead
+  `evaluator.kv_cache_read_native_equivalence` proves the device-resident
+  `apple_gpu_kv_cache_read` runs on `metal_runtime` **and** matches the cache's own
+  host `read` slice — same provenance gate (inconclusive off-Metal). Its
+  conformance cell stays below `complete` (numerical fixture for a stateful op is
+  the remaining gated piece) — reported, not faked.
 
 ## Phase 5 pipelining (2026-06-19) — assessed, no new HF work
 

@@ -50,11 +50,16 @@ def _p_flash_attn(q, k, v):
     return ts.ops.flash_attn(q, k, v)
 
 
+def _p_conv2d(x, w):
+    return ts.ops.conv2d(x, w, stride=1, padding=0, layout="nhwc")
+
+
 _BASE_FN: dict[str, Callable[..., Any]] = {
     "matmul": _p_matmul,
     "softmax": _p_softmax,
     "matmul_softmax": _p_matmul_softmax,
     "flash_attn": _p_flash_attn,
+    "conv2d": _p_conv2d,
 }
 
 # (jitted-fn cache keyed by (op, target) so we compile each once.)
@@ -108,6 +113,18 @@ def _build(op: str, rng: Any) -> tuple[tuple[Any, ...], Any, bool, dict[str, flo
         scores = np.einsum("bhqd,bhkd->bhqk", q, k) / np.sqrt(d)
         out = np.einsum("bhqk,bhkd->bhqd", _np_softmax(scores, -1), v)
         return (q, k, v), out, False, {"rtol": 5e-3, "atol": 1e-3}
+    if op == "conv2d":
+        # NHWC source, HWIO weights, stride 1 / no pad (matches _p_conv2d).
+        x = rng.standard_normal((1, 8, 8, 3)).astype(np.float32)
+        w = rng.standard_normal((3, 3, 3, 4)).astype(np.float32)
+        oh, ow = x.shape[1] - 2, x.shape[2] - 2
+        out = np.zeros((1, oh, ow, w.shape[3]), np.float32)
+        for i in range(oh):
+            for j in range(ow):
+                patch = x[0, i:i + 3, j:j + 3, :]
+                for co in range(w.shape[3]):
+                    out[0, i, j, co] = np.sum(patch * w[:, :, :, co])
+        return (x, w), out, False, {"rtol": 3e-3, "atol": 1e-3}
     raise KeyError(f"no corroboration program builder for op {op!r}")
 
 

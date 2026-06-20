@@ -231,24 +231,35 @@ def _apple_gpu_envelope_ops() -> set[str]:
     """Apple-GPU ops whose **@jit→launch** path executes (without the ``tessera.``
     prefix).
 
-    NOTE (2026-06-19): this deliberately reads only the three core lanes
-    (MPS / MSL / MPSGraph) — the ones the standard ``runtime.launch`` path
-    dispatches end-to-end. Ops like ``conv2d`` have a working *direct* dispatcher
-    (``_apple_gpu_dispatch_conv2d``) and live in the broader
-    ``_APPLE_GPU_RUNTIME_OPS`` union, but their ``@jit→launch`` integration is
-    still ``unimplemented`` (verified: launch returns ``artifact_only`` /
-    ``unimplemented`` for ``conv2d``). Widening this proxy to the full union
-    would flip those cells to ``complete``, which the conformance Evaluator then
-    refuses to corroborate at rung 7 (correctly) — so the proxy stays scoped to
-    the genuinely launch-wired lanes until that integration lands.
+    NOTE (2026-06-19): this deliberately reads only the lanes the standard
+    ``runtime.launch`` path dispatches end-to-end — a launch-wired *proxy*, not
+    the broader ``_APPLE_GPU_RUNTIME_OPS`` union. An op with only a *direct*
+    dispatcher (no ``@jit→launch`` integration) stays out, because widening the
+    proxy prematurely would flip its cell to ``complete`` while the conformance
+    Evaluator (correctly) refuses to corroborate it at rung 7.
+
+    UPDATE (2026-06-20): ``conv2d`` now executes through ``@jit→launch`` — the
+    driver's executable gate accepts a single ``tessera.conv2d_nhwc`` op, the
+    runtime per-op path dispatches it to the Metal conv lane, and provenance is
+    honest (``native_gpu`` only when the Metal symbol ran; ``reference`` on host
+    fallback). So ``_APPLE_GPU_CONV_OPS`` joins the proxy and the
+    ``conv2d``/``apple_gpu`` cell's ``runtime_execute`` flips to complete,
+    corroborated by ``conformance_evaluator`` (the generic Evaluator reaches
+    HARDWARE_VERIFIED for conv2d on this host). conv3d stays out until its launch
+    path is verified the same way.
     """
     from tessera.compiler import driver as _drv
+    from tessera.compiler.apple_gpu_envelope import _APPLE_GPU_CONV_OPS
 
     out: set[str] = set()
     for attr in ("_APPLE_GPU_MPS_OPS", "_APPLE_GPU_MSL_OPS",
                  "_APPLE_GPU_MPSGRAPH_OPS"):
         for name in getattr(_drv, attr, ()):
             out.add(name[len("tessera."):] if name.startswith("tessera.") else name)
+    # conv2d is launch-wired (2026-06-20); conv3d is not yet, so add conv2d only.
+    for name in ("tessera.conv2d", "tessera.conv2d_nhwc"):
+        if name in _APPLE_GPU_CONV_OPS:
+            out.add(name[len("tessera."):])
     return out
 
 

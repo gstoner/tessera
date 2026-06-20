@@ -79,8 +79,9 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.clifford_wedge")
 // lane: concat (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.cat")
 
-// lane: conv2d (1 ops)
+// lane: conv2d (2 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.conv2d")
+TESSERA_APPLE_GPU_RUNTIME_OP("tessera.conv2d_nhwc")
 
 // lane: conv3d (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.conv3d")
@@ -292,5 +293,5 @@ TESSERA_APPLE_GPU_RUNTIME_OP("tessera.where")
 // lane: z_loss (1 ops)
 TESSERA_APPLE_GPU_RUNTIME_OP("tessera.loss.z_loss")
 
-// Total runtime-executable ops: 184
+// Total runtime-executable ops: 185
 #undef TESSERA_APPLE_GPU_RUNTIME_OP

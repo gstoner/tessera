@@ -217,7 +217,11 @@ _APPLE_GPU_REDUCTION_OPS = frozenset(_APPLE_GPU_REDUCE_OPS)
 _APPLE_GPU_TOPK_OPS = frozenset({"tessera.top_k"})
 # 2026-05-30 — Tier-3 convolutions: conv2d via the MPSGraph convolution2D node
 # (NHWC/HWIO); conv3d via im2col + a GPU MPSGraph batched matmul (NDHWC/DHWIO).
-_APPLE_GPU_CONV_OPS = frozenset({"tessera.conv2d", "tessera.conv3d"})
+# 2026-06-20 — the @jit lowering emits the canonical op as ``tessera.conv2d_nhwc``
+# (op_catalog target name), so the envelope must carry that spelling too or the
+# driver's executable gate + the runtime lane lookup miss the actual plan op.
+_APPLE_GPU_CONV_OPS = frozenset(
+    {"tessera.conv2d", "tessera.conv2d_nhwc", "tessera.conv3d"})
 # GPU linear-algebra lane (MPSMatrix) — only the registered Graph IR ops:
 # tessera.cholesky (1 operand) + tessera.tri_solve (2 operands, `lower` kwarg).
 _APPLE_GPU_LINALG_OPS = frozenset({"tessera.cholesky", "tessera.tri_solve"})
@@ -329,7 +333,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put({"tessera.qkv_projection"}, "qkv_projection")
     put(_APPLE_GPU_REDUCE_OPS, "reduce")
     put(_APPLE_GPU_TOPK_OPS, "topk")
-    put({"tessera.conv2d"}, "conv2d")
+    put({"tessera.conv2d", "tessera.conv2d_nhwc"}, "conv2d")
     put({"tessera.conv3d"}, "conv3d")
     put(_APPLE_GPU_QUANT_OPS, "quant_matmul")
     put(_APPLE_GPU_LINALG_OPS, "linalg")

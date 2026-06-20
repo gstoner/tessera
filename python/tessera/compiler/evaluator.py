@@ -557,6 +557,44 @@ def paged_kv_native_equivalence(
                             max_abs_err, detail)
 
 
+def kv_cache_read_native_equivalence(cache: Any, start: int,
+                                     end: "int | None" = None) -> CrossPathVerdict:
+    """Native execution rung for the stateful ``kv_cache_read`` accessor (#17).
+
+    ``kv_cache_read`` is a *stateful* op over a ``KVCacheType`` — it does not flow
+    the pure-tensor @jit→launch conformance matrix (unlike conv2d), so its
+    "execution-proven" status is established here instead: the device-resident
+    ``apple_gpu_kv_cache_read`` must run on ``metal_runtime`` **and** the slice it
+    returns must equal the host source slice (the cache's own ``read``). Same
+    provenance gate as the paged-KV native rung — a silent host fallback stays
+    ``inconclusive`` and can never earn the native rung.
+    """
+    import numpy as np
+
+    from ..runtime import apple_gpu_kv_cache_read
+
+    kview, vview, exe = apple_gpu_kv_cache_read(cache, start, end)
+    # Host reference slice straight from the cache (its own dequantized read).
+    hi = (start + 1) if end is None else end
+    k_ref, v_ref = cache.read(start, hi)
+    k_ref = np.asarray(k_ref, dtype=np.float64)
+    v_ref = np.asarray(v_ref, dtype=np.float64)
+
+    if exe != "metal_runtime":
+        return CrossPathVerdict(
+            "inconclusive", ("reference",), None,
+            f"apple_gpu kv_cache_read fell back ({exe!r}) — native rung unearned")
+    kv = np.asarray(kview, dtype=np.float64)
+    vv = np.asarray(vview, dtype=np.float64)
+    shapes_ok = (kv.shape == k_ref.shape and vv.shape == v_ref.shape)
+    max_abs_err = (max(float(np.max(np.abs(kv - k_ref))),
+                       float(np.max(np.abs(vv - v_ref)))) if shapes_ok else None)
+    scale = max(float(np.max(np.abs(k_ref))), float(np.max(np.abs(v_ref))), 1.0)
+    relation, detail = _cross_path_relation(2, max_abs_err, tol=1e-4 + 1e-5 * scale)
+    return CrossPathVerdict(relation, ("apple_gpu:metal_runtime", "reference"),
+                            max_abs_err, detail)
+
+
 # ── NVIDIA/ROCm emission rung (rung 2.5) ─────────────────────────────────────
 #
 # These backends do not execute here; their honest forward progress is measured

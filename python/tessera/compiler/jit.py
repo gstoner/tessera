@@ -1187,6 +1187,30 @@ class JitFn:
                 }
                 for op in self.cpu_plan.ops
             ]
+            # The strict f32/rank-2 descriptor schema is the matmul/gemm contract
+            # (Phase 8.3) downstream tooling relies on. Single ops that are not a
+            # 2-D matmul (e.g. rank-4 conv2d) carry name-only descriptors +
+            # relaxed guards, mirroring the apple_cpu multi-op branch — never a
+            # dishonest rank-2 descriptor for a rank-4 operand.
+            single_matmul = (
+                len(self.cpu_plan.ops) == 1
+                and self.cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
+            )
+            if single_matmul:
+                gpu_input_descriptors: list[dict[str, Any]] = [
+                    {"name": name, "dtype": "f32", "rank": 2}
+                    for name in self.arg_names
+                ]
+                gpu_output_descriptor: dict[str, Any] = {
+                    "name": self.cpu_plan.output_name, "dtype": "f32", "rank": 2}
+                gpu_guards: dict[str, Any] = {
+                    "dtype": "float32", "rank": 2,
+                    "static_shape_at_launch": True, "op_count": 1}
+            else:
+                gpu_input_descriptors = [{"name": name} for name in self.arg_names]
+                gpu_output_descriptor = {"name": self.cpu_plan.output_name}
+                gpu_guards = {"op_count": len(self.cpu_plan.ops),
+                              "static_shape_at_launch": True}
             metadata.update({
                 "executable": True,
                 "compiler_path": "apple_gpu_mps",
@@ -1195,24 +1219,12 @@ class JitFn:
                 "execution_mode": "metal_runtime",
                 "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
-                "input_descriptors": [
-                    {"name": name, "dtype": "f32", "rank": 2}
-                    for name in self.arg_names
-                ],
-                "output_descriptor": {
-                    "name": self.cpu_plan.output_name,
-                    "dtype": "f32",
-                    "rank": 2,
-                },
+                "input_descriptors": gpu_input_descriptors,
+                "output_descriptor": gpu_output_descriptor,
                 "cpu_tile": list(self.cpu_plan.tile),
                 "ops": ops_payload,
                 "mps_ops": [op["op_name"] for op in ops_payload],
-                "guards": {
-                    "dtype": "float32",
-                    "rank": 2,
-                    "static_shape_at_launch": True,
-                    "op_count": 1,
-                },
+                "guards": gpu_guards,
             })
         elif self.cpu_plan is not None:
             metadata.update({

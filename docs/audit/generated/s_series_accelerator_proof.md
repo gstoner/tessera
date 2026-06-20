@@ -5,14 +5,14 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**181/458 primitives are accelerator-proven on Apple GPU today.** Of the 316 accelerator-relevant primitives (proven + eligible + special), **123 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**182/458 primitives are accelerator-proven on Apple GPU today.** Of the 316 accelerator-relevant primitives (proven + eligible + special), **122 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
 | Class | Count | Meaning |
 |-------|------:|---------|
-| `proven` | 181 | executes on Apple GPU today (`metal_runtime`) |
-| `eligible` | 123 | numeric — route-able to a Metal kernel (the actionable gap) |
+| `proven` | 182 | executes on Apple GPU today (`metal_runtime`) |
+| `eligible` | 122 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
 | `host` | 132 | structural / orchestration / shape — accelerator not-applicable |
@@ -74,17 +74,17 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `state_space` | 1 | 1 | 0 | `eligible` |
 | `state_tree` | 10 | 0 | 0 | `host` |
 | `state_update` | 4 | 0 | 4 | `eligible` |
-| `stencil` | 8 | 0 | 8 | `eligible` |
+| `stencil` | 8 | 1 | 7 | `eligible` |
 | `tensor_algebra` | 19 | 2 | 0 | `host` |
 | `tokenizer` | 5 | 0 | 0 | `host` |
 | `transform` | 11 | 0 | 0 | `host` |
 
-## Eligible worklist (123) — the accelerator-proof gap
+## Eligible worklist (122) — the accelerator-proof gap
 
 FLOP-bearing numeric primitives with no Apple GPU envelope route yet. Routing a category here (an MPSGraph/MSL kernel + envelope entry + dispatcher + a `metal_runtime` test) flips its primitives to `proven`.
 
 <details><summary>names</summary>
 
-  `adafactor`, `adam`, `adamw`, `adaptive_pool`, `add_decoupled_weight_decay`, `alibi`, `avg_pool`, `bidirectional_scan`, `bsmm`, `calibration_observer`, `centralize_grad`, `check_cauchy_riemann`, `cispo_policy_loss`, `clifford_integral`, `clip_grad_norm`, `clip_grad_value`, `complex_abs`, `complex_arg`, `complex_conjugate`, `complex_div`, `complex_exp`, `complex_log`, `complex_mul`, `complex_pow`, `complex_sqrt`, `conformal_energy_on_sphere`, `conformal_jacobian`, `contrastive_loss`, `conv1d`, `conv2d`, `conv3d`, `conv_transpose`, `cosine_embedding_loss`, `cross_ratio`, `ctc_loss`, `dbar`, `depthwise_conv1d`, `dequant_grouped_gemm`, `dequant_matmul`, `dequantize_fp4`, `dequantize_fp6`, `dequantize_fp8`, `dequantize_int4`, `dequantize_int8`, `dequantize_nvfp4`, `digamma`, `dropout`, `dz`, `ebm_bivector_langevin_sample`, `ebm_bivector_langevin_step`, `ebm_decode_init`, `ebm_energy`, `ebm_langevin_step`, `ebm_partition_ais`, `ebm_partition_exact`, `ebm_partition_monte_carlo`, `ebm_sphere_langevin_sample`, `ebm_sphere_langevin_step`, `einsum`, `ema_update`, `factorized_matmul`, `fake_quantize`, `focal_loss`, `fused_epilogue`, `grad_scaler_step`, `grpo_policy_loss`, `gru_cell`, `info_nce_loss`, `is_concyclic`, `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `label_smoothed_cross_entropy`, `lamb`, `laplacian_2d`, `latent_kv_compress`, `latent_kv_expand_k`, `latent_kv_expand_v`, `lgamma`, `lion`, `lora_linear`, `max_pool`, `memory_evict`, `memory_index_score`, `memory_read`, `memory_write`, `min_pool`, `mobius`, `mobius_from_three_points`, `moe`, `moe_combine`, `moe_dispatch`, `momentum`, `msa_index_scores`, `muon`, `nesterov`, `normalize_group_advantages`, `nt_xent_loss`, `ntk_rope`, `online_softmax`, `online_softmax_state`, `optax_style_chain`, `polyak_avg`, `ppo_policy_loss`, `quantize_fp4`, `quantize_fp6`, `quantize_fp8`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `score_combine`, `sddmm`, `segment_reduce`, `seq2seq_loss`, `sgd`, `simple_rnn_cell`, `spectral_norm`, `spmm_coo`, `spmm_csr`, `stereographic`, `triplet_loss`, `varlen_sdpa`, `wasserstein_distance`
+  `adafactor`, `adam`, `adamw`, `adaptive_pool`, `add_decoupled_weight_decay`, `alibi`, `avg_pool`, `bidirectional_scan`, `bsmm`, `calibration_observer`, `centralize_grad`, `check_cauchy_riemann`, `cispo_policy_loss`, `clifford_integral`, `clip_grad_norm`, `clip_grad_value`, `complex_abs`, `complex_arg`, `complex_conjugate`, `complex_div`, `complex_exp`, `complex_log`, `complex_mul`, `complex_pow`, `complex_sqrt`, `conformal_energy_on_sphere`, `conformal_jacobian`, `contrastive_loss`, `conv1d`, `conv3d`, `conv_transpose`, `cosine_embedding_loss`, `cross_ratio`, `ctc_loss`, `dbar`, `depthwise_conv1d`, `dequant_grouped_gemm`, `dequant_matmul`, `dequantize_fp4`, `dequantize_fp6`, `dequantize_fp8`, `dequantize_int4`, `dequantize_int8`, `dequantize_nvfp4`, `digamma`, `dropout`, `dz`, `ebm_bivector_langevin_sample`, `ebm_bivector_langevin_step`, `ebm_decode_init`, `ebm_energy`, `ebm_langevin_step`, `ebm_partition_ais`, `ebm_partition_exact`, `ebm_partition_monte_carlo`, `ebm_sphere_langevin_sample`, `ebm_sphere_langevin_step`, `einsum`, `ema_update`, `factorized_matmul`, `fake_quantize`, `focal_loss`, `fused_epilogue`, `grad_scaler_step`, `grpo_policy_loss`, `gru_cell`, `info_nce_loss`, `is_concyclic`, `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `label_smoothed_cross_entropy`, `lamb`, `laplacian_2d`, `latent_kv_compress`, `latent_kv_expand_k`, `latent_kv_expand_v`, `lgamma`, `lion`, `lora_linear`, `max_pool`, `memory_evict`, `memory_index_score`, `memory_read`, `memory_write`, `min_pool`, `mobius`, `mobius_from_three_points`, `moe`, `moe_combine`, `moe_dispatch`, `momentum`, `msa_index_scores`, `muon`, `nesterov`, `normalize_group_advantages`, `nt_xent_loss`, `ntk_rope`, `online_softmax`, `online_softmax_state`, `optax_style_chain`, `polyak_avg`, `ppo_policy_loss`, `quantize_fp4`, `quantize_fp6`, `quantize_fp8`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `score_combine`, `sddmm`, `segment_reduce`, `seq2seq_loss`, `sgd`, `simple_rnn_cell`, `spectral_norm`, `spmm_coo`, `spmm_csr`, `stereographic`, `triplet_loss`, `varlen_sdpa`, `wasserstein_distance`
 
 </details>

@@ -107,6 +107,15 @@ from .e2e_coverage import (
     coverage_row_for as e2e_coverage_row_for,
     status_counts as e2e_status_counts,
 )
+from .profiling_plan import (
+    ModelAnalyzerSweep,
+    ProfilerPlan,
+    ProviderCapability,
+    normalize_profiler_target,
+    plan_profile,
+    provider_capabilities,
+    summarize_capabilities,
+)
 
 __all__ = [
     "ConstraintSolver",
@@ -229,4 +238,11 @@ __all__ = [
     "all_e2e_coverage_rows",
     "e2e_coverage_row_for",
     "e2e_status_counts",
+    "ModelAnalyzerSweep",
+    "ProfilerPlan",
+    "ProviderCapability",
+    "normalize_profiler_target",
+    "plan_profile",
+    "provider_capabilities",
+    "summarize_capabilities",
 ]

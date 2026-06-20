@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -170,3 +171,10 @@ def test_profiler_standalone_build_and_demo_smoke(tmp_path: Path) -> None:
     assert (demo_dir / "demo.trace.json").is_file()
     assert (demo_dir / "demo.perfetto.json").is_file()
     assert (demo_dir / "demo.report.html").is_file()
+    trace = json.loads((demo_dir / "demo.trace.json").read_text())
+    categories = {
+        event.get("cat")
+        for event in trace["traceEvents"]
+        if event.get("cat") is not None
+    }
+    assert {"runtime_api", "device_activity", "intra_kernel"} <= categories

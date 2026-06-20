@@ -54,6 +54,29 @@ bool perfetto_export(const std::vector<event_t>& events, const std::string& path
            << ", \"pid\": 0, \"tid\": " << e.tid
            << ", \"args\": { \"value\": " << e.value << " } }";
         break;
+      case event_t::RUNTIME_API:
+        os << "    { \"name\": \"" << json_escape(e.name)
+           << "\", \"cat\": \"runtime_api\", \"ph\": \"i\", \"s\": \"t\", \"ts\": "
+           << (e.ts_ns / 1000.0)
+           << ", \"pid\": 0, \"tid\": " << e.tid
+           << ", \"args\": { \"payload\": \"" << json_escape(e.args) << "\" } }";
+        break;
+      case event_t::DEVICE_ACTIVITY:
+        os << "    { \"name\": \"" << json_escape(e.name)
+           << "\", \"cat\": \"device_activity\", \"ph\": \"X\", \"ts\": "
+           << (e.ts_ns / 1000.0)
+           << ", \"dur\": " << e.value
+           << ", \"pid\": 0, \"tid\": " << e.tid
+           << ", \"args\": { \"payload\": \"" << json_escape(e.args) << "\" } }";
+        break;
+      case event_t::INTRA_KERNEL_SAMPLE:
+        os << "    { \"name\": \"" << json_escape(e.name)
+           << "\", \"cat\": \"intra_kernel\", \"ph\": \"C\", \"ts\": "
+           << (e.ts_ns / 1000.0)
+           << ", \"pid\": 0, \"tid\": " << e.tid
+           << ", \"args\": { \"value\": " << e.value
+           << ", \"payload\": \"" << json_escape(e.args) << "\" } }";
+        break;
     }
   }
   os << "\n  ]\n}\n";

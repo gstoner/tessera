@@ -12,12 +12,13 @@ struct config_t {
 };
 
 struct event_t {
-  enum type_t { RANGE_B, RANGE_E, MARKER, COUNTER };
+  enum type_t { RANGE_B, RANGE_E, MARKER, COUNTER, RUNTIME_API, DEVICE_ACTIVITY, INTRA_KERNEL_SAMPLE };
   type_t type;
   std::string name;
   uint64_t ts_ns;
   uint64_t tid;
   double value;
+  std::string args;
 };
 
 void enable(const config_t& cfg);
@@ -26,6 +27,9 @@ void push(const char* name);
 void pop();
 void marker(const char* name);
 void counter_add(const char* name, double v);
+void runtime_api(const char* name, const char* args_json = nullptr);
+void device_activity(const char* name, double duration_us, const char* args_json = nullptr);
+void intra_kernel_sample(const char* name, double value, const char* args_json = nullptr);
 
 bool export_chrome(const std::string& path);
 bool export_perfetto(const std::string& path); // Trace Event JSON, Perfetto-compatible

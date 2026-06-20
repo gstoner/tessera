@@ -53,7 +53,7 @@ void disable() {
 
 void push(const char* name) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::RANGE_B, name ? name : "range", now_ns(), this_thread_id(), 0.0};
+  event_t e{event_t::RANGE_B, name ? name : "range", now_ns(), this_thread_id(), 0.0, ""};
   std::lock_guard<std::mutex> lk(g_mu);
   g_events.emplace_back(std::move(e));
   nvtx_push(name);
@@ -61,7 +61,7 @@ void push(const char* name) {
 
 void pop() {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::RANGE_E, "", now_ns(), this_thread_id(), 0.0};
+  event_t e{event_t::RANGE_E, "", now_ns(), this_thread_id(), 0.0, ""};
   std::lock_guard<std::mutex> lk(g_mu);
   g_events.emplace_back(std::move(e));
   nvtx_pop();
@@ -69,14 +69,38 @@ void pop() {
 
 void marker(const char* name) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::MARKER, name ? name : "marker", now_ns(), this_thread_id(), 0.0};
+  event_t e{event_t::MARKER, name ? name : "marker", now_ns(), this_thread_id(), 0.0, ""};
   std::lock_guard<std::mutex> lk(g_mu);
   g_events.emplace_back(std::move(e));
 }
 
 void counter_add(const char* name, double v) {
   if (!g_enabled.load(std::memory_order_acquire)) return;
-  event_t e{event_t::COUNTER, name ? name : "counter", now_ns(), this_thread_id(), v};
+  event_t e{event_t::COUNTER, name ? name : "counter", now_ns(), this_thread_id(), v, ""};
+  std::lock_guard<std::mutex> lk(g_mu);
+  g_events.emplace_back(std::move(e));
+}
+
+void runtime_api(const char* name, const char* args_json) {
+  if (!g_enabled.load(std::memory_order_acquire)) return;
+  event_t e{event_t::RUNTIME_API, name ? name : "runtime_api", now_ns(), this_thread_id(), 0.0,
+            args_json ? args_json : ""};
+  std::lock_guard<std::mutex> lk(g_mu);
+  g_events.emplace_back(std::move(e));
+}
+
+void device_activity(const char* name, double duration_us, const char* args_json) {
+  if (!g_enabled.load(std::memory_order_acquire)) return;
+  event_t e{event_t::DEVICE_ACTIVITY, name ? name : "device_activity", now_ns(), this_thread_id(),
+            duration_us, args_json ? args_json : ""};
+  std::lock_guard<std::mutex> lk(g_mu);
+  g_events.emplace_back(std::move(e));
+}
+
+void intra_kernel_sample(const char* name, double v, const char* args_json) {
+  if (!g_enabled.load(std::memory_order_acquire)) return;
+  event_t e{event_t::INTRA_KERNEL_SAMPLE, name ? name : "intra_kernel_sample", now_ns(),
+            this_thread_id(), v, args_json ? args_json : ""};
   std::lock_guard<std::mutex> lk(g_mu);
   g_events.emplace_back(std::move(e));
 }

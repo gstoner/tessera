@@ -167,6 +167,34 @@ def test_tessera_prof_emits_json_and_autotune_artifact(tmp_path, capsys):
     assert cache.exists()
 
 
+def test_tessera_prof_emits_advanced_profiler_plan(tmp_path, capsys):
+    model = _write_model(tmp_path)
+
+    assert prof.main([
+        str(model),
+        "--emit=json",
+        "--compile-target=sm90",
+        "--advanced-plan",
+        "--trace-features=runtime_api,device_activity,intra_kernel,model_analyzer",
+        "--kernels",
+        "matmul",
+        "flash_attn",
+        "--analyzer-mode=quick",
+        "--batch-sizes=1,4",
+        "--instance-counts=1,2",
+    ]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    plan = payload["advanced_profiler_plan"]
+    providers = {cap["feature"]: cap["provider"] for cap in plan["capabilities"]}
+    assert plan["target"] == "nvidia"
+    assert plan["kernels"] == ["matmul", "flash_attn"]
+    assert providers["runtime_api"] == "cupti-callback-api"
+    assert providers["device_activity"] == "cupti-activity-api"
+    assert providers["intra_kernel"] == "cupti-pc-sampling+compiler-instrumentation"
+    assert plan["analyzer_sweep"]["batch_sizes"] == [1, 4]
+
+
 def test_tessera_runtime_smoke_writes_telemetry(tmp_path):
     output = tmp_path / "runtime.json"
 

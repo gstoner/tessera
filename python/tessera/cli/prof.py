@@ -11,6 +11,7 @@ from typing import Sequence
 
 from tessera import autotune
 from tessera import profiler
+from tessera.compiler.profiling_plan import ModelAnalyzerSweep, plan_profile
 
 
 DEFAULT_METRICS = ("latency", "flops", "bandwidth")
@@ -83,12 +84,32 @@ def main(argv: Sequence[str] | None = None) -> int:
             sess.timeline(args.trace)
         report = sess.report()
 
+    analyzer_sweep = None
+    advanced_plan = None
+    if args.advanced_plan:
+        analyzer_sweep = ModelAnalyzerSweep(
+            mode=args.analyzer_mode,
+            batch_sizes=_parse_int_list(args.batch_sizes),
+            instance_counts=_parse_int_list(args.instance_counts),
+            dynamic_batching=_parse_bool_list(args.dynamic_batching),
+            latency_budget_ms=args.latency_budget_ms,
+            memory_budget_bytes=args.memory_budget_bytes,
+        )
+        advanced_plan = plan_profile(
+            args.compile_target,
+            features=_parse_trace_features(args.trace_features),
+            model_name=source.stem,
+            kernels=tuple(args.kernels),
+            analyzer_sweep=analyzer_sweep,
+        ).to_dict()
+
     payload = {
         **sess.to_dict(),
         "mode": "source_inspection",
         "source": str(source),
         "compile_target": args.compile_target,
         "schedule_artifact": artifact,
+        "advanced_profiler_plan": advanced_plan,
     }
     if args.emit == "json":
         text = json.dumps(payload, indent=2, sort_keys=True)
@@ -142,6 +163,37 @@ def _parse_shape(value: str) -> tuple[int, int, int]:
     return M, N, K
 
 
+def _parse_trace_features(value: str | None) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _parse_int_list(value: str) -> tuple[int, ...]:
+    try:
+        out = tuple(int(part.strip()) for part in value.split(",") if part.strip())
+    except ValueError as exc:
+        raise SystemExit("expected a comma-separated integer list") from exc
+    if not out:
+        raise SystemExit("expected at least one integer")
+    return out
+
+
+def _parse_bool_list(value: str) -> tuple[bool, ...]:
+    mapping = {"1": True, "true": True, "yes": True, "0": False, "false": False, "no": False}
+    out: list[bool] = []
+    for part in value.split(","):
+        key = part.strip().lower()
+        if not key:
+            continue
+        if key not in mapping:
+            raise SystemExit("expected booleans as true,false,1,0,yes,no")
+        out.append(mapping[key])
+    if not out:
+        raise SystemExit("expected at least one boolean")
+    return tuple(out)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tessera-prof",
@@ -168,6 +220,48 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-trials", type=int, default=8, help="Maximum autotune trials")
     parser.add_argument("--cache", help="SQLite tuning cache path")
     parser.add_argument("--artifact", help="Write selected schedule artifact JSON")
+    parser.add_argument(
+        "--advanced-plan",
+        action="store_true",
+        help="Attach compiler profiler/provider plan JSON for runtime/device tracing.",
+    )
+    parser.add_argument(
+        "--trace-features",
+        default="host_context,runtime_api,device_activity,counters,roofline,model_analyzer",
+        help=(
+            "Comma-separated advanced profiling features: host_context,runtime_api,"
+            "device_activity,counters,intra_kernel,model_analyzer,roofline"
+        ),
+    )
+    parser.add_argument(
+        "--kernels",
+        nargs="*",
+        default=(),
+        help="Kernel names to correlate in the advanced profiler plan.",
+    )
+    parser.add_argument(
+        "--analyzer-mode",
+        choices=("quick", "brute", "manual", "optuna"),
+        default="quick",
+        help="Model Analyzer style search mode for --advanced-plan.",
+    )
+    parser.add_argument(
+        "--batch-sizes",
+        default="1,2,4,8",
+        help="Comma-separated batch sizes for the model analyzer sweep.",
+    )
+    parser.add_argument(
+        "--instance-counts",
+        default="1",
+        help="Comma-separated instance counts for the model analyzer sweep.",
+    )
+    parser.add_argument(
+        "--dynamic-batching",
+        default="false,true",
+        help="Comma-separated booleans for dynamic batching sweep states.",
+    )
+    parser.add_argument("--latency-budget-ms", type=float, help="Optional analyzer latency budget")
+    parser.add_argument("--memory-budget-bytes", type=int, help="Optional analyzer memory budget")
     return parser
 
 

@@ -184,11 +184,14 @@ int main(int argc, char** argv) {
   tprof::enable(cfg);
   {
     tprof::range_t r0("demo.kernel");
+    tprof::runtime_api("tsrLaunchKernel", "{\"target\":\"demo\",\"kernel\":\"demo.kernel\"}");
     for (int i = 0; i < 3; ++i) {
       tprof::range_t r1("stage.compute");
       tprof::counter_add("bytes_hbm", 1e6);
       tprof::counter_add("flops", 2.0e9);
       tprof::marker("mbarrier.try_wait.parity");
+      tprof::device_activity("demo.kernel.dispatch", 1000.0, "{\"queue\":\"demo\"}");
+      tprof::intra_kernel_sample("warp_phase", static_cast<double>(i), "{\"phase\":\"compute\"}");
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }

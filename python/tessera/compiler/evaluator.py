@@ -370,6 +370,81 @@ def cross_path_equivalence(
     return CrossPathVerdict(relation, tuple(t for t, _ in outs), max_abs_err, detail)
 
 
+# ── E2: opt-level checksum oracle (DESIL checksum-across-opt-levels) ──────────
+#
+# A correct compiler produces the same result for the same program regardless of
+# optimization level. DESIL (OOPSLA'25) exploits this: compile one program at two
+# opt levels, run both, compare a stable checksum — a divergence is a miscompile
+# at one level. Here the "opt levels" are two independent lowerings of the same
+# math (e.g. fusion-on vs fusion-off, autotune variant A vs B). The checksum is
+# tolerance-rounded so benign float-reordering across fusions doesn't false-alarm,
+# while a real divergence (a dropped term, a wrong tile) still trips it.
+
+
+def opt_level_checksum(value: Any, *, decimals: int = 4) -> int:
+    """A stable integer checksum of an array, robust to benign float reordering.
+
+    Rounds to ``decimals`` then sums the scaled integers — identical for two
+    numerically-equivalent lowerings, divergent for a real miscompile."""
+    import numpy as np
+
+    arr = np.asarray(value, dtype=np.float64)
+    if not np.all(np.isfinite(arr)):
+        return -1  # non-finite output is never "stable"
+    scaled = np.rint(arr * (10 ** decimals)).astype(np.int64)
+    return int(scaled.sum())
+
+
+@dataclass(frozen=True)
+class OptLevelVerdict:
+    """Agreement of one program's checksum across optimization levels."""
+
+    relation: str                 # "stable" | "divergent" | "inconclusive"
+    levels: tuple[str, ...]        # the opt levels that ran natively
+    checksums: tuple[int, ...]
+    detail: str = ""
+
+    @property
+    def is_stable(self) -> bool:
+        return self.relation == "stable"
+
+
+def opt_level_equivalence(
+    variants: list[tuple[str, Any]],
+    args: tuple[Any, ...],
+    *,
+    decimals: int = 4,
+) -> OptLevelVerdict:
+    """Assert a program checksums identically across optimization levels.
+
+    ``variants`` is ``[(level_name, jitted_fn), ...]`` — the *same* computation
+    lowered at different opt levels (fusion on/off, autotune A/B). Only natively-
+    executed variants are compared; ``inconclusive`` unless ≥2 ran natively. A
+    differing checksum is a miscompile at one opt level (rung 5 CODEGEN_STABLE).
+    """
+    ran: list[tuple[str, int]] = []
+    for level, fn in variants:
+        try:
+            out, native = run_native("apple_gpu", fn, args)
+            if not native:
+                out, native = run_native("cpu", fn, args)
+        except Exception:
+            out, native = None, False  # a variant that can't even build didn't run
+        if native and out is not None:
+            ran.append((level, opt_level_checksum(out, decimals=decimals)))
+
+    if len(ran) < 2:
+        return OptLevelVerdict(
+            "inconclusive", tuple(l for l, _ in ran), tuple(c for _, c in ran),
+            f"only {len(ran)} variant(s) ran natively — need ≥2 to cross-check")
+    checks = [c for _, c in ran]
+    relation = "stable" if len(set(checks)) == 1 else "divergent"
+    detail = (f"checksums agree across {len(ran)} opt levels ({checks[0]})"
+              if relation == "stable" else
+              f"opt levels DISAGREE: {dict(ran)} — a miscompile at one level")
+    return OptLevelVerdict(relation, tuple(l for l, _ in ran), tuple(checks), detail)
+
+
 # ── DESIL at the KV-ABI level — PagedKVState differential oracle ─────────────
 #
 # Workstream A. The same logical KV sequence held by independent substrates

@@ -765,7 +765,11 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
 4. Require fixture-backed numerical proof before conformance cells become
    complete.
 5. Update specs to point at dashboards and this audit instead of old root audit
-   documents.
+   documents. **Verified 2026-06-19:** the only specs that link an audit
+   (`TARGET_IR_SPEC.md`, `AUTODIFF_SPEC.md`) already use the current theme-audit
+   path `docs/audit/coverage/COVERAGE_AUDIT.md` — no stale root-audit references
+   remain. Adding generated-dashboard pointers to the remaining specs is optional
+   polish, not a correctness gap.
 6. **Unify generated-doc regeneration + drift into one contract — landed
    2026-06-04.** `tessera.compiler.generated_docs` is the single registry
    consumed by both `check_generated_docs.sh` and `release_gate.py` (the latter's

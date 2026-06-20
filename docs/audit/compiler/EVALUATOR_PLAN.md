@@ -321,8 +321,9 @@ count authority; this is a structural map, not a count.
 | **Flywheel** (E3) | ✅ landed | `flywheel.py` (records, roofline, sweep, per-chip calibration, persist/distill) + `flywheel_autotune.py` (autotune_v2 bridge, `autotune_matmul`) |
 | **Scored environment / grader** (E5) | ✅ landed | `compiler_grader.py` (TensorBench-style, hidden inputs, anti-cheat) + `attention_tasks.py` (LongCA mask×seqlen) |
 | **Search layers** (E5) | ✅ landed | `magellan.py` (gated heuristic evolution) + `alphaevolve.py` (evaluator-driven search; reward-hack rejection proven) |
-| **Opt-level checksum + MLIRod coverage** (E2) | ⬜ open | follow-ups (cross-path realizes the differential intent today) |
-| **NVIDIA/ROCm hardware window** (E4) | ⬜ open | Linux/CUDA runner: `ptxas` rung 3, complete WGMMA kernel, rungs 6–7 |
+| **Opt-level checksum** (E2) | ✅ landed | `evaluator.opt_level_checksum` + `opt_level_equivalence` (DESIL checksum-across-opt-levels; tolerance-rounded so benign float reordering doesn't false-alarm; `inconclusive` unless ≥2 variants run natively). MLIRod grammar-generator coverage remains a larger generator-hardening follow-on. |
+| **AMD emission rung** (E4, hardware-free) | ✅ landed | `evaluator.rocm_emission_verdict` — `llc -mcpu=gfx1151` assembles real `v_wmma` AMDGCN on-host → rung 4 (ASSEMBLES); parallel to `nvidia_emission_verdict` (rung 3, PTX text). |
+| **NVIDIA/ROCm hardware window** (E4) | ⬜ open | Linux/CUDA + Strix Halo / Blackwell silicon: `ptxas` rung 4, rungs 6–7 |
 
 Guards: `tests/unit/test_{evaluator,evaluator_e2,conformance_evaluator,ptx_emit,
 flywheel,flywheel_autotune,compiler_grader,attention_tasks,magellan,alphaevolve}.py`

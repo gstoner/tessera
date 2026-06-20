@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 #include "../scheduler/tile_scheduler.h"
 #include "../../include/tessera/tsr_types.h"
 #include "../../include/tessera/tsr_status.h"
@@ -18,6 +19,7 @@ struct Stream { explicit Stream(ThreadPool* p):pool(p){} ThreadPool* pool; };
 
 struct Event {
   std::mutex mu;
+  std::condition_variable cv;       // notified on recordEvent (CPU waitEvent)
   bool signaled=false;
   uint64_t timestamp_ns=0; // time of recordEvent (profiling)
 };

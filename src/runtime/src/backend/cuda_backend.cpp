@@ -86,9 +86,13 @@ class CudaBackend final : public Backend {
   DeviceProps props() const override {
     cudaDeviceProp dp{};
     int dev = 0;
-    cudaGetDevice(&dev);
-    cudaGetDeviceProperties(&dp, dev);
-
+    cudaError_t e = cudaGetDevice(&dev);
+    if (e == cudaSuccess) e = cudaGetDeviceProperties(&dp, dev);
+    if (e != cudaSuccess) {
+      // Don't return zero-initialized bogus props silently — surface the error.
+      set_cuda_error(e);
+      return DeviceProps{TSR_DEVICE_CUDA, "<unknown>", 0, 0};
+    }
     return DeviceProps{
         TSR_DEVICE_CUDA,
         std::string(dp.name),
@@ -113,7 +117,11 @@ class CudaBackend final : public Backend {
 
   void free(Buffer* b) override {
     if (!b) return;
-    TSR_CUDA_CHECK(cudaFree(b->ptr));
+    // Always delete the host wrapper, even if cudaFree fails — returning early
+    // (as TSR_CUDA_CHECK does) would leak the wrapper while the live-handle
+    // ratchet still decrements.
+    cudaError_t e = cudaFree(b->ptr);
+    if (e != cudaSuccess) set_cuda_error(e);
     delete static_cast<CudaBuffer*>(b);
   }
 
@@ -126,6 +134,13 @@ class CudaBackend final : public Backend {
   void memcpy(Buffer* dst, const Buffer* src,
               size_t bytes, TsrMemcpyKind kind) override {
     if (!dst || !src) return;
+    // Bound the copy against both buffer sizes (the CPU backend clamps; the
+    // GPU path must not pass an oversized length straight to cudaMemcpy →
+    // device buffer overflow).
+    if (bytes > dst->bytes || bytes > src->bytes) {
+      set_cuda_error(cudaErrorInvalidValue);
+      return;
+    }
     cudaMemcpyKind ck;
     switch (kind) {
       case TSR_MEMCPY_HOST_TO_DEVICE: ck = cudaMemcpyHostToDevice;   break;
@@ -165,7 +180,8 @@ class CudaBackend final : public Backend {
     if (!s) return;
     auto* cs = static_cast<CudaStream*>(s);
     if (cs->cu_stream) {
-      cudaStreamDestroy(cs->cu_stream);
+      cudaError_t e = cudaStreamDestroy(cs->cu_stream);
+      if (e != cudaSuccess) set_cuda_error(e);
       cs->cu_stream = nullptr;
     }
     delete cs;
@@ -199,7 +215,8 @@ class CudaBackend final : public Backend {
     if (!e) return;
     auto* ce = static_cast<CudaEvent*>(e);
     if (ce->cu_event) {
-      cudaEventDestroy(ce->cu_event);
+      cudaError_t err = cudaEventDestroy(ce->cu_event);
+      if (err != cudaSuccess) set_cuda_error(err);
       ce->cu_event = nullptr;
     }
     delete ce;

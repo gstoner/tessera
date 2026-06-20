@@ -83,9 +83,12 @@ class HipBackend final : public Backend {
   DeviceProps props() const override {
     hipDeviceProp_t dp{};
     int dev = 0;
-    hipGetDevice(&dev);
-    hipGetDeviceProperties(&dp, dev);
-
+    hipError_t e = hipGetDevice(&dev);
+    if (e == hipSuccess) e = hipGetDeviceProperties(&dp, dev);
+    if (e != hipSuccess) {
+      set_hip_error(e);
+      return DeviceProps{TSR_DEVICE_HIP, "<unknown>", 0, 0};
+    }
     return DeviceProps{
         TSR_DEVICE_HIP,
         std::string(dp.name),
@@ -110,7 +113,10 @@ class HipBackend final : public Backend {
 
   void free(Buffer* b) override {
     if (!b) return;
-    TSR_HIP_CHECK(hipFree(b->ptr));
+    // Always delete the host wrapper even if hipFree fails (returning early
+    // would leak it while the live-handle ratchet still decrements).
+    hipError_t e = hipFree(b->ptr);
+    if (e != hipSuccess) set_hip_error(e);
     delete static_cast<HipBuffer*>(b);
   }
 
@@ -123,6 +129,12 @@ class HipBackend final : public Backend {
   void memcpy(Buffer* dst, const Buffer* src,
               size_t bytes, TsrMemcpyKind kind) override {
     if (!dst || !src) return;
+    // Bound the copy against both buffer sizes (mirrors the CPU backend; avoid
+    // passing an oversized length straight to hipMemcpy → device overflow).
+    if (bytes > dst->bytes || bytes > src->bytes) {
+      set_hip_error(hipErrorInvalidValue);
+      return;
+    }
     hipMemcpyKind hk;
     switch (kind) {
       case TSR_MEMCPY_HOST_TO_DEVICE:   hk = hipMemcpyHostToDevice;   break;
@@ -159,7 +171,8 @@ class HipBackend final : public Backend {
     if (!s) return;
     auto* hs = static_cast<HipStream*>(s);
     if (hs->hip_stream) {
-      hipStreamDestroy(hs->hip_stream);
+      hipError_t e = hipStreamDestroy(hs->hip_stream);
+      if (e != hipSuccess) set_hip_error(e);
       hs->hip_stream = nullptr;
     }
     delete hs;
@@ -189,7 +202,8 @@ class HipBackend final : public Backend {
     if (!e) return;
     auto* he = static_cast<HipEvent*>(e);
     if (he->hip_event) {
-      hipEventDestroy(he->hip_event);
+      hipError_t err = hipEventDestroy(he->hip_event);
+      if (err != hipSuccess) set_hip_error(err);
       he->hip_event = nullptr;
     }
     delete he;

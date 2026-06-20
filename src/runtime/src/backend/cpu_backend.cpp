@@ -66,16 +66,18 @@ class CpuBackend final : public Backend {
   Event* createEvent() override { return new Event(); }
   void destroyEvent(Event* e) override { delete e; }
   void recordEvent(Event* e, Stream* ) override {
-    std::lock_guard<std::mutex> lk(e->mu);
-    e->signaled = true;
-    e->timestamp_ns = NowNs();
+    {
+      std::lock_guard<std::mutex> lk(e->mu);
+      e->signaled = true;
+      e->timestamp_ns = NowNs();
+    }
+    e->cv.notify_all();
   }
   void waitEvent(Event* e, Stream* ) override {
-    for (;;) {
-      std::lock_guard<std::mutex> lk(e->mu);
-      if (e->signaled) return;
-      std::this_thread::yield();
-    }
+    // Block on the condition variable instead of busy-spinning with yield(),
+    // which burned a core per waiter under many logical tile threads.
+    std::unique_lock<std::mutex> lk(e->mu);
+    e->cv.wait(lk, [e] { return e->signaled; });
   }
   void eventSync(Event* e) override { waitEvent(e, nullptr); }
 

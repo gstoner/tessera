@@ -47,6 +47,19 @@ struct Policy {
     if (intraNode) return topo.hasNVLink ? intraPath : Path::PCIE;
     return topo.hasRDMA ? interPath : Path::PCIE;
   }
+
+  // Per-path chunk granularity (the documented NVLink/PCIe/RDMA chunk sizes).
+  // Transfers should size chunks per the chosen path rather than using a single
+  // global constant, so each link gets its spec'd granularity.
+  static uint64_t chunkBytesForPath(Path path) {
+    switch (path) {
+      case Path::NVLINK: return 512ull << 10;  // 512 KiB
+      case Path::PCIE:   return 128ull << 10;  // 128 KiB
+      case Path::RDMA:   return 256ull << 10;  // 256 KiB
+      case Path::Auto:   return 512ull << 10;
+    }
+    return 512ull << 10;
+  }
 };
 
 }} // ns

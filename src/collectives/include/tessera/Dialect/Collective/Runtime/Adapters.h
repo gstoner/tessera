@@ -32,6 +32,20 @@ enum class ReduceOp { SUM, MAX, MIN, PROD };
 
 enum class WireDType { FP32, BF16, FP16, FP8, INT8 };
 
+// Element size for the wire dtype. The mock collective paths operate on the
+// wire layout, so hardcoding sizeof(float) gave wrong offsets/sizes for
+// non-FP32 mock tests (Decision #6: mock paths must be correct).
+inline size_t wireDTypeBytes(WireDType dt) {
+  switch (dt) {
+    case WireDType::FP32: return 4;
+    case WireDType::BF16: return 2;
+    case WireDType::FP16: return 2;
+    case WireDType::FP8:  return 1;
+    case WireDType::INT8: return 1;
+  }
+  return 4;
+}
+
 struct CollectiveSpec {
   int    world_size   = 1;
   int    local_rank   = 0;
@@ -154,20 +168,22 @@ private:
   static void _mock_reduce_scatter(const void* src, void* dst, size_t count,
                                     ReduceOp op, const CollectiveSpec& spec) {
     // Copy this rank's shard from src to dst
+    size_t esz = wireDTypeBytes(spec.wire_dtype);
     size_t shard = count / (size_t)spec.world_size;
     size_t offset = (size_t)spec.local_rank * shard;
-    std::memcpy(dst, static_cast<const char*>(src) + offset * sizeof(float),
-                shard * sizeof(float));
+    std::memcpy(dst, static_cast<const char*>(src) + offset * esz,
+                shard * esz);
     (void)op;
   }
 
   static void _mock_all_gather(const void* src, void* dst, size_t count,
                                 const CollectiveSpec& spec) {
     // Copy src into rank's slot in dst
+    size_t esz = wireDTypeBytes(spec.wire_dtype);
     size_t shard = count / (size_t)spec.world_size;
     size_t offset = (size_t)spec.local_rank * shard;
-    std::memcpy(static_cast<char*>(dst) + offset * sizeof(float),
-                src, shard * sizeof(float));
+    std::memcpy(static_cast<char*>(dst) + offset * esz,
+                src, shard * esz);
   }
 
   static void _mock_all_to_all(const void* send_buf, void* recv_buf,
@@ -208,10 +224,11 @@ struct RCCLAdapter : CollectiveAdapter {
 #ifdef TESSERA_HAS_RCCL
     (void)src; (void)dst; (void)count; (void)op; (void)spec;
 #else
+    size_t esz = wireDTypeBytes(spec.wire_dtype);
     size_t shard = count / (size_t)spec.world_size;
     size_t offset = (size_t)spec.local_rank * shard;
-    std::memcpy(dst, static_cast<const char*>(src) + offset * sizeof(float),
-                shard * sizeof(float));
+    std::memcpy(dst, static_cast<const char*>(src) + offset * esz,
+                shard * esz);
     (void)op;
 #endif
   }
@@ -221,10 +238,11 @@ struct RCCLAdapter : CollectiveAdapter {
 #ifdef TESSERA_HAS_RCCL
     (void)src; (void)dst; (void)count; (void)spec;
 #else
+    size_t esz = wireDTypeBytes(spec.wire_dtype);
     size_t shard = count / (size_t)spec.world_size;
     size_t offset = (size_t)spec.local_rank * shard;
-    std::memcpy(static_cast<char*>(dst) + offset * sizeof(float),
-                src, shard * sizeof(float));
+    std::memcpy(static_cast<char*>(dst) + offset * esz,
+                src, shard * esz);
 #endif
   }
 

@@ -175,8 +175,10 @@ def test_public_autotune_on_device_cpu_uses_wall_clock_measurement(tmp_path):
     )
 
     assert result.status == "ok"
-    assert result.method == "on_device"
-    assert "wall-clock measurement" in result.reason
+    # The measurement times a numpy fp32 reference GEMM, not the backend kernel,
+    # so it is labeled honestly (Decision #21) rather than claiming "on_device".
+    assert result.method == "wall_clock_reference"
+    assert "wall-clock" in result.reason and "reference" in result.reason
     assert result.latency_ms >= 0.0
 
 

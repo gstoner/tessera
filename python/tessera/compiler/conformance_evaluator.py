@@ -19,6 +19,7 @@ complete cell), so the corroboration set cannot silently shrink.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
@@ -57,7 +58,10 @@ _BASE_FN: dict[str, Callable[..., Any]] = {
 }
 
 # (jitted-fn cache keyed by (op, target) so we compile each once.)
-_JIT_CACHE: dict[tuple[str, str], Any] = {}
+# Bounded LRU so it can't grow without limit if used generatively (the seed op
+# set is small, so this is a defensive cap, not a hot-path concern).
+_JIT_CACHE_MAX = 256
+_JIT_CACHE: "OrderedDict[tuple[str, str], Any]" = OrderedDict()
 
 
 def _jitted(op: str, target: str) -> Any:
@@ -66,6 +70,10 @@ def _jitted(op: str, target: str) -> Any:
     if fn is None:
         fn = ts.jit(target=target)(_BASE_FN[op])
         _JIT_CACHE[key] = fn
+        if len(_JIT_CACHE) > _JIT_CACHE_MAX:
+            _JIT_CACHE.popitem(last=False)  # evict oldest
+    else:
+        _JIT_CACHE.move_to_end(key)  # LRU touch
     return fn
 
 

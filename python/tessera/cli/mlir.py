@@ -341,6 +341,10 @@ def _compile_artifact_outputs(artifact, *, obj, source: Path, symbol: str, targe
 
 
 def _load_symbol(source: Path, symbol: str):
+    # SECURITY: this imports and EXECUTES arbitrary Python from `source`
+    # (reached only via --mode=compile_artifact). There is no sandbox — only
+    # point it at trusted project files, never an attacker-controlled path. The
+    # default CLI mode never executes user modules.
     module_name = f"_tessera_mlir_debug_{source.stem}_{abs(hash(source))}"
     spec = importlib.util.spec_from_file_location(module_name, source)
     if spec is None or spec.loader is None:

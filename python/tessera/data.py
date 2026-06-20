@@ -70,6 +70,12 @@ class Dataset:
         return Dataset(batches)
 
     def prefetch(self, buffer_size: int = 1) -> "Dataset":
+        """Pass-through in the reference (eager) Dataset.
+
+        Prefetch is a runtime/background-overlap concern; the reference pipeline
+        has nothing to overlap, so this returns an equivalent Dataset.
+        ``buffer_size`` is validated but otherwise a no-op here.
+        """
         if buffer_size <= 0:
             raise ValueError("prefetch buffer_size must be positive")
         return Dataset(self)
@@ -82,6 +88,14 @@ class Dataset:
         return Dataset(items[int(i)] for i in order)
 
     def interleave(self, fn: Callable[[Any], "Dataset"], *, cycle_length: int = 1) -> "Dataset":
+        """Round-robin across the sub-datasets ``fn`` produces per element.
+
+        Reference (eager) behavior: every sub-stream is materialized up front and
+        drained round-robin into one Dataset. ``cycle_length`` is validated but
+        not yet honored (all streams cycle together, not ``cycle_length`` at a
+        time) — a documented limitation of the reference pipeline; a lazy,
+        bounded-fan-in version is future work.
+        """
         if cycle_length <= 0:
             raise ValueError("cycle_length must be positive")
         streams = [iter(fn(x)) for x in self]
@@ -299,6 +313,14 @@ def tokenizer_unigram(vocab: Mapping[str, int] | None = None, **kwargs) -> Vocab
 
 
 def tokenizer_sentencepiece_compat(vocab: Mapping[str, int] | None = None, **kwargs) -> VocabTokenizer:
+    """Vocab-backed tokenizer accepting a SentencePiece-style ``vocab`` mapping.
+
+    NOTE: this is a compatibility *stub*, not a SentencePiece model loader — it
+    does NOT parse a SentencePiece ``.model`` protobuf and does NOT reproduce SP
+    subword segmentation. It wraps a plain token→id ``vocab`` (whitespace-level
+    via ``VocabTokenizer``). Reading real SP protobuf bytes with a Tessera-native
+    parser (Decision #23 file-format concession) is future work.
+    """
     return VocabTokenizer(vocab or {}, **kwargs)
 
 

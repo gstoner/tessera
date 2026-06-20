@@ -170,7 +170,9 @@ def evaluate(
         got = np.asarray(res["output"])
         ref = np.asarray(oracle)
         if not np.all(np.isfinite(got)) or got.shape != ref.shape:
-            match = None
+            # A *successful* native run that produced NaN/Inf or a wrong-shaped
+            # result is a correctness FAILURE, not "no reference / unproven".
+            match = False
         elif exact:
             match = bool(np.array_equal(got, ref))
         else:

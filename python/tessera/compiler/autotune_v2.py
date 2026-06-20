@@ -18,6 +18,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -262,11 +263,11 @@ class BayesianAutotuner:
 
         Returns the number of results loaded.
         """
+        conn = None
         try:
             conn = sqlite3.connect(db_path)
             columns = _table_columns(conn, "tuning_results")
             if not columns:
-                conn.close()
                 return 0
             optional = {
                 "status": "'ok'",
@@ -314,37 +315,38 @@ class BayesianAutotuner:
                     count += 1
                 except (ValueError, TypeError):
                     continue  # skip corrupted rows
-            conn.close()
             return count
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             return 0
+        finally:
+            if conn is not None:
+                conn.close()
 
     def save_to_cache(self, db_path: str) -> None:
         """Persist all evaluated results to SQLite cache (upsert-style)."""
-        conn = sqlite3.connect(db_path)
-        _ensure_cache_schema(conn)
-        for r in self._results:
-            conn.execute(
-                """
-                INSERT INTO tuning_results (
-                    M, N, K, dtype, arch, layout, movement_json,
-                    tile_m, tile_n, tile_k, num_warps, num_stages,
-                    latency_ms, tflops, sampled_at, trial_id, status, reason, method
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    self.workload.M, self.workload.N,
-                    self.workload.K, self.workload.dtype,
-                    self.workload.arch, self.workload.layout,
-                    json.dumps(dict(self.workload.movement), sort_keys=True),
-                    r.config.tile_m, r.config.tile_n, r.config.tile_k,
-                    r.config.num_warps, r.config.num_stages,
-                    r.latency_ms, r.tflops,
-                    r.sampled_at, r.trial_id, r.status, r.reason, r.method,
-                ),
-            )
-        conn.commit()
-        conn.close()
+        with contextlib.closing(sqlite3.connect(db_path)) as conn:
+            _ensure_cache_schema(conn)
+            for r in self._results:
+                conn.execute(
+                    """
+                    INSERT INTO tuning_results (
+                        M, N, K, dtype, arch, layout, movement_json,
+                        tile_m, tile_n, tile_k, num_warps, num_stages,
+                        latency_ms, tflops, sampled_at, trial_id, status, reason, method
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        self.workload.M, self.workload.N,
+                        self.workload.K, self.workload.dtype,
+                        self.workload.arch, self.workload.layout,
+                        json.dumps(dict(self.workload.movement), sort_keys=True),
+                        r.config.tile_m, r.config.tile_n, r.config.tile_k,
+                        r.config.num_warps, r.config.num_stages,
+                        r.latency_ms, r.tflops,
+                        r.sampled_at, r.trial_id, r.status, r.reason, r.method,
+                    ),
+                )
+            conn.commit()
 
     # ------------------------------------------------------------------
     # Synthetic latency model (used in place of real kernel measurement)

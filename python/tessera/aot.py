@@ -48,8 +48,18 @@ class AOTArtifact:
         if self.fn is not None:
             try:
                 (root / "callable.pkl").write_bytes(pickle.dumps(self.fn))
-            except Exception:
-                pass
+            except Exception as exc:  # closures / C-extensions / lambdas
+                import warnings
+
+                warnings.warn(
+                    f"AOTArtifact callable could not be pickled ({exc!r}); the "
+                    f"reference-execution sidecar was not written. "
+                    f"load(..., allow_pickle=True).run() will fail for this "
+                    f"artifact. Export a top-level (picklable) function to keep "
+                    f"reference execution.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         return root
 
 

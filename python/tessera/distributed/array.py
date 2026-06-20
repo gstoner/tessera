@@ -195,7 +195,15 @@ class DistributedArray:
         dim_idx = self.shard_spec.partition[axis_idx_in_spec]
 
         dim_size = self.shape[dim_idx]
-        num_parts = getattr(self, "_mesh_size_cache", {}).get(axis, 1)
+        mesh_cache = getattr(self, "_mesh_size_cache", {})
+        if axis not in mesh_cache:
+            # Defaulting to a single shard here would silently return a
+            # partitioned array as if it were unsharded. Fail loudly instead.
+            raise ValueError(
+                f"Mesh axis {axis!r} has no bound size; bind the mesh "
+                f"(e.g. via _bind_mesh) before calling parts({axis!r})."
+            )
+        num_parts = mesh_cache[axis]
 
         if self.shard_spec.cyclic:
             # ── Cyclic (round-robin) partition ───────────────────────────────

@@ -566,7 +566,14 @@ class Dropout(Module):
         self.seed = seed
 
     def forward(self, x: Any) -> np.ndarray:
-        return ops.dropout(_as_array(x), p=self.p, training=self.training, seed=self.seed)
+        seed = self.seed
+        if self.training and self.p > 0.0 and seed is None:
+            # Materialize a concrete per-call seed so the dropout mask is
+            # reproducible by the autodiff backward pass (the VJP recomputes the
+            # mask from the seed). Without a seed the gradient would be silently
+            # wrong; varying it per call preserves standard stochastic dropout.
+            seed = int(np.random.SeedSequence().generate_state(1)[0])
+        return ops.dropout(_as_array(x), p=self.p, training=self.training, seed=seed)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

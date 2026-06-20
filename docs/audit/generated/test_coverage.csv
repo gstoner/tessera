@@ -105,7 +105,7 @@ cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 count_nonzero,9,0,0,9,0,,directly_tested,9 direct test references
-cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
+cross_entropy_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 ctc_loss,7,0,0,7,0,,directly_tested,7 direct test references
 cummax,4,0,0,4,0,,directly_tested,4 direct test references
@@ -144,7 +144,7 @@ dequantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
 dequantize_nvfp4,8,0,1,8,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,8 direct test references
 digamma,2,0,0,2,0,,directly_tested,2 direct test references
 div,5,2,0,7,0,bf16 f16,directly_tested,7 direct test references
-dropout,18,5,3,23,0,f32 fp32 fp64,directly_tested,23 direct test references
+dropout,19,5,3,24,0,f32 fp32 fp64,directly_tested,24 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests

@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **458** ops in `primitive_coverage` registry.
-- **2722** total Python-test references, **777** total lit-fixture references.
+- **2724** total Python-test references, **777** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **195** ops have ≤1 reference ("thinly tested").
+- **194** ops have ≤1 reference ("thinly tested").
 - **61** ops have ≥10 references ("well tested").
 - **63** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **195** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **194** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -90,7 +90,6 @@ These **195** ops have at most one test reference across the whole test surface.
 | `conformal_jacobian` |    0 |    0 |    0 |
 | `cosh` |    1 |    0 |    1 |
 | `cosine_warmup_lr` |    1 |    0 |    1 |
-| `cross_entropy_loss` |    1 |    0 |    1 |
 | `cross_ratio` |    0 |    0 |    0 |
 | `custom_batching` |    0 |    0 |    0 |
 | `custom_call` |    0 |    0 |    0 |
@@ -104,8 +103,9 @@ These **195** ops have at most one test reference across the whole test surface.
 | `dataset_filter` |    0 |    0 |    0 |
 | `dataset_interleave` |    0 |    0 |    0 |
 | `dataset_map` |    0 |    0 |    0 |
+| `dataset_prefetch` |    0 |    0 |    0 |
 
-_(135 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(134 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**195** ops have ≤1 direct test reference.  They break down as:
+**194** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   77 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   76 | Tested via a parent op or family wrapper |
 | `structural_only`        |  114 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 77 ops
+## `covered_by_family` — 76 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -177,12 +177,12 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `complex_sqrt` | category default for 'elementwise' |
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
 | `cosh` | category default for 'elementwise' |
-| `cross_entropy_loss` | category default for 'loss' |
 | `cross_ratio` | category default for 'elementwise' |
 | `dbar` | exercised by complex differential tests |
 | `ddpm_noise_pred_loss` | category default for 'loss' |
+| `denoising_score_matching_loss` | category default for 'loss' |
 
-_(47 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(46 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 114 ops
 

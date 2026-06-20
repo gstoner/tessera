@@ -349,6 +349,11 @@ def quantize(x: Any, fmt: str | LowPrecisionFormat) -> MicroscaledArray:
     else:                              # fp8/fp32 scale: round through the dtype
         scale = raw_scale.astype(scale_dt)
     scale_f = scale.astype(np.float32)[..., None]
+    # An all-zero block clamps raw_scale to 1e-30, which can underflow to 0.0
+    # when cast to an fp8 scale dtype — dividing by it would emit a
+    # divide-by-zero RuntimeWarning and produce inf/NaN codes. A zero block
+    # encodes to zero codes regardless, so substitute 1.0 for a zero scale.
+    scale_f = np.where(scale_f == 0.0, np.float32(1.0), scale_f)
     codes_b = _encode(blocks / scale_f, f)
     codes = codes_b.reshape(*lead, nblocks * bs)[..., :n]
     codes = np.moveaxis(codes, -1, ax)

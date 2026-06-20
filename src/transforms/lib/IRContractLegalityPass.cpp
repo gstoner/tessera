@@ -38,8 +38,10 @@
 //
 // Diagnostic codes are stable for COMPILER_AUDIT / SHAPE_SYSTEM cross-linking.
 // Registered standalone as `--tessera-ir-contracts` (parallel to
-// `--tessera-layout-legality`); pipeline insertion is a follow-up once a backend
-// consumes the contracts.
+// `--tessera-layout-legality`) and wired into the named lowering pipelines
+// (tessera-lower-to-x86, -to-gpu, and the CUDA13 chain) right after
+// LayoutLegalityPass, so dtype/aliasing/buffer-binding violations surface with
+// the other early structural diagnostics on every backend.
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"

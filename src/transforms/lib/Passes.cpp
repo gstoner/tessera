@@ -193,6 +193,9 @@ void registerTesseraPasses() {
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
+        // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
+        // #15a) alongside layout legality — matches lowerToX86 / CUDA13.
+        pm.addPass(createIRContractLegalityPass());
         // Sprint V6b (2026-05-22): symbolic-dim equality recheck
         // after distribution lowering (see lowerToX86 comment).
         pm.addPass(createSymbolicDimEqualityPass());

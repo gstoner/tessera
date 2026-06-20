@@ -155,17 +155,9 @@ class _ContiguousPagedKV:
         return PageTier.RESIDENT
 
     def gather(self, token_indices: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
-        h = self.handle
-        idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
-        if idx.size and (idx.min() < 0 or idx.max() >= h.current_seq):
-            raise IndexError(
-                f"gather token index out of range [0, {h.current_seq})")
-        k = np.asarray(h.keys)[idx]
-        v = np.asarray(h.values)[idx]
-        if h.quantize_bits is not None:
-            from .. import ops as _ops
-            scale = h._scales[:, idx]
-            k, v = _ops.dequantize_kv(k, v, scale)
+        # Delegate to the handle's public fancy-index gather — it owns the
+        # quant-scale layout, so the adapter never reaches into ``_scales``.
+        k, v = self.handle.gather(token_indices)
         return np.asarray(k, np.float32), np.asarray(v, np.float32)
 
 
@@ -190,7 +182,7 @@ class _TieredPagedKV:
         c = self.cache
         ps = c.page_size
         n_pages = (int(c.current_seq) + ps - 1) // ps if c.current_seq else 0
-        resident = set(c._page_to_slot)
+        resident = c.resident_pages()
         return [
             PageTableEntry(
                 p, PageTier.RESIDENT if p in resident else PageTier.HOST)
@@ -198,7 +190,7 @@ class _TieredPagedKV:
         ]
 
     def tier(self, page_id: int) -> PageTier:
-        return (PageTier.RESIDENT if page_id in self.cache._page_to_slot
+        return (PageTier.RESIDENT if self.cache.is_resident(page_id)
                 else PageTier.HOST)
 
     def gather(self, token_indices: Sequence[int]) -> tuple[np.ndarray, np.ndarray]:
@@ -209,7 +201,7 @@ class _TieredPagedKV:
         idx = np.asarray(token_indices, dtype=np.int64).reshape(-1)
         c = self.cache
         ps = c.page_size
-        cap = c._cap
+        cap = c.resident_capacity_pages
         H, D = c.num_heads, c.head_dim
         out_k = np.empty((idx.shape[0], H, D), np.float32)
         out_v = np.empty((idx.shape[0], H, D), np.float32)

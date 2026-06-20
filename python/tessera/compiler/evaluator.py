@@ -385,14 +385,18 @@ def opt_level_checksum(value: Any, *, decimals: int = 4) -> int:
     """A stable integer checksum of an array, robust to benign float reordering.
 
     Rounds to ``decimals`` then sums the scaled integers — identical for two
-    numerically-equivalent lowerings, divergent for a real miscompile."""
+    numerically-equivalent lowerings, divergent for a real miscompile. The sum is
+    accumulated in Python ``int`` (arbitrary precision) so a large / high-magnitude
+    tensor cannot silently wrap an int64 accumulator into a spurious mismatch."""
     import numpy as np
 
     arr = np.asarray(value, dtype=np.float64)
     if not np.all(np.isfinite(arr)):
         return -1  # non-finite output is never "stable"
-    scaled = np.rint(arr * (10 ** decimals)).astype(np.int64)
-    return int(scaled.sum())
+    scaled = np.rint(arr * (10 ** decimals))
+    # int(np.float64) is exact for |x| < 2^53; fold via Python ints to avoid the
+    # int64 overflow np.sum() would hit on large tensors.
+    return int(sum(int(x) for x in scaled.ravel().tolist()))
 
 
 @dataclass(frozen=True)
@@ -419,30 +423,46 @@ def opt_level_equivalence(
 
     ``variants`` is ``[(level_name, jitted_fn), ...]`` — the *same* computation
     lowered at different opt levels (fusion on/off, autotune A/B). Only natively-
-    executed variants are compared; ``inconclusive`` unless ≥2 ran natively. A
-    differing checksum is a miscompile at one opt level (rung 5 CODEGEN_STABLE).
+    executed variants are compared, and only against others that ran on the **same
+    backend**: comparing an apple_gpu lowering to a cpu one would conflate a
+    backend float difference with an opt-level miscompile. ``inconclusive`` unless
+    ≥2 variants ran natively on a single backend. A differing checksum within one
+    backend is a miscompile at one opt level (rung 5 CODEGEN_STABLE).
     """
-    ran: list[tuple[str, int]] = []
+    ran: list[tuple[str, str, int]] = []  # (level, backend, checksum)
     for level, fn in variants:
-        try:
-            out, native = run_native("apple_gpu", fn, args)
-            if not native:
-                out, native = run_native("cpu", fn, args)
-        except Exception:
-            out, native = None, False  # a variant that can't even build didn't run
-        if native and out is not None:
-            ran.append((level, opt_level_checksum(out, decimals=decimals)))
+        out, backend = None, None
+        for cand in ("apple_gpu", "cpu"):
+            try:
+                o, native = run_native(cand, fn, args)
+            except Exception:
+                continue  # this backend can't build/run the variant — try the next
+            if native and o is not None:
+                out, backend = o, cand
+                break
+        if out is not None and backend is not None:
+            ran.append((level, backend, opt_level_checksum(out, decimals=decimals)))
 
-    if len(ran) < 2:
+    # Cross-check only within the largest same-backend group.
+    by_backend: dict[str, list[tuple[str, int]]] = {}
+    for level, backend, chk in ran:
+        by_backend.setdefault(backend, []).append((level, chk))
+    group_backend, group = max(
+        by_backend.items(), key=lambda kv: len(kv[1]), default=(None, []))
+
+    if len(group) < 2:
         return OptLevelVerdict(
-            "inconclusive", tuple(l for l, _ in ran), tuple(c for _, c in ran),
-            f"only {len(ran)} variant(s) ran natively — need ≥2 to cross-check")
-    checks = [c for _, c in ran]
+            "inconclusive", tuple(l for l, _ in group), tuple(c for _, c in group),
+            f"only {len(group)} variant(s) ran natively on a single backend "
+            f"({group_backend}) — need ≥2 on the same backend to cross-check")
+    checks = [c for _, c in group]
     relation = "stable" if len(set(checks)) == 1 else "divergent"
-    detail = (f"checksums agree across {len(ran)} opt levels ({checks[0]})"
-              if relation == "stable" else
-              f"opt levels DISAGREE: {dict(ran)} — a miscompile at one level")
-    return OptLevelVerdict(relation, tuple(l for l, _ in ran), tuple(checks), detail)
+    detail = (f"checksums agree across {len(group)} opt levels on "
+              f"{group_backend} ({checks[0]})" if relation == "stable" else
+              f"opt levels DISAGREE on {group_backend}: {dict(group)} — "
+              "a miscompile at one level")
+    return OptLevelVerdict(relation, tuple(l for l, _ in group), tuple(checks),
+                           detail)
 
 
 # ── DESIL at the KV-ABI level — PagedKVState differential oracle ─────────────

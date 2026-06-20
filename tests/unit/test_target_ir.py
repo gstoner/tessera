@@ -9,6 +9,7 @@ from tessera.compiler.target_ir import (
     TargetIRModule,
     TargetIRVerificationError,
     TargetOp,
+    annotate_target_ir_with_probes,
     lower_tile_to_target_ir,
 )
 from tessera.compiler.tile_ir import TileFunction, TileIRModule, TileOp, lower_schedule_to_tile_ir
@@ -108,6 +109,28 @@ def test_lower_tile_to_nvidia_hopper_target_ir_maps_mma_to_wgmma_tma_mbarrier():
     assert "tessera_nvidia.wgmma" in text
     assert "tessera_nvidia.tma_async_copy" in text
     assert "tessera_nvidia.mbarrier" in text
+
+
+def test_annotate_target_ir_with_intra_kernel_probes_adds_backend_markers():
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            body=[TileOp("tile.mma", {"source": "tessera.matmul", "result": "C", "ordinal": 0})],
+            target="nvidia_sm90",
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm90")
+
+    annotated = annotate_target_ir_with_probes(target)
+
+    assert annotated.verify().ok
+    text = annotated.to_mlir()
+    assert "tessera_nvidia.profiler_probe" in text
+    assert 'kernel = "matmul"' in text
+    assert 'phase = "prologue"' in text
+    assert 'phase = "mainloop"' in text
+    assert 'phase = "epilogue"' in text
+    assert "profiling_probes" in text
 
 
 def test_lower_tile_to_nvidia_blackwell_target_ir_maps_mma_to_tcgen05_tmem():

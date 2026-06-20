@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Profiling and autotuning workflows; defers schedule artifact semantics to docs/spec/SHAPE_SYSTEM.md and compiler autotuner implementation
-last_updated: 2026-06-11
+last_updated: 2026-06-20
 ---
 
 # Tessera Profiling and Autotuning Guide
@@ -64,6 +64,11 @@ The CLI surface mirrors the runtime profiler:
 tessera-prof my_model.py --metrics=flops,bandwidth,occupancy
 tessera-prof my_model.py --trace=trace.json
 tessera-prof my_model.py --emit=json --compile-target=sm90
+tessera-prof my_model.py --advanced-plan --emit=json --compile-target=apple_gpu
+tessera-prof my_model.py --advanced-plan --emit=json --compile-target=sm90 \
+  --trace-features=runtime_api,device_activity,intra_kernel,model_analyzer \
+  --model-analyzer-manifest model_analyzer.json \
+  --model-analyzer-result model_analyzer_result.json
 ```
 
 The current `tessera-prof` implementation records a lightweight inspection
@@ -72,6 +77,44 @@ JSON, and can correlate autotune schedule artifacts with profiler telemetry. As
 device execution is wired through the runtime, this command should become the
 stable front door for kernel latency, FLOPs, bandwidth, occupancy, memory,
 collective, and launch metrics.
+
+The C runtime now exposes a profiling callback spine for native execution
+traces. Register `tsrSetProfileEventCallback`, call `tsrEnableProfiling(1)`,
+and collect `TSR_PROFILE_RUNTIME_API` plus `TSR_PROFILE_DEVICE_ACTIVITY` events.
+Payload JSON includes `status`, `duration_us`, and correlation fields such as
+`kernel`, `target`, `bytes`, `memcpy_kind`, `grid`, `tile`, or `device_kind`.
+`tessera-prof --advanced-plan` reports which backend provider should eventually
+own each feature; v1 runtime callback events are the portable CPU/runtime proof
+path before CUPTI, ROCprofiler-SDK, and Metal collectors are promoted from
+`planned`.
+
+`--model-analyzer-manifest` writes a runner-facing JSON contract derived from
+the same advanced plan. The manifest carries the batch/instance/dynamic
+batching search space, primary objective, required runtime/device telemetry,
+planned output artifacts, and any compiler-inserted intra-kernel probe sites.
+This is Tessera's local Model Analyzer handoff: CPU/runtime sweeps can consume
+it immediately, while NVIDIA, ROCm, and Apple GPU runners stay gated on their
+native collector integrations.
+
+`--model-analyzer-result` runs the manifest search space through Tessera's local
+Model Analyzer runner and writes a result JSON with every trial, the selected
+best configuration, and runner status. Unless a future backend runner supplies
+real measurements, the default result is explicitly marked as estimated or
+planned-estimated rather than hardware-measured.
+
+When `intra_kernel` is requested, the compiler plan emits portable probe specs
+for `prologue`, `mainloop`, and `epilogue` phases. Those specs use stable
+payload fields (`kernel`, `phase`, `tile`, `program_id`) so later backend
+implementations can lower them to CUPTI PC sampling correlation, ROCprofiler
+thread trace, Metal counter correlation, or inserted counters without changing
+the JSON shape.
+
+`tessera.compiler.target_ir.annotate_target_ir_with_probes(...)` attaches those
+probe specs to backend-facing Target IR as per-target profiler marker ops
+(`tessera_nvidia.profiler_probe`, `tessera_rocm.profiler_probe`,
+`tessera_apple.gpu.profiler_probe`, or `tessera.cpu.profiler_probe`). These ops
+verify like any other Target IR op and provide the compiler-side anchor that a
+later backend can lower to native counters or inserted instrumentation.
 
 Profiler events carry:
 

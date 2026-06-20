@@ -169,12 +169,18 @@ def test_tessera_prof_emits_json_and_autotune_artifact(tmp_path, capsys):
 
 def test_tessera_prof_emits_advanced_profiler_plan(tmp_path, capsys):
     model = _write_model(tmp_path)
+    manifest_path = tmp_path / "model_analyzer.json"
+    result_path = tmp_path / "model_analyzer_result.json"
 
     assert prof.main([
         str(model),
         "--emit=json",
         "--compile-target=sm90",
         "--advanced-plan",
+        "--model-analyzer-manifest",
+        str(manifest_path),
+        "--model-analyzer-result",
+        str(result_path),
         "--trace-features=runtime_api,device_activity,intra_kernel,model_analyzer",
         "--kernels",
         "matmul",
@@ -184,8 +190,11 @@ def test_tessera_prof_emits_advanced_profiler_plan(tmp_path, capsys):
         "--instance-counts=1,2",
     ]) == 0
 
-    payload = json.loads(capsys.readouterr().out)
+    stdout = capsys.readouterr().out
+    payload = json.loads(stdout.split("\nmodel_analyzer_manifest:")[0])
     plan = payload["advanced_profiler_plan"]
+    manifest = json.loads(manifest_path.read_text())
+    result = json.loads(result_path.read_text())
     providers = {cap["feature"]: cap["provider"] for cap in plan["capabilities"]}
     assert plan["target"] == "nvidia"
     assert plan["kernels"] == ["matmul", "flash_attn"]
@@ -193,6 +202,15 @@ def test_tessera_prof_emits_advanced_profiler_plan(tmp_path, capsys):
     assert providers["device_activity"] == "cupti-activity-api"
     assert providers["intra_kernel"] == "cupti-pc-sampling+compiler-instrumentation"
     assert plan["analyzer_sweep"]["batch_sizes"] == [1, 4]
+    assert plan["intra_kernel_probes"][0]["phase"] == "prologue"
+    assert manifest["schema"] == "tessera.compiler.model_analyzer_manifest.v1"
+    assert manifest["runner"]["status"] == "planned"
+    assert manifest["telemetry"]["required_features"] == ["runtime_api", "device_activity"]
+    assert result["schema"] == "tessera.compiler.model_analyzer_result.v1"
+    assert result["trial_count"] == 8
+    assert result["best"]["status"] == "planned_estimate"
+    assert str(manifest_path) in stdout
+    assert str(result_path) in stdout
 
 
 def test_tessera_runtime_smoke_writes_telemetry(tmp_path):

@@ -15,6 +15,7 @@ from typing import Any, Iterable, Optional
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, TesseraDiagnostic, TesseraErrorCode
 from .apple_target_descriptor import apple_target_descriptor as _apple_target_descriptor
 from .capabilities import normalize_target
+from .profiling_plan import IntraKernelProbe, plan_intra_kernel_probes
 from .tile_ir import TILE_METADATA_OPS, TileIRModule, TileIRVerificationError, TileOp
 
 
@@ -762,12 +763,18 @@ class TargetIRVerifier:
         return TargetIRVerificationResult(tuple(diagnostics))
 
     def _verify_cpu_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera.cpu.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
         if not op.op_name.startswith("tessera.cpu."):
             diagnostics.append(TargetIRDiagnostic("error", f"invalid CPU op {op.op_name!r}", "TARGET_IR_CPU_OP"))
             return
         self._require(op, diagnostics, "source", "result", "ordinal", "abi")
 
     def _verify_apple_cpu_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera_apple.cpu.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
         if op.op_name == "tessera_apple.diagnostic":
             self._require(op, diagnostics, "severity", "reason")
             return
@@ -776,6 +783,9 @@ class TargetIRVerifier:
         self._require(op, diagnostics, "framework", "abi", "dtype")
 
     def _verify_apple_gpu_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera_apple.gpu.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
         if op.op_name == "tessera_apple.diagnostic":
             self._require(op, diagnostics, "severity", "reason")
             return
@@ -795,6 +805,9 @@ class TargetIRVerifier:
             diagnostics.append(TargetIRDiagnostic("error", f"invalid Apple GPU op {op.op_name!r}", "TARGET_IR_APPLE_GPU_OP"))
 
     def _verify_rocm_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera_rocm.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
         if op.op_name == "tessera.target.diagnostic":
             self._require(op, diagnostics, "target", "severity", "reason")
             return
@@ -811,6 +824,9 @@ class TargetIRVerifier:
             self._require(op, diagnostics, "arch")
 
     def _verify_nvidia_op(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic]) -> None:
+        if op.op_name == "tessera_nvidia.profiler_probe":
+            self._require(op, diagnostics, "kernel", "phase", "metric", "aggregation", "payload_fields")
+            return
         if not op.op_name.startswith("tessera_nvidia."):
             diagnostics.append(TargetIRDiagnostic("error", f"invalid NVIDIA op {op.op_name!r}", "TARGET_IR_NVIDIA_OP"))
             return
@@ -898,6 +914,40 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
             body=body,
         ))
     return target_module
+
+
+def annotate_target_ir_with_probes(
+    module: TargetIRModule,
+    probes: Iterable[IntraKernelProbe] | None = None,
+) -> TargetIRModule:
+    """Return a copy of ``module`` with backend profiler probe ops inserted.
+
+    The probes are pure Target IR metadata/instrumentation markers. They are
+    placed before the first non-probe op for each target function so downstream
+    lowering can map them to compiler-inserted counters, CUPTI/ROCprofiler
+    correlation records, or Metal counter ranges without changing the planner
+    JSON contract.
+    """
+
+    planned = tuple(probes or plan_intra_kernel_probes(_target_kernel_names(module)))
+    if not planned:
+        return TargetIRModule(
+            attrs=dict(module.attrs),
+            functions=[
+                TargetFunction(fn.name, body=[_copy_target_op(op) for op in fn.body], target=fn.target)
+                for fn in module.functions
+            ],
+        )
+
+    annotated = TargetIRModule(attrs={**module.attrs, "profiling_probes": [p.to_dict() for p in planned]})
+    for fn in module.functions:
+        body = [_probe_target_op(fn.target, probe) for probe in planned]
+        body.extend(_copy_target_op(op) for op in fn.body)
+        annotated.functions.append(TargetFunction(fn.name, body=body, target=fn.target))
+    result = annotated.verify()
+    if not result.ok:
+        raise TargetIRVerificationError(result.format())
+    return annotated
 
 
 def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
@@ -1544,6 +1594,60 @@ def _launch_metadata(op: TileOp) -> dict[str, Any]:
     if source in {"tessera.softmax", "tessera.softmax_safe"}:
         return {"kernel_id": "softmax", "grid": "rows", "block": "256", "measurement": "wall_clock_pending"}
     return {"kernel_id": source.removeprefix("tessera.").replace(".", "_"), "grid": "elements", "measurement": "wall_clock_pending"}
+
+
+def _target_kernel_names(module: TargetIRModule) -> tuple[str, ...]:
+    names: list[str] = []
+    for fn in module.functions:
+        for op in fn.body:
+            launch = op.attrs.get("launch")
+            if isinstance(launch, dict):
+                kernel = str(launch.get("kernel_id", "")).strip()
+                if kernel and kernel not in names:
+                    names.append(kernel)
+            kernel = str(op.attrs.get("kernel", "")).strip()
+            if kernel and kernel not in names:
+                names.append(kernel)
+            entry = str(op.attrs.get("entry_point", "")).strip()
+            if entry and entry not in names:
+                names.append(entry)
+        if not names and fn.name not in names:
+            names.append(fn.name)
+    return tuple(names) or ("*",)
+
+
+def _probe_target_op(target: str, probe: IntraKernelProbe) -> TargetOp:
+    return TargetOp(_probe_op_name_for_target(target), {
+        "kernel": probe.kernel,
+        "phase": probe.phase,
+        "metric": probe.metric,
+        "aggregation": probe.aggregation,
+        "payload_fields": list(probe.payload_fields),
+        "status": "planned",
+    })
+
+
+def _probe_op_name_for_target(target: str) -> str:
+    if target == CPU_TARGET:
+        return "tessera.cpu.profiler_probe"
+    if target == APPLE_CPU_TARGET:
+        return "tessera_apple.cpu.profiler_probe"
+    if target == APPLE_GPU_TARGET:
+        return "tessera_apple.gpu.profiler_probe"
+    if target == ROCM_TARGET:
+        return "tessera_rocm.profiler_probe"
+    if target in NVIDIA_TARGETS:
+        return "tessera_nvidia.profiler_probe"
+    return "tessera.target.profiler_probe"
+
+
+def _copy_target_op(op: TargetOp) -> TargetOp:
+    return TargetOp(
+        op.op_name,
+        attrs=dict(op.attrs),
+        operands=list(op.operands),
+        result=op.result,
+    )
 
 
 def _source_from_tile_op(op: TileOp) -> str:

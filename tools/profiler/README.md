@@ -10,6 +10,9 @@ Features:
 - Compiler-side advanced profiler plans via
   `tessera.compiler.profiling_plan.plan_profile(...)` and
   `tessera-prof --advanced-plan --emit=json`.
+- Optional `tprof` adapter for the Tessera runtime callback ABI.
+- Runner-facing Model Analyzer manifest JSON and compiler-inserted
+  intra-kernel probe specs.
 
 ## Advanced profiler backend plan
 
@@ -36,6 +39,77 @@ Design anchors:
 
 Apple GPU validation on this host needs native, out-of-sandbox execution before
 turning any `planned` row into `available`.
+
+## Runtime callback trace spine
+
+The runtime ABI emits v1 profiling events through a callback instead of linking
+the core runtime to `tprof`:
+
+```c
+static void on_profile(TsrProfileEventKind kind, const char* name,
+                       const char* payload_json, double value, void* user) {
+  (void)user;
+  if (kind == TSR_PROFILE_RUNTIME_API) {
+    /* payload_json has status, duration_us, and call-specific fields. */
+  } else if (kind == TSR_PROFILE_DEVICE_ACTIVITY) {
+    /* value is elapsed microseconds for tprof-style duration records. */
+  }
+}
+
+tsrSetProfileEventCallback(on_profile, NULL);
+tsrEnableProfiling(1);
+```
+
+`payload_json` is owned by the runtime and valid only during the callback.
+Runtime API events cover lifecycle, memory, artifact, and launch calls. Portable
+device activity events cover CPU/runtime work such as `tsrMemcpy`,
+`tsrMemset`, `tsrLaunchHostTileKernel`, and `tsrNativeGemmF32`.
+
+Profiler harnesses that link both `libtessera_runtime` and `tprof_runtime` can
+use the optional adapter instead of hand-writing the callback:
+
+```c++
+#include "tprof/tessera_runtime_adapter.h"
+
+tprof::enable(tprof::config_t{});
+tprof::attach_tessera_runtime_trace();
+/* run Tessera runtime work */
+tprof::detach_tessera_runtime_trace();
+tprof::export_chrome("runtime.trace.json");
+```
+
+The dependency direction is one-way: `tools/profiler` includes the runtime ABI
+headers, but `src/runtime` does not link against `tprof`.
+
+## Intra-kernel and Model Analyzer contracts
+
+`tessera.compiler.profiling_plan.plan_profile(..., features=["intra_kernel"])`
+now emits deterministic compiler-inserted probe specs. The first portable shape
+uses `prologue`, `mainloop`, and `epilogue` phases with payload fields such as
+`kernel`, `phase`, `tile`, and `program_id`. Backend collectors can later map
+those probes to CUPTI PC sampling, ROCprofiler thread trace, Metal counters, or
+plain inserted counters without changing the compiler-facing JSON.
+
+`tessera.compiler.profiling_plan.model_analyzer_manifest(plan)` converts the
+same provider plan into a runner-facing Model Analyzer manifest with the search
+space, objective, required telemetry features, planned probe sites, and output
+artifacts. `tessera.compiler.model_analyzer.run_model_analyzer_manifest(...)`
+executes that search contract as a local result artifact; default trials are
+estimated/planned-estimated unless a backend runner supplies real measurements.
+The CLI can write both files directly:
+
+```bash
+tessera-prof my_model.py \
+  --advanced-plan --emit=json --compile-target=sm90 \
+  --trace-features=runtime_api,device_activity,intra_kernel,model_analyzer \
+  --model-analyzer-manifest model_analyzer.json \
+  --model-analyzer-result model_analyzer_result.json
+```
+
+`tessera.compiler.target_ir.annotate_target_ir_with_probes(...)` attaches the
+planned probes to Target IR as backend-specific profiler marker ops, providing
+the compiler-side anchor for future CUPTI, ROCprofiler-SDK, Metal counter, or
+inserted-counter lowering.
 
 ## Examples
 

@@ -11,7 +11,12 @@ from typing import Sequence
 
 from tessera import autotune
 from tessera import profiler
-from tessera.compiler.profiling_plan import ModelAnalyzerSweep, plan_profile
+from tessera.compiler.profiling_plan import (
+    ModelAnalyzerSweep,
+    model_analyzer_manifest,
+    plan_profile,
+)
+from tessera.compiler.model_analyzer import run_model_analyzer_manifest, write_model_analyzer_result
 
 
 DEFAULT_METRICS = ("latency", "flops", "bandwidth")
@@ -86,7 +91,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     analyzer_sweep = None
     advanced_plan = None
-    if args.advanced_plan:
+    analyzer_result = None
+    if args.advanced_plan or args.model_analyzer_manifest or args.model_analyzer_result:
         analyzer_sweep = ModelAnalyzerSweep(
             mode=args.analyzer_mode,
             batch_sizes=_parse_int_list(args.batch_sizes),
@@ -95,13 +101,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             latency_budget_ms=args.latency_budget_ms,
             memory_budget_bytes=args.memory_budget_bytes,
         )
-        advanced_plan = plan_profile(
+        plan = plan_profile(
             args.compile_target,
             features=_parse_trace_features(args.trace_features),
             model_name=source.stem,
             kernels=tuple(args.kernels),
             analyzer_sweep=analyzer_sweep,
-        ).to_dict()
+        )
+        if args.advanced_plan:
+            advanced_plan = plan.to_dict()
+        if args.model_analyzer_manifest or args.model_analyzer_result:
+            manifest = model_analyzer_manifest(plan)
+            manifest_payload = manifest.to_dict()
+        if args.model_analyzer_manifest:
+            Path(args.model_analyzer_manifest).write_text(manifest.to_json() + "\n")
+        if args.model_analyzer_result:
+            analyzer_result = run_model_analyzer_manifest(manifest_payload)
+            write_model_analyzer_result(analyzer_result, args.model_analyzer_result)
 
     payload = {
         **sess.to_dict(),
@@ -110,6 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "compile_target": args.compile_target,
         "schedule_artifact": artifact,
         "advanced_profiler_plan": advanced_plan,
+        "model_analyzer_result": analyzer_result,
     }
     if args.emit == "json":
         text = json.dumps(payload, indent=2, sort_keys=True)
@@ -125,6 +142,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(f"trace: {args.trace}\n")
     if args.artifact:
         sys.stdout.write(f"artifact: {args.artifact}\n")
+    if args.model_analyzer_manifest:
+        sys.stdout.write(f"model_analyzer_manifest: {args.model_analyzer_manifest}\n")
+    if args.model_analyzer_result:
+        sys.stdout.write(f"model_analyzer_result: {args.model_analyzer_result}\n")
     return 0
 
 
@@ -262,6 +283,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--latency-budget-ms", type=float, help="Optional analyzer latency budget")
     parser.add_argument("--memory-budget-bytes", type=int, help="Optional analyzer memory budget")
+    parser.add_argument(
+        "--model-analyzer-manifest",
+        help="Write runner-facing Tessera Model Analyzer manifest JSON.",
+    )
+    parser.add_argument(
+        "--model-analyzer-result",
+        help=(
+            "Write a local Tessera Model Analyzer result JSON by running the "
+            "manifest search contract with estimated measurements."
+        ),
+    )
     return parser
 
 

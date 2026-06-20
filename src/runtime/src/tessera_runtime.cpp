@@ -7,6 +7,10 @@
 #include <unordered_map>
 #include <cassert>
 #include <chrono>
+#include <cctype>
+#include <iomanip>
+#include <algorithm>
+#include <atomic>
 #include "backend/base_backend.h"
 #include "../include/tessera/tessera_runtime.h"
 #include "../include/tessera/tsr_types.h"
@@ -65,6 +69,10 @@ std::unordered_map<std::string, tsrHostKernelFn> g_host_kernels;
 std::mutex g_gpu_launcher_mu;
 tsrGpuLauncherFn g_gpu_launcher = nullptr;
 void* g_gpu_launcher_user = nullptr;
+
+std::mutex g_profile_callback_mu;
+tsrProfileEventFn g_profile_callback = nullptr;
+void* g_profile_callback_user = nullptr;
 
 constexpr const char *kArtifactMagicV1 = "TSRART1";
 constexpr const char *kArtifactMagicV2 = "TSRART2";
@@ -126,6 +134,83 @@ bool parseArtifact(const std::string& payload, tsrArtifact_t& out) {
   }
   return true;
 }
+
+const char* profileStatusName(TsrStatus s) {
+  switch (s) {
+    case TSR_STATUS_SUCCESS:          return "SUCCESS";
+    case TSR_STATUS_INVALID_ARGUMENT: return "INVALID_ARGUMENT";
+    case TSR_STATUS_NOT_FOUND:        return "NOT_FOUND";
+    case TSR_STATUS_ALREADY_EXISTS:   return "ALREADY_EXISTS";
+    case TSR_STATUS_OUT_OF_MEMORY:    return "OUT_OF_MEMORY";
+    case TSR_STATUS_UNIMPLEMENTED:    return "UNIMPLEMENTED";
+    case TSR_STATUS_INTERNAL:         return "INTERNAL";
+    case TSR_STATUS_DEVICE_ERROR:     return "DEVICE_ERROR";
+  }
+  return "UNKNOWN";
+}
+
+std::string jsonEscape(const std::string& value) {
+  std::string out;
+  out.reserve(value.size());
+  for (char ch : value) {
+    switch (ch) {
+      case '\\': out += "\\\\"; break;
+      case '"': out += "\\\""; break;
+      case '\b': out += "\\b"; break;
+      case '\f': out += "\\f"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:
+        if (static_cast<unsigned char>(ch) < 0x20) {
+          std::ostringstream esc;
+          esc << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+              << static_cast<int>(static_cast<unsigned char>(ch));
+          out += esc.str();
+        } else {
+          out += ch;
+        }
+        break;
+    }
+  }
+  return out;
+}
+
+std::string jsonStringField(const char* key, const std::string& value) {
+  return "\"" + std::string(key) + "\":\"" + jsonEscape(value) + "\"";
+}
+
+std::string jsonNumberField(const char* key, uint64_t value) {
+  return "\"" + std::string(key) + "\":" + std::to_string(value);
+}
+
+std::string jsonSignedField(const char* key, int64_t value) {
+  return "\"" + std::string(key) + "\":" + std::to_string(value);
+}
+
+std::string jsonDim3Field(const char* key, const tsrDim3& value) {
+  return "\"" + std::string(key) + "\":[" + std::to_string(value.x) + "," +
+         std::to_string(value.y) + "," + std::to_string(value.z) + "]";
+}
+
+const char* memcpyKindName(TsrMemcpyKind kind) {
+  switch (kind) {
+    case TSR_MEMCPY_HOST_TO_DEVICE: return "host_to_device";
+    case TSR_MEMCPY_DEVICE_TO_HOST: return "device_to_host";
+    case TSR_MEMCPY_DEVICE_TO_DEVICE: return "device_to_device";
+    case TSR_MEMCPY_HOST_TO_HOST: return "host_to_host";
+  }
+  return "unknown";
+}
+
+const char* deviceKindName(TsrDeviceKind kind) {
+  switch (kind) {
+    case TSR_DEVICE_CPU: return "cpu";
+    case TSR_DEVICE_CUDA: return "cuda";
+    case TSR_DEVICE_HIP: return "hip";
+  }
+  return "unknown";
+}
 }  // namespace
 
 static std::vector<tsrDevice_t*> g_devices;
@@ -156,9 +241,35 @@ static uint64_t _liveHandleCount() {
 }
 
 static thread_local std::string g_last_error;
-static bool g_profiling_enabled = true;
+static std::atomic<bool> g_profiling_enabled{true};
 
+static uint64_t NowNs();
 static void SetLastError(const char* msg) { g_last_error = msg ? msg : ""; }
+
+static void EmitProfileEvent(TsrProfileEventKind kind,
+                             const char* name,
+                             uint64_t start_ns,
+                             TsrStatus status,
+                             const std::string& extra_json = std::string()) {
+  if (!g_profiling_enabled.load(std::memory_order_relaxed)) return;
+  tsrProfileEventFn callback = nullptr;
+  void* user = nullptr;
+  {
+    std::lock_guard<std::mutex> lk(g_profile_callback_mu);
+    callback = g_profile_callback;
+    user = g_profile_callback_user;
+  }
+  if (!callback) return;
+  uint64_t end_ns = NowNs();
+  double duration_us = static_cast<double>(end_ns - start_ns) / 1000.0;
+  std::ostringstream payload;
+  payload << "{\"status\":\"" << profileStatusName(status)
+          << "\",\"duration_us\":" << duration_us;
+  if (!extra_json.empty()) payload << "," << extra_json;
+  payload << "}";
+  double value = kind == TSR_PROFILE_DEVICE_ACTIVITY ? duration_us : 0.0;
+  callback(kind, name ? name : "runtime", payload.str().c_str(), value, user);
+}
 
 // Consult the backend's per-thread last-error slot after a
 // ``void``-returning backend call.  If the backend reports a
@@ -189,8 +300,27 @@ void tsrGetVersion(int* major, int* minor, int* patch) {
   if (minor) *minor = TESSERA_VERSION_MINOR;
   if (patch) *patch = TESSERA_VERSION_PATCH;
 }
-void tsrEnableProfiling(int enable) { g_profiling_enabled = (enable != 0); }
+void tsrEnableProfiling(int enable) {
+  uint64_t start = NowNs();
+  g_profiling_enabled.store(enable != 0, std::memory_order_relaxed);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrEnableProfiling", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("enabled", enable != 0 ? 1 : 0));
+}
 uint64_t tsrTimestampNowNs(void) { return NowNs(); }
+
+TsrStatus tsrSetProfileEventCallback(tsrProfileEventFn fn, void* user) {
+  uint64_t start = NowNs();
+  {
+    std::lock_guard<std::mutex> lk(g_profile_callback_mu);
+    g_profile_callback = fn;
+    g_profile_callback_user = fn ? user : nullptr;
+  }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrSetProfileEventCallback", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("registered", fn ? 1 : 0));
+  return TSR_STATUS_SUCCESS;
+}
 
 // ---- Status & error strings ----
 //
@@ -219,100 +349,163 @@ void tsrClearLastError(void) { g_last_error.clear(); }
 
 // ---- Init / Shutdown ----
 TsrStatus tsrInit(void) {
-  std::lock_guard<std::mutex> lk(g_mu);
-  if (g_initialized) {
-    // Idempotent: second `tsrInit()` without an intervening shutdown is
-    // a benign success.
-    return TSR_STATUS_SUCCESS;
-  }
+  uint64_t start = NowNs();
+  size_t device_count = 0;
+  bool already_initialized = false;
+  {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (g_initialized) {
+      already_initialized = true;
+      device_count = g_devices.size();
+    } else {
+      // Always have a CPU backend.
+      auto* dev_cpu = new tsrDevice_t();
+      dev_cpu->be = CreateCpuBackend();
+      g_devices.push_back(dev_cpu);
 
-  // Always have a CPU backend.
-  auto* dev_cpu = new tsrDevice_t();
-  dev_cpu->be = CreateCpuBackend();
-  g_devices.push_back(dev_cpu);
+      // Optional CUDA/HIP backends (stubs) if compiled in.
+      if (auto cuda = CreateCudaBackend()) {
+        auto* d = new tsrDevice_t(); d->be = std::move(cuda); g_devices.push_back(d);
+      }
+      if (auto hip = CreateHipBackend()) {
+        auto* d = new tsrDevice_t(); d->be = std::move(hip); g_devices.push_back(d);
+      }
 
-  // Optional CUDA/HIP backends (stubs) if compiled in.
-  if (auto cuda = CreateCudaBackend()) {
-    auto* d = new tsrDevice_t(); d->be = std::move(cuda); g_devices.push_back(d);
+      g_initialized = true;
+      device_count = g_devices.size();
+    }
   }
-  if (auto hip = CreateHipBackend()) {
-    auto* d = new tsrDevice_t(); d->be = std::move(hip); g_devices.push_back(d);
-  }
-
-  g_initialized = true;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrInit", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("device_count", device_count) + "," +
+                   jsonNumberField("already_initialized", already_initialized ? 1 : 0));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrShutdown(void) {
-  std::lock_guard<std::mutex> lk(g_mu);
-  // Refuse to tear down devices while streams / events / buffers are
-  // still live — those handles carry raw ``tsrDevice_t*`` back-pointers
-  // and would dereference freed memory on a subsequent ``tsrFree`` /
-  // ``tsrDestroyStream`` / ``tsrDestroyEvent`` call.  This is the
-  // notebook-style use-after-free P1 the audit flagged; we surface it
-  // here as ``INVALID_ARGUMENT`` with a precise diagnostic instead of
-  // letting it become memory corruption.
-  if (uint64_t live = _liveHandleCount()) {
-    static thread_local std::string buf;
-    buf = "tsrShutdown: refusing to destroy devices with live handles "
-          "(streams=" + std::to_string(g_live_streams) +
-          ", events="  + std::to_string(g_live_events)  +
-          ", buffers=" + std::to_string(g_live_buffers) +
-          ", total="   + std::to_string(live) +
-          "); call tsrDestroyStream / tsrDestroyEvent / tsrFree for "
-          "every outstanding handle first";
-    SetLastError(buf.c_str());
-    return TSR_STATUS_INVALID_ARGUMENT;
+  uint64_t start = NowNs();
+  TsrStatus status = TSR_STATUS_SUCCESS;
+  uint64_t live = 0;
+  {
+    std::lock_guard<std::mutex> lk(g_mu);
+    // Refuse to tear down devices while streams / events / buffers are
+    // still live — those handles carry raw ``tsrDevice_t*`` back-pointers
+    // and would dereference freed memory on a subsequent ``tsrFree`` /
+    // ``tsrDestroyStream`` / ``tsrDestroyEvent`` call.  This is the
+    // notebook-style use-after-free P1 the audit flagged; we surface it
+    // here as ``INVALID_ARGUMENT`` with a precise diagnostic instead of
+    // letting it become memory corruption.
+    live = _liveHandleCount();
+    if (live) {
+      static thread_local std::string buf;
+      buf = "tsrShutdown: refusing to destroy devices with live handles "
+            "(streams=" + std::to_string(g_live_streams) +
+            ", events="  + std::to_string(g_live_events)  +
+            ", buffers=" + std::to_string(g_live_buffers) +
+            ", total="   + std::to_string(live) +
+            "); call tsrDestroyStream / tsrDestroyEvent / tsrFree for "
+            "every outstanding handle first";
+      SetLastError(buf.c_str());
+      status = TSR_STATUS_INVALID_ARGUMENT;
+    } else {
+      for (auto* d : g_devices) delete d;
+      g_devices.clear();
+      // Flip the initialized flag so a later `tsrInit()` repopulates the
+      // device list.  Without this, `std::call_once`'s "fire once forever"
+      // semantics would leave the runtime in a non-functional state after
+      // shutdown — a real glass jaw for notebooks / reload tests / embedded
+      // runtimes.
+      g_initialized = false;
+    }
   }
-  for (auto* d : g_devices) delete d;
-  g_devices.clear();
-  // Flip the initialized flag so a later `tsrInit()` repopulates the
-  // device list.  Without this, `std::call_once`'s "fire once forever"
-  // semantics would leave the runtime in a non-functional state after
-  // shutdown — a real glass jaw for notebooks / reload tests / embedded
-  // runtimes.
-  g_initialized = false;
-  return TSR_STATUS_SUCCESS;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrShutdown", start, status,
+                   jsonNumberField("live_handles", live));
+  return status;
 }
 
 // Internal: returns whether the runtime currently has any devices.
 // Exposed to tests via the C ABI under `tsrIsInitialized`.
 TsrStatus tsrIsInitialized(int* out) {
-  if (!out) { SetLastError("out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
-  std::lock_guard<std::mutex> lk(g_mu);
-  *out = g_initialized ? 1 : 0;
+  uint64_t start = NowNs();
+  if (!out) {
+    SetLastError("out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrIsInitialized", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
+  {
+    std::lock_guard<std::mutex> lk(g_mu);
+    *out = g_initialized ? 1 : 0;
+  }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrIsInitialized", start,
+                   TSR_STATUS_SUCCESS, jsonNumberField("initialized", *out));
   return TSR_STATUS_SUCCESS;
 }
 
 // ---- Devices ----
 TsrStatus tsrGetDeviceCount(int* count) {
-  if (!count) { SetLastError("count==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!count) {
+    SetLastError("count==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDeviceCount", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   *count = (int)g_devices.size();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDeviceCount", start,
+                   TSR_STATUS_SUCCESS, jsonNumberField("count", *count));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrGetDevice(int index, tsrDevice* out) {
-  if (!out) { SetLastError("out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!out) {
+    SetLastError("out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDevice", start,
+                     TSR_STATUS_INVALID_ARGUMENT, jsonSignedField("index", index));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   if (index < 0 || index >= (int)g_devices.size()) {
-    SetLastError("device index out of range"); return TSR_STATUS_NOT_FOUND;
+    SetLastError("device index out of range");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDevice", start,
+                     TSR_STATUS_NOT_FOUND, jsonSignedField("index", index));
+    return TSR_STATUS_NOT_FOUND;
   }
   *out = g_devices[index];
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDevice", start,
+                   TSR_STATUS_SUCCESS, jsonSignedField("index", index));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrGetDeviceProps(tsrDevice dev, tsrDeviceProps* props) {
-  if (!dev || !props) { SetLastError("dev/props==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!dev || !props) {
+    SetLastError("dev/props==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDeviceProps", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   auto p = dev->be->props();
   props->kind = p.kind;
   std::snprintf(props->name, sizeof(props->name), "%s", p.name.c_str());
   props->logical_tile_threads_max = p.logical_tile_threads_max;
   props->concurrent_tiles_hint = p.concurrent_tiles_hint;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetDeviceProps", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("device_kind", deviceKindName(props->kind)) + "," +
+                   jsonStringField("name", props->name));
   return TSR_STATUS_SUCCESS;
 }
 
 // ---- Streams / Events ----
 TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out) {
-  if (!dev || !out) { SetLastError("dev/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!dev || !out) {
+    SetLastError("dev/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateStream", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   // Allocate the backend stream FIRST and validate before we take any
   // ownership.  If the backend reports failure (returns nullptr, e.g.,
   // CUDA/HIP path on `cudaStreamCreate` failure), we must NOT:
@@ -331,9 +524,13 @@ TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out) {
     TsrStatus backend_st = dev->be->consumeLastError(&msg);
     if (backend_st != TSR_STATUS_SUCCESS && !msg.empty()) {
       SetLastError(msg.c_str());
+      EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateStream", start,
+                       backend_st);
       return backend_st;
     }
     SetLastError("backend->createStream returned NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateStream", start,
+                     TSR_STATUS_INTERNAL);
     return TSR_STATUS_INTERNAL;
   }
   auto s = new tsrStream_t();
@@ -341,26 +538,50 @@ TsrStatus tsrCreateStream(tsrDevice dev, tsrStream* out) {
   s->dev = dev;
   *out = s;
   { std::lock_guard<std::mutex> lk(g_mu); ++g_live_streams; }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateStream", start,
+                   TSR_STATUS_SUCCESS);
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrDestroyStream(tsrStream s) {
-  if (!s) { SetLastError("s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!s) {
+    SetLastError("s==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyStream", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   s->dev->be->destroyStream(s->impl);
   delete s;
   { std::lock_guard<std::mutex> lk(g_mu);
     if (g_live_streams) --g_live_streams; }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyStream", start,
+                   TSR_STATUS_SUCCESS);
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrStreamSynchronize(tsrStream s) {
-  if (!s) { SetLastError("s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!s) {
+    SetLastError("s==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrStreamSynchronize", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   s->dev->be->streamSync(s->impl);
-  return _PropagateBackendError(s->dev);
+  TsrStatus st = _PropagateBackendError(s->dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrStreamSynchronize", start, st);
+  return st;
 }
 
 TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
-  if (!dev || !out) { SetLastError("dev/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!dev || !out) {
+    SetLastError("dev/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateEvent", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   // See ``tsrCreateStream`` for the rationale — validate the backend
   // event before taking ownership, so a CUDA/HIP create failure
   // doesn't smuggle a NULL ``impl`` handle out to the caller or
@@ -371,9 +592,13 @@ TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
     TsrStatus backend_st = dev->be->consumeLastError(&msg);
     if (backend_st != TSR_STATUS_SUCCESS && !msg.empty()) {
       SetLastError(msg.c_str());
+      EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateEvent", start,
+                       backend_st);
       return backend_st;
     }
     SetLastError("backend->createEvent returned NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateEvent", start,
+                     TSR_STATUS_INTERNAL);
     return TSR_STATUS_INTERNAL;
   }
   auto e = new tsrEvent_t();
@@ -381,87 +606,195 @@ TsrStatus tsrCreateEvent(tsrDevice dev, tsrEvent* out) {
   e->dev = dev;
   *out = e;
   { std::lock_guard<std::mutex> lk(g_mu); ++g_live_events; }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCreateEvent", start,
+                   TSR_STATUS_SUCCESS);
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrRecordEvent(tsrEvent e, tsrStream s) {
-  if (!e || !s) { SetLastError("e/s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!e || !s) {
+    SetLastError("e/s==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrRecordEvent", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   e->dev->be->recordEvent(e->impl, s->impl);
-  return _PropagateBackendError(e->dev);
+  TsrStatus st = _PropagateBackendError(e->dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrRecordEvent", start, st);
+  return st;
 }
 
 TsrStatus tsrWaitEvent(tsrEvent e, tsrStream s) {
-  if (!e || !s) { SetLastError("e/s==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!e || !s) {
+    SetLastError("e/s==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrWaitEvent", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   e->dev->be->waitEvent(e->impl, s->impl);
-  return _PropagateBackendError(e->dev);
+  TsrStatus st = _PropagateBackendError(e->dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrWaitEvent", start, st);
+  return st;
 }
 
 TsrStatus tsrEventSynchronize(tsrEvent e) {
-  if (!e) { SetLastError("e==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!e) {
+    SetLastError("e==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrEventSynchronize", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   e->dev->be->eventSync(e->impl);
-  return _PropagateBackendError(e->dev);
+  TsrStatus st = _PropagateBackendError(e->dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrEventSynchronize", start, st);
+  return st;
 }
 
 TsrStatus tsrDestroyEvent(tsrEvent e) {
-  if (!e) { SetLastError("e==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!e) {
+    SetLastError("e==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyEvent", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   e->dev->be->destroyEvent(e->impl);
   delete e;
   { std::lock_guard<std::mutex> lk(g_mu);
     if (g_live_events) --g_live_events; }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyEvent", start,
+                   TSR_STATUS_SUCCESS);
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrEventGetTimestamp(tsrEvent e, uint64_t* ns_out) {
-  if (!e || !ns_out) { SetLastError("e/ns_out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!e || !ns_out) {
+    SetLastError("e/ns_out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrEventGetTimestamp", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   *ns_out = e->impl->timestamp_ns;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrEventGetTimestamp", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("timestamp_ns", *ns_out));
   return TSR_STATUS_SUCCESS;
 }
 
 // ---- Memory ----
 TsrStatus tsrMalloc(tsrDevice dev, size_t bytes, tsrBuffer* out) {
-  if (!dev || !out) { SetLastError("dev/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!dev || !out) {
+    SetLastError("dev/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMalloc", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     jsonNumberField("bytes", bytes));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   auto impl = dev->be->malloc(bytes);
-  if (!impl) { SetLastError("allocation failed"); return TSR_STATUS_OUT_OF_MEMORY; }
+  if (!impl) {
+    SetLastError("allocation failed");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMalloc", start,
+                     TSR_STATUS_OUT_OF_MEMORY,
+                     jsonNumberField("bytes", bytes));
+    return TSR_STATUS_OUT_OF_MEMORY;
+  }
   auto b = new tsrBuffer_t();
   b->impl = impl;
   b->dev = dev;
   *out = b;
   { std::lock_guard<std::mutex> lk(g_mu); ++g_live_buffers; }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMalloc", start,
+                   TSR_STATUS_SUCCESS, jsonNumberField("bytes", bytes));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrFree(tsrBuffer b) {
-  if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!b) {
+    SetLastError("b==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrFree", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   tsrDevice_t* dev = b->dev;
+  uint64_t bytes = b->impl ? b->impl->bytes : 0;
   dev->be->free(b->impl);
   delete b;
   { std::lock_guard<std::mutex> lk(g_mu);
     if (g_live_buffers) --g_live_buffers; }
-  return _PropagateBackendError(dev);
+  TsrStatus st = _PropagateBackendError(dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrFree", start, st,
+                   jsonNumberField("bytes", bytes));
+  return st;
 }
 
 TsrStatus tsrMemset(tsrBuffer b, int value, size_t bytes) {
-  if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!b) {
+    SetLastError("b==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemset", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     jsonNumberField("bytes", bytes));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   b->dev->be->memset(b->impl, value, bytes);
-  return _PropagateBackendError(b->dev);
+  TsrStatus st = _PropagateBackendError(b->dev);
+  std::string payload = jsonNumberField("bytes", bytes) + "," +
+                        jsonSignedField("value", value);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemset", start, st, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrMemset", start, st, payload);
+  return st;
 }
 
 TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyKind kind) {
-  if (!dst || !src) { SetLastError("dst/src==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  std::string payload = jsonNumberField("bytes", bytes) + "," +
+                        jsonStringField("memcpy_kind", memcpyKindName(kind));
+  if (!dst || !src) {
+    SetLastError("dst/src==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemcpy", start,
+                     TSR_STATUS_INVALID_ARGUMENT, payload);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   dst->dev->be->memcpy(dst->impl, src->impl, bytes, kind);
-  return _PropagateBackendError(dst->dev);
+  TsrStatus st = _PropagateBackendError(dst->dev);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemcpy", start, st, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrMemcpy", start, st, payload);
+  return st;
 }
 
 TsrStatus tsrMap(tsrBuffer b, void** host_ptr, size_t* bytes) {
-  if (!b || !host_ptr) { SetLastError("b/host_ptr==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!b || !host_ptr) {
+    SetLastError("b/host_ptr==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMap", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   *host_ptr = b->dev->be->map(b->impl);
   if (bytes) *bytes = b->impl->bytes;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMap", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("bytes", b->impl ? b->impl->bytes : 0));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrUnmap(tsrBuffer b) {
-  if (!b) { SetLastError("b==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!b) {
+    SetLastError("b==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrUnmap", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   b->dev->be->unmap(b->impl);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrUnmap", start,
+                   TSR_STATUS_SUCCESS);
   return TSR_STATUS_SUCCESS;
 }
 
@@ -482,10 +815,18 @@ TsrStatus tsrUnmap(tsrBuffer b) {
 TsrStatus tsrCompileArtifact(const char* module_ir,
                              const tsrCompileOptions* options,
                              tsrArtifact* out) {
-  if (!module_ir || !out) { SetLastError("module_ir/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  std::string target = (options && options->target) ? std::string(options->target) : "cpu";
+  if (!module_ir || !out) {
+    SetLastError("module_ir/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCompileArtifact", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     jsonStringField("target", target));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
   // G6 — read the target tag from options. Default "cpu" preserves the G5 path.
-  a->target = (options && options->target) ? std::string(options->target) : "cpu";
+  a->target = target;
   if (a->target == "cpu") {
     a->compiler_path = "native_cpu";
     a->execution_kind = "native_cpu";
@@ -499,7 +840,7 @@ TsrStatus tsrCompileArtifact(const char* module_ir,
   }
   std::string spec(module_ir);
   // Split on commas; trim whitespace. Empty spec -> empty artifact (valid).
-  std::lock_guard<std::mutex> lk(g_host_kernel_mu);
+  std::unique_lock<std::mutex> lk(g_host_kernel_mu);
   std::size_t i = 0;
   while (i <= spec.size()) {
     std::size_t j = spec.find(',', i);
@@ -516,6 +857,11 @@ TsrStatus tsrCompileArtifact(const char* module_ir,
               "' is not registered (call tsrRegisterHostKernel first; non-CPU "
               "codegen JIT is a separate gap)";
           SetLastError(msg.c_str());
+          lk.unlock();
+          EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCompileArtifact", start,
+                           TSR_STATUS_UNIMPLEMENTED,
+                           jsonStringField("target", a->target) + "," +
+                           jsonStringField("kernel", name));
           return TSR_STATUS_UNIMPLEMENTED;
         }
         a->kernels[name] = it->second;
@@ -528,37 +874,77 @@ TsrStatus tsrCompileArtifact(const char* module_ir,
     if (j == spec.size()) break;
     i = j + 1;
   }
+  lk.unlock();
   a->payload = serializeArtifact(a->target, a->compiler_path,
                                  a->execution_kind, a->kernels);
+  size_t kernel_count = a->kernels.size();
   *out = a.release();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrCompileArtifact", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("target", target) + "," +
+                   jsonNumberField("kernel_count", kernel_count));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrLoadArtifact(const void* bytes, size_t bytes_len, tsrArtifact* out) {
-  if (!bytes || !out) { SetLastError("bytes/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!bytes || !out) {
+    SetLastError("bytes/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLoadArtifact", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     jsonNumberField("bytes", bytes_len));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   std::unique_ptr<tsrArtifact_t> a(new tsrArtifact_t);
   a->payload.assign(static_cast<const char*>(bytes), bytes_len);
   if (!parseArtifact(a->payload, *a)) {
     SetLastError("tsrLoadArtifact: payload is not a valid Tessera artifact "
                  "(expected TSRART1/TSRART2 magic + target + name/fn table)");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLoadArtifact", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     jsonNumberField("bytes", bytes_len));
     return TSR_STATUS_INVALID_ARGUMENT;
   }
+  std::string target = a->target;
+  size_t kernel_count = a->kernels.size();
   *out = a.release();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLoadArtifact", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("target", target) + "," +
+                   jsonNumberField("bytes", bytes_len) + "," +
+                   jsonNumberField("kernel_count", kernel_count));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrDestroyArtifact(tsrArtifact artifact) {
+  uint64_t start = NowNs();
+  std::string target = artifact ? artifact->target : "";
   delete artifact;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyArtifact", start,
+                   TSR_STATUS_SUCCESS,
+                   target.empty() ? std::string() : jsonStringField("target", target));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
-  if (!artifact || !name || !out) { SetLastError("artifact/name/out==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  std::string kernel_name = name ? std::string(name) : "";
+  if (!artifact || !name || !out) {
+    SetLastError("artifact/name/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     kernel_name.empty() ? std::string() : jsonStringField("kernel", kernel_name));
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   auto it = artifact->kernels.find(name);
   if (it == artifact->kernels.end()) {
     std::string msg = "tsrGetKernel: artifact (target=" + artifact->target +
                       ") does not contain kernel '" + name + "'";
     SetLastError(msg.c_str());
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetKernel", start,
+                     TSR_STATUS_NOT_FOUND,
+                     jsonStringField("target", artifact->target) + "," +
+                     jsonStringField("kernel", kernel_name));
     return TSR_STATUS_NOT_FOUND;
   }
   std::unique_ptr<tsrKernel_t> k(new tsrKernel_t);
@@ -569,6 +955,10 @@ TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
       // CPU artifact with a null fn-pointer is corrupt (shouldn't happen via
       // the public API but defensive guard).
       SetLastError("tsrGetKernel: CPU artifact has a null kernel function");
+      EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetKernel", start,
+                       TSR_STATUS_INVALID_ARGUMENT,
+                       jsonStringField("target", artifact->target) + "," +
+                       jsonStringField("kernel", kernel_name));
       return TSR_STATUS_INVALID_ARGUMENT;
     }
     k->kind = tsrKernelKind::kHostCpu;
@@ -578,11 +968,20 @@ TsrStatus tsrGetKernel(tsrArtifact artifact, const char* name, tsrKernel* out) {
     k->fn = nullptr;
   }
   *out = k.release();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetKernel", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("target", artifact->target) + "," +
+                   jsonStringField("kernel", kernel_name));
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrDestroyKernel(tsrKernel kernel) {
+  uint64_t start = NowNs();
+  std::string kernel_name = kernel ? kernel->name : "";
   delete kernel;
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrDestroyKernel", start,
+                   TSR_STATUS_SUCCESS,
+                   kernel_name.empty() ? std::string() : jsonStringField("kernel", kernel_name));
   return TSR_STATUS_SUCCESS;
 }
 
@@ -590,22 +989,35 @@ TsrStatus tsrDestroyKernel(tsrKernel kernel) {
 // bytes tsrLoadArtifact accepts; the pointer is owned by the artifact.
 TsrStatus tsrGetArtifactBytes(tsrArtifact artifact, const void** out_bytes,
                               size_t* out_len) {
+  uint64_t start = NowNs();
   if (!artifact || !out_bytes || !out_len) {
     SetLastError("artifact/out_bytes/out_len==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetArtifactBytes", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   *out_bytes = artifact->payload.data();
   *out_len = artifact->payload.size();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetArtifactBytes", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("target", artifact->target) + "," +
+                   jsonNumberField("bytes", *out_len));
   return TSR_STATUS_SUCCESS;
 }
 
 // G6.2 — public read-only target tag.
 TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out) {
+  uint64_t start = NowNs();
   if (!artifact || !out) {
     SetLastError("artifact/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetArtifactTarget", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   *out = artifact->target.c_str();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetArtifactTarget", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonStringField("target", artifact->target));
   return TSR_STATUS_SUCCESS;
 }
 
@@ -618,7 +1030,19 @@ TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out) {
 //                   its own dispatcher; until a native ABI-level launch bridge
 //                   exists, the C ABI must not silently succeed here.
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
-  if (!s || !kernel) { SetLastError("s/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  std::string kernel_name = kernel ? kernel->name : "";
+  std::string target = (kernel && kernel->artifact) ? kernel->artifact->target : "";
+  std::string base_payload =
+      (target.empty() ? std::string() : jsonStringField("target", target) + ",") +
+      (kernel_name.empty() ? std::string() : jsonStringField("kernel", kernel_name) + ",") +
+      jsonNumberField("nargs", nargs);
+  if (!s || !kernel) {
+    SetLastError("s/kernel==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT, base_payload);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   if (kernel->kind == tsrKernelKind::kGpuUnbridged) {
     // G7 — route to a registered GPU launcher if one exists. args[0] is a
     // const tsrGpuLaunchParams* (ordered buffers + scalar dims).
@@ -633,6 +1057,8 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nar
       if (!args || nargs < 1) {
         SetLastError("tsrLaunchKernel(gpu): args[0] must be a "
                      "const tsrGpuLaunchParams*");
+        EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                         TSR_STATUS_INVALID_ARGUMENT, base_payload);
         return TSR_STATUS_INVALID_ARGUMENT;
       }
       const tsrGpuLaunchParams* params =
@@ -646,8 +1072,14 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nar
             "handle target='" + kernel->artifact->target +
             "' kernel='" + kernel->name + "'";
         SetLastError(msg.c_str());
+        EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                         TSR_STATUS_UNIMPLEMENTED, base_payload);
         return TSR_STATUS_UNIMPLEMENTED;
       }
+      EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start, st,
+                       base_payload);
+      EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrLaunchKernel", start, st,
+                       base_payload);
       return st;
     }
     std::string msg = "tsrLaunchKernel: no native C-ABI launch bridge for ";
@@ -656,42 +1088,78 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nar
            "tsrRegisterGpuLauncher, or run via the Python execution_matrix "
            "dispatch.";
     SetLastError(msg.c_str());
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                     TSR_STATUS_UNIMPLEMENTED, base_payload);
     return TSR_STATUS_UNIMPLEMENTED;
   }
-  if (!kernel->fn) { SetLastError("tsrLaunchKernel: kernel.fn==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  if (!kernel->fn) {
+    SetLastError("tsrLaunchKernel: kernel.fn==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT, base_payload);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   if (!args || nargs < 1) {
     SetLastError("tsrLaunchKernel(host): args[0] must be a tsrLaunchParams* "
                  "(args[1] optional user payload)");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT, base_payload);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   const tsrLaunchParams* params = static_cast<const tsrLaunchParams*>(args[0]);
   void* user_payload = nargs >= 2 ? args[1] : nullptr;
-  return tsrLaunchHostTileKernel(s, params, kernel->fn, user_payload);
+  TsrStatus st = tsrLaunchHostTileKernel(s, params, kernel->fn, user_payload);
+  std::string payload = base_payload + "," +
+                        jsonDim3Field("grid", params->grid) + "," +
+                        jsonDim3Field("tile", params->tile);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchKernel", start, st, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrLaunchKernel", start, st, payload);
+  return st;
 }
 
 // G5 — Register a host kernel under a name so tsrCompileArtifact can bundle it.
 // Idempotent: re-registering the same name with the same fn is a no-op; a
 // conflicting re-registration returns INVALID_ARGUMENT.
 TsrStatus tsrRegisterHostKernel(const char* name, tsrHostKernelFn fn) {
-  if (!name || !fn) { SetLastError("name/fn==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
-  std::lock_guard<std::mutex> lk(g_host_kernel_mu);
-  auto it = g_host_kernels.find(name);
-  if (it != g_host_kernels.end() && it->second != fn) {
-    std::string msg = "tsrRegisterHostKernel: '"; msg += name;
-    msg += "' is already registered with a different function";
-    SetLastError(msg.c_str());
+  uint64_t start = NowNs();
+  std::string kernel_name = name ? std::string(name) : "";
+  if (!name || !fn) {
+    SetLastError("name/fn==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrRegisterHostKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT,
+                     kernel_name.empty() ? std::string() : jsonStringField("kernel", kernel_name));
     return TSR_STATUS_INVALID_ARGUMENT;
   }
-  g_host_kernels[name] = fn;
-  return TSR_STATUS_SUCCESS;
+  TsrStatus status = TSR_STATUS_SUCCESS;
+  {
+    std::lock_guard<std::mutex> lk(g_host_kernel_mu);
+    auto it = g_host_kernels.find(name);
+    if (it != g_host_kernels.end() && it->second != fn) {
+      std::string msg = "tsrRegisterHostKernel: '"; msg += name;
+      msg += "' is already registered with a different function";
+      SetLastError(msg.c_str());
+      status = TSR_STATUS_INVALID_ARGUMENT;
+    } else {
+      g_host_kernels[name] = fn;
+    }
+  }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrRegisterHostKernel", start,
+                   status,
+                   jsonStringField("kernel", kernel_name));
+  return status;
 }
 
 // G7 — register (or clear) the process-wide GPU launcher used by
 // tsrLaunchKernel for GPU artifact kernels. fn=NULL clears it.
 TsrStatus tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user) {
-  std::lock_guard<std::mutex> lk(g_gpu_launcher_mu);
-  g_gpu_launcher = fn;
-  g_gpu_launcher_user = fn ? user : nullptr;
+  uint64_t start = NowNs();
+  {
+    std::lock_guard<std::mutex> lk(g_gpu_launcher_mu);
+    g_gpu_launcher = fn;
+    g_gpu_launcher_user = fn ? user : nullptr;
+  }
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrRegisterGpuLauncher", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("registered", fn ? 1 : 0));
   return TSR_STATUS_SUCCESS;
 }
 
@@ -723,13 +1191,24 @@ TsrStatus tsrLaunchHostTileKernel(tsrStream s,
                                   const tsrLaunchParams* params,
                                   tsrHostKernelFn kernel,
                                   void* user_payload) {
-  if (!s || !params || !kernel) { SetLastError("s/params/kernel==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!s || !params || !kernel) {
+    SetLastError("s/params/kernel==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernel", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   TsrStatus st = s->dev->be->launchHostKernel(s->impl, params, kernel, user_payload);
   if (st == TSR_STATUS_UNIMPLEMENTED) {
     SetLastError(
       "launchHostTileKernel: this backend cannot honor the host tile "
       "kernel ABI; route to the CPU device for host tile kernels");
   }
+  std::string payload = jsonStringField("device_kind", deviceKindName(s->dev->be->props().kind)) + "," +
+                        jsonDim3Field("grid", params->grid) + "," +
+                        jsonDim3Field("tile", params->tile);
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernel", start, st, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrLaunchHostTileKernel", start, st, payload);
   return st;
 }
 
@@ -737,14 +1216,35 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
                                       const tsrLaunchParams* params,
                                       tsrHostKernelFn kernel,
                                       void* user_payload) {
-  if (!dev) { SetLastError("dev==NULL"); return TSR_STATUS_INVALID_ARGUMENT; }
+  uint64_t start = NowNs();
+  if (!dev) {
+    SetLastError("dev==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
+    return TSR_STATUS_INVALID_ARGUMENT;
+  }
   tsrStream s;
   TsrStatus st = tsrCreateStream(dev, &s);
-  if (st != TSR_STATUS_SUCCESS) return st;
+  if (st != TSR_STATUS_SUCCESS) {
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start, st);
+    return st;
+  }
   st = tsrLaunchHostTileKernel(s, params, kernel, user_payload);
-  if (st != TSR_STATUS_SUCCESS) { tsrDestroyStream(s); return st; }
+  if (st != TSR_STATUS_SUCCESS) {
+    tsrDestroyStream(s);
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start, st);
+    return st;
+  }
   tsrStreamSynchronize(s);
   tsrDestroyStream(s);
+  std::string payload = params
+      ? jsonStringField("device_kind", deviceKindName(dev->be->props().kind)) + "," +
+        jsonDim3Field("grid", params->grid) + "," + jsonDim3Field("tile", params->tile)
+      : jsonStringField("device_kind", deviceKindName(dev->be->props().kind));
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start,
+                   TSR_STATUS_SUCCESS, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrLaunchHostTileKernelSync", start,
+                   TSR_STATUS_SUCCESS, payload);
   return TSR_STATUS_SUCCESS;
 }
 
@@ -755,27 +1255,48 @@ TsrStatus tsrNativeGemmF32(tsrDevice dev,
                            int32_t m,
                            int32_t n,
                            int32_t k) {
+  uint64_t start = NowNs();
+  std::string payload = jsonSignedField("m", m) + "," +
+                        jsonSignedField("n", n) + "," +
+                        jsonSignedField("k", k);
   if (!dev || !a || !b || !c) {
     SetLastError("dev/a/b/c==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrNativeGemmF32", start,
+                     TSR_STATUS_INVALID_ARGUMENT, payload);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   if (m < 0 || n < 0 || k < 0) {
     SetLastError("gemm dimensions must be non-negative");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrNativeGemmF32", start,
+                     TSR_STATUS_INVALID_ARGUMENT, payload);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   if (!dev->be->gemmF32(a, b, c, m, n, k)) {
     SetLastError("native f32 GEMM is not available on this backend");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrNativeGemmF32", start,
+                     TSR_STATUS_UNIMPLEMENTED, payload);
     return TSR_STATUS_UNIMPLEMENTED;
   }
+  payload += "," + jsonStringField("device_kind", deviceKindName(dev->be->props().kind));
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrNativeGemmF32", start,
+                   TSR_STATUS_SUCCESS, payload);
+  EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrNativeGemmF32", start,
+                   TSR_STATUS_SUCCESS, payload);
   return TSR_STATUS_SUCCESS;
 }
 
 TsrStatus tsrGetWorkerThreadCount(tsrDevice dev, uint32_t* out) {
+  uint64_t start = NowNs();
   if (!dev || !out) {
     SetLastError("dev/out==NULL");
+    EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetWorkerThreadCount", start,
+                     TSR_STATUS_INVALID_ARGUMENT);
     return TSR_STATUS_INVALID_ARGUMENT;
   }
   *out = dev->be->workerThreadCount();
+  EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrGetWorkerThreadCount", start,
+                   TSR_STATUS_SUCCESS,
+                   jsonNumberField("worker_threads", *out));
   return TSR_STATUS_SUCCESS;
 }
 

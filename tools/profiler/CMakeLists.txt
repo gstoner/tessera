@@ -31,12 +31,18 @@ endif()
 
 add_library(tprof_runtime
   src/runtime/tprof_runtime.cpp
+  src/runtime/tessera_runtime_adapter.cpp
   src/runtime/nvtx_shim.cpp
   src/runtime/cupti_shim.cpp
   src/exporters/chrome_trace_exporter.cpp
   src/exporters/perfetto_exporter.cpp
 )
-target_include_directories(tprof_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(tprof_runtime
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/runtime/include
+)
 if (NVTX_FOUND)
   target_link_libraries(tprof_runtime PRIVATE NVTX::nvtx3)
 endif()

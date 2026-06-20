@@ -107,6 +107,17 @@
 |--------|--------------|
 | `MockRankGroup`, `MockRank` | PYTHON_API_SPEC §17 |
 
+### Profiling and Model Analysis
+
+| Symbol | Spec location |
+|--------|--------------|
+| `plan_profile`, `ProviderCapability`, `ModelAnalyzerSweep` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `IntraKernelProbe`, `plan_intra_kernel_probes` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `model_analyzer_manifest`, `ModelAnalyzerManifest` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `run_model_analyzer_manifest`, `AnalyzerTrial` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `annotate_target_ir_with_probes` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `tprof::attach_tessera_runtime_trace`, `tprof::detach_tessera_runtime_trace` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+
 ### Runtime C ABI
 
 | Symbol | Spec location |
@@ -117,6 +128,7 @@
 | `tsrMalloc`, `tsrFree`, `tsrMemcpy` | RUNTIME_ABI_SPEC §5.5 |
 | `tsrLaunchHostTileKernel` (host fn-pointer kernel) | RUNTIME_ABI_SPEC §5.6 |
 | `tsrLaunchKernel`, `tsrRegisterGpuLauncher` (G7 GPU launch bridge) | RUNTIME_ABI_SPEC §5.6.1 |
+| `tsrSetProfileEventCallback`, `TsrProfileEventKind`, `tsrProfileEventFn` | RUNTIME_ABI_SPEC §5.7 |
 | `TsrStatus` enum | RUNTIME_ABI_SPEC §4 |
 | Python wrapper `tessera.runtime.TesseraRuntime`, `tessera.runtime.launch` | RUNTIME_ABI_SPEC §10 |
 

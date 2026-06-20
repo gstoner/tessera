@@ -51,6 +51,22 @@ typedef enum {
   TSR_MEMCPY_HOST_TO_HOST
 } TsrMemcpyKind;
 
+typedef enum {
+  TSR_PROFILE_RUNTIME_API = 0,
+  TSR_PROFILE_DEVICE_ACTIVITY = 1
+} TsrProfileEventKind;
+
+// Profiling callback ABI. ``payload_json`` is a transient, null-terminated JSON
+// object owned by the runtime and valid only for the duration of the callback.
+// ``value`` is feature-specific: runtime API events use 0.0 in v1; device
+// activity events use elapsed microseconds so tprof-style collectors can map it
+// directly to a duration.
+typedef void (*tsrProfileEventFn)(TsrProfileEventKind kind,
+                                  const char* name,
+                                  const char* payload_json,
+                                  double value,
+                                  void* user);
+
 typedef struct {
   const char* target;
   const char* options_json;

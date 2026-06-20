@@ -9,11 +9,14 @@ from tessera.compiler.profiling_plan import (
     DEVICE_ACTIVITY,
     INTRA_KERNEL,
     MODEL_ANALYZER,
+    MODEL_ANALYZER_SCHEMA_VERSION,
     PLANNED,
     RUNTIME_API,
     TRACE_SCHEMA_VERSION,
     ModelAnalyzerSweep,
+    model_analyzer_manifest,
     normalize_profiler_target,
+    plan_intra_kernel_probes,
     plan_profile,
     provider_capabilities,
 )
@@ -81,6 +84,58 @@ def test_cpu_model_analyzer_sweep_serializes() -> None:
     assert payload["capabilities"][0]["status"] == "available"
     assert payload["analyzer_sweep"]["mode"] == "brute"
     assert payload["analyzer_sweep"]["latency_budget_ms"] == 25.0
+
+
+def test_intra_kernel_probe_contract_serializes_when_requested() -> None:
+    plan = plan_profile("cpu", features=[INTRA_KERNEL], kernels=("matmul", "softmax"))
+    payload = plan.to_dict()
+
+    assert payload["intra_kernel_probes"]
+    assert {probe["kernel"] for probe in payload["intra_kernel_probes"]} == {"matmul", "softmax"}
+    assert {probe["phase"] for probe in payload["intra_kernel_probes"]} == {
+        "prologue",
+        "mainloop",
+        "epilogue",
+    }
+    assert payload["intra_kernel_probes"][0]["payload_fields"] == [
+        "kernel",
+        "phase",
+        "tile",
+        "program_id",
+    ]
+
+
+def test_model_analyzer_manifest_exposes_runner_contract() -> None:
+    plan = plan_profile(
+        "sm90",
+        features=[RUNTIME_API, DEVICE_ACTIVITY, COUNTERS, INTRA_KERNEL, MODEL_ANALYZER],
+        model_name="decoder",
+        kernels=("matmul",),
+        analyzer_sweep=ModelAnalyzerSweep(
+            mode="quick",
+            batch_sizes=(1, 8),
+            instance_counts=(1, 2),
+            latency_budget_ms=20.0,
+        ),
+    )
+
+    manifest = model_analyzer_manifest(plan, objective="throughput_qps").to_dict()
+
+    assert manifest["schema"] == MODEL_ANALYZER_SCHEMA_VERSION
+    assert manifest["target"] == "nvidia"
+    assert manifest["model_name"] == "decoder"
+    assert manifest["search"]["batch_sizes"] == [1, 8]
+    assert manifest["objective"]["primary"] == "throughput_qps"
+    assert manifest["objective"]["latency_budget_ms"] == 20.0
+    assert manifest["runner"]["provider"] == "tessera-model-analyzer+nvidia-triton-model-analyzer"
+    assert manifest["runner"]["status"] == "planned"
+    assert manifest["telemetry"]["required_features"] == [RUNTIME_API, DEVICE_ACTIVITY]
+    assert manifest["intra_kernel_probes"][0]["kernel"] == "matmul"
+
+
+def test_plan_intra_kernel_probes_rejects_bad_metric() -> None:
+    with pytest.raises(ValueError, match="unsupported intra-kernel probe metric"):
+        plan_intra_kernel_probes(("k",), metrics=("mystery",))
 
 
 def test_unknown_features_are_rejected() -> None:

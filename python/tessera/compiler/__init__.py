@@ -26,7 +26,13 @@ from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import GraphIRConstructionContext, KVCacheSpec, NumericPolicy, construct_mlir_module
 from .schedule_ir import ScheduleIRModule, ScheduleFunction, ScheduleOp, lower_graph_to_schedule_ir
 from .tile_ir import TileIRModule, TileFunction, TileOp, lower_schedule_to_tile_ir
-from .target_ir import TargetIRModule, TargetFunction, TargetOp, lower_tile_to_target_ir
+from .target_ir import (
+    TargetIRModule,
+    TargetFunction,
+    TargetOp,
+    annotate_target_ir_with_probes,
+    lower_tile_to_target_ir,
+)
 from .capabilities import (
     CAPABILITY_REGISTRY_VERSION,
     CapabilityResult,
@@ -108,13 +114,24 @@ from .e2e_coverage import (
     status_counts as e2e_status_counts,
 )
 from .profiling_plan import (
+    IntraKernelProbe,
+    ModelAnalyzerManifest,
     ModelAnalyzerSweep,
     ProfilerPlan,
     ProviderCapability,
+    model_analyzer_manifest,
     normalize_profiler_target,
+    plan_intra_kernel_probes,
     plan_profile,
     provider_capabilities,
     summarize_capabilities,
+)
+from .model_analyzer import (
+    AnalyzerTrial,
+    MODEL_ANALYZER_RESULT_SCHEMA_VERSION,
+    load_model_analyzer_manifest,
+    run_model_analyzer_manifest,
+    write_model_analyzer_result,
 )
 
 __all__ = [
@@ -141,6 +158,7 @@ __all__ = [
     "TargetIRModule",
     "TargetFunction",
     "TargetOp",
+    "annotate_target_ir_with_probes",
     "lower_tile_to_target_ir",
     "CAPABILITY_REGISTRY_VERSION",
     "CapabilityResult",
@@ -238,11 +256,20 @@ __all__ = [
     "all_e2e_coverage_rows",
     "e2e_coverage_row_for",
     "e2e_status_counts",
+    "IntraKernelProbe",
+    "ModelAnalyzerManifest",
     "ModelAnalyzerSweep",
     "ProfilerPlan",
     "ProviderCapability",
+    "model_analyzer_manifest",
     "normalize_profiler_target",
+    "plan_intra_kernel_probes",
     "plan_profile",
     "provider_capabilities",
     "summarize_capabilities",
+    "AnalyzerTrial",
+    "MODEL_ANALYZER_RESULT_SCHEMA_VERSION",
+    "load_model_analyzer_manifest",
+    "run_model_analyzer_manifest",
+    "write_model_analyzer_result",
 ]

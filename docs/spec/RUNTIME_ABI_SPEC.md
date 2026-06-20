@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Runtime C ABI
-last_updated: 2026-06-11
+last_updated: 2026-06-20
 ---
 
 # Tessera Runtime ABI Specification
@@ -380,6 +380,35 @@ Apple GPU execution flows through the registered launcher plus the Python
 runtime dispatch lane, by design. See `tessera_runtime.h` and
 [backend/BACKEND_AUDIT.md](../audit/backend/BACKEND_AUDIT.md).
 
+### 5.7 Profiling callback trace spine
+
+```c
+typedef enum {
+  TSR_PROFILE_RUNTIME_API = 0,
+  TSR_PROFILE_DEVICE_ACTIVITY = 1
+} TsrProfileEventKind;
+
+typedef void (*tsrProfileEventFn)(TsrProfileEventKind kind,
+                                  const char* name,
+                                  const char* payload_json,
+                                  double value,
+                                  void* user);
+
+TsrStatus tsrSetProfileEventCallback(tsrProfileEventFn fn, void* user);
+```
+
+The profiling callback is process-wide. Passing `fn == NULL` clears it.
+`tsrEnableProfiling(0)` suppresses event emission without clearing the callback.
+The runtime copies the callback under its own mutex and invokes it outside that
+mutex. `payload_json` is owned by the runtime and valid only for the duration of
+the callback.
+
+Runtime API events cover C ABI calls. Device activity events cover portable work
+spans such as `tsrMemcpy`, `tsrMemset`, `tsrLaunchHostTileKernel`,
+`tsrLaunchHostTileKernelSync`, and `tsrNativeGemmF32`. Payloads include
+`status`, `duration_us`, and call-specific fields such as `bytes`,
+`memcpy_kind`, `target`, `kernel`, `grid`, `tile`, or `device_kind`.
+
 ---
 
 ## 6. Tile Kernel Interface  (`tsr_kernel.h`)
@@ -521,6 +550,7 @@ void tsrGetVersion(int* major, int* minor, int* patch);
 // Profiling
 void     tsrEnableProfiling(int enable);     // 1 = on, 0 = off
 uint64_t tsrTimestampNowNs(void);            // nanoseconds since process start (steady clock)
+TsrStatus tsrSetProfileEventCallback(tsrProfileEventFn fn, void* user);
 ```
 
 **ABI stability guarantee:** Functions with `TESSERA_VERSION_MAJOR == 0` may change in

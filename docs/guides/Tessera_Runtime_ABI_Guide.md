@@ -1,7 +1,7 @@
 ---
 status: Tutorial
 classification: Tutorial
-last_updated: 2026-06-11
+last_updated: 2026-06-20
 ---
 
 > **Phase status note (updated 2026-06-11):** The runtime Python wrapper
@@ -558,12 +558,35 @@ at that release is stable for all 1.x releases.
 ## Profiling
 
 ```c
+static void on_profile(TsrProfileEventKind kind, const char* name,
+                       const char* payload_json, double value, void* user) {
+    (void)user;
+    // payload_json is a transient JSON object owned by the runtime.
+    // Runtime API events use value=0.0; device activity events use
+    // elapsed microseconds as value.
+}
+
+tsrSetProfileEventCallback(on_profile, NULL);
 tsrEnableProfiling(1);                    // enable at program start
 uint64_t now = tsrTimestampNowNs();       // nanoseconds since process start
 ```
 
 `tsrEventGetTimestamp` uses the same clock, so you can mix event timestamps with
 `tsrTimestampNowNs()` readings for host+device timing correlation.
+
+Profiling callbacks receive:
+
+- `TSR_PROFILE_RUNTIME_API` for ABI calls such as initialization, device/stream
+  lifecycle, memory, artifact, and launch APIs.
+- `TSR_PROFILE_DEVICE_ACTIVITY` for portable work spans such as `tsrMemcpy`,
+  `tsrMemset`, `tsrLaunchHostTileKernel`, `tsrLaunchHostTileKernelSync`, and
+  `tsrNativeGemmF32`.
+- `payload_json` with `status`, `duration_us`, and correlation fields such as
+  `bytes`, `memcpy_kind`, `target`, `kernel`, `grid`, `tile`, or `device_kind`.
+
+Pass `NULL` to `tsrSetProfileEventCallback` to clear the callback. Use
+`tsrEnableProfiling(0)` to keep the callback registered but suppress event
+emission.
 
 ---
 

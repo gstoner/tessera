@@ -33,6 +33,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 TRACE_SCHEMA_VERSION = "tessera.compiler.profiling_plan.v1"
+MODEL_ANALYZER_SCHEMA_VERSION = "tessera.compiler.model_analyzer_manifest.v1"
 
 
 RUNTIME_API = "runtime_api"
@@ -138,6 +139,43 @@ class ModelAnalyzerSweep:
 
 
 @dataclass(frozen=True)
+class IntraKernelProbe:
+    """Compiler-inserted probe point planned before backend lowering.
+
+    This is intentionally backend-neutral.  NVIDIA/ROCm may later map probes to
+    PC sampling or thread trace correlation, while Apple and CPU targets can use
+    compiler-inserted phase markers/counters where native samplers do not exist.
+    """
+
+    kernel: str
+    phase: str
+    metric: str = "elapsed_cycles"
+    aggregation: str = "sample"
+    payload_fields: tuple[str, ...] = ("kernel", "phase", "tile", "program_id")
+
+    def __post_init__(self) -> None:
+        if not str(self.kernel).strip():
+            raise ValueError("kernel must be non-empty")
+        if not str(self.phase).strip():
+            raise ValueError("phase must be non-empty")
+        if self.metric not in {"elapsed_cycles", "active_threads", "bytes", "flops", "occupancy"}:
+            raise ValueError("unsupported intra-kernel probe metric")
+        if self.aggregation not in {"sample", "sum", "max", "min", "avg"}:
+            raise ValueError("unsupported intra-kernel probe aggregation")
+        if not self.payload_fields:
+            raise ValueError("payload_fields must be non-empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kernel": self.kernel,
+            "phase": self.phase,
+            "metric": self.metric,
+            "aggregation": self.aggregation,
+            "payload_fields": list(self.payload_fields),
+        }
+
+
+@dataclass(frozen=True)
 class ProfilerPlan:
     """A deterministic profiling request artifact consumed by runtime tools."""
 
@@ -147,6 +185,7 @@ class ProfilerPlan:
     model_name: str | None = None
     kernels: tuple[str, ...] = ()
     analyzer_sweep: ModelAnalyzerSweep | None = None
+    intra_kernel_probes: tuple[IntraKernelProbe, ...] = ()
     source_notes: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
@@ -162,6 +201,7 @@ class ProfilerPlan:
                 if self.analyzer_sweep is not None
                 else None
             ),
+            "intra_kernel_probes": [probe.to_dict() for probe in self.intra_kernel_probes],
             "source_notes": list(self.source_notes),
             "summary": summarize_capabilities(self.capabilities),
         }
@@ -199,8 +239,122 @@ def plan_profile(
         model_name=model_name,
         kernels=tuple(str(k) for k in kernels),
         analyzer_sweep=sweep,
+        intra_kernel_probes=(
+            plan_intra_kernel_probes(kernels)
+            if INTRA_KERNEL in requested
+            else ()
+        ),
         source_notes=_SOURCE_NOTES,
     )
+
+
+@dataclass(frozen=True)
+class ModelAnalyzerManifest:
+    """Runner-facing config-search manifest derived from a profiler plan."""
+
+    plan: ProfilerPlan
+    objective: str = "latency_ms"
+    warmup_runs: int = 3
+    measurement_window_s: float = 30.0
+    output_artifacts: tuple[str, ...] = (
+        "model_analyzer_summary_json",
+        "trace_event_json",
+        "telemetry_json",
+    )
+
+    def __post_init__(self) -> None:
+        if self.objective not in {"latency_ms", "throughput_qps", "memory_bytes"}:
+            raise ValueError("objective must be latency_ms, throughput_qps, or memory_bytes")
+        if self.warmup_runs < 0:
+            raise ValueError("warmup_runs must be non-negative")
+        if self.measurement_window_s <= 0:
+            raise ValueError("measurement_window_s must be positive")
+        if not self.output_artifacts:
+            raise ValueError("output_artifacts must be non-empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        sweep = self.plan.analyzer_sweep or ModelAnalyzerSweep()
+        analyzer_cap = _capability_for_plan(self.plan, MODEL_ANALYZER)
+        trace_caps = [
+            _capability_for_plan(self.plan, feature).to_dict()
+            for feature in (RUNTIME_API, DEVICE_ACTIVITY, COUNTERS, INTRA_KERNEL)
+        ]
+        return {
+            "schema": MODEL_ANALYZER_SCHEMA_VERSION,
+            "source_plan_schema": TRACE_SCHEMA_VERSION,
+            "target": self.plan.target,
+            "model_name": self.plan.model_name,
+            "kernels": list(self.plan.kernels),
+            "search": sweep.to_dict(),
+            "objective": {
+                "primary": self.objective,
+                "latency_budget_ms": sweep.latency_budget_ms,
+                "memory_budget_bytes": sweep.memory_budget_bytes,
+            },
+            "runner": {
+                "provider": analyzer_cap.provider,
+                "status": analyzer_cap.status,
+                "artifact": analyzer_cap.artifact,
+            },
+            "telemetry": {
+                "required_features": [
+                    RUNTIME_API,
+                    DEVICE_ACTIVITY,
+                ],
+                "capabilities": trace_caps,
+            },
+            "intra_kernel_probes": [
+                probe.to_dict() for probe in self.plan.intra_kernel_probes
+            ],
+            "execution": {
+                "warmup_runs": self.warmup_runs,
+                "measurement_window_s": self.measurement_window_s,
+            },
+            "output_artifacts": list(self.output_artifacts),
+        }
+
+    def to_json(self, *, indent: int = 2) -> str:
+        return json.dumps(self.to_dict(), indent=indent, sort_keys=True)
+
+
+def model_analyzer_manifest(
+    plan: ProfilerPlan,
+    *,
+    objective: str = "latency_ms",
+    warmup_runs: int = 3,
+    measurement_window_s: float = 30.0,
+    output_artifacts: Sequence[str] = (
+        "model_analyzer_summary_json",
+        "trace_event_json",
+        "telemetry_json",
+    ),
+) -> ModelAnalyzerManifest:
+    """Create a runner-facing Model Analyzer manifest from a profiler plan."""
+
+    return ModelAnalyzerManifest(
+        plan=plan,
+        objective=objective,
+        warmup_runs=warmup_runs,
+        measurement_window_s=measurement_window_s,
+        output_artifacts=tuple(output_artifacts),
+    )
+
+
+def plan_intra_kernel_probes(
+    kernels: Sequence[str],
+    *,
+    phases: Sequence[str] = ("prologue", "mainloop", "epilogue"),
+    metrics: Sequence[str] = ("elapsed_cycles",),
+) -> tuple[IntraKernelProbe, ...]:
+    """Create deterministic compiler-inserted probe specs for kernels."""
+
+    kernel_names = tuple(str(k).strip() for k in kernels if str(k).strip()) or ("*",)
+    probes: list[IntraKernelProbe] = []
+    for kernel in kernel_names:
+        for phase in phases:
+            for metric in metrics:
+                probes.append(IntraKernelProbe(kernel=kernel, phase=str(phase), metric=str(metric)))
+    return tuple(probes)
 
 
 def provider_capabilities(target: str) -> tuple[ProviderCapability, ...]:
@@ -293,6 +447,13 @@ def _select_capability(
         artifact="trace-event-json",
         notes="No provider mapping exists for this target/feature pair.",
     )
+
+
+def _capability_for_plan(plan: ProfilerPlan, feature: str) -> ProviderCapability:
+    for cap in plan.capabilities:
+        if cap.feature == feature:
+            return cap
+    return _select_capability(provider_capabilities(plan.target), feature)
 
 
 def _generic_capabilities(target: str) -> tuple[ProviderCapability, ...]:
@@ -592,8 +753,11 @@ __all__ = [
     "DEVICE_ACTIVITY",
     "HOST_CONTEXT",
     "INTRA_KERNEL",
+    "IntraKernelProbe",
     "MODEL_ANALYZER",
+    "MODEL_ANALYZER_SCHEMA_VERSION",
     "ModelAnalyzerSweep",
+    "ModelAnalyzerManifest",
     "PLANNED",
     "ProfilerPlan",
     "ProviderCapability",
@@ -602,7 +766,9 @@ __all__ = [
     "TRACE_FEATURES",
     "TRACE_SCHEMA_VERSION",
     "UNSUPPORTED",
+    "model_analyzer_manifest",
     "normalize_profiler_target",
+    "plan_intra_kernel_probes",
     "plan_profile",
     "provider_capabilities",
     "summarize_capabilities",

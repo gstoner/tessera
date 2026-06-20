@@ -38,6 +38,10 @@ TsrStatus tsrDestroyEvent(tsrEvent e);
 
 // Profiling: timestamp in nanoseconds since process start (steady clock).
 TsrStatus tsrEventGetTimestamp(tsrEvent e, uint64_t* ns_out);
+// Register, replace, or clear the process-wide profiling callback. Pass fn=NULL
+// to clear. ``tsrEnableProfiling(0)`` suppresses callback emission without
+// clearing the registered sink.
+TsrStatus tsrSetProfileEventCallback(tsrProfileEventFn fn, void* user);
 
 TsrStatus tsrMalloc(tsrDevice dev, size_t bytes, tsrBuffer* out);
 TsrStatus tsrFree(tsrBuffer b);

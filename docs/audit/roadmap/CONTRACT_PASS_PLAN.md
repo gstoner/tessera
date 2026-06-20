@@ -310,3 +310,44 @@ G/H/I): only real multi-GPU TP throughput and NVIDIA/ROCm kernel rungs — every
 
 Every workstream lands its oracle into `evaluator.py` so "the pass consumes the contract
 correctly" is a derived, drift-gated fact, not prose.
+
+## NVIDIA / AMD matmul optimization ladder (2026-06-20)
+
+`compiler/matmul_opt_ladder.py` encodes the cloudrift "GPU Matmul Optimization"
+article (RTX 5090 / **sm_120** — the same arch as the NVIDIA bring-up box, which
+reaches 96% cuBLAS fp32 / 105% fp16 from scratch) as a Tessera optimization
+ladder + the NVIDIA/AMD Evaluator bring-up sequence. Each rung names the target,
+the owning Tessera pass/axis, the blog's measured speedup, and whether it is
+provable on hardware-free infra here or gated on silicon:
+
+| # | Technique | Targets | Owner (Tessera) | Blog speedup | Verifiable now |
+|---|---|---|---|---|---|
+| 1 | Register tiling (outer-product, FM×FN per thread) | both | autotune_v2 thread reg-tile axis (new) | 5.2× (dominant lever) | yes (intensity model) |
+| 2 | Shared-memory / LDS staging | both | TilingPass + AsyncCopyLoweringPass | foundation | silicon |
+| 3 | Tensor-core / MFMA / WMMA | both | ptx_emit (WGMMA) / rocdl_emit (WMMA) | ~3× | yes (emission) |
+| 4 | Double-buffer + software pipelining | both | autotune_v2.num_stages depth | ~30% staging | silicon |
+| 5 | Async copy / TMA | nvidia | AsyncCopyLoweringPass + NVTMADescriptorPass | staging | silicon |
+| 6 | Warp specialization (producer/consumer + mbarrier ring) | nvidia | WarpSpecializationPass | **105% (beats cuBLAS fp16)** | silicon |
+| 7 | LDS/smem bank-conflict padding (+1 / swizzle) | both | smem/LDS layout pass (new) | 3.7× on cp.async | silicon |
+| 8 | CTA swizzle (GROUP_M) | both | persistent-CTA grid mapping | 5% (L2-bound) | silicon |
+| 9 | **Split-K reduction** | both | `split_k_matmul` + reduction insertion | 7.1× skinny large-K | **yes (rewrite + oracle)** |
+
+**Split-K is landed as an executable, semantics-preserving rewrite.**
+`split_k_matmul(A, B, SplitKConfig(splits, reduce))` partitions K, computes
+partials, and reduces (tree / atomic order); `verify_split_k_equivalence` proves
+it equals the dense product up to fp reassociation — on CPU now and, via the
+`matmul` hook, on Apple GPU. So the correctness of the 7.1×-on-skinny-matmul
+lever is proven *before* any NVIDIA/AMD execution. `split_k_profitable` +
+`register_tile_intensity` are the planning models that feed the autotuner's
+ranking (skinny-grid detection; the arithmetic-intensity argument for why the
+coarse register tile wins 5× despite low occupancy).
+
+**AMD reading (the article is NVIDIA-only).** gfx1151 (RDNA 3.5, WMMA, no
+TMA/cp.async/mbarrier) maps to the blog's pre-TMA path: register/wave tiling +
+LDS double-buffering + **LDS bank-conflict padding (the 3.7× lever, MORE relevant
+to AMD than NVIDIA)** + split-K transfer directly; warp specialization does NOT
+(no mbarrier — use the manual double-buffered `s_waitcnt` + LDS pipeline).
+
+The remaining rungs (1 perf-side, 2, 4–8) are silicon-gated: their IR/emission is
+expressible here, but the speedups need the Blackwell / Strix Halo boxes. The
+ladder is the checklist-with-oracles for that bring-up.

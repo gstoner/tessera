@@ -176,9 +176,15 @@ class Parameter:
             object.__setattr__(self, "_grad", None)
             return
         if isinstance(value, np.ndarray):
+            # The gradient buffer follows the *gradient's* dtype, not the
+            # parameter's storage dtype: a low-precision (fp16/bf16) parameter
+            # must not force its gradients into fp16, which loses precision /
+            # underflows during accumulation (the optimizer master-weight path
+            # assumes fp32 grads). See autodiff.tape._accumulate_param_grad.
+            grad_dtype = str(value.dtype)
             arr = DistributedArray.from_domain(
                 Rect(tuple(value.shape)),
-                dtype=self._data.dtype,
+                dtype=grad_dtype,
                 distribution=Replicated(),
                 fill="empty",
             )

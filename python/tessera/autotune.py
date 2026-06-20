@@ -212,8 +212,9 @@ def _measure_gemm_wall_clock(
         time.time(),
         result.trial_id,
         "ok",
-        f"{backend} wall-clock measurement; dtype request {dtype!r} measured with fp32 reference arrays",
-        "on_device",
+        f"{backend}: wall-clock timing of a numpy fp32 reference GEMM (NOT the "
+        f"{backend} kernel); dtype request {dtype!r} measured with fp32 arrays",
+        "wall_clock_reference",
     )
 
 

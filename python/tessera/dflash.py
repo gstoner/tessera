@@ -239,6 +239,14 @@ def dflash_speculative_verify(draft_tokens, draft_probs, target_probs,
     The marginal of every emitted token equals the target's distribution — the
     output is distributionally identical to plain target sampling.
 
+    **Caveat (exactness condition).** Distribution preservation is exact only
+    when ``draft_probs`` and ``target_probs`` are full distributions over the
+    *same* support (e.g. plain softmax). Under top-k / top-p truncation the draft
+    and target are renormalized over *different* truncated supports, so
+    ``pt / pd`` no longer equals the true acceptance ratio and the guarantee
+    holds only approximately. Pass untruncated distributions to this verifier
+    (truncate elsewhere) if exact preservation is required.
+
     ``draft_probs`` is ``(b-1, V)`` (one row per drafted position), ``target_probs``
     is ``(b, V)`` (one extra row for the bonus). ``rng`` is a numpy Generator.
     With one-hot (temperature-0) distributions this reduces to exact-match.

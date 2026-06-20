@@ -222,7 +222,10 @@ class DistributedArray:
                 result.append(DistributedArray(
                     data=sub,
                     dtype=self.dtype,
-                    shard_spec=self.shard_spec,
+                    # A shard is the concrete per-rank local slice — it is no
+                    # longer partitioned, so it must not inherit the parent's
+                    # partitioned spec (which would re-split on a second parts()).
+                    shard_spec=ShardSpec.replicate(),
                     logical_shape=tuple(sub.shape),
                 ))
             return result
@@ -238,7 +241,10 @@ class DistributedArray:
                 DistributedArray(
                     data=sub,
                     dtype=self.dtype,
-                    shard_spec=self.shard_spec,
+                    # A shard is the concrete per-rank local slice — it is no
+                    # longer partitioned, so it must not inherit the parent's
+                    # partitioned spec (which would re-split on a second parts()).
+                    shard_spec=ShardSpec.replicate(),
                     logical_shape=tuple(sub.shape),
                 )
                 for sub in subs

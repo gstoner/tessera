@@ -289,7 +289,28 @@ struct TileIRLoweringPass
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                             std::move(patterns)))) {
       signalPassFailure();
+      return;
     }
+
+    // Decision #21: applyPatternsAndFoldGreedily returns success even when it
+    // matched nothing, so a tessera.flash_attn / tessera.matmul that failed a
+    // pattern guard (e.g. unsupported operand count / shape) would silently
+    // survive and the module would be reported as "GPU-lowered". Refuse that:
+    // any surviving target op is a hard lowering failure with a named diagnostic.
+    WalkResult residual = getOperation()->walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.flash_attn" || name == "tessera.matmul") {
+        op->emitError() << "[TILE_IR_LOWERING] '" << name
+                        << "' was not lowered to FA-4 Tile IR for sm_"
+                        << smVersion
+                        << " (unsupported operands/shape); refusing to report a "
+                           "partially-lowered module as success";
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (residual.wasInterrupted())
+      signalPassFailure();
   }
 };
 

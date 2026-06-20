@@ -278,15 +278,19 @@ def plan_all_to_all(
     num_tokens = routing.assignment.shape[0]
     top_k = routing.assignment.shape[1]
 
-    # expert e is owned by rank: e // experts_per_rank
-    # For simplicity we assume tokens are evenly distributed across source ranks:
-    # token i originates from rank i // (num_tokens // num_ranks)
-    tokens_per_rank = max(1, num_tokens // num_ranks)
+    # Tokens are laid out contiguously across source ranks using the same
+    # convention as np.array_split: the first (num_tokens % num_ranks) ranks
+    # each get one extra token. Deriving src_rank by floor division dropped the
+    # remainder onto the last rank, inflating its send_counts for non-divisible
+    # batches. searchsorted on the cumulative per-rank end indices is exact.
+    per_rank = np.full(num_ranks, num_tokens // num_ranks, dtype=np.int64)
+    per_rank[: num_tokens % num_ranks] += 1
+    rank_ends = np.cumsum(per_rank)  # exclusive end token index per source rank
 
     send_counts = np.zeros((num_ranks, num_ranks), dtype=np.int64)
 
     for token_i in range(num_tokens):
-        src_rank = min(token_i // tokens_per_rank, num_ranks - 1)
+        src_rank = int(np.searchsorted(rank_ends, token_i, side="right"))
         for slot in range(top_k):
             expert = routing.assignment[token_i, slot]
             if expert < 0:

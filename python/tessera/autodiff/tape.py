@@ -241,18 +241,16 @@ def _parameter_class():
     return Parameter
 
 
-_TESSERA_TO_NUMPY_DTYPE = {
-    "fp16": "float16",
-    "fp32": "float32",
-    "fp64": "float64",
-    "bf16": "float32",  # bf16 stored as float32 for the gradient buffer
-}
-
-
 def _accumulate_param_grad(param, grad: np.ndarray) -> None:
-    """Add `grad` into `param.grad`, creating a new buffer if `.grad` is None."""
-    np_dtype = _TESSERA_TO_NUMPY_DTYPE.get(param.dtype, param.dtype)
-    g = np.asarray(grad).astype(np_dtype, copy=False)
+    """Add `grad` into `param.grad`, creating a new buffer if `.grad` is None.
+
+    Gradients accumulate in at least fp32 regardless of the parameter's storage
+    dtype: fp16/bf16 accumulation loses precision and can underflow across many
+    tape entries (the optimizer master-weight path assumes fp32 grads).
+    """
+    g = np.asarray(grad)
+    if g.dtype.kind == "f" and g.dtype.itemsize < 4:
+        g = g.astype(np.float32)
     if param.grad is None:
         param.grad = g.copy()  # setter wraps in a fresh DistributedArray
     else:

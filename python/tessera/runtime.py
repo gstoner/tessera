@@ -396,16 +396,31 @@ class TesseraRuntime:
         self._lib: Any = None
         self._backend: Any = None
         self._initialized: bool = False
-        self._telemetry_events: list[dict[str, Any]] = []
+        # Bounded so a long-running process (server / training loop) can't grow
+        # this without limit; the oldest events are dropped. Telemetry is advisory.
+        self._telemetry_events: "collections.deque[dict[str, Any]]" = collections.deque(maxlen=100_000)
 
         if not mock:
+            # A library requested *explicitly* (constructor arg or env var) must
+            # not silently degrade to the mock backend on load failure — that
+            # hides a real deployment error. Also catch symbol-binding failures
+            # in _setup_ctypes (AttributeError), not just dlopen (OSError).
+            explicit = lib_path is not None or bool(os.environ.get("TESSERA_RUNTIME_LIB"))
             path = lib_path or _find_library()
             if path:
                 try:
                     self._lib = ctypes.CDLL(path)
                     self._setup_ctypes()
-                except OSError:
+                except (OSError, AttributeError) as exc:
                     self._lib = None
+                    if explicit:
+                        raise TesseraRuntimeError(
+                            "load_runtime_library",
+                            TsrStatus.NOT_FOUND,
+                            f"explicitly requested runtime library {path!r} failed to "
+                            f"load ({exc}); refusing to fall back to mock mode silently. "
+                            f"Pass mock=True to use the mock backend deliberately.",
+                        ) from exc
 
         if self._lib is None:
             self._mock_mode = True

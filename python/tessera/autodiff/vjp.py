@@ -2106,7 +2106,10 @@ def vjp_pow(dout, x, y, **_):
     # d/db a**b = a**b log(a). Undefined for a <= 0 in real-valued AD;
     # return 0 there, matching the "skip singular branch" convention used
     # by several framework reference paths.
-    db = do * out * np.where(a > 0, np.log(a), 0.0)
+    # Evaluate log only on the positive subset — log of non-positive `a` is
+    # undefined in real-valued AD; return 0 there without np.log emitting a
+    # divide-by-zero / invalid-value RuntimeWarning (and a masked NaN).
+    db = do * out * np.where(a > 0, np.log(np.where(a > 0, a, 1.0)), 0.0)
     return (_sum_to_shape(da, a.shape), _sum_to_shape(db, b.shape))
 
 

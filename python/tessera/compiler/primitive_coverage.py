@@ -2752,9 +2752,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "ddpm_noise_pred_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "score_matching_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "vlb_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
-        # EDM preconditioning / σ-weight: closed-form elementwise scalings.
-        "edm_precondition": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
-        "edm_loss_weight": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # EDM preconditioning / σ-weight: closed-form elementwise scalings that
+        # decompose through sqrt/log/div (which lower + transpose) — so
+        # transpose_rule / lowering_rule close `complete`, matching the
+        # scalar-math/loss convention (cf. softplus, mse_loss).
+        "edm_precondition": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete", "lowering_rule": "complete"},
+        "edm_loss_weight": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete", "lowering_rule": "complete"},
         # Noise-schedule partition / discretization are host-side config that
         # emit σ boundaries — not tensors in the autodiff/SPMD data path, so the
         # differentiation and sharding axes are not_applicable by construction.

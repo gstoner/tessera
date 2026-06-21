@@ -28,6 +28,10 @@ Features:
 - Report summary JSON export for machine-readable hot-op, roofline,
   provider-status, context, and dropped-record summaries.
 
+Release gates for mock/file CI, optional SDK builds, native hardware proof, and
+availability claims are documented in
+[`docs/guides/Tessera_Profiler_Release_Gates.md`](../../docs/guides/Tessera_Profiler_Release_Gates.md).
+
 ## Advanced profiler backend plan
 
 The compiler-facing plan keeps the integration honest: it emits a stable JSON

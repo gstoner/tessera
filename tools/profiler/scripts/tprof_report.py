@@ -26,6 +26,13 @@ def load_statuses(paths):
     return out
 
 
+def load_optional_json(path):
+    if not path:
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def aggregate(trace):
     events = trace.get("traceEvents", [])
     stacks = collections.defaultdict(list)
@@ -134,18 +141,29 @@ def aggregate_context(context):
         "sample_count": context.get("sample_count", len(samples)),
         "dominant_bottleneck": dominant,
         "bottlenecks": bottlenecks,
+        "annotations": _context_annotations(samples),
     }
 
 
-def build_report_summary(trace, totals, peak_flops=None, hbm_gbs=None, context=None, provider_statuses=None):
+def build_report_summary(
+    trace,
+    totals,
+    peak_flops=None,
+    hbm_gbs=None,
+    context=None,
+    provider_statuses=None,
+    model_analyzer=None,
+):
     rows = _rows_from_totals(totals)
     category_summary = aggregate_categories(trace)
+    backend_overlays = _backend_roofline_overlays(trace, rows)
     return {
         "schema": "tessera.profiler_report_summary.v1",
         "hot_ops": rows,
         "roofline": {
             "peak_flops": peak_flops,
             "hbm_gbs": hbm_gbs,
+            "backend_overlays": backend_overlays,
             "points": [
                 {
                     "name": row["name"],
@@ -159,7 +177,115 @@ def build_report_summary(trace, totals, peak_flops=None, hbm_gbs=None, context=N
         },
         "context": context,
         "provider_statuses": provider_statuses or [],
+        "transfer_summary": _transfer_summary(trace),
+        "launch_overhead": _launch_overhead_summary(trace),
+        "model_analyzer": _model_analyzer_summary(model_analyzer),
         **category_summary,
+    }
+
+
+def _context_annotations(samples):
+    annotations = []
+    for sample in samples:
+        if not isinstance(sample, dict):
+            continue
+        temp = sample.get("temperature_c")
+        if temp is not None and float(temp) >= 85.0:
+            annotations.append({"kind": "thermal", "temperature_c": float(temp)})
+        power = sample.get("power_watts")
+        limit = sample.get("power_limit_watts")
+        if power is not None and limit:
+            ratio = float(power) / max(float(limit), 1e-12)
+            if ratio >= 0.90:
+                annotations.append({"kind": "power", "power_limit_fraction": ratio})
+        bottleneck = sample.get("bottleneck")
+        if bottleneck:
+            annotations.append({"kind": "bottleneck", "label": str(bottleneck)})
+    return annotations
+
+
+def _backend_roofline_overlays(trace, rows):
+    row_by_name = {row["name"]: row for row in rows}
+    overlays = collections.defaultdict(lambda: {"bytes": 0.0, "flops": 0.0, "ops": 0})
+    for event in trace.get("traceEvents", []):
+        if event.get("ph") != "X":
+            continue
+        args = event.get("args", {})
+        if not isinstance(args, dict):
+            continue
+        backend = str(args.get("backend") or args.get("provider") or "unknown")
+        row = row_by_name.get(event.get("name", ""))
+        if row is None:
+            continue
+        overlays[backend]["bytes"] += row["bytes"]
+        overlays[backend]["flops"] += row["flops"]
+        overlays[backend]["ops"] += 1
+    return {
+        backend: {
+            **values,
+            "arithmetic_intensity_flops_per_byte": (
+                values["flops"] / values["bytes"] if values["bytes"] > 0.0 else 0.0
+            ),
+        }
+        for backend, values in sorted(overlays.items())
+    }
+
+
+def _transfer_summary(trace):
+    out = collections.defaultdict(lambda: {"events": 0, "bytes": 0.0, "dur_us": 0.0})
+    for event in trace.get("traceEvents", []):
+        args = event.get("args", {})
+        name = str(event.get("name", "")).lower()
+        activity = str(args.get("activity", "") if isinstance(args, dict) else "").lower()
+        if "memcpy" not in name and "copy" not in activity and "memcpy" not in activity:
+            continue
+        provider = str(args.get("provider") or args.get("backend") or "unknown") if isinstance(args, dict) else "unknown"
+        out[provider]["events"] += 1
+        out[provider]["bytes"] += float(args.get("bytes") or 0.0) if isinstance(args, dict) else 0.0
+        out[provider]["dur_us"] += float(event.get("dur") or 0.0)
+    return dict(sorted(out.items()))
+
+
+def _launch_overhead_summary(trace):
+    runtime = {}
+    device = {}
+    gaps = []
+    for event in trace.get("traceEvents", []):
+        args = event.get("args", {})
+        if not isinstance(args, dict) or args.get("launch_id") is None:
+            continue
+        launch_id = str(args["launch_id"])
+        if event.get("cat") == "runtime_api":
+            runtime.setdefault(launch_id, 0.0)
+            runtime[launch_id] += float(event.get("dur") or 0.0)
+        if event.get("cat") == "device_activity":
+            device.setdefault(launch_id, 0.0)
+            device[launch_id] += float(event.get("dur") or 0.0)
+    for launch_id in sorted(set(runtime) | set(device)):
+        if launch_id not in runtime or launch_id not in device:
+            gaps.append(launch_id)
+    pairs = {
+        launch_id: {
+            "runtime_us": runtime.get(launch_id, 0.0),
+            "device_us": device.get(launch_id, 0.0),
+            "host_overhead_us": max(0.0, runtime.get(launch_id, 0.0) - device.get(launch_id, 0.0)),
+        }
+        for launch_id in sorted(set(runtime) & set(device))
+    }
+    return {"launches": pairs, "correlation_gaps": gaps}
+
+
+def _model_analyzer_summary(payload):
+    if not payload:
+        return None
+    trials = payload.get("trials", [])
+    best = payload.get("best", {})
+    return {
+        "schema": payload.get("schema"),
+        "trial_count": payload.get("trial_count", len(trials)),
+        "best": best,
+        "bottleneck_labels": payload.get("bottleneck_labels", []),
+        "provider_status_summary": payload.get("provider_status_summary", {}),
     }
 
 
@@ -399,6 +525,7 @@ def main():
         help="tessera.profiler_provider_status.v1 JSON. Can be repeated.",
     )
     parser.add_argument("--summary-json", type=str, default=None, help="Write machine-readable report summary JSON.")
+    parser.add_argument("--model-analyzer-json", type=str, default=None, help="Tessera Model Analyzer result JSON.")
     args = parser.parse_args()
 
     peak_flops = args.peak_flops
@@ -414,6 +541,7 @@ def main():
     totals = aggregate(trace)
     context = aggregate_context(load_context(args.context_json))
     provider_statuses = aggregate_provider_status(trace, load_statuses(args.provider_status_json))
+    model_analyzer = load_optional_json(args.model_analyzer_json)
     make_html(
         totals,
         args.out,
@@ -430,6 +558,7 @@ def main():
             hbm_gbs=hbm_gbs,
             context=context,
             provider_statuses=provider_statuses,
+            model_analyzer=model_analyzer,
         )
         with open(args.summary_json, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)

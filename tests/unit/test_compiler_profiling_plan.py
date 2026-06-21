@@ -103,6 +103,9 @@ def test_intra_kernel_probe_contract_serializes_when_requested() -> None:
         "tile",
         "program_id",
     ]
+    assert payload["intra_kernel_probes"][0]["probe_name"] == "matmul.prologue"
+    assert payload["intra_kernel_probes"][0]["source_op"] == "matmul"
+    assert payload["intra_kernel_probes"][0]["schedule"] == "target_ir"
 
 
 def test_model_analyzer_manifest_exposes_runner_contract() -> None:
@@ -129,6 +132,8 @@ def test_model_analyzer_manifest_exposes_runner_contract() -> None:
     assert manifest["objective"]["latency_budget_ms"] == 20.0
     assert manifest["runner"]["provider"] == "tessera-model-analyzer+nvidia-triton-model-analyzer"
     assert manifest["runner"]["status"] == "planned"
+    assert manifest["telemetry"]["provider_status_required"] is True
+    assert manifest["telemetry"]["merged_trace_required"] is True
     assert manifest["telemetry"]["required_features"] == [RUNTIME_API, DEVICE_ACTIVITY]
     assert manifest["intra_kernel_probes"][0]["kernel"] == "matmul"
 

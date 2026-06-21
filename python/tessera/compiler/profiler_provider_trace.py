@@ -257,6 +257,15 @@ def normalize_metal_command_buffer_record(raw: Mapping[str, Any]) -> ProviderTra
         "backend": _first(raw, "backend", default="metal"),
         "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", default=None),
         "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "route": _first(raw, "route", "apple_route", "execution_route", default=None),
+        "mps_route": _first(raw, "mps_route", default=None),
+        "mtl4_route": _first(raw, "mtl4_route", default=None),
+        "archive_cache_hit": _first(raw, "archive_cache_hit", "cache_hit", default=None),
+        "mtl4_archive_path": _first(raw, "mtl4_archive_path", "archive_path", default=None),
+        "tensor_phase": _first(raw, "tensor_phase", "phase", default=None),
+        "tensor_bytes": _first(raw, "tensor_bytes", default=None),
+        "resident_session_id": _first(raw, "resident_session_id", "session_id", default=None),
+        "resident_session_phase": _first(raw, "resident_session_phase", default=None),
         "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
@@ -287,6 +296,11 @@ def normalize_metal_counter_record(raw: Mapping[str, Any]) -> ProviderTraceRecor
             "probe_name": _first(raw, "probe_name", "probe", default=None),
             "target": _first(raw, "target", default="apple_gpu"),
             "backend": _first(raw, "backend", default="metal"),
+            "counter_set": _first(raw, "counter_set", "set", default=None),
+            "sample_buffer_id": _first(raw, "sample_buffer_id", "counter_sample_buffer", default=None),
+            "command_buffer": _first(raw, "command_buffer", "command_buffer_id", default=None),
+            "route": _first(raw, "route", "apple_route", "execution_route", default=None),
+            "tensor_phase": _first(raw, "tensor_phase", "phase", default=None),
             "dropped_records": _first(raw, "dropped_records", default=None),
         },
     )

@@ -127,6 +127,10 @@ def test_annotate_target_ir_with_intra_kernel_probes_adds_backend_markers():
     text = annotated.to_mlir()
     assert "tessera_nvidia.profiler_probe" in text
     assert 'kernel = "matmul"' in text
+    assert 'probe_name = "matmul.prologue"' in text
+    assert 'backend_correlation_key = "matmul.mainloop"' in text
+    assert 'source_op = "matmul"' in text
+    assert 'schedule = "target_ir"' in text
     assert 'phase = "prologue"' in text
     assert 'phase = "mainloop"' in text
     assert 'phase = "epilogue"' in text

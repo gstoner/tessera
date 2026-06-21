@@ -65,3 +65,40 @@ def test_model_analyzer_runner_accepts_real_measurement_hook(tmp_path):
     assert payload["trials"][0]["measured"] is True
     assert payload["trials"][0]["metadata"]["target"] == "cpu"
     assert payload["best"]["instance_count"] == 2
+
+
+def test_model_analyzer_runner_attaches_profiler_status_and_merged_traces(tmp_path):
+    trace_path = tmp_path / "merged.json"
+    trace_path.write_text("{}\n")
+    status = {
+        "schema": "tessera.profiler_provider_status.v1",
+        "provider": "apple",
+        "target": "apple_gpu",
+        "status": "compiled_shell",
+        "diagnostics": {"native_proof_required": "fresh-process"},
+    }
+
+    def measure(trial, _manifest):
+        return {
+            "latency_ms": 2.0,
+            "throughput_qps": 100.0,
+            "memory_bytes": 1024,
+            "metadata": {
+                "route": "mtl4",
+                "fallback_reason": "counter buffers unavailable",
+            },
+        }
+
+    result = run_model_analyzer_manifest(
+        _manifest(),
+        measure=measure,
+        provider_statuses=(status,),
+        merged_trace_paths=(trace_path,),
+    )
+
+    assert result["provider_statuses"][0]["provider"] == "apple"
+    assert result["provider_status_summary"]["providers"]["apple"] == "compiled_shell"
+    assert result["provider_status_summary"]["native_claims_allowed"] is False
+    assert result["merged_traces"][0]["path"] == str(trace_path)
+    assert "fallback_bound" in result["bottleneck_labels"]
+    assert "apple_provider_unproven" in result["bottleneck_labels"]

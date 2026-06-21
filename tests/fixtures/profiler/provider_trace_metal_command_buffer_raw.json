@@ -9,6 +9,14 @@
     "probe_name": "matmul.mainloop",
     "target": "apple_gpu",
     "backend": "metal",
+    "route": "mtl4",
+    "mps_route": "not_used",
+    "mtl4_route": "cooperative_tensor",
+    "archive_cache_hit": true,
+    "tensor_phase": "submit",
+    "tensor_bytes": 4096,
+    "resident_session_id": "session-1",
+    "resident_session_phase": "run",
     "queue_id": "metal-queue-0",
     "status": "completed"
   }

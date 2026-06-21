@@ -127,6 +127,11 @@ def test_provider_trace_cli_replays_metal_command_buffer_fixture(tmp_path: Path)
     assert event["args"]["backend"] == "metal"
     assert event["args"]["launch_id"] == "launch-apple-1"
     assert event["args"]["probe_name"] == "matmul.mainloop"
+    assert event["args"]["route"] == "mtl4"
+    assert event["args"]["mtl4_route"] == "cooperative_tensor"
+    assert event["args"]["archive_cache_hit"] is True
+    assert event["args"]["tensor_phase"] == "submit"
+    assert event["args"]["resident_session_id"] == "session-1"
 
 
 def test_provider_trace_cli_replays_metal_counter_fixture(tmp_path: Path) -> None:
@@ -155,6 +160,9 @@ def test_provider_trace_cli_replays_metal_counter_fixture(tmp_path: Path) -> Non
     assert event["ph"] == "C"
     assert event["args"]["backend"] == "metal"
     assert event["args"]["correlation_id"] == "apple-cb-1"
+    assert event["args"]["counter_set"] == "timestamp"
+    assert event["args"]["sample_buffer_id"] == "sample-buffer-0"
+    assert event["args"]["command_buffer"] == "apple-cb-1"
 
 
 def test_cupti_callback_and_activity_share_correlation_id() -> None:

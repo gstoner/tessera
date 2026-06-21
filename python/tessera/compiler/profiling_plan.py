@@ -159,6 +159,14 @@ class IntraKernelProbe:
     metric: str = "elapsed_cycles"
     aggregation: str = "sample"
     payload_fields: tuple[str, ...] = ("kernel", "phase", "tile", "program_id")
+    source_op: str | None = None
+    region: str | None = None
+    schedule: str | None = None
+    target: str | None = None
+
+    @property
+    def probe_name(self) -> str:
+        return f"{self.kernel}.{self.phase}"
 
     def __post_init__(self) -> None:
         if not str(self.kernel).strip():
@@ -174,11 +182,16 @@ class IntraKernelProbe:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "probe_name": self.probe_name,
             "kernel": self.kernel,
             "phase": self.phase,
             "metric": self.metric,
             "aggregation": self.aggregation,
             "payload_fields": list(self.payload_fields),
+            "source_op": self.source_op or self.kernel,
+            "region": self.region or self.phase,
+            "schedule": self.schedule or "target_ir",
+            "target": self.target,
         }
 
 
@@ -304,6 +317,8 @@ class ModelAnalyzerManifest:
                 "artifact": analyzer_cap.artifact,
             },
             "telemetry": {
+                "provider_status_required": True,
+                "merged_trace_required": True,
                 "required_features": [
                     RUNTIME_API,
                     DEVICE_ACTIVITY,

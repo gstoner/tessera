@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .profiler_context import summarize_profiler_context, validate_profiler_context_artifact
+from .profiler_provider_status import validate_provider_status_artifact
 
 
 MODEL_ANALYZER_RESULT_SCHEMA_VERSION = "tessera.compiler.model_analyzer_result.v1"
@@ -53,6 +54,8 @@ def run_model_analyzer_manifest(
     *,
     measure: MeasurementFn | None = None,
     context_artifact: Mapping[str, Any] | None = None,
+    provider_statuses: Sequence[Mapping[str, Any]] = (),
+    merged_trace_paths: Sequence[str | Path] = (),
 ) -> dict[str, Any]:
     """Run or estimate all configurations from a Model Analyzer manifest."""
 
@@ -74,6 +77,19 @@ def run_model_analyzer_manifest(
             "source_status": context_artifact.get("source_status"),
             **summarize_profiler_context(context_artifact.get("samples", [])),
         }
+    provider_status_payloads = [dict(status) for status in provider_statuses]
+    for status in provider_status_payloads:
+        validate_provider_status_artifact(status)
+    provider_summary = _summarize_provider_statuses(provider_status_payloads)
+    bottleneck_labels = _bottleneck_labels(
+        results,
+        context_summary=context_summary,
+        provider_summary=provider_summary,
+    )
+    trace_attachments = [
+        {"schema": "tessera.merged_profiler_trace.v1", "path": str(path)}
+        for path in merged_trace_paths
+    ]
     return {
         "schema": MODEL_ANALYZER_RESULT_SCHEMA_VERSION,
         "manifest_schema": manifest.get("schema"),
@@ -85,6 +101,10 @@ def run_model_analyzer_manifest(
         "best": best,
         "trials": results,
         "context_summary": context_summary,
+        "provider_statuses": provider_status_payloads,
+        "provider_status_summary": provider_summary,
+        "merged_traces": trace_attachments,
+        "bottleneck_labels": bottleneck_labels,
         "notes": [
             "Default runner output is estimated unless a measurement function supplies measured=true.",
             "Native NVIDIA/ROCm/Apple GPU collectors must promote provider status before hardware claims.",
@@ -169,7 +189,57 @@ def _normalize_measurement(
     }
     if "metadata" in measurement:
         out["metadata"] = dict(measurement["metadata"])
+    out["bottleneck"] = str(measurement.get("bottleneck", _infer_trial_bottleneck(out)))
     return out
+
+
+def _summarize_provider_statuses(statuses: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    by_provider = {
+        str(status.get("provider", "unknown")): str(status.get("status", "unknown"))
+        for status in statuses
+    }
+    unavailable = sorted(
+        provider
+        for provider, status in by_provider.items()
+        if status not in {"native_available", "mock", "file", "host_metadata_only"}
+    )
+    return {
+        "providers": by_provider,
+        "unavailable_or_unproven": unavailable,
+        "native_claims_allowed": not unavailable,
+    }
+
+
+def _bottleneck_labels(
+    trials: Sequence[Mapping[str, Any]],
+    *,
+    context_summary: Mapping[str, Any] | None,
+    provider_summary: Mapping[str, Any],
+) -> list[str]:
+    labels = {str(trial.get("bottleneck", "unknown")) for trial in trials}
+    if context_summary and context_summary.get("dominant_bottleneck"):
+        labels.add(str(context_summary["dominant_bottleneck"]))
+    for provider in provider_summary.get("unavailable_or_unproven", []) or []:
+        labels.add(f"{provider}_provider_unproven")
+    return sorted(label for label in labels if label and label != "unknown")
+
+
+def _infer_trial_bottleneck(row: Mapping[str, Any]) -> str:
+    metadata = row.get("metadata", {})
+    if isinstance(metadata, Mapping):
+        route = str(metadata.get("route") or metadata.get("backend_route") or "")
+        fallback = metadata.get("fallback_reason")
+        if fallback:
+            return "fallback_bound"
+        if route in {"mps", "mpsgraph", "host"}:
+            return "launch_bound"
+    latency_ms = float(row.get("latency_ms", 0.0))
+    memory_bytes = int(row.get("memory_bytes", 0))
+    if latency_ms > 0.0 and memory_bytes > 0:
+        gb_per_s = memory_bytes / max(latency_ms / 1000.0, 1e-12) / 1e9
+        if gb_per_s > 500.0:
+            return "bandwidth_bound"
+    return "launch_bound"
 
 
 def _select_best_trial(results: Sequence[Mapping[str, Any]], objective: str) -> dict[str, Any]:

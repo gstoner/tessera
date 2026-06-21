@@ -1617,12 +1617,19 @@ def _target_kernel_names(module: TargetIRModule) -> tuple[str, ...]:
 
 
 def _probe_target_op(target: str, probe: IntraKernelProbe) -> TargetOp:
+    probe_name = probe.probe_name
     return TargetOp(_probe_op_name_for_target(target), {
+        "probe_name": probe_name,
         "kernel": probe.kernel,
         "phase": probe.phase,
         "metric": probe.metric,
         "aggregation": probe.aggregation,
         "payload_fields": list(probe.payload_fields),
+        "source_op": probe.source_op or probe.kernel,
+        "region": probe.region or probe.phase,
+        "schedule": probe.schedule or "target_ir",
+        "target": target,
+        "backend_correlation_key": probe_name,
         "status": "planned",
     })
 

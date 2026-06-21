@@ -158,8 +158,19 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
     status_path = tmp_path / "provider_status.json"
     out_path = tmp_path / "report.html"
     summary_path = tmp_path / "summary.json"
+    analyzer_path = tmp_path / "model_analyzer.json"
     trace_path.write_text(json.dumps({
         "traceEvents": [
+            {
+                "name": "tsrLaunchKernel",
+                "cat": "runtime_api",
+                "ph": "X",
+                "ts": 0,
+                "dur": 15,
+                "args": {
+                    "launch_id": "launch-1",
+                },
+            },
             {
                 "name": "matmul",
                 "cat": "device_activity",
@@ -168,12 +179,26 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
                 "dur": 10,
                 "args": {
                     "provider": "cupti",
+                    "backend": "cuda",
                     "kind": "device_activity",
                     "bytes": 1024,
                     "flops": 8192,
                     "launch_id": "launch-1",
                     "probe_name": "matmul.mainloop",
                     "dropped_records": 3,
+                },
+            },
+            {
+                "name": "cupti.memcpy",
+                "cat": "device_activity",
+                "ph": "X",
+                "ts": 15,
+                "dur": 4,
+                "args": {
+                    "provider": "cupti",
+                    "backend": "cuda",
+                    "activity": "memcpy",
+                    "bytes": 2048,
                 },
             },
             {
@@ -198,6 +223,13 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
         "status": "planned",
         "diagnostics": {"cupti": "compile-gated"},
     }))
+    analyzer_path.write_text(json.dumps({
+        "schema": "tessera.compiler.model_analyzer_result.v1",
+        "trial_count": 2,
+        "best": {"latency_ms": 1.0, "batch_size": 1},
+        "bottleneck_labels": ["launch_bound"],
+        "provider_status_summary": {"providers": {"nvidia": "planned"}},
+    }))
 
     subprocess.run(
         [
@@ -215,6 +247,8 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
             "1000",
             "--summary-json",
             str(summary_path),
+            "--model-analyzer-json",
+            str(analyzer_path),
         ],
         check=True,
     )
@@ -222,11 +256,16 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
     summary = json.loads(summary_path.read_text())
     assert summary["schema"] == "tessera.profiler_report_summary.v1"
     assert summary["roofline"]["points"][0]["arithmetic_intensity_flops_per_byte"] == 8.0
-    assert summary["provider_categories"]["cupti"]["device_activity"] == 1
+    assert summary["provider_categories"]["cupti"]["device_activity"] == 2
     assert summary["provider_dropped_records"]["cupti"] == 3
     assert summary["correlation_summary"]["launch_id"] == 1
     assert summary["correlation_summary"]["probe_name"] == 1
     assert summary["provider_statuses"][0]["provider"] == "nvidia"
+    assert summary["roofline"]["backend_overlays"]["cuda"]["ops"] == 2
+    assert summary["transfer_summary"]["cupti"]["bytes"] == 2048
+    assert summary["launch_overhead"]["launches"]["launch-1"]["host_overhead_us"] == 5.0
+    assert summary["model_analyzer"]["trial_count"] == 2
+    assert summary["model_analyzer"]["bottleneck_labels"] == ["launch_bound"]
 
 
 def test_context_golden_fixture_validates() -> None:

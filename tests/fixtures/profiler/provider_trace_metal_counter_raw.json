@@ -11,6 +11,10 @@
     "target": "apple_gpu",
     "backend": "metal",
     "queue_id": "metal-queue-0",
+    "counter_set": "timestamp",
+    "sample_buffer_id": "sample-buffer-0",
+    "route": "mtl4",
+    "tensor_phase": "submit",
     "sample_index": 0
   }
 ]

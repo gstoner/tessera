@@ -122,10 +122,13 @@
 | `collect_profiler_context`, `mock_profiler_context`, `sample_nvidia_nvml_context`, `sample_rocm_amdsmi_context`, `sample_apple_system_context` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `ProviderTraceRecord`, `build_provider_trace_artifact`, `normalize_rocprofiler_api_record`, `normalize_rocprofiler_activity_record`, `normalize_rocprofiler_counter_record`, `normalize_rocprofiler_thread_trace_record` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `normalize_metal_command_buffer_record`, `normalize_metal_counter_record`, `normalize_cupti_callback_record`, `normalize_cupti_activity_record` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `collect_provider_status`, `provider_status_artifact`, `validate_provider_status_artifact` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `merge_profiler_traces`, `write_merged_profiler_trace` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `tprof::attach_tessera_runtime_trace`, `tprof::detach_tessera_runtime_trace` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 | `tprof::provider_shell`, `tprof::provider_shells`, `tprof::native_system_context_init`, `tprof::heavy_provider_init` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
-| `tprof::rocprofiler_adapter_init`, `tprof::metal_adapter_init`, `tprof::cupti_adapter_init` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::rocprofiler_adapter_init`, `tprof::rocprofiler_adapter_status`, `tprof::rocprofiler_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::metal_adapter_init`, `tprof::metal_adapter_status`, `tprof::metal_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::cupti_adapter_init`, `tprof::cupti_adapter_status`, `tprof::cupti_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 
 ### Runtime C ABI
 

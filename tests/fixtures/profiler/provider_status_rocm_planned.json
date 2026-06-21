@@ -1,0 +1,10 @@
+{
+  "diagnostics": {
+    "native_proof_required": "AMD GPU plus ROCprofiler-SDK HIP/HSA dispatch proof",
+    "rocprofiler_sdk": "compile-gated by TPROF_WITH_ROCPROFILER"
+  },
+  "provider": "rocm",
+  "schema": "tessera.profiler_provider_status.v1",
+  "status": "planned",
+  "target": "rocm"
+}

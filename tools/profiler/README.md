@@ -20,6 +20,8 @@ Features:
   CUPTI, and Metal callback/activity/counter records into Trace Event JSON.
 - `tprof-merge-trace` for combining runtime trace, provider trace, and context
   artifacts into one report-ready Trace Event JSON file.
+- `tprof-provider-status` for reporting provider readiness and native-proof
+  diagnostics without requiring vendor hardware in CI.
 
 ## Advanced profiler backend plan
 
@@ -123,6 +125,12 @@ Native context collectors are intentionally dynamic and optional:
   behind the macOS-only `TPROF_WITH_APPLE_SYSTEM_CONTEXT` shell guard until it
   has out-of-sandbox native proof.
 
+Optional probes preserve diagnostics instead of failing the profiler run. When
+native context collection is unavailable, samples include metadata such as
+`error`, `error_type`, and any best-effort method retry diagnostics. This keeps
+missing SDKs, permission failures, and adapter signature drift distinguishable
+in reports.
+
 The C++ shell API in `tprof/provider_shells.h` lists the native context lanes
 (`nvidia-system-context`, `rocm-system-context`,
 `apple-silicon-system-context`) and the heavier providers
@@ -160,6 +168,16 @@ python3 tools/profiler/scripts/tprof_provider_trace.py \
   --trace-out provider_trace.trace.json
 ```
 
+Multiple `--input` files can be batched into one provider artifact:
+
+```bash
+python3 tools/profiler/scripts/tprof_provider_trace.py \
+  --provider cupti \
+  --input callbacks.json \
+  --input activities.json \
+  --out provider_trace.json
+```
+
 Then merge runtime, provider, and context artifacts into one report input:
 
 ```bash
@@ -167,7 +185,16 @@ python3 tools/profiler/scripts/tprof_merge_trace.py \
   --runtime-trace runtime.trace.json \
   --provider-trace provider_trace.json \
   --context-json context.json \
+  --provider-status nvidia.status.json \
   --out merged.trace.json
+```
+
+Provider readiness can be checked without starting a native profiler:
+
+```bash
+python3 tools/profiler/scripts/tprof_provider_status.py --provider apple
+python3 tools/profiler/scripts/tprof_provider_status.py --provider rocm
+python3 tools/profiler/scripts/tprof_provider_status.py --provider nvidia
 ```
 
 ROCprofiler records map HIP/HSA callback records to `runtime_api`, dispatch and
@@ -190,19 +217,42 @@ The SDK adapter shims are split by provider:
 
 These adapters currently ingest normalized callback data into `tprof` event
 categories. Their `*_init` functions return `false` without the relevant compile
-guard/SDK, but the record-ingestion functions remain usable for fixtures and
-tests.
+guard/SDK, but the record-ingestion and replay functions remain usable for
+fixtures and tests. Each adapter exposes `*_adapter_status()` so AMD, NVIDIA,
+and Apple hosts can report whether the shell was SDK/framework-compiled,
+initialized, paused, and which source status or last error applies.
 
 All provider adapters expose start-paused/pause/resume controls and simple
 include/exclude filters. ROCprofiler filters API names and kernel/dispatch
-names; CUPTI filters API and activity names; Metal filters command-buffer labels
-and counter names. Counter and thread-trace paths are opt-in to avoid accidental
-high-volume captures.
+names plus counter metric names; CUPTI filters API and activity names; Metal
+filters command-buffer labels and counter names. Counter and thread-trace paths
+are opt-in to avoid accidental high-volume captures. ROCprofiler thread-trace
+replay enforces `thread_trace_max_bytes` and marks
+`thread_trace_volume_limited` in adapter status when a record is dropped.
+
+Replay helpers mirror the fixture schema used by `tprof_provider_trace.py`:
+
+```cpp
+tprof::rocprofiler_replay_api_record(
+    {"hipLaunchKernel", "HIP_API", 7, 10.0, 14.0, "{\"grid\":\"16x1x1\"}"});
+tprof::cupti_replay_activity_record(
+    {"matmul", "kernel", 99, 4.0, 12.0, "{\"stream_id\":2}"});
+tprof::metal_replay_command_buffer_record(
+    {"tessera.probe.mainloop", 21, 100.0, 140.0, "{\"kernel\":\"matmul\"}"});
+```
 
 `TPROF_WITH_ROCPROFILER=ON` now runs CMake detection for
 `rocprofiler-sdk/rocprofiler.h` and a ROCprofiler-SDK library before defining
 `TPROF_WITH_ROCPROFILER`; if either is missing, the adapter remains a planned
 shell and emits a configure-time warning.
+
+`TPROF_WITH_CUPTI=ON` follows the same no-hard-link pattern through the CUPTI
+finder. `TPROF_WITH_METAL=ON` is macOS-only and builds a tiny Objective-C++
+Metal framework compile probe; it still reports a shell until command-buffer and
+counter-sample attachment are proven in a fresh native process.
+
+Merged traces validate timestamps strictly. A non-numeric Trace Event `ts` is
+reported as malformed input instead of being sorted as zero.
 
 ## Runtime callback trace spine
 

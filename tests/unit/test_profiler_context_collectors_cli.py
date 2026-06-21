@@ -138,6 +138,30 @@ def test_rocm_amdsmi_collector_normalizes_fake_module() -> None:
     assert raw["memory_used_fraction"] == 0.5
     assert raw["correctable_ecc_errors"] == 2
     assert raw["bottleneck"] == "compute_bound"
+    assert raw["metadata"]["diagnostics"] == []
+
+
+def test_rocm_amdsmi_collector_records_signature_mismatch_diagnostics() -> None:
+    class FakeAmdSmi:
+        def amdsmi_init(self):
+            return None
+
+        def amdsmi_shutdown(self):
+            return None
+
+        def amdsmi_get_processor_handles(self):
+            return ["gpu0"]
+
+        def amdsmi_get_gpu_activity(self, handle, extra):
+            return {"gfx_activity": 100, "umc_activity": 0}
+
+    payload = sample_rocm_amdsmi_context(module=FakeAmdSmi())
+
+    assert payload["source_status"] == "measured"
+    diagnostics = payload["samples"][0]["raw"]["metadata"]["diagnostics"]
+    assert diagnostics
+    assert diagnostics[0]["method"] == "amdsmi_get_gpu_activity"
+    assert diagnostics[0]["error_type"] == "TypeError"
 
 
 def test_nvidia_nvml_collector_normalizes_fake_dynamic_library() -> None:
@@ -197,3 +221,31 @@ def test_nvidia_nvml_collector_normalizes_fake_dynamic_library() -> None:
     assert raw["power_watts"] == 300
     assert raw["power_limit_watts"] == 400
     assert raw["correctable_ecc_errors"] == 1
+
+
+def test_nvidia_unavailable_context_records_error_type() -> None:
+    class BrokenNvml:
+        def nvmlInit_v2(self):
+            raise RuntimeError("boom")
+
+    payload = sample_nvidia_nvml_context(lib=BrokenNvml())
+
+    assert payload["source_status"] == "unavailable"
+    metadata = payload["samples"][0]["raw"]["metadata"]
+    assert metadata["collector"] == "nvml"
+    assert metadata["error_type"] == "RuntimeError"
+    assert "boom" in metadata["error"]
+
+
+def test_rocm_unavailable_context_records_error_type() -> None:
+    class BrokenAmdSmi:
+        def amdsmi_init(self):
+            raise RuntimeError("boom")
+
+    payload = sample_rocm_amdsmi_context(module=BrokenAmdSmi())
+
+    assert payload["source_status"] == "unavailable"
+    metadata = payload["samples"][0]["raw"]["metadata"]
+    assert metadata["collector"] == "amdsmi"
+    assert metadata["error_type"] == "RuntimeError"
+    assert "boom" in metadata["error"]

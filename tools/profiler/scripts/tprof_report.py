@@ -18,6 +18,14 @@ def load_context(path):
         return json.load(f)
 
 
+def load_statuses(paths):
+    out = []
+    for path in paths or []:
+        with open(path, "r", encoding="utf-8") as f:
+            out.append(json.load(f))
+    return out
+
+
 def aggregate(trace):
     events = trace.get("traceEvents", [])
     stacks = collections.defaultdict(list)
@@ -50,6 +58,29 @@ def aggregate(trace):
             elif "flop" in event_name:
                 totals[target]["flops"] += value
     return totals
+
+
+def aggregate_provider_status(trace, sidecars=None):
+    statuses = []
+    for status in sidecars or []:
+        if isinstance(status, dict):
+            statuses.append(status)
+    for event in trace.get("traceEvents", []):
+        if event.get("cat") != "provider_status":
+            continue
+        args = event.get("args", {})
+        if isinstance(args, dict):
+            statuses.append({
+                "provider": args.get("provider"),
+                "target": args.get("target"),
+                "status": args.get("status"),
+                "diagnostics": args.get("diagnostics", {}),
+            })
+    deduped = {}
+    for status in statuses:
+        provider = status.get("provider") or "unknown"
+        deduped[provider] = status
+    return [deduped[key] for key in sorted(deduped)]
 
 
 def aggregate_context(context):
@@ -136,7 +167,7 @@ def select_peaks(peaks_map, arch, env_arch):
     return None, None
 
 
-def make_html(totals, out_path, peak_flops=None, hbm_gbs=None, context=None):
+def make_html(totals, out_path, peak_flops=None, hbm_gbs=None, context=None, provider_statuses=None):
     rows = []
     total_time = sum(value["dur_us"] for value in totals.values()) or 1.0
     for name, value in totals.items():
@@ -160,6 +191,7 @@ def make_html(totals, out_path, peak_flops=None, hbm_gbs=None, context=None):
         "peak_flops": peak_flops,
         "hbm_gbs": hbm_gbs,
         "context": context,
+        "provider_statuses": provider_statuses or [],
     })
     html = f'''<!doctype html>
 <html><head><meta charset="utf-8"/>
@@ -196,6 +228,14 @@ small {{ color: #666; }}
 <table>
 <thead><tr><th>Bottleneck</th><th>Samples</th></tr></thead>
 <tbody id="context-body"></tbody>
+</table>
+</section>
+
+<section id="provider-status" hidden>
+<h2>Provider Status</h2>
+<table>
+<thead><tr><th>Provider</th><th>Target</th><th>Status</th><th>Diagnostics</th></tr></thead>
+<tbody id="provider-status-body"></tbody>
 </table>
 </section>
 
@@ -256,6 +296,25 @@ if (DATA.context) {{
     cbody.appendChild(tr);
   }}
 }}
+
+if (DATA.provider_statuses && DATA.provider_statuses.length) {{
+  document.getElementById("provider-status").hidden = false;
+  const body = document.getElementById("provider-status-body");
+  for (const status of DATA.provider_statuses) {{
+    const tr = document.createElement("tr");
+    function td(txt, alignLeft=false) {{
+      const e = document.createElement("td");
+      e.textContent = txt;
+      if (alignLeft) e.style.textAlign = "left";
+      return e;
+    }}
+    tr.appendChild(td(status.provider || "unknown", true));
+    tr.appendChild(td(status.target || "unknown", true));
+    tr.appendChild(td(status.status || "unknown", true));
+    tr.appendChild(td(JSON.stringify(status.diagnostics || {{}}), true));
+    body.appendChild(tr);
+  }}
+}}
 </script>
 </body></html>'''
     with open(out_path, "w", encoding="utf-8") as f:
@@ -271,6 +330,12 @@ def main():
     parser.add_argument("--peaks", type=str, default=None, help="YAML with device peaks")
     parser.add_argument("--arch", type=str, default=None, help="Architecture key from YAML")
     parser.add_argument("--context-json", type=str, default=None, help="tessera.profiler_context.v1 JSON")
+    parser.add_argument(
+        "--provider-status-json",
+        action="append",
+        default=[],
+        help="tessera.profiler_provider_status.v1 JSON. Can be repeated.",
+    )
     args = parser.parse_args()
 
     peak_flops = args.peak_flops
@@ -282,12 +347,14 @@ def main():
         peak_flops = peak_flops if peak_flops is not None else selected_flops
         hbm_gbs = hbm_gbs if hbm_gbs is not None else selected_hbm
 
+    trace = load_trace(args.inp)
     make_html(
-        aggregate(load_trace(args.inp)),
+        aggregate(trace),
         args.out,
         peak_flops=peak_flops,
         hbm_gbs=hbm_gbs,
         context=aggregate_context(load_context(args.context_json)),
+        provider_statuses=aggregate_provider_status(trace, load_statuses(args.provider_status_json)),
     )
 
 

@@ -8,6 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from .profiler_context import validate_profiler_context_artifact
 from .profiler_provider_trace import validate_provider_trace_artifact
+from .profiler_provider_status import validate_provider_status_artifact
 
 
 MERGED_PROFILER_TRACE_SCHEMA_VERSION = "tessera.merged_profiler_trace.v1"
@@ -18,11 +19,13 @@ def merge_profiler_traces(
     runtime_trace: Mapping[str, Any] | None = None,
     provider_traces: Sequence[Mapping[str, Any]] = (),
     context_artifact: Mapping[str, Any] | None = None,
+    provider_statuses: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Merge runtime Trace Event JSON, provider traces, and context metadata."""
 
     trace_events: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
+    status_payloads: list[dict[str, Any]] = []
     if runtime_trace is not None:
         events = list(runtime_trace.get("traceEvents", []))
         trace_events.extend(dict(event) for event in events)
@@ -36,6 +39,16 @@ def merge_profiler_traces(
             "provider": provider.get("provider"),
             "events": len(events),
             "records": provider.get("record_count", 0),
+        })
+    for status in provider_statuses:
+        validate_provider_status_artifact(status)
+        status_payload = dict(status)
+        status_payloads.append(status_payload)
+        trace_events.append(_provider_status_marker_event(status_payload))
+        sources.append({
+            "kind": "provider_status",
+            "provider": status.get("provider"),
+            "status": status.get("status"),
         })
     context_summary = None
     if context_artifact is not None:
@@ -54,13 +67,14 @@ def merge_profiler_traces(
             "provider": context_artifact.get("provider"),
             "samples": context_artifact.get("sample_count", 0),
         })
-    trace_events.sort(key=lambda event: float(event.get("ts", 0.0)))
+    trace_events.sort(key=_event_ts)
     return {
         "schema": MERGED_PROFILER_TRACE_SCHEMA_VERSION,
         "displayTimeUnit": "ns",
         "traceEvents": trace_events,
         "sources": sources,
         "context_summary": context_summary,
+        "provider_statuses": status_payloads,
         "summary": _summarize_trace_events(trace_events),
     }
 
@@ -87,6 +101,8 @@ def validate_merged_profiler_trace(payload: Mapping[str, Any]) -> None:
     event_count = payload["summary"].get("event_count")
     if event_count != len(payload["traceEvents"]):
         raise ValueError("summary.event_count must match traceEvents length")
+    for event in payload["traceEvents"]:
+        _event_ts(event)
 
 
 def _context_marker_event(summary: Mapping[str, Any]) -> dict[str, Any]:
@@ -108,19 +124,57 @@ def _context_marker_event(summary: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _provider_status_marker_event(status: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "name": f"provider_status.{status.get('provider', 'unknown')}",
+        "cat": "provider_status",
+        "ph": "i",
+        "s": "p",
+        "ts": 0.0,
+        "pid": 0,
+        "tid": 0,
+        "args": {
+            "provider": status.get("provider"),
+            "status": status.get("status"),
+            "target": status.get("target"),
+            "diagnostics": status.get("diagnostics", {}),
+        },
+    }
+
+
+def _event_ts(event: Mapping[str, Any]) -> float:
+    try:
+        return float(event.get("ts", 0.0))
+    except (TypeError, ValueError) as exc:
+        name = event.get("name", "<unnamed>")
+        raise ValueError(f"trace event {name!r} has non-numeric ts") from exc
+
+
 def _summarize_trace_events(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     categories: dict[str, int] = {}
     correlations: set[str] = set()
+    launch_ids: set[str] = set()
+    probe_names: set[str] = set()
+    dropped_records = 0
     for event in events:
         cat = str(event.get("cat", "unknown"))
         categories[cat] = categories.get(cat, 0) + 1
         args = event.get("args", {})
         if isinstance(args, Mapping) and args.get("correlation_id") is not None:
             correlations.add(str(args["correlation_id"]))
+        if isinstance(args, Mapping) and args.get("launch_id") is not None:
+            launch_ids.add(str(args["launch_id"]))
+        if isinstance(args, Mapping) and args.get("probe_name") is not None:
+            probe_names.add(str(args["probe_name"]))
+        if isinstance(args, Mapping):
+            dropped_records += int(args.get("dropped_records") or 0)
     return {
         "event_count": len(events),
         "categories": dict(sorted(categories.items())),
         "correlation_count": len(correlations),
+        "launch_count": len(launch_ids),
+        "probe_count": len(probe_names),
+        "dropped_records": dropped_records,
     }
 
 

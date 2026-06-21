@@ -104,6 +104,7 @@ def test_model_analyzer_result_accepts_profiler_context_summary() -> None:
 def test_tprof_report_renders_context_section(tmp_path: Path) -> None:
     trace_path = tmp_path / "trace.json"
     context_path = tmp_path / "context.json"
+    status_path = tmp_path / "provider_status.json"
     out_path = tmp_path / "report.html"
     trace_path.write_text(json.dumps({"traceEvents": []}))
     context = build_profiler_context_artifact(
@@ -120,6 +121,13 @@ def test_tprof_report_renders_context_section(tmp_path: Path) -> None:
         ),
     )
     write_profiler_context_artifact(context, context_path)
+    status_path.write_text(json.dumps({
+        "schema": "tessera.profiler_provider_status.v1",
+        "provider": "rocm",
+        "target": "rocm",
+        "status": "planned",
+        "diagnostics": {"rocprofiler_sdk": "compile-gated"},
+    }))
 
     subprocess.run(
         [
@@ -131,6 +139,8 @@ def test_tprof_report_renders_context_section(tmp_path: Path) -> None:
             str(out_path),
             "--context-json",
             str(context_path),
+            "--provider-status-json",
+            str(status_path),
         ],
         check=True,
     )
@@ -139,6 +149,8 @@ def test_tprof_report_renders_context_section(tmp_path: Path) -> None:
     assert "System Context" in html
     assert "rocm-system-context" in html
     assert "power_capped" in html
+    assert "Provider Status" in html
+    assert "rocprofiler_sdk" in html
 
 
 def test_context_golden_fixture_validates() -> None:

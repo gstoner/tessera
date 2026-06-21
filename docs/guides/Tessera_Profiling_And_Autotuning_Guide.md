@@ -141,6 +141,11 @@ python3 tools/profiler/scripts/tprof_context.py --provider rocm --out amdsmi.con
 python3 tools/profiler/scripts/tprof_context.py --provider apple --out apple.context.json
 ```
 
+Unavailable optional probes keep diagnostic metadata such as `error`,
+`error_type`, and adapter retry details in the sample `metadata` block so SDK
+absence, permission failures, and method signature drift can be separated in
+reports.
+
 and by `tessera-prof --profiler-context-json context.json` when writing a Model
 Analyzer result. This attaches context to the result artifact; it does not
 promote native collector status by itself.
@@ -204,8 +209,18 @@ Chrome/Perfetto-compatible Trace Event JSON.
 python3 tools/profiler/scripts/tprof_provider_trace.py \
   --provider rocprofiler \
   --input rocprofiler_records.json \
+  --input rocprofiler_more_records.json \
   --out provider_trace.json \
   --trace-out provider_trace.trace.json
+```
+
+Provider readiness is a separate artifact/CLI so native availability can be
+reported without starting a collector:
+
+```bash
+python3 tools/profiler/scripts/tprof_provider_status.py --provider apple
+python3 tools/profiler/scripts/tprof_provider_status.py --provider rocm
+python3 tools/profiler/scripts/tprof_provider_status.py --provider nvidia
 ```
 
 Merge provider records with Tessera runtime trace and system context before
@@ -216,8 +231,13 @@ python3 tools/profiler/scripts/tprof_merge_trace.py \
   --runtime-trace runtime.trace.json \
   --provider-trace provider_trace.json \
   --context-json context.json \
+  --provider-status rocm.status.json \
   --out merged.trace.json
 ```
+
+Merged trace validation is strict about Trace Event timestamps. A non-numeric
+`ts` is reported as malformed input before sorting, rather than silently being
+treated as timestamp zero.
 
 The staged mapping is:
 
@@ -237,15 +257,24 @@ The staged mapping is:
 The first C++ SDK adapter shims are intentionally thin:
 
 - `tprof/rocprofiler_adapter.h` exposes HIP/HSA API, dispatch/activity, counter,
-  and thread-trace ingestion functions.
+  and thread-trace ingestion and replay functions.
 - `tprof/metal_adapter.h` exposes command-buffer and counter-sample ingestion
-  functions.
+  and replay functions.
 - `tprof/cupti_adapter.h` exposes runtime/driver callback and activity
-  ingestion functions.
+  ingestion and replay functions.
 
 Their init functions are SDK-gated and can return `false`, but the ingestion
 functions feed normalized fixture or callback data into the existing `tprof`
-runtime categories.
+runtime categories. Each adapter also exposes `*_adapter_status()` with
+compiled/initialized/paused/source-status fields so hardware hosts can
+distinguish a planned shell from an SDK-compiled shell without promoting
+availability.
+
+ROCprofiler thread trace remains explicitly bounded: configure
+`thread_trace_max_bytes`, keep thread trace opt-in, and treat
+`thread_trace_volume_limited` as a dropped-record warning. This follows
+ROCprofiler-SDK guidance that thread trace can generate high-volume data and
+should be filtered to the kernels of interest.
 
 Profiler events carry:
 

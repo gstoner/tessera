@@ -235,16 +235,46 @@ def _sample_nvidia_nvml_from_library(lib: Any, *, device_index: int) -> dict[str
 
 def _sample_rocm_amdsmi_from_module(amdsmi: Any, *, device_index: int) -> dict[str, Any]:
     _call_if_present(amdsmi, "amdsmi_init")
+    diagnostics: list[dict[str, str]] = []
     try:
-        handles = _call_first(amdsmi, ("amdsmi_get_processor_handles", "amdsmi_get_gpu_handles"))
+        handles = _call_first(
+            amdsmi,
+            ("amdsmi_get_processor_handles", "amdsmi_get_gpu_handles"),
+            diagnostics=diagnostics,
+        )
         if handles is None:
             raise RuntimeError("AMD SMI did not return processor handles")
         handle = list(handles)[device_index]
-        activity = _as_mapping(_call_first(amdsmi, ("amdsmi_get_gpu_activity", "amdsmi_get_gpu_utilization"), handle))
-        vram = _as_mapping(_call_first(amdsmi, ("amdsmi_get_gpu_vram_usage", "amdsmi_get_gpu_memory_usage"), handle))
-        power = _as_mapping(_call_first(amdsmi, ("amdsmi_get_power_info", "amdsmi_get_gpu_power_info"), handle))
-        temp = _as_mapping(_call_first(amdsmi, ("amdsmi_get_temp_metric", "amdsmi_get_gpu_temperature"), handle))
-        ras = _as_mapping(_call_first(amdsmi, ("amdsmi_get_gpu_total_ecc_count", "amdsmi_get_gpu_ras_error_count"), handle))
+        activity = _as_mapping(_call_first(
+            amdsmi,
+            ("amdsmi_get_gpu_activity", "amdsmi_get_gpu_utilization"),
+            handle,
+            diagnostics=diagnostics,
+        ))
+        vram = _as_mapping(_call_first(
+            amdsmi,
+            ("amdsmi_get_gpu_vram_usage", "amdsmi_get_gpu_memory_usage"),
+            handle,
+            diagnostics=diagnostics,
+        ))
+        power = _as_mapping(_call_first(
+            amdsmi,
+            ("amdsmi_get_power_info", "amdsmi_get_gpu_power_info"),
+            handle,
+            diagnostics=diagnostics,
+        ))
+        temp = _as_mapping(_call_first(
+            amdsmi,
+            ("amdsmi_get_temp_metric", "amdsmi_get_gpu_temperature"),
+            handle,
+            diagnostics=diagnostics,
+        ))
+        ras = _as_mapping(_call_first(
+            amdsmi,
+            ("amdsmi_get_gpu_total_ecc_count", "amdsmi_get_gpu_ras_error_count"),
+            handle,
+            diagnostics=diagnostics,
+        ))
         used = _num(vram, "vram_used", "used", "used_vram", default=0.0)
         total = _num(vram, "vram_total", "total", "total_vram", default=0.0)
         sample = AcceleratorProfilerContext(
@@ -259,7 +289,11 @@ def _sample_rocm_amdsmi_from_module(amdsmi: Any, *, device_index: int) -> dict[s
             uncorrectable_ecc_errors=int(_num(ras, "uncorrectable_count", "uncorrectable", "ue_count", default=0)),
             xgmi_or_nvlink_replay_errors=int(_num(ras, "xgmi_replay_count", "replay_count", default=0)),
         ).to_dict()
-        sample["metadata"] = {"collector": "amdsmi", "device_index": device_index}
+        sample["metadata"] = {
+            "collector": "amdsmi",
+            "device_index": device_index,
+            "diagnostics": diagnostics,
+        }
         return sample
     finally:
         _call_if_present(amdsmi, "amdsmi_shut_down", "amdsmi_shutdown")
@@ -346,17 +380,36 @@ def _call_if_present(obj: Any, *names: str) -> Any:
     return None
 
 
-def _call_first(obj: Any, names: tuple[str, ...], *args: Any) -> Any:
+def _call_first(
+    obj: Any,
+    names: tuple[str, ...],
+    *args: Any,
+    diagnostics: list[dict[str, str]] | None = None,
+) -> Any:
     for name in names:
         fn = getattr(obj, name, None)
         if fn is None:
             continue
         try:
             return fn(*args)
-        except TypeError:
+        except TypeError as exc:
+            if diagnostics is not None:
+                diagnostics.append({
+                    "method": name,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "retry": "no_args",
+                })
             try:
                 return fn()
-            except TypeError:
+            except TypeError as retry_exc:
+                if diagnostics is not None:
+                    diagnostics.append({
+                        "method": name,
+                        "error_type": type(retry_exc).__name__,
+                        "error": str(retry_exc),
+                        "retry": "failed",
+                    })
                 continue
     return None
 
@@ -415,6 +468,7 @@ def _unavailable_accelerator_sample(
     sample["metadata"] = {
         "collector": collector,
         "error": str(exc),
+        "error_type": type(exc).__name__,
     }
     return sample
 

@@ -178,6 +178,7 @@ def test_artifact_lifecycle_is_no_longer_unimplemented():
         non_stub = (
             "TSR_STATUS_SUCCESS" in body
             or "return tsrLaunch" in body              # delegates to a real launcher
+            or "tsrLaunchHostTileKernel" in body       # host delegate captured into `st` then returned
             or "return parseArtifact" in body          # ditto for parsers
         )
         assert non_stub, (

@@ -27,7 +27,12 @@ def main(argv: list[str] | None = None) -> int:
         description="Normalize ROCprofiler/CUPTI/Metal records to tessera.profiler_provider_trace.v1.",
     )
     parser.add_argument("--provider", choices=("rocprofiler", "cupti", "metal"), required=True)
-    parser.add_argument("--input", required=True, help="Raw record/list JSON or provider trace artifact.")
+    parser.add_argument(
+        "--input",
+        action="append",
+        required=True,
+        help="Raw record/list JSON or provider trace artifact. Can be repeated.",
+    )
     parser.add_argument("--out", help="Write full provider trace artifact JSON.")
     parser.add_argument(
         "--trace-out",
@@ -36,18 +41,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        payload = load_provider_trace_input(args.input, provider=args.provider)
+        inputs = [load_provider_trace_input(path, provider=args.provider) for path in args.input]
     except Exception as exc:
         parser.error(str(exc))
-    # Rebuild existing artifacts too so --provider controls future fixture
-    # migrations with a deterministic output order.
-    if payload.get("source_status") != "file":
-        payload = build_provider_trace_artifact(
-            provider=args.provider,
-            records=records_from_raw(args.provider, payload.get("records", [])),
-            source_status=str(payload.get("source_status", "file")),
-            source=str(payload.get("source") or args.input),
-        )
+    records = []
+    for payload in inputs:
+        records.extend(records_from_raw(args.provider, payload.get("records", [])))
+    payload = build_provider_trace_artifact(
+        provider=args.provider,
+        records=records,
+        source_status="file" if len(args.input) == 1 else "file_batch",
+        source=",".join(args.input),
+    )
 
     if args.out:
         write_provider_trace_artifact(payload, args.out)

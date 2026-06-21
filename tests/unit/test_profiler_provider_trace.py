@@ -180,6 +180,50 @@ def test_tprof_provider_trace_cli_writes_artifact_and_trace_json(tmp_path: Path)
     assert "matmul" in report_path.read_text()
 
 
+def test_tprof_provider_trace_cli_accepts_repeated_inputs(tmp_path: Path) -> None:
+    raw_a = tmp_path / "a.json"
+    raw_b = tmp_path / "b.json"
+    out = tmp_path / "provider.json"
+    raw_a.write_text(json.dumps([{
+        "record_type": "api",
+        "name": "hipMemcpy",
+        "start_us": 1,
+        "end_us": 2,
+        "correlation_id": 1,
+    }]))
+    raw_b.write_text(json.dumps([{
+        "record_type": "dispatch",
+        "kernel_name": "matmul",
+        "start_us": 3,
+        "end_us": 5,
+        "correlation_id": 1,
+        "launch_id": "launch-1",
+        "probe_name": "matmul.mainloop",
+    }]))
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "rocprofiler",
+            "--input",
+            str(raw_a),
+            "--input",
+            str(raw_b),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["source_status"] == "file_batch"
+    assert payload["record_count"] == 2
+    assert payload["summary"]["launch_count"] == 1
+    assert payload["summary"]["probe_count"] == 1
+
+
 def test_provider_trace_golden_fixture_normalizes_all_rocprofiler_record_kinds(tmp_path: Path) -> None:
     out = tmp_path / "provider.json"
 

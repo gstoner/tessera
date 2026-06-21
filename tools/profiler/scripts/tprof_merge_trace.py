@@ -33,6 +33,12 @@ def main(argv: list[str] | None = None) -> int:
         help="tessera.profiler_provider_trace.v1 JSON. Can be repeated.",
     )
     parser.add_argument("--context-json", help="tessera.profiler_context.v1 JSON.")
+    parser.add_argument(
+        "--provider-status",
+        action="append",
+        default=[],
+        help="tessera.profiler_provider_status.v1 JSON. Can be repeated.",
+    )
     parser.add_argument("--out", required=True, help="Merged Trace Event JSON output.")
     args = parser.parse_args(argv)
 
@@ -41,11 +47,12 @@ def main(argv: list[str] | None = None) -> int:
             runtime_trace=load_json(args.runtime_trace) if args.runtime_trace else None,
             provider_traces=[load_json(path) for path in args.provider_trace],
             context_artifact=load_json(args.context_json) if args.context_json else None,
+            provider_statuses=[load_json(path) for path in args.provider_status],
         )
     except Exception as exc:
         parser.error(str(exc))
     write_merged_profiler_trace(payload, args.out)
-    if not args.provider_trace and not args.runtime_trace and not args.context_json:
+    if not args.provider_trace and not args.runtime_trace and not args.context_json and not args.provider_status:
         sys.stderr.write("warning: merged trace contains no input artifacts\n")
     return 0
 

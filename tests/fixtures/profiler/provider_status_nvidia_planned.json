@@ -1,0 +1,10 @@
+{
+  "diagnostics": {
+    "cupti": "compile-gated by TPROF_WITH_CUPTI",
+    "native_proof_required": "NVIDIA GPU plus CUPTI callback/activity proof"
+  },
+  "provider": "nvidia",
+  "schema": "tessera.profiler_provider_status.v1",
+  "status": "planned",
+  "target": "nvidia"
+}

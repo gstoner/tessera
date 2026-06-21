@@ -43,6 +43,7 @@ endif()
 
 if (TPROF_WITH_METAL)
   if (APPLE)
+    enable_language(OBJCXX)
     add_compile_definitions(TPROF_WITH_METAL=1)
   else()
     message(WARNING "Metal requested on a non-Apple host; building Metal provider as planned shell.")
@@ -57,7 +58,7 @@ if (TPROF_WITH_APPLE_SYSTEM_CONTEXT)
   endif()
 endif()
 
-add_library(tprof_runtime
+set(TPROF_RUNTIME_SOURCES
   src/runtime/tprof_runtime.cpp
   src/runtime/tessera_runtime_adapter.cpp
   src/runtime/provider_shells.cpp
@@ -68,6 +69,14 @@ add_library(tprof_runtime
   src/runtime/cupti_shim.cpp
   src/exporters/chrome_trace_exporter.cpp
   src/exporters/perfetto_exporter.cpp
+)
+
+if (TPROF_WITH_METAL AND APPLE)
+  list(APPEND TPROF_RUNTIME_SOURCES src/runtime/metal_command_buffer_probe.mm)
+endif()
+
+add_library(tprof_runtime
+  ${TPROF_RUNTIME_SOURCES}
 )
 target_include_directories(tprof_runtime
   PUBLIC
@@ -83,6 +92,9 @@ if (CUPTI_FOUND)
 endif()
 if (ROCprofilerSDK_FOUND)
   target_link_libraries(tprof_runtime PRIVATE ROCprofilerSDK::rocprofiler-sdk)
+endif()
+if (TPROF_WITH_METAL AND APPLE)
+  target_link_libraries(tprof_runtime PRIVATE "-framework Metal")
 endif()
 
 add_library(tprof_device INTERFACE)

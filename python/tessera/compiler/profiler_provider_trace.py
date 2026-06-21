@@ -116,14 +116,26 @@ def summarize_provider_trace_records(
 ) -> dict[str, Any]:
     counts: dict[str, int] = {}
     correlations: set[str] = set()
+    launch_ids: set[str] = set()
+    probe_names: set[str] = set()
+    dropped_records = 0
     for raw in records:
         record = raw if isinstance(raw, ProviderTraceRecord) else _coerce_record(None, raw)
         counts[record.kind] = counts.get(record.kind, 0) + 1
         if record.correlation_id is not None:
             correlations.add(str(record.correlation_id))
+        args = dict(record.args or {})
+        if args.get("launch_id") is not None:
+            launch_ids.add(str(args["launch_id"]))
+        if args.get("probe_name") is not None:
+            probe_names.add(str(args["probe_name"]))
+        dropped_records += int(args.get("dropped_records") or 0)
     return {
         "kinds": dict(sorted(counts.items())),
         "correlation_count": len(correlations),
+        "launch_count": len(launch_ids),
+        "probe_count": len(probe_names),
+        "dropped_records": dropped_records,
     }
 
 
@@ -134,6 +146,12 @@ def normalize_rocprofiler_api_record(raw: Mapping[str, Any]) -> ProviderTraceRec
         "domain": domain,
         "phase": phase,
         "operation": _first(raw, "operation", "op", "api", default=None),
+        "launch_id": _first(raw, "launch_id", default=None),
+        "target": _first(raw, "target", default=None),
+        "backend": _first(raw, "backend", default="rocm"),
+        "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", "stream_id", default=None),
+        "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
         provider="rocprofiler",
@@ -156,6 +174,13 @@ def normalize_rocprofiler_activity_record(raw: Mapping[str, Any]) -> ProviderTra
         "queue_id": _first(raw, "queue_id", "queue", default=None),
         "dispatch_id": _first(raw, "dispatch_id", default=None),
         "bytes": _first(raw, "bytes", "size", default=None),
+        "launch_id": _first(raw, "launch_id", default=None),
+        "probe_name": _first(raw, "probe_name", "probe", default=None),
+        "target": _first(raw, "target", default=None),
+        "backend": _first(raw, "backend", default="rocm"),
+        "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", "queue", default=None),
+        "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
         provider="rocprofiler",
@@ -178,7 +203,15 @@ def normalize_rocprofiler_counter_record(raw: Mapping[str, Any]) -> ProviderTrac
         value=float(_first(raw, "value", default=0.0) or 0.0),
         correlation_id=_first(raw, "correlation_id", "dispatch_id", default=None),
         thread_id=_first(raw, "agent_id", "tid", default=0),
-        args={"unit": _first(raw, "unit", default=None), "agent": _first(raw, "agent", "agent_id", default=None)},
+        args={
+            "unit": _first(raw, "unit", default=None),
+            "agent": _first(raw, "agent", "agent_id", default=None),
+            "launch_id": _first(raw, "launch_id", default=None),
+            "probe_name": _first(raw, "probe_name", "probe", default=None),
+            "target": _first(raw, "target", default=None),
+            "backend": _first(raw, "backend", default="rocm"),
+            "dropped_records": _first(raw, "dropped_records", default=None),
+        },
     )
 
 
@@ -196,6 +229,11 @@ def normalize_rocprofiler_thread_trace_record(raw: Mapping[str, Any]) -> Provide
             "shader_engine_mask": _first(raw, "shader_engine_mask", default=None),
             "target_cu": _first(raw, "target_cu", default=None),
             "records": _first(raw, "records", "record_count", default=None),
+            "launch_id": _first(raw, "launch_id", default=None),
+            "probe_name": _first(raw, "probe_name", "probe", default=None),
+            "target": _first(raw, "target", default=None),
+            "backend": _first(raw, "backend", default="rocm"),
+            "dropped_records": _first(raw, "dropped_records", default=None),
         },
     )
 
@@ -205,6 +243,13 @@ def normalize_metal_command_buffer_record(raw: Mapping[str, Any]) -> ProviderTra
         "command_buffer": _first(raw, "command_buffer", "command_buffer_id", default=None),
         "kernel": _first(raw, "kernel", "probe", "label", default=None),
         "status": _first(raw, "status", default=None),
+        "launch_id": _first(raw, "launch_id", default=None),
+        "probe_name": _first(raw, "probe_name", "probe", default=None),
+        "target": _first(raw, "target", default="apple_gpu"),
+        "backend": _first(raw, "backend", default="metal"),
+        "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", default=None),
+        "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
         provider="metal",
@@ -230,6 +275,11 @@ def normalize_metal_counter_record(raw: Mapping[str, Any]) -> ProviderTraceRecor
         args={
             "sample_index": _first(raw, "sample_index", default=None),
             "probe": _first(raw, "probe", "kernel", default=None),
+            "launch_id": _first(raw, "launch_id", default=None),
+            "probe_name": _first(raw, "probe_name", "probe", default=None),
+            "target": _first(raw, "target", default="apple_gpu"),
+            "backend": _first(raw, "backend", default="metal"),
+            "dropped_records": _first(raw, "dropped_records", default=None),
         },
     )
 
@@ -244,7 +294,16 @@ def normalize_cupti_callback_record(raw: Mapping[str, Any]) -> ProviderTraceReco
         duration_us=_duration_us(raw),
         correlation_id=_first(raw, "correlation_id", "correlationId", default=None),
         thread_id=_first(raw, "thread_id", "tid", default=0),
-        args={"domain": domain, "cbid": _first(raw, "cbid", default=None)},
+        args={
+            "domain": domain,
+            "cbid": _first(raw, "cbid", default=None),
+            "launch_id": _first(raw, "launch_id", default=None),
+            "target": _first(raw, "target", default=None),
+            "backend": _first(raw, "backend", default="cuda"),
+            "stream_or_queue": _first(raw, "stream_or_queue", "stream_id", "streamId", default=None),
+            "fallback_reason": _first(raw, "fallback_reason", default=None),
+            "dropped_records": _first(raw, "dropped_records", default=None),
+        },
     )
 
 
@@ -255,6 +314,13 @@ def normalize_cupti_activity_record(raw: Mapping[str, Any]) -> ProviderTraceReco
         "bytes": _first(raw, "bytes", default=None),
         "device_id": _first(raw, "device_id", "deviceId", default=None),
         "stream_id": _first(raw, "stream_id", "streamId", default=None),
+        "launch_id": _first(raw, "launch_id", default=None),
+        "probe_name": _first(raw, "probe_name", "probe", default=None),
+        "target": _first(raw, "target", default=None),
+        "backend": _first(raw, "backend", default="cuda"),
+        "stream_or_queue": _first(raw, "stream_or_queue", "stream_id", "streamId", default=None),
+        "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
         provider="cupti",
@@ -303,6 +369,12 @@ def validate_provider_trace_artifact(payload: Mapping[str, Any]) -> None:
         raise ValueError("provider trace artifact requires records and traceEvents lists")
     if payload.get("record_count") != len(records):
         raise ValueError("record_count must match records length")
+    for event in trace_events:
+        if not isinstance(event, Mapping):
+            raise ValueError("provider trace events must be mappings")
+        for key in ("name", "cat", "ph", "ts", "args"):
+            if key not in event:
+                raise ValueError(f"provider trace event missing {key!r}")
 
 
 def _coerce_record(provider: Provider | None, raw: ProviderTraceRecord | Mapping[str, Any]) -> ProviderTraceRecord:
@@ -311,6 +383,18 @@ def _coerce_record(provider: Provider | None, raw: ProviderTraceRecord | Mapping
     raw_provider = provider or raw.get("provider")
     if raw_provider not in {"rocprofiler", "cupti", "metal"}:
         raise ValueError("provider must be rocprofiler, cupti, or metal")
+    if {"provider", "kind", "name", "ts_us", "duration_us", "args"} <= set(raw):
+        return ProviderTraceRecord(
+            provider=raw_provider,
+            kind=str(raw["kind"]),  # type: ignore[arg-type]
+            name=str(raw["name"]),
+            ts_us=float(raw["ts_us"]),
+            duration_us=float(raw.get("duration_us") or 0.0),
+            correlation_id=raw.get("correlation_id"),
+            thread_id=raw.get("thread_id", 0),
+            value=(float(raw["value"]) if raw.get("value") is not None else None),
+            args=dict(raw.get("args") or {}),
+        )
     record_type = str(_first(raw, "record_type", "kind", "type", "activity", default="")).lower()
     if raw_provider == "rocprofiler":
         if "thread" in record_type:

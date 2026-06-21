@@ -28,6 +28,7 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
         text = path.read_text()
         assert f"{provider}_adapter_init" in text
         assert f"{provider}_adapter_shutdown" in text
+        assert f"{provider}_adapter_status" in text
         assert f"{provider}_record_" in text
 
     roc = sources["rocprofiler"].read_text()
@@ -40,8 +41,15 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "exclude_api" in headers["rocprofiler"].read_text()
     assert "include_kernel" in headers["rocprofiler"].read_text()
     assert "exclude_kernel" in headers["rocprofiler"].read_text()
+    assert "include_counter" in headers["rocprofiler"].read_text()
+    assert "thread_trace_max_bytes" in headers["rocprofiler"].read_text()
+    assert "rocprofiler_api_record_t" in headers["rocprofiler"].read_text()
+    assert "rocprofiler_replay_api_record" in headers["rocprofiler"].read_text()
     assert "rocprofiler_adapter_pause" in headers["rocprofiler"].read_text()
     assert "passes_filters" in roc
+    assert "rocprofiler_adapter_status_t" in roc
+    assert "thread trace record exceeded configured byte limit" in roc
+    assert "rocprofiler_replay_thread_trace_record" in roc
     assert "runtime_api(name ? name : \"rocprofiler.api\"" in roc
     assert "device_activity(name ? name : \"rocprofiler.dispatch\"" in roc
     assert "intra_kernel_sample" in roc
@@ -52,7 +60,10 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "metal_adapter_pause" in headers["metal"].read_text()
     assert "include_label" in headers["metal"].read_text()
     assert "exclude_counter" in headers["metal"].read_text()
+    assert "metal_command_buffer_record_t" in headers["metal"].read_text()
+    assert "metal_replay_command_buffer_record" in headers["metal"].read_text()
     assert "tprof_passes_filters" in metal
+    assert "metal_adapter_status_t" in metal
     assert "device_activity(label ? label : \"metal.command_buffer\"" in metal
 
     cupti = sources["cupti"].read_text()
@@ -62,7 +73,10 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "activity_buffer_bytes" in headers["cupti"].read_text()
     assert "include_api" in headers["cupti"].read_text()
     assert "exclude_activity" in headers["cupti"].read_text()
+    assert "cupti_callback_record_t" in headers["cupti"].read_text()
+    assert "cupti_replay_callback_record" in headers["cupti"].read_text()
     assert "tprof_passes_filters" in cupti
+    assert "cupti_adapter_status_t" in cupti
     assert "runtime_api(name ? name : \"cupti.callback\"" in cupti
     assert "device_activity(name ? name : \"cupti.activity\"" in cupti
 
@@ -72,6 +86,8 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
         "src/runtime/cupti_adapter.cpp",
     ):
         assert source in cmake
+    assert "metal_command_buffer_probe.mm" in cmake
+    assert "enable_language(OBJCXX)" in cmake
 
 
 def test_provider_adapter_harness_exports_tprof_categories(tmp_path: Path) -> None:
@@ -231,6 +247,94 @@ int main(int argc, char** argv) {
     assert "skip_matmul" not in names
 
 
+def test_rocprofiler_adapter_status_replay_and_thread_trace_guard(tmp_path: Path) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("c++ compiler is not available")
+    harness = tmp_path / "rocprofiler_replay_harness.cpp"
+    trace = tmp_path / "rocprofiler_replay.trace.json"
+    exe = tmp_path / "rocprofiler_replay_harness"
+    harness.write_text(
+        r'''
+#include "tprof/rocprofiler_adapter.h"
+#include "tprof/tprof_runtime.h"
+
+int main(int argc, char** argv) {
+  if (argc != 2) return 2;
+  tprof::enable(tprof::config_t{});
+  tprof::rocprofiler_adapter_config_t cfg{};
+  cfg.counter_collection = true;
+  cfg.thread_trace = true;
+  cfg.include_counter = "SQ";
+  cfg.exclude_counter = "BAD";
+  cfg.thread_trace_max_bytes = 64;
+  (void)tprof::rocprofiler_adapter_init(cfg);
+  auto status = tprof::rocprofiler_adapter_status();
+  if (status.paused) return 3;
+  if (!status.counter_collection || !status.thread_trace) return 4;
+  if (status.buffer_bytes == 0 || status.thread_trace_max_bytes != 64) return 5;
+  if (status.source_status == nullptr || status.last_error == nullptr) return 6;
+
+  tprof::rocprofiler_replay_api_record(
+      tprof::rocprofiler_api_record_t{"hipMemcpy", "HIP_API", 10, 1.0, 3.5,
+                                      "{\"bytes\":128}"});
+  tprof::rocprofiler_replay_activity_record(
+      tprof::rocprofiler_activity_record_t{"matmul", "dispatch", 10, 4.0, 14.0, 77,
+                                           "{\"queue_id\":2}"});
+  tprof::rocprofiler_replay_counter_record(
+      tprof::rocprofiler_counter_record_t{"SQ_WAVES", 8.0, 77, "{\"unit\":\"waves\"}"});
+  tprof::rocprofiler_replay_counter_record(
+      tprof::rocprofiler_counter_record_t{"BAD_SQ_WAVES", 8.0, 77, nullptr});
+  tprof::rocprofiler_replay_thread_trace_record(
+      tprof::rocprofiler_thread_trace_record_t{"matmul", 77, 4.0, 14.0, 32,
+                                               "{\"target_cu\":0}"});
+  tprof::rocprofiler_replay_thread_trace_record(
+      tprof::rocprofiler_thread_trace_record_t{"huge", 78, 4.0, 14.0, 128,
+                                               "{\"target_cu\":1}"});
+  status = tprof::rocprofiler_adapter_status();
+  if (!status.thread_trace_volume_limited) return 7;
+  return tprof::export_chrome(argv[1]) ? 0 : 1;
+}
+'''
+    )
+    sources = [
+        harness,
+        ROOT / "tools/profiler/src/runtime/tprof_runtime.cpp",
+        ROOT / "tools/profiler/src/runtime/rocprofiler_adapter.cpp",
+        ROOT / "tools/profiler/src/runtime/nvtx_shim.cpp",
+        ROOT / "tools/profiler/src/exporters/chrome_trace_exporter.cpp",
+        ROOT / "tools/profiler/src/exporters/perfetto_exporter.cpp",
+    ]
+    compile_proc = subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            "-I",
+            str(ROOT / "tools/profiler/include"),
+            "-I",
+            str(ROOT / "tools/profiler/src/runtime"),
+            *[str(source) for source in sources],
+            "-o",
+            str(exe),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert compile_proc.returncode == 0, compile_proc.stderr
+    run_proc = subprocess.run([str(exe), str(trace)], capture_output=True, text=True, timeout=10)
+    assert run_proc.returncode == 0, run_proc.stderr
+
+    payload = json.loads(trace.read_text())
+    names = [event.get("name") for event in payload["traceEvents"]]
+    assert "hipMemcpy" in names
+    assert "matmul" in names
+    assert "SQ_WAVES" in names
+    assert "BAD_SQ_WAVES" not in names
+    assert "huge" not in names
+
+
 def test_cupti_and_metal_adapters_honor_pause_and_filters(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
@@ -254,11 +358,16 @@ int main(int argc, char** argv) {
   cupti.include_activity = "matmul";
   cupti.exclude_activity = "skip";
   tprof::cupti_adapter_init(cupti);
+  auto cupti_status = tprof::cupti_adapter_status();
+  if (!cupti_status.paused || !cupti_status.runtime_driver_callbacks) return 4;
   tprof::cupti_record_callback("cudaLaunchKernel", "runtime", 1, 1.0, nullptr);
   tprof::cupti_adapter_resume();
-  tprof::cupti_record_callback("cudaLaunchKernel", "runtime", 2, 1.0, nullptr);
+  tprof::cupti_replay_callback_record(
+      tprof::cupti_callback_record_t{"cudaLaunchKernel", "runtime", 2, 1.0, 2.0,
+                                     nullptr});
   tprof::cupti_record_callback("cudaIgnore", "runtime", 3, 1.0, nullptr);
-  tprof::cupti_record_activity("matmul", "kernel", 4, 5.0, nullptr);
+  tprof::cupti_replay_activity_record(
+      tprof::cupti_activity_record_t{"matmul", "kernel", 4, 4.0, 9.0, nullptr});
   tprof::cupti_record_activity("skip_matmul", "kernel", 5, 5.0, nullptr);
 
   tprof::metal_adapter_config_t metal{};
@@ -269,9 +378,13 @@ int main(int argc, char** argv) {
   metal.include_counter = "gpu";
   metal.exclude_counter = "bad";
   tprof::metal_adapter_init(metal);
-  tprof::metal_record_command_buffer("metal.matmul", 7, 6.0, nullptr);
+  auto metal_status = tprof::metal_adapter_status();
+  if (!metal_status.command_buffer_spans || !metal_status.counter_sample_buffers) return 5;
+  tprof::metal_replay_command_buffer_record(
+      tprof::metal_command_buffer_record_t{"metal.matmul", 7, 10.0, 16.0, nullptr});
   tprof::metal_record_command_buffer("metal.skip", 8, 6.0, nullptr);
-  tprof::metal_record_counter_sample("gpu_cycles", 9.0, 7, "mainloop", nullptr);
+  tprof::metal_replay_counter_sample_record(
+      tprof::metal_counter_sample_record_t{"gpu_cycles", 9.0, 7, "mainloop", nullptr});
   tprof::metal_record_counter_sample("bad_gpu_cycles", 9.0, 7, "mainloop", nullptr);
   tprof::metal_adapter_pause();
   if (!tprof::metal_adapter_is_paused()) return 3;

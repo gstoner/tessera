@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 454 |
-| `transpose_rule` | 0 | 458 |
-| `sharding_rule` | 39 | 419 |
-| `lowering_rule` | 0 | 458 |
-| `backend_kernel` | 458 | 0 |
+| `batching_rule` | 4 | 466 |
+| `transpose_rule` | 0 | 470 |
+| `sharding_rule` | 45 | 425 |
+| `lowering_rule` | 0 | 470 |
+| `backend_kernel` | 470 | 0 |
 
 ## Per-category breakdown
 
@@ -29,8 +29,8 @@
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
 | S5 | `control_flow` | 7 | — | — | — | — | 7 |
-| S7 | `attention` | 26 | — | — | 12 | — | 26 |
-| S7 | `position_encoding` | 2 | — | — | — | — | 2 |
+| S7 | `attention` | 28 | — | — | 14 | — | 28 |
+| S7 | `position_encoding` | 3 | — | — | — | — | 3 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
 | S7 | `memory` | 3 | — | — | — | — | 3 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
@@ -50,8 +50,8 @@
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
-| other | `indexing` | 13 | — | — | — | — | 13 |
-| other | `layout_transform` | 14 | — | — | — | — | 14 |
+| other | `indexing` | 14 | — | — | — | — | 14 |
+| other | `layout_transform` | 17 | — | — | — | — | 17 |
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |
@@ -68,7 +68,7 @@
 | other | `random_source` | 2 | — | — | — | — | 2 |
 | other | `recurrent` | 3 | — | — | — | — | 3 |
 | other | `rng` | 18 | — | — | — | — | 18 |
-| other | `rotary_embedding` | 1 | — | — | — | — | 1 |
+| other | `rotary_embedding` | 2 | — | — | — | — | 2 |
 | other | `segment_reduce` | 1 | — | — | — | — | 1 |
 | other | `serialization` | 6 | — | — | — | — | 6 |
 | other | `sharding` | 3 | — | — | — | — | 3 |
@@ -81,6 +81,7 @@
 | other | `state_update` | 4 | 1 | — | — | — | 4 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
 | other | `transform` | 11 | — | — | — | — | 11 |
+| other | `vision` | 4 | — | — | 4 | — | 4 |
 
 ## Roll-up by sprint
 
@@ -88,12 +89,12 @@
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 56 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 55 | 0 | 0 | 12 | 55 |
+| S7 | 58 | 0 | 0 | 14 | 58 |
 | S10 | 18 | 0 | 0 | 0 | 18 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 259 | 4 | 0 | 21 | 259 |
+| other | 268 | 4 | 0 | 25 | 268 |
 
 ## Closure trajectory
 

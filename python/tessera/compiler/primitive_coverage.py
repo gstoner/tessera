@@ -298,6 +298,19 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "lookahead_sparse_attention": ("Titans/Atlas", "Megalodon/Griffin"),
     "conv2d": ("diffusion", "JEPA"),
     "conv3d": ("diffusion",),
+    # VLM connector pack (P0+) — vision-language model glue primitives.
+    "masked_scatter": ("all", "vlm"),
+    "image_resize": ("vlm", "diffusion"),
+    "interpolate": ("vlm", "diffusion"),
+    "center_crop": ("vlm",),
+    "image_normalize": ("vlm",),
+    "patchify": ("vlm",),
+    "factorized_pos_emb": ("vlm",),
+    "mrope_2d": ("vlm",),
+    "pixel_unshuffle": ("vlm",),
+    "pixel_shuffle": ("vlm",),
+    "cross_attention": ("vlm",),
+    "perceiver_resampler": ("vlm",),
     "dct": ("Hyena/FNet/spectral",),
     "depthwise_conv1d": ("Mamba/SSM", "Hyena/FNet/spectral", "Megalodon/Griffin"),
     "fft": ("Hyena/FNet/spectral",),
@@ -1069,6 +1082,7 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "normalization":       "complete",   # per-sample independent
     "pooling":             "complete",
     "stencil":             "complete",   # spatial dims independent across batch
+    "vision":              "complete",   # VLM preprocessing — batch over N
     "sort":                "complete",   # sort along inner axis, batch outer
     "grad_transform":      "complete",   # per-parameter
     # — Trickier: state interactions / routing / control flow —
@@ -1266,6 +1280,10 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # stencil primitive (depthwise_conv1d/2d, neighbors stencil.apply,
     # halo.exchange) has a documented transpose-conv counterpart.
     "stencil":             "complete",
+    # vision (transpose, 2026-06-21): VLM preprocessing ops are linear maps —
+    # resample-transpose (resize/interpolate), zero-pad (center_crop), 1/std
+    # scale (image_normalize) — so the transpose rule is defined.
+    "vision":              "complete",
     # pooling (transpose, 2026-06-02): max/min/adaptive pool are nonlinear
     # (they select an argmax/argmin element), so the category default is
     # N/A — their backward is the registered VJP (unpool-with-indices),
@@ -1424,6 +1442,7 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
     "grad_transform":      "complete",
     "sort":                "complete",
     "stencil":             "complete",
+    "vision":              "complete",
     "state_update":        "complete",
     # Partial: variant-dependent and layout-dependent (per-name overrides
     # still win when a specific entry is formally documented).
@@ -1530,6 +1549,9 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
     "state_update":        "complete",
     "state_space":         "complete",
     "stencil":             "complete",
+    "vision":              "complete",   # decomposes to gather/affine/slice
+    "indexing":            "complete",   # scatter/gather/index_update in OP_SPECS
+    "layout_transform":    "complete",   # reshape/permute/transpose in OP_SPECS
 
     # — GA + EBM (Decision #25, 2026-05-17): the Clifford dialect
     #   (`tessera_clifford`) + EBM annotation passes (`tessera_ebm`)
@@ -2125,6 +2147,7 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     "loop_nest":           "complete",   # test_autodiff_lowering_gap_hardening
     "memory":              "complete",   # test_sprint_collectives_optim_memory_cumextrema
     "stencil":             "complete",   # test_conv1d_autodiff
+    "vision":              "complete",   # test_vlm_primitives
     "pooling":             "complete",   # test_autodiff_loss_layer_coverage
     "normalization":       "complete",   # test_autodiff_loss_layer_coverage
     "state_tree":          "complete",   # test_state_tree.py
@@ -2612,6 +2635,21 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "tokenizer_sentencepiece_compat": ("tokenizer", "SentencePiece-compatible vocab tokenizer — S15 landed 2026-05-10"),
         # S8 — expanded conformance target once S10-S15 exist.
         "tiny_training_step_conformance": ("conformance", "data/loss/optimizer/checkpoint training-step smoke — S8 expanded 2026-05-10"),
+        # VLM connector pack — Python reference + autodiff; Graph IR / backend
+        # kernels still pending (status stays `partial`).  See
+        # docs/audit/coverage/COVERAGE_AUDIT.md (VLM gap section).
+        "masked_scatter": ("indexing", "VLM modality fusion — splice projected patch embeddings into <|image|> placeholder slots (combined[mask]=image_embd); VJP+JVP registered — VLM P0 landed 2026-06-21"),
+        "image_resize": ("vision", "VLM preprocessing — resize shorter side / to size, bilinear; VJP+JVP registered — VLM P0 landed 2026-06-21"),
+        "interpolate": ("vision", "general bilinear/nearest resampler — dynamic-res inputs + pos-emb interpolation; VJP+JVP registered — VLM P0 landed 2026-06-21"),
+        "center_crop": ("vision", "VLM preprocessing — central crop; VJP+JVP registered — VLM P0 landed 2026-06-21"),
+        "image_normalize": ("vision", "VLM preprocessing — per-channel (x-mean)/std affine; VJP+JVP registered — VLM P0 landed 2026-06-21"),
+        "patchify": ("layout_transform", "VLM patch embedder — (B,C,H,W)→(B,nh*nw,C*P*P) reshape/permute; VJP+JVP registered — VLM P1 landed 2026-06-21"),
+        "factorized_pos_emb": ("position_encoding", "VLM factorized 2-D positional embedding pos[i,j]=row[i]+col[j] (Gemma-4 embedder); VJP+JVP registered — VLM P1 landed 2026-06-21"),
+        "mrope_2d": ("rotary_embedding", "multimodal M-RoPE — rotary split into temporal/height/width sections (Qwen2-VL); reduces to rope for one section; VJP+JVP registered — VLM P1 landed 2026-06-21"),
+        "pixel_unshuffle": ("layout_transform", "VLM token reduction — space-to-depth (B,C,H,W)->(B,C*r^2,H/r,W/r) (Idefics3/InternVL); VJP+JVP registered — VLM P2 landed 2026-06-21"),
+        "pixel_shuffle": ("layout_transform", "depth-to-space, inverse of pixel_unshuffle; VJP+JVP registered — VLM P2 landed 2026-06-21"),
+        "cross_attention": ("attention", "scaled-dot-product cross-attention (query attends to separate K/V source; Flamingo/BLIP-2/Q-Former); analytic VJP+JVP registered — VLM P2 landed 2026-06-21"),
+        "perceiver_resampler": ("attention", "Perceiver/Q-Former resampler — learned latents cross-attend to image features; composite over cross_attention, tape-differentiable — VLM P2 landed 2026-06-21"),
     }
     nondifferentiable_categories = {
         "aot",
@@ -2629,6 +2667,16 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "cummin": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "conv1d": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "linear_general": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # VLM preprocessing pack — closed-form semantics, deterministic shape
+        # rules, dtype-preserving (modulo the fp accum in normalize/resample).
+        "image_resize": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "interpolate": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "center_crop": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "image_normalize": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # perceiver_resampler is a composite over cross_attention (no single
+        # registered VJP) but is differentiable end-to-end through the tape —
+        # mark the differentiation axes complete (verified by the tape test).
+        "perceiver_resampler": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "vjp": "complete", "jvp": "complete"},
         "sgd": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "adam": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "adamw": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
@@ -2636,6 +2684,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "adafactor": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "lion": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "gated_attention": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "cross_attention": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "hybrid_attention": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "deepseek_sparse_attention": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "lightning_attention": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
@@ -3381,6 +3430,15 @@ _PLANNED_ENTRIES: tuple[PrimitiveCoverage, ...] = (
              ("complex_analysis", "harmonic_analysis"),
              references=("Needham — Visual Complex Analysis",),
              notes="M7: Δ = 4 ∂² /∂z∂z̄; harmonic ⇔ real-part of holomorphic."),
+    # ── VLM P0: modality fusion + image preprocessing ────────────────────
+    # The connector/preprocessing layer every vision-language model needs.
+    # The heavy compute (conv2d/conv3d, flash_attn, varlen_sdpa,
+    # layer_norm, linear_general) already ships; these are the missing glue
+    # primitives that turn an image into LM-ready tokens and splice them in.
+    # Tracked as `planned` so the gap is visible on the dashboard rather
+    # than implied by absence.  Covers encoder-free (Fuyu/Gemma-4),
+    # encoder+connector (LLaVA/SmolVLM), and dynamic-resolution (Qwen2-VL)
+    # families.  See docs/audit/coverage/COVERAGE_AUDIT.md (VLM gap section).
 )
 
 

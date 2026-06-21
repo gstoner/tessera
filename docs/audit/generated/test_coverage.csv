@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,7,0,0,7,0,fp32 fp64,directly_tested,7 direct test references
 adamw,6,0,0,6,0,fp32 fp64,directly_tested,6 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,92,13,8,105,0,bf16 f16 f32 f64 fp32,directly_tested,105 direct test references
+add,93,13,8,106,0,bf16 f16 f32 f64 fp32,directly_tested,106 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,1,0,0,1,1,,covered_by_family,tested via attention_family_support attention paths
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -48,6 +48,7 @@ calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fa
 cast,10,40,0,50,0,fp32,directly_tested,50 direct test references
 cat,12,0,0,12,0,,directly_tested,12 direct test references
 ceil,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+center_crop,4,0,1,4,0,,directly_tested,4 direct test references
 centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 chained_schedule,1,0,0,1,1,,structural_only,category default for 'schedule'
 check_cauchy_riemann,0,0,0,0,1,,covered_by_family,exercised by complex_jit / CR conformance tests
@@ -105,6 +106,7 @@ cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 count_nonzero,9,0,0,9,0,,directly_tested,9 direct test references
+cross_attention,7,0,0,7,0,,directly_tested,7 direct test references
 cross_entropy_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 ctc_loss,7,0,0,7,0,,directly_tested,7 direct test references
@@ -172,6 +174,7 @@ exp,4,0,0,4,0,,directly_tested,4 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
+factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
 fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
 flash_attn,94,57,5,151,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,151 direct test references
@@ -199,11 +202,14 @@ gt,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 huber_loss,2,0,0,2,0,,directly_tested,2 direct test references
 hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
 ifft,3,0,0,3,0,fp32,directly_tested,3 direct test references
+image_normalize,4,0,1,4,0,,directly_tested,4 direct test references
+image_resize,6,0,1,6,0,,directly_tested,6 direct test references
 implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 index_update,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 info_nce_loss,3,0,0,3,0,,directly_tested,3 direct test references
 instance_norm,6,0,0,6,0,,directly_tested,6 direct test references
+interpolate,6,0,1,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 irfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
@@ -254,7 +260,8 @@ mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
-matmul,380,180,15,560,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,560 direct test references
+masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
+matmul,381,180,15,561,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,561 direct test references
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,4,0,0,4,0,,directly_tested,4 direct test references
@@ -284,6 +291,7 @@ mor_partition,3,2,1,5,0,,directly_tested,5 direct test references
 mor_router,5,3,1,8,0,,directly_tested,8 direct test references
 mor_scatter,3,2,1,5,0,,directly_tested,5 direct test references
 mqa_attention,3,0,0,3,0,,directly_tested,3 direct test references
+mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
 msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
@@ -305,8 +313,12 @@ pack,3,0,0,3,0,,directly_tested,3 direct test references
 pad,2,0,0,2,0,,directly_tested,2 direct test references
 partial_state_load,0,0,0,0,1,,structural_only,category default for 'serialization'
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
+patchify,6,0,1,6,0,,directly_tested,6 direct test references
+perceiver_resampler,1,0,0,1,1,,needs_direct_test,category default for 'attention'
 permute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 persistent_cd_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
+pixel_shuffle,1,0,1,1,1,,needs_direct_test,category default for 'layout_transform'
+pixel_unshuffle,5,0,1,5,0,,directly_tested,5 direct test references
 pmap,0,0,0,0,1,,structural_only,category default for 'transform'
 pmax,2,0,0,2,0,,directly_tested,2 direct test references
 pmean,2,0,0,2,0,,directly_tested,2 direct test references
@@ -330,7 +342,7 @@ quantize_nvfp4,11,0,2,11,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nv
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,2,0,0,2,0,,directly_tested,2 direct test references
 reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reduce,83,0,7,83,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,83 direct test references
+reduce,86,0,7,86,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,103,18,9,121,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,121 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -361,7 +373,7 @@ rng_split,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_truncated_normal,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_uniform,3,0,0,3,0,fp32,directly_tested,3 direct test references
 roll,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-rope,17,10,0,27,0,,directly_tested,27 direct test references
+rope,18,10,0,28,0,,directly_tested,28 direct test references
 rope_merge,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 rope_split,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
 round,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

@@ -629,6 +629,286 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         out[np.broadcast_to(mask, out.shape)] = value
         return out
 
+    def masked_scatter(x, mask, source):
+        """VLM modality fusion — overwrite ``x`` at every True position of
+        ``mask`` with consecutive elements of ``source`` (row-major).
+
+        This is the ``combined[mask] = image_embd`` splice that injects
+        projected patch embeddings into the ``<|image|>`` placeholder slots of
+        the token-embedding sequence. ``mask`` broadcasts against ``x`` (the
+        VLM case is a per-token ``(B, S)`` mask over an ``(B, S, D)`` embedding
+        sequence, so each True token consumes one ``D``-vector row of
+        ``source``). Matches ``torch.Tensor.masked_scatter`` semantics: source
+        is consumed in flattened order; only the first ``mask.sum()`` elements
+        are used.
+
+        Differentiable through ``x`` and ``source``; ``mask`` is recorded but
+        non-differentiable. Gradient flows to ``x`` only at the *unmasked*
+        positions and to ``source`` only at the consumed positions.
+        """
+        if hasattr(x, "_data"):
+            x = x._data
+        if hasattr(mask, "_data"):
+            mask = mask._data
+        if hasattr(source, "_data"):
+            source = source._data
+        x = np.asarray(x)
+        mask = np.asarray(mask, dtype=bool)
+        # Native numpy boolean indexing: a same-shape mask selects scalars, a
+        # leading-prefix mask (the VLM (B,S) mask over an (B,S,D) embedding
+        # sequence) selects whole trailing rows. ``x[mask]`` gives the selected
+        # block shape either way; we consume that many source elements.
+        selected_shape = x[mask].shape
+        total = int(np.prod(selected_shape)) if selected_shape else 0
+        src_flat = np.asarray(source).reshape(-1)
+        if src_flat.size < total:
+            raise ValueError(
+                f"masked_scatter: source has {src_flat.size} elements but mask "
+                f"selects {total} positions — source must supply at least as "
+                f"many values as the mask selects."
+            )
+        out = x.copy().astype(np.result_type(x, src_flat))
+        out[mask] = src_flat[:total].reshape(selected_shape)
+        return out
+
+    # ── VLM image preprocessing pack ─────────────────────────────────────────
+    # resize → center_crop → normalize is the standard VLM transform; the
+    # general `interpolate` resampler backs both variable-resolution inputs and
+    # positional-embedding-table interpolation. Layout is one of
+    # nchw/nhwc/chw/hwc; shape params are keyword-only so `x` is the sole
+    # differentiable positional input. Shared resample/layout helpers (also used
+    # by the VJP/JVP rules) live in tessera._image_ops.
+    from . import _image_ops as _imgops
+    _img_unwrap = _imgops.img_unwrap
+    _img_canon = _imgops.img_canon
+    _resample_nchw = _imgops.resample_nchw
+
+    def image_resize(x, *, size, mode="bilinear", align_corners=False,
+                     layout="nchw", antialias=False):
+        """Resize an image tensor's spatial dims. ``size`` is either an int
+        (resize the *shorter* side to that length, preserving aspect ratio —
+        the VLM transform's step 1) or a ``(H_out, W_out)`` pair. Bilinear by
+        default; differentiable through ``x``.
+        """
+        if antialias:
+            raise NotImplementedError(
+                "image_resize: antialias is not modeled in the numpy reference "
+                "yet — pass antialias=False (the resample is a plain bilinear "
+                "gather). Tracked for the backend kernel lane."
+            )
+        x = _img_unwrap(x)
+        nchw, restore = _img_canon(x, layout)
+        _, _, h, w = nchw.shape
+        if isinstance(size, (tuple, list)):
+            out_hw = (int(size[0]), int(size[1]))
+        else:
+            short = min(h, w)
+            scale = float(size) / float(short)
+            out_hw = (int(round(h * scale)), int(round(w * scale)))
+        return restore(_resample_nchw(nchw, out_hw, mode, align_corners))
+
+    def interpolate(x, *, size=None, scale_factor=None, mode="bilinear",
+                    align_corners=False, layout="nchw"):
+        """General spatial resampler (bilinear/nearest). Specify exactly one of
+        ``size`` (``(H_out, W_out)``) or ``scale_factor`` (float). Backs
+        dynamic-resolution image inputs and positional-embedding interpolation.
+        Differentiable through ``x``.
+        """
+        if (size is None) == (scale_factor is None):
+            raise ValueError(
+                "interpolate: pass exactly one of size or scale_factor."
+            )
+        x = _img_unwrap(x)
+        nchw, restore = _img_canon(x, layout)
+        _, _, h, w = nchw.shape
+        if size is not None:
+            out_hw = (int(size[0]), int(size[1]))
+        else:
+            out_hw = (int(round(h * float(scale_factor))),
+                      int(round(w * float(scale_factor))))
+        return restore(_resample_nchw(nchw, out_hw, mode, align_corners))
+
+    def center_crop(x, *, size, layout="nchw"):
+        """Crop the central ``size`` region (int → square, or ``(H, W)``) —
+        the VLM transform's step 2. Differentiable: the gradient is a
+        zero-padded scatter back into the crop window.
+        """
+        x = _img_unwrap(x)
+        nchw, restore = _img_canon(x, layout)
+        n, c, h, w = nchw.shape
+        ch, cw = (int(size), int(size)) if not isinstance(size, (tuple, list)) \
+            else (int(size[0]), int(size[1]))
+        top, left = _imgops.center_crop_bounds(h, w, ch, cw)
+        # Copy, not a view — a primitive must not alias its input (mutating the
+        # crop would otherwise mutate the source tensor).
+        out = nchw[:, :, top:top + ch, left:left + cw].copy()
+        return restore(out)
+
+    def image_normalize(x, *, mean, std, layout="nchw"):
+        """Per-channel affine ``(x - mean) / std`` to the encoder's expected
+        input distribution — the VLM transform's step 3. ``mean``/``std`` are
+        scalars or per-channel vectors (length C). Differentiable through ``x``
+        (``dx = dout / std``); ``mean``/``std`` are non-differentiable.
+        """
+        x = _img_unwrap(x).astype(np.float64)
+        nchw, restore = _img_canon(x, layout)
+        c = nchw.shape[1]
+        mean_a = np.asarray(mean, dtype=np.float64).reshape(-1)
+        std_a = np.asarray(std, dtype=np.float64).reshape(-1)
+        if mean_a.size not in (1, c) or std_a.size not in (1, c):
+            raise ValueError(
+                f"image_normalize: mean/std must be scalar or per-channel "
+                f"(C={c}); got mean={mean_a.size}, std={std_a.size}."
+            )
+        if np.any(std_a == 0):
+            raise ValueError("image_normalize: std must be nonzero.")
+        m = mean_a.reshape(1, -1, 1, 1) if mean_a.size == c else mean_a.reshape(1, 1, 1, 1)
+        s = std_a.reshape(1, -1, 1, 1) if std_a.size == c else std_a.reshape(1, 1, 1, 1)
+        return restore((nchw - m) / s)
+
+    # ── VLM patch embedder (Gemma-4 style) ───────────────────────────────────
+
+    def patchify(x, *, patch_size, layout="nchw"):
+        """Split an image into flattened patches — the embedder's first step.
+        ``(B, C, H, W) → (B, nh*nw, C*P*P)`` via reshape→permute→reshape (a pure
+        layout op, differentiable). H and W must be divisible by ``patch_size``.
+        Always returns batched output; 3-D (chw/hwc) inputs gain a leading
+        batch of 1.
+        """
+        x = _img_unwrap(x)
+        nchw, _ = _img_canon(x, layout)
+        b, c, h, w = nchw.shape
+        p = int(patch_size)
+        if h % p or w % p:
+            raise ValueError(
+                f"patchify: H={h}, W={w} must be divisible by patch_size={p}."
+            )
+        nh, nw = h // p, w // p
+        t = nchw.reshape(b, c, nh, p, nw, p)
+        t = np.transpose(t, (0, 2, 4, 1, 3, 5))  # (B, nh, nw, C, P, P)
+        return t.reshape(b, nh * nw, c * p * p)
+
+    def factorized_pos_emb(row, col, *, grid_h, grid_w):
+        """Factorized 2-D positional embedding: ``pos[i*gw + j] = row[i] +
+        col[j]`` over a ``grid_h × grid_w`` patch grid. ``row``/``col`` are
+        learned tables of shape ``(>=grid_h, D)`` / ``(>=grid_w, D)`` — 8× fewer
+        params than a full table. Returns ``(grid_h*grid_w, D)``; differentiable
+        through both tables.
+        """
+        row = _img_unwrap(row)
+        col = _img_unwrap(col)
+        gh, gw = int(grid_h), int(grid_w)
+        if row.shape[0] < gh or col.shape[0] < gw:
+            raise ValueError(
+                f"factorized_pos_emb: tables too small — row {row.shape[0]} < "
+                f"grid_h {gh} or col {col.shape[0]} < grid_w {gw}."
+            )
+        if row.shape[-1] != col.shape[-1]:
+            raise ValueError(
+                f"factorized_pos_emb: row dim {row.shape[-1]} != col dim "
+                f"{col.shape[-1]}."
+            )
+        r = row[:gh]
+        cc = col[:gw]
+        pos = r[:, None, :] + cc[None, :, :]      # (gh, gw, D)
+        return pos.reshape(gh * gw, row.shape[-1])
+
+    def mrope_2d(x, positions, inv_freq, *, sections):
+        """Multimodal RoPE (Qwen2-VL M-RoPE): rotary embedding whose
+        head-dim pairs are partitioned into ``sections`` (e.g. temporal /
+        height / width), each rotated by its own position axis.
+
+        ``x``: ``(..., S, Hd)`` (Hd even) — rotary over the last dim with the
+        standard even/odd pairing. ``positions``: ``(n_axes, S)`` per-token
+        coordinate per axis. ``inv_freq``: ``(Hd//2,)`` base frequencies.
+        ``sections``: per-axis pair counts, summing to ``Hd//2``. Reduces to
+        plain `rope` when there is a single section. Differentiable through
+        ``x``; ``positions``/``inv_freq`` are non-differentiable.
+        """
+        x = np.asarray(_img_unwrap(x))
+        positions = np.asarray(_img_unwrap(positions))
+        inv_freq = np.asarray(_img_unwrap(inv_freq)).reshape(-1)
+        hd = x.shape[-1]
+        if hd % 2:
+            raise ValueError("mrope_2d requires an even head dimension.")
+        hd2 = hd // 2
+        if int(sum(sections)) != hd2:
+            raise ValueError(
+                f"mrope_2d: sections {tuple(sections)} sum to {int(sum(sections))}, "
+                f"expected Hd//2 = {hd2}."
+            )
+        if positions.ndim != 2 or positions.shape[0] != len(sections):
+            raise ValueError(
+                f"mrope_2d: positions must be (n_axes={len(sections)}, S); got "
+                f"{positions.shape}."
+            )
+        if inv_freq.shape[0] != hd2:
+            raise ValueError(
+                f"mrope_2d: inv_freq has {inv_freq.shape[0]} entries, expected {hd2}."
+            )
+        axis_of_pair = np.concatenate(
+            [np.full(int(s), a, dtype=np.int64) for a, s in enumerate(sections)]
+        )                                                      # (Hd2,)
+        pos_per_pair = positions[axis_of_pair]                 # (Hd2, S)
+        angle = (pos_per_pair * inv_freq[:, None]).T           # (S, Hd2)
+        cos = np.cos(angle)
+        sin_ = np.sin(angle)
+        even = x[..., 0::2]
+        odd = x[..., 1::2]
+        out = np.empty(x.shape, dtype=np.result_type(x, angle))
+        out[..., 0::2] = even * cos - odd * sin_
+        out[..., 1::2] = even * sin_ + odd * cos
+        return out
+
+    # ── VLM token reduction + resampler (P2) ─────────────────────────────────
+
+    def pixel_unshuffle(x, *, downscale_factor, layout="nchw"):
+        """Space-to-depth token reduction (Idefics3 / InternVL "pixel shuffle"):
+        ``(B,C,H,W) → (B, C*r², H/r, W/r)`` — fewer spatial tokens, wider
+        channels. Pure rearrange, differentiable (VJP = pixel_shuffle).
+        """
+        x = _img_unwrap(x)
+        nchw, restore = _img_canon(x, layout)
+        return restore(_imgops.pixel_unshuffle_nchw(nchw, int(downscale_factor)))
+
+    def pixel_shuffle(x, *, upscale_factor, layout="nchw"):
+        """Depth-to-space: ``(B, C*r², H, W) → (B, C, H*r, W*r)``. Inverse of
+        pixel_unshuffle; differentiable (VJP = pixel_unshuffle).
+        """
+        x = _img_unwrap(x)
+        nchw, restore = _img_canon(x, layout)
+        return restore(_imgops.pixel_shuffle_nchw(nchw, int(upscale_factor)))
+
+    def cross_attention(q, k, v, *, scale=None, mask=None):
+        """Scaled-dot-product cross-attention: query attends to a separate
+        key/value source (Flamingo / BLIP-2 / Q-Former). ``q``:
+        ``(..., Sq, d)``, ``k``: ``(..., Sk, d)``, ``v``: ``(..., Sk, dv)``.
+        Returns ``(..., Sq, dv)``. Differentiable through q, k, v; ``mask``
+        (additive, broadcast to the ``(..., Sq, Sk)`` scores) is non-diff.
+        """
+        q = np.asarray(_img_unwrap(q))
+        k = np.asarray(_img_unwrap(k))
+        v = np.asarray(_img_unwrap(v))
+        d = q.shape[-1]
+        sc = (1.0 / np.sqrt(d)) if scale is None else float(scale)
+        s = np.matmul(q, np.swapaxes(k, -1, -2)) * sc        # (..., Sq, Sk)
+        if mask is not None:
+            s = s + np.asarray(_img_unwrap(mask))
+        s = s - np.max(s, axis=-1, keepdims=True)
+        p = np.exp(s)
+        p = p / np.sum(p, axis=-1, keepdims=True)
+        return np.matmul(p, v)                               # (..., Sq, dv)
+
+    def perceiver_resampler(latents, x, *, scale=None):
+        """Perceiver/Q-Former resampler: a fixed set of learned ``latents``
+        (queries) cross-attend to a variable-length image feature sequence
+        ``x`` (keys/values), compressing it to ``len(latents)`` tokens. A
+        composite over the wrapped ``tessera.ops.cross_attention``, so the tape
+        records it; differentiable through latents and x.
+        """
+        import tessera as _ts
+        return _ts.ops.cross_attention(latents, x, x, scale=scale)
+
     def sin(x):
         if hasattr(x, "_data"):
             x = x._data
@@ -3757,6 +4037,17 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "gather": gather,
         "clip": clip,
         "masked_fill": masked_fill,
+        "masked_scatter": masked_scatter,
+        "image_resize": image_resize,
+        "interpolate": interpolate,
+        "center_crop": center_crop,
+        "image_normalize": image_normalize,
+        "patchify": patchify,
+        "factorized_pos_emb": factorized_pos_emb,
+        "mrope_2d": mrope_2d,
+        "pixel_unshuffle": pixel_unshuffle,
+        "pixel_shuffle": pixel_shuffle,
+        "cross_attention": cross_attention,
         "adam": adam,
         "transpose": transpose,
         "cast": cast,
@@ -4156,6 +4447,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         gather=gather,
         clip=clip,
         masked_fill=masked_fill,
+        masked_scatter=masked_scatter,
+        image_resize=image_resize,
+        interpolate=interpolate,
+        center_crop=center_crop,
+        image_normalize=image_normalize,
+        patchify=patchify,
+        factorized_pos_emb=factorized_pos_emb,
+        mrope_2d=mrope_2d,
+        pixel_unshuffle=pixel_unshuffle,
+        pixel_shuffle=pixel_shuffle,
+        cross_attention=cross_attention,
+        perceiver_resampler=perceiver_resampler,
         rmsnorm=rmsnorm,
         rmsnorm_safe=rmsnorm_safe,
         sin=sin,

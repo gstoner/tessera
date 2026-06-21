@@ -6,25 +6,25 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **458** ops in `primitive_coverage` registry.
-- **2726** total Python-test references, **780** total lit-fixture references.
+- **470** ops in `primitive_coverage` registry.
+- **2794** total Python-test references, **780** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **194** ops have ≤1 reference ("thinly tested").
+- **196** ops have ≤1 reference ("thinly tested").
 - **61** ops have ≥10 references ("well tested").
-- **63** ops have at least one associated `pytest.raises` negative test.
+- **73** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  380 |  180 |  560 |  15 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  381 |  180 |  561 |  15 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |   94 |   57 |  151 |   5 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   92 |   37 |  129 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  103 |   18 |  121 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |   92 |   13 |  105 |   8 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |   93 |   13 |  106 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   84 |    4 |   88 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |   86 |    0 |   86 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `silu` |   82 |    2 |   84 |   5 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |   83 |    0 |   83 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
 | `rmsnorm` |   69 |   10 |   79 |   2 | `bf16`, `f16`, `f32`, `f64` … |
 | `gelu` |   44 |   19 |   63 |   1 | `bf16`, `f16`, `f32`, `f64` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **194** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **196** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **194** ops have at most one test reference across the whole test surface.
 | `dataset_map` |    0 |    0 |    0 |
 | `dataset_prefetch` |    0 |    0 |    0 |
 
-_(134 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(136 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,22 +117,24 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**194** ops have ≤1 direct test reference.  They break down as:
+**196** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   76 | Tested via a parent op or family wrapper |
 | `structural_only`        |  114 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
+| `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
 
-These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **2** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
+| `perceiver_resampler` |   1 |   0 | category default for 'attention' |
+| `pixel_shuffle` |   1 |   0 | category default for 'layout_transform' |
 
 ## Hardware-gated ops
 

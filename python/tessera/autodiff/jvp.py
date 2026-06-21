@@ -2984,6 +2984,249 @@ def jvp_masked_fill(primals, tangents, *, value=0.0, **_):
     return primal, tan
 
 
+@_jvp("masked_scatter")
+def jvp_masked_scatter(primals, tangents, **_):
+    """masked_scatter is linear in both x (unmasked positions) and source
+    (the consumed values), so the tangent follows the same splice."""
+    x, mask, source = primals
+    dx, _, dsource = tangents
+    x = np.asarray(x)
+    m = np.asarray(mask, dtype=bool)
+    src = np.asarray(source)
+    selected_shape = x[m].shape
+    total = int(np.prod(selected_shape)) if selected_shape else 0
+
+    def _splice(base, fill_flat):
+        out = np.array(np.asarray(base), copy=True)
+        out = out.astype(np.result_type(out, fill_flat))
+        out[m] = fill_flat[:total].reshape(selected_shape)
+        return out
+
+    primal_out = _splice(x, src.reshape(-1))
+    dsrc_flat = (np.zeros(src.size, dtype=np.result_type(x, src))
+                 if dsource is None else np.asarray(dsource).reshape(-1))
+    dx_base = np.zeros_like(x) if dx is None else np.asarray(dx)
+    tan_out = _splice(dx_base, dsrc_flat)
+    return primal_out, tan_out
+
+
+# ── VLM image preprocessing pack — all linear in x ───────────────────────────
+
+
+def _jvp_resample(primals, tangents, *, mode="bilinear", align_corners=False,
+                  layout="nchw", size=None, scale_factor=None, **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    nchw, restore = _img.img_canon(x, layout)
+    _, _, h, w = nchw.shape
+    if size is not None:
+        out_hw = (int(size[0]), int(size[1]))
+    elif scale_factor is not None:
+        out_hw = (int(round(h * float(scale_factor))),
+                  int(round(w * float(scale_factor))))
+    else:  # image_resize int/tuple `size` path arrives as size=...; handled above
+        out_hw = (h, w)
+    primal_out = restore(_img.resample_nchw(nchw, out_hw, mode, align_corners))
+    dnchw, _ = _img.img_canon(np.zeros_like(x) if dx is None else np.asarray(dx), layout)
+    tan_out = restore(_img.resample_nchw(dnchw, out_hw, mode, align_corners))
+    return primal_out, tan_out
+
+
+@_jvp("interpolate")
+def jvp_interpolate(primals, tangents, **kw):
+    return _jvp_resample(primals, tangents, **kw)
+
+
+@_jvp("image_resize")
+def jvp_image_resize(primals, tangents, *, size, mode="bilinear",
+                     align_corners=False, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    nchw, restore = _img.img_canon(x, layout)
+    _, _, h, w = nchw.shape
+    if isinstance(size, (tuple, list)):
+        out_hw = (int(size[0]), int(size[1]))
+    else:
+        scale = float(size) / float(min(h, w))
+        out_hw = (int(round(h * scale)), int(round(w * scale)))
+    primal_out = restore(_img.resample_nchw(nchw, out_hw, mode, align_corners))
+    dnchw, _ = _img.img_canon(np.zeros_like(x) if dx is None else np.asarray(dx), layout)
+    tan_out = restore(_img.resample_nchw(dnchw, out_hw, mode, align_corners))
+    return primal_out, tan_out
+
+
+@_jvp("center_crop")
+def jvp_center_crop(primals, tangents, *, size, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    nchw, restore = _img.img_canon(x, layout)
+    _, _, h, w = nchw.shape
+    ch, cw = (int(size), int(size)) if not isinstance(size, (tuple, list)) \
+        else (int(size[0]), int(size[1]))
+    top, left = _img.center_crop_bounds(h, w, ch, cw)
+
+    def _crop(arr):
+        a, _ = _img.img_canon(arr, layout)
+        return restore(a[:, :, top:top + ch, left:left + cw])
+
+    primal_out = _crop(x)
+    tan_out = _crop(np.zeros_like(x) if dx is None else np.asarray(dx))
+    return primal_out, tan_out
+
+
+@_jvp("image_normalize")
+def jvp_image_normalize(primals, tangents, *, mean, std, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x, dtype=np.float64)
+    nchw, restore = _img.img_canon(x, layout)
+    c = nchw.shape[1]
+    mean_a = np.asarray(mean, dtype=np.float64).reshape(-1)
+    std_a = np.asarray(std, dtype=np.float64).reshape(-1)
+    m = mean_a.reshape(1, -1, 1, 1) if mean_a.size == c else mean_a.reshape(1, 1, 1, 1)
+    s = std_a.reshape(1, -1, 1, 1) if std_a.size == c else std_a.reshape(1, 1, 1, 1)
+    primal_out = restore((nchw - m) / s)
+    dnchw, _ = _img.img_canon(np.zeros_like(x) if dx is None else np.asarray(dx, dtype=np.float64), layout)
+    tan_out = restore(dnchw / s)
+    return primal_out, tan_out
+
+
+# ── VLM patch embedder — both ops linear ─────────────────────────────────────
+
+
+@_jvp("patchify")
+def jvp_patchify(primals, tangents, *, patch_size, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    nchw, _ = _img.img_canon(x, layout)
+    b, c, h, w = nchw.shape
+    p = int(patch_size)
+    nh, nw = h // p, w // p
+
+    def _fwd(arr):
+        a, _ = _img.img_canon(np.asarray(arr), layout)
+        t = a.reshape(b, c, nh, p, nw, p)
+        t = np.transpose(t, (0, 2, 4, 1, 3, 5))
+        return t.reshape(b, nh * nw, c * p * p)
+
+    primal_out = _fwd(x)
+    tan_out = _fwd(np.zeros_like(x) if dx is None else np.asarray(dx))
+    return primal_out, tan_out
+
+
+@_jvp("factorized_pos_emb")
+def jvp_factorized_pos_emb(primals, tangents, *, grid_h, grid_w, **_):
+    row, col = primals
+    drow, dcol = tangents
+    row = np.asarray(row)
+    col = np.asarray(col)
+    gh, gw = int(grid_h), int(grid_w)
+    dd = row.shape[-1]
+
+    def _fwd(r, c):
+        r = np.asarray(r)[:gh]
+        c = np.asarray(c)[:gw]
+        return (r[:, None, :] + c[None, :, :]).reshape(gh * gw, dd)
+
+    primal_out = _fwd(row, col)
+    drow = np.zeros_like(row) if drow is None else drow
+    dcol = np.zeros_like(col) if dcol is None else dcol
+    tan_out = _fwd(drow, dcol)
+    return primal_out, tan_out
+
+
+@_jvp("mrope_2d")
+def jvp_mrope_2d(primals, tangents, *, sections, **_):
+    """mrope_2d is linear in x: the tangent rotates the same way as the primal."""
+    x, positions, inv_freq = primals
+    dx = tangents[0]
+    x = np.asarray(x)
+    positions = np.asarray(positions)
+    inv_freq = np.asarray(inv_freq).reshape(-1)
+    hd2 = x.shape[-1] // 2
+    axis_of_pair = np.concatenate(
+        [np.full(int(s), a, dtype=np.int64) for a, s in enumerate(sections)]
+    )
+    angle = (positions[axis_of_pair] * inv_freq[:, None]).T   # (S, Hd2)
+    cos = np.cos(angle)
+    sin = np.sin(angle)
+
+    def _rot(v):
+        v = np.asarray(v)
+        out = np.empty(v.shape, dtype=np.result_type(v, angle))
+        e, o = v[..., 0::2], v[..., 1::2]
+        out[..., 0::2] = e * cos - o * sin
+        out[..., 1::2] = e * sin + o * cos
+        return out
+
+    primal_out = _rot(x)
+    tan_out = _rot(np.zeros_like(x) if dx is None else np.asarray(dx))
+    return primal_out, tan_out
+
+
+# ── VLM token reduction + cross-attention (P2) ───────────────────────────────
+
+
+@_jvp("pixel_unshuffle")
+def jvp_pixel_unshuffle(primals, tangents, *, downscale_factor, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    r = int(downscale_factor)
+
+    def _f(arr):
+        nchw, restore = _img.img_canon(np.asarray(arr), layout)
+        return restore(_img.pixel_unshuffle_nchw(nchw, r))
+
+    return _f(x), _f(np.zeros_like(x) if dx is None else np.asarray(dx))
+
+
+@_jvp("pixel_shuffle")
+def jvp_pixel_shuffle(primals, tangents, *, upscale_factor, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    (x,), (dx,) = primals, tangents
+    x = np.asarray(x)
+    r = int(upscale_factor)
+
+    def _f(arr):
+        nchw, restore = _img.img_canon(np.asarray(arr), layout)
+        return restore(_img.pixel_shuffle_nchw(nchw, r))
+
+    return _f(x), _f(np.zeros_like(x) if dx is None else np.asarray(dx))
+
+
+@_jvp("cross_attention")
+def jvp_cross_attention(primals, tangents, *, scale=None, mask=None, **_):
+    """Forward-mode through scaled-dot-product attention (softmax is nonlinear,
+    so the tangent threads through its Jacobian)."""
+    q, k, v = (np.asarray(p, dtype=np.float64) for p in primals)
+    dq, dk, dv = (None if t is None else np.asarray(t, dtype=np.float64)
+                  for t in tangents)
+    dq = np.zeros_like(q) if dq is None else dq
+    dk = np.zeros_like(k) if dk is None else dk
+    dv = np.zeros_like(v) if dv is None else dv
+    d = q.shape[-1]
+    sc = (1.0 / np.sqrt(d)) if scale is None else float(scale)
+    s = np.matmul(q, np.swapaxes(k, -1, -2)) * sc
+    if mask is not None:
+        s = s + np.asarray(mask)
+    s = s - np.max(s, axis=-1, keepdims=True)
+    e = np.exp(s)
+    p = e / np.sum(e, axis=-1, keepdims=True)
+    primal_out = np.matmul(p, v)
+    # tangent of scores
+    ds = (np.matmul(dq, np.swapaxes(k, -1, -2))
+          + np.matmul(q, np.swapaxes(dk, -1, -2))) * sc
+    # tangent of softmax: dp = p * (ds - sum(p*ds))
+    dp = p * (ds - np.sum(p * ds, axis=-1, keepdims=True))
+    tan_out = np.matmul(dp, v) + np.matmul(p, dv)
+    return primal_out, tan_out
+
+
 @_jvp("mor_partition")
 def jvp_mor_partition(primals, tangents, **kwargs):
     """Mixture-of-recursions partition is linear in the inputs."""

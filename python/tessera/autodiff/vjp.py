@@ -699,6 +699,211 @@ def vjp_masked_fill(dout, x, mask, *, value=None, **_):
     return (_sum_to_shape(dx, x.shape), None)
 
 
+@_vjp("masked_scatter")
+def vjp_masked_scatter(dout, x, mask, source, **_):
+    """y = masked_scatter(x, mask, source) — overwrite x at True positions of
+    `mask` (broadcast to x) with source values consumed in flattened order.
+
+    dx propagates dout only on the *unmasked* positions (masked positions were
+    overwritten by source, so they carry no gradient back to x). dsource
+    receives dout gathered at the masked positions, in the same flatten order
+    source was consumed, zero-filled for any unconsumed tail. `mask` is a
+    recorded tensor input (non-differentiable → None cotangent).
+    """
+    x = np.asarray(x)
+    dout = np.asarray(dout)
+    m = np.asarray(mask, dtype=bool)
+    # dx = dout everywhere except the overwritten (selected) positions.
+    dx = dout.astype(np.result_type(dout, x)).copy()
+    dx[m] = 0
+    # dsource = dout gathered at the selected positions, in flatten order,
+    # zero-filled for any unconsumed source tail.
+    selected = dout[m]
+    total = int(selected.size)
+    src = np.asarray(source)
+    dsource = np.zeros(src.shape, dtype=np.result_type(dout, src))
+    dsource.reshape(-1)[:total] = np.asarray(selected).reshape(-1)
+    return (_sum_to_shape(dx, x.shape), None, dsource)
+
+
+# ── VLM image preprocessing pack — all linear in x ───────────────────────────
+
+
+def _resample_vjp(dout, x, *, mode="bilinear", align_corners=False,
+                  layout="nchw", **_):
+    """Shared VJP for image_resize / interpolate: the bilinear resample is a
+    linear map, so its cotangent is the transpose resample back to x's
+    resolution."""
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    in_nchw, restore = _img.img_canon(x, layout)
+    _, _, h, w = in_nchw.shape
+    dout_nchw, _ = _img.img_canon(np.asarray(dout), layout)
+    dx_nchw = _img.resample_nchw_vjp(dout_nchw, (h, w), mode, align_corners)
+    return (restore(dx_nchw).astype(np.result_type(dout, x)),)
+
+
+@_vjp("image_resize")
+def vjp_image_resize(dout, x, **kw):
+    return _resample_vjp(dout, x, **kw)
+
+
+@_vjp("interpolate")
+def vjp_interpolate(dout, x, **kw):
+    return _resample_vjp(dout, x, **kw)
+
+
+@_vjp("center_crop")
+def vjp_center_crop(dout, x, *, size, layout="nchw", **_):
+    """center_crop is a pure slice; the cotangent is zero-padded back into the
+    crop window."""
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    in_nchw, restore = _img.img_canon(x, layout)
+    n, c, h, w = in_nchw.shape
+    ch, cw = (int(size), int(size)) if not isinstance(size, (tuple, list)) \
+        else (int(size[0]), int(size[1]))
+    top, left = _img.center_crop_bounds(h, w, ch, cw)
+    dout_nchw, _ = _img.img_canon(np.asarray(dout), layout)
+    dx_nchw = np.zeros((n, c, h, w), dtype=np.result_type(dout, x))
+    dx_nchw[:, :, top:top + ch, left:left + cw] = dout_nchw
+    return (restore(dx_nchw),)
+
+
+@_vjp("image_normalize")
+def vjp_image_normalize(dout, x, *, mean, std, layout="nchw", **_):
+    """y = (x - mean) / std; dx = dout / std (per channel). mean/std are
+    keyword-only and non-differentiable."""
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    dout_nchw, restore = _img.img_canon(np.asarray(dout, dtype=np.float64), layout)
+    c = dout_nchw.shape[1]
+    std_a = np.asarray(std, dtype=np.float64).reshape(-1)
+    s = std_a.reshape(1, -1, 1, 1) if std_a.size == c else std_a.reshape(1, 1, 1, 1)
+    dx_nchw = dout_nchw / s
+    return (restore(dx_nchw).astype(np.result_type(dout, x)),)
+
+
+# ── VLM patch embedder ───────────────────────────────────────────────────────
+
+
+@_vjp("patchify")
+def vjp_patchify(dout, x, *, patch_size, layout="nchw", **_):
+    """patchify is a pure reshape/permute (linear bijection on elements); its
+    cotangent is the inverse permute/reshape back to the image layout."""
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    nchw, restore = _img.img_canon(x, layout)
+    b, c, h, w = nchw.shape
+    p = int(patch_size)
+    nh, nw = h // p, w // p
+    d = np.asarray(dout).reshape(b, nh, nw, c, p, p)
+    d = np.transpose(d, (0, 3, 1, 4, 2, 5))   # (B, C, nh, P, nw, P)
+    d = d.reshape(b, c, h, w)
+    return (restore(d).astype(np.result_type(dout, x)),)
+
+
+@_vjp("factorized_pos_emb")
+def vjp_factorized_pos_emb(dout, row, col, *, grid_h, grid_w, **_):
+    """pos[i*gw+j] = row[i] + col[j]; drow[i] = sum_j dout[i,j],
+    dcol[j] = sum_i dout[i,j], zero-filled for unused table rows."""
+    row = np.asarray(row)
+    col = np.asarray(col)
+    gh, gw = int(grid_h), int(grid_w)
+    d = col.shape[-1]
+    g = np.asarray(dout).reshape(gh, gw, d)
+    drow = np.zeros(row.shape, dtype=np.result_type(dout, row))
+    dcol = np.zeros(col.shape, dtype=np.result_type(dout, col))
+    drow[:gh] = g.sum(axis=1)
+    dcol[:gw] = g.sum(axis=0)
+    return (drow, dcol)
+
+
+def _mrope_2d_angle(x, positions, inv_freq, sections):
+    """Shared per-pair rotation angle (S, Hd//2) for mrope_2d fwd/bwd."""
+    positions = np.asarray(positions)
+    inv_freq = np.asarray(inv_freq).reshape(-1)
+    hd2 = x.shape[-1] // 2
+    axis_of_pair = np.concatenate(
+        [np.full(int(s), a, dtype=np.int64) for a, s in enumerate(sections)]
+    )
+    pos_per_pair = positions[axis_of_pair]            # (Hd2, S)
+    return (pos_per_pair * inv_freq[:, None]).T       # (S, Hd2)
+
+
+@_vjp("mrope_2d")
+def vjp_mrope_2d(dout, x, positions, inv_freq, *, sections, **_):
+    """Rotation is orthogonal in x; the cotangent is the inverse rotation.
+    positions/inv_freq are non-differentiable (None)."""
+    x = np.asarray(x)
+    dout = np.asarray(dout)
+    angle = _mrope_2d_angle(x, positions, inv_freq, sections)
+    cos = np.cos(angle)
+    sin = np.sin(angle)
+    de = dout[..., 0::2]
+    do = dout[..., 1::2]
+    dx = np.empty(x.shape, dtype=np.result_type(dout, x))
+    dx[..., 0::2] = de * cos + do * sin
+    dx[..., 1::2] = -de * sin + do * cos
+    return (dx, None, None)
+
+
+# ── VLM token reduction + cross-attention (P2) ───────────────────────────────
+
+
+@_vjp("pixel_unshuffle")
+def vjp_pixel_unshuffle(dout, x, *, downscale_factor, layout="nchw", **_):
+    """Pure rearrange; cotangent is the inverse rearrange (pixel_shuffle)."""
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    dout_nchw, restore = _img.img_canon(np.asarray(dout), layout)
+    dx = _img.pixel_shuffle_nchw(dout_nchw, int(downscale_factor))
+    _, restore_x = _img.img_canon(x, layout)
+    return (restore_x(dx).astype(np.result_type(dout, x)),)
+
+
+@_vjp("pixel_shuffle")
+def vjp_pixel_shuffle(dout, x, *, upscale_factor, layout="nchw", **_):
+    from tessera import _image_ops as _img
+    x = np.asarray(x)
+    dout_nchw, _ = _img.img_canon(np.asarray(dout), layout)
+    dx = _img.pixel_unshuffle_nchw(dout_nchw, int(upscale_factor))
+    _, restore_x = _img.img_canon(x, layout)
+    return (restore_x(dx).astype(np.result_type(dout, x)),)
+
+
+def _sdpa_fwd(q, k, v, scale, mask):
+    d = q.shape[-1]
+    sc = (1.0 / np.sqrt(d)) if scale is None else float(scale)
+    s = np.matmul(q, np.swapaxes(k, -1, -2)) * sc
+    if mask is not None:
+        s = s + np.asarray(mask)
+    s = s - np.max(s, axis=-1, keepdims=True)
+    p = np.exp(s)
+    p = p / np.sum(p, axis=-1, keepdims=True)
+    return p, sc
+
+
+@_vjp("cross_attention")
+def vjp_cross_attention(dout, q, k, v, *, scale=None, mask=None, **_):
+    """Scaled-dot-product attention backward. mask is additive/non-diff."""
+    q = np.asarray(q, dtype=np.float64)
+    k = np.asarray(k, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    p, sc = _sdpa_fwd(q, k, v, scale, mask)
+    # o = p @ v
+    dv = np.matmul(np.swapaxes(p, -1, -2), do)
+    dp = np.matmul(do, np.swapaxes(v, -1, -2))
+    # softmax backward along last axis
+    ds = p * (dp - np.sum(dp * p, axis=-1, keepdims=True))
+    dq = np.matmul(ds, k) * sc
+    dk = np.matmul(np.swapaxes(ds, -1, -2), q) * sc
+    # q, k, v are the positional inputs; scale/mask are keyword-only (not on the
+    # tape as positional inputs), so the cotangent tuple is exactly (dq, dk, dv).
+    return (dq, dk, dv)
+
+
 @_vjp("gelu")
 def vjp_gelu(dout, x, **_):
     """tanh-approx GELU: 0.5 x (1 + tanh(sqrt(2/pi)(x + 0.044715 x^3)))."""

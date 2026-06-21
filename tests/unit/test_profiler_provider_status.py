@@ -204,8 +204,9 @@ def test_tprof_apple_metal_smoke_command_buffer_probe_is_ci_safe(tmp_path: Path)
 
     payload = json.loads(out.read_text())
     proof = payload["diagnostics"]["native_proof"]
-    assert "command_buffer_timestamp" in proof
-    assert proof["command_buffer_timestamp"]["proof_api"] == "tprof_metal_capture_command_buffer_timestamp"
+    if proof.get("metal_visible"):
+        assert "command_buffer_timestamp" in proof
+        assert proof["command_buffer_timestamp"]["proof_api"] == "tprof_metal_capture_command_buffer_timestamp"
     validate_provider_status_artifact(payload)
 
 

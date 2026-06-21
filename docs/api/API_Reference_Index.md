@@ -118,7 +118,14 @@
 | `annotate_target_ir_with_probes` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `AppleProfilerContext`, `classify_apple_profiler_context`, `apple_unified_memory_bandwidth_ceiling_gbs` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `AcceleratorProfilerContext`, `classify_accelerator_profiler_context`, `accelerator_profiler_context_contract` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `build_profiler_context_artifact`, `write_profiler_context_artifact`, `load_profiler_context_artifact`, `summarize_profiler_context` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `collect_profiler_context`, `mock_profiler_context`, `sample_nvidia_nvml_context`, `sample_rocm_amdsmi_context`, `sample_apple_system_context` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `ProviderTraceRecord`, `build_provider_trace_artifact`, `normalize_rocprofiler_api_record`, `normalize_rocprofiler_activity_record`, `normalize_rocprofiler_counter_record`, `normalize_rocprofiler_thread_trace_record` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `normalize_metal_command_buffer_record`, `normalize_metal_counter_record`, `normalize_cupti_callback_record`, `normalize_cupti_activity_record` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `merge_profiler_traces`, `write_merged_profiler_trace` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `tprof::attach_tessera_runtime_trace`, `tprof::detach_tessera_runtime_trace` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::provider_shell`, `tprof::provider_shells`, `tprof::native_system_context_init`, `tprof::heavy_provider_init` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::rocprofiler_adapter_init`, `tprof::metal_adapter_init`, `tprof::cupti_adapter_init` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 
 ### Runtime C ABI
 

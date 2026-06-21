@@ -1,0 +1,35 @@
+[
+  {
+    "correlation_id": "hip-1",
+    "domain": "HIP_API",
+    "end_us": 2,
+    "name": "hipLaunchKernel",
+    "record_type": "api",
+    "start_us": 1
+  },
+  {
+    "activity": "dispatch",
+    "correlation_id": "hip-1",
+    "dispatch_id": 17,
+    "end_us": 10,
+    "kernel_name": "matmul",
+    "record_type": "dispatch",
+    "start_us": 3
+  },
+  {
+    "dispatch_id": 17,
+    "metric": "SQ_WAVES",
+    "record_type": "counter",
+    "timestamp_us": 11,
+    "value": 64
+  },
+  {
+    "dispatch_id": 17,
+    "end_us": 10,
+    "kernel_name": "matmul",
+    "record_type": "thread_trace",
+    "shader_engine_mask": "0x1",
+    "start_us": 3,
+    "target_cu": 0
+  }
+]

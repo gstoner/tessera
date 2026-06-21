@@ -1,0 +1,17 @@
+{
+  "displayTimeUnit": "ns",
+  "traceEvents": [
+    {
+      "args": {
+        "payload": "{\"status\":\"ok\",\"duration_us\":4}"
+      },
+      "cat": "runtime_api",
+      "dur": 4,
+      "name": "tsrLaunchKernel",
+      "ph": "X",
+      "pid": 0,
+      "tid": 1,
+      "ts": 5
+    }
+  ]
+}

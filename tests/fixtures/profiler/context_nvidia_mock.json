@@ -1,0 +1,42 @@
+{
+  "bottleneck_summary": {
+    "bottlenecks": {
+      "bandwidth_bound": 1
+    },
+    "dominant_bottleneck": "bandwidth_bound",
+    "providers": {
+      "nvidia-system-context": 1
+    },
+    "total_samples": 1
+  },
+  "provider": "nvidia-system-context",
+  "sample_count": 1,
+  "samples": [
+    {
+      "bottleneck": "bandwidth_bound",
+      "provider": "nvidia-system-context",
+      "raw": {
+        "bottleneck": "bandwidth_bound",
+        "gpu_utilization": 0.72,
+        "memory_bandwidth_fraction": 0.87,
+        "memory_used_fraction": 0.4,
+        "memory_utilization": 0.88,
+        "metadata": {
+          "collector": "mock"
+        },
+        "power_limit_watts": 400.0,
+        "power_watts": 260.0,
+        "schema": "tessera.accelerator_profiler_context.v1",
+        "temperature_c": 62.0,
+        "temperature_limit_c": 95.0,
+        "vendor": "nvidia"
+      },
+      "timestamp_us": null,
+      "vendor": "nvidia"
+    }
+  ],
+  "schema": "tessera.profiler_context.v1",
+  "source": null,
+  "source_status": "mock",
+  "target": "nvidia"
+}

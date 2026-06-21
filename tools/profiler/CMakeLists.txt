@@ -4,6 +4,9 @@ project(tessera_profiler LANGUAGES C CXX)
 
 option(TPROF_WITH_NVTX "Enable NVTX shims" OFF)
 option(TPROF_WITH_CUPTI "Enable CUPTI shims" OFF)
+option(TPROF_WITH_ROCPROFILER "Enable ROCprofiler-SDK shell compile guards" OFF)
+option(TPROF_WITH_APPLE_SYSTEM_CONTEXT "Enable Apple IOReport/SMC/HID system-context shell guards" OFF)
+option(TPROF_WITH_METAL "Enable Apple Metal counter shell compile guards" OFF)
 option(TPROF_WITH_MLIR "Build MLIR pass (stub)" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -29,9 +32,38 @@ if (TPROF_WITH_CUPTI)
   endif()
 endif()
 
+if (TPROF_WITH_ROCPROFILER)
+  find_package(ROCprofilerSDK QUIET)
+  if (ROCprofilerSDK_FOUND)
+    add_compile_definitions(TPROF_WITH_ROCPROFILER=1)
+  else()
+    message(WARNING "ROCprofiler-SDK requested but not found; building ROCprofiler adapter as planned shell.")
+  endif()
+endif()
+
+if (TPROF_WITH_METAL)
+  if (APPLE)
+    add_compile_definitions(TPROF_WITH_METAL=1)
+  else()
+    message(WARNING "Metal requested on a non-Apple host; building Metal provider as planned shell.")
+  endif()
+endif()
+
+if (TPROF_WITH_APPLE_SYSTEM_CONTEXT)
+  if (APPLE)
+    add_compile_definitions(TPROF_WITH_APPLE_SYSTEM_CONTEXT=1)
+  else()
+    message(WARNING "Apple system context requested on a non-Apple host; building as planned shell.")
+  endif()
+endif()
+
 add_library(tprof_runtime
   src/runtime/tprof_runtime.cpp
   src/runtime/tessera_runtime_adapter.cpp
+  src/runtime/provider_shells.cpp
+  src/runtime/rocprofiler_adapter.cpp
+  src/runtime/metal_adapter.cpp
+  src/runtime/cupti_adapter.cpp
   src/runtime/nvtx_shim.cpp
   src/runtime/cupti_shim.cpp
   src/exporters/chrome_trace_exporter.cpp
@@ -48,6 +80,9 @@ if (NVTX_FOUND)
 endif()
 if (CUPTI_FOUND)
   target_link_libraries(tprof_runtime PRIVATE CUPTI::cupti)
+endif()
+if (ROCprofilerSDK_FOUND)
+  target_link_libraries(tprof_runtime PRIVATE ROCprofilerSDK::rocprofiler-sdk)
 endif()
 
 add_library(tprof_device INTERFACE)

@@ -67,6 +67,7 @@ tessera-prof my_model.py --emit=json --compile-target=sm90
 tessera-prof my_model.py --advanced-plan --emit=json --compile-target=apple_gpu
 tessera-prof my_model.py --advanced-plan --emit=json --compile-target=sm90 \
   --trace-features=runtime_api,device_activity,intra_kernel,model_analyzer \
+  --profiler-context-json context.json \
   --model-analyzer-manifest model_analyzer.json \
   --model-analyzer-result model_analyzer_result.json
 ```
@@ -102,6 +103,48 @@ best configuration, and runner status. Unless a future backend runner supplies
 real measurements, the default result is explicitly marked as estimated or
 planned-estimated rather than hardware-measured.
 
+`tessera.compiler.profiler_context` defines the portable
+`tessera.profiler_context.v1` artifact used to correlate traces with lower-rate
+system context. Apple, NVIDIA, and AMD context samples normalize to:
+
+- `provider` such as `apple-silicon-system-context`, `nvidia-system-context`,
+  or `rocm-system-context`.
+- `source_status` such as `planned`, `compiled_shell`, or `measured`.
+- A `bottleneck_summary` over labels such as `bandwidth_bound`,
+  `compute_bound`, `power_capped`, `thermal_throttled`, `fabric_limited`, or
+  `reliability_risk`.
+
+The same artifact can be consumed by the HTML report generator:
+
+```bash
+python3 tools/profiler/scripts/tprof_report.py \
+  --in runtime.trace.json \
+  --context-json context.json \
+  --out report.html
+```
+
+Use `tools/profiler/scripts/tprof_context.py` to create the artifact:
+
+```bash
+# Deterministic CI path.
+python3 tools/profiler/scripts/tprof_context.py \
+  --provider mock --target nvidia --out context.json
+
+# File ingestion path for native helper output or recorded samples.
+python3 tools/profiler/scripts/tprof_context.py \
+  --provider mock --target apple_gpu --input sample.json --out context.json
+
+# Best-effort native paths; missing libraries/devices still emit a valid
+# context artifact with source_status="unavailable".
+python3 tools/profiler/scripts/tprof_context.py --provider nvidia --out nvml.context.json
+python3 tools/profiler/scripts/tprof_context.py --provider rocm --out amdsmi.context.json
+python3 tools/profiler/scripts/tprof_context.py --provider apple --out apple.context.json
+```
+
+and by `tessera-prof --profiler-context-json context.json` when writing a Model
+Analyzer result. This attaches context to the result artifact; it does not
+promote native collector status by itself.
+
 When `intra_kernel` is requested, the compiler plan emits portable probe specs
 for `prologue`, `mainloop`, and `epilogue` phases. Those specs use stable
 payload fields (`kernel`, `phase`, `tile`, `program_id`) so later backend
@@ -131,6 +174,78 @@ power, thermals, clocks, PCIe/NVLink/XGMI pressure, and reliability events. The
 context lane can label a run `bandwidth_bound`, `compute_bound`, `power_capped`,
 `fabric_limited`, or `reliability_risk`; CUPTI and ROCprofiler-SDK still own the
 runtime/activity/counter records that prove what kernels actually did.
+
+`tools/profiler/include/tprof/provider_shells.h` is the native integration
+handoff. It lists lightweight system-context shells for NVML/DCGM, AMD SMI/RDC,
+and Apple IOReport/SMC/HID-style sampling, plus heavier provider shells for
+CUPTI callbacks/activity/counters, ROCprofiler-SDK dispatch/counters, and Metal
+command-buffer/counter-sample correlation. The shell API is intentionally
+compilable without vendor SDKs; backend proof must wire the SDK, collect data,
+and update provider status before docs or plans say `available`.
+
+The first native context collectors are best-effort and dynamic:
+
+- NVIDIA loads NVML at runtime with no hard link and samples utilization, memory
+  residency, power/limit, temperature, throttle reasons, and ECC totals when
+  available.
+- AMD loads the optional `amdsmi` Python module and normalizes GPU/memory
+  activity, VRAM, power, temperature, and RAS-style counts when available.
+- Apple emits host-safe metadata only for now; IOReport/SMC/HID stays behind
+  the macOS-only `TPROF_WITH_APPLE_SYSTEM_CONTEXT` shell guard and still needs
+  fresh-process, out-of-sandbox proof before promotion.
+
+`tessera.compiler.profiler_provider_trace` is the next layer down: it describes
+the heavy provider records that prove API calls, device activity, counters, and
+intra-kernel samples. The artifact schema is
+`tessera.profiler_provider_trace.v1`, with each record also rendered as
+Chrome/Perfetto-compatible Trace Event JSON.
+
+```bash
+python3 tools/profiler/scripts/tprof_provider_trace.py \
+  --provider rocprofiler \
+  --input rocprofiler_records.json \
+  --out provider_trace.json \
+  --trace-out provider_trace.trace.json
+```
+
+Merge provider records with Tessera runtime trace and system context before
+rendering the final report:
+
+```bash
+python3 tools/profiler/scripts/tprof_merge_trace.py \
+  --runtime-trace runtime.trace.json \
+  --provider-trace provider_trace.json \
+  --context-json context.json \
+  --out merged.trace.json
+```
+
+The staged mapping is:
+
+- ROCprofiler-SDK first maps HIP/HSA callback records to `runtime_api`.
+- ROCprofiler-SDK dispatch, kernel, memcpy, and memory records map to
+  `device_activity`.
+- ROCprofiler-SDK counters map to `counters`; filtered thread-trace records map
+  to `intra_kernel` and must carry dispatch/kernel correlation fields.
+- Metal command-buffer timestamp records map to `device_activity`; Metal counter
+  sample buffer records map to `counters` and should carry command-buffer or
+  Target IR probe correlation IDs.
+- CUPTI runtime/driver callback records map to `runtime_api`.
+- CUPTI kernel, memcpy, memset, and device activity records map to
+  `device_activity`, preserving CUPTI correlation IDs so activity can be joined
+  to the originating API callback.
+
+The first C++ SDK adapter shims are intentionally thin:
+
+- `tprof/rocprofiler_adapter.h` exposes HIP/HSA API, dispatch/activity, counter,
+  and thread-trace ingestion functions.
+- `tprof/metal_adapter.h` exposes command-buffer and counter-sample ingestion
+  functions.
+- `tprof/cupti_adapter.h` exposes runtime/driver callback and activity
+  ingestion functions.
+
+Their init functions are SDK-gated and can return `false`, but the ingestion
+functions feed normalized fixture or callback data into the existing `tprof`
+runtime categories.
 
 Profiler events carry:
 

@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Normalize vendor profiler records into Tessera provider trace JSON."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+def _repo_python_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "python"
+
+
+def main(argv: list[str] | None = None) -> int:
+    sys.path.insert(0, str(_repo_python_path()))
+    from tessera.compiler.profiler_provider_trace import (
+        build_provider_trace_artifact,
+        load_provider_trace_input,
+        records_from_raw,
+        write_provider_trace_artifact,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="tprof-provider-trace",
+        description="Normalize ROCprofiler/CUPTI/Metal records to tessera.profiler_provider_trace.v1.",
+    )
+    parser.add_argument("--provider", choices=("rocprofiler", "cupti", "metal"), required=True)
+    parser.add_argument("--input", required=True, help="Raw record/list JSON or provider trace artifact.")
+    parser.add_argument("--out", help="Write full provider trace artifact JSON.")
+    parser.add_argument(
+        "--trace-out",
+        help="Write only Chrome/Perfetto-compatible Trace Event JSON.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        payload = load_provider_trace_input(args.input, provider=args.provider)
+    except Exception as exc:
+        parser.error(str(exc))
+    # Rebuild existing artifacts too so --provider controls future fixture
+    # migrations with a deterministic output order.
+    if payload.get("source_status") != "file":
+        payload = build_provider_trace_artifact(
+            provider=args.provider,
+            records=records_from_raw(args.provider, payload.get("records", [])),
+            source_status=str(payload.get("source_status", "file")),
+            source=str(payload.get("source") or args.input),
+        )
+
+    if args.out:
+        write_provider_trace_artifact(payload, args.out)
+    if args.trace_out:
+        trace = {
+            "displayTimeUnit": "ns",
+            "traceEvents": payload["traceEvents"],
+            "summary": payload["summary"],
+        }
+        out = Path(args.trace_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(trace, indent=2, sort_keys=True) + "\n")
+    if not args.out and not args.trace_out:
+        sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

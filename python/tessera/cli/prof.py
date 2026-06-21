@@ -17,6 +17,7 @@ from tessera.compiler.profiling_plan import (
     plan_profile,
 )
 from tessera.compiler.model_analyzer import run_model_analyzer_manifest, write_model_analyzer_result
+from tessera.compiler.profiler_context import load_profiler_context_artifact
 
 
 DEFAULT_METRICS = ("latency", "flops", "bandwidth")
@@ -92,6 +93,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     analyzer_sweep = None
     advanced_plan = None
     analyzer_result = None
+    profiler_context_artifact = None
+    if args.profiler_context_json:
+        profiler_context_artifact = load_profiler_context_artifact(args.profiler_context_json)
     if args.advanced_plan or args.model_analyzer_manifest or args.model_analyzer_result:
         analyzer_sweep = ModelAnalyzerSweep(
             mode=args.analyzer_mode,
@@ -116,7 +120,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.model_analyzer_manifest:
             Path(args.model_analyzer_manifest).write_text(manifest.to_json() + "\n")
         if args.model_analyzer_result:
-            analyzer_result = run_model_analyzer_manifest(manifest_payload)
+            analyzer_result = run_model_analyzer_manifest(
+                manifest_payload,
+                context_artifact=profiler_context_artifact,
+            )
             write_model_analyzer_result(analyzer_result, args.model_analyzer_result)
 
     payload = {
@@ -126,6 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "compile_target": args.compile_target,
         "schedule_artifact": artifact,
         "advanced_profiler_plan": advanced_plan,
+        "profiler_context": profiler_context_artifact,
         "model_analyzer_result": analyzer_result,
     }
     if args.emit == "json":
@@ -292,6 +300,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Write a local Tessera Model Analyzer result JSON by running the "
             "manifest search contract with estimated measurements."
+        ),
+    )
+    parser.add_argument(
+        "--profiler-context-json",
+        help=(
+            "Read a tessera.profiler_context.v1 artifact and attach its summary "
+            "to JSON output and Model Analyzer results."
         ),
     )
     return parser

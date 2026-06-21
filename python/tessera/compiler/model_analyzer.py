@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from .profiler_context import summarize_profiler_context, validate_profiler_context_artifact
+
 
 MODEL_ANALYZER_RESULT_SCHEMA_VERSION = "tessera.compiler.model_analyzer_result.v1"
 
@@ -50,6 +52,7 @@ def run_model_analyzer_manifest(
     manifest: Mapping[str, Any],
     *,
     measure: MeasurementFn | None = None,
+    context_artifact: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run or estimate all configurations from a Model Analyzer manifest."""
 
@@ -62,6 +65,15 @@ def run_model_analyzer_manifest(
     objective = _required_mapping(manifest, "objective")
     primary = str(objective.get("primary", "latency_ms"))
     best = _select_best_trial(results, primary)
+    context_summary = None
+    if context_artifact is not None:
+        validate_profiler_context_artifact(context_artifact)
+        context_summary = {
+            "schema": context_artifact.get("schema"),
+            "provider": context_artifact.get("provider"),
+            "source_status": context_artifact.get("source_status"),
+            **summarize_profiler_context(context_artifact.get("samples", [])),
+        }
     return {
         "schema": MODEL_ANALYZER_RESULT_SCHEMA_VERSION,
         "manifest_schema": manifest.get("schema"),
@@ -72,6 +84,7 @@ def run_model_analyzer_manifest(
         "trial_count": len(results),
         "best": best,
         "trials": results,
+        "context_summary": context_summary,
         "notes": [
             "Default runner output is estimated unless a measurement function supplies measured=true.",
             "Native NVIDIA/ROCm/Apple GPU collectors must promote provider status before hardware claims.",

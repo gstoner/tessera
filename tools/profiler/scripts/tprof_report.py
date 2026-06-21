@@ -11,6 +11,13 @@ def load_trace(path):
         return json.load(f)
 
 
+def load_context(path):
+    if not path:
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def aggregate(trace):
     events = trace.get("traceEvents", [])
     stacks = collections.defaultdict(list)
@@ -25,6 +32,14 @@ def aggregate(trace):
             if stacks[tid]:
                 name, start_ts = stacks[tid].pop()
                 totals[name]["dur_us"] += max(0.0, ts - start_ts)
+        elif phase == "X":
+            name = event.get("name", "range")
+            totals[name]["dur_us"] += max(0.0, float(event.get("dur", 0.0)))
+            args = event.get("args", {})
+            if "bytes" in args and args["bytes"] is not None:
+                totals[name]["bytes"] += float(args["bytes"])
+            if "flops" in args and args["flops"] is not None:
+                totals[name]["flops"] += float(args["flops"])
         elif phase == "C":
             target = stacks[tid][-1][0] if stacks[tid] else "counter"
             args = event.get("args", {})
@@ -35,6 +50,29 @@ def aggregate(trace):
             elif "flop" in event_name:
                 totals[target]["flops"] += value
     return totals
+
+
+def aggregate_context(context):
+    if not context:
+        return None
+    samples = context.get("samples", [])
+    summary = context.get("bottleneck_summary") or {}
+    bottlenecks = summary.get("bottlenecks") or {}
+    if not bottlenecks and samples:
+        counts = collections.Counter(str(s.get("bottleneck", "unknown")) for s in samples)
+        bottlenecks = dict(sorted(counts.items()))
+    dominant = summary.get("dominant_bottleneck")
+    if dominant is None and bottlenecks:
+        dominant = max(bottlenecks.items(), key=lambda item: item[1])[0]
+    return {
+        "schema": context.get("schema"),
+        "target": context.get("target"),
+        "provider": context.get("provider"),
+        "source_status": context.get("source_status"),
+        "sample_count": context.get("sample_count", len(samples)),
+        "dominant_bottleneck": dominant,
+        "bottlenecks": bottlenecks,
+    }
 
 
 def _coerce_peak_value(value):
@@ -98,7 +136,7 @@ def select_peaks(peaks_map, arch, env_arch):
     return None, None
 
 
-def make_html(totals, out_path, peak_flops=None, hbm_gbs=None):
+def make_html(totals, out_path, peak_flops=None, hbm_gbs=None, context=None):
     rows = []
     total_time = sum(value["dur_us"] for value in totals.values()) or 1.0
     for name, value in totals.items():
@@ -117,7 +155,12 @@ def make_html(totals, out_path, peak_flops=None, hbm_gbs=None):
             }
         )
     rows.sort(key=lambda row: row["ms"], reverse=True)
-    data_json = json.dumps({"rows": rows, "peak_flops": peak_flops, "hbm_gbs": hbm_gbs})
+    data_json = json.dumps({
+        "rows": rows,
+        "peak_flops": peak_flops,
+        "hbm_gbs": hbm_gbs,
+        "context": context,
+    })
     html = f'''<!doctype html>
 <html><head><meta charset="utf-8"/>
 <title>Tessera Profiler Report</title>
@@ -131,6 +174,7 @@ tbody tr:nth-child(even) {{ background: #fafafa; }}
 small {{ color: #666; }}
 #chart {{ width: 100%; height: 360px; border: 1px solid #ddd; margin-top: 16px; position: relative; }}
 .axis {{ position: absolute; color: #666; font-size: 12px; }}
+.muted {{ color: #666; }}
 </style></head>
 <body>
 <h1>Tessera Profiler - Report</h1>
@@ -145,6 +189,15 @@ small {{ color: #666; }}
 <h2>Roofline</h2>
 <div id="chart"></div>
 <p><small>Peaks: peak_flops={peak_flops or "unset"} FLOP/s, hbm_gbs={hbm_gbs or "unset"} GB/s.</small></p>
+
+<section id="system-context" hidden>
+<h2>System Context</h2>
+<p class="muted" id="context-meta"></p>
+<table>
+<thead><tr><th>Bottleneck</th><th>Samples</th></tr></thead>
+<tbody id="context-body"></tbody>
+</table>
+</section>
 
 <script>
 const DATA = {data_json};
@@ -189,6 +242,20 @@ if (DATA.hbm_gbs) {{
   const f1 = DATA.hbm_gbs * minB, f2 = DATA.hbm_gbs * maxB;
   ctx.strokeStyle="#0a0"; ctx.beginPath(); ctx.moveTo(xmap(minB), ymap(f1)); ctx.lineTo(xmap(maxB), ymap(f2)); ctx.stroke();
 }}
+
+if (DATA.context) {{
+  document.getElementById("system-context").hidden = false;
+  const c = DATA.context;
+  document.getElementById("context-meta").textContent =
+    `target=${{c.target || "unknown"}}, provider=${{c.provider || "unknown"}}, status=${{c.source_status || "unknown"}}, dominant=${{c.dominant_bottleneck || "unknown"}}`;
+  const cbody = document.getElementById("context-body");
+  for (const [name, count] of Object.entries(c.bottlenecks || {{}})) {{
+    const tr = document.createElement("tr");
+    const label = document.createElement("td"); label.textContent = name; label.style.textAlign = "left"; tr.appendChild(label);
+    const value = document.createElement("td"); value.textContent = String(count); tr.appendChild(value);
+    cbody.appendChild(tr);
+  }}
+}}
 </script>
 </body></html>'''
     with open(out_path, "w", encoding="utf-8") as f:
@@ -203,6 +270,7 @@ def main():
     parser.add_argument("--hbm-gbs", type=float, default=None, help="HBM bandwidth GB/s")
     parser.add_argument("--peaks", type=str, default=None, help="YAML with device peaks")
     parser.add_argument("--arch", type=str, default=None, help="Architecture key from YAML")
+    parser.add_argument("--context-json", type=str, default=None, help="tessera.profiler_context.v1 JSON")
     args = parser.parse_args()
 
     peak_flops = args.peak_flops
@@ -214,7 +282,13 @@ def main():
         peak_flops = peak_flops if peak_flops is not None else selected_flops
         hbm_gbs = hbm_gbs if hbm_gbs is not None else selected_hbm
 
-    make_html(aggregate(load_trace(args.inp)), args.out, peak_flops=peak_flops, hbm_gbs=hbm_gbs)
+    make_html(
+        aggregate(load_trace(args.inp)),
+        args.out,
+        peak_flops=peak_flops,
+        hbm_gbs=hbm_gbs,
+        context=aggregate_context(load_context(args.context_json)),
+    )
 
 
 if __name__ == "__main__":

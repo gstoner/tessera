@@ -125,7 +125,7 @@ def _provider_from_sample(sample: Mapping[str, Any], schema: str) -> str:
     return "unknown"
 
 
-def _infer_provider(samples: list[Mapping[str, Any]], target: str) -> str:
+def _infer_provider(samples: Iterable[Mapping[str, Any]], target: str) -> str:
     providers = {str(sample.get("provider")) for sample in samples if sample.get("provider")}
     if len(providers) == 1:
         return next(iter(providers))

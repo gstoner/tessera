@@ -15,7 +15,7 @@ import json
 import platform
 import subprocess
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, overload
 
 from .accelerator_profiler_context import AcceleratorProfilerContext
 from .apple_profiler_context import AppleProfilerContext, apple_unified_memory_bandwidth_ceiling_gbs
@@ -97,7 +97,11 @@ def mock_profiler_context(*, target: str = "nvidia") -> dict[str, Any]:
         ).to_dict()
         target_name = "apple_gpu"
     else:
-        vendor = "rocm" if normalized in {"rocm", "amd", "hip"} or normalized.startswith("gfx") else "nvidia"
+        vendor: Literal["nvidia", "rocm"] = (
+            "rocm"
+            if normalized in {"rocm", "amd", "hip"} or normalized.startswith("gfx")
+            else "nvidia"
+        )
         sample = AcceleratorProfilerContext(
             vendor=vendor,
             gpu_utilization=0.72,
@@ -369,6 +373,10 @@ def _as_mapping(value: Any) -> Mapping[str, Any]:
     return {}
 
 
+@overload
+def _num(mapping: Mapping[str, Any], *keys: str, default: float) -> float: ...
+@overload
+def _num(mapping: Mapping[str, Any], *keys: str, default: None) -> float | None: ...
 def _num(mapping: Mapping[str, Any], *keys: str, default: float | None) -> float | None:
     for key in keys:
         if key in mapping and mapping[key] is not None:
@@ -400,7 +408,9 @@ def _temperature_c(value: float | None) -> float | None:
     return value / 1000.0 if value > 1000 else value
 
 
-def _unavailable_accelerator_sample(vendor: str, collector: str, exc: Exception) -> dict[str, Any]:
+def _unavailable_accelerator_sample(
+    vendor: Literal["nvidia", "rocm"], collector: str, exc: Exception
+) -> dict[str, Any]:
     sample = AcceleratorProfilerContext(vendor=vendor).to_dict()
     sample["metadata"] = {
         "collector": collector,

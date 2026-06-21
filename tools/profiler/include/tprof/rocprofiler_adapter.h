@@ -9,6 +9,8 @@ struct rocprofiler_adapter_config_t {
   bool dispatch_activity_records = true;
   bool counter_collection = false;
   bool thread_trace = false;
+  bool buffered_activity_service = true;
+  bool counter_discovery = false;
   bool start_paused = false;
   uint64_t buffer_bytes = 4 * 1024 * 1024;
   uint64_t thread_trace_max_bytes = 256 * 1024 * 1024;
@@ -19,6 +21,7 @@ struct rocprofiler_adapter_config_t {
   const char* exclude_kernel = nullptr;
   const char* include_counter = nullptr;
   const char* exclude_counter = nullptr;
+  const char* requested_counters = nullptr;
 };
 
 struct rocprofiler_adapter_status_t {
@@ -34,11 +37,18 @@ struct rocprofiler_adapter_status_t {
   bool dispatch_activity_records;
   bool counter_collection;
   bool thread_trace;
+  bool buffered_activity_service_configured;
+  bool counter_discovery_configured;
+  bool counter_request_validated;
+  bool unsupported_counter_requested;
   bool thread_trace_volume_limited;
+  uint64_t dropped_records;
   uint64_t buffer_bytes;
   uint64_t thread_trace_max_bytes;
+  const char* lifecycle_stage;
   const char* source_status;
   const char* last_error;
+  const char* unsupported_counter;
 };
 
 struct rocprofiler_api_record_t {
@@ -84,6 +94,10 @@ bool rocprofiler_adapter_is_paused();
 bool rocprofiler_adapter_start_collection();
 void rocprofiler_adapter_stop_collection();
 bool rocprofiler_adapter_collection_started();
+bool rocprofiler_adapter_configure_buffered_activity_service(uint64_t buffer_bytes);
+bool rocprofiler_adapter_validate_counter_request(const char* metric);
+void rocprofiler_adapter_report_dropped_records(uint64_t count);
+uint64_t rocprofiler_adapter_dropped_records();
 rocprofiler_adapter_status_t rocprofiler_adapter_status();
 
 void rocprofiler_record_api(const char* name,

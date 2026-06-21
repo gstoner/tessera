@@ -21,10 +21,29 @@ std::atomic<bool> g_rocprofiler_tool_registered{false};
 std::atomic<bool> g_rocprofiler_hip_callbacks_configured{false};
 std::atomic<bool> g_rocprofiler_hsa_callbacks_configured{false};
 std::atomic<bool> g_rocprofiler_collection_started{false};
+std::atomic<bool> g_rocprofiler_buffered_activity_service_configured{false};
+std::atomic<bool> g_rocprofiler_counter_discovery_configured{false};
+std::atomic<bool> g_rocprofiler_counter_request_validated{false};
+std::atomic<bool> g_rocprofiler_unsupported_counter_requested{false};
+std::atomic<uint64_t> g_rocprofiler_dropped_records{0};
+const char* g_rocprofiler_lifecycle_stage = "not_initialized";
 const char* g_rocprofiler_last_error = "not initialized";
+std::string g_rocprofiler_unsupported_counter;
 
 double duration_from_us(double start_us, double end_us) {
   return end_us > start_us ? end_us - start_us : 0.0;
+}
+
+bool is_supported_counter_name(const char* metric) {
+  if (metric == nullptr || metric[0] == '\0') return false;
+  const std::string value(metric);
+  return value.find("SQ") != std::string::npos ||
+         value.find("GRBM") != std::string::npos ||
+         value.find("VALU") != std::string::npos ||
+         value.find("TCC") != std::string::npos ||
+         value.find("L2") != std::string::npos ||
+         value.find("FETCH_SIZE") != std::string::npos ||
+         value.find("WRITE_SIZE") != std::string::npos;
 }
 } // namespace
 
@@ -32,14 +51,24 @@ bool rocprofiler_adapter_init(const rocprofiler_adapter_config_t& cfg) {
   g_rocprofiler_cfg = cfg;
   g_rocprofiler_paused.store(cfg.start_paused);
   g_rocprofiler_thread_trace_volume_limited.store(false);
+  g_rocprofiler_counter_request_validated.store(false);
+  g_rocprofiler_unsupported_counter_requested.store(false);
+  g_rocprofiler_dropped_records.store(0);
+  g_rocprofiler_unsupported_counter.clear();
 #ifdef TPROF_WITH_ROCPROFILER
   g_rocprofiler_initialized.store(true);
   g_rocprofiler_context_created.store(true);
   g_rocprofiler_tool_registered.store(true);
   g_rocprofiler_hip_callbacks_configured.store(cfg.hip_hsa_api_tracing);
   g_rocprofiler_hsa_callbacks_configured.store(cfg.hip_hsa_api_tracing);
+  g_rocprofiler_buffered_activity_service_configured.store(cfg.buffered_activity_service);
+  g_rocprofiler_counter_discovery_configured.store(cfg.counter_discovery);
   g_rocprofiler_collection_started.store(!cfg.start_paused);
-  g_rocprofiler_last_error = "compiled ROCprofiler-SDK lifecycle shell; native HIP/HSA callback registration pending";
+  g_rocprofiler_lifecycle_stage = cfg.start_paused ? "initialized_paused" : "collecting";
+  if (cfg.requested_counters != nullptr) {
+    rocprofiler_adapter_validate_counter_request(cfg.requested_counters);
+  }
+  g_rocprofiler_last_error = "compiled ROCprofiler-SDK lifecycle shell; hardware proof required for native_available";
   return true;
 #else
   g_rocprofiler_initialized.store(false);
@@ -47,7 +76,13 @@ bool rocprofiler_adapter_init(const rocprofiler_adapter_config_t& cfg) {
   g_rocprofiler_tool_registered.store(false);
   g_rocprofiler_hip_callbacks_configured.store(false);
   g_rocprofiler_hsa_callbacks_configured.store(false);
+  g_rocprofiler_buffered_activity_service_configured.store(false);
+  g_rocprofiler_counter_discovery_configured.store(false);
   g_rocprofiler_collection_started.store(false);
+  g_rocprofiler_lifecycle_stage = "sdk_unavailable";
+  if (cfg.requested_counters != nullptr) {
+    rocprofiler_adapter_validate_counter_request(cfg.requested_counters);
+  }
   g_rocprofiler_last_error = "ROCprofiler-SDK was not found at build time";
   return false;
 #endif
@@ -59,7 +94,10 @@ void rocprofiler_adapter_shutdown() {
   g_rocprofiler_tool_registered.store(false);
   g_rocprofiler_hip_callbacks_configured.store(false);
   g_rocprofiler_hsa_callbacks_configured.store(false);
+  g_rocprofiler_buffered_activity_service_configured.store(false);
+  g_rocprofiler_counter_discovery_configured.store(false);
   g_rocprofiler_collection_started.store(false);
+  g_rocprofiler_lifecycle_stage = "shutdown";
   g_rocprofiler_last_error = "shutdown";
 }
 
@@ -79,13 +117,16 @@ bool rocprofiler_adapter_start_collection() {
 #ifdef TPROF_WITH_ROCPROFILER
   if (!g_rocprofiler_initialized.load()) {
     g_rocprofiler_last_error = "ROCprofiler adapter is not initialized";
+    g_rocprofiler_lifecycle_stage = "start_failed";
     return false;
   }
   g_rocprofiler_collection_started.store(true);
   g_rocprofiler_paused.store(false);
+  g_rocprofiler_lifecycle_stage = "collecting";
   return true;
 #else
   g_rocprofiler_collection_started.store(false);
+  g_rocprofiler_lifecycle_stage = "sdk_unavailable";
   g_rocprofiler_last_error = "ROCprofiler-SDK was not found at build time";
   return false;
 #endif
@@ -93,10 +134,47 @@ bool rocprofiler_adapter_start_collection() {
 
 void rocprofiler_adapter_stop_collection() {
   g_rocprofiler_collection_started.store(false);
+  g_rocprofiler_lifecycle_stage = "stopped";
 }
 
 bool rocprofiler_adapter_collection_started() {
   return g_rocprofiler_collection_started.load();
+}
+
+bool rocprofiler_adapter_configure_buffered_activity_service(uint64_t buffer_bytes) {
+  g_rocprofiler_cfg.buffer_bytes = buffer_bytes;
+#ifdef TPROF_WITH_ROCPROFILER
+  g_rocprofiler_buffered_activity_service_configured.store(buffer_bytes > 0);
+  g_rocprofiler_lifecycle_stage = "buffered_activity_configured";
+  return buffer_bytes > 0;
+#else
+  g_rocprofiler_buffered_activity_service_configured.store(false);
+  g_rocprofiler_lifecycle_stage = "sdk_unavailable";
+  g_rocprofiler_last_error = "ROCprofiler-SDK was not found at build time";
+  return false;
+#endif
+}
+
+bool rocprofiler_adapter_validate_counter_request(const char* metric) {
+  const bool ok = is_supported_counter_name(metric);
+  g_rocprofiler_counter_request_validated.store(ok);
+  g_rocprofiler_unsupported_counter_requested.store(!ok);
+  g_rocprofiler_unsupported_counter = ok ? "" : (metric ? metric : "");
+  if (!ok) {
+    g_rocprofiler_last_error = "unsupported ROCprofiler counter request";
+  }
+  return ok;
+}
+
+void rocprofiler_adapter_report_dropped_records(uint64_t count) {
+  g_rocprofiler_dropped_records.fetch_add(count);
+  if (count > 0) {
+    g_rocprofiler_last_error = "ROCprofiler dropped records reported";
+  }
+}
+
+uint64_t rocprofiler_adapter_dropped_records() {
+  return g_rocprofiler_dropped_records.load();
 }
 
 rocprofiler_adapter_status_t rocprofiler_adapter_status() {
@@ -119,11 +197,18 @@ rocprofiler_adapter_status_t rocprofiler_adapter_status() {
       g_rocprofiler_cfg.dispatch_activity_records,
       g_rocprofiler_cfg.counter_collection,
       g_rocprofiler_cfg.thread_trace,
+      g_rocprofiler_buffered_activity_service_configured.load(),
+      g_rocprofiler_counter_discovery_configured.load(),
+      g_rocprofiler_counter_request_validated.load(),
+      g_rocprofiler_unsupported_counter_requested.load(),
       g_rocprofiler_thread_trace_volume_limited.load(),
+      g_rocprofiler_dropped_records.load(),
       g_rocprofiler_cfg.buffer_bytes,
       g_rocprofiler_cfg.thread_trace_max_bytes,
+      g_rocprofiler_lifecycle_stage,
       sdk_compiled ? "compiled_shell" : "planned",
       g_rocprofiler_last_error,
+      g_rocprofiler_unsupported_counter.empty() ? nullptr : g_rocprofiler_unsupported_counter.c_str(),
   };
 }
 
@@ -208,6 +293,7 @@ void rocprofiler_replay_thread_trace_record(const rocprofiler_thread_trace_recor
       g_rocprofiler_cfg.thread_trace_max_bytes > 0 &&
       record.trace_bytes > g_rocprofiler_cfg.thread_trace_max_bytes) {
     g_rocprofiler_thread_trace_volume_limited.store(true);
+    rocprofiler_adapter_report_dropped_records(1);
     g_rocprofiler_last_error = "thread trace record exceeded configured byte limit";
     return;
   }

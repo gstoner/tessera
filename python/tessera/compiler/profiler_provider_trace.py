@@ -159,6 +159,9 @@ def normalize_rocprofiler_api_record(raw: Mapping[str, Any]) -> ProviderTraceRec
         "backend": _first(raw, "backend", default="rocm"),
         "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", "stream_id", default=None),
         "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "sdk_version": _first(raw, "sdk_version", "rocprofiler_sdk_version", default=None),
+        "context_id": _first(raw, "context_id", default=None),
+        "callback_id": _first(raw, "callback_id", "callbackId", default=None),
         "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
@@ -188,6 +191,9 @@ def normalize_rocprofiler_activity_record(raw: Mapping[str, Any]) -> ProviderTra
         "backend": _first(raw, "backend", default="rocm"),
         "stream_or_queue": _first(raw, "stream_or_queue", "queue_id", "queue", default=None),
         "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "sdk_version": _first(raw, "sdk_version", "rocprofiler_sdk_version", default=None),
+        "activity_service": _first(raw, "activity_service", "buffer_service", default=None),
+        "buffer_bytes": _first(raw, "buffer_bytes", default=None),
         "dropped_records": _first(raw, "dropped_records", default=None),
     }
     return ProviderTraceRecord(
@@ -218,6 +224,10 @@ def normalize_rocprofiler_counter_record(raw: Mapping[str, Any]) -> ProviderTrac
             "probe_name": _first(raw, "probe_name", "probe", default=None),
             "target": _first(raw, "target", default=None),
             "backend": _first(raw, "backend", default="rocm"),
+            "counter_request": _first(raw, "counter_request", "request", default=None),
+            "counter_status": _first(raw, "counter_status", "request_status", default=None),
+            "unsupported_counter": _first(raw, "unsupported_counter", default=None),
+            "sdk_version": _first(raw, "sdk_version", "rocprofiler_sdk_version", default=None),
             "dropped_records": _first(raw, "dropped_records", default=None),
         },
     )
@@ -241,6 +251,8 @@ def normalize_rocprofiler_thread_trace_record(raw: Mapping[str, Any]) -> Provide
             "probe_name": _first(raw, "probe_name", "probe", default=None),
             "target": _first(raw, "target", default=None),
             "backend": _first(raw, "backend", default="rocm"),
+            "thread_trace_bytes": _first(raw, "thread_trace_bytes", "trace_bytes", default=None),
+            "thread_trace_byte_limit": _first(raw, "thread_trace_byte_limit", default=None),
             "dropped_records": _first(raw, "dropped_records", default=None),
         },
     )
@@ -323,6 +335,11 @@ def normalize_cupti_callback_record(raw: Mapping[str, Any]) -> ProviderTraceReco
             "target": _first(raw, "target", default=None),
             "backend": _first(raw, "backend", default="cuda"),
             "stream_or_queue": _first(raw, "stream_or_queue", "stream_id", "streamId", default=None),
+            "callback_id": _first(raw, "callback_id", "cbid", "callbackId", default=None),
+            "context_id": _first(raw, "context_id", "contextId", default=None),
+            "device_id": _first(raw, "device_id", "deviceId", default=None),
+            "driver_version": _first(raw, "driver_version", default=None),
+            "sdk_version": _first(raw, "sdk_version", "cupti_version", default=None),
             "fallback_reason": _first(raw, "fallback_reason", default=None),
             "dropped_records": _first(raw, "dropped_records", default=None),
         },
@@ -341,6 +358,12 @@ def normalize_cupti_activity_record(raw: Mapping[str, Any]) -> ProviderTraceReco
         "target": _first(raw, "target", default=None),
         "backend": _first(raw, "backend", default="cuda"),
         "stream_or_queue": _first(raw, "stream_or_queue", "stream_id", "streamId", default=None),
+        "context_id": _first(raw, "context_id", "contextId", default=None),
+        "activity_buffer_id": _first(raw, "activity_buffer_id", "buffer_id", default=None),
+        "activity_buffer_bytes": _first(raw, "activity_buffer_bytes", "buffer_bytes", default=None),
+        "driver_version": _first(raw, "driver_version", default=None),
+        "sdk_version": _first(raw, "sdk_version", "cupti_version", default=None),
+        "unsupported_metric": _first(raw, "unsupported_metric", default=None),
         "fallback_reason": _first(raw, "fallback_reason", default=None),
         "dropped_records": _first(raw, "dropped_records", default=None),
     }

@@ -58,7 +58,11 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "hip_callbacks_configured" in headers["rocprofiler"].read_text()
     assert "hsa_callbacks_configured" in headers["rocprofiler"].read_text()
     assert "rocprofiler_adapter_start_collection" in headers["rocprofiler"].read_text()
-    assert "native HIP/HSA callback registration pending" in roc
+    assert "buffered_activity_service_configured" in headers["rocprofiler"].read_text()
+    assert "counter_request_validated" in headers["rocprofiler"].read_text()
+    assert "unsupported_counter_requested" in headers["rocprofiler"].read_text()
+    assert "dropped_records" in headers["rocprofiler"].read_text()
+    assert "hardware proof required for native_available" in roc
 
     metal = sources["metal"].read_text()
     assert "command_buffer_spans" in metal
@@ -93,10 +97,17 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "exclude_activity" in headers["cupti"].read_text()
     assert "cupti_callback_record_t" in headers["cupti"].read_text()
     assert "cupti_replay_callback_record" in headers["cupti"].read_text()
+    assert "subscriber_created" in headers["cupti"].read_text()
+    assert "activity_buffer_requested" in headers["cupti"].read_text()
+    assert "activity_buffer_completed" in headers["cupti"].read_text()
+    assert "metric_request_validated" in headers["cupti"].read_text()
+    assert "unsupported_metric_requested" in headers["cupti"].read_text()
+    assert "cupti_adapter_request_activity_buffer" in headers["cupti"].read_text()
     assert "tprof_passes_filters" in cupti
     assert "cupti_adapter_status_t" in cupti
     assert "runtime_api(name ? name : \"cupti.callback\"" in cupti
     assert "device_activity(name ? name : \"cupti.activity\"" in cupti
+    assert "hardware proof required for native_available" in cupti
 
     for source in (
         "src/runtime/rocprofiler_adapter.cpp",
@@ -283,19 +294,29 @@ int main(int argc, char** argv) {
   tprof::rocprofiler_adapter_config_t cfg{};
   cfg.counter_collection = true;
   cfg.thread_trace = true;
+  cfg.counter_discovery = true;
   cfg.include_counter = "SQ";
   cfg.exclude_counter = "BAD";
   cfg.thread_trace_max_bytes = 64;
+  cfg.requested_counters = "SQ_WAVES";
   (void)tprof::rocprofiler_adapter_init(cfg);
   auto status = tprof::rocprofiler_adapter_status();
   if (status.paused) return 3;
   if (!status.counter_collection || !status.thread_trace) return 4;
   if (status.context_created || status.tool_registered) return 8;
   if (status.hip_callbacks_configured || status.hsa_callbacks_configured) return 9;
+  if (status.buffered_activity_service_configured) return 12;
+  if (status.counter_discovery_configured) return 13;
+  if (!status.counter_request_validated || status.unsupported_counter_requested) return 14;
   if (tprof::rocprofiler_adapter_start_collection()) return 10;
   if (tprof::rocprofiler_adapter_collection_started()) return 11;
   if (status.buffer_bytes == 0 || status.thread_trace_max_bytes != 64) return 5;
   if (status.source_status == nullptr || status.last_error == nullptr) return 6;
+  if (status.lifecycle_stage == nullptr) return 15;
+  if (tprof::rocprofiler_adapter_validate_counter_request("NOT_A_REAL_COUNTER")) return 16;
+  status = tprof::rocprofiler_adapter_status();
+  if (!status.unsupported_counter_requested || status.unsupported_counter == nullptr) return 17;
+  tprof::rocprofiler_adapter_report_dropped_records(2);
 
   tprof::rocprofiler_replay_api_record(
       tprof::rocprofiler_api_record_t{"hipMemcpy", "HIP_API", 10, 1.0, 3.5,
@@ -315,6 +336,7 @@ int main(int argc, char** argv) {
                                                "{\"target_cu\":1}"});
   status = tprof::rocprofiler_adapter_status();
   if (!status.thread_trace_volume_limited) return 7;
+  if (status.dropped_records != 3 || tprof::rocprofiler_adapter_dropped_records() != 3) return 18;
   return tprof::export_chrome(argv[1]) ? 0 : 1;
 }
 '''
@@ -379,9 +401,21 @@ int main(int argc, char** argv) {
   cupti.exclude_api = "Ignore";
   cupti.include_activity = "matmul";
   cupti.exclude_activity = "skip";
+  cupti.requested_metrics = "sm__cycles_active";
   tprof::cupti_adapter_init(cupti);
   auto cupti_status = tprof::cupti_adapter_status();
   if (!cupti_status.paused || !cupti_status.runtime_driver_callbacks) return 4;
+  if (cupti_status.subscriber_created) return 6;
+  if (cupti_status.activity_buffer_service_configured) return 7;
+  if (!cupti_status.metric_request_validated || cupti_status.unsupported_metric_requested) return 8;
+  if (tprof::cupti_adapter_start_collection()) return 9;
+  if (tprof::cupti_adapter_collection_started()) return 10;
+  if (tprof::cupti_adapter_request_activity_buffer(4096)) return 11;
+  tprof::cupti_adapter_complete_activity_buffer(128, 3);
+  if (tprof::cupti_adapter_validate_metric_request("not_a_real_metric")) return 12;
+  cupti_status = tprof::cupti_adapter_status();
+  if (!cupti_status.activity_buffer_completed || cupti_status.dropped_records != 3) return 13;
+  if (!cupti_status.unsupported_metric_requested || cupti_status.unsupported_metric == nullptr) return 14;
   tprof::cupti_record_callback("cudaLaunchKernel", "runtime", 1, 1.0, nullptr);
   tprof::cupti_adapter_resume();
   tprof::cupti_replay_callback_record(

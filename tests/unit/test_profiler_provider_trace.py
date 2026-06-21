@@ -30,6 +30,9 @@ def test_rocprofiler_api_dispatch_counter_thread_trace_order_contract() -> None:
         "start_us": 10,
         "end_us": 14,
         "correlation_id": 7,
+        "callback_id": 101,
+        "context_id": "rocctx0",
+        "sdk_version": "6.2",
     })
     dispatch = normalize_rocprofiler_activity_record({
         "activity": "dispatch",
@@ -38,12 +41,16 @@ def test_rocprofiler_api_dispatch_counter_thread_trace_order_contract() -> None:
         "end_us": 40,
         "correlation_id": 7,
         "dispatch_id": 11,
+        "activity_service": "buffered",
+        "buffer_bytes": 4096,
     })
     counter = normalize_rocprofiler_counter_record({
         "metric": "SQ_WAVES",
         "value": 123,
         "timestamp_us": 41,
         "dispatch_id": 11,
+        "counter_request": "SQ_WAVES",
+        "counter_status": "validated",
     })
     thread = normalize_rocprofiler_thread_trace_record({
         "kernel_name": "matmul",
@@ -52,6 +59,8 @@ def test_rocprofiler_api_dispatch_counter_thread_trace_order_contract() -> None:
         "dispatch_id": 11,
         "shader_engine_mask": "0x1",
         "target_cu": 0,
+        "trace_bytes": 1024,
+        "thread_trace_byte_limit": 2048,
     })
     artifact = build_provider_trace_artifact(
         provider="rocprofiler",
@@ -70,6 +79,10 @@ def test_rocprofiler_api_dispatch_counter_thread_trace_order_contract() -> None:
     assert artifact["traceEvents"][1]["cat"] == "device_activity"
     assert artifact["traceEvents"][2]["ph"] == "C"
     assert artifact["traceEvents"][3]["cat"] == "intra_kernel"
+    assert artifact["traceEvents"][0]["args"]["callback_id"] == 101
+    assert artifact["traceEvents"][1]["args"]["activity_service"] == "buffered"
+    assert artifact["traceEvents"][2]["args"]["counter_status"] == "validated"
+    assert artifact["traceEvents"][3]["args"]["thread_trace_bytes"] == 1024
 
 
 def test_metal_command_buffer_and_counter_correlation() -> None:
@@ -172,6 +185,9 @@ def test_cupti_callback_and_activity_share_correlation_id() -> None:
         "start_ns": 1_000,
         "end_ns": 3_000,
         "correlationId": 99,
+        "cbid": 211,
+        "contextId": 3,
+        "deviceId": 0,
     })
     activity = normalize_cupti_activity_record({
         "activity": "kernel",
@@ -180,6 +196,8 @@ def test_cupti_callback_and_activity_share_correlation_id() -> None:
         "end_ns": 12_000,
         "correlationId": 99,
         "streamId": 2,
+        "activity_buffer_id": "buf0",
+        "activity_buffer_bytes": 4096,
     })
     artifact = build_provider_trace_artifact(provider="cupti", records=(callback, activity))
 
@@ -187,6 +205,9 @@ def test_cupti_callback_and_activity_share_correlation_id() -> None:
     assert artifact["traceEvents"][0]["args"]["correlation_id"] == 99
     assert artifact["traceEvents"][1]["args"]["correlation_id"] == 99
     assert artifact["traceEvents"][1]["cat"] == "device_activity"
+    assert artifact["traceEvents"][0]["args"]["callback_id"] == 211
+    assert artifact["traceEvents"][0]["args"]["context_id"] == 3
+    assert artifact["traceEvents"][1]["args"]["activity_buffer_id"] == "buf0"
 
 
 def test_tprof_provider_trace_cli_writes_artifact_and_trace_json(tmp_path: Path) -> None:

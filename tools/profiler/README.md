@@ -241,12 +241,15 @@ to runtime or driver API calls.
 The SDK adapter shims are split by provider:
 
 - `tprof/rocprofiler_adapter.h`: HIP/HSA API tracing first, dispatch/activity
-  records next, counters and thread trace behind explicit config flags.
+  records next, buffered activity-service status, counter request validation,
+  unsupported-counter diagnostics, dropped-record accounting, and thread trace
+  behind explicit config flags.
 - `tprof/metal_adapter.h`: command-buffer span ingestion first, counter-set
   discovery as a capability shell, and counter sample records behind an
   explicit config flag.
-- `tprof/cupti_adapter.h`: runtime/driver callback ingestion first, activity
-  records next.
+- `tprof/cupti_adapter.h`: runtime/driver callback ingestion first, subscriber
+  lifecycle status, activity-buffer request/completion accounting,
+  unsupported-metric diagnostics, and activity records next.
 
 These adapters currently ingest normalized callback data into `tprof` event
 categories. Their `*_init` functions return `false` without the relevant compile
@@ -254,6 +257,10 @@ guard/SDK, but the record-ingestion and replay functions remain usable for
 fixtures and tests. Each adapter exposes `*_adapter_status()` so AMD, NVIDIA,
 and Apple hosts can report whether the shell was SDK/framework-compiled,
 initialized, paused, and which source status or last error applies.
+For ROCprofiler and CUPTI, status also carries lifecycle stage, SDK-gated
+buffer-service/subscriber state, counter or metric validation, unsupported
+requests, and dropped-record counts. These diagnostics close the native
+collector shell without promoting provider availability before hardware proof.
 
 Provider-status sidecars can be embedded directly in provider trace artifacts
 with `--provider-status`. `tprof-merge-trace` lifts embedded sidecars into
@@ -278,6 +285,9 @@ filters command-buffer labels and counter names. Counter and thread-trace paths
 are opt-in to avoid accidental high-volume captures. ROCprofiler thread-trace
 replay enforces `thread_trace_max_bytes` and marks
 `thread_trace_volume_limited` in adapter status when a record is dropped.
+ROCprofiler buffered activity and CUPTI activity-buffer helpers expose the
+request/completion accounting that native callbacks should update on AMD/NVIDIA
+hosts.
 
 Replay helpers mirror the fixture schema used by `tprof_provider_trace.py`:
 

@@ -19,6 +19,14 @@ double duration_from_us(double start_us, double end_us) {
 
 #if defined(TPROF_WITH_METAL) && defined(__APPLE__)
 extern "C" bool tprof_metal_command_buffer_probe_compiled();
+extern "C" bool tprof_metal_capture_command_buffer_timestamp(const char* label,
+                                                             uint64_t command_buffer_id,
+                                                             double* start_us,
+                                                             double* end_us,
+                                                             const char** error);
+extern "C" bool tprof_metal_discover_counter_sets(uint64_t* counter_set_count,
+                                                  const char** first_counter_set,
+                                                  const char** error);
 #endif
 
 bool metal_adapter_init(const metal_adapter_config_t& cfg) {
@@ -65,9 +73,13 @@ metal_adapter_status_t metal_adapter_status() {
 #else
       false;
 #endif
+  const bool native_timestamp_capture = metal_framework_compiled && g_metal_initialized.load();
+  const bool counter_set_discovery = metal_framework_compiled && g_metal_initialized.load();
   return metal_adapter_status_t{
       compiled_for_apple,
       metal_framework_compiled,
+      native_timestamp_capture,
+      counter_set_discovery,
       g_metal_initialized.load(),
       g_metal_paused.load(),
       g_metal_cfg.command_buffer_spans,
@@ -101,6 +113,69 @@ void metal_record_counter_sample(const char* counter,
                                         command_buffer_id, "probe", probe, args_json);
   (void)payload;
   counter_add(counter ? counter : "metal.counter", value);
+}
+
+bool metal_capture_command_buffer_timestamp(const char* label,
+                                            uint64_t command_buffer_id,
+                                            metal_command_buffer_timestamp_t* out) {
+  if (out == nullptr) return false;
+  out->command_buffer_id = command_buffer_id;
+  out->start_us = 0.0;
+  out->end_us = 0.0;
+  out->label = label;
+  out->error = nullptr;
+#if defined(TPROF_WITH_METAL) && defined(__APPLE__)
+  const char* error = nullptr;
+  const bool ok = tprof_metal_capture_command_buffer_timestamp(
+      label, command_buffer_id, &out->start_us, &out->end_us, &error);
+  out->error = error;
+  if (!ok) {
+    g_metal_last_error = error != nullptr ? error : "Metal command-buffer timestamp capture failed";
+  }
+  return ok;
+#else
+  out->error = "Metal support was not enabled for this build";
+  g_metal_last_error = out->error;
+  return false;
+#endif
+}
+
+bool metal_record_native_command_buffer(const char* label,
+                                        uint64_t command_buffer_id,
+                                        const char* args_json) {
+  metal_command_buffer_timestamp_t timestamp{};
+  if (!metal_capture_command_buffer_timestamp(label, command_buffer_id, &timestamp)) {
+    return false;
+  }
+  metal_record_command_buffer(label,
+                              command_buffer_id,
+                              duration_from_us(timestamp.start_us, timestamp.end_us),
+                              args_json);
+  return true;
+}
+
+bool metal_discover_counter_sets(metal_counter_set_discovery_t* out) {
+  if (out == nullptr) return false;
+  out->available = false;
+  out->counter_set_count = 0;
+  out->first_counter_set = nullptr;
+  out->error = nullptr;
+#if defined(TPROF_WITH_METAL) && defined(__APPLE__)
+  const char* first = nullptr;
+  const char* error = nullptr;
+  const bool ok = tprof_metal_discover_counter_sets(&out->counter_set_count, &first, &error);
+  out->available = ok;
+  out->first_counter_set = first;
+  out->error = error;
+  if (!ok) {
+    g_metal_last_error = error != nullptr ? error : "Metal counter-set discovery failed";
+  }
+  return ok;
+#else
+  out->error = "Metal support was not enabled for this build";
+  g_metal_last_error = out->error;
+  return false;
+#endif
 }
 
 void metal_replay_command_buffer_record(const metal_command_buffer_record_t& record) {

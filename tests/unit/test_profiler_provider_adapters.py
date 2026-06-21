@@ -53,6 +53,12 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "runtime_api(name ? name : \"rocprofiler.api\"" in roc
     assert "device_activity(name ? name : \"rocprofiler.dispatch\"" in roc
     assert "intra_kernel_sample" in roc
+    assert "context_created" in headers["rocprofiler"].read_text()
+    assert "tool_registered" in headers["rocprofiler"].read_text()
+    assert "hip_callbacks_configured" in headers["rocprofiler"].read_text()
+    assert "hsa_callbacks_configured" in headers["rocprofiler"].read_text()
+    assert "rocprofiler_adapter_start_collection" in headers["rocprofiler"].read_text()
+    assert "native HIP/HSA callback registration pending" in roc
 
     metal = sources["metal"].read_text()
     assert "command_buffer_spans" in metal
@@ -65,6 +71,18 @@ def test_provider_adapter_headers_and_sources_are_wired() -> None:
     assert "tprof_passes_filters" in metal
     assert "metal_adapter_status_t" in metal
     assert "device_activity(label ? label : \"metal.command_buffer\"" in metal
+    assert "metal_capture_command_buffer_timestamp" in headers["metal"].read_text()
+    assert "metal_record_native_command_buffer" in headers["metal"].read_text()
+    assert "metal_discover_counter_sets" in headers["metal"].read_text()
+    assert "tprof_metal_capture_command_buffer_timestamp" in metal
+    assert "tprof_metal_discover_counter_sets" in metal
+    metal_objc = (ROOT / "tools/profiler/src/runtime/metal_command_buffer_probe.mm").read_text()
+    assert "MTLCreateSystemDefaultDevice" in metal_objc
+    assert "GPUStartTime" in metal_objc
+    assert "GPUEndTime" in metal_objc
+    assert "blitCommandEncoder" in metal_objc
+    assert "MTLCounterSet" in metal_objc
+    assert "counterSets" in metal_objc
 
     cupti = sources["cupti"].read_text()
     assert "runtime_driver_callbacks" in cupti
@@ -272,6 +290,10 @@ int main(int argc, char** argv) {
   auto status = tprof::rocprofiler_adapter_status();
   if (status.paused) return 3;
   if (!status.counter_collection || !status.thread_trace) return 4;
+  if (status.context_created || status.tool_registered) return 8;
+  if (status.hip_callbacks_configured || status.hsa_callbacks_configured) return 9;
+  if (tprof::rocprofiler_adapter_start_collection()) return 10;
+  if (tprof::rocprofiler_adapter_collection_started()) return 11;
   if (status.buffer_bytes == 0 || status.thread_trace_max_bytes != 64) return 5;
   if (status.source_status == nullptr || status.last_error == nullptr) return 6;
 

@@ -124,10 +124,11 @@
 | `normalize_metal_command_buffer_record`, `normalize_metal_counter_record`, `normalize_cupti_callback_record`, `normalize_cupti_activity_record` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `collect_provider_status`, `provider_status_artifact`, `validate_provider_status_artifact` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
 | `merge_profiler_traces`, `write_merged_profiler_trace` | [Tessera_Profiling_And_Autotuning_Guide.md](../guides/Tessera_Profiling_And_Autotuning_Guide.md) |
+| `tprof_report.py --summary-json`, `tessera.profiler_report_summary.v1` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 | `tprof::attach_tessera_runtime_trace`, `tprof::detach_tessera_runtime_trace` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 | `tprof::provider_shell`, `tprof::provider_shells`, `tprof::native_system_context_init`, `tprof::heavy_provider_init` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
-| `tprof::rocprofiler_adapter_init`, `tprof::rocprofiler_adapter_status`, `tprof::rocprofiler_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
-| `tprof::metal_adapter_init`, `tprof::metal_adapter_status`, `tprof::metal_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::rocprofiler_adapter_init`, `tprof::rocprofiler_adapter_start_collection`, `tprof::rocprofiler_adapter_status`, `tprof::rocprofiler_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
+| `tprof::metal_adapter_init`, `tprof::metal_adapter_status`, `tprof::metal_capture_command_buffer_timestamp`, `tprof::metal_record_native_command_buffer`, `tprof::metal_discover_counter_sets`, `tprof::metal_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 | `tprof::cupti_adapter_init`, `tprof::cupti_adapter_status`, `tprof::cupti_replay_*` | [`tools/profiler/README.md`](../../tools/profiler/README.md) |
 
 ### Runtime C ABI

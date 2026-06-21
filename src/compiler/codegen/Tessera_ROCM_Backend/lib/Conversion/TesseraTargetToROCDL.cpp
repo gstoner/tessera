@@ -73,8 +73,26 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
         markerName = "llvm.amdgcn.raw.buffer.load.contract";
       else if (opName == "tessera_rocm.ds_read_tr")
         markerName = "llvm.amdgcn.ds.read.tr.contract";
-      else if (opName == "tessera_rocm.wait")
-        markerName = "llvm.amdgcn.s.barrier.contract";
+      else if (opName == "tessera_rocm.wait") {
+        // A targeted counter wait (vmcnt / lgkmcnt) lets the matrix core keep
+        // issuing past an in-flight copy; only a wait with no counter class is
+        // a true synchronization point that drains the wavefront (s_barrier).
+        StringRef counter;
+        if (auto attr = op->getAttrOfType<StringAttr>("counter"))
+          counter = attr.getValue();
+        if (counter == "vmcnt")
+          markerName = "llvm.amdgcn.s.waitcnt.vmcnt.contract";
+        else if (counter == "lgkmcnt")
+          markerName = "llvm.amdgcn.s.waitcnt.lgkmcnt.contract";
+        else if (counter.empty())
+          markerName = "llvm.amdgcn.s.barrier.contract";
+        else {
+          op->emitError("tessera_rocm.wait: unknown counter class '")
+              << counter << "' (expected 'vmcnt', 'lgkmcnt', or none)";
+          signalPassFailure();
+          return;
+        }
+      }
 
       auto marker = declareVoidMarker(module, markerName);
       rewriter.create<LLVM::CallOp>(op->getLoc(), TypeRange{},

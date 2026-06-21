@@ -167,6 +167,60 @@ class SwizzledLdsLayout:
         phase = (row // self.per_phase) % self.max_phase
         return ((col // self.vec) ^ phase) * self.vec + (col % self.vec)
 
+    @property
+    def window(self) -> int:
+        """Number of columns the swizzle permutes before repeating
+        (``max_phase * vec``).  The XOR-swizzle is a bijection over
+        ``[0, window)`` — see :meth:`is_conflict_free`."""
+        return self.max_phase * self.vec
+
+    def is_conflict_free(self, *, num_banks: int = 32, rows: int | None = None) -> bool:
+        """Verify the swizzle is (a) lossless and (b) conflict-breaking.
+
+        Two properties make this a correct bank-conflict-avoidance layout:
+
+        * **lossless** — for any fixed row the column map is a *bijection* over
+          ``[0, window)``, so distinct logical columns never alias to the same
+          physical offset (addressing stays correct);
+        * **conflict-breaking** — reading one logical column down successive
+          rows lands in distinct LDS banks.  The worst case is a row stride
+          that is a multiple of ``num_banks`` (so the *un*-swizzled column would
+          hit one bank on every row); the swizzle must spread those accesses
+          across more than one bank.
+
+        ``rows`` defaults to ``max_phase`` (one full phase cycle).  Returns
+        ``True`` only when both hold.
+        """
+        # (a) bijection over the window, per row.
+        for r in range(self.max_phase):
+            cols = {self.swizzled_col(r, c) for c in range(self.window)}
+            if cols != set(range(self.window)):
+                return False
+        # (b) a fixed column spreads across banks down the rows.  Use a
+        # pathological row stride (== window, a multiple of vec) so an
+        # unswizzled access would collide on every row.
+        n_rows = self.max_phase if rows is None else rows
+        stride = self.window
+        for c in range(self.vec, self.window):  # col 0's vec-block has phase 0
+            banks = {
+                (r * stride + self.swizzled_col(r, c)) % num_banks
+                for r in range(n_rows)
+            }
+            if len(banks) < 2:
+                return False
+        return True
+
+    def to_mlir_attr(self) -> str:
+        """Emit the swizzle as a Tessera ROCm IR attribute the lowering reads to
+        compute swizzled ``ds_read``/``ds_write`` offsets (Decision #15a: layout
+        is a first-class tensor attribute)."""
+        order = ", ".join(str(o) for o in self.order)
+        return (
+            "#tessera_rocm.lds_swizzle<"
+            f"vec = {self.vec}, per_phase = {self.per_phase}, "
+            f"max_phase = {self.max_phase}, order = [{order}]>"
+        )
+
     def as_metadata_dict(self) -> dict[str, Any]:
         return {
             "kind": "lds_layout",
@@ -213,6 +267,13 @@ class PaddedLdsLayout:
                 f"PaddedLdsLayout.padded_stride: cols must be >= 0, got {cols}"
             )
         return cols + self.pad_elems
+
+    def to_mlir_attr(self) -> str:
+        """Emit the padding layout as a Tessera ROCm IR attribute."""
+        return (
+            "#tessera_rocm.lds_pad<"
+            f"pad_elems = {self.pad_elems}, inner_dim = {self.inner_dim}>"
+        )
 
     def as_metadata_dict(self) -> dict[str, Any]:
         return {
@@ -261,10 +322,41 @@ def select_lds_layout(
     return SwizzledLdsLayout(vec=vec, per_phase=1, max_phase=8)
 
 
+def attn_kv_tile_swizzle(
+    arch: AMDArch, *, inner_dim: int = 128, vec: int = 8
+) -> SwizzledLdsLayout:
+    """XOR swizzle for an attention K/V tile staged in LDS.
+
+    The moonmath CDNA3 attention writeup swizzles the K tile so a warp's lanes
+    (which share a row but stride down the head dimension) land in distinct LDS
+    banks — eliminating the bank-stride conflict an unswizzled row-major K tile
+    would suffer.  The swizzle *window* is sized to one full row (``inner_dim``,
+    the head dimension), so ``max_phase = inner_dim // vec`` and the permutation
+    covers the whole row before repeating.
+
+    ``inner_dim`` must be a multiple of ``vec`` and ``inner_dim // vec`` a power
+    of two (so the XOR stays in range); both are checked with a stable
+    diagnostic.  Note this is the general swizzle path — on the CDNA 4
+    ``GLOBAL_LOAD_LDS`` direct path :func:`select_lds_layout` prefers padding
+    instead (the swizzle would scatter the required consecutive writes).
+    """
+    if inner_dim < 1 or inner_dim % vec != 0:
+        raise ValueError(
+            f"attn_kv_tile_swizzle: inner_dim ({inner_dim}) must be a positive "
+            f"multiple of vec ({vec})")
+    max_phase = inner_dim // vec
+    if not _is_power_of_two(max_phase):
+        raise ValueError(
+            f"attn_kv_tile_swizzle: inner_dim // vec ({max_phase}) must be a "
+            f"power of two; got inner_dim={inner_dim}, vec={vec}")
+    return SwizzledLdsLayout(vec=vec, per_phase=1, max_phase=max_phase)
+
+
 __all__ = [
     "SoftwarePipeline",
     "SwizzledLdsLayout",
     "PaddedLdsLayout",
     "LdsLayout",
     "select_lds_layout",
+    "attn_kv_tile_swizzle",
 ]

@@ -17,6 +17,8 @@ struct metal_adapter_config_t {
 struct metal_adapter_status_t {
   bool compiled_for_apple;
   bool metal_framework_compiled;
+  bool native_timestamp_capture;
+  bool counter_set_discovery;
   bool initialized;
   bool paused;
   bool command_buffer_spans;
@@ -41,6 +43,21 @@ struct metal_counter_sample_record_t {
   const char* args_json;
 };
 
+struct metal_command_buffer_timestamp_t {
+  uint64_t command_buffer_id;
+  double start_us;
+  double end_us;
+  const char* label;
+  const char* error;
+};
+
+struct metal_counter_set_discovery_t {
+  bool available;
+  uint64_t counter_set_count;
+  const char* first_counter_set;
+  const char* error;
+};
+
 bool metal_adapter_init(const metal_adapter_config_t& cfg = {});
 void metal_adapter_shutdown();
 void metal_adapter_pause();
@@ -57,6 +74,13 @@ void metal_record_counter_sample(const char* counter,
                                  uint64_t command_buffer_id,
                                  const char* probe,
                                  const char* args_json = nullptr);
+bool metal_capture_command_buffer_timestamp(const char* label,
+                                            uint64_t command_buffer_id,
+                                            metal_command_buffer_timestamp_t* out);
+bool metal_record_native_command_buffer(const char* label,
+                                        uint64_t command_buffer_id,
+                                        const char* args_json = nullptr);
+bool metal_discover_counter_sets(metal_counter_set_discovery_t* out);
 void metal_replay_command_buffer_record(const metal_command_buffer_record_t& record);
 void metal_replay_counter_sample_record(const metal_counter_sample_record_t& record);
 

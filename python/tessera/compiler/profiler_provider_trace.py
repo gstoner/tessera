@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
+from .profiler_provider_status import validate_provider_status_artifact
+
 
 PROVIDER_TRACE_SCHEMA_VERSION = "tessera.profiler_provider_trace.v1"
 
@@ -96,15 +98,21 @@ def build_provider_trace_artifact(
     records: Iterable[ProviderTraceRecord | Mapping[str, Any]],
     source_status: str = "normalized",
     source: str | None = None,
+    provider_statuses: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     normalized = [_coerce_record(provider, record) for record in records]
+    status_payloads = [dict(status) for status in provider_statuses]
+    for status in status_payloads:
+        validate_provider_status_artifact(status)
     trace_events = [record.to_trace_event() for record in normalized]
     return {
         "schema": PROVIDER_TRACE_SCHEMA_VERSION,
         "provider": provider,
         "source_status": source_status,
         "source": source,
+        "record_source": _record_source_from_status(source_status),
         "record_count": len(normalized),
+        "provider_statuses": status_payloads,
         "summary": summarize_provider_trace_records(normalized),
         "records": [record.to_dict() for record in normalized],
         "traceEvents": trace_events,
@@ -369,12 +377,26 @@ def validate_provider_trace_artifact(payload: Mapping[str, Any]) -> None:
         raise ValueError("provider trace artifact requires records and traceEvents lists")
     if payload.get("record_count") != len(records):
         raise ValueError("record_count must match records length")
+    provider_statuses = payload.get("provider_statuses", [])
+    if provider_statuses is not None:
+        if not isinstance(provider_statuses, list):
+            raise ValueError("provider_statuses must be a list")
+        for status in provider_statuses:
+            if not isinstance(status, Mapping):
+                raise ValueError("provider_statuses entries must be mappings")
+            validate_provider_status_artifact(status)
     for event in trace_events:
         if not isinstance(event, Mapping):
             raise ValueError("provider trace events must be mappings")
         for key in ("name", "cat", "ph", "ts", "args"):
             if key not in event:
                 raise ValueError(f"provider trace event missing {key!r}")
+        args = event.get("args")
+        if not isinstance(args, Mapping):
+            raise ValueError("provider trace event args must be a mapping")
+        if event.get("cat") in {"runtime_api", "device_activity", "counters", "intra_kernel"}:
+            if "provider" not in args or "kind" not in args:
+                raise ValueError("provider trace event args require provider and kind")
 
 
 def _coerce_record(provider: Provider | None, raw: ProviderTraceRecord | Mapping[str, Any]) -> ProviderTraceRecord:
@@ -449,6 +471,21 @@ def _duration_us(raw: Mapping[str, Any]) -> float:
     if "start_ns" in raw and "end_ns" in raw:
         return max(0.0, (float(raw["end_ns"]) - float(raw["start_ns"])) / 1000.0)
     return 0.0
+
+
+def _record_source_from_status(source_status: str) -> str:
+    normalized = str(source_status).lower()
+    if normalized in {"native", "fixture", "replay", "file", "mock"}:
+        return normalized
+    if "file" in normalized:
+        return "file"
+    if "replay" in normalized:
+        return "replay"
+    if "fixture" in normalized:
+        return "fixture"
+    if "native" in normalized or "measured" in normalized:
+        return "native"
+    return "unknown"
 
 
 __all__ = [

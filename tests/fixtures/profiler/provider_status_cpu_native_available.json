@@ -1,0 +1,9 @@
+{
+  "diagnostics": {
+    "runtime_trace": "tessera runtime callback spine"
+  },
+  "provider": "cpu",
+  "schema": "tessera.profiler_provider_status.v1",
+  "status": "native_available",
+  "target": "cpu"
+}

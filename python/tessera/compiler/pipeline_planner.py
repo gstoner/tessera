@@ -16,6 +16,17 @@ Interleaved 1F1B (Megatron-LM variant):
   - Reduces bubble fraction from (p-1)/m to (p-1)/(m*v) where v = chunks/rank
   - Requires num_micro_batches >= num_stages * num_chunks
 
+Decoupled-stage (local-objective) schedule:
+  - Models block-local training where each stage owns a self-contained
+    objective and trains directly from data — no cross-stage forward/backward
+    activation dependency (DiffusionBlocks, arXiv:2506.14202). Because no stage
+    waits on an upstream activation, there is no pipeline fill/drain: every rank
+    runs forward+backward on its own micro-batch every step.
+  - bubble fraction = 0, warmup = 0. This is the *scheduling* dual of the
+    decoupled-block memory lever (checkpoint.CheckpointPolicy.DECOUPLED_BLOCK);
+    see docs/audit/roadmap/decoupled_stage_pipeline.md. Experimental: valid only
+    for genuinely decoupled per-stage objectives, not standard backprop.
+
 Reference: CLAUDE.md §Phase 4 — PipelinePlan
            src/transforms/lib/PipelineStageInsertionPass.cpp
            "Efficient Large-Scale Language Model Training on GPU Clusters" (Narayanan et al. 2021)
@@ -69,6 +80,9 @@ class PipelinePlan:
         num_micro_batches: number of micro-batches per global batch
         interleaved    : if True, use interleaved 1F1B (requires num_chunks > 1)
         num_chunks     : virtual chunks per rank for interleaved schedule
+        decoupled      : if True, use the decoupled-stage (local-objective)
+                         schedule — zero bubble, no cross-stage activation
+                         dependency (mutually exclusive with interleaved)
 
     Example:
         plan = PipelinePlan(num_stages=4, num_micro_batches=8)
@@ -84,12 +98,17 @@ class PipelinePlan:
     num_micro_batches: int
     interleaved: bool = False
     num_chunks: int = 1
+    decoupled: bool = False
 
     def __post_init__(self) -> None:
         if self.num_stages < 1:
             raise ValueError(f"num_stages must be >= 1, got {self.num_stages}")
         if self.num_micro_batches < 1:
             raise ValueError(f"num_micro_batches must be >= 1, got {self.num_micro_batches}")
+        if self.decoupled and self.interleaved:
+            raise ValueError(
+                "decoupled and interleaved schedules are mutually exclusive"
+            )
         if self.interleaved:
             if self.num_chunks < 2:
                 raise ValueError(
@@ -109,8 +128,13 @@ class PipelinePlan:
 
         Standard 1F1B:    bubble = (p - 1) / m
         Interleaved 1F1B: bubble = (p - 1) / (m × v)
+        Decoupled-stage:  bubble = 0  (no cross-stage activation dependency)
         where p = num_stages, m = num_micro_batches, v = num_chunks
         """
+        if self.decoupled:
+            # Stages train from data with no upstream dependency: every rank is
+            # busy every clock, so there is no fill/drain bubble.
+            return 0.0
         p = self.num_stages
         m = self.num_micro_batches
         if self.interleaved and self.num_chunks > 1:
@@ -121,15 +145,22 @@ class PipelinePlan:
     def warmup_steps(self) -> int:
         """
         Number of forward-only steps before the first backward can begin.
-        This is the pipeline fill time: p - 1 steps.
+        This is the pipeline fill time: p - 1 steps (0 for decoupled stages,
+        which never wait on an upstream forward).
         """
+        if self.decoupled:
+            return 0
         return self.num_stages - 1
 
     def total_clocks(self) -> int:
         """Total clock cycles for the complete schedule (all ranks, all micro-batches)."""
-        # Fill: (p-1) fwd-only + m*(F+B) steady-state + drain (p-1) bwd-only
         p = self.num_stages
         m = self.num_micro_batches
+        if self.decoupled:
+            # Each rank runs F then B per micro-batch with no inter-stage
+            # dependency; all ranks proceed in lockstep → 2m clocks, no bubble.
+            return 2 * m
+        # Fill: (p-1) fwd-only + m*(F+B) steady-state + drain (p-1) bwd-only
         return (p - 1) + m + m + (p - 1)
 
     def schedule_steps(self) -> List[ScheduleStep]:
@@ -147,9 +178,37 @@ class PipelinePlan:
           Phase 2 (steady): alternating F and B, one per clock per rank
           Phase 3 (drain):  ranks flush remaining backward passes
         """
+        if self.decoupled:
+            return self._build_decoupled()
         if self.interleaved:
             return self._build_interleaved()
         return self._build_standard()
+
+    def _build_decoupled(self) -> List[ScheduleStep]:
+        """
+        Decoupled-stage (local-objective) schedule.
+
+        Each stage owns a self-contained objective and trains directly from
+        data, so there is no cross-stage activation dependency: every rank runs
+        forward then backward on its own micro-batch with no fill/drain. Rank r
+        processes micro-batch mb with forward at clock 2*mb and backward at
+        clock 2*mb+1 — identical across ranks, zero bubble.
+        """
+        p = self.num_stages
+        m = self.num_micro_batches
+        steps: List[ScheduleStep] = []
+        for mb in range(m):
+            for rank in range(p):
+                steps.append(ScheduleStep(
+                    clock=2 * mb, rank=rank, stage=rank,
+                    micro_batch=mb, phase=Phase.FORWARD,
+                ))
+                steps.append(ScheduleStep(
+                    clock=2 * mb + 1, rank=rank, stage=rank,
+                    micro_batch=mb, phase=Phase.BACKWARD,
+                ))
+        steps.sort(key=lambda s: (s.clock, s.rank))
+        return steps
 
     def _build_standard(self) -> List[ScheduleStep]:
         """Standard 1F1B (non-interleaved) schedule."""
@@ -258,11 +317,17 @@ class PipelinePlan:
             f'num_stages = {self.num_stages}, '
             f'num_micro_batches = {self.num_micro_batches}, '
             f'interleaved = {"true" if self.interleaved else "false"}, '
+            f'decoupled = {"true" if self.decoupled else "false"}, '
             f'num_chunks = {self.num_chunks}}}}}'
         )
 
     def __repr__(self) -> str:
-        mode = f", interleaved, v={self.num_chunks}" if self.interleaved else ""
+        if self.decoupled:
+            mode = ", decoupled"
+        elif self.interleaved:
+            mode = f", interleaved, v={self.num_chunks}"
+        else:
+            mode = ""
         return (
             f"PipelinePlan(stages={self.num_stages}, "
             f"micro_batches={self.num_micro_batches}{mode}, "

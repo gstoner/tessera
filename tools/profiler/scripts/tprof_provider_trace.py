@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
         records_from_raw,
         write_provider_trace_artifact,
     )
+    from tessera.compiler.profiler_provider_status import validate_provider_status_artifact
 
     parser = argparse.ArgumentParser(
         prog="tprof-provider-trace",
@@ -38,10 +39,21 @@ def main(argv: list[str] | None = None) -> int:
         "--trace-out",
         help="Write only Chrome/Perfetto-compatible Trace Event JSON.",
     )
+    parser.add_argument(
+        "--provider-status",
+        action="append",
+        default=[],
+        help="tessera.profiler_provider_status.v1 JSON to embed as a sidecar. Can be repeated.",
+    )
     args = parser.parse_args(argv)
 
     try:
         inputs = [load_provider_trace_input(path, provider=args.provider) for path in args.input]
+        provider_statuses = []
+        for path in args.provider_status:
+            status = json.loads(Path(path).read_text())
+            validate_provider_status_artifact(status)
+            provider_statuses.append(status)
     except Exception as exc:
         parser.error(str(exc))
     records = []
@@ -52,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         records=records,
         source_status="file" if len(args.input) == 1 else "file_batch",
         source=",".join(args.input),
+        provider_statuses=provider_statuses,
     )
 
     if args.out:

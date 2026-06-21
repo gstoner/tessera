@@ -146,6 +146,78 @@ class TestPipelinePlanMLIR:
         assert "37.50%" in r
 
 
+class TestDecoupledStage:
+    """Decoupled-stage (local-objective) schedule — DiffusionBlocks-style block
+    -local training: no cross-stage activation dependency ⇒ zero bubble."""
+
+    def test_zero_bubble(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8, decoupled=True)
+        assert plan.bubble_fraction == 0.0
+
+    def test_zero_warmup(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8, decoupled=True)
+        assert plan.warmup_steps == 0
+
+    def test_total_clocks_is_2m(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8, decoupled=True)
+        assert plan.total_clocks() == 16  # 2 * m, independent of p
+
+    def test_bubble_strictly_less_than_1f1b(self):
+        std = PipelinePlan(num_stages=8, num_micro_batches=8)
+        dec = PipelinePlan(num_stages=8, num_micro_batches=8, decoupled=True)
+        assert dec.bubble_fraction < std.bubble_fraction
+
+    def test_decoupled_and_interleaved_mutually_exclusive(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            PipelinePlan(num_stages=4, num_micro_batches=8,
+                         decoupled=True, interleaved=True, num_chunks=2)
+
+    def test_all_micro_batches_covered(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=4, decoupled=True)
+        steps = plan.schedule_steps()
+        for phase in (Phase.FORWARD, Phase.BACKWARD):
+            for rank in range(4):
+                mbs = {s.micro_batch for s in steps
+                       if s.rank == rank and s.phase == phase}
+                assert mbs == {0, 1, 2, 3}
+
+    def test_no_cross_stage_activation_dependency(self):
+        """At any clock, all active ranks run the SAME phase on the SAME
+        micro-batch — there is no upstream→downstream forward handoff."""
+        plan = PipelinePlan(num_stages=4, num_micro_batches=4, decoupled=True)
+        steps = plan.schedule_steps()
+        by_clock: dict[int, list] = {}
+        for s in steps:
+            by_clock.setdefault(s.clock, []).append(s)
+        for clock, group in by_clock.items():
+            phases = {s.phase for s in group}
+            mbs = {s.micro_batch for s in group}
+            ranks = {s.rank for s in group}
+            assert len(phases) == 1, f"clock {clock} mixes phases {phases}"
+            assert len(mbs) == 1, f"clock {clock} mixes micro-batches {mbs}"
+            assert ranks == set(range(4)), f"clock {clock} not full-width"
+
+    def test_forward_before_backward(self):
+        plan = PipelinePlan(num_stages=3, num_micro_batches=5, decoupled=True)
+        steps = plan.schedule_steps()
+        for rank in range(3):
+            for mb in range(5):
+                fwd = next(s.clock for s in steps if s.rank == rank
+                           and s.micro_batch == mb and s.phase == Phase.FORWARD)
+                bwd = next(s.clock for s in steps if s.rank == rank
+                           and s.micro_batch == mb and s.phase == Phase.BACKWARD)
+                assert fwd < bwd
+
+    def test_to_mlir_attrs_decoupled_flag(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8, decoupled=True)
+        attr = plan.to_mlir_attrs()
+        assert "decoupled = true" in attr
+
+    def test_repr_marks_decoupled(self):
+        plan = PipelinePlan(num_stages=4, num_micro_batches=8, decoupled=True)
+        assert "decoupled" in repr(plan)
+
+
 class TestAsciiRender:
     def test_render_ascii_returns_string(self):
         plan = PipelinePlan(num_stages=2, num_micro_batches=2)

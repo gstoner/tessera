@@ -254,9 +254,19 @@ static uint64_t _liveHandleCount() {
 
 static thread_local std::string g_last_error;
 static std::atomic<bool> g_profiling_enabled{true};
+static std::atomic<uint64_t> g_profile_launch_seq{0};
+static thread_local uint64_t g_profile_launch_id = 0;
 
 static uint64_t NowNs();
 static void SetLastError(const char* msg) { g_last_error = msg ? msg : ""; }
+
+static uint64_t NextProfileLaunchId() {
+  return g_profile_launch_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+static uint64_t ActiveOrNextProfileLaunchId() {
+  return g_profile_launch_id ? g_profile_launch_id : NextProfileLaunchId();
+}
 
 static void EmitProfileEvent(TsrProfileEventKind kind,
                              const char* name,
@@ -785,7 +795,8 @@ TsrStatus tsrMemset(tsrBuffer b, int value, size_t bytes) {
   b->dev->be->memset(b->impl, value, bytes);
   TsrStatus st = _PropagateBackendError(b->dev);
   std::string payload = jsonNumberField("bytes", bytes) + "," +
-                        jsonSignedField("value", value);
+                        jsonSignedField("value", value) + "," +
+                        jsonStringField("device_kind", deviceKindName(b->dev->be->props().kind));
   EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemset", start, st, payload);
   EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrMemset", start, st, payload);
   return st;
@@ -803,6 +814,7 @@ TsrStatus tsrMemcpy(tsrBuffer dst, const tsrBuffer src, size_t bytes, TsrMemcpyK
   }
   dst->dev->be->memcpy(dst->impl, src->impl, bytes, kind);
   TsrStatus st = _PropagateBackendError(dst->dev);
+  payload += "," + jsonStringField("device_kind", deviceKindName(dst->dev->be->props().kind));
   EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrMemcpy", start, st, payload);
   EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrMemcpy", start, st, payload);
   return st;
@@ -1071,11 +1083,13 @@ TsrStatus tsrGetArtifactTarget(tsrArtifact artifact, const char** out) {
 //                   exists, the C ABI must not silently succeed here.
 TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nargs) {
   uint64_t start = NowNs();
+  uint64_t launch_id = ActiveOrNextProfileLaunchId();
   std::string kernel_name = kernel ? kernel->name : "";
   std::string target = (kernel && kernel->artifact) ? kernel->artifact->target : "";
   std::string base_payload =
       (target.empty() ? std::string() : jsonStringField("target", target) + ",") +
       (kernel_name.empty() ? std::string() : jsonStringField("kernel", kernel_name) + ",") +
+      jsonNumberField("launch_id", launch_id) + "," +
       jsonNumberField("nargs", nargs);
   if (!s || !kernel) {
     SetLastError("s/kernel==NULL");
@@ -1147,7 +1161,10 @@ TsrStatus tsrLaunchKernel(tsrStream s, tsrKernel kernel, void** args, size_t nar
   }
   const tsrLaunchParams* params = static_cast<const tsrLaunchParams*>(args[0]);
   void* user_payload = nargs >= 2 ? args[1] : nullptr;
+  uint64_t previous_launch_id = g_profile_launch_id;
+  g_profile_launch_id = launch_id;
   TsrStatus st = tsrLaunchHostTileKernel(s, params, kernel->fn, user_payload);
+  g_profile_launch_id = previous_launch_id;
   std::string payload = base_payload + "," +
                         jsonDim3Field("grid", params->grid) + "," +
                         jsonDim3Field("tile", params->tile);
@@ -1232,6 +1249,7 @@ TsrStatus tsrLaunchHostTileKernel(tsrStream s,
                                   tsrHostKernelFn kernel,
                                   void* user_payload) {
   uint64_t start = NowNs();
+  uint64_t launch_id = ActiveOrNextProfileLaunchId();
   if (!s || !params || !kernel) {
     SetLastError("s/params/kernel==NULL");
     EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernel", start,
@@ -1245,6 +1263,8 @@ TsrStatus tsrLaunchHostTileKernel(tsrStream s,
       "kernel ABI; route to the CPU device for host tile kernels");
   }
   std::string payload = jsonStringField("device_kind", deviceKindName(s->dev->be->props().kind)) + "," +
+                        jsonNumberField("launch_id", launch_id) + "," +
+                        jsonNumberField("stream_or_queue", static_cast<uint64_t>(reinterpret_cast<uintptr_t>(s))) + "," +
                         jsonDim3Field("grid", params->grid) + "," +
                         jsonDim3Field("tile", params->tile);
   EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernel", start, st, payload);
@@ -1257,6 +1277,7 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
                                       tsrHostKernelFn kernel,
                                       void* user_payload) {
   uint64_t start = NowNs();
+  uint64_t launch_id = ActiveOrNextProfileLaunchId();
   if (!dev) {
     SetLastError("dev==NULL");
     EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start,
@@ -1269,7 +1290,10 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
     EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start, st);
     return st;
   }
+  uint64_t previous_launch_id = g_profile_launch_id;
+  g_profile_launch_id = launch_id;
   st = tsrLaunchHostTileKernel(s, params, kernel, user_payload);
+  g_profile_launch_id = previous_launch_id;
   if (st != TSR_STATUS_SUCCESS) {
     tsrDestroyStream(s);
     EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start, st);
@@ -1279,8 +1303,10 @@ TsrStatus tsrLaunchHostTileKernelSync(tsrDevice dev,
   tsrDestroyStream(s);
   std::string payload = params
       ? jsonStringField("device_kind", deviceKindName(dev->be->props().kind)) + "," +
+        jsonNumberField("launch_id", launch_id) + "," +
         jsonDim3Field("grid", params->grid) + "," + jsonDim3Field("tile", params->tile)
-      : jsonStringField("device_kind", deviceKindName(dev->be->props().kind));
+      : jsonStringField("device_kind", deviceKindName(dev->be->props().kind)) + "," +
+        jsonNumberField("launch_id", launch_id);
   EmitProfileEvent(TSR_PROFILE_RUNTIME_API, "tsrLaunchHostTileKernelSync", start,
                    TSR_STATUS_SUCCESS, payload);
   EmitProfileEvent(TSR_PROFILE_DEVICE_ACTIVITY, "tsrLaunchHostTileKernelSync", start,

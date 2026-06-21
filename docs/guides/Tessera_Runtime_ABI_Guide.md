@@ -582,7 +582,10 @@ Profiling callbacks receive:
   `tsrMemset`, `tsrLaunchHostTileKernel`, `tsrLaunchHostTileKernelSync`, and
   `tsrNativeGemmF32`.
 - `payload_json` with `status`, `duration_us`, and correlation fields such as
-  `bytes`, `memcpy_kind`, `target`, `kernel`, `grid`, `tile`, or `device_kind`.
+  `bytes`, `memcpy_kind`, `target`, `kernel`, `launch_id`, `stream_or_queue`,
+  `grid`, `tile`, or `device_kind`. `tsrLaunchKernel` propagates its
+  `launch_id` into the nested host-tile launch span so runtime and provider
+  activity can be joined later.
 
 Pass `NULL` to `tsrSetProfileEventCallback` to clear the callback. Use
 `tsrEnableProfiling(0)` to keep the callback registered but suppress event

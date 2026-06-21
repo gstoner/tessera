@@ -142,3 +142,74 @@ class TestAnnotatorViaDecorator:
         hints = set(ann.recompute_hints(self._layers()))
         # Checkpoint markers and recompute hints must be disjoint.
         assert checkpointed.isdisjoint(hints)
+
+
+class TestDecoupledBlockPolicy:
+    """Decoupled-block training (DiffusionBlocks): peak activation ≈ 1/B of the
+    full-network footprint, a structural lever distinct from recompute."""
+
+    def test_requires_num_blocks_ge_2(self):
+        with pytest.raises(ValueError, match="num_blocks >= 2"):
+            CollectiveCheckpointConfig(
+                policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=1
+            )
+
+    def test_num_blocks_must_be_positive(self):
+        with pytest.raises(ValueError, match="num_blocks"):
+            CollectiveCheckpointConfig(num_blocks=0)
+
+    def test_peak_fraction_is_one_over_num_blocks(self):
+        cfg = CollectiveCheckpointConfig(
+            policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=4
+        )
+        assert cfg.peak_activation_fraction() == 0.25
+
+    def test_peak_fraction_default_policy_is_full(self):
+        cfg = CollectiveCheckpointConfig()  # SELECTIVE
+        assert cfg.peak_activation_fraction() == 1.0
+
+    def test_estimated_peak_bytes_scales(self):
+        cfg = CollectiveCheckpointConfig(
+            policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=8
+        )
+        assert cfg.estimated_peak_activation_bytes(800.0) == 100.0
+
+    def test_estimated_peak_bytes_rejects_negative(self):
+        cfg = CollectiveCheckpointConfig(
+            policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=2
+        )
+        with pytest.raises(ValueError):
+            cfg.estimated_peak_activation_bytes(-1.0)
+
+    def test_no_checkpoint_markers_emitted(self):
+        cfg = CollectiveCheckpointConfig(
+            policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=4
+        )
+        # saving is structural, not via recompute markers
+        assert cfg.checkpoint_layers(["a", "b", "c", "d"]) == []
+
+    def test_decorator_carries_num_blocks(self):
+        @checkpoint_jit(policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=6)
+        def fn(x):
+            return x
+        cfg = fn.__tessera_checkpoint_config__
+        assert cfg.num_blocks == 6
+        assert cfg.peak_activation_fraction() == pytest.approx(1 / 6)
+
+    def test_ir_attr_includes_num_blocks(self):
+        cfg = CollectiveCheckpointConfig(
+            policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=4
+        )
+        attr = cfg.to_ir_attr()
+        assert "num_blocks = 4" in attr
+        assert "decoupled_block" in attr
+
+    def test_b2_b4_b6_monotone_savings(self):
+        """The B=2/4/6 trade: more blocks ⇒ strictly lower peak memory."""
+        fracs = [
+            CollectiveCheckpointConfig(
+                policy=CheckpointPolicy.DECOUPLED_BLOCK, num_blocks=b
+            ).peak_activation_fraction()
+            for b in (2, 4, 6)
+        ]
+        assert fracs[0] > fracs[1] > fracs[2]

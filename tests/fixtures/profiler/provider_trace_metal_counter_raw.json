@@ -1,0 +1,16 @@
+[
+  {
+    "record_type": "counter",
+    "counter": "gpu_cycles",
+    "value": 4096,
+    "timestamp_us": 125.0,
+    "command_buffer_id": "apple-cb-1",
+    "probe": "matmul.mainloop",
+    "launch_id": "launch-apple-1",
+    "probe_name": "matmul.mainloop",
+    "target": "apple_gpu",
+    "backend": "metal",
+    "queue_id": "metal-queue-0",
+    "sample_index": 0
+  }
+]

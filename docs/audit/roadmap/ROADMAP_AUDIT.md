@@ -19,6 +19,11 @@ planning material.
   proof.
 - Long historical sprint documents should not compete with generated
   dashboards or theme audits.
+- **Block-local training (DiffusionBlocks, arXiv:2506.14202):** decoupled-stage
+  pipeline scheduling + decoupled-block memory accounting landed as
+  hardware-free, test-gated planner/checkpoint modes; real block-parallel device
+  execution and training-loop integration are still open. See
+  [`decoupled_stage_pipeline.md`](decoupled_stage_pipeline.md).
 
 ## Standalone Compiler Roadmap Contract
 

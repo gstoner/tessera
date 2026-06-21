@@ -239,6 +239,18 @@ Merged trace validation is strict about Trace Event timestamps. A non-numeric
 `ts` is reported as malformed input before sorting, rather than silently being
 treated as timestamp zero.
 
+Provider trace artifacts may carry `provider_statuses` sidecars. The merge
+tool lifts those sidecars into `provider_status` marker events so report and
+Model Analyzer consumers see the same availability diagnostics whether status
+was supplied separately or bundled with a provider replay. Reports can also
+write `tessera.profiler_report_summary.v1` via
+`tools/profiler/scripts/tprof_report.py --summary-json`, including hot ops,
+derived arithmetic intensity, provider/category grouping, dropped records,
+correlation counts, provider diagnostics, and context bottleneck summaries.
+Provider traces additionally contribute Chrome/Perfetto metadata markers for
+provider, backend, target, source status, record source, record count, and
+dropped-record totals.
+
 The staged mapping is:
 
 - ROCprofiler-SDK first maps HIP/HSA callback records to `runtime_api`.
@@ -248,7 +260,11 @@ The staged mapping is:
   to `intra_kernel` and must carry dispatch/kernel correlation fields.
 - Metal command-buffer timestamp records map to `device_activity`; Metal counter
   sample buffer records map to `counters` and should carry command-buffer or
-  Target IR probe correlation IDs.
+  Target IR probe correlation IDs. Apple provider status remains
+  `compiled_shell` until `tools/profiler/scripts/tprof_apple_metal_smoke.py`
+  proves `MTLCreateSystemDefaultDevice` in a fresh native process.
+  `--prove-counters` adds native `MTLDevice.counterSets` capability discovery
+  diagnostics without collecting counters or claiming availability.
 - CUPTI runtime/driver callback records map to `runtime_api`.
 - CUPTI kernel, memcpy, memset, and device activity records map to
   `device_activity`, preserving CUPTI correlation IDs so activity can be joined

@@ -16,6 +16,11 @@ rocprofiler_adapter_config_t g_rocprofiler_cfg{};
 std::atomic<bool> g_rocprofiler_paused{false};
 std::atomic<bool> g_rocprofiler_initialized{false};
 std::atomic<bool> g_rocprofiler_thread_trace_volume_limited{false};
+std::atomic<bool> g_rocprofiler_context_created{false};
+std::atomic<bool> g_rocprofiler_tool_registered{false};
+std::atomic<bool> g_rocprofiler_hip_callbacks_configured{false};
+std::atomic<bool> g_rocprofiler_hsa_callbacks_configured{false};
+std::atomic<bool> g_rocprofiler_collection_started{false};
 const char* g_rocprofiler_last_error = "not initialized";
 
 double duration_from_us(double start_us, double end_us) {
@@ -29,10 +34,20 @@ bool rocprofiler_adapter_init(const rocprofiler_adapter_config_t& cfg) {
   g_rocprofiler_thread_trace_volume_limited.store(false);
 #ifdef TPROF_WITH_ROCPROFILER
   g_rocprofiler_initialized.store(true);
-  g_rocprofiler_last_error = "compiled ROCprofiler-SDK shell; native callback registration pending";
+  g_rocprofiler_context_created.store(true);
+  g_rocprofiler_tool_registered.store(true);
+  g_rocprofiler_hip_callbacks_configured.store(cfg.hip_hsa_api_tracing);
+  g_rocprofiler_hsa_callbacks_configured.store(cfg.hip_hsa_api_tracing);
+  g_rocprofiler_collection_started.store(!cfg.start_paused);
+  g_rocprofiler_last_error = "compiled ROCprofiler-SDK lifecycle shell; native HIP/HSA callback registration pending";
   return true;
 #else
   g_rocprofiler_initialized.store(false);
+  g_rocprofiler_context_created.store(false);
+  g_rocprofiler_tool_registered.store(false);
+  g_rocprofiler_hip_callbacks_configured.store(false);
+  g_rocprofiler_hsa_callbacks_configured.store(false);
+  g_rocprofiler_collection_started.store(false);
   g_rocprofiler_last_error = "ROCprofiler-SDK was not found at build time";
   return false;
 #endif
@@ -40,6 +55,11 @@ bool rocprofiler_adapter_init(const rocprofiler_adapter_config_t& cfg) {
 
 void rocprofiler_adapter_shutdown() {
   g_rocprofiler_initialized.store(false);
+  g_rocprofiler_context_created.store(false);
+  g_rocprofiler_tool_registered.store(false);
+  g_rocprofiler_hip_callbacks_configured.store(false);
+  g_rocprofiler_hsa_callbacks_configured.store(false);
+  g_rocprofiler_collection_started.store(false);
   g_rocprofiler_last_error = "shutdown";
 }
 
@@ -55,6 +75,30 @@ bool rocprofiler_adapter_is_paused() {
   return g_rocprofiler_paused.load();
 }
 
+bool rocprofiler_adapter_start_collection() {
+#ifdef TPROF_WITH_ROCPROFILER
+  if (!g_rocprofiler_initialized.load()) {
+    g_rocprofiler_last_error = "ROCprofiler adapter is not initialized";
+    return false;
+  }
+  g_rocprofiler_collection_started.store(true);
+  g_rocprofiler_paused.store(false);
+  return true;
+#else
+  g_rocprofiler_collection_started.store(false);
+  g_rocprofiler_last_error = "ROCprofiler-SDK was not found at build time";
+  return false;
+#endif
+}
+
+void rocprofiler_adapter_stop_collection() {
+  g_rocprofiler_collection_started.store(false);
+}
+
+bool rocprofiler_adapter_collection_started() {
+  return g_rocprofiler_collection_started.load();
+}
+
 rocprofiler_adapter_status_t rocprofiler_adapter_status() {
   const bool sdk_compiled =
 #ifdef TPROF_WITH_ROCPROFILER
@@ -66,6 +110,11 @@ rocprofiler_adapter_status_t rocprofiler_adapter_status() {
       sdk_compiled,
       g_rocprofiler_initialized.load(),
       g_rocprofiler_paused.load(),
+      g_rocprofiler_context_created.load(),
+      g_rocprofiler_tool_registered.load(),
+      g_rocprofiler_hip_callbacks_configured.load(),
+      g_rocprofiler_hsa_callbacks_configured.load(),
+      g_rocprofiler_collection_started.load(),
       g_rocprofiler_cfg.hip_hsa_api_tracing,
       g_rocprofiler_cfg.dispatch_activity_records,
       g_rocprofiler_cfg.counter_collection,

@@ -34,12 +34,26 @@ def merge_profiler_traces(
         validate_provider_trace_artifact(provider)
         events = list(provider.get("traceEvents", []))
         trace_events.extend(dict(event) for event in events)
+        trace_events.extend(_provider_metadata_events(provider))
         sources.append({
             "kind": "provider_trace",
             "provider": provider.get("provider"),
             "events": len(events),
             "records": provider.get("record_count", 0),
+            "source_status": provider.get("source_status"),
+            "record_source": provider.get("record_source"),
         })
+        for status in provider.get("provider_statuses", []) or []:
+            validate_provider_status_artifact(status)
+            status_payload = dict(status)
+            status_payloads.append(status_payload)
+            trace_events.append(_provider_status_marker_event(status_payload))
+            sources.append({
+                "kind": "provider_status",
+                "provider": status.get("provider"),
+                "status": status.get("status"),
+                "source": "provider_trace_sidecar",
+            })
     for status in provider_statuses:
         validate_provider_status_artifact(status)
         status_payload = dict(status)
@@ -142,6 +156,50 @@ def _provider_status_marker_event(status: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _provider_metadata_events(provider: Mapping[str, Any]) -> list[dict[str, Any]]:
+    name = str(provider.get("provider") or "unknown")
+    raw_summary = provider.get("summary")
+    summary = raw_summary if isinstance(raw_summary, Mapping) else {}
+    backend = None
+    target = None
+    for event in provider.get("traceEvents", []) or []:
+        if not isinstance(event, Mapping):
+            continue
+        args = event.get("args", {})
+        if isinstance(args, Mapping):
+            backend = backend or args.get("backend")
+            target = target or args.get("target")
+    args = {
+        "provider": name,
+        "backend": backend,
+        "target": target,
+        "source_status": provider.get("source_status"),
+        "record_source": provider.get("record_source"),
+        "record_count": provider.get("record_count"),
+        "dropped_records": summary.get("dropped_records", 0),
+    }
+    return [
+        {
+            "name": "process_name",
+            "cat": "metadata",
+            "ph": "M",
+            "ts": 0.0,
+            "pid": 0,
+            "tid": 0,
+            "args": {"name": f"tessera.{name}", **args},
+        },
+        {
+            "name": "tessera.provider_metadata",
+            "cat": "metadata",
+            "ph": "M",
+            "ts": 0.0,
+            "pid": 0,
+            "tid": 0,
+            "args": args,
+        },
+    ]
+
+
 def _event_ts(event: Mapping[str, Any]) -> float:
     try:
         return float(event.get("ts", 0.0))
@@ -166,7 +224,7 @@ def _summarize_trace_events(events: Sequence[Mapping[str, Any]]) -> dict[str, An
             launch_ids.add(str(args["launch_id"]))
         if isinstance(args, Mapping) and args.get("probe_name") is not None:
             probe_names.add(str(args["probe_name"]))
-        if isinstance(args, Mapping):
+        if isinstance(args, Mapping) and cat != "metadata":
             dropped_records += int(args.get("dropped_records") or 0)
     return {
         "event_count": len(events),

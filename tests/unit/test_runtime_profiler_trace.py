@@ -50,7 +50,56 @@ def test_runtime_profile_callback_abi_is_public_and_decoupled() -> None:
     assert "tsrProfileEventFn" in types
     assert "tsrSetProfileEventCallback" in runtime_h
     assert "EmitProfileEvent" in runtime_cpp
+    assert "NextProfileLaunchId" in runtime_cpp
+    assert "launch_id" in runtime_cpp
+    assert "stream_or_queue" in runtime_cpp
+    assert "device_kind" in runtime_cpp
     assert "tprof_runtime" not in cmake
+
+
+def test_runtime_profile_events_cover_public_runtime_abi() -> None:
+    runtime_h = (RUNTIME_INCLUDE / "tessera" / "tessera_runtime.h").read_text()
+    runtime_cpp = (REPO_ROOT / "src" / "runtime" / "src" / "tessera_runtime.cpp").read_text()
+    abi_names = [
+        "tsrInit",
+        "tsrShutdown",
+        "tsrIsInitialized",
+        "tsrGetDeviceCount",
+        "tsrGetDevice",
+        "tsrGetDeviceProps",
+        "tsrCreateStream",
+        "tsrDestroyStream",
+        "tsrStreamSynchronize",
+        "tsrCreateEvent",
+        "tsrRecordEvent",
+        "tsrWaitEvent",
+        "tsrEventSynchronize",
+        "tsrDestroyEvent",
+        "tsrEventGetTimestamp",
+        "tsrMalloc",
+        "tsrFree",
+        "tsrMemset",
+        "tsrMemcpy",
+        "tsrMap",
+        "tsrUnmap",
+        "tsrCompileArtifact",
+        "tsrLoadArtifact",
+        "tsrDestroyArtifact",
+        "tsrGetKernel",
+        "tsrLaunchKernel",
+        "tsrRegisterGpuLauncher",
+        "tsrRegisterHostKernel",
+        "tsrDestroyKernel",
+        "tsrGetArtifactBytes",
+        "tsrGetArtifactTarget",
+        "tsrLaunchHostTileKernel",
+        "tsrLaunchHostTileKernelSync",
+        "tsrNativeGemmF32",
+        "tsrGetWorkerThreadCount",
+    ]
+    for name in abi_names:
+        assert f"TsrStatus {name}" in runtime_h
+        assert f'"{name}"' in runtime_cpp
 
 
 _PROFILE_HARNESS = r"""

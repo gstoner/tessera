@@ -38,10 +38,14 @@ def provider_status_artifact(
     }
 
 
-def collect_provider_status(provider: str) -> dict[str, Any]:
+def collect_provider_status(
+    provider: str,
+    *,
+    native_proof: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized = provider.strip().lower().replace("-", "_")
     if normalized in {"apple", "metal", "apple_gpu"}:
-        return _apple_status()
+        return _apple_status(native_proof=native_proof)
     if normalized in {"rocm", "amd", "hip", "rocprofiler"}:
         return _rocm_status()
     if normalized in {"nvidia", "cuda", "cupti"}:
@@ -76,18 +80,28 @@ def validate_provider_status_artifact(payload: Mapping[str, Any]) -> None:
         raise ValueError("provider status diagnostics must be a mapping")
 
 
-def _apple_status() -> dict[str, Any]:
+def _apple_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, Any]:
     is_darwin = platform.system() == "Darwin"
-    status: ProviderStatus = "compiled_shell" if is_darwin else "planned"
+    proof = dict(native_proof or {})
+    proof_passed = bool(proof.get("metal_visible") and proof.get("fresh_process"))
+    status: ProviderStatus
+    if proof_passed:
+        status = "native_available"
+    else:
+        status = "compiled_shell" if is_darwin else "planned"
+    diagnostics: dict[str, Any] = {
+        "platform": platform.platform(),
+        "metal_framework": "compile-gated by TPROF_WITH_METAL",
+        "native_proof_required": "fresh-process out-of-sandbox command-buffer/counter proof",
+        "availability_rule": "apple remains compiled_shell until fresh-process Metal proof passes",
+    }
+    if proof:
+        diagnostics["native_proof"] = proof
     return provider_status_artifact(
         provider="apple",
         target="apple_gpu",
         status=status,
-        diagnostics={
-            "platform": platform.platform(),
-            "metal_framework": "compile-gated by TPROF_WITH_METAL",
-            "native_proof_required": "fresh-process out-of-sandbox command-buffer/counter proof",
-        },
+        diagnostics=diagnostics,
     )
 
 

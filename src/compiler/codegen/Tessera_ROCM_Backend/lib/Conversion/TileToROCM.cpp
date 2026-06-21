@@ -159,6 +159,12 @@ struct LowerTileToROCMPass
 
         OperationState state(op->getLoc(), "tessera_rocm.wait");
         state.addOperands(lastAsyncToken);
+        // The async copy is global→LDS (see the async_copy lowering above),
+        // which retires on the vector-memory counter — so gate on vmcnt rather
+        // than draining the wavefront with a full barrier.  This is the
+        // decoupled-wait lever from the CDNA3 attention writeup: the matrix
+        // core keeps issuing while the copy is still in flight.
+        state.addAttribute("counter", builder.getStringAttr("vmcnt"));
         builder.create(state);
         op->erase();
         continue;

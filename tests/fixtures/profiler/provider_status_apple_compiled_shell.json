@@ -1,7 +1,8 @@
 {
   "diagnostics": {
     "metal_framework": "compile-gated by TPROF_WITH_METAL",
-    "native_proof_required": "fresh-process out-of-sandbox command-buffer/counter proof"
+    "native_proof_required": "fresh-process out-of-sandbox command-buffer/counter proof",
+    "availability_rule": "apple remains compiled_shell until fresh-process Metal proof passes"
   },
   "provider": "apple",
   "schema": "tessera.profiler_provider_status.v1",

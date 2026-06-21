@@ -18,7 +18,23 @@ def ROCM_AsyncCopyOp : TesseraROCM_Op<"async_copy", [MemoryEffects<[MemWrite, Me
 }
 
 def ROCM_WaitTokenOp : TesseraROCM_Op<"wait", []> {
-  let arguments = (ins TokenType:$tkn);
+  let summary = "Wait on an async-copy token via a targeted hardware counter";
+  let description = [{
+    Waits for an outstanding async memory operation to retire.  The optional
+    `counter` attribute names the AMDGCN wait-counter class to gate on rather
+    than draining the whole wavefront with a full `s_barrier`:
+
+      * `"vmcnt"`   — vector-memory counter (global / buffer loads, incl. the
+                      direct-to-LDS `global_load_lds` / `buffer_load ... lds`
+                      path an async global→LDS copy uses);
+      * `"lgkmcnt"` — LDS / GDS / constant counter (e.g. a `ds_read`);
+      * absent      — a true synchronization point, lowered to `s_barrier`.
+
+    Targeted counter waits are what let the matrix core keep issuing while a
+    copy is still in flight (moonmath CDNA3 attention writeup, §"Decoupled
+    Waits"); a blanket barrier would stall it.
+  }];
+  let arguments = (ins TokenType:$tkn, OptionalAttr<StrAttr>:$counter);
   let assemblyFormat = "$tkn attr-dict `:` type($tkn)";
 }
 

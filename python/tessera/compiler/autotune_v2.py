@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
+from .rounding import RTNE
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +561,7 @@ class BayesianAutotuner:
             "numeric_policy": {
                 "storage": self.workload.dtype,
                 "accum": "f32" if self.workload.dtype != "int8" else "s32",
-                "rounding": "nearest_even",
+                "rounding": RTNE,
                 "deterministic": True,
             },
             "movement": movement,

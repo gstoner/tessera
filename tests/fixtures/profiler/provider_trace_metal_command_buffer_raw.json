@@ -1,0 +1,15 @@
+[
+  {
+    "record_type": "command_buffer",
+    "label": "tessera.probe.matmul.mainloop",
+    "start_us": 100.0,
+    "end_us": 145.5,
+    "command_buffer_id": "apple-cb-1",
+    "launch_id": "launch-apple-1",
+    "probe_name": "matmul.mainloop",
+    "target": "apple_gpu",
+    "backend": "metal",
+    "queue_id": "metal-queue-0",
+    "status": "completed"
+  }
+]

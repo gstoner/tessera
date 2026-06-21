@@ -8,10 +8,11 @@ compiler.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable, Mapping
 
 from .op_catalog import OP_SPECS
+from .rounding import IEEE_ROUNDING_SWEEP, normalize_rounding_mode, rounding_to_mlir
 
 # Public-name aliases used to bridge `op_catalog.public_name` ↔ the VJP
 # registry's `_VJPS` dict (which is keyed by the same public name today).
@@ -174,6 +175,12 @@ class NumericPolicy:
             canon_accum = canonicalize_dtype(self.accum, allow_planned_gated=True)
             if canon_accum != self.accum:
                 object.__setattr__(self, "accum", canon_accum)
+        # Canonicalize the rounding-mode spelling (Decision #15a: rounding is a
+        # policy field, not the storage dtype).  Accepts RTNE/RTNA/RTZ and every
+        # legacy spelling; a bad value fails here rather than during rendering.
+        canon_round = normalize_rounding_mode(self.rounding)
+        if canon_round != self.rounding:
+            object.__setattr__(self, "rounding", canon_round)
 
     def as_metadata_dict(self) -> dict[str, Any]:
         """Flatten the policy to plain JSON-style values for the dashboard.
@@ -193,6 +200,27 @@ class NumericPolicy:
         if self.scale_layout is not None:
             md["scale_layout"] = self.scale_layout.as_metadata_dict()
         return md
+
+    @property
+    def mlir_rounding_token(self) -> str:
+        """Short IR token for this policy's rounding mode (``rtne``/``rtna``/…)."""
+        return rounding_to_mlir(self.rounding)
+
+    def with_rounding(self, mode: str) -> "NumericPolicy":
+        """A copy of this policy with ``rounding`` replaced (mode is normalized)."""
+        return replace(self, rounding=normalize_rounding_mode(mode))
+
+    def rounding_sweep(
+        self, modes: Iterable[str] | None = None
+    ) -> tuple["NumericPolicy", ...]:
+        """This policy expanded over a rounding sweep — one variant per mode.
+
+        Defaults to the article's IEEE sweep (RTNE/RTNA/RTZ).  Each variant is
+        identical except for ``rounding``; the autotuner / evaluator scores them
+        as a single execution-derived axis (the moonmath writeup shows the best
+        mode is shape-dependent)."""
+        sweep = IEEE_ROUNDING_SWEEP if modes is None else tuple(modes)
+        return tuple(self.with_rounding(m) for m in sweep)
 
 
 @dataclass(frozen=True)
@@ -298,6 +326,10 @@ _EXISTING_MODEL_FAMILIES: dict[str, tuple[str, ...]] = {
     "lookahead_sparse_attention": ("Titans/Atlas", "Megalodon/Griffin"),
     "conv2d": ("diffusion", "JEPA"),
     "conv3d": ("diffusion",),
+    "edm_precondition": ("diffusion", "DiffusionBlocks"),
+    "edm_loss_weight": ("diffusion", "DiffusionBlocks"),
+    "equiprob_band_partition": ("diffusion", "DiffusionBlocks"),
+    "karras_sigma_schedule": ("diffusion", "DiffusionBlocks"),
     # VLM connector pack (P0+) — vision-language model glue primitives.
     "masked_scatter": ("all", "vlm"),
     "image_resize": ("vlm", "diffusion"),
@@ -1750,6 +1782,13 @@ def _stable_reduce_policy() -> "NumericPolicy":
     return NumericPolicy(storage="fp32", accum="fp32", deterministic=True)
 
 
+def _edm_policy() -> "NumericPolicy":
+    """EDM preconditioning / σ-weighting: fp32 throughout — the c_skip/c_out/
+    c_in/c_noise scalings and w(σ) need the full mantissa (σ spans ~5 decades),
+    even when the denoised tensor it scales is bf16-stored."""
+    return NumericPolicy(storage="fp32", accum="fp32")
+
+
 def _quant_int8_policy(quant_axis: int | None = None) -> "NumericPolicy":
     from .grouped_layout import ScaleLayout
     return NumericPolicy(
@@ -1806,6 +1845,11 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     # rides on the grouped-layout / scale_layout metadata.
     "dequant_matmul":        _matmul_policy,
     "dequant_grouped_gemm":  _matmul_policy,
+    # ── Diffusion EDM preconditioning / loss weighting ─────────────────
+    # fp32 throughout (DiffusionBlocks / Karras 2022): the σ-dependent scalings
+    # need full mantissa across the ~5-decade noise range.
+    "edm_precondition":           _edm_policy,
+    "edm_loss_weight":            _edm_policy,
     # ── Attention family ───────────────────────────────────────────────
     "flash_attn":                 _attn_policy,
     "multi_head_attention":       _attn_policy,
@@ -2593,6 +2637,13 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "ddpm_noise_pred_loss": ("loss", "DDPM noise-prediction loss — S11 landed 2026-05-10"),
         "vlb_loss": ("loss", "diffusion VLB term reducer — S11 landed 2026-05-10"),
         "score_matching_loss": ("loss", "score-matching loss — S11 landed 2026-05-10"),
+        # Block-diffusion / EDM schedule + preconditioning (DiffusionBlocks,
+        # arXiv:2506.14202; Karras 2022). compiler/diffusion_schedule.py +
+        # compiler/denoise_reference.py.
+        "edm_precondition": ("diffusion", "EDM c_skip/c_out/c_in/c_noise preconditioning — landed 2026-06-21"),
+        "edm_loss_weight": ("diffusion", "EDM σ-weighted denoising loss weight w(σ) — landed 2026-06-21"),
+        "equiprob_band_partition": ("diffusion_schedule", "equal-probability-mass noise-band partition (+γ overlap) — landed 2026-06-21"),
+        "karras_sigma_schedule": ("diffusion_schedule", "EDM Karras ρ=7 inference σ discretization — landed 2026-06-21"),
         "ctc_loss": ("loss", "small CPU-reference CTC loss — S11 landed 2026-05-10"),
         "seq2seq_loss": ("loss", "masked seq2seq cross-entropy loss — S11 landed 2026-05-10"),
         # S12 — serialization + checkpointing (python/tessera/checkpoint.py)
@@ -2701,6 +2752,22 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "ddpm_noise_pred_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "score_matching_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "vlb_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # EDM preconditioning / σ-weight: closed-form elementwise scalings.
+        "edm_precondition": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        "edm_loss_weight": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
+        # Noise-schedule partition / discretization are host-side config that
+        # emit σ boundaries — not tensors in the autodiff/SPMD data path, so the
+        # differentiation and sharding axes are not_applicable by construction.
+        "equiprob_band_partition": {
+            "math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete",
+            "vjp": "not_applicable", "jvp": "not_applicable", "transpose_rule": "not_applicable",
+            "batching_rule": "not_applicable", "sharding_rule": "not_applicable", "lowering_rule": "not_applicable",
+        },
+        "karras_sigma_schedule": {
+            "math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete",
+            "vjp": "not_applicable", "jvp": "not_applicable", "transpose_rule": "not_applicable",
+            "batching_rule": "not_applicable", "sharding_rule": "not_applicable", "lowering_rule": "not_applicable",
+        },
         # Sprint D (2026-05-11): memory primitives now have:
         #   - vmap_axis_map for shared-state batching semantics
         #     (tessera.memory.vmap_axis_for) → batching_rule complete

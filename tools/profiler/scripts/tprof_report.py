@@ -60,6 +60,37 @@ def aggregate(trace):
     return totals
 
 
+def aggregate_categories(trace):
+    categories = collections.Counter()
+    providers = collections.defaultdict(collections.Counter)
+    provider_dropped = collections.Counter()
+    correlations = {"correlation_id": set(), "launch_id": set(), "probe_name": set()}
+    for event in trace.get("traceEvents", []):
+        cat = str(event.get("cat", "unknown"))
+        categories[cat] += 1
+        args = event.get("args", {})
+        provider = "unknown"
+        if isinstance(args, dict):
+            provider = str(args.get("provider") or "unknown")
+            if cat != "metadata":
+                provider_dropped[provider] += int(args.get("dropped_records") or 0)
+            for key in correlations:
+                if args.get(key) is not None:
+                    correlations[key].add(str(args[key]))
+        providers[provider][cat] += 1
+    return {
+        "categories": dict(sorted(categories.items())),
+        "provider_categories": {
+            provider: dict(sorted(counts.items()))
+            for provider, counts in sorted(providers.items())
+        },
+        "provider_dropped_records": dict(sorted(provider_dropped.items())),
+        "correlation_summary": {
+            key: len(values) for key, values in sorted(correlations.items())
+        },
+    }
+
+
 def aggregate_provider_status(trace, sidecars=None):
     statuses = []
     for status in sidecars or []:
@@ -104,6 +135,54 @@ def aggregate_context(context):
         "dominant_bottleneck": dominant,
         "bottlenecks": bottlenecks,
     }
+
+
+def build_report_summary(trace, totals, peak_flops=None, hbm_gbs=None, context=None, provider_statuses=None):
+    rows = _rows_from_totals(totals)
+    category_summary = aggregate_categories(trace)
+    return {
+        "schema": "tessera.profiler_report_summary.v1",
+        "hot_ops": rows,
+        "roofline": {
+            "peak_flops": peak_flops,
+            "hbm_gbs": hbm_gbs,
+            "points": [
+                {
+                    "name": row["name"],
+                    "bytes": row["bytes"],
+                    "flops": row["flops"],
+                    "arithmetic_intensity_flops_per_byte": row["intensity"],
+                }
+                for row in rows
+                if row["bytes"] > 0.0 and row["flops"] > 0.0
+            ],
+        },
+        "context": context,
+        "provider_statuses": provider_statuses or [],
+        **category_summary,
+    }
+
+
+def _rows_from_totals(totals):
+    rows = []
+    total_time = sum(value["dur_us"] for value in totals.values()) or 1.0
+    for name, value in totals.items():
+        bytes_moved = value["bytes"]
+        flops = value["flops"]
+        duration = value["dur_us"]
+        intensity = flops / bytes_moved if bytes_moved > 0.0 and flops > 0.0 else 0.0
+        rows.append(
+            {
+                "name": name,
+                "ms": duration / 1000.0,
+                "pct": 100.0 * duration / total_time,
+                "bytes": bytes_moved,
+                "flops": flops,
+                "intensity": intensity,
+            }
+        )
+    rows.sort(key=lambda row: row["ms"], reverse=True)
+    return rows
 
 
 def _coerce_peak_value(value):
@@ -168,24 +247,7 @@ def select_peaks(peaks_map, arch, env_arch):
 
 
 def make_html(totals, out_path, peak_flops=None, hbm_gbs=None, context=None, provider_statuses=None):
-    rows = []
-    total_time = sum(value["dur_us"] for value in totals.values()) or 1.0
-    for name, value in totals.items():
-        bytes_moved = value["bytes"]
-        flops = value["flops"]
-        duration = value["dur_us"]
-        intensity = flops / bytes_moved if bytes_moved > 0.0 and flops > 0.0 else 0.0
-        rows.append(
-            {
-                "name": name,
-                "ms": duration / 1000.0,
-                "pct": 100.0 * duration / total_time,
-                "bytes": bytes_moved,
-                "flops": flops,
-                "intensity": intensity,
-            }
-        )
-    rows.sort(key=lambda row: row["ms"], reverse=True)
+    rows = _rows_from_totals(totals)
     data_json = json.dumps({
         "rows": rows,
         "peak_flops": peak_flops,
@@ -336,6 +398,7 @@ def main():
         default=[],
         help="tessera.profiler_provider_status.v1 JSON. Can be repeated.",
     )
+    parser.add_argument("--summary-json", type=str, default=None, help="Write machine-readable report summary JSON.")
     args = parser.parse_args()
 
     peak_flops = args.peak_flops
@@ -348,14 +411,29 @@ def main():
         hbm_gbs = hbm_gbs if hbm_gbs is not None else selected_hbm
 
     trace = load_trace(args.inp)
+    totals = aggregate(trace)
+    context = aggregate_context(load_context(args.context_json))
+    provider_statuses = aggregate_provider_status(trace, load_statuses(args.provider_status_json))
     make_html(
-        aggregate(trace),
+        totals,
         args.out,
         peak_flops=peak_flops,
         hbm_gbs=hbm_gbs,
-        context=aggregate_context(load_context(args.context_json)),
-        provider_statuses=aggregate_provider_status(trace, load_statuses(args.provider_status_json)),
+        context=context,
+        provider_statuses=provider_statuses,
     )
+    if args.summary_json:
+        payload = build_report_summary(
+            trace,
+            totals,
+            peak_flops=peak_flops,
+            hbm_gbs=hbm_gbs,
+            context=context,
+            provider_statuses=provider_statuses,
+        )
+        with open(args.summary_json, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+            f.write("\n")
 
 
 if __name__ == "__main__":

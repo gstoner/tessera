@@ -25,6 +25,11 @@ struct rocprofiler_adapter_status_t {
   bool sdk_compiled;
   bool initialized;
   bool paused;
+  bool context_created;
+  bool tool_registered;
+  bool hip_callbacks_configured;
+  bool hsa_callbacks_configured;
+  bool native_collection_started;
   bool hip_hsa_api_tracing;
   bool dispatch_activity_records;
   bool counter_collection;
@@ -76,6 +81,9 @@ void rocprofiler_adapter_shutdown();
 void rocprofiler_adapter_pause();
 void rocprofiler_adapter_resume();
 bool rocprofiler_adapter_is_paused();
+bool rocprofiler_adapter_start_collection();
+void rocprofiler_adapter_stop_collection();
+bool rocprofiler_adapter_collection_started();
 rocprofiler_adapter_status_t rocprofiler_adapter_status();
 
 void rocprofiler_record_api(const char* name,

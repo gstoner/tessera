@@ -95,6 +95,68 @@ def test_metal_command_buffer_and_counter_correlation() -> None:
     assert artifact["traceEvents"][1]["args"]["probe"] == "mainloop"
 
 
+def test_provider_trace_cli_replays_metal_command_buffer_fixture(tmp_path: Path) -> None:
+    out = tmp_path / "metal_provider.json"
+    trace = tmp_path / "metal_trace.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "metal",
+            "--input",
+            str(FIXTURES / "provider_trace_metal_command_buffer_raw.json"),
+            "--out",
+            str(out),
+            "--trace-out",
+            str(trace),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    trace_payload = json.loads(trace.read_text())
+    assert payload["provider"] == "metal"
+    assert payload["summary"]["kinds"] == {"command_buffer": 1}
+    assert payload["summary"]["launch_count"] == 1
+    assert payload["summary"]["probe_count"] == 1
+    event = trace_payload["traceEvents"][0]
+    assert event["cat"] == "device_activity"
+    assert event["dur"] == 45.5
+    assert event["args"]["backend"] == "metal"
+    assert event["args"]["launch_id"] == "launch-apple-1"
+    assert event["args"]["probe_name"] == "matmul.mainloop"
+
+
+def test_provider_trace_cli_replays_metal_counter_fixture(tmp_path: Path) -> None:
+    out = tmp_path / "metal_counter_provider.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "metal",
+            "--input",
+            str(FIXTURES / "provider_trace_metal_counter_raw.json"),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["summary"]["kinds"] == {"counter": 1}
+    assert payload["summary"]["launch_count"] == 1
+    assert payload["summary"]["probe_count"] == 1
+    event = payload["traceEvents"][0]
+    assert event["cat"] == "counters"
+    assert event["ph"] == "C"
+    assert event["args"]["backend"] == "metal"
+    assert event["args"]["correlation_id"] == "apple-cb-1"
+
+
 def test_cupti_callback_and_activity_share_correlation_id() -> None:
     callback = normalize_cupti_callback_record({
         "domain": "runtime",
@@ -222,6 +284,47 @@ def test_tprof_provider_trace_cli_accepts_repeated_inputs(tmp_path: Path) -> Non
     assert payload["record_count"] == 2
     assert payload["summary"]["launch_count"] == 1
     assert payload["summary"]["probe_count"] == 1
+
+
+def test_tprof_provider_trace_cli_embeds_provider_status_sidecar(tmp_path: Path) -> None:
+    raw = tmp_path / "raw.json"
+    status = tmp_path / "status.json"
+    out = tmp_path / "provider.json"
+    raw.write_text(json.dumps([{
+        "record_type": "activity",
+        "activity": "kernel",
+        "kernel_name": "matmul",
+        "start_us": 10,
+        "end_us": 20,
+    }]))
+    status.write_text(json.dumps({
+        "schema": "tessera.profiler_provider_status.v1",
+        "provider": "nvidia",
+        "target": "nvidia",
+        "status": "planned",
+        "diagnostics": {"cupti": "compile-gated"},
+    }))
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "cupti",
+            "--input",
+            str(raw),
+            "--provider-status",
+            str(status),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["record_source"] == "file"
+    assert payload["provider_statuses"][0]["provider"] == "nvidia"
+    assert payload["provider_statuses"][0]["diagnostics"]["cupti"] == "compile-gated"
 
 
 def test_provider_trace_golden_fixture_normalizes_all_rocprofiler_record_kinds(tmp_path: Path) -> None:

@@ -1,0 +1,169 @@
+{
+  "context_summary": {
+    "bottleneck_summary": {
+      "bottlenecks": {
+        "bandwidth_bound": 1
+      },
+      "dominant_bottleneck": "bandwidth_bound",
+      "providers": {
+        "nvidia-system-context": 1
+      },
+      "total_samples": 1
+    },
+    "provider": "nvidia-system-context",
+    "sample_count": 1,
+    "schema": "tessera.profiler_context.v1",
+    "source_status": "mock",
+    "target": "nvidia"
+  },
+  "displayTimeUnit": "ns",
+  "provider_statuses": [
+    {
+      "diagnostics": {
+        "cupti": "compile-gated by TPROF_WITH_CUPTI"
+      },
+      "provider": "nvidia",
+      "schema": "tessera.profiler_provider_status.v1",
+      "status": "planned",
+      "target": "nvidia"
+    }
+  ],
+  "schema": "tessera.merged_profiler_trace.v1",
+  "sources": [
+    {
+      "events": 1,
+      "kind": "runtime_trace"
+    },
+    {
+      "events": 1,
+      "kind": "provider_trace",
+      "provider": "cupti",
+      "record_source": "fixture",
+      "records": 1,
+      "source_status": "fixture"
+    },
+    {
+      "kind": "provider_status",
+      "provider": "nvidia",
+      "status": "planned"
+    },
+    {
+      "kind": "profiler_context",
+      "provider": "nvidia-system-context",
+      "samples": 1
+    }
+  ],
+  "summary": {
+    "categories": {
+      "device_activity": 1,
+      "host_context": 1,
+      "metadata": 2,
+      "provider_status": 1,
+      "runtime_api": 1
+    },
+    "correlation_count": 1,
+    "dropped_records": 0,
+    "event_count": 6,
+    "launch_count": 1,
+    "probe_count": 1
+  },
+  "traceEvents": [
+    {
+      "args": {
+        "kernel": "matmul",
+        "launch_id": "launch-1"
+      },
+      "cat": "runtime_api",
+      "dur": 2,
+      "name": "tsrLaunchKernel",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 1
+    },
+    {
+      "args": {
+        "backend": "cuda",
+        "kind": "device_activity",
+        "launch_id": "launch-1",
+        "probe_name": "matmul.mainloop",
+        "provider": "cupti",
+        "target": "nvidia"
+      },
+      "cat": "device_activity",
+      "dur": 8,
+      "name": "cuda.matmul",
+      "ph": "X",
+      "pid": 0,
+      "tid": 2,
+      "ts": 3
+    },
+    {
+      "args": {
+        "backend": "cuda",
+        "dropped_records": 0,
+        "name": "tessera.cupti",
+        "provider": "cupti",
+        "record_count": 1,
+        "record_source": "fixture",
+        "source_status": "fixture",
+        "target": "nvidia"
+      },
+      "cat": "metadata",
+      "name": "process_name",
+      "ph": "M",
+      "pid": 0,
+      "tid": 0,
+      "ts": 0
+    },
+    {
+      "args": {
+        "backend": "cuda",
+        "dropped_records": 0,
+        "provider": "cupti",
+        "record_count": 1,
+        "record_source": "fixture",
+        "source_status": "fixture",
+        "target": "nvidia"
+      },
+      "cat": "metadata",
+      "name": "tessera.provider_metadata",
+      "ph": "M",
+      "pid": 0,
+      "tid": 0,
+      "ts": 0
+    },
+    {
+      "args": {
+        "diagnostics": {
+          "cupti": "compile-gated by TPROF_WITH_CUPTI"
+        },
+        "provider": "nvidia",
+        "status": "planned",
+        "target": "nvidia"
+      },
+      "cat": "provider_status",
+      "name": "provider_status.nvidia",
+      "ph": "i",
+      "pid": 0,
+      "s": "p",
+      "tid": 0,
+      "ts": 0
+    },
+    {
+      "args": {
+        "dominant_bottleneck": "bandwidth_bound",
+        "provider": "nvidia-system-context",
+        "sample_count": 1,
+        "source_status": "mock"
+      },
+      "cat": "host_context",
+      "name": "profiler_context.summary",
+      "ph": "i",
+      "pid": 0,
+      "s": "p",
+      "tid": 0,
+      "ts": 0
+    }
+  ]
+}

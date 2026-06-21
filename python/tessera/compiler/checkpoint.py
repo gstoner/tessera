@@ -39,6 +39,7 @@ class CheckpointPolicy(Enum):
     NONE = "none"
     SELECTIVE = "selective"   # every ``interval``-th layer (default)
     FULL = "full"             # every layer boundary
+    DECOUPLED_BLOCK = "decoupled_block"  # block-local training; peak ≈ 1/num_blocks
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +60,14 @@ class CollectiveCheckpointConfig:
     memory_budget_gb : float
         Soft memory budget in GiB.  The pass treats this as a hint for how
         aggressively to recompute.
+    num_blocks : int
+        Number of independently-trained blocks for the ``DECOUPLED_BLOCK``
+        policy.  Block-local training (DiffusionBlocks, arXiv:2506.14202) keeps
+        only one block's activations live at a time, so peak activation memory
+        is ≈ ``1 / num_blocks`` of the full-network footprint.  This is a
+        **distinct lever from recompute**: it trades nothing for compute (no
+        backward recomputation), it partitions which block is trained.  Ignored
+        for the other policies.
     save_dir : str
         Directory where checkpoint blobs are written at runtime.
     enabled : bool
@@ -68,6 +77,7 @@ class CollectiveCheckpointConfig:
     interval: int = 2
     policy: CheckpointPolicy = CheckpointPolicy.SELECTIVE
     memory_budget_gb: float = 40.0
+    num_blocks: int = 1
     save_dir: str = "/tmp/tessera_checkpoints"
     enabled: bool = True
 
@@ -78,6 +88,13 @@ class CollectiveCheckpointConfig:
             raise ValueError(
                 f"memory_budget_gb={self.memory_budget_gb} must be > 0"
             )
+        if self.num_blocks < 1:
+            raise ValueError(f"num_blocks={self.num_blocks} must be >= 1")
+        if self.policy == CheckpointPolicy.DECOUPLED_BLOCK and self.num_blocks < 2:
+            raise ValueError(
+                "DECOUPLED_BLOCK policy requires num_blocks >= 2 (a single "
+                "block is just standard end-to-end training)"
+            )
 
     def checkpoint_layers(self, layer_names: List[str]) -> List[str]:
         """
@@ -86,12 +103,44 @@ class CollectiveCheckpointConfig:
         - NONE   → empty list
         - FULL   → all layers
         - SELECTIVE → every ``interval``-th layer (indices 0, interval, 2*interval, …)
+        - DECOUPLED_BLOCK → empty list (the memory saving is structural — only
+          one block is ever live — not realised via recompute markers)
         """
-        if not self.enabled or self.policy == CheckpointPolicy.NONE:
+        if not self.enabled or self.policy in (
+            CheckpointPolicy.NONE,
+            CheckpointPolicy.DECOUPLED_BLOCK,
+        ):
             return []
         if self.policy == CheckpointPolicy.FULL:
             return list(layer_names)
         return [n for i, n in enumerate(layer_names) if i % self.interval == 0]
+
+    def peak_activation_fraction(self) -> float:
+        """Fraction of the full-network forward-activation footprint that is
+        live at peak under this policy.
+
+        Only ``DECOUPLED_BLOCK`` lowers this in the model here: block-local
+        training holds a single block's activations, so peak ≈ ``1/num_blocks``.
+        The recompute policies (SELECTIVE/FULL) trade compute for *backward*
+        live-set and are modelled as a separate lever — they return ``1.0``
+        here, not because they save no memory but because their saving is
+        captured by the recompute pass's live-set scan, not this structural
+        fraction.  Use this to trade ``num_blocks`` against quality the way the
+        DiffusionBlocks B=2/4/6 ablation does.
+        """
+        if self.policy == CheckpointPolicy.DECOUPLED_BLOCK:
+            return 1.0 / self.num_blocks
+        return 1.0
+
+    def estimated_peak_activation_bytes(self, full_activation_bytes: float) -> float:
+        """Estimated peak activation bytes given the full-network footprint.
+
+        ``full_activation_bytes`` is the activation memory an end-to-end forward
+        pass would hold; the return scales it by :meth:`peak_activation_fraction`.
+        """
+        if full_activation_bytes < 0:
+            raise ValueError("full_activation_bytes must be >= 0")
+        return full_activation_bytes * self.peak_activation_fraction()
 
     def to_ir_attr(self) -> str:
         """Serialise to a tessera MLIR attribute string."""
@@ -99,6 +148,7 @@ class CollectiveCheckpointConfig:
             f'{{tessera_sr.checkpoint_config = {{'
             f'policy = "{self.policy.value}", '
             f'interval = {self.interval}, '
+            f'num_blocks = {self.num_blocks}, '
             f'memory_budget_gb = {self.memory_budget_gb}}}}}'
         )
 
@@ -123,6 +173,7 @@ def checkpoint_jit(
     interval: int = 2,
     policy: CheckpointPolicy = CheckpointPolicy.SELECTIVE,
     memory_budget_gb: float = 40.0,
+    num_blocks: int = 1,
     save_dir: str = "/tmp/tessera_checkpoints",
 ) -> Callable:
     """
@@ -145,6 +196,7 @@ def checkpoint_jit(
         interval=interval,
         policy=policy,
         memory_budget_gb=memory_budget_gb,
+        num_blocks=num_blocks,
         save_dir=save_dir,
     )
 

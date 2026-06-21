@@ -164,10 +164,13 @@ ebm_refinement,3,0,0,3,0,,directly_tested,3 direct test references
 ebm_self_verify,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
+edm_loss_weight,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
+edm_precondition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 einsum,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,7 direct test references
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
+equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 exp,4,0,0,4,0,,directly_tested,4 direct test references
@@ -220,6 +223,7 @@ istft,4,0,0,4,0,,directly_tested,4 direct test references
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,6,0,0,6,0,,directly_tested,6 direct test references
 jvp,0,0,0,0,1,,structural_only,category default for 'transform'
+karras_sigma_schedule,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 kimi_delta_attention,8,4,0,12,0,fp64,directly_tested,12 direct test references
 kl_divergence,5,0,0,5,0,,directly_tested,5 direct test references
 kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,directly_tested,5 direct test references

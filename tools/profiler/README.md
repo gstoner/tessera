@@ -22,6 +22,11 @@ Features:
   artifacts into one report-ready Trace Event JSON file.
 - `tprof-provider-status` for reporting provider readiness and native-proof
   diagnostics without requiring vendor hardware in CI.
+- `tprof-apple-metal-smoke` for the macOS fresh-process Metal visibility proof
+  that gates Apple provider promotion from `compiled_shell` to
+  `native_available`.
+- Report summary JSON export for machine-readable hot-op, roofline,
+  provider-status, context, and dropped-record summaries.
 
 ## Advanced profiler backend plan
 
@@ -59,6 +64,27 @@ Design anchors:
 Apple GPU validation on this host needs native, out-of-sandbox execution before
 turning any `planned` row into `available`.
 
+Apple provider status remains `compiled_shell` on macOS until a fresh process
+successfully calls `MTLCreateSystemDefaultDevice`. Use the smoke helper outside
+the Codex sandbox when validating a real host:
+
+```bash
+python3 tools/profiler/scripts/tprof_apple_metal_smoke.py --out apple.status.json
+```
+
+For CI or non-Apple hosts, keep the command non-fatal while preserving the
+diagnostic artifact:
+
+```bash
+python3 tools/profiler/scripts/tprof_apple_metal_smoke.py \
+  --allow-unavailable --out apple.status.json
+
+# Optional native counter-set discovery proof. This discovers capability only;
+# it does not collect counter samples or promote availability by itself.
+python3 tools/profiler/scripts/tprof_apple_metal_smoke.py \
+  --allow-unavailable --prove-counters --out apple.counter.status.json
+```
+
 ## Context artifacts and provider shells
 
 `tessera.compiler.profiler_context.build_profiler_context_artifact(...)`
@@ -92,6 +118,7 @@ Reports can ingest this alongside Trace Event JSON:
 python3 tools/profiler/scripts/tprof_report.py \
   --in runtime.trace.json \
   --context-json context.json \
+  --summary-json report.summary.json \
   --out report.html
 ```
 
@@ -175,6 +202,7 @@ python3 tools/profiler/scripts/tprof_provider_trace.py \
   --provider cupti \
   --input callbacks.json \
   --input activities.json \
+  --provider-status nvidia.status.json \
   --out provider_trace.json
 ```
 
@@ -210,8 +238,9 @@ The SDK adapter shims are split by provider:
 
 - `tprof/rocprofiler_adapter.h`: HIP/HSA API tracing first, dispatch/activity
   records next, counters and thread trace behind explicit config flags.
-- `tprof/metal_adapter.h`: command-buffer span ingestion first, counter sample
-  records behind an explicit config flag.
+- `tprof/metal_adapter.h`: command-buffer span ingestion first, counter-set
+  discovery as a capability shell, and counter sample records behind an
+  explicit config flag.
 - `tprof/cupti_adapter.h`: runtime/driver callback ingestion first, activity
   records next.
 
@@ -221,6 +250,22 @@ guard/SDK, but the record-ingestion and replay functions remain usable for
 fixtures and tests. Each adapter exposes `*_adapter_status()` so AMD, NVIDIA,
 and Apple hosts can report whether the shell was SDK/framework-compiled,
 initialized, paused, and which source status or last error applies.
+
+Provider-status sidecars can be embedded directly in provider trace artifacts
+with `--provider-status`. `tprof-merge-trace` lifts embedded sidecars into
+`provider_status` marker events, so report consumers see the same diagnostics
+whether status was supplied separately or bundled with a replay file.
+Merged provider traces also emit Chrome/Perfetto metadata events
+(`process_name` and `tessera.provider_metadata`) carrying provider, backend,
+target, source status, record source, record count, and dropped-record totals.
+
+`tprof_report.py --summary-json report.summary.json` writes
+`tessera.profiler_report_summary.v1` with hot ops, derived arithmetic
+intensity, provider/category grouping, correlation counts, dropped-record
+totals, provider diagnostics, and context bottleneck summaries. The HTML report
+remains useful when native collectors are unavailable because unavailable or
+compiled-shell providers are rendered as diagnostics rather than treated as
+fatal errors.
 
 All provider adapters expose start-paused/pause/resume controls and simple
 include/exclude filters. ROCprofiler filters API names and kernel/dispatch
@@ -248,8 +293,11 @@ shell and emits a configure-time warning.
 
 `TPROF_WITH_CUPTI=ON` follows the same no-hard-link pattern through the CUPTI
 finder. `TPROF_WITH_METAL=ON` is macOS-only and builds a tiny Objective-C++
-Metal framework compile probe; it still reports a shell until command-buffer and
-counter-sample attachment are proven in a fresh native process.
+Metal framework compile probe plus a command-buffer timestamp capture helper.
+It still reports a shell until `tprof-apple-metal-smoke` proves Metal visibility
+in a fresh native process. Captured Metal command-buffer spans normalize to
+`device_activity` in `tessera.profiler_provider_trace.v1`; committed fixtures
+exercise the same path through `tprof_provider_trace.py`.
 
 Merged traces validate timestamps strictly. A non-numeric Trace Event `ts` is
 reported as malformed input instead of being sorted as zero.

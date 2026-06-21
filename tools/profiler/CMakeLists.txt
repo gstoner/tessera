@@ -94,7 +94,7 @@ if (ROCprofilerSDK_FOUND)
   target_link_libraries(tprof_runtime PRIVATE ROCprofilerSDK::rocprofiler-sdk)
 endif()
 if (TPROF_WITH_METAL AND APPLE)
-  target_link_libraries(tprof_runtime PRIVATE "-framework Metal")
+  target_link_libraries(tprof_runtime PRIVATE "-framework Foundation" "-framework Metal")
 endif()
 
 add_library(tprof_device INTERFACE)

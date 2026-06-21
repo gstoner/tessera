@@ -13,6 +13,7 @@ from tessera.compiler.rocm_lds import (
     PaddedLdsLayout,
     SoftwarePipeline,
     SwizzledLdsLayout,
+    attn_kv_tile_swizzle,
     select_lds_layout,
 )
 from tessera.compiler.rocm_target import AMDArch
@@ -240,3 +241,81 @@ def test_ldslayout_union_members() -> None:
     assert PaddedLdsLayout(pad_elems=4, inner_dim=64) is not None
     # LdsLayout is importable and is a typing Union.
     assert LdsLayout is not None
+
+
+# ── swizzle correctness: lossless + bank-conflict-breaking ───────────────────
+
+
+def test_swizzle_is_lossless_permutation_per_row() -> None:
+    # For each row the column map must be a bijection over the window — distinct
+    # logical columns never alias, so addressing stays correct.
+    s = SwizzledLdsLayout(vec=8, per_phase=1, max_phase=8)
+    for row in range(s.max_phase):
+        cols = sorted(s.swizzled_col(row, c) for c in range(s.window))
+        assert cols == list(range(s.window))
+
+
+def test_swizzle_breaks_bank_conflicts() -> None:
+    # A column read down successive rows lands in >1 LDS bank (32-bank model).
+    s = SwizzledLdsLayout(vec=8, per_phase=1, max_phase=8)
+    assert s.is_conflict_free(num_banks=32)
+
+
+@pytest.mark.parametrize("vec,max_phase", [(4, 8), (8, 8), (8, 16), (16, 8), (2, 16)])
+def test_swizzle_conflict_free_across_params(vec: int, max_phase: int) -> None:
+    s = SwizzledLdsLayout(vec=vec, per_phase=1, max_phase=max_phase)
+    assert s.is_conflict_free(num_banks=32)
+
+
+def test_swizzle_window_property() -> None:
+    s = SwizzledLdsLayout(vec=8, per_phase=2, max_phase=4)
+    assert s.window == 32
+
+
+# ── MLIR attribute emission ──────────────────────────────────────────────────
+
+
+def test_swizzle_to_mlir_attr_round_trips_params() -> None:
+    s = SwizzledLdsLayout(vec=8, per_phase=1, max_phase=16, order=(1, 0))
+    attr = s.to_mlir_attr()
+    assert attr == (
+        "#tessera_rocm.lds_swizzle<vec = 8, per_phase = 1, "
+        "max_phase = 16, order = [1, 0]>"
+    )
+
+
+def test_pad_to_mlir_attr_round_trips_params() -> None:
+    p = PaddedLdsLayout(pad_elems=4, inner_dim=64)
+    assert p.to_mlir_attr() == "#tessera_rocm.lds_pad<pad_elems = 4, inner_dim = 64>"
+
+
+def test_selected_layout_is_emittable() -> None:
+    # Whatever the arch-keyed rule picks, it can be lowered to an IR attr.
+    for arch, g2l in (
+        (AMDArch.GFX_942, True),
+        (AMDArch.GFX_950, True),
+        (AMDArch.GFX_950, False),
+    ):
+        attr = select_lds_layout(arch, global_to_lds=g2l).to_mlir_attr()
+        assert attr.startswith("#tessera_rocm.lds_")
+
+
+# ── attention K/V-tile swizzle helper ────────────────────────────────────────
+
+
+def test_attn_kv_tile_swizzle_sizes_window_to_row() -> None:
+    s = attn_kv_tile_swizzle(AMDArch.GFX_942, inner_dim=128, vec=8)
+    assert s.max_phase == 16
+    assert s.window == 128
+    assert s.is_conflict_free(num_banks=32)
+
+
+def test_attn_kv_tile_swizzle_rejects_non_multiple_inner_dim() -> None:
+    with pytest.raises(ValueError, match="multiple of vec"):
+        attn_kv_tile_swizzle(AMDArch.GFX_942, inner_dim=130, vec=8)
+
+
+def test_attn_kv_tile_swizzle_rejects_non_pow2_phase() -> None:
+    # inner_dim // vec = 48 // 8 = 6, not a power of two.
+    with pytest.raises(ValueError, match="power of two"):
+        attn_kv_tile_swizzle(AMDArch.GFX_942, inner_dim=48, vec=8)

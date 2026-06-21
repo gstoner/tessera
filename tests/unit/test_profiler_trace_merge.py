@@ -66,6 +66,7 @@ def test_merge_profiler_traces_combines_runtime_provider_and_context() -> None:
     assert merged["summary"]["categories"] == {
         "device_activity": 1,
         "host_context": 1,
+        "metadata": 2,
         "provider_status": 1,
         "runtime_api": 1,
     }
@@ -75,6 +76,9 @@ def test_merge_profiler_traces_combines_runtime_provider_and_context() -> None:
     assert merged["summary"]["dropped_records"] == 2
     assert merged["context_summary"]["provider"] == "rocm-system-context"
     assert merged["provider_statuses"][0]["provider"] == "rocm"
+    metadata = [event for event in merged["traceEvents"] if event["cat"] == "metadata"]
+    assert {event["name"] for event in metadata} == {"process_name", "tessera.provider_metadata"}
+    assert metadata[0]["args"]["provider"] == "rocprofiler"
     validate_merged_profiler_trace(merged)
 
 
@@ -145,12 +149,89 @@ def test_tprof_merge_trace_cli_writes_report_ready_trace(tmp_path: Path) -> None
 
     merged = json.loads(merged_path.read_text())
     assert merged["schema"] == MERGED_PROFILER_TRACE_SCHEMA_VERSION
-    assert merged["summary"]["event_count"] == 4
+    assert merged["summary"]["event_count"] == 6
     names = [event["name"] for event in merged["traceEvents"]]
     assert "profiler_context.summary" in names
     assert "provider_status.nvidia" in names
     assert merged["traceEvents"][-1]["name"] == "matmul"
     assert merged["provider_statuses"][0]["provider"] == "nvidia"
+    validate_merged_profiler_trace(merged)
+
+
+def test_merge_profiler_traces_lifts_provider_status_sidecars() -> None:
+    provider = build_provider_trace_artifact(
+        provider="metal",
+        records=[
+            {
+                "record_type": "command_buffer",
+                "label": "metal.matmul",
+                "start_us": 3,
+                "end_us": 6,
+                "command_buffer_id": "cb-1",
+            }
+        ],
+        provider_statuses=(
+            provider_status_artifact(
+                provider="apple",
+                target="apple_gpu",
+                status="compiled_shell",
+                diagnostics={"metal": "native proof required"},
+            ),
+        ),
+    )
+
+    merged = merge_profiler_traces(provider_traces=(provider,))
+
+    assert merged["provider_statuses"][0]["provider"] == "apple"
+    assert merged["summary"]["categories"]["provider_status"] == 1
+    assert merged["summary"]["categories"]["metadata"] == 2
+    names = [event["name"] for event in merged["traceEvents"]]
+    assert "provider_status.apple" in names
+    assert merged["sources"][1]["source"] == "provider_trace_sidecar"
+    validate_merged_profiler_trace(merged)
+
+
+def test_merge_profiler_traces_supports_multi_provider_metadata() -> None:
+    cupti = build_provider_trace_artifact(
+        provider="cupti",
+        records=[
+            {
+                "record_type": "activity",
+                "activity": "kernel",
+                "kernel_name": "cuda.matmul",
+                "start_us": 5,
+                "end_us": 12,
+                "correlationId": 9,
+                "backend": "cuda",
+                "target": "nvidia",
+            }
+        ],
+    )
+    metal = build_provider_trace_artifact(
+        provider="metal",
+        records=[
+            {
+                "record_type": "command_buffer",
+                "label": "metal.matmul",
+                "start_us": 6,
+                "end_us": 10,
+                "command_buffer_id": "cb-1",
+                "backend": "metal",
+                "target": "apple_gpu",
+            }
+        ],
+    )
+
+    merged = merge_profiler_traces(provider_traces=(cupti, metal))
+
+    assert merged["summary"]["categories"]["device_activity"] == 2
+    assert merged["summary"]["categories"]["metadata"] == 4
+    metadata = [
+        event for event in merged["traceEvents"]
+        if event["name"] == "tessera.provider_metadata"
+    ]
+    assert {event["args"]["provider"] for event in metadata} == {"cupti", "metal"}
+    assert {event["args"]["backend"] for event in metadata} == {"cuda", "metal"}
     validate_merged_profiler_trace(merged)
 
 
@@ -192,6 +273,16 @@ def test_tprof_merge_trace_cli_accepts_committed_fixtures(tmp_path: Path) -> Non
     assert merged["summary"]["categories"]["device_activity"] == 1
     assert merged["summary"]["categories"]["counters"] == 1
     assert merged["summary"]["categories"]["intra_kernel"] == 1
+    assert merged["summary"]["categories"]["metadata"] == 2
+
+
+def test_merged_runtime_provider_context_example_fixture_validates() -> None:
+    payload = json.loads((FIXTURES / "merged_runtime_provider_context_example.json").read_text())
+
+    validate_merged_profiler_trace(payload)
+    assert payload["context_summary"]["provider"] == "nvidia-system-context"
+    assert payload["provider_statuses"][0]["provider"] == "nvidia"
+    assert payload["summary"]["categories"]["metadata"] == 2
 
 
 def test_tprof_merge_trace_cli_reports_malformed_context_cleanly(tmp_path: Path) -> None:

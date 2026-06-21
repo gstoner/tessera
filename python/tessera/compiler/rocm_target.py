@@ -457,6 +457,32 @@ _AGPR_BUDGET: dict[AMDArch, int] = {
 }
 
 
+# ── Per-arch chiplet (XCD) topology ─────────────────────────────────────────
+# CDNA 3/4 are multi-die: the compute is split across N Accelerator Complex Dies
+# (XCDs), each with its own slice of the shared L2.  Data resident in one XCD's
+# L2 slice is cheap to that XCD and a cross-die hop for the others — so a grid
+# that scatters one attention head's Q-blocks across XCDs forces its K/V to be
+# re-fetched into multiple L2 slices.  The moonmath CDNA3 writeup's "head-first
+# swizzle" pins all of a head's blocks to a single XCD so its K/V stays resident
+# in that XCD's slice (see :func:`head_first_xcd`).
+#
+# Counts (CDNA): MI300X/gfx942 = 8 XCDs (304 CUs), MI300A/gfx940 = 6 XCDs,
+# CDNA 4/gfx950 = 8 XCDs.  MI250/gfx90a is 2 GCDs (modeled as 2).  RDNA parts
+# are monolithic (1).  These are die-count topology facts, not an execution
+# claim; ``gfx950`` is labeled provisional pending an MI350-class spec check.
+_XCD_COUNT: dict[AMDArch, int] = {
+    AMDArch.GFX_90A:  2,    # MI250 — 2 GCDs
+    AMDArch.GFX_940:  6,    # MI300A
+    AMDArch.GFX_942:  8,    # MI300X
+    AMDArch.GFX_950:  8,    # CDNA 4 (MI350-class) — PROVISIONAL count
+    AMDArch.GFX_1100: 1,    # RDNA — monolithic
+    AMDArch.GFX_1151: 1,
+    AMDArch.GFX_1200: 1,
+    AMDArch.GFX_1250: 1,
+    AMDArch.GFX_1251: 1,
+}
+
+
 # Per-arch HIP/HIPCC compile-target strings under ROCm 7.2.3.
 _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_90A:  "gfx90a",
@@ -599,6 +625,18 @@ class ROCmTargetProfile:
         return self.vgpr_budget + self.agpr_budget
 
     @property
+    def num_xcds(self) -> int:
+        """Number of XCDs / GCDs on this arch (1 on monolithic RDNA parts).
+
+        Drives chiplet-aware grid mapping — see :func:`head_first_xcd`."""
+        return _XCD_COUNT[self.arch]
+
+    @property
+    def is_multi_die(self) -> bool:
+        """True when the arch has more than one XCD/GCD (chiplet topology)."""
+        return _XCD_COUNT[self.arch] > 1
+
+    @property
     def waves_per_simd(self) -> int:
         return self.waves_per_cu
 
@@ -629,6 +667,22 @@ class ROCmTargetProfile:
     def wmma_shapes(self) -> frozenset[tuple[int, int, int]]:
         """WMMA (M, N, K) tiles for this arch (empty on CDNA — see mfma_shapes)."""
         return _WMMA_VARIANTS[self.arch]
+
+    def mfma_shapes_by_footprint(
+        self, *, k: Optional[int] = None
+    ) -> list[tuple[tuple[int, int, int, int], int]]:
+        """Legal MFMA shapes ranked cheapest-accumulator-first for this arch.
+
+        See :func:`rank_mfma_shapes_by_footprint`.  The matrix-core selection
+        lever from the moonmath CDNA3 attention writeup: prefer the shape with
+        the smallest M×N accumulator so registers are free for prefetch + Q."""
+        return rank_mfma_shapes_by_footprint(self.arch, k=k)
+
+    def cheapest_mfma_shape(self, *, k: Optional[int] = None) -> tuple[int, int, int, int]:
+        """The smallest-accumulator-footprint MFMA shape for this arch.
+
+        See :func:`cheapest_mfma_shape`."""
+        return cheapest_mfma_shape(self.arch, k=k)
 
     @property
     def is_wave32(self) -> bool:
@@ -671,9 +725,161 @@ def mfma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int, int]]:
     return _MFMA_VARIANTS[arch]
 
 
+def xcd_count(arch: AMDArch) -> int:
+    """Number of Accelerator Complex Dies (XCDs / GCDs) on ``arch``.
+
+    ``1`` for monolithic (RDNA) parts.  See :data:`_XCD_COUNT`."""
+    return _XCD_COUNT[arch]
+
+
+def head_first_xcd(batch: int, head: int, *, num_heads: int, num_xcds: int) -> int:
+    """XCD a ``(batch, head)``'s attention work is pinned to (head-first swizzle).
+
+    All Q-blocks of a given ``(batch, head)`` map to one XCD, so that head's K/V
+    stays resident in that XCD's L2 slice instead of being re-fetched into
+    several slices.  The assignment is the ``(batch, head)`` pair index modulo
+    the XCD count — independent of the Q-block index, which is exactly the
+    L2-residency property the moonmath writeup's swizzle achieves.
+
+    Raises a stable diagnostic on non-positive ``num_heads``/``num_xcds`` or
+    out-of-range / negative ``batch``/``head``.
+    """
+    if num_heads <= 0 or num_xcds <= 0:
+        raise TesseraROCmTargetError(
+            f"head_first_xcd: num_heads ({num_heads}) and num_xcds ({num_xcds}) "
+            f"must be positive")
+    if batch < 0 or head < 0:
+        raise TesseraROCmTargetError(
+            f"head_first_xcd: batch ({batch}) and head ({head}) must be >= 0")
+    if head >= num_heads:
+        raise TesseraROCmTargetError(
+            f"head_first_xcd: head ({head}) out of range for num_heads={num_heads}")
+    return (batch * num_heads + head) % num_xcds
+
+
+def naive_block_xcd(
+    batch: int,
+    head: int,
+    q_block: int,
+    *,
+    num_heads: int,
+    q_blocks: int,
+    num_xcds: int,
+) -> int:
+    """XCD a Q-block lands on under the *default* round-robin block scheduler.
+
+    The hardware's default maps the linear global block id modulo the XCD count,
+    so a single head's Q-blocks scatter across XCDs (the residency problem
+    head-first swizzle fixes).  Provided as the baseline :func:`head_first_xcd`
+    improves on.
+    """
+    if num_heads <= 0 or q_blocks <= 0 or num_xcds <= 0:
+        raise TesseraROCmTargetError(
+            "naive_block_xcd: num_heads, q_blocks, num_xcds must be positive")
+    if batch < 0 or head < 0 or q_block < 0:
+        raise TesseraROCmTargetError(
+            "naive_block_xcd: batch, head, q_block must be >= 0")
+    if head >= num_heads or q_block >= q_blocks:
+        raise TesseraROCmTargetError(
+            f"naive_block_xcd: head/q_block out of range "
+            f"(head={head}/{num_heads}, q_block={q_block}/{q_blocks})")
+    global_block = (batch * num_heads + head) * q_blocks + q_block
+    return global_block % num_xcds
+
+
 def wmma_variants(arch: AMDArch) -> frozenset[tuple[int, int, int]]:
     """Return WMMA instruction shapes (M, N, K) for an RDNA ``arch`` (empty on CDNA)."""
     return _WMMA_VARIANTS[arch]
+
+
+# ── MFMA accumulator-footprint cost model ───────────────────────────────────
+# (moonmath CDNA3 attention writeup, §"Matrix Core Selection".)
+#
+# A matrix-core instruction holds its M×N fp32 accumulator tile distributed
+# across the wavefront's lanes.  On CDNA wave64 each lane owns ``M*N // 64``
+# fp32 accumulators (AGPRs); on RDNA/wave32 each lane owns ``M*N // 32`` VGPRs.
+# The footprint depends ONLY on M and N — not on K — so two shapes that saturate
+# the matrix core at the same FLOPs/cycle can have very different register cost:
+#
+#     16×16×16  → 16*16 // 64 =  4 fp32/lane
+#     32×32×8   → 32*32 // 64 = 16 fp32/lane   (4× the accumulator footprint)
+#
+# Both do 512 FLOPs/cycle on gfx94x, so the article picks 16×16×16 purely to
+# free registers for deeper prefetch rings + persistent Q.  This is the lever
+# ``mfma_table.inc`` / ``MFMAFullCoveragePass`` cannot express: they answer
+# "which shapes are *legal*", not "which legal shape is *cheapest* in registers".
+
+
+def mfma_accumulator_regs(shape: tuple[int, ...], *, lanes: int = 64) -> int:
+    """Per-lane fp32 accumulator registers a matrix-core ``shape`` occupies.
+
+    ``shape`` is an ``(M, N, K[, K_blocks])`` tuple (MFMA carries a 4th
+    ``K_blocks`` field, WMMA a 3-tuple).  The accumulator is the M×N output
+    tile, spread one fp32 per accumulated MAC across ``lanes`` lanes, so the
+    per-lane cost is ``M * N // lanes`` — independent of K.  ``lanes`` is 64
+    for CDNA MFMA (the default) and 32 for RDNA/wave32 WMMA.
+
+    Raises ``TesseraROCmTargetError`` if the M×N tile does not divide evenly
+    across ``lanes`` (a malformed shape) rather than silently truncating.
+    """
+    if len(shape) < 2:
+        raise TesseraROCmTargetError(
+            f"mfma_accumulator_regs: shape must be (M, N, ...); got {shape!r}")
+    m, n = shape[0], shape[1]
+    if m <= 0 or n <= 0:
+        raise TesseraROCmTargetError(
+            f"mfma_accumulator_regs: M, N must be positive; got M={m}, N={n}")
+    if lanes <= 0:
+        raise TesseraROCmTargetError(
+            f"mfma_accumulator_regs: lanes must be positive; got {lanes}")
+    if (m * n) % lanes != 0:
+        raise TesseraROCmTargetError(
+            f"mfma_accumulator_regs: M*N={m * n} does not divide evenly across "
+            f"{lanes} lanes (shape {shape!r})")
+    return (m * n) // lanes
+
+
+def rank_mfma_shapes_by_footprint(
+    arch: AMDArch, *, k: Optional[int] = None
+) -> list[tuple[tuple[int, int, int, int], int]]:
+    """Legal MFMA shapes for ``arch``, ranked by accumulator footprint (cheapest
+    first).
+
+    Returns a list of ``(shape, accumulator_regs)`` pairs sorted ascending by
+    per-lane accumulator registers, tie-broken by *descending* arithmetic
+    density ``M*N*K`` (prefer the larger contraction at equal register cost).
+    The order is fully deterministic so it can drive selection in a pass.
+
+    ``k`` optionally filters to shapes with that contraction width — the way a
+    caller restricts to the K a given storage dtype lowers to (bf16/fp16 → 16
+    on the 16×16×16 form, fp8 → 32, fp4 → 64, xf32 → 8).
+    """
+    lanes = 32 if arch in _RDNA_ARCHES else 64
+    shapes = [s for s in _MFMA_VARIANTS[arch] if k is None or s[2] == k]
+    ranked = [(s, mfma_accumulator_regs(s, lanes=lanes)) for s in shapes]
+    # Cheapest accumulator first; tie → larger M*N*K (more work per issue) first.
+    ranked.sort(key=lambda sr: (sr[1], -(sr[0][0] * sr[0][1] * sr[0][2])))
+    return ranked
+
+
+def cheapest_mfma_shape(
+    arch: AMDArch, *, k: Optional[int] = None
+) -> tuple[int, int, int, int]:
+    """The MFMA shape on ``arch`` with the smallest accumulator footprint.
+
+    This is the article's "16×16×16 over 32×32×8" decision as a function:
+    among the legal shapes (optionally filtered to contraction width ``k``),
+    return the one that frees the most registers.  Raises a stable diagnostic
+    when ``arch`` has no MFMA shapes (an RDNA/WMMA arch) or none match ``k``.
+    """
+    ranked = rank_mfma_shapes_by_footprint(arch, k=k)
+    if not ranked:
+        if not _MFMA_VARIANTS[arch]:
+            raise TesseraROCmTargetError(
+                f"{arch.name} has no MFMA shapes (WMMA arch — see wmma_variants).")
+        raise TesseraROCmTargetError(
+            f"{arch.name} has no MFMA shape with contraction width k={k}.")
+    return ranked[0][0]
 
 
 # ── FP8 numeric semantics per arch ──────────────────────────────────────────
@@ -746,6 +952,12 @@ __all__ = [
     "rocm_arch_string",
     "mfma_variants",
     "wmma_variants",
+    "mfma_accumulator_regs",
+    "rank_mfma_shapes_by_footprint",
+    "cheapest_mfma_shape",
+    "xcd_count",
+    "head_first_xcd",
+    "naive_block_xcd",
     "fp8_semantics",
     "fp8_dtype_flavor",
 ]

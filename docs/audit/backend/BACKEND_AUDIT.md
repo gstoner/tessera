@@ -31,6 +31,43 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   launch bridge by registering a backend launcher into the same hook once
   hardware exists.
 
+- **CDNA3 attention cost-model spine (2026-06-21):** eight compiler-visible
+  levers harvested from the moonmath CDNA3/MI300X attention writeup, landed as
+  hardware-free model + IR contracts (no device required, all lit/pytest-gated):
+  1. **MFMA accumulator-footprint cost model** — `rocm_target.py`
+     `mfma_accumulator_regs` / `rank_mfma_shapes_by_footprint` /
+     `cheapest_mfma_shape`: ranks legal MFMA shapes by per-lane accumulator
+     registers (16×16×16 = 4 vs 32×32×8 = 16), the "free registers for prefetch"
+     lever the legality table couldn't express. `test_rocm_mfma_footprint.py`.
+  2. **LDS XOR-swizzle made IR-emittable** — `rocm_lds.py` gains
+     `SwizzledLdsLayout.to_mlir_attr()` + `is_conflict_free()` (lossless-perm +
+     bank-spread proof) + `attn_kv_tile_swizzle()`. `test_rocm_lds.py`.
+  3. **Decoupled vmcnt/lgkmcnt waits (C++)** — `tessera_rocm.wait` gained a
+     `counter` attr; the tile→ROCm lowering tags a global→LDS copy's wait
+     `vmcnt`, and ROCDL lowering emits `s.waitcnt.{vmcnt,lgkmcnt}` instead of a
+     blanket `s_barrier` (barrier only when no counter). `wait_counter_class.mlir`
+     + updated `pipeline_tile_to_rocdl_contract.mlir` (11/11 ROCm lit pass).
+  4. **Target-parametric wave specialization** — `wave_specialization.py`:
+     producer/consumer role split generalized off SM_90 into a descriptor with a
+     CDNA 8-wave/2-group **ping-pong** schedule (roles swap per phase, 2
+     barriers/iter) vs the SM_90 fixed-role plan. Drives a future
+     `WarpSpecializationPass` reframe. `test_wave_specialization.py`.
+  5. **Tail-KV split (flash-decoding) cost model** — `attn_split_kv.py`:
+     `plan_split_kv` picks split factor G from grid/CU occupancy, declines when
+     the last wave is ≥95% full or the sequence is too short; online-softmax
+     merge contract. `test_attn_split_kv.py`.
+  6. **Chiplet/XCD-aware grid mapping** — `rocm_target.py` `xcd_count` +
+     `head_first_xcd` (pins a head's Q-blocks to one XCD for L2 residency) vs
+     `naive_block_xcd` baseline; per-arch `_XCD_COUNT`. `test_rocm_xcd_mapping.py`.
+  7. **Rounding mode as a swept knob** — new canonical `rounding.py`
+     (RTNE/RTNA/RTZ + alias normalization unifying the drifted spellings);
+     `NumericPolicy` canonicalizes `rounding` and gains `rounding_sweep()`.
+     `test_rounding_modes.py`.
+  8. **LDS-budget-aware attn tile sizing** — `attn_lower.py` `lds_bytes()` /
+     `fits_lds()` / `feasible_configs()` prune the tile sweep against per-arch
+     LDS budget (CDNA 4's doubled budget admits strictly more configs).
+     `test_attn_lds_budget.py`.
+
 ## Still Open
 
 - **NVIDIA runtime execution:** no execution-matrix rows yet (the G7 launch-

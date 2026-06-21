@@ -153,6 +153,82 @@ def test_tprof_report_renders_context_section(tmp_path: Path) -> None:
     assert "rocprofiler_sdk" in html
 
 
+def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.json"
+    status_path = tmp_path / "provider_status.json"
+    out_path = tmp_path / "report.html"
+    summary_path = tmp_path / "summary.json"
+    trace_path.write_text(json.dumps({
+        "traceEvents": [
+            {
+                "name": "matmul",
+                "cat": "device_activity",
+                "ph": "X",
+                "ts": 1,
+                "dur": 10,
+                "args": {
+                    "provider": "cupti",
+                    "kind": "device_activity",
+                    "bytes": 1024,
+                    "flops": 8192,
+                    "launch_id": "launch-1",
+                    "probe_name": "matmul.mainloop",
+                    "dropped_records": 3,
+                },
+            },
+            {
+                "name": "provider_status.nvidia",
+                "cat": "provider_status",
+                "ph": "i",
+                "s": "p",
+                "ts": 0,
+                "args": {
+                    "provider": "nvidia",
+                    "target": "nvidia",
+                    "status": "planned",
+                    "diagnostics": {"cupti": "compile-gated"},
+                },
+            },
+        ]
+    }))
+    status_path.write_text(json.dumps({
+        "schema": "tessera.profiler_provider_status.v1",
+        "provider": "nvidia",
+        "target": "nvidia",
+        "status": "planned",
+        "diagnostics": {"cupti": "compile-gated"},
+    }))
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_report.py"),
+            "--in",
+            str(trace_path),
+            "--out",
+            str(out_path),
+            "--provider-status-json",
+            str(status_path),
+            "--peak-flops",
+            "1000000",
+            "--hbm-gbs",
+            "1000",
+            "--summary-json",
+            str(summary_path),
+        ],
+        check=True,
+    )
+
+    summary = json.loads(summary_path.read_text())
+    assert summary["schema"] == "tessera.profiler_report_summary.v1"
+    assert summary["roofline"]["points"][0]["arithmetic_intensity_flops_per_byte"] == 8.0
+    assert summary["provider_categories"]["cupti"]["device_activity"] == 1
+    assert summary["provider_dropped_records"]["cupti"] == 3
+    assert summary["correlation_summary"]["launch_id"] == 1
+    assert summary["correlation_summary"]["probe_name"] == 1
+    assert summary["provider_statuses"][0]["provider"] == "nvidia"
+
+
 def test_context_golden_fixture_validates() -> None:
     payload = load_profiler_context_artifact(FIXTURES / "context_nvidia_mock.json")
 

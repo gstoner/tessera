@@ -47,9 +47,9 @@ def collect_provider_status(
     if normalized in {"apple", "metal", "apple_gpu"}:
         return _apple_status(native_proof=native_proof)
     if normalized in {"rocm", "amd", "hip", "rocprofiler"}:
-        return _rocm_status()
+        return _rocm_status(native_proof=native_proof)
     if normalized in {"nvidia", "cuda", "cupti"}:
-        return _nvidia_status()
+        return _nvidia_status(native_proof=native_proof)
     if normalized == "cpu":
         return provider_status_artifact(
             provider="cpu",
@@ -83,7 +83,21 @@ def validate_provider_status_artifact(payload: Mapping[str, Any]) -> None:
 def _apple_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, Any]:
     is_darwin = platform.system() == "Darwin"
     proof = dict(native_proof or {})
-    proof_passed = bool(proof.get("metal_visible") and proof.get("fresh_process"))
+    counter_proof = proof.get("counter_discovery")
+    counter_discovery_available = (
+        isinstance(counter_proof, Mapping)
+        and bool(counter_proof.get("counter_discovery_available"))
+    )
+    command_buffer_proof = proof.get("command_buffer_timestamp")
+    command_buffer_timestamp_available = (
+        isinstance(command_buffer_proof, Mapping)
+        and bool(command_buffer_proof.get("timestamp_available"))
+    )
+    proof_passed = bool(
+        proof.get("metal_visible")
+        and proof.get("fresh_process")
+        and (counter_discovery_available or command_buffer_timestamp_available)
+    )
     status: ProviderStatus
     if proof_passed:
         status = "native_available"
@@ -105,33 +119,73 @@ def _apple_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str,
     )
 
 
-def _rocm_status() -> dict[str, Any]:
+def _rocm_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, Any]:
     has_amdsmi = importlib.util.find_spec("amdsmi") is not None
+    proof = dict(native_proof or {})
+    proof_passed = bool(
+        proof.get("amd_gpu_visible")
+        and proof.get("rocprofiler_sdk_visible")
+        and proof.get("context_created")
+        and proof.get("tool_registered")
+        and (proof.get("hip_callback_seen") or proof.get("hsa_callback_seen"))
+        and proof.get("dispatch_activity_seen")
+    )
+    status: ProviderStatus
+    if proof_passed:
+        status = "native_available"
+    elif proof:
+        status = "native_failed"
+    else:
+        status = "planned"
+    diagnostics: dict[str, Any] = {
+        "amdsmi_python": has_amdsmi,
+        "rocprofiler_sdk": "compile-gated by TPROF_WITH_ROCPROFILER",
+        "native_proof_required": "AMD GPU plus ROCprofiler-SDK HIP/HSA dispatch proof",
+        "availability_rule": "ROCm remains planned/native_failed until ROCprofiler-SDK proof passes",
+    }
+    if proof:
+        diagnostics["native_proof"] = proof
     return provider_status_artifact(
         provider="rocm",
         target="rocm",
-        status="planned",
-        diagnostics={
-            "amdsmi_python": has_amdsmi,
-            "rocprofiler_sdk": "compile-gated by TPROF_WITH_ROCPROFILER",
-            "native_proof_required": "AMD GPU plus ROCprofiler-SDK HIP/HSA dispatch proof",
-        },
+        status=status,
+        diagnostics=diagnostics,
     )
 
 
-def _nvidia_status() -> dict[str, Any]:
+def _nvidia_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, Any]:
     nvml = ctypes.util.find_library("nvidia-ml")
     cupti = ctypes.util.find_library("cupti")
+    proof = dict(native_proof or {})
+    proof_passed = bool(
+        proof.get("nvidia_gpu_visible")
+        and proof.get("cupti_visible")
+        and proof.get("subscriber_created")
+        and proof.get("callback_seen")
+        and proof.get("activity_buffer_seen")
+        and proof.get("activity_seen")
+    )
+    status: ProviderStatus
+    if proof_passed:
+        status = "native_available"
+    elif proof:
+        status = "native_failed"
+    else:
+        status = "planned"
+    diagnostics: dict[str, Any] = {
+        "nvml_library": nvml,
+        "cupti_library": cupti,
+        "cupti": "compile-gated by TPROF_WITH_CUPTI",
+        "native_proof_required": "NVIDIA GPU plus CUPTI callback/activity proof",
+        "availability_rule": "NVIDIA remains planned/native_failed until CUPTI callback/activity proof passes",
+    }
+    if proof:
+        diagnostics["native_proof"] = proof
     return provider_status_artifact(
         provider="nvidia",
         target="nvidia",
-        status="planned",
-        diagnostics={
-            "nvml_library": nvml,
-            "cupti_library": cupti,
-            "cupti": "compile-gated by TPROF_WITH_CUPTI",
-            "native_proof_required": "NVIDIA GPU plus CUPTI callback/activity proof",
-        },
+        status=status,
+        diagnostics=diagnostics,
     )
 
 

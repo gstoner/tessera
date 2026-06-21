@@ -81,10 +81,15 @@ def run_model_analyzer_manifest(
     for status in provider_status_payloads:
         validate_provider_status_artifact(status)
     provider_summary = _summarize_provider_statuses(provider_status_payloads)
+    provider_requirements = _evaluate_provider_requirements(
+        manifest.get("provider_requirements", {}),
+        provider_status_payloads,
+    )
     bottleneck_labels = _bottleneck_labels(
         results,
         context_summary=context_summary,
         provider_summary=provider_summary,
+        provider_requirements=provider_requirements,
     )
     trace_attachments = [
         {"schema": "tessera.merged_profiler_trace.v1", "path": str(path)}
@@ -103,6 +108,7 @@ def run_model_analyzer_manifest(
         "context_summary": context_summary,
         "provider_statuses": provider_status_payloads,
         "provider_status_summary": provider_summary,
+        "provider_requirements": provider_requirements,
         "merged_traces": trace_attachments,
         "bottleneck_labels": bottleneck_labels,
         "notes": [
@@ -210,17 +216,49 @@ def _summarize_provider_statuses(statuses: Sequence[Mapping[str, Any]]) -> dict[
     }
 
 
+def _evaluate_provider_requirements(
+    requirements: Any,
+    statuses: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not isinstance(requirements, Mapping):
+        requirements = {}
+    required_providers = tuple(str(p) for p in requirements.get("providers", ()) or ())
+    required_features = tuple(str(f) for f in requirements.get("features", ()) or ())
+    status_by_provider = {
+        str(status.get("provider", "unknown")): str(status.get("status", "unknown"))
+        for status in statuses
+    }
+    unmet = []
+    for provider in required_providers:
+        status = status_by_provider.get(provider)
+        if status not in {"native_available", "mock", "file", "host_metadata_only"}:
+            unmet.append({
+                "provider": provider,
+                "status": status or "missing",
+                "reason": "required provider is not available for measured profiler analysis",
+            })
+    return {
+        "providers": list(required_providers),
+        "features": list(required_features),
+        "met": not unmet,
+        "unmet": unmet,
+    }
+
+
 def _bottleneck_labels(
     trials: Sequence[Mapping[str, Any]],
     *,
     context_summary: Mapping[str, Any] | None,
     provider_summary: Mapping[str, Any],
+    provider_requirements: Mapping[str, Any],
 ) -> list[str]:
     labels = {str(trial.get("bottleneck", "unknown")) for trial in trials}
     if context_summary and context_summary.get("dominant_bottleneck"):
         labels.add(str(context_summary["dominant_bottleneck"]))
     for provider in provider_summary.get("unavailable_or_unproven", []) or []:
         labels.add(f"{provider}_provider_unproven")
+    if not provider_requirements.get("met", True):
+        labels.add("provider_requirements_unmet")
     return sorted(label for label in labels if label and label != "unknown")
 
 

@@ -1,0 +1,127 @@
+name: Profiler Native Proofs
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["**"]
+    types: [labeled, synchronize]
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  apple-metal-proof:
+    name: profiler proof (Apple Metal optional)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'profiler-native-proof')
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build Metal profiler shell
+        run: |
+          cmake -S tools/profiler -B build/profiler-metal \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTPROF_WITH_METAL=ON
+          cmake --build build/profiler-metal --target tprof_runtime
+
+      - name: Emit Apple provider snapshot
+        env:
+          PYTHONPATH: python
+        run: |
+          python tools/profiler/scripts/tprof_apple_metal_smoke.py \
+            --allow-unavailable \
+            --prove-counters \
+            --prove-command-buffer \
+            --out profiler-provider-status-apple.json
+
+      - name: Upload Apple provider snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: profiler-provider-status-apple
+          path: profiler-provider-status-apple.json
+          if-no-files-found: error
+
+  rocm-proof:
+    name: profiler proof (ROCm optional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'profiler-native-proof')
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Configure ROCprofiler shell
+        run: |
+          cmake -S tools/profiler -B build/profiler-rocm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTPROF_WITH_ROCPROFILER=ON
+
+      - name: Emit ROCm provider snapshot
+        env:
+          PYTHONPATH: python
+        run: |
+          python tools/profiler/scripts/tprof_rocm_native_smoke.py \
+            --allow-unavailable \
+            --out profiler-provider-status-rocm.json
+
+      - name: Upload ROCm provider snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: profiler-provider-status-rocm
+          path: profiler-provider-status-rocm.json
+          if-no-files-found: error
+
+  nvidia-cupti-proof:
+    name: profiler proof (NVIDIA CUPTI optional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || contains(github.event.pull_request.labels.*.name, 'profiler-native-proof')
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Configure CUPTI shell
+        run: |
+          cmake -S tools/profiler -B build/profiler-cupti \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTPROF_WITH_CUPTI=ON
+
+      - name: Emit NVIDIA provider snapshot
+        env:
+          PYTHONPATH: python
+        run: |
+          python tools/profiler/scripts/tprof_nvidia_cupti_smoke.py \
+            --allow-unavailable \
+            --out profiler-provider-status-nvidia.json
+
+      - name: Upload NVIDIA provider snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: profiler-provider-status-nvidia
+          path: profiler-provider-status-nvidia.json
+          if-no-files-found: error

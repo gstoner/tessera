@@ -55,10 +55,67 @@ def test_apple_status_stays_shell_until_fresh_process_metal_proof() -> None:
 
     passed_proof = collect_provider_status(
         "apple",
-        native_proof={"fresh_process": True, "metal_visible": True},
+        native_proof={
+            "fresh_process": True,
+            "metal_visible": True,
+            "counter_discovery": {"counter_discovery_available": True},
+        },
     )
     assert passed_proof["status"] == "native_available"
     validate_provider_status_artifact(passed_proof)
+
+
+def test_rocm_and_nvidia_require_native_callback_activity_proof() -> None:
+    rocm_failed = collect_provider_status(
+        "rocm",
+        native_proof={
+            "fresh_process": True,
+            "amd_gpu_visible": True,
+            "rocprofiler_sdk_visible": True,
+            "context_created": True,
+            "tool_registered": True,
+        },
+    )
+    assert rocm_failed["status"] == "native_failed"
+
+    rocm_passed = collect_provider_status(
+        "rocm",
+        native_proof={
+            "fresh_process": True,
+            "amd_gpu_visible": True,
+            "rocprofiler_sdk_visible": True,
+            "context_created": True,
+            "tool_registered": True,
+            "hip_callback_seen": True,
+            "dispatch_activity_seen": True,
+        },
+    )
+    assert rocm_passed["status"] == "native_available"
+
+    nvidia_failed = collect_provider_status(
+        "nvidia",
+        native_proof={
+            "fresh_process": True,
+            "nvidia_gpu_visible": True,
+            "cupti_visible": True,
+            "subscriber_created": True,
+        },
+    )
+    assert nvidia_failed["status"] == "native_failed"
+
+    nvidia_passed = collect_provider_status(
+        "nvidia",
+        native_proof={
+            "fresh_process": True,
+            "nvidia_gpu_visible": True,
+            "cupti_visible": True,
+            "subscriber_created": True,
+            "callback_seen": True,
+            "activity_buffer_seen": True,
+            "activity_seen": True,
+        },
+    )
+    assert nvidia_passed["status"] == "native_available"
 
 
 def test_tprof_provider_status_cli_prints_json() -> None:
@@ -126,6 +183,60 @@ def test_tprof_apple_metal_smoke_counter_probe_is_ci_safe(tmp_path: Path) -> Non
     if proof.get("metal_visible"):
         assert "counter_discovery" in proof
         assert proof["counter_discovery"]["proof_api"] == "MTLDevice.counterSets"
+    validate_provider_status_artifact(payload)
+
+
+def test_tprof_apple_metal_smoke_command_buffer_probe_is_ci_safe(tmp_path: Path) -> None:
+    out = tmp_path / "apple_command_buffer_status.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_apple_metal_smoke.py"),
+            "--allow-unavailable",
+            "--prove-command-buffer",
+            "--out",
+            str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(out.read_text())
+    proof = payload["diagnostics"]["native_proof"]
+    assert "command_buffer_timestamp" in proof
+    assert proof["command_buffer_timestamp"]["proof_api"] == "tprof_metal_capture_command_buffer_timestamp"
+    validate_provider_status_artifact(payload)
+
+
+@pytest.mark.parametrize(("script", "provider"), [
+    ("tprof_rocm_native_smoke.py", "rocm"),
+    ("tprof_nvidia_cupti_smoke.py", "nvidia"),
+])
+def test_native_smoke_scripts_emit_status_snapshots_without_hardware(
+    tmp_path: Path,
+    script: str,
+    provider: str,
+) -> None:
+    out = tmp_path / f"{provider}_status.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts" / script),
+            "--allow-unavailable",
+            "--out",
+            str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["provider"] == provider
+    assert payload["status"] in {"native_failed", "native_available"}
+    assert payload["diagnostics"]["collection_blocked"] == (payload["status"] != "native_available")
+    assert "native_proof" in payload["diagnostics"]
     validate_provider_status_artifact(payload)
 
 

@@ -102,6 +102,11 @@ Model Analyzer runner and writes a result JSON with every trial, the selected
 best configuration, and runner status. Unless a future backend runner supplies
 real measurements, the default result is explicitly marked as estimated or
 planned-estimated rather than hardware-measured.
+Result artifacts can attach profiler context summaries, provider status
+snapshots, merged trace paths, and provider requirements. If a manifest requires
+an unavailable native provider feature, the result reports
+`provider_requirements.met = false` and adds `provider_requirements_unmet` to
+the bottleneck labels instead of treating mock/file data as native proof.
 
 `tessera.compiler.profiler_context` defines the portable
 `tessera.profiler_context.v1` artifact used to correlate traces with lower-rate
@@ -262,13 +267,22 @@ The staged mapping is:
   sample buffer records map to `counters` and should carry command-buffer or
   Target IR probe correlation IDs. Apple provider status remains
   `compiled_shell` until `tools/profiler/scripts/tprof_apple_metal_smoke.py`
-  proves `MTLCreateSystemDefaultDevice` in a fresh native process.
+  proves `MTLCreateSystemDefaultDevice` in a fresh native process plus
+  command-buffer timestamp or counter-set evidence.
   `--prove-counters` adds native `MTLDevice.counterSets` capability discovery
   diagnostics without collecting counters or claiming availability.
+  `--prove-command-buffer` can call a compiled tprof Metal adapter library
+  exported through `TPROF_METAL_ADAPTER_LIB` or `--adapter-library`.
 - CUPTI runtime/driver callback records map to `runtime_api`.
 - CUPTI kernel, memcpy, memset, and device activity records map to
   `device_activity`, preserving CUPTI correlation IDs so activity can be joined
   to the originating API callback.
+
+`tprof_rocm_native_smoke.py` and `tprof_nvidia_cupti_smoke.py` emit hardware
+proof snapshots without requiring CI hardware. On hosts without AMD/NVIDIA
+devices they return `native_failed` with library/device diagnostics when run
+with `--allow-unavailable`; they only promote to `native_available` once the
+required callback/activity proof fields are true.
 
 The first C++ SDK adapter shims are intentionally thin:
 

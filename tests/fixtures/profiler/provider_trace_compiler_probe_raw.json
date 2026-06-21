@@ -1,0 +1,19 @@
+[
+  {
+    "record_type": "compiler_probe",
+    "op_name": "tessera_nvidia.profiler_probe",
+    "probe_name": "matmul.mainloop",
+    "source_op": "tessera.matmul",
+    "region": "mainloop",
+    "schedule": "target_ir",
+    "metric": "elapsed_cycles",
+    "aggregation": "sample",
+    "payload_fields": ["kernel", "phase", "tile", "program_id"],
+    "backend_correlation_key": "matmul.mainloop",
+    "launch_id": "launch-nvidia-1",
+    "target": "nvidia",
+    "backend": "cuda",
+    "stream_id": 2,
+    "timestamp_us": 4.0
+  }
+]

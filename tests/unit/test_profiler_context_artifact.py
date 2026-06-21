@@ -229,6 +229,13 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
         "best": {"latency_ms": 1.0, "batch_size": 1},
         "bottleneck_labels": ["launch_bound"],
         "provider_status_summary": {"providers": {"nvidia": "planned"}},
+        "provider_requirements": {
+            "providers": ["nvidia"],
+            "features": ["runtime_api", "device_activity"],
+            "met": False,
+            "unmet": [{"provider": "nvidia", "status": "planned"}],
+        },
+        "merged_traces": [{"schema": "tessera.merged_profiler_trace.v1", "path": "merged.json"}],
     }))
 
     subprocess.run(
@@ -266,6 +273,8 @@ def test_tprof_report_writes_summary_json_with_roofline_and_status(tmp_path: Pat
     assert summary["launch_overhead"]["launches"]["launch-1"]["host_overhead_us"] == 5.0
     assert summary["model_analyzer"]["trial_count"] == 2
     assert summary["model_analyzer"]["bottleneck_labels"] == ["launch_bound"]
+    assert summary["model_analyzer"]["provider_requirements"]["met"] is False
+    assert summary["model_analyzer"]["merged_traces"][0]["path"] == "merged.json"
 
 
 def test_context_golden_fixture_validates() -> None:

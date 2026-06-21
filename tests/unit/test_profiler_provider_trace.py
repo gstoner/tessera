@@ -10,6 +10,7 @@ from tessera.compiler.profiler_provider_trace import (
     build_provider_trace_artifact,
     normalize_cupti_activity_record,
     normalize_cupti_callback_record,
+    normalize_compiler_probe_record,
     normalize_metal_command_buffer_record,
     normalize_metal_counter_record,
     normalize_rocprofiler_activity_record,
@@ -208,6 +209,84 @@ def test_cupti_callback_and_activity_share_correlation_id() -> None:
     assert artifact["traceEvents"][0]["args"]["callback_id"] == 211
     assert artifact["traceEvents"][0]["args"]["context_id"] == 3
     assert artifact["traceEvents"][1]["args"]["activity_buffer_id"] == "buf0"
+
+
+def test_cupti_fixture_replays_callback_activity_and_memcpy(tmp_path: Path) -> None:
+    out = tmp_path / "cupti_provider.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "cupti",
+            "--input",
+            str(FIXTURES / "provider_trace_cupti_raw.json"),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["summary"]["kinds"] == {
+        "device_activity": 2,
+        "runtime_api": 1,
+    }
+    assert payload["summary"]["correlation_count"] == 2
+    assert payload["summary"]["launch_count"] == 1
+    assert payload["summary"]["probe_count"] == 1
+    assert payload["traceEvents"][0]["args"]["callback_id"] == 211
+    assert payload["traceEvents"][1]["args"]["activity_buffer_id"] == "buf0"
+    assert payload["traceEvents"][2]["args"]["activity"] == "memcpy"
+
+
+def test_compiler_probe_record_normalizes_to_intra_kernel_marker() -> None:
+    record = normalize_compiler_probe_record("cupti", {
+        "record_type": "compiler_probe",
+        "probe_name": "matmul.mainloop",
+        "source_op": "tessera.matmul",
+        "region": "mainloop",
+        "schedule": "target_ir",
+        "metric": "elapsed_cycles",
+        "launch_id": "launch-1",
+        "target": "nvidia",
+        "backend": "cuda",
+        "timestamp_us": 4,
+    })
+    event = record.to_trace_event()
+    assert event["cat"] == "intra_kernel"
+    assert event["args"]["probe_name"] == "matmul.mainloop"
+    assert event["args"]["backend_correlation_key"] == "matmul.mainloop"
+    assert event["args"]["source_op"] == "tessera.matmul"
+    assert event["args"]["record_source"] == "compiler_probe"
+
+
+def test_provider_trace_cli_replays_compiler_probe_fixture(tmp_path: Path) -> None:
+    out = tmp_path / "compiler_probe_provider.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/profiler/scripts/tprof_provider_trace.py"),
+            "--provider",
+            "cupti",
+            "--input",
+            str(FIXTURES / "provider_trace_compiler_probe_raw.json"),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    payload = json.loads(out.read_text())
+    assert payload["summary"]["kinds"] == {"intra_kernel": 1}
+    assert payload["summary"]["launch_count"] == 1
+    assert payload["summary"]["probe_count"] == 1
+    event = payload["traceEvents"][0]
+    assert event["cat"] == "intra_kernel"
+    assert event["args"]["target"] == "nvidia"
+    assert event["args"]["backend"] == "cuda"
 
 
 def test_tprof_provider_trace_cli_writes_artifact_and_trace_json(tmp_path: Path) -> None:

@@ -102,3 +102,27 @@ def test_model_analyzer_runner_attaches_profiler_status_and_merged_traces(tmp_pa
     assert result["merged_traces"][0]["path"] == str(trace_path)
     assert "fallback_bound" in result["bottleneck_labels"]
     assert "apple_provider_unproven" in result["bottleneck_labels"]
+
+
+def test_model_analyzer_reports_unmet_provider_requirements():
+    manifest = {
+        **_manifest(),
+        "provider_requirements": {
+            "providers": ["nvidia"],
+            "features": ["runtime_api", "device_activity", "counters"],
+        },
+    }
+    status = {
+        "schema": "tessera.profiler_provider_status.v1",
+        "provider": "nvidia",
+        "target": "nvidia",
+        "status": "planned",
+        "diagnostics": {"native_proof_required": "CUPTI callback/activity proof"},
+    }
+
+    result = run_model_analyzer_manifest(manifest, provider_statuses=(status,))
+
+    assert result["provider_requirements"]["met"] is False
+    assert result["provider_requirements"]["unmet"][0]["provider"] == "nvidia"
+    assert result["provider_requirements"]["unmet"][0]["status"] == "planned"
+    assert "provider_requirements_unmet" in result["bottleneck_labels"]

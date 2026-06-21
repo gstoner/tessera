@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import ctypes.util
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -106,7 +107,56 @@ def _prove_counter_discovery(device: int | None) -> dict[str, Any]:
     return proof
 
 
-def _prove_metal_visibility(*, prove_counters: bool = False) -> dict[str, Any]:
+def _prove_command_buffer_timestamp(adapter_library: str | None) -> dict[str, Any]:
+    proof: dict[str, Any] = {
+        "proof_api": "tprof_metal_capture_command_buffer_timestamp",
+        "adapter_library": adapter_library,
+        "timestamp_available": False,
+    }
+    if not adapter_library:
+        proof["error_type"] = "AdapterLibraryMissing"
+        proof["error"] = "pass --adapter-library or set TPROF_METAL_ADAPTER_LIB"
+        return proof
+    try:
+        lib = ctypes.CDLL(adapter_library)
+        capture = lib.tprof_metal_capture_command_buffer_timestamp
+        capture.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
+        capture.restype = ctypes.c_bool
+        start = ctypes.c_double(0.0)
+        end = ctypes.c_double(0.0)
+        error = ctypes.c_char_p()
+        ok = capture(
+            b"tessera.profiler.apple.smoke",
+            ctypes.c_uint64(1),
+            ctypes.byref(start),
+            ctypes.byref(end),
+            ctypes.byref(error),
+        )
+        proof["timestamp_available"] = bool(ok and end.value >= start.value)
+        proof["start_us"] = start.value
+        proof["end_us"] = end.value
+        if error.value:
+            proof["error"] = error.value.decode("utf-8")
+        if not proof["timestamp_available"] and "error" not in proof:
+            proof["error"] = "timestamp capture returned false"
+    except Exception as exc:  # pragma: no cover - platform/build dependent
+        proof["error_type"] = type(exc).__name__
+        proof["error"] = str(exc)
+    return proof
+
+
+def _prove_metal_visibility(
+    *,
+    prove_counters: bool = False,
+    prove_command_buffer: bool = False,
+    adapter_library: str | None = None,
+) -> dict[str, Any]:
     proof: dict[str, Any] = {
         "fresh_process": True,
         "platform": platform.platform(),
@@ -143,6 +193,8 @@ def _prove_metal_visibility(*, prove_counters: bool = False) -> dict[str, Any]:
         proof["error"] = "MTLCreateSystemDefaultDevice returned nil"
     if prove_counters:
         proof["counter_discovery"] = _prove_counter_discovery(device)
+    if prove_command_buffer:
+        proof["command_buffer_timestamp"] = _prove_command_buffer_timestamp(adapter_library)
     return proof
 
 
@@ -165,9 +217,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also probe MTLDevice.counterSets discovery without collecting counters.",
     )
+    parser.add_argument(
+        "--prove-command-buffer",
+        action="store_true",
+        help="Also call the compiled Metal command-buffer timestamp probe from a tprof runtime library.",
+    )
+    parser.add_argument(
+        "--adapter-library",
+        default=None,
+        help="Shared library exporting tprof_metal_capture_command_buffer_timestamp. Defaults to TPROF_METAL_ADAPTER_LIB.",
+    )
     args = parser.parse_args(argv)
 
-    proof = _prove_metal_visibility(prove_counters=args.prove_counters)
+    proof = _prove_metal_visibility(
+        prove_counters=args.prove_counters,
+        prove_command_buffer=args.prove_command_buffer,
+        adapter_library=args.adapter_library or os.environ.get("TPROF_METAL_ADAPTER_LIB"),
+    )
     status = collect_provider_status("apple", native_proof=proof)
     status["diagnostics"]["smoke_script"] = "tprof-apple-metal-smoke"
     status["diagnostics"]["collection_blocked"] = not bool(proof.get("metal_visible"))

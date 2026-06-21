@@ -286,6 +286,8 @@ def _model_analyzer_summary(payload):
         "best": best,
         "bottleneck_labels": payload.get("bottleneck_labels", []),
         "provider_status_summary": payload.get("provider_status_summary", {}),
+        "provider_requirements": payload.get("provider_requirements", {}),
+        "merged_traces": payload.get("merged_traces", []),
     }
 
 

@@ -258,6 +258,43 @@ def normalize_rocprofiler_thread_trace_record(raw: Mapping[str, Any]) -> Provide
     )
 
 
+def normalize_compiler_probe_record(provider: Provider, raw: Mapping[str, Any]) -> ProviderTraceRecord:
+    probe_name = str(_first(raw, "probe_name", "probe", "backend_correlation_key", default="compiler.probe"))
+    target = _first(raw, "target", default=None)
+    backend_default = {
+        "cupti": "cuda",
+        "metal": "metal",
+        "rocprofiler": "rocm",
+    }[provider]
+    args = {
+        "probe_name": probe_name,
+        "source_op": _first(raw, "source_op", default=None),
+        "region": _first(raw, "region", default=None),
+        "schedule": _first(raw, "schedule", default=None),
+        "metric": _first(raw, "metric", default=None),
+        "aggregation": _first(raw, "aggregation", default=None),
+        "payload_fields": _first(raw, "payload_fields", default=None),
+        "backend_correlation_key": _first(raw, "backend_correlation_key", default=probe_name),
+        "launch_id": _first(raw, "launch_id", default=None),
+        "target": target,
+        "backend": _first(raw, "backend", default=backend_default),
+        "stream_or_queue": _first(raw, "stream_or_queue", "stream_id", "queue_id", default=None),
+        "fallback_reason": _first(raw, "fallback_reason", default=None),
+        "record_source": _first(raw, "record_source", default="compiler_probe"),
+        "dropped_records": _first(raw, "dropped_records", default=None),
+    }
+    return ProviderTraceRecord(
+        provider=provider,
+        kind="intra_kernel",
+        name=str(_first(raw, "name", "op_name", default=probe_name)),
+        ts_us=_time_us(raw),
+        duration_us=_duration_us(raw),
+        correlation_id=_first(raw, "correlation_id", "launch_id", default=None),
+        thread_id=_first(raw, "thread_id", "tid", "stream_id", "queue_id", default=0),
+        args={k: v for k, v in args.items() if v is not None},
+    )
+
+
 def normalize_metal_command_buffer_record(raw: Mapping[str, Any]) -> ProviderTraceRecord:
     args = {
         "command_buffer": _first(raw, "command_buffer", "command_buffer_id", default=None),
@@ -455,6 +492,8 @@ def _coerce_record(provider: Provider | None, raw: ProviderTraceRecord | Mapping
             args=dict(raw.get("args") or {}),
         )
     record_type = str(_first(raw, "record_type", "kind", "type", "activity", default="")).lower()
+    if "probe" in record_type or str(raw.get("op_name", "")).endswith("profiler_probe"):
+        return normalize_compiler_probe_record(raw_provider, raw)
     if raw_provider == "rocprofiler":
         if "thread" in record_type:
             return normalize_rocprofiler_thread_trace_record(raw)
@@ -534,6 +573,7 @@ __all__ = [
     "normalize_cupti_callback_record",
     "normalize_metal_command_buffer_record",
     "normalize_metal_counter_record",
+    "normalize_compiler_probe_record",
     "normalize_rocprofiler_activity_record",
     "normalize_rocprofiler_api_record",
     "normalize_rocprofiler_counter_record",

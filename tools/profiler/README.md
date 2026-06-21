@@ -25,6 +25,9 @@ Features:
 - `tprof-apple-metal-smoke` for the macOS fresh-process Metal visibility proof
   that gates Apple provider promotion from `compiled_shell` to
   `native_available`.
+- `tprof-rocm-native-smoke` and `tprof-nvidia-cupti-smoke` for optional native
+  proof snapshots that degrade to diagnostics on hosts without AMD/NVIDIA
+  hardware.
 - Report summary JSON export for machine-readable hot-op, roofline,
   provider-status, context, and dropped-record summaries.
 
@@ -309,9 +312,19 @@ shell and emits a configure-time warning.
 finder. `TPROF_WITH_METAL=ON` is macOS-only and builds a tiny Objective-C++
 Metal framework compile probe plus a command-buffer timestamp capture helper.
 It still reports a shell until `tprof-apple-metal-smoke` proves Metal visibility
-in a fresh native process. Captured Metal command-buffer spans normalize to
-`device_activity` in `tessera.profiler_provider_trace.v1`; committed fixtures
-exercise the same path through `tprof_provider_trace.py`.
+in a fresh native process plus command-buffer timestamp or counter-set evidence.
+`--prove-command-buffer` calls a compiled tprof Metal adapter library when
+`TPROF_METAL_ADAPTER_LIB` or `--adapter-library` is set. Captured Metal
+command-buffer spans normalize to `device_activity` in
+`tessera.profiler_provider_trace.v1`; committed fixtures exercise the same path
+through `tprof_provider_trace.py`.
+
+`tools/profiler/scripts/tprof_rocm_native_smoke.py` and
+`tools/profiler/scripts/tprof_nvidia_cupti_smoke.py` emit provider-status
+snapshots for optional hardware jobs. Without AMD/NVIDIA hardware they return
+`native_failed` diagnostics under `--allow-unavailable`; they only report
+`native_available` after the callback/activity proof fields required by
+`docs/guides/Tessera_Profiler_Release_Gates.md` are true.
 
 Merged traces validate timestamps strictly. A non-numeric Trace Event `ts` is
 reported as malformed input instead of being sorted as zero.
@@ -373,7 +386,10 @@ artifacts. `tessera.compiler.model_analyzer.run_model_analyzer_manifest(...)`
 executes that search contract as a local result artifact; default trials are
 estimated/planned-estimated unless a backend runner supplies real measurements.
 It can also attach a `tessera.profiler_context.v1` summary so trial results can
-carry bottleneck context without claiming native collector availability.
+carry bottleneck context without claiming native collector availability. When a
+manifest declares `provider_requirements`, unmet native providers appear in the
+result artifact under `provider_requirements.unmet` and as the
+`provider_requirements_unmet` bottleneck label.
 The CLI can write both files directly:
 
 ```bash

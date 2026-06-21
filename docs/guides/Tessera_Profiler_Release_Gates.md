@@ -50,6 +50,19 @@ The snapshot must include provider, target, status, diagnostics, SDK/driver
 versions when known, permission status when applicable, and dropped-record
 counts when collection buffers are involved.
 
+The optional `.github/workflows/profiler-native-proofs.yml` workflow is the
+current proof scaffold. It is manual or label-gated and uploads one provider
+status artifact per backend:
+
+- `profiler-provider-status-apple` from `tprof_apple_metal_smoke.py`.
+- `profiler-provider-status-rocm` from `tprof_rocm_native_smoke.py`.
+- `profiler-provider-status-nvidia` from `tprof_nvidia_cupti_smoke.py`.
+
+The ROCm and NVIDIA smoke scripts are safe on hosts without AMD/NVIDIA
+hardware: they report `native_failed` diagnostics rather than promoting
+availability. Apple remains `compiled_shell` until a fresh process proves Metal
+visibility plus command-buffer timestamp or counter-set evidence.
+
 ## Claim Lint
 
 Documentation, reports, and generated status tables must keep native provider

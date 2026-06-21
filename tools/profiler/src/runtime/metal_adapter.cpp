@@ -34,7 +34,7 @@ bool metal_adapter_init(const metal_adapter_config_t& cfg) {
   g_metal_paused.store(cfg.start_paused);
 #if defined(TPROF_WITH_METAL) && defined(__APPLE__)
   g_metal_initialized.store(true);
-  g_metal_last_error = "compiled Metal shell; native command-buffer attachment pending";
+  g_metal_last_error = "compiled Metal timestamp/counter-discovery shell; hardware proof required for native_available";
   return true;
 #else
   g_metal_initialized.store(false);

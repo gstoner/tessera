@@ -1,0 +1,49 @@
+[
+  {
+    "record_type": "callback",
+    "domain": "runtime",
+    "name": "cudaLaunchKernel",
+    "start_ns": 1000,
+    "end_ns": 3000,
+    "correlationId": "cuda-1",
+    "cbid": 211,
+    "contextId": 3,
+    "deviceId": 0,
+    "launch_id": "launch-nvidia-1",
+    "target": "nvidia",
+    "backend": "cuda"
+  },
+  {
+    "record_type": "activity",
+    "activity": "kernel",
+    "kernel_name": "cuda.matmul",
+    "start_ns": 4000,
+    "end_ns": 12000,
+    "correlationId": "cuda-1",
+    "streamId": 2,
+    "contextId": 3,
+    "deviceId": 0,
+    "activity_buffer_id": "buf0",
+    "activity_buffer_bytes": 4096,
+    "launch_id": "launch-nvidia-1",
+    "probe_name": "matmul.mainloop",
+    "target": "nvidia",
+    "backend": "cuda",
+    "bytes": 8192
+  },
+  {
+    "record_type": "activity",
+    "activity": "memcpy",
+    "name": "cuda.memcpy.h2d",
+    "start_ns": 13000,
+    "end_ns": 16000,
+    "correlationId": "cuda-copy-1",
+    "streamId": 2,
+    "deviceId": 0,
+    "activity_buffer_id": "buf0",
+    "activity_buffer_bytes": 4096,
+    "target": "nvidia",
+    "backend": "cuda",
+    "bytes": 4096
+  }
+]

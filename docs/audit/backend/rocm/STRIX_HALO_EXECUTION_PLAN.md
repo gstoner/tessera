@@ -79,9 +79,36 @@ On the box this now runs for real (not skip-clean):
   the rung-3 tests run by default on the box. `tests/unit/test_rocdl_emit.py`:
   **96 passed, 0 skipped.**
 
-Remaining toward a runnable kernel: **Stage C** (register a HIP launcher into
-`tsrRegisterGpuLauncher`, load the object / HIPRTC, `hipModuleLaunchKernel`) then
-**Stage D** (execute-and-compare vs numpy → first non-Apple `backend_kernel`).
+### Stage C — DONE: first non-Apple kernel through the C-ABI launch bridge (2026-06-22)
+
+A real GPU kernel now **executes on the gfx1100 device through Tessera's C-ABI
+launch bridge** — the first non-Apple backend to do so. Mirrors the Apple G7
+proof (`test_runtime_abi_gpu_launch_bridge.py`): a hipcc-compiled harness
+registers a `tsrGpuLauncherFn` for `(target="rocm", "tessera_rocm_gemm_f32")`
+that runs a real `__global__` GEMM (hipMalloc / H2D / launch / sync / D2H) over
+the params' buffers + dims; it compiles a `rocm` artifact, launches via
+`tsrLaunchKernel`, and **verifies the GPU output equals `A @ B`**. An
+unregistered kernel name still returns `UNIMPLEMENTED` (the bridge never
+silently succeeds). Test: `tests/unit/test_runtime_abi_rocm_launch_bridge.py`.
+
+Two real fixes landed with it:
+- **Runtime CMake HIP-include bug:** with `-DTESSERA_ENABLE_HIP=ON`,
+  `hip_backend.cpp` was compiled without the HIP include path
+  (`fatal error: hip/hip_runtime.h`). `tessera_runtime` now links `hip::host`
+  (or falls back to `$ROCM_PATH/include`) — `libtessera_runtime.a` builds with
+  HIP enabled.
+- **WSL device-enumeration quirk:** `hipGetDeviceCount` reports **0** under WSL
+  even though kernels launch and compute correctly. The harness gates on a real
+  HIP probe (malloc + sync round-trip), not the device count, and skip-cleans
+  (`SKIP_NO_DEVICE`) when no usable GPU is present.
+
+**Honesty ceiling.** Stage C proves the *launch bridge + execution mechanics*
+with a correct (naive) GEMM kernel compiled by hipcc. It does **not** yet route
+the Stage A/B **WMMA** kernel, nor is the launcher auto-registered by a shipped
+ROCm runtime lib (it lives in the test harness, exactly as the Apple G7 proof
+does). **Stage D** is next: execute-and-compare the **WMMA** GEMM (bring up
+`fp32←f16` / `f16←f16` before bf16) vs a numpy oracle → flip `backend_kernel`
+for `tessera.matmul` on `rocm_gfx1151`/`gfx1100` to a real-execution status.
 
 ## The hardware — three engines, three Tessera stories
 

@@ -46,33 +46,41 @@ apt.llvm.org `llc`. `test_rocdl_emit.py`: 96 passed, 0 skipped. **Note:** the ML
 `--tessera-emit-rocdl` pipeline aborts here (`tessera-to-linalg` pass unregistered
 in `tessera-opt`) — a separate follow-up; Stage B rides the direct LLVM-IR emitter.
 
+**Stage C verified on the box (2026-06-22):** a real GEMM kernel **executes on
+the gfx1100 device through the C-ABI launch bridge** (`tsrLaunchKernel` →
+registered `tsrGpuLauncherFn` → HIP launch) and matches `A @ B`; unregistered
+kernels still report `UNIMPLEMENTED`. First non-Apple kernel through the bridge.
+Mirrors the Apple G7 proof; test `test_runtime_abi_rocm_launch_bridge.py`. Fixed
+the runtime CMake HIP-include bug (`tessera_runtime` now links `hip::host`) and
+handled the WSL `hipGetDeviceCount==0` quirk (probe-based skip).
+
 ## Still Open
 
-- No ROCm execution row exists in `../../generated/runtime_execution_matrix.md`.
-- ROCm rows remain artifact-only or planned until real hardware execution is
-  proven.
-- **Stage C — HIP launch bridge:** the standalone `tessera_rocm_runtime`
-  (`runtime/hip/loader.cpp`) has real `hipModuleLaunchKernel` (behind
-  `TESSERA_HAS_HIP`) but is **not** registered into the core C-ABI hook
-  `tsrRegisterGpuLauncher`, and there is no HIPRTC path (loads prebuilt hsaco).
-- **Stage D — execute-and-compare** WMMA GEMM vs numpy oracle, then flip
-  `backend_kernel` for `tessera.matmul` on `rocm_gfx1100`/`gfx1151`.
+- No ROCm execution row exists in `../../generated/runtime_execution_matrix.md`
+  yet (the Stage C launcher lives in the test harness, like Apple G7 — a shipped
+  auto-registered ROCm runtime launcher is the follow-up before a matrix row).
+- ROCm `backend_kernel` rows remain artifact-only until the **WMMA** op itself
+  executes-and-compares (Stage D) — Stage C proved the bridge with a naive GEMM.
+- **Stage D — execute-and-compare** the WMMA GEMM vs numpy oracle (bring up
+  `fp32←f16`/`f16←f16` before bf16), then flip `backend_kernel` for
+  `tessera.matmul` on `rocm_gfx1151`/`gfx1100`.
 
 ## Next Work
 
 1. ✅ **Stage B — assemble (2026-06-22):** `rocdl_emit.py` emits the WMMA GEMM
    LLVM IR and `llc -mcpu=gfx1100` lowers it to real `v_wmma_*` AMDGCN + an
    AMD GPU ELF object; verified on the box, gfx1100 + gfx1151.
-2. **Stage C — launch:** register a HIP launcher into `tsrRegisterGpuLauncher`
-   (landed G7 2026-06-10 — see `backend/BACKEND_AUDIT.md`); load the Stage B
-   object (or HIPRTC) and `hipModuleLaunchKernel` the gfx1100 WMMA kernel. Add
-   runtime ABI + hardware-smoke tests. The `runtime/hip/loader.cpp` launch glue
-   exists but is not registered into the core C-ABI bridge.
-3. **Stage D — prove:** execute-and-compare oracle tests (bring up
-   `fp32←f16`/`f16←f16` WMMA before bf16 per the documented gfx115x bf16 bugs).
-4. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
+2. ✅ **Stage C — launch (2026-06-22):** a GEMM executes through the C-ABI
+   bridge on gfx1100 and matches `A @ B`; runtime HIP build fixed.
+3. **Stage D — prove:** route the Stage A/B **WMMA** GEMM through the Stage C
+   bridge and execute-and-compare vs a numpy oracle (bring up `fp32←f16`/
+   `f16←f16` before bf16 per the documented gfx115x bf16 bugs), then flip
+   `backend_kernel` for `tessera.matmul`.
+4. Ship an auto-registered ROCm runtime launcher (move the harness launcher into
+   a backend lib) so a `runtime_execution_matrix` ROCm row can land.
+5. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
    `--tessera-emit-rocdl` route works (Stage B currently rides the direct emitter).
-5. Promote manifest rows only after generated dashboards agree.
+6. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated
 

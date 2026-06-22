@@ -69,8 +69,13 @@ def test_nvidia_unsupported_launch_names_toolchain_gate():
 
 
 def test_rocm_unsupported_launch_names_toolchain_gate():
+    # Canonical (toolchain-not-assumed) contract — deterministic so it holds on
+    # both the Apple dev box and the Ubuntu ROCm 7.2.4 box (where hipcc is
+    # live-present, so the live named blocker is instead `link`).
+    from tessera.compiler import pipeline_gates as pg
     art = _unsupported_artifact("rocm", "matmul")
-    result = launch(art, args={})
+    with pg.deterministic_host_for_dashboard():
+        result = launch(art, args={})
     assert result["ok"] is False
     assert result["first_failing_gate"] == "toolchain", result
     assert "hipcc" in result["first_failing_gate_detail"]

@@ -3,8 +3,8 @@
 //
 // Sprint H-4 (2026-05-11) — AMD CDNA 3 MFMA matmul (bf16 storage, fp32
 // accumulator).  Validates the canonical (M=32, N=32, K=8, K_blocks=1)
-// shape emitted by Tessera's MFMA lowering pass under ROCm 7.2.3 + HIP
-// 7.2.3 for gfx942 (MI300X).
+// shape emitted by Tessera's MFMA lowering pass under ROCm 7.2.4 + HIP
+// 7.2.4 for gfx942 (MI300X).
 
 module attributes {tessera.target = "rocm_gfx942"} {
   func.func @mfma_matmul_bf16(

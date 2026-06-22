@@ -82,7 +82,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
-| `compiler/gpu_target.py` / `rocm_target.py` / `tpu_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.2 U1; AMD pinned ROCm 7.2.3; TPU MXU tile 128. |
+| `compiler/gpu_target.py` / `rocm_target.py` / `tpu_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.2 U1; AMD pinned ROCm 7.2.4; TPU MXU tile 128. |
 | `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
@@ -260,6 +260,19 @@ with `python3 -m …` — no venv. `numpy`, `scipy`, `torch`, `transformers`,
 
 When pointing CMake at LLVM, use `/opt/homebrew/opt/llvm/lib/cmake/{llvm,mlir}`
 (NOT the older `llvm@21` path that stale `build/` caches reference).
+
+### Ubuntu 24.04 (x86 + AMD ROCm 7.2.4)
+
+The same tree builds on Ubuntu 24.04. `bash scripts/setup_ubuntu.sh` provisions
+LLVM/MLIR 22 from **apt.llvm.org** (ROCm's bundled LLVM has no MLIR), the base
+build deps, and a project-local `.venv` — then `source .venv/bin/activate` and
+`export PYTHONPATH=python`. CMake LLVM lives at `/usr/lib/llvm-22/lib/cmake/
+{llvm,mlir}`; ROCm **7.2.4** at `/opt/rocm` (`-DTESSERA_ENABLE_HIP=ON
+-DTESSERA_BUILD_ROCM_BACKEND=ON -DCMAKE_PREFIX_PATH=/opt/rocm`). ROCm kernel
+execution stays hardware-gated (Phase H) until a GPU + `/dev/kfd` are present;
+the build and lit fixtures need no GPU. The venv caps `numpy<2.2` (numpy ≥2.2
+stubs break the `python_version=3.10` mypy ratchet). See `docs/GETTING_STARTED.md`
+for the full cross-platform matrix.
 
 ---
 

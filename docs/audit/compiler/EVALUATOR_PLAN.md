@@ -65,7 +65,7 @@ the highest honest rung reached.
 | Rung | Claim | Hardware? | Apple | NVIDIA | ROCm |
 |---|---|---|---|---|---|
 | 1 `artifact_only` | IR emitted | no | ✅ | ✅ **(here today)** | ✅ **(here today)** |
-| 2 `lowers_clean` | backend pipeline lowers the *generated* program and the Target IR **passes the MLIR verifier** with no unsupported-diagnostic; WGMMA/TMA/MFMA descriptors valid per the CUDA-13.2 / ROCm-7.2.3 inventories | no (needs `tessera-opt`) | ✅ | gap² | gap² |
+| 2 `lowers_clean` | backend pipeline lowers the *generated* program and the Target IR **passes the MLIR verifier** with no unsupported-diagnostic; WGMMA/TMA/MFMA descriptors valid per the CUDA-13.2 / ROCm-7.2.4 inventories | no (needs `tessera-opt`) | ✅ | gap² | gap² |
 | 2.5 `emits_asm_text` | the backend emits **actual PTX / AMDGCN assembler text** (today it stops at Target IR MLIR — `tessera_nvidia.*` / `tessera_rocm.mfma` / `tessera.tile.wgmma`) | no | n/a¹ | **MISSING — prerequisite for rung 3** | **MISSING** |
 | 3 `assembles` | emitted PTX/AMDGCN **actually assembles** (`ptxas -arch=sm_90a` / `hipcc`+`llvm-mc`) — catches register/shared-mem overflow, illegal wgmma/tma encodings, arch mismatch | **no** (toolchain only) | n/a¹ | blocked on 2.5 | blocked on 2.5 |
 | 4 `codegen_stable` | same IR at two opt levels → structurally-equivalent SASS/AMDGCN (kernel count, descriptor count, no dropped fusion) | **no** | ✅ (also runtime checksum) | blocked on 2.5 | blocked on 2.5 |

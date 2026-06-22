@@ -5,17 +5,17 @@ authority: Companion to Phase H ROCm backend pre-work
 last_updated: 2026-05-11
 ---
 
-# ROCm 7.2.3 MFMA Kernel Inventory
+# ROCm 7.2.4 MFMA Kernel Inventory
 
 > Hardware-free reference enumerating every fused kernel Tessera plans
-> to ship on AMD CDNA 3 / CDNA 4 / RDNA 3 / RDNA 4 under ROCm 7.2.3 + HIP 7.2.3.
+> to ship on AMD CDNA 3 / CDNA 4 / RDNA 3 / RDNA 4 under ROCm 7.2.4 + HIP 7.2.4.
 > Companion to `docs/nvidia_cuda13_kernel_inventory.md` (parallel
 > coverage tracking) and `docs/apple_gpu_kernel_inventory.md`.
 
 This document is the **authoritative kernel inventory** for the
 ROCm backend. It captures:
 
-1. The **toolchain pin** — ROCm 7.2.3 + HIP 7.2.3 (RCCL 2.22,
+1. The **toolchain pin** — ROCm 7.2.4 + HIP 7.2.4 (RCCL 2.22,
    rocBLAS 5.0, MIOpen 3.5).
 2. The **shipped + planned fused kernel surface** across CDNA 2
    (gfx90a / MI250), CDNA 3 (gfx940 / MI300A, gfx942 / MI300X),
@@ -33,9 +33,9 @@ ROCm backend. It captures:
 
 | Pin | Value |
 |---|---|
-| ROCm | **7.2.3** |
-| HIP | **7.2.3** |
-| RCCL | **2.22** (bundled with ROCm 7.2.3) |
+| ROCm | **7.2.4** |
+| HIP | **7.2.4** |
+| RCCL | **2.22** (bundled with ROCm 7.2.4) |
 | rocBLAS | **≥ 5.0.0** |
 | MIOpen | **≥ 3.5.0** |
 | hipcc arch strings | `gfx90a`, `gfx940`, `gfx942`, `gfx950`, `gfx1100`, `gfx1200` |
@@ -302,14 +302,14 @@ GFX12 scalar prefetch / load notes tracked for future scheduler work:
 | Gate | What it means | When it lifts |
 |---|---|---|
 | `artifact_only` (current state) | Target IR + AMDGCN intrinsic text are well-formed; lit fixtures pass FileCheck; no execution | now |
-| `compileable` | `hipcc -S --offload-arch=gfx942` accepts the kernel; produces a valid hsaco; **without execution** | once ROCm 7.2.3 is installed on the dev box (no GPU needed) |
+| `compileable` | `hipcc -S --offload-arch=gfx942` accepts the kernel; produces a valid hsaco; **without execution** | once ROCm 7.2.4 is installed on the dev box (no GPU needed) |
 | `executable` | The hsaco loads on a real MI300X / MI325X and produces correct output vs CPU reference | requires MI300A/X or MI325X hardware |
 | `fused` | Performance characterized; hits the MFU targets in §5 | requires hardware + perf tuning sprint |
 
 Today the ROCm backend sits at `artifact_only` across every entry.
 Sprint H-4 lit fixtures validate the IR + MFMA patterns hardware-free.
 Sprint H-6/H-7/H-8 will promote entries to `compileable` once
-`hipcc 7.2.3` runs the compile-only validation.
+`hipcc 7.2.4` runs the compile-only validation.
 
 ---
 

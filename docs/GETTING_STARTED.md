@@ -19,7 +19,7 @@ in five minutes.
 - pip
 
 GPU artifact validation is pinned to CUDA 13.3 for NVIDIA and ROCm
-7.2.3 for AMD. Native GPU execution is hardware-gated by target; all examples
+7.2.4 for AMD. Native GPU execution is hardware-gated by target; all examples
 here run on CPU so no accelerator is needed to start.
 
 ---
@@ -38,6 +38,64 @@ Verify the install:
 import tessera
 print(tessera.__version__)
 ```
+
+> Note: `.[dev]` pulls `torch`/`transformers` as *reference* test vocabularies
+> (Decision #23 — Tessera imports neither at runtime). For a lean environment,
+> install only `numpy scipy ml_dtypes pyyaml click rich tqdm` plus the dev tools
+> (`pytest mypy ruff lit`), as the platform setup paths below do.
+
+---
+
+## Developer Environment & Building the Compiler
+
+Tessera builds on **macOS (Apple backend)** and **Ubuntu 24.04 (x86/ROCm
+backend)** from one source tree. The Python flow needs only the lean deps above;
+the C++ compiler (`tessera-opt` and friends) additionally needs **LLVM/MLIR 22**.
+
+### macOS (Homebrew) — Apple backend
+
+LLVM/MLIR 22, ninja, cmake, and the Python tooling come from Homebrew (no venv):
+
+```bash
+brew install llvm ninja cmake        # LLVM/MLIR 22.x
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
+  -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
+ninja -C build tessera-opt
+```
+
+### Ubuntu 24.04 — x86 + AMD ROCm 7.2.4 backend
+
+One script provisions LLVM/MLIR 22 (from apt.llvm.org — ROCm's bundled LLVM has
+no MLIR), the base build deps, and a project-local `.venv`. It needs `sudo` for
+the apt steps and is idempotent:
+
+```bash
+bash scripts/setup_ubuntu.sh
+source .venv/bin/activate
+```
+
+Then configure + build the compiler with the ROCm Target IR backend (ROCm
+**7.2.4** at `/opt/rocm`; kernel execution is hardware-gated on a GPU + `kfd`
+driver, Phase H — the build itself needs no GPU):
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
+  -DTESSERA_ENABLE_HIP=ON \
+  -DTESSERA_BUILD_ROCM_BACKEND=ON \
+  -DCMAKE_PREFIX_PATH=/opt/rocm
+ninja -C build tessera-opt
+```
+
+For a CPU-only Linux build (no ROCm), drop the last three flags and add
+`-DTESSERA_CPU_ONLY=ON`.
+
+> The Ubuntu venv caps `numpy<2.2`: numpy ≥2.2 ships PEP 695 `type` statements +
+> stricter reduction overloads in its bundled stubs that break the mypy ratchet
+> under the project's `python_version=3.10` type-check target.
 
 ---
 

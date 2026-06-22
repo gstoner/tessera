@@ -372,7 +372,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "cp_async_bulk", "async_proxy_fence", "cuda_13_2_u1",
         ),
     ),
-    # Sprint H-1 (2026-05-11): ROCm 7.2.3 capability matrix.  Per-arch
+    # Sprint H-1 (2026-05-11): ROCm 7.2.4 capability matrix.  Per-arch
     # entries replace the single "rocm" alias; the legacy "rocm" name
     # routes to gfx942 (MI300X) as the canonical default.  Each entry's
     # `features` reflects `rocm_feature_set(arch)` from `rocm_target.py`.
@@ -384,7 +384,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         default_runtime_status="artifact_only",
         # Sprint H-3 (2026-05-11): full planned kernel set from
         # `docs/rocm_mfma_kernel_inventory.md`.
-        supported_ops=_ops("artifact_only", _ROCM_ARTIFACT, reason="ROCm 7.2.3 MFMA artifact exists; HIP execution remains gated"),
+        supported_ops=_ops("artifact_only", _ROCM_ARTIFACT, reason="ROCm 7.2.4 MFMA artifact exists; HIP execution remains gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(
             "mfma", "mfma_f8", "mfma_xf32",
@@ -398,7 +398,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul",), reason="ROCm 7.2.3 CDNA 2 baseline MFMA artifact"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul",), reason="ROCm 7.2.4 CDNA 2 baseline MFMA artifact"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "int8"),
         features=("mfma", "buffer_load_lds", "xnack", "sram_ecc", "rocm_7_2_3"),
     ),
@@ -408,7 +408,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax"), reason="ROCm 7.2.3 CDNA 3 unified-APU artifact; HIP execution gated"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax"), reason="ROCm 7.2.4 CDNA 3 unified-APU artifact; HIP execution gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(
             "mfma", "mfma_f8", "mfma_xf32",
@@ -422,7 +422,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.3 CDNA 3 discrete MI300X MFMA artifact; HIP execution gated"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.4 CDNA 3 discrete MI300X MFMA artifact; HIP execution gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "fp8_e4m3", "fp8_e5m2", "int8"),
         features=(
             "mfma", "mfma_f8", "mfma_xf32",
@@ -436,7 +436,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.3 CDNA 4 MI325X MFMA artifact (with FP4/FP6 lanes); HIP execution gated"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul", "tessera.gelu", "tessera.softmax", "tessera.flash_attn"), reason="ROCm 7.2.4 CDNA 4 MI325X MFMA artifact (with FP4/FP6 lanes); HIP execution gated"),
         supported_dtypes=(
             "bf16", "fp16", "fp32", "fp64",
             "fp8_e4m3", "fp8_e5m2",
@@ -456,7 +456,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops("artifact_only", ("tessera.matmul",), reason="ROCm 7.2.3 RDNA 3 WMMA artifact (prosumer line)"),
+        supported_ops=_ops("artifact_only", ("tessera.matmul",), reason="ROCm 7.2.4 RDNA 3 WMMA artifact (prosumer line)"),
         supported_dtypes=("bf16", "fp16", "fp32", "int8"),
         features=("wmma_f16", "wmma_bf16", "buffer_load_lds", "rocm_7_2_3"),
     ),
@@ -469,7 +469,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         supported_ops=_ops(
             "artifact_only",
             ("tessera.matmul",),
-            reason="ROCm 7.2.3 RDNA 3.5 (Strix Halo APU) WMMA artifact; HIP execution gated on real gfx1151 silicon",
+            reason="ROCm 7.2.4 RDNA 3.5 (Strix Halo APU) WMMA artifact; HIP execution gated on real gfx1151 silicon",
         ),
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
         # RDNA 3.5 (the load-bearing difference from gfx1200).
@@ -486,7 +486,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "artifact_only",
             ("tessera.matmul",),
             reason=(
-                "ROCm 7.2.3 GFX12/RDNA 4 WMMA artifact planning target; "
+                "ROCm 7.2.4 GFX12/RDNA 4 WMMA artifact planning target; "
                 "HIP execution remains gated"
             ),
         ),

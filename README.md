@@ -101,7 +101,7 @@ Current high-level status (as of June 16, 2026):
 | **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 284 Apple C ABI symbols across 126 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | **Distributed MoE / MegaMoE** — single-device `nn.functional.moe_layer`, fused `ops.moe_swiglu_block` (Graph-IR op + GPU kernel), expert-parallel `megamoe_forward` (GShard 2× all-to-all dispatch/combine), FP8×FP4 mixed precision, and **real wall-clock comm/compute overlap** (async GPU command buffer ∥ CPU comm) | implemented / hardware-runtime (Apple GPU expert FFN); multi-rank via in-process mock collectives — see [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) |
 | NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
-| ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
+| ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.4 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
 | **Tier 2 autodiff** — Python tape (`tessera.autodiff.{tape, reverse, custom_rule, rematerialize}`) + 270+ built-in VJPs/JVPs covering matmul, depthwise conv 1d/2d, RNN cells (LSTM), Mamba2 `selective_ssm`, distributed collectives | implemented / hardware-runtime (numpy-reference tape); end-to-end BPTT through multi-step LSTM, depthwise conv chains, and selective SSMs verified vs. central-difference numerical Jacobian at fp64 |
@@ -422,6 +422,17 @@ cmake -S . -B build \
 
 cmake --build build --parallel
 
+# On Ubuntu 24.04 (x86 + AMD ROCm 7.2.4): bootstrap the toolchain once with
+#   bash scripts/setup_ubuntu.sh           # LLVM/MLIR 22 from apt.llvm.org + venv
+# then configure against the system LLVM and ROCm at /opt/rocm:
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-22/lib/cmake/mlir \
+  -DTESSERA_ENABLE_HIP=ON \
+  -DTESSERA_BUILD_ROCM_BACKEND=ON \
+  -DCMAKE_PREFIX_PATH=/opt/rocm
+ninja -C build tessera-opt
+
 # MLIR lit tests require a built tessera-opt on PATH
 lit tests/tessera-ir/ -v
 
@@ -445,7 +456,7 @@ NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):
 # Validate CUDA 13.2 U1 PTX patterns against installed nvcc
 python scripts/validate_nvcc_compile.py
 
-# Validate ROCm 7.2.3 AMDGCN intrinsics against installed hipcc
+# Validate ROCm 7.2.4 AMDGCN intrinsics against installed hipcc
 python scripts/validate_hipcc_compile.py
 
 # Probe NCCL/RCCL ≥ 2.22 symbols at runtime

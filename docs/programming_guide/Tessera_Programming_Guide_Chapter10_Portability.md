@@ -71,7 +71,7 @@ against numpy. See [`docs/apple_gpu_overview.md`](../apple_gpu_overview.md).
 
 ### 10.4 AMD GPUs (artifact today; hardware execution Phase H)
 
-- **ROCm 7.2.3 / MFMA**: Target IR + MFMA shape tables emit today
+- **ROCm 7.2.4 / MFMA**: Target IR + MFMA shape tables emit today
   (gfx90a / 940 / 942 / 950 / 1100); hardware execute-and-compare is Phase H.  
 - **rccl**: collective backend.  
 - **Unified memory (HMM)** support.  

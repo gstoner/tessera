@@ -8,7 +8,7 @@ Locks the per-target hardware-free pre-work landed 2026-05-11:
        async_proxy_fence / block_scaled_mma) + arch strings
        (sm_90a/sm_100a/sm_120a) + dtype matrix updated.
 
-  H-1: ROCm backend pinned to ROCm 7.2.3 — per-arch feature matrix
+  H-1: ROCm backend pinned to ROCm 7.2.4 — per-arch feature matrix
        (mfma_f8 / mfma_xf32 / mfma_f4 / mfma_f6 / lds_async_copy /
        cluster_mode) + arch strings (gfx90a/gfx940/gfx942/gfx950/
        gfx1100) + dtype matrix + MFMA shape variants.
@@ -145,7 +145,7 @@ class TestNVIDIACapabilityRegistry:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-#               H-1: ROCm 7.2.3 capability matrix
+#               H-1: ROCm 7.2.4 capability matrix
 # ──────────────────────────────────────────────────────────────────────────
 
 class TestROCmToolchainPin:
@@ -155,8 +155,8 @@ class TestROCmToolchainPin:
             TESSERA_TARGET_HIP,
             TESSERA_TARGET_RCCL_MIN,
         )
-        assert TESSERA_TARGET_ROCM == "7.2.3"
-        assert TESSERA_TARGET_HIP == "7.2.3"
+        assert TESSERA_TARGET_ROCM == "7.2.4"
+        assert TESSERA_TARGET_HIP == "7.2.4"
         assert TESSERA_TARGET_RCCL_MIN == "2.22"
 
     def test_hipcc_arch_strings(self):

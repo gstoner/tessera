@@ -104,7 +104,7 @@ class TestH2MFMATableSync:
         # Auto-generated banner
         assert "Auto-generated" in body
         # Toolchain pin
-        assert "ROCm target pin: 7.2.3" in body
+        assert "ROCm target pin: 7.2.4" in body
 
     def test_mfma_table_in_sync_with_python_source(self):
         """The on-disk `mfma_table.inc` must match what
@@ -141,7 +141,7 @@ class TestH2MFMATableSync:
         body = MFMA_TABLE_PATH.read_text()
         # Per `_MFMA_VARIANTS`: gfx90a=2, gfx940=6, gfx942=6, gfx950=8,
         # gfx1100=0, gfx1200=0  →  total = 22
-        match = re.search(r"Total shapes across all ROCm 7.2.3 arches: (\d+)", body)
+        match = re.search(r"Total shapes across all ROCm 7.2.4 arches: (\d+)", body)
         assert match is not None
         assert int(match.group(1)) == 22
 
@@ -162,8 +162,8 @@ class TestG6H6CMakeToolchainPin:
         assert 'TESSERA_REQUIRED_CUDA_VERSION   "13.3"' in body
         assert 'TESSERA_REQUIRED_PTX_ISA        "9.3"' in body
         assert 'TESSERA_REQUIRED_NCCL_VERSION   "2.22"' in body
-        assert 'TESSERA_REQUIRED_ROCM_VERSION   "7.2.3"' in body
-        assert 'TESSERA_REQUIRED_HIP_VERSION    "7.2.3"' in body
+        assert 'TESSERA_REQUIRED_ROCM_VERSION   "7.2.4"' in body
+        assert 'TESSERA_REQUIRED_HIP_VERSION    "7.2.4"' in body
         assert 'TESSERA_REQUIRED_RCCL_VERSION   "2.22"' in body
 
     def test_exports_pin_functions(self):
@@ -300,8 +300,8 @@ class TestG9H8CollectivePin:
 
     def test_pins_rocm_7_2_3(self):
         body = ADAPTER_PIN_HEADER.read_text()
-        assert 'TESSERA_TARGET_ROCM         "7.2.3"' in body
-        assert 'TESSERA_TARGET_HIP          "7.2.3"' in body
+        assert 'TESSERA_TARGET_ROCM         "7.2.4"' in body
+        assert 'TESSERA_TARGET_HIP          "7.2.4"' in body
 
     def test_static_assert_via_error_directive(self):
         """If NCCL/RCCL headers are present at compile time and the
@@ -378,8 +378,8 @@ class TestToolchainPinConsistency:
             TESSERA_TARGET_HIP,
             TESSERA_TARGET_RCCL_MIN,
         )
-        assert TESSERA_TARGET_ROCM == "7.2.3"
-        assert TESSERA_TARGET_HIP == "7.2.3"
+        assert TESSERA_TARGET_ROCM == "7.2.4"
+        assert TESSERA_TARGET_HIP == "7.2.4"
         assert TESSERA_TARGET_RCCL_MIN == "2.22"
 
         cmake_body = TOOLCHAIN_CMAKE.read_text()

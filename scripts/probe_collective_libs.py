@@ -2,7 +2,7 @@
 """Sprint G-9 + H-8 (2026-05-11) — NCCL / RCCL symbol resolution probe.
 
 Hardware-free check: dlopens libnccl.so (CUDA 13.2 U1) and librccl.so
-(ROCm 7.2.3) and resolves the symbol surface Tessera's adapters link
+(ROCm 7.2.4) and resolves the symbol surface Tessera's adapters link
 against (`ncclAllReduce`, `ncclReduceScatter`, `ncclAllGather`,
 `ncclSend`, `ncclRecv`, `ncclCommInitRank`, `ncclGetVersion`).  No GPU
 or multi-process collective execution is required — just a successful
@@ -109,7 +109,7 @@ def main() -> int:
 
     print()
 
-    # RCCL — ROCm 7.2.3 bundles RCCL 2.22+.
+    # RCCL — ROCm 7.2.4 bundles RCCL 2.22+.
     rccl = _try_load("librccl.so.1", "librccl.so")
     if rccl is None:
         print("  RCCL: not installed (librccl.so absent) — skipping")

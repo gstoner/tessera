@@ -3,7 +3,7 @@
 //
 // Sprint G-9 + H-8 (2026-05-11) — Compile-time version checks for the
 // NCCL (NVIDIA) and RCCL (AMD) collective libraries Tessera links
-// against under CUDA 13.3 and ROCm 7.2.3 respectively.
+// against under CUDA 13.3 and ROCm 7.2.4 respectively.
 //
 // Both pins match the Python source of truth:
 //   * TESSERA_TARGET_NCCL_MIN = "2.22" in python/tessera/compiler/gpu_target.py
@@ -28,8 +28,8 @@
 // docs/rocm_mfma_kernel_inventory.md.
 #define TESSERA_TARGET_CUDA_TOOLKIT "13.3"
 #define TESSERA_TARGET_PTX_ISA      "9.3"
-#define TESSERA_TARGET_ROCM         "7.2.3"
-#define TESSERA_TARGET_HIP          "7.2.3"
+#define TESSERA_TARGET_ROCM         "7.2.4"
+#define TESSERA_TARGET_HIP          "7.2.4"
 
 
 #if defined(TESSERA_HAS_NCCL)

@@ -118,9 +118,15 @@ def test_launch_trusts_canonical_first_failing_gate_for_nvidia():
 
 
 def test_launch_trusts_canonical_first_failing_gate_for_rocm():
-    result = canonical_compile(_tiny_matmul_module(), target="rocm")
-    artifact = result.to_runtime_artifact()
-    response = launch(artifact, args={})
+    # Canonical (toolchain-not-assumed) contract — deterministic so it holds on
+    # both the Apple dev box and the Ubuntu ROCm 7.2.4 box (where hipcc is
+    # live-present and the live named blocker is instead ``link``). Covers both
+    # the compile-time gate and launch's re-derivation under one context.
+    from tessera.compiler import pipeline_gates as pg
+    with pg.deterministic_host_for_dashboard():
+        result = canonical_compile(_tiny_matmul_module(), target="rocm")
+        artifact = result.to_runtime_artifact()
+        response = launch(artifact, args={})
     assert response["ok"] is False
     assert response["first_failing_gate"] == "toolchain"
     assert "hipcc" in response["first_failing_gate_detail"]

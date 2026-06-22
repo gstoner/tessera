@@ -109,7 +109,11 @@ def test_rocm_per_arch_target_finds_family_manifest_entry():
     spuriously failed first. Post-fix: per-arch ROCm targets inherit the
     rocm family manifest row, so the *real* first failing gate is the
     one the audit cared about (``toolchain`` — no hipcc)."""
-    result = pg.first_failing_gate("rocm_gfx942", "matmul")
+    # Deterministic (toolchain-not-assumed) so the canonical first failing gate
+    # holds on both the Apple dev box and the Ubuntu ROCm 7.2.4 box where hipcc
+    # is live-present (there the live first failing gate is instead ``link``).
+    with pg.deterministic_host_for_dashboard():
+        result = pg.first_failing_gate("rocm_gfx942", "matmul")
     assert result is not None
     assert result.gate == pg.GATE_TOOLCHAIN, (
         f"expected first failing gate to be toolchain (no hipcc); "
@@ -132,7 +136,8 @@ def test_every_rocm_subarch_inherits_manifest_codegen_pass(arch):
 
 def test_rocm_family_target_still_matches():
     """Bare ``rocm`` family target keeps working (the fix is additive)."""
-    result = pg.first_failing_gate("rocm", "matmul")
+    with pg.deterministic_host_for_dashboard():
+        result = pg.first_failing_gate("rocm", "matmul")
     assert result is not None
     assert result.gate == pg.GATE_TOOLCHAIN
 

@@ -5,7 +5,7 @@
 #
 #   * CUDA Toolkit 13.3 (matches TESSERA_TARGET_CUDA_TOOLKIT
 #     in python/tessera/compiler/gpu_target.py)
-#   * ROCm 7.2.3 + HIP 7.2.3 (matches TESSERA_TARGET_ROCM in
+#   * ROCm 7.2.4 + HIP 7.2.4 (matches TESSERA_TARGET_ROCM in
 #     python/tessera/compiler/rocm_target.py)
 #
 # Designed to be hardware-free — only the *toolchain* is required, not
@@ -16,7 +16,7 @@
 #
 #     include(cmake/TesseraToolchainPins.cmake)
 #     tessera_pin_cuda_toolkit(13.3)        # exits with error if version <13.3
-#     tessera_pin_rocm(7.2.3)               # exits with error if version <7.2.3
+#     tessera_pin_rocm(7.2.4)               # exits with error if version <7.2.4
 #
 # Both functions are no-ops when TESSERA_SKIP_TOOLCHAIN_PIN is set, so
 # CI configurations that intentionally use older toolchains can still
@@ -30,8 +30,8 @@ set(TESSERA_REQUIRED_CUDA_DRIVER    "610.43.02" CACHE STRING "Required minimum C
 set(TESSERA_REQUIRED_PTX_ISA        "9.3"       CACHE STRING "Required minimum PTX ISA version")
 set(TESSERA_REQUIRED_NCCL_VERSION   "2.22"      CACHE STRING "Required minimum NCCL version (floor; 13.3 bundles 2.30.7)")
 
-set(TESSERA_REQUIRED_ROCM_VERSION   "7.2.3"  CACHE STRING "Required minimum ROCm version")
-set(TESSERA_REQUIRED_HIP_VERSION    "7.2.3"  CACHE STRING "Required minimum HIP version")
+set(TESSERA_REQUIRED_ROCM_VERSION   "7.2.4"  CACHE STRING "Required minimum ROCm version")
+set(TESSERA_REQUIRED_HIP_VERSION    "7.2.4"  CACHE STRING "Required minimum HIP version")
 set(TESSERA_REQUIRED_RCCL_VERSION   "2.22"   CACHE STRING "Required minimum RCCL version")
 set(TESSERA_REQUIRED_ROCBLAS_VERSION "5.0.0" CACHE STRING "Required minimum rocBLAS version")
 

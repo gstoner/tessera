@@ -12,7 +12,7 @@ Hardware-free guards for the per-target kernel pre-work:
        FA-4 forward, MLA decode, DeepSeek NSA, Lightning attention,
        matmul→softmax fusion, SwiGLU MLP, Blackwell tcgen05, AdamW.
   H-3: `docs/rocm_mfma_kernel_inventory.md` — enumerates every planned
-       ROCm fused kernel under ROCm 7.2.3.
+       ROCm fused kernel under ROCm 7.2.4.
   H-4: ROCm lit fixtures under `tests/tessera-ir/phase8/rocm_7_2/`
        — MFMA matmul (bf16, fp8, fp4-CDNA4), FA fwd, MLA decode,
        AdamW, RDNA3 WMMA.
@@ -109,10 +109,10 @@ class TestG3SchemaExtension:
         from tessera.compiler.backend_manifest import BackendKernelEntry
         e = BackendKernelEntry(
             target="rocm_gfx942", status="artifact_only",
-            hipcc_version_min="7.2.3",
+            hipcc_version_min="7.2.4",
         )
-        assert e.hipcc_version_min == "7.2.3"
-        assert e.as_dict()["hipcc_version_min"] == "7.2.3"
+        assert e.hipcc_version_min == "7.2.4"
+        assert e.as_dict()["hipcc_version_min"] == "7.2.4"
 
     def test_expected_mfu_in_range(self):
         from tessera.compiler.backend_manifest import BackendKernelEntry
@@ -185,7 +185,7 @@ class TestG3ManifestWiring:
         entries = {e.target: e for e in manifest_for("matmul")}
         rocm = entries["rocm"]
         assert rocm.mfma_shape == (32, 32, 8, 1)
-        assert rocm.hipcc_version_min == "7.2.3"
+        assert rocm.hipcc_version_min == "7.2.4"
 
     def test_rocm_flash_attn_uses_16x16x16(self):
         from tessera.compiler.backend_manifest import manifest_for
@@ -265,8 +265,8 @@ class TestH3RocmInventoryDoc:
             "Planned fused kernel inventory",
             "AMDGCN intrinsic patterns",
             "Execution gates",
-            "ROCm 7.2.3",
-            "HIP 7.2.3",
+            "ROCm 7.2.4",
+            "HIP 7.2.4",
         ):
             assert section in doc, f"Section {section!r} missing"
 

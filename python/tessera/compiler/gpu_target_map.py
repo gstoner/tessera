@@ -367,7 +367,7 @@ def render_markdown(target: str) -> str:
     )
     lines.append(
         "* **arch_min** is the minimum target arch the kernel "
-        "compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.3`` "
+        "compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.4`` "
         "for ROCm)."
     )
     return "\n".join(lines) + "\n"

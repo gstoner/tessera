@@ -191,7 +191,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="E_DRIVER", pass_origin="tessera.diagnostics.TesseraErrorCode",
         severity="error",
         summary="Underlying device driver returned an error.",
-        fix_hint="Check the driver version against the pinned CUDA 13.2 / ROCm 7.2.3 minima.",
+        fix_hint="Check the driver version against the pinned CUDA 13.2 / ROCm 7.2.4 minima.",
         spec=None, sprint="Phase 6", language="python", status="implemented",
     ),
     DiagnosticCode(
@@ -940,7 +940,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         fix_hint=(
             "Inspect the wrapped backend error message in the exception "
-            "chain; check toolchain pin (CUDA 13.2 / ROCm 7.2.3) "
+            "chain; check toolchain pin (CUDA 13.2 / ROCm 7.2.4) "
             "compatibility with the installed driver."
         ),
         spec="docs/operations/Tessera_Standard_Operations.md §Error Handling",

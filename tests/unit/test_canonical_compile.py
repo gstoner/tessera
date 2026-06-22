@@ -132,7 +132,13 @@ def test_nvidia_matmul_is_not_executable_and_names_toolchain_gate():
 
 
 def test_rocm_matmul_names_toolchain_gate():
-    result = cn.canonical_compile(_tiny_matmul_module(), target="rocm")
+    # Canonical (toolchain-not-assumed) contract, asserted under deterministic
+    # mode so it holds on both the Apple dev box and the Ubuntu ROCm 7.2.4 box.
+    # On a box with hipcc live-present the toolchain gate passes and the named
+    # blocker is instead ``link`` (no runtime launch bridge yet) — still not
+    # executable, just blocked one gate later.
+    with pg.deterministic_host_for_dashboard():
+        result = cn.canonical_compile(_tiny_matmul_module(), target="rocm")
     assert result.executable is False
     assert result.first_failing_gate.gate == pg.GATE_TOOLCHAIN
     assert "hipcc" in result.first_failing_gate.detail

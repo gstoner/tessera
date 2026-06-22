@@ -14,20 +14,22 @@
 The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
 LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
 
-- **The part is RDNA 3.5 = `gfx1151` (the true ISA); WSL presents it as
-  `gfx1100`.** The Radeon 8060S in Strix Halo is RDNA 3.5, whose ISA is
-  `gfx1151` (RDNA 3.5 ISA Ref Guide, doc 70649, 23-Jul-2024). The toolchain on
-  the box **fully supports `gfx1151`** — verified here: `hipcc
-  --offload-arch=gfx1151` compiles and `llc -mcpu=gfx1151` emits a real
-  `v_wmma_f32_16x16x16_f16`. So **`gfx1151` is the codegen target** (accurate
-  ISA). Separately, `rocminfo` *enumerates* the device as `Name: gfx1100`
-  (wave32, 40 CUs) — the WSL/ROCm 7.2.4 runtime presents the RDNA 3.5 part under
-  the discrete `gfx1100` (RDNA 3) profile, so a `gfx1100` binary also assembles
-  and is the runtime-enumerated alias. **Both are RDNA, same 16×16×16 WMMA op
-  family, no FP8 WMMA** — the rung-3 emit tests assemble for both (gfx1151
-  primary + gfx1100). The runtime-load arch (does a gfx1151 hsaco load on the
-  gfx1100-presenting WSL device, or is `HSA_OVERRIDE_GFX_VERSION` needed?) is a
-  **Stage C** question. Both archs are in `rocm_target.py`/`capabilities.py`.
+- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` is a *transient
+  WSL enumeration*, not a permanent target.** The Radeon 8060S in Strix Halo
+  (Ryzen AI MAX+ 395) is RDNA 3.5, ISA `gfx1151` (RDNA 3.5 ISA Ref Guide, doc
+  70649, 23-Jul-2024). (`gfx1150` is the related Strix *Point* iGPU — Radeon
+  890M — a distinct part; the 8060S is `gfx1151`.) The toolchain **fully
+  supports `gfx1151`** — verified here: `hipcc --offload-arch=gfx1151` compiles
+  and `llc -mcpu=gfx1151` emits a real `v_wmma_f32_16x16x16_f16`. So **`gfx1151`
+  is the codegen target.** Today the WSL/ROCm 7.2.4 runtime *enumerates* the
+  device as `Name: gfx1100` (RDNA 3 discrete profile) — a **temporary WSL
+  limitation; AMD's WSL enablement will report the native RDNA 3.5 arch
+  (`gfx1151`)**. A `gfx1100` binary also assembles, so it is the current-WSL
+  transitional alias, but the bring-up targets `gfx1151` going forward. **Both
+  are RDNA, same 16×16×16 WMMA op family, no FP8 WMMA** — the rung-3 emit tests
+  assemble for both (gfx1151 primary + gfx1100), and the Stage C launcher uses
+  hipcc's device-default arch, so it auto-adapts when WSL starts reporting
+  `gfx1151`. Both archs are in `rocm_target.py`/`capabilities.py`.
 - **External gates from "Honest external gates" below are now cleared:**
   `rocminfo` enumerates the GPU **without** any `HSA_OVERRIDE_GFX_VERSION`;
   `hipcc --offload-arch=gfx1100` compiles a WMMA kernel (374 lines of AMDGCN

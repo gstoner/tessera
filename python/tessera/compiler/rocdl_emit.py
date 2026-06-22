@@ -1045,8 +1045,19 @@ class LlcResult:
 
 
 def _find_llc() -> str | None:
-    for cand in ("/opt/homebrew/opt/llvm/bin/llc", "llc"):
-        p = shutil.which(cand) if cand == "llc" else (cand if Path(cand).exists() else None)
+    # macOS Homebrew keg, the apt.llvm.org keg on Ubuntu (LLVM 22, newest first),
+    # the versioned console script, then a bare ``llc`` on PATH.
+    fixed = (
+        "/opt/homebrew/opt/llvm/bin/llc",
+        "/usr/lib/llvm-24/bin/llc",
+        "/usr/lib/llvm-23/bin/llc",
+        "/usr/lib/llvm-22/bin/llc",
+    )
+    for cand in fixed:
+        if Path(cand).exists():
+            return cand
+    for cand in ("llc-24", "llc-23", "llc-22", "llc"):
+        p = shutil.which(cand)
         if p:
             return p
     return None
@@ -1086,6 +1097,56 @@ def llc_assemble(ir: str, *, arch: str = "gfx1151") -> LlcResult:
                          wmma_instruction=wmma)
 
 
+@dataclass(frozen=True)
+class LlcObjectResult:
+    status: str            # "ok" | "failed" | "skipped"
+    detail: str
+    n_bytes: int = 0
+    is_amdgpu_elf: bool = False
+
+
+# ELF e_machine for AMD GPU (EM_AMDGPU = 224 = 0xE0), little-endian at offset 18.
+_EM_AMDGPU = 0xE0
+
+
+def llc_object(ir: str, *, arch: str = "gfx1100") -> LlcObjectResult:
+    """Rung 3 (object form): lower the emitted LLVM IR to a real **relocatable
+    object** with ``llc -filetype=obj -mcpu=<arch>`` and confirm it is an AMD GPU
+    ELF (``EM_AMDGPU``) — the plan's "compiles A to a real object" gate.
+
+    Runs on this host (LLVM 22 AMDGPU backend); skip-cleans only if no ``llc``."""
+    if not _LLC_ARCH_RE.match(arch):
+        raise ValueError(
+            f"invalid arch {arch!r} — must match {_LLC_ARCH_RE.pattern} (e.g. gfx1100)")
+    llc = _find_llc()
+    if not llc:
+        return LlcObjectResult("skipped", "llc (LLVM AMDGPU backend) not available")
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "wmma.ll"
+        out = Path(td) / "wmma.o"
+        src.write_text(ir)
+        try:
+            proc = subprocess.run(
+                [llc, "-mtriple=amdgcn-amd-amdhsa", f"-mcpu={arch}",
+                 "-filetype=obj", str(src), "-o", str(out)],
+                capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as e:
+            return LlcObjectResult("failed", f"llc invocation error: {e}")
+        if proc.returncode != 0 or not out.exists():
+            return LlcObjectResult("failed", proc.stderr.strip() or "llc returned nonzero")
+        data = out.read_bytes()
+        is_elf = data[:4] == b"\x7fELF"
+        e_machine = int.from_bytes(data[18:20], "little") if len(data) >= 20 else 0
+        is_amdgpu = is_elf and e_machine == _EM_AMDGPU
+        if not is_amdgpu:
+            return LlcObjectResult(
+                "failed",
+                f"object is not an AMDGPU ELF (elf={is_elf}, e_machine=0x{e_machine:x})",
+                n_bytes=len(data))
+        return LlcObjectResult("ok", f"emitted AMDGPU ELF object for {arch}",
+                               n_bytes=len(data), is_amdgpu_elf=True)
+
+
 __all__ = [
     "wmma_intrinsic",
     "wmma_intrinsic_rdna4",
@@ -1108,6 +1169,8 @@ __all__ = [
     "validate_wmma_gemm_store_structure",
     "validate_wmma_gemm_threadgroup_structure",
     "llc_assemble",
+    "llc_object",
     "RocdlValidation",
     "LlcResult",
+    "LlcObjectResult",
 ]

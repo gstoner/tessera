@@ -14,14 +14,20 @@
 The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
 LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
 
-- **The iGPU enumerates as `gfx1100`, not `gfx1151`.** `rocminfo` reports the
-  Radeon 8060S as `Name: gfx1100` (ISA `amdgcn-amd-amdhsa--gfx1100`, wave32, 40
-  CUs) — the WSL/ROCm 7.2.4 runtime maps the RDNA 3.5 part onto the supported
-  discrete `gfx1100` (RDNA 3) profile. Both are RDNA, **same 16×16×16 WMMA op
-  family, no FP8 WMMA**, so the codegen target model is unchanged — but **on
-  this box the offload arch is `gfx1100`** (`--offload-arch=gfx1100`). Stages
-  B–D below target `gfx1100` here; `gfx1151` remains the native-Linux target.
-  Both archs are already in `rocm_target.py`/`capabilities.py`.
+- **The part is RDNA 3.5 = `gfx1151` (the true ISA); WSL presents it as
+  `gfx1100`.** The Radeon 8060S in Strix Halo is RDNA 3.5, whose ISA is
+  `gfx1151` (RDNA 3.5 ISA Ref Guide, doc 70649, 23-Jul-2024). The toolchain on
+  the box **fully supports `gfx1151`** — verified here: `hipcc
+  --offload-arch=gfx1151` compiles and `llc -mcpu=gfx1151` emits a real
+  `v_wmma_f32_16x16x16_f16`. So **`gfx1151` is the codegen target** (accurate
+  ISA). Separately, `rocminfo` *enumerates* the device as `Name: gfx1100`
+  (wave32, 40 CUs) — the WSL/ROCm 7.2.4 runtime presents the RDNA 3.5 part under
+  the discrete `gfx1100` (RDNA 3) profile, so a `gfx1100` binary also assembles
+  and is the runtime-enumerated alias. **Both are RDNA, same 16×16×16 WMMA op
+  family, no FP8 WMMA** — the rung-3 emit tests assemble for both (gfx1151
+  primary + gfx1100). The runtime-load arch (does a gfx1151 hsaco load on the
+  gfx1100-presenting WSL device, or is `HSA_OVERRIDE_GFX_VERSION` needed?) is a
+  **Stage C** question. Both archs are in `rocm_target.py`/`capabilities.py`.
 - **External gates from "Honest external gates" below are now cleared:**
   `rocminfo` enumerates the GPU **without** any `HSA_OVERRIDE_GFX_VERSION`;
   `hipcc --offload-arch=gfx1100` compiles a WMMA kernel (374 lines of AMDGCN
@@ -47,6 +53,35 @@ LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
     rocm_7_2/*.mlir` fixtures is **stale — no tool implements it**; those
     fixtures are not in the run suite. Canonical fixtures live in
     `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`.
+  - **The MLIR `--tessera-emit-rocdl` pipeline is broken on this build:** it
+    references a pass `tessera-to-linalg` that is **not registered** in
+    `tessera-opt` here, so the pipeline string fails to build and aborts
+    (`-nvvm` too). That blocks the *MLIR-graph*→WMMA route. **Stage B does not
+    depend on it** — `rocdl_emit.py` (the AMD analog of `ptx_emit.py`) is a
+    direct LLVM-IR WMMA emitter, the established rung pattern. Registering
+    `tessera-to-linalg` into `tessera-opt` is its own follow-up.
+
+### Stage B — DONE, verified on the box (2026-06-22)
+
+`python/tessera/compiler/rocdl_emit.py` already implements rung 2.5 (emit
+`llvm.amdgcn.wmma.*` LLVM IR + host-free structural validators) **and** rung 3
+(`llc -mcpu=<arch>` → real `v_wmma_*` AMDGCN), the AMD mirror of `ptx_emit.py`.
+On the box this now runs for real (not skip-clean):
+
+- **rung 3 asm:** the K-reduction / operand-layout / D-store WMMA GEMMs lower to
+  AMDGCN with the documented `v_wmma_f32_16x16x16_{f16,bf16}`, lane-replication
+  (`v_and_b32 _,15,_`), and strided `global_store`s — now parametrized over
+  **gfx1100** (the box) as well as gfx1151.
+- **rung 3 object:** new `llc_object()` lowers the GEMM to a real relocatable
+  **AMD GPU ELF** (`EM_AMDGPU`) — the plan's "compiles A to a real object" gate,
+  confirmed for gfx1100/gfx1151 (`test_rung3_gemm_assembles_to_amdgpu_elf_object`).
+- `_find_llc()` now finds the apt.llvm.org `llc` (`/usr/lib/llvm-22/bin/llc`), so
+  the rung-3 tests run by default on the box. `tests/unit/test_rocdl_emit.py`:
+  **96 passed, 0 skipped.**
+
+Remaining toward a runnable kernel: **Stage C** (register a HIP launcher into
+`tsrRegisterGpuLauncher`, load the object / HIPRTC, `hipModuleLaunchKernel`) then
+**Stage D** (execute-and-compare vs numpy → first non-Apple `backend_kernel`).
 
 ## The hardware — three engines, three Tessera stories
 
@@ -164,3 +199,5 @@ Two viable emit paths for Stage A (pick after a spike):
 - `python/tessera/compiler/rocm_target.py`, `capabilities.py` — the grounded gfx1151 target model.
 - `docs/rocm_mfma_kernel_inventory.md` — CDNA MFMA inventory (RDNA WMMA inventory is a sibling TODO).
 - `compiler/ptx_emit.py`, `EVALUATOR_PLAN.md` §9.5 — the NVIDIA rung ladder this mirrors.
+- `python/tessera/compiler/rocdl_emit.py` + `tests/unit/test_rocdl_emit.py` — Stage B emitter (rung 2.5 + rung 3 `llc`), AMD analog of `ptx_emit.py`.
+- **RDNA 3.5 ISA Reference Guide** (AMD doc 70649, 23-Jul-2024) — authoritative WMMA spec (§7.9 / Table 33): <https://docs.amd.com/v/u/en-US/rdna35_instruction_set_architecture>. Note: docs.amd.com is a JS-rendered SPA — fetch the linked PDF, not the HTML.

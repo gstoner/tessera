@@ -21,6 +21,7 @@ from tessera.compiler.rocdl_emit import (
     emit_wmma_llvmir,
     emit_wmma_rdna4_llvmir,
     llc_assemble,
+    llc_object,
     validate_wmma_gemm_layout_structure,
     validate_wmma_gemm_store_structure,
     validate_wmma_gemm_structure,
@@ -130,19 +131,38 @@ def test_gemm_validator_catches_dropped_kloop():
     assert any("accumulator phi" in r for r in v.reasons)
 
 
+# Both RDNA3-class arches: gfx1151 (native Strix Halo) and gfx1100 (how the
+# Radeon 8060S enumerates under WSL/ROCm 7.2.4 — the actual box target).
 @pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("arch", ["gfx1151", "gfx1100"])
 @pytest.mark.parametrize("dtype,want", [
     ("f16", "v_wmma_f32_16x16x16_f16"),
     ("bf16", "v_wmma_f32_16x16x16_bf16"),
 ])
-def test_rung3_gemm_lowers_to_wmma_inside_a_loop(dtype, want):
+def test_rung3_gemm_lowers_to_wmma_inside_a_loop(dtype, want, arch):
     """The K-reduction GEMM lowers to AMDGCN with the v_wmma_* inside a real loop."""
-    ir = emit_wmma_gemm_llvmir(dtype, arch="gfx1151")
-    r = llc_assemble(ir, arch="gfx1151")
+    ir = emit_wmma_gemm_llvmir(dtype, arch=arch)
+    r = llc_assemble(ir, arch=arch)
     assert r.status == "ok", r.detail
     assert want in r.wmma_instruction
     # the wmma is inside a loop body (a conditional branch / loop label exists).
     assert "s_cbranch" in r.asm or ".LBB" in r.asm
+
+
+# ── rung 3 (object form): the plan's "compiles A to a real object" gate ──
+
+@pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("arch", ["gfx1100", "gfx1151"])
+@pytest.mark.parametrize("dtype", ["f16", "bf16"])
+def test_rung3_gemm_assembles_to_amdgpu_elf_object(dtype, arch):
+    """The WMMA GEMM lowers all the way to a real relocatable **object** that is
+    an AMD GPU ELF (EM_AMDGPU) — Stage B's "compiles A to a real object" gate,
+    machine-confirmed for the box target gfx1100 (and native gfx1151)."""
+    ir = emit_wmma_gemm_llvmir(dtype, arch=arch)
+    r = llc_object(ir, arch=arch)
+    assert r.status == "ok", r.detail
+    assert r.is_amdgpu_elf
+    assert r.n_bytes > 0
 
 
 # ── operand layout: lane replication (ISA 7.9) + nt contiguous loads ──
@@ -169,16 +189,17 @@ def test_gemm_layout_validator_catches_dropped_replication():
 
 
 @pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("arch", ["gfx1151", "gfx1100"])
 @pytest.mark.parametrize("dtype,want", [
     ("f16", "v_wmma_f32_16x16x16_f16"),
     ("bf16", "v_wmma_f32_16x16x16_bf16"),
 ])
-def test_rung3_layout_gemm_emits_replication_in_amdgcn(dtype, want):
+def test_rung3_layout_gemm_emits_replication_in_amdgcn(dtype, want, arch):
     """The operand-layout GEMM lowers to AMDGCN carrying BOTH a real v_wmma_* and
     the lane-replication mask (`v_and_b32 _, 15, _`) — the ISA 7.9 requirement,
     machine-confirmed on this host."""
-    ir = emit_wmma_gemm_layout_llvmir(dtype, arch="gfx1151")
-    r = llc_assemble(ir, arch="gfx1151")
+    ir = emit_wmma_gemm_layout_llvmir(dtype, arch=arch)
+    r = llc_assemble(ir, arch=arch)
     assert r.status == "ok", r.detail
     assert want in r.wmma_instruction
     assert "v_and_b32" in r.asm   # the (lane & 15) replication landed in the ISA
@@ -246,16 +267,17 @@ def test_gemm_store_rejects_rdna4():
 
 
 @pytest.mark.skipif(not _llc_available(), reason="LLVM `llc` (AMDGPU backend) not found")
+@pytest.mark.parametrize("arch", ["gfx1151", "gfx1100"])
 @pytest.mark.parametrize("dtype,want", [
     ("f16", "v_wmma_f32_16x16x16_f16"),
     ("bf16", "v_wmma_f32_16x16x16_bf16"),
 ])
-def test_rung3_store_gemm_lowers_with_strided_global_stores(dtype, want):
+def test_rung3_store_gemm_lowers_with_strided_global_stores(dtype, want, arch):
     """The grounded-D-store GEMM lowers to AMDGCN with a real v_wmma_*, the lane
     replication, AND strided per-register global stores — the D->C output mapping,
     machine-confirmed on this host."""
-    ir = emit_wmma_gemm_store_llvmir(dtype, arch="gfx1151")
-    r = llc_assemble(ir, arch="gfx1151")
+    ir = emit_wmma_gemm_store_llvmir(dtype, arch=arch)
+    r = llc_assemble(ir, arch=arch)
     assert r.status == "ok", r.detail
     assert want in r.wmma_instruction
     assert "v_and_b32" in r.asm        # lane replication + column mask

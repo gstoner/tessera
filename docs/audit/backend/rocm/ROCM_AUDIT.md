@@ -37,6 +37,15 @@ gfx1100; ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
 op + arch-keyed selection (`gfx11xx` → WMMA, CDNA → MFMA, no-FP8-on-RDNA gate
 preserved) + a `llvm.amdgcn.wmma.contract` ROCDL marker, with lit fixtures.
 
+**Stage B verified on the box (2026-06-22):** `rocdl_emit.py` (the AMD analog of
+`ptx_emit.py`) already emits `llvm.amdgcn.wmma.*` LLVM IR and `llc`-assembles it
+to real `v_wmma_*` AMDGCN; now runs for real on the box (LLVM 22.1.8 AMDGPU `llc`)
+and is parametrized over **gfx1100** (the box target). Added `llc_object()` — the
+GEMM lowers to a real AMD GPU ELF object (`EM_AMDGPU`); `_find_llc()` now finds the
+apt.llvm.org `llc`. `test_rocdl_emit.py`: 96 passed, 0 skipped. **Note:** the MLIR
+`--tessera-emit-rocdl` pipeline aborts here (`tessera-to-linalg` pass unregistered
+in `tessera-opt`) — a separate follow-up; Stage B rides the direct LLVM-IR emitter.
+
 ## Still Open
 
 - No ROCm execution row exists in `../../generated/runtime_execution_matrix.md`.
@@ -51,16 +60,19 @@ preserved) + a `llvm.amdgcn.wmma.contract` ROCDL marker, with lit fixtures.
 
 ## Next Work
 
-1. **Stage B — assemble:** emit the gfx1100 WMMA GEMM to LLVM IR
-   (`mlir-translate`) → `hipcc --offload-arch=gfx1100` / `llc -mcpu=gfx1100` to a
-   real object; skip-clean when hipcc absent.
+1. ✅ **Stage B — assemble (2026-06-22):** `rocdl_emit.py` emits the WMMA GEMM
+   LLVM IR and `llc -mcpu=gfx1100` lowers it to real `v_wmma_*` AMDGCN + an
+   AMD GPU ELF object; verified on the box, gfx1100 + gfx1151.
 2. **Stage C — launch:** register a HIP launcher into `tsrRegisterGpuLauncher`
    (landed G7 2026-06-10 — see `backend/BACKEND_AUDIT.md`); load the Stage B
-   hsaco and `hipModuleLaunchKernel` the gfx1100 WMMA kernel. Add runtime ABI +
-   hardware-smoke tests.
+   object (or HIPRTC) and `hipModuleLaunchKernel` the gfx1100 WMMA kernel. Add
+   runtime ABI + hardware-smoke tests. The `runtime/hip/loader.cpp` launch glue
+   exists but is not registered into the core C-ABI bridge.
 3. **Stage D — prove:** execute-and-compare oracle tests (bring up
    `fp32←f16`/`f16←f16` WMMA before bf16 per the documented gfx115x bf16 bugs).
-4. Promote manifest rows only after generated dashboards agree.
+4. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
+   `--tessera-emit-rocdl` route works (Stage B currently rides the direct emitter).
+5. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated
 

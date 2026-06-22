@@ -180,7 +180,7 @@ class BackendKernelEntry:
           * ``compileable`` → dtypes the lowering pipeline emits IR for.
             Compilation works; execution may not.
           * ``artifact_only`` → dtypes the Target IR artifact compiles
-            for under the pinned toolchain (CUDA 13.2 U1 / ROCm 7.2.3).
+            for under the pinned toolchain (CUDA 13.2 U1 / ROCm 7.2.4).
             No host execution.
           * ``planned`` → **target kernel dtypes for the unbuilt
             kernel** — the matrix the future native kernel will
@@ -221,7 +221,7 @@ class BackendKernelEntry:
         against ``rocm_target.mfma_variants(arch)``.  ``None`` for
         non-AMD targets.
     hipcc_version_min : str | None
-        Minimum hipcc release.  Today all ROCm entries pin to ``"7.2.3"``.
+        Minimum hipcc release.  Today all ROCm entries pin to ``"7.2.4"``.
     expected_mfu : float | None
         Target MFU as a fraction of peak (e.g., ``0.65`` = 65%).  Used
         by ``perf_gate.py`` once execution lights up.
@@ -1039,7 +1039,7 @@ _NVIDIA_KERNEL_ROOFLINE: dict[str, str] = {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint H-3 (2026-05-11) — Per-kernel MFMA shape + LDS layout + MFU for
-# ROCm 7.2.3.  Mirrors the NVIDIA tables above.
+# ROCm 7.2.4.  Mirrors the NVIDIA tables above.
 #
 # Canonical MFMA shapes for bf16 on CDNA 3 (gfx94x): (32, 32, 8, 1) and
 # (16, 16, 16, 1).  FP8 variants are (32, 32, 16, 1) / (16, 16, 32, 1).
@@ -1992,7 +1992,7 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             "(fp32-only); fp16/bf16 lanes land with the Phase H "
             "kernel work."
         ),
-        hipcc_version_min="7.2.3",
+        hipcc_version_min="7.2.4",
     ))
     return entries
 
@@ -2204,11 +2204,11 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=dtypes,
             feature_flags=("mfma",),
             notes=(
-                "ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H"
+                "ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H"
                 if mapped == _ARTIFACT_STATUS else ""
             ),
             mfma_shape=mfma,
-            hipcc_version_min="7.2.3",
+            hipcc_version_min="7.2.4",
             expected_mfu=mfu,
             mma_descriptor=mma_desc,
         ))

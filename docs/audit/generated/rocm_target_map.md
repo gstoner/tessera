@@ -34,62 +34,62 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| gelu | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| silu | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| silu_mul | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| softmax | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| softmax_safe | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
+| gelu | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| silu | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| silu_mul | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| softmax | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| softmax_safe | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
 
 ## attention (15)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| attn_sliding_window | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| deepseek_sparse_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| flash_attn | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | 65% | - |
-| gated_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| gated_deltanet | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| gqa_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| hybrid_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| kimi_delta_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| lightning_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | 35% | - |
-| linear_attn | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| mla_decode | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | 50% | - |
-| mla_decode_fused | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| modified_delta_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| mqa_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| multi_head_attention | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
+| attn_sliding_window | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| deepseek_sparse_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| flash_attn | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 65% | - |
+| gated_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| gated_deltanet | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| gqa_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| hybrid_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| kimi_delta_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| lightning_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 35% | - |
+| linear_attn | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| mla_decode | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 50% | - |
+| mla_decode_fused | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| modified_delta_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| mqa_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| multi_head_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 
 ## norm (3)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| layer_norm | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| rmsnorm | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| rmsnorm_safe | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
+| layer_norm | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| rmsnorm | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| rmsnorm_safe | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
 
 ## position_encoding (2)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| alibi | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
-| rope | artifact_only | fp32 | hipcc≥7.2.3 | - | - | - |
+| alibi | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| rope | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
 
 ## tensor (7)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| batched_gemm | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | 72% | - |
-| einsum | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | - | - |
-| factorized_matmul | artifact_only | fp32 | hipcc≥7.2.3 | (16, 16, 16, 1) | - | - |
-| fused_epilogue | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | - | - |
-| linear_general | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | - | - |
-| matmul | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | 75% | - |
-| qkv_projection | artifact_only | fp32 | hipcc≥7.2.3 | (32, 32, 8, 1) | - | - |
+| batched_gemm | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | 72% | - |
+| einsum | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| factorized_matmul | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| fused_epilogue | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| linear_general | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| matmul | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | 75% | - |
+| qkv_projection | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 
 ## How to read this
 
 * **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``).
 * **dtypes** is the per-op kernel dtype matrix — same interpretation rule as ``BackendKernelEntry.dtypes``: on a ``planned`` row, the dtype tuple is the target kernel dtype matrix, not what runs today.
 * **tile shape** is the WGMMA `(M, N, K)` for NVIDIA Hopper+ or the MFMA `(M, N, K, K_blocks)` for ROCm CDNA.
-* **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.3`` for ROCm).
+* **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.4`` for ROCm).

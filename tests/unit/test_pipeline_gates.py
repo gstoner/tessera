@@ -87,16 +87,27 @@ def test_known_good_target_passes_all_gates_for_matmul(target):
 
 
 def test_nvidia_matmul_first_failing_gate_is_toolchain():
-    """On a developer Mac without CUDA installed, the *named* gate is
-    toolchain — not 'reference_cpu' silently, not 'unsupported' generically."""
-    result = pg.first_failing_gate("nvidia", "matmul")
+    """On the canonical generic host (no CUDA toolchain), the *named* gate is
+    toolchain — not 'reference_cpu' silently, not 'unsupported' generically.
+
+    Asserted under ``deterministic_host_for_dashboard`` so the result is
+    host-independent: a box that actually has ``nvcc`` would pass the toolchain
+    gate and fail later at ``link`` (the real live behavior), but the canonical
+    audit contract is that the toolchain gate is the first named blocker."""
+    with pg.deterministic_host_for_dashboard():
+        result = pg.first_failing_gate("nvidia", "matmul")
     assert result is not None
     assert result.gate == pg.GATE_TOOLCHAIN
     assert "nvcc" in result.detail
 
 
 def test_rocm_matmul_first_failing_gate_is_toolchain():
-    result = pg.first_failing_gate("rocm", "matmul")
+    """Canonical (toolchain-not-assumed) gate ordering for rocm matmul. See the
+    nvidia sibling: deterministic so it holds on both the Apple dev box and the
+    Ubuntu ROCm 7.2.4 box (where ``hipcc`` is live-present and the live first
+    failing gate is instead ``link``)."""
+    with pg.deterministic_host_for_dashboard():
+        result = pg.first_failing_gate("rocm", "matmul")
     assert result is not None
     assert result.gate == pg.GATE_TOOLCHAIN
     assert "hipcc" in result.detail

@@ -79,4 +79,4 @@ Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple
 * **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``).
 * **dtypes** is the per-op kernel dtype matrix — same interpretation rule as ``BackendKernelEntry.dtypes``: on a ``planned`` row, the dtype tuple is the target kernel dtype matrix, not what runs today.
 * **tile shape** is the WGMMA `(M, N, K)` for NVIDIA Hopper+ or the MFMA `(M, N, K, K_blocks)` for ROCm CDNA.
-* **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.3`` for ROCm).
+* **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.4`` for ROCm).

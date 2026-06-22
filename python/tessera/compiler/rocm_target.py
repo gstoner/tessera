@@ -1,7 +1,7 @@
-"""tessera.compiler.rocm_target — ROCm 7.2.3 target profile.
+"""tessera.compiler.rocm_target — ROCm 7.2.4 target profile.
 
 Mirrors the structure of ``gpu_target.py`` (NVIDIA) for the AMD/ROCm
-backend.  Pinned to ROCm 7.2.3 + HIP 7.2.3 as the minimum AMD toolchain
+backend.  Pinned to ROCm 7.2.4 + HIP 7.2.4 as the minimum AMD toolchain
 under Sprint H-1 (2026-05-11).
 
 Per-ISA feature matrix covers:
@@ -32,7 +32,7 @@ from typing import Optional
 
 
 class AMDArch(IntEnum):
-    """AMD GPU architecture identifiers under ROCm 7.2.3.
+    """AMD GPU architecture identifiers under ROCm 7.2.4.
 
     Values encode ``int(gfx_id)`` so comparisons work for CDNA-family
     ordering: gfx1200 (RDNA 4) > gfx1100 (RDNA 3) and gfx950
@@ -66,9 +66,9 @@ _RDNA_ARCHES: frozenset[AMDArch] = frozenset({
 
 
 #: Target ROCm release that Tessera's AMD backend is built against.
-TESSERA_TARGET_ROCM: str = "7.2.3"
-TESSERA_TARGET_HIP: str = "7.2.3"
-TESSERA_TARGET_RCCL_MIN: str = "2.22"     # RCCL bundled with ROCm 7.2.3
+TESSERA_TARGET_ROCM: str = "7.2.4"
+TESSERA_TARGET_HIP: str = "7.2.4"
+TESSERA_TARGET_RCCL_MIN: str = "2.22"     # RCCL bundled with ROCm 7.2.4
 TESSERA_TARGET_ROCBLAS_MIN: str = "5.0.0"
 TESSERA_TARGET_MIOPEN_MIN: str = "3.5.0"
 
@@ -104,7 +104,7 @@ _MAX_WAVES: dict[AMDArch, int] = {
 }
 
 
-# Per-arch dtype matrix accepted by the ROCm 7.2.3 backend.  Canonical
+# Per-arch dtype matrix accepted by the ROCm 7.2.4 backend.  Canonical
 # Tessera dtype spellings only (validated by `tessera.dtype.canonicalize_dtype`).
 _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
     AMDArch.GFX_90A: frozenset({
@@ -168,8 +168,8 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
 
 
 # Per-arch feature flag matrix.  Status values:
-#   "ready"          — fully supported under ROCm 7.2.3
-#   "tba"            — present in the architecture, not yet exposed by HIP 7.2.3
+#   "ready"          — fully supported under ROCm 7.2.4
+#   "tba"            — present in the architecture, not yet exposed by HIP 7.2.4
 #   "not_supported"  — architecturally unavailable
 _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
     AMDArch.GFX_90A: {
@@ -483,7 +483,7 @@ _XCD_COUNT: dict[AMDArch, int] = {
 }
 
 
-# Per-arch HIP/HIPCC compile-target strings under ROCm 7.2.3.
+# Per-arch HIP/HIPCC compile-target strings under ROCm 7.2.4.
 _ROCM_ARCH_STRINGS: dict[AMDArch, str] = {
     AMDArch.GFX_90A:  "gfx90a",
     AMDArch.GFX_940:  "gfx940",
@@ -647,12 +647,12 @@ class ROCmTargetProfile:
 
     @property
     def rocm_features(self) -> frozenset[str]:
-        """Set of all ROCm 7.2.3 features marked ``ready`` for this arch."""
+        """Set of all ROCm 7.2.4 features marked ``ready`` for this arch."""
         return rocm_feature_set(self.arch)
 
     @property
     def hipcc_arch(self) -> str:
-        """``hipcc --offload-arch=...`` string under ROCm 7.2.3."""
+        """``hipcc --offload-arch=...`` string under ROCm 7.2.4."""
         return rocm_arch_string(self.arch)
 
     @property
@@ -699,7 +699,7 @@ class ROCmTargetProfile:
 
 
 def rocm_feature_status(arch: AMDArch, feature: str) -> str:
-    """Return the ROCm 7.2.3 status for a per-arch feature. Raises ``KeyError`` with
+    """Return the ROCm 7.2.4 status for a per-arch feature. Raises ``KeyError`` with
     a clear message for an unknown feature name."""
     try:
         return _ROCM_7_2_FEATURES[arch][feature]

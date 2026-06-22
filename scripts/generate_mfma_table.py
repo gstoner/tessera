@@ -60,7 +60,7 @@ HEADER = """\
 
 FOOTER = """\
 
-// Total shapes across all ROCm 7.2.3 arches: {total}
+// Total shapes across all ROCm 7.2.4 arches: {total}
 #undef TESSERA_MFMA_VARIANT
 """
 

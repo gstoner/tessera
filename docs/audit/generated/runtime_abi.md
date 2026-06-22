@@ -192,7 +192,7 @@ Pins declared in Python (`gpu_target.py` / `rocm_target.py`) and CMake (`cmake/T
 
 | Source | Declared value |
 |--------|----------------|
-| `python_rocm_target` | `7.2.3` |
-| `cmake_pins` | `7.2.3` |
+| `python_rocm_target` | `7.2.4` |
+| `cmake_pins` | `7.2.4` |
 
 ✅ Sources agree.

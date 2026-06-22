@@ -1,33 +1,33 @@
 op_name,family,status,dtypes,arch_min,tile_shape,expected_mfu,roofline,notes
-gelu,activation,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-silu,activation,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-silu_mul,activation,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-softmax,activation,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-softmax_safe,activation,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-attn_sliding_window,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-deepseek_sparse_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-flash_attn,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",0.6500,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-gated_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-gated_deltanet,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-gqa_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-hybrid_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-kimi_delta_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-lightning_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",0.3500,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-linear_attn,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-mla_decode,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",0.5000,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-mla_decode_fused,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-modified_delta_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-mqa_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-multi_head_attention,attention,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-layer_norm,norm,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-rmsnorm,norm,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-rmsnorm_safe,norm,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-alibi,position_encoding,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-rope,position_encoding,artifact_only,fp32,hipcc≥7.2.3,,,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-batched_gemm,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",0.7200,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-einsum,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-factorized_matmul,tensor,artifact_only,fp32,hipcc≥7.2.3,"(16, 16, 16, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-fused_epilogue,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-linear_general,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-matmul,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",0.7500,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
-qkv_projection,tensor,artifact_only,fp32,hipcc≥7.2.3,"(32, 32, 8, 1)",,,ROCm 7.2.3 MFMA artifact ships; HIP execution gated on Phase H
+gelu,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+silu,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+silu_mul,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+softmax,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+softmax_safe,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+attn_sliding_window,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+deepseek_sparse_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+flash_attn,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",0.6500,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+gated_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+gated_deltanet,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+gqa_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+hybrid_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+kimi_delta_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+lightning_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",0.3500,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+linear_attn,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+mla_decode,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",0.5000,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+mla_decode_fused,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+modified_delta_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+mqa_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+multi_head_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+layer_norm,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+rmsnorm,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+rmsnorm_safe,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+alibi,position_encoding,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+rope,position_encoding,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+batched_gemm,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",0.7200,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+einsum,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+factorized_matmul,tensor,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+fused_epilogue,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+linear_general,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+matmul,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",0.7500,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+qkv_projection,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H

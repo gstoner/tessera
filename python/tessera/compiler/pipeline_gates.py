@@ -154,11 +154,13 @@ def _execution_row(target: str) -> Optional[_em.ExecutionRow]:
     return None
 
 
-# When True, the hardware_smoke gate ignores the live host and renders the
-# canonical "Apple silicon required" result for apple targets.  This keeps the
-# *committed* op×target conformance dashboard byte-identical regardless of where
-# it is generated (a Mac dev vs the Linux CI runner).  The live runtime / launch
-# path never enables this — only the dashboard renderer does.
+# When True, the host-probing gates ignore the live host and render canonical
+# results: the hardware_smoke gate renders "Apple silicon required" for apple
+# targets, and the toolchain gate renders the generic-host result for nvidia /
+# rocm (nvcc / hipcc not assumed).  This keeps the *committed* op×target
+# conformance dashboard byte-identical regardless of where it is generated
+# (a Mac dev box, the Ubuntu ROCm 7.2.4 box, or a Linux CI runner).  The live
+# runtime / launch path never enables this — only the dashboard renderer does.
 _DASHBOARD_DETERMINISTIC = False
 
 
@@ -256,16 +258,24 @@ def _eval_toolchain(target: str, op_name: Optional[str]) -> GateResult:
         if shutil.which("c++") or shutil.which("clang++"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "host C++ compiler present")
         return GateResult(GATE_TOOLCHAIN, STATUS_FAIL, "no host C++ compiler on PATH")
+    # The specialized GPU toolchains (nvcc / hipcc) are optional and present on
+    # only some dev boxes (e.g. the Ubuntu ROCm 7.2.4 box has hipcc; the Apple
+    # dev box does not). Probing the live PATH would make the *committed*
+    # op×target dashboard drift between machines, so under
+    # ``deterministic_host_for_dashboard`` we render the canonical generic-host
+    # result (toolchain not assumed) — the same way the Apple hardware_smoke
+    # gate renders "Apple silicon required" regardless of the actual host. The
+    # live runtime/launch path (deterministic mode off) still probes for real.
     if target == "nvidia":
-        if shutil.which("nvcc"):
+        if not _DASHBOARD_DETERMINISTIC and shutil.which("nvcc"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "nvcc present")
         return GateResult(GATE_TOOLCHAIN, STATUS_FAIL,
                           "nvcc not on PATH (CUDA Toolkit 13.3 not installed)")
     if target == "rocm":
-        if shutil.which("hipcc"):
+        if not _DASHBOARD_DETERMINISTIC and shutil.which("hipcc"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "hipcc present")
         return GateResult(GATE_TOOLCHAIN, STATUS_FAIL,
-                          "hipcc not on PATH (ROCm 7.2.3 not installed)")
+                          "hipcc not on PATH (ROCm 7.2.4 not installed)")
     return GateResult(GATE_TOOLCHAIN, STATUS_FAIL, f"unknown target {target!r}")
 
 

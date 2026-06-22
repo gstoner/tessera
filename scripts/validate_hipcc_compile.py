@@ -11,7 +11,7 @@ pass emits.
 Hardware-free: `hipcc -S` produces AMDGCN assembly without requiring a GPU.
 
 Usage:
-    python scripts/validate_hipcc_compile.py --hipcc /opt/rocm-7.2.3/bin/hipcc
+    python scripts/validate_hipcc_compile.py --hipcc /opt/rocm-7.2.4/bin/hipcc
 
 Exit codes:
     0 — every fixture compiles cleanly (or hipcc absent → skipped)
@@ -69,7 +69,7 @@ extern "C" __global__ void k_mfma_32x32x16_f8(const i64x1 *a, const i64x1 *b, f3
     "llvm.amdgcn.mfma.f32.32x32x32f4f4": r'''
 typedef long long  i64x2  __attribute__((ext_vector_type(2)));
 typedef float      f32x16 __attribute__((ext_vector_type(16)));
-// CDNA 4 (gfx950) FP4 MFMA — preliminary intrinsic name from ROCm 7.2.3.
+// CDNA 4 (gfx950) FP4 MFMA — preliminary intrinsic name from ROCm 7.2.4.
 extern "C" __global__ void k_mfma_32x32x32_f4(const i64x2 *a, const i64x2 *b, f32x16 *c) {
     c[0] = __builtin_amdgcn_mfma_f32_32x32x32_fp4_fp4(a[0], b[0], c[0], 0, 0, 0);
 }
@@ -110,10 +110,10 @@ def _check_hipcc_version(hipcc: Path) -> tuple[int, int, int]:
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"ERROR: failed to invoke {hipcc}: {e}", file=sys.stderr)
         return (0, 0, 0)
-    # Example: "HIP version: 7.2.3.61234-abc"
+    # Example: "HIP version: 7.2.4.61234-abc"
     match = re.search(r"HIP version:\s*(\d+)\.(\d+)\.(\d+)", out)
     if not match:
-        # Also try "AMD HIP version 7.2.3"
+        # Also try "AMD HIP version 7.2.4"
         match = re.search(r"AMD HIP version (\d+)\.(\d+)\.(\d+)", out)
     if not match:
         return (0, 0, 0)
@@ -168,7 +168,7 @@ def main() -> int:
     if version < MIN_HIP_VERSION:
         print(
             f"ERROR: hipcc version {version} < required {MIN_HIP_VERSION}.  "
-            f"Tessera pins ROCm 7.2.3.",
+            f"Tessera pins ROCm 7.2.4.",
             file=sys.stderr,
         )
         return 1

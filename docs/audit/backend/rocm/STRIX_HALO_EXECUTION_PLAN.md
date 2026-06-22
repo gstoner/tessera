@@ -99,7 +99,7 @@ Two viable emit paths for Stage A (pick after a spike):
   gfx1150/1151 added in 7.2.0) and continues in 7.2.x. AMD's recommended stack for Ryzen AI Max+ is
   **Ubuntu 24.04.3 inbox graphics drivers + ROCm 7.2.1**. Note this is the *Radeon/Ryzen client*
   track, distinct from the Instinct "Supported GPUs" matrix — so cite the Radeon-Ryzen docs, not the
-  data-center matrix. Tessera's **7.2.3 pin (≥ the user-confirmed 7.2.1/7.2.2)** is covered by
+  data-center matrix. Tessera's **7.2.4 pin (≥ the user-confirmed 7.2.1/7.2.2)** is covered by
   official support; community guides (ollama, llama.cpp) corroborate it enumerates **without** an
   `HSA_OVERRIDE_GFX_VERSION` hack on 7.2. Still `rocminfo`-verify enumeration on the box before Stage B.
 - **⚠️ Documented gfx1151 bf16 correctness bugs (ROCm/ROCm#6034: "5 critical bf16 bugs").** This is

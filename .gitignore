@@ -90,3 +90,6 @@ src/solvers/tpp/test/TPP/.lit_test_times.txt
 # deleted files, so a tracked graph goes stale on refactors and churns the
 # cache dir on every run. Keep it local; regenerate via `graphify update .`.
 graphify-out/
+
+# Local Python virtualenv (scripts/setup_ubuntu.sh)
+.venv/

@@ -17,7 +17,7 @@ What's audited
       - `src/compiler/codegen/Tessera_ROCM_Backend/include/`
   * Per-symbol metadata: backend, op family, dtype variant.
   * Version pin consistency: NCCL/RCCL ≥ 2.22, CUDA 13.3,
-    ROCm 7.2.3 across Python + CMake + C++ headers.
+    ROCm 7.2.4 across Python + CMake + C++ headers.
 
 The dashboard at ``docs/audit/generated/runtime_abi.md`` surfaces:
 
@@ -281,7 +281,7 @@ def _version_pin_consistency() -> dict[str, dict[str, str | None]]:
     Pins audited:
       - CUDA Toolkit (`13.3`) — declared in gpu_target.py,
         TesseraToolchainPins.cmake.
-      - ROCm (`7.2.3`) — declared in rocm_target.py,
+      - ROCm (`7.2.4`) — declared in rocm_target.py,
         TesseraToolchainPins.cmake.
       - NCCL / RCCL (`>= 2.22`) — declared in adapter_version_pin.h,
         rocm_target.py, gpu_target.py.

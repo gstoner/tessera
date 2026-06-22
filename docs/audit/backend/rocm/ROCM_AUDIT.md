@@ -54,16 +54,26 @@ Mirrors the Apple G7 proof; test `test_runtime_abi_rocm_launch_bridge.py`. Fixed
 the runtime CMake HIP-include bug (`tessera_runtime` now links `hip::host`) and
 handled the WSL `hipGetDeviceCount==0` quirk (probe-based skip).
 
+**Stage D verified on the box (2026-06-22):** the real RDNA **WMMA** matrix op
+(`__builtin_amdgcn_wmma_f32_16x16x16_f16_w32`, the same `v_wmma_f32_16x16x16_f16`
+`rocdl_emit.py` emits) executes on the device and produces a numerically correct
+16×16×16 `f32←f16` GEMM, routed through the C-ABI bridge — maxerr ≈ 3e-8
+standalone / < 1e-2 through the bridge. Test
+`tests/unit/test_rocm_wmma_execute_compare.py`. This clears the *numerical-proof*
+half of the `hardware_verified` contract.
+
 ## Still Open
 
-- No ROCm execution row exists in `../../generated/runtime_execution_matrix.md`
-  yet (the Stage C launcher lives in the test harness, like Apple G7 — a shipped
-  auto-registered ROCm runtime launcher is the follow-up before a matrix row).
-- ROCm `backend_kernel` rows remain artifact-only until the **WMMA** op itself
-  executes-and-compares (Stage D) — Stage C proved the bridge with a naive GEMM.
-- **Stage D — execute-and-compare** the WMMA GEMM vs numpy oracle (bring up
-  `fp32←f16`/`f16←f16` before bf16), then flip `backend_kernel` for
-  `tessera.matmul` on `rocm_gfx1151`/`gfx1100`.
+- **The `backend_kernel` / `hardware_verified` flip is NOT done — and is gated,
+  honestly.** `hardware_verified` requires a *shipped* `runtime_symbol` (an
+  auto-registered ROCm runtime launcher) in addition to the now-satisfied
+  `execute_compare_fixture`. The Stage C/D kernels + launcher live in the test
+  harness (like Apple G7), so promoting the manifest row now would be Decision
+  #25 inflation. The flip becomes mechanical once the launcher ships.
+- No ROCm execution row in `../../generated/runtime_execution_matrix.md` yet
+  (same shipped-launcher gate).
+- Stage D proof is a single 16×16×16 tile + `f32←f16` only; general tiled/
+  K-looped GEMM and the bf16 combo (documented gfx115x bugs) are follow-ups.
 
 ## Next Work
 
@@ -72,12 +82,14 @@ handled the WSL `hipGetDeviceCount==0` quirk (probe-based skip).
    AMD GPU ELF object; verified on the box, gfx1100 + gfx1151.
 2. ✅ **Stage C — launch (2026-06-22):** a GEMM executes through the C-ABI
    bridge on gfx1100 and matches `A @ B`; runtime HIP build fixed.
-3. **Stage D — prove:** route the Stage A/B **WMMA** GEMM through the Stage C
-   bridge and execute-and-compare vs a numpy oracle (bring up `fp32←f16`/
-   `f16←f16` before bf16 per the documented gfx115x bf16 bugs), then flip
-   `backend_kernel` for `tessera.matmul`.
-4. Ship an auto-registered ROCm runtime launcher (move the harness launcher into
-   a backend lib) so a `runtime_execution_matrix` ROCm row can land.
+3. ✅ **Stage D — prove (2026-06-22):** the WMMA `f32←f16` GEMM executes through
+   the bridge and matches a host reference (`test_rocm_wmma_execute_compare.py`).
+4. **Ship an auto-registered ROCm runtime launcher** (move the harness WMMA
+   kernel + launcher into a hipcc-built backend lib that auto-registers via
+   `tsrRegisterGpuLauncher` with a real shipped `runtime_symbol`). This is the
+   one remaining gate to (a) promote the gfx1151 matmul manifest row to
+   `hardware_verified`, (b) flip `backend_kernel`, and (c) add a
+   `runtime_execution_matrix` ROCm row. Then extend to tiled/K-looped GEMM + bf16.
 5. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
    `--tessera-emit-rocdl` route works (Stage B currently rides the direct emitter).
 6. Promote manifest rows only after generated dashboards agree.

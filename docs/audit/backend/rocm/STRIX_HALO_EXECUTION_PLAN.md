@@ -108,9 +108,35 @@ Two real fixes landed with it:
 with a correct (naive) GEMM kernel compiled by hipcc. It does **not** yet route
 the Stage A/B **WMMA** kernel, nor is the launcher auto-registered by a shipped
 ROCm runtime lib (it lives in the test harness, exactly as the Apple G7 proof
-does). **Stage D** is next: execute-and-compare the **WMMA** GEMM (bring up
-`fp32←f16` / `f16←f16` before bf16) vs a numpy oracle → flip `backend_kernel`
-for `tessera.matmul` on `rocm_gfx1151`/`gfx1100` to a real-execution status.
+does). That WMMA execute-compare is Stage D, below.
+
+### Stage D — WMMA matrix-core GEMM executes-and-compares through the bridge (2026-06-22)
+
+The real RDNA WMMA matrix instruction now runs on the device and produces a
+**numerically correct GEMM**, routed through the C-ABI launch bridge. The kernel
+uses `__builtin_amdgcn_wmma_f32_16x16x16_f16_w32` (the same
+`v_wmma_f32_16x16x16_f16` `rocdl_emit.py` emits), with the operand/accumulator
+fragment layout matching the grounded mapping in `rocdl_emit.py` (col = lane&15,
+row = 2·e + lane>>4). A 16×16×16 `f32 ← f16` tile vs a host reference: **maxerr
+≈ 3e-8 standalone, < 1e-2 through the bridge** (`f16` rounding). Test:
+`tests/unit/test_rocm_wmma_execute_compare.py`. We bring up `f32←f16` first
+(bf16 has documented gfx115x bugs).
+
+**What this clears, and what it does NOT.** This is a genuine on-hardware
+execute-and-compare of the WMMA op — the *numerical-proof* half of the
+`backend_manifest` `hardware_verified` contract (`execute_compare_fixture`). It
+is **deliberately NOT promoted to `hardware_verified` / `backend_kernel`
+complete**, because that status also requires a **shipped `runtime_symbol`** — a
+C-ABI kernel symbol that runs at dispatch from an auto-registered ROCm runtime
+lib (cf. Apple's `tessera_apple_gpu_mps_matmul_f32` in the shipped runtime).
+Today the WMMA kernel + launcher live in the *test harness* (exactly as the
+Apple G7 bridge proof does), not a shipped, auto-registering backend lib.
+Promoting the manifest row now — with a test-only symbol — would be the audit
+inflation Decision #25 forbids. **The formal `backend_kernel` flip is gated on
+the remaining "ship an auto-registered ROCm runtime launcher" item** (Next Work
+in `ROCM_AUDIT.md`); the numerical proof is in hand, so that flip becomes
+mechanical once the symbol ships. It is also a single 16×16×16 tile, not a
+general tiled/K-looped GEMM (a separate scale item).
 
 ## The hardware — three engines, three Tessera stories
 

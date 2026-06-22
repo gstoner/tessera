@@ -35,6 +35,14 @@ static std::string fp8Base(Type t) {
   return "";
 }
 
+// RDNA arches use the WMMA matrix instruction; CDNA arches use MFMA. The
+// matmul tile lowering must pick the right matrix op per arch — emitting MFMA
+// on RDNA (which has no matrix-fused-multiply-add core) is a silent miscompile.
+// RDNA = gfx11xx (RDNA 3 / 3.5) and gfx12xx (RDNA 4); CDNA = gfx9xx.
+static bool isWmmaArch(llvm::StringRef arch) {
+  return arch.starts_with("gfx11") || arch.starts_with("gfx12");
+}
+
 // "fnuz" (CDNA 3) | "ocp" (CDNA 4 / RDNA 4 / gfx125x) | "none" (no FP8 path).
 static llvm::StringRef fp8SemanticsForArch(llvm::StringRef arch) {
   if (arch == "gfx940" || arch == "gfx942")
@@ -110,7 +118,11 @@ struct LowerTileToROCMPass
           fp8Flavor = (sem == "fnuz") ? base + "fnuz" : base;
         }
 
-        OperationState state(op->getLoc(), "tessera_rocm.mfma");
+        // RDNA -> WMMA, CDNA -> MFMA. Same 16x16x16 v1 artifact contract; only
+        // the target matrix op (and its eventual ROCDL marker) differs.
+        StringRef matrixOp =
+            isWmmaArch(arch) ? "tessera_rocm.wmma" : "tessera_rocm.mfma";
+        OperationState state(op->getLoc(), matrixOp);
         // The v1 contract carries a scalar accumulator operand. Until Tile IR
         // models explicit accumulator SSA, use lhs as the artifact accumulator.
         state.addOperands({op->getOperand(0), op->getOperand(1),

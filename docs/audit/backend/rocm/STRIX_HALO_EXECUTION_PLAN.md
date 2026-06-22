@@ -9,6 +9,45 @@
 > so the MLIR→LLVM→AMDGPU codegen path becomes real and testable on owned silicon, and
 > it is the path that **generalizes to NVIDIA** where the Apple path does not.
 
+## Bring-up status — box landed (2026-06-22)
+
+The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
+LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
+
+- **The iGPU enumerates as `gfx1100`, not `gfx1151`.** `rocminfo` reports the
+  Radeon 8060S as `Name: gfx1100` (ISA `amdgcn-amd-amdhsa--gfx1100`, wave32, 40
+  CUs) — the WSL/ROCm 7.2.4 runtime maps the RDNA 3.5 part onto the supported
+  discrete `gfx1100` (RDNA 3) profile. Both are RDNA, **same 16×16×16 WMMA op
+  family, no FP8 WMMA**, so the codegen target model is unchanged — but **on
+  this box the offload arch is `gfx1100`** (`--offload-arch=gfx1100`). Stages
+  B–D below target `gfx1100` here; `gfx1151` remains the native-Linux target.
+  Both archs are already in `rocm_target.py`/`capabilities.py`.
+- **External gates from "Honest external gates" below are now cleared:**
+  `rocminfo` enumerates the GPU **without** any `HSA_OVERRIDE_GFX_VERSION`;
+  `hipcc --offload-arch=gfx1100` compiles a WMMA kernel (374 lines of AMDGCN
+  `.s`); the ROCm backend lit suite is **11/11**; `tessera-opt` +
+  `tessera-rocm-opt` build clean against LLVM/MLIR 22.1.8. So **Stages A and B
+  are fully unblocked**, and the box presence unblocks C/D.
+- **Build-state findings (verified in-tree):**
+  - The `--tessera-emit-rocdl` pipeline (linalg→scf.parallel→gpu→ROCDL) scaffold
+    exists in `tessera-opt`; the `tessera_rocm`/`rocdl` dialects are registered.
+  - **`lower-tile-to-rocm` had no WMMA path — it always emitted
+    `tessera_rocm.mfma` regardless of arch**, which is wrong for RDNA (no MFMA).
+    Fixed in the Stage A increment (2026-06-22): a `tessera_rocm.wmma` op +
+    arch-keyed selection (`gfx11xx` → WMMA) + a `llvm.amdgcn.wmma.contract`
+    ROCDL marker, with the no-FP8-on-RDNA gate preserved. Lit fixtures added.
+  - The HIP runtime `loader.cpp` already has real
+    `hipModuleLoad`/`hipModuleGetFunction`/`hipModuleLaunchKernel` (behind
+    `TESSERA_HAS_HIP`), **but it is a standalone `tessera_rocm_runtime` lib and
+    is NOT wired into the core C-ABI bridge `tsrRegisterGpuLauncher`**, and
+    there is **no HIPRTC** path (it loads a prebuilt `.hsaco`). That wiring is
+    the bulk of **Stage C**.
+  - The arch knob is `lower-tile-to-rocm{arch=gfxNNNN}` (and the FP8 gate). The
+    `--rocm-target=gfxNNNN` flag referenced by the `tests/tessera-ir/phase8/
+    rocm_7_2/*.mlir` fixtures is **stale — no tool implements it**; those
+    fixtures are not in the run suite. Canonical fixtures live in
+    `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`.
+
 ## The hardware — three engines, three Tessera stories
 
 | Engine | What | Tessera status | Action |

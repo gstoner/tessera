@@ -23,23 +23,44 @@ This document consolidates ROCm-specific audit material.
 - ROCm sub-arch gating was corrected so missing HIP toolchain is reported on
   the right axis.
 
+## Box landed (2026-06-22) — toolchain gates cleared
+
+A Strix Halo box (Ryzen AI Max+ 395) is now available: Ubuntu 24.04 (WSL2),
+ROCm **7.2.4**, LLVM/MLIR **22.1.8**. The iGPU enumerates as **`gfx1100`**
+(RDNA3 profile; same 16×16×16 WMMA family as gfx1151, no FP8 WMMA) — see
+[`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md) "Bring-up status".
+Cleared: `rocminfo` enumerates without `HSA_OVERRIDE`; `hipcc` compiles WMMA for
+gfx1100; ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
+
+**Stage A increment landed (2026-06-22):** `lower-tile-to-rocm` was emitting
+`tessera_rocm.mfma` for every arch — wrong for RDNA. Added a `tessera_rocm.wmma`
+op + arch-keyed selection (`gfx11xx` → WMMA, CDNA → MFMA, no-FP8-on-RDNA gate
+preserved) + a `llvm.amdgcn.wmma.contract` ROCDL marker, with lit fixtures.
+
 ## Still Open
 
 - No ROCm execution row exists in `../../generated/runtime_execution_matrix.md`.
 - ROCm rows remain artifact-only or planned until real hardware execution is
   proven.
-- HIP runtime launch bridge and execute-and-compare proof are still required.
-- MFMA/gfx-specific proof must be validated on real AMD hardware.
+- **Stage C — HIP launch bridge:** the standalone `tessera_rocm_runtime`
+  (`runtime/hip/loader.cpp`) has real `hipModuleLaunchKernel` (behind
+  `TESSERA_HAS_HIP`) but is **not** registered into the core C-ABI hook
+  `tsrRegisterGpuLauncher`, and there is no HIPRTC path (loads prebuilt hsaco).
+- **Stage D — execute-and-compare** WMMA GEMM vs numpy oracle, then flip
+  `backend_kernel` for `tessera.matmul` on `rocm_gfx1100`/`gfx1151`.
 
 ## Next Work
 
-1. Bring up ROCm hardware validation.
-2. Register a HIP launcher into the C-ABI launch-bridge hook
-   (`tsrRegisterGpuLauncher`, landed G7 2026-06-10 — see
-   `backend/BACKEND_AUDIT.md`) for the first narrow ROCm kernel.
-3. Add runtime ABI and hardware-smoke tests.
-4. Add execute-and-compare oracle tests.
-5. Promote manifest rows only after generated dashboards agree.
+1. **Stage B — assemble:** emit the gfx1100 WMMA GEMM to LLVM IR
+   (`mlir-translate`) → `hipcc --offload-arch=gfx1100` / `llc -mcpu=gfx1100` to a
+   real object; skip-clean when hipcc absent.
+2. **Stage C — launch:** register a HIP launcher into `tsrRegisterGpuLauncher`
+   (landed G7 2026-06-10 — see `backend/BACKEND_AUDIT.md`); load the Stage B
+   hsaco and `hipModuleLaunchKernel` the gfx1100 WMMA kernel. Add runtime ABI +
+   hardware-smoke tests.
+3. **Stage D — prove:** execute-and-compare oracle tests (bring up
+   `fp32←f16`/`f16←f16` WMMA before bf16 per the documented gfx115x bf16 bugs).
+4. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated
 

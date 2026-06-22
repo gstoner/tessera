@@ -7,3 +7,18 @@ if (hip_FOUND)
 endif()
 add_executable(launch_demo examples/launch_vec_add.cpp)
 target_link_libraries(launch_demo PRIVATE tessera_rocm_runtime)
+
+# Shipped ROCm WMMA GEMM runtime symbol (tessera_rocm_wmma_gemm_f16). Built only
+# when HIP is available: it HIPRTC-compiles the WMMA kernel at load time, so the
+# object itself needs only the ordinary host compiler + the HIP runtime/HIPRTC
+# at link time. This is the shipped symbol the backend_manifest
+# `hardware_verified` contract requires; the execute_compare_fixture
+# (tests/unit/test_rocm_wmma_runtime_symbol.py) dlopens and numerically validates it.
+if (hip_FOUND)
+  find_library(TESSERA_HIPRTC_LIB NAMES hiprtc HINTS "${ROCM_PATH}/lib" /opt/rocm/lib)
+  add_library(tessera_rocm_gemm SHARED tessera_rocm_gemm.cpp)
+  target_link_libraries(tessera_rocm_gemm PUBLIC hip::host)
+  if (TESSERA_HIPRTC_LIB)
+    target_link_libraries(tessera_rocm_gemm PUBLIC ${TESSERA_HIPRTC_LIB})
+  endif()
+endif()

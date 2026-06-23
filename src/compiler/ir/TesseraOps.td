@@ -969,7 +969,7 @@ def Tessera_DequantizeFP4Op : Op<Tessera_Dialect, "dequantize_fp4", [Pure]> {
   let hasVerifier = 1;
 }
 
-def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", []> {
+def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", [MemoryEffects<[MemWrite]>]> {
   let summary = "MoE token dispatch transport op";
   let arguments = (ins TensorType:$x, TensorType:$route);
   let results = (outs TensorType:$partials);
@@ -980,7 +980,7 @@ def Tessera_MoeDispatchOp : Op<Tessera_Dialect, "moe_dispatch", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_MoeCombineOp : Op<Tessera_Dialect, "moe_combine", []> {
+def Tessera_MoeCombineOp : Op<Tessera_Dialect, "moe_combine", [MemoryEffects<[MemWrite]>]> {
   let summary = "MoE token combine transport op";
   let arguments = (ins TensorType:$partials, TensorType:$inverse_route,
                         DefaultValuedAttr<StrAttr, "\"sum\"">:$reduce);
@@ -1750,7 +1750,7 @@ def Tessera_CastOp : Op<
   let hasFolder = 1;
 }
 
-def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", []> {
+def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]>]> {
   let summary = "Reference random dropout with optional deterministic seed";
   // Sprint V4b (2026-05-22): dropout probability must be in [0, 1).
   // Shape is preserved; element type is preserved.
@@ -1765,7 +1765,7 @@ def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", []> {
 
 class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  []
+  [MemoryEffects<[MemWrite]>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,
@@ -1809,7 +1809,7 @@ def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_AdamOp : Op<Tessera_Dialect, "adam", []> {
+def Tessera_AdamOp : Op<Tessera_Dialect, "adam", [Pure]> {
   let summary = "Functional Adam optimizer step";
   let arguments = (ins TensorType:$param, TensorType:$grad,
                        TensorType:$moment1, TensorType:$moment2,
@@ -1827,7 +1827,7 @@ def Tessera_AdamOp : Op<Tessera_Dialect, "adam", []> {
 }
 
 class Tessera_OptimizerTreeOp<string mnemonic, string summaryText>
-  : Op<Tessera_Dialect, mnemonic, []> {
+  : Op<Tessera_Dialect, mnemonic, [Pure]> {
   let summary = summaryText;
   let arguments = (ins TensorType:$params, TensorType:$grads,
                        Optional<TensorType>:$state,
@@ -1875,7 +1875,7 @@ def Tessera_SoftmaxSafeOp : Op<
   let hasVerifier = 1;
 }
 
-def Tessera_KVCacheCreateOp : Op<Tessera_Dialect, "kv_cache.create", []> {
+def Tessera_KVCacheCreateOp : Op<Tessera_Dialect, "kv_cache.create", [MemoryEffects<[MemWrite]>]> {
   let summary = "Create a stateful KV cache with rolling-window/page policy";
   let arguments = (ins I64Attr:$max_seq,
                        I64Attr:$head_dim,
@@ -1887,7 +1887,7 @@ def Tessera_KVCacheCreateOp : Op<Tessera_Dialect, "kv_cache.create", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_KVCacheAppendOp : Op<Tessera_Dialect, "kv_cache.append", []> {
+def Tessera_KVCacheAppendOp : Op<Tessera_Dialect, "kv_cache.append", [MemoryEffects<[MemWrite]>]> {
   let summary = "Append key/value tensors to a stateful KV cache";
   let arguments = (ins Tessera_KVCacheType:$cache, TensorType:$k, TensorType:$v);
   let results = (outs Tessera_KVCacheType:$updated);
@@ -1895,7 +1895,7 @@ def Tessera_KVCacheAppendOp : Op<Tessera_Dialect, "kv_cache.append", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", []> {
+def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", [MemoryEffects<[MemWrite]>]> {
   let summary = "Prune a rolling-window KV cache to a fixed window";
   let arguments = (ins Tessera_KVCacheType:$cache, I64Attr:$window);
   let results = (outs Tessera_KVCacheType:$updated);
@@ -1903,14 +1903,14 @@ def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", []> {
+def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", [MemoryEffects<[MemRead]>]> {
   let summary = "Lookup a logical page in a stateful cache";
   let arguments = (ins Tessera_KVCacheType:$cache, Index:$position);
   let results = (outs Tessera_CachePageType:$page);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_RingCreateOp : Op<Tessera_Dialect, "ring.create", []> {
+def Tessera_RingCreateOp : Op<Tessera_Dialect, "ring.create", [MemoryEffects<[MemWrite]>]> {
   let summary = "Create a stateful ring buffer";
   let arguments = (ins I64Attr:$capacity);
   let results = (outs Tessera_RingType:$ring);
@@ -1918,7 +1918,7 @@ def Tessera_RingCreateOp : Op<Tessera_Dialect, "ring.create", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_ArchParameterOp : Op<Tessera_Dialect, "arch.parameter", []> {
+def Tessera_ArchParameterOp : Op<Tessera_Dialect, "arch.parameter", [MemoryEffects<[MemWrite]>]> {
   let summary = "Declare FP32 architecture logits separate from model weights";
   let arguments = (ins I64Attr:$size,
                        OptionalAttr<StrAttr>:$name,
@@ -1928,7 +1928,7 @@ def Tessera_ArchParameterOp : Op<Tessera_Dialect, "arch.parameter", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_ArchGumbelSoftmaxOp : Op<Tessera_Dialect, "arch.gumbel_softmax", []> {
+def Tessera_ArchGumbelSoftmaxOp : Op<Tessera_Dialect, "arch.gumbel_softmax", [MemoryEffects<[MemWrite]>]> {
   let summary = "Differentiable Gumbel-Softmax relaxation over architecture logits";
   let arguments = (ins Tessera_ArchParamType:$alpha,
                        F64Attr:$temperature,
@@ -1938,7 +1938,7 @@ def Tessera_ArchGumbelSoftmaxOp : Op<Tessera_Dialect, "arch.gumbel_softmax", []>
   let hasVerifier = 1;
 }
 
-def Tessera_ArchHardConcreteOp : Op<Tessera_Dialect, "arch.hard_concrete", []> {
+def Tessera_ArchHardConcreteOp : Op<Tessera_Dialect, "arch.hard_concrete", [MemoryEffects<[MemWrite]>]> {
   let summary = "Hard-concrete sparse relaxation over architecture logits";
   let arguments = (ins Tessera_ArchParamType:$alpha,
                        F64Attr:$temperature);
@@ -1947,7 +1947,7 @@ def Tessera_ArchHardConcreteOp : Op<Tessera_Dialect, "arch.hard_concrete", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_ArchSTEOneHotOp : Op<Tessera_Dialect, "arch.ste_one_hot", []> {
+def Tessera_ArchSTEOneHotOp : Op<Tessera_Dialect, "arch.ste_one_hot", [Pure]> {
   let summary = "Straight-through one-hot architecture gate";
   let arguments = (ins Tessera_ArchParamType:$alpha);
   let results = (outs Tessera_ArchGateType:$gate);
@@ -1957,7 +1957,7 @@ def Tessera_ArchSTEOneHotOp : Op<Tessera_Dialect, "arch.ste_one_hot", []> {
   // invariant to add). A `verify(){return success();}` would be a trivial stub.
 }
 
-def Tessera_ArchWeightedSumOp : Op<Tessera_Dialect, "arch.weighted_sum", []> {
+def Tessera_ArchWeightedSumOp : Op<Tessera_Dialect, "arch.weighted_sum", [Pure]> {
   let summary = "Weighted merge of candidate tensor outputs by architecture gate";
   let arguments = (ins Variadic<TensorType>:$candidates,
                        Tessera_ArchGateType:$gate);
@@ -1966,7 +1966,7 @@ def Tessera_ArchWeightedSumOp : Op<Tessera_Dialect, "arch.weighted_sum", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_ArchSwitchOp : Op<Tessera_Dialect, "arch.switch", []> {
+def Tessera_ArchSwitchOp : Op<Tessera_Dialect, "arch.switch", [Pure]> {
   let summary = "Soft or hard architecture candidate switch";
   let arguments = (ins Variadic<TensorType>:$candidates,
                        Tessera_ArchGateType:$gate,
@@ -1976,7 +1976,7 @@ def Tessera_ArchSwitchOp : Op<Tessera_Dialect, "arch.switch", []> {
   let hasVerifier = 1;
 }
 
-def Tessera_ArchMixedOp : Op<Tessera_Dialect, "arch.mixed", []> {
+def Tessera_ArchMixedOp : Op<Tessera_Dialect, "arch.mixed", [Pure]> {
   let summary = "Search-space mixed operator carrying candidate names and relaxation";
   let arguments = (ins AnyType:$input,
                        Tessera_ArchGateType:$gate,

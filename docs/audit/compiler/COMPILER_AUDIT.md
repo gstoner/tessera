@@ -77,7 +77,7 @@ Two facts make the transition cheaper than it looks:
 | IR level | Real today | Dispatcher / stub | Primary gap to close |
 |---|---|---|---|
 | **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
-| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast` folders + `matmul`/`transpose` canonicalizers (7 ops), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). Still open: the other ops have no folder; **effect interfaces on the 8 non-pure ops are absent (0 today)** so generic CSE/DCE isn't sound across them; `LayoutAssignmentPass` is **not yet wired into the named x86/GPU pipelines**. ~5 passes are attribute-stamp-only. | Effect interfaces on the 8 non-pure ops; broaden folder coverage; wire `LayoutAssignmentPass` into the named pipelines. |
+| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast` folders + `matmul`/`transpose` canonicalizers (7 ops), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). Still open: the non-arithmetic ops have no folder; `LayoutAssignmentPass` is **not yet wired into the named x86/GPU pipelines**. ~5 passes are attribute-stamp-only. | Broaden folder coverage; wire `LayoutAssignmentPass` into the named pipelines. |
 | **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. | Pipeline insertion is annotation-only (no real 1F1B order). OptimizerShard is pure attrs. No collective overlap (`ChunkPlanner`/`CollectiveScheduler` exist but are never invoked). | Real 1F1B ordering; wire the collective planners. |
 | **Tile IR (FA-4)** | `TilingPass` emits real `scf.for` M/N nests; `NVTMADescriptorPass` is a genuine hoist/dedup. | M/N blocking only — **no K-reduction loop**, fixed 16×16. **Flash-attn is straight-line** (no `scf.for` over KV; online-softmax is whole-tensor ops). WarpSpec emits no queues/mbarriers. WGMMA → hardcoded `m64n64k16`. | Converge GEMM to linalg K-loop; streaming flash-attn loop; autotuner→IR. |
 | **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
@@ -691,9 +691,14 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   (it mutates IR, so wiring is gated on a layout-sensitive backend consuming the
   attrs). The Graph-IR `hasFolder`/`hasCanonicalizer` gap is **partly closed** —
   7 ops now carry folders/canonicalizers wired into the `tessera_jit` CPU
-  `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); **effect interfaces on
-  the 8 non-pure ops remain absent (0 today)**, so making generic CSE/DCE sound
-  across them is the open remainder.
+  `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); **per-op effect
+  interfaces landed 2026-06-22** — all 23 non-pure ops carry an explicit
+  `MemoryEffectsOpInterface` (`[Pure]` for the deterministic optimizer/arch
+  value ops, `MemWrite`/`MemRead` for random/stateful/collective/MoE-transport
+  ops), so generic CSE merges/removes the pure ones and preserves the effectful
+  ones (`graph_ir_op_effects.mlir`). The open Phase-1 remainder is wiring
+  `LayoutAssignmentPass` into the named x86/GPU pipelines and broadening folder
+  coverage beyond the 7 arithmetic/cast ops.
 - **Complete claims need fixtures.** A completed backend claim should resolve to
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the

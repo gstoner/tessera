@@ -17,25 +17,22 @@ Failure-path hardening (2026-06-22):
     (``make -q`` is unusable here: CMake-generated Makefiles carry phony
     always-run rules, so it reports "needs rebuild" even right after a build.
     mtime, by contrast, correctly flips to fresh once you rebuild.)
-  * **OOM notification** — a lit run killed by ``SIGKILL`` is almost always the
-    OOM killer (macOS jetsam / Linux oom-killer under memory pressure) or an
-    operator kill, NOT a fixture regression. We detect the signal exit and skip
-    with a loud, actionable reason instead of reporting a misleading failure.
-  * **Clean shutdown** — the lit subprocess runs in its own process group, so on
-    a timeout or any error the whole tree (``lit`` → ``tessera-rocm-opt`` /
-    ``FileCheck`` / ``not``) is torn down with ``killpg`` — no orphaned children.
+  * **OOM / clean shutdown** — the lit subprocess runs through the shared
+    ``_subprocess.run_checked`` helper: its own process group (so a timeout or
+    error tears down the whole tree — ``lit`` → ``tessera-rocm-opt`` /
+    ``FileCheck`` / ``not`` — with no orphans), a SIGKILL treated as OOM/resource
+    (skip, not a false failure), and a timeout ceiling.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
-import signal
-import subprocess
 from pathlib import Path
 
 import pytest
+
+from _subprocess import run_checked
 
 _REPO = Path(__file__).resolve().parents[2]
 
@@ -94,6 +91,15 @@ def _newest_opt_source_mtime() -> float:
     return newest
 
 
+def _build_root(test_dir: Path) -> Path | None:
+    """The CMake build root (holds CMakeCache.txt) — used only to phrase the
+    rebuild hint."""
+    for p in test_dir.parents:
+        if (p / "CMakeCache.txt").is_file():
+            return p
+    return None
+
+
 def _stale_binary_reason(test_dir: Path) -> str | None:
     """Return a skip reason if ``tessera-rocm-opt`` predates its real source
     inputs (so its lit output can't be trusted), else None. mtime, scoped to the
@@ -116,62 +122,6 @@ def _stale_binary_reason(test_dir: Path) -> str | None:
     return None
 
 
-def _build_root(test_dir: Path) -> Path | None:
-    """The CMake build root (holds CMakeCache.txt) — used only to phrase the
-    rebuild hint."""
-    for p in test_dir.parents:
-        if (p / "CMakeCache.txt").is_file():
-            return p
-    return None
-
-
-class _LitResult:
-    def __init__(self, returncode: int | None, stdout: str, stderr: str,
-                 timed_out: bool = False) -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-        self.timed_out = timed_out
-        # POSIX: a signal-killed child reports a negative returncode (-SIG).
-        self.killed_signal = (
-            -returncode if (returncode is not None and returncode < 0) else None)
-
-
-def _kill_group(proc: subprocess.Popen) -> None:
-    """Tear down the whole process group (lit + its grandchildren). Falls back to
-    killing just the leader if the group is already gone."""
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError, OSError):
-        try:
-            proc.kill()
-        except OSError:
-            pass
-
-
-def _run_lit_clean(cmd: list[str], timeout: int) -> _LitResult:
-    """Run ``cmd`` in its own session/process group and return a result that
-    distinguishes a clean exit, a timeout, and a signal kill (e.g. OOM SIGKILL).
-    On timeout or any exception the group is killed so no child is orphaned."""
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        start_new_session=True)
-    try:
-        out, err = proc.communicate(timeout=timeout)
-        return _LitResult(proc.returncode, out, err)
-    except subprocess.TimeoutExpired:
-        _kill_group(proc)
-        try:
-            out, err = proc.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            out, err = "", ""
-        return _LitResult(proc.returncode, out, err, timed_out=True)
-    except BaseException:
-        # KeyboardInterrupt / unexpected error — never leave the tree running.
-        _kill_group(proc)
-        raise
-
-
 def test_rocm_lit_suite_passes() -> None:
     lit = _lit()
     if lit is None:
@@ -186,28 +136,10 @@ def test_rocm_lit_suite_passes() -> None:
     if stale is not None:
         pytest.skip(stale)
 
-    res = _run_lit_clean([lit, "-q", str(test_dir)], timeout=_LIT_TIMEOUT_S)
-
-    # ── Failure paths, most-specific first ──────────────────────────────────
-    if res.timed_out:
-        pytest.fail(
-            f"ROCm lit suite exceeded {_LIT_TIMEOUT_S}s and was killed "
-            f"(process group torn down). A tessera-rocm-opt fixture likely hung."
-            f"\n--- stdout ---\n{res.stdout}\n--- stderr ---\n{res.stderr}")
-    if res.killed_signal == signal.SIGKILL:
-        # OOM notification: jetsam / oom-killer / operator kill — a resource
-        # condition, not a fixture regression. The tree is already down.
-        pytest.skip(
-            "ROCm lit suite was SIGKILL'd — almost certainly OOM / memory "
-            "pressure (or an external kill), not a test failure. Re-run with "
-            "less concurrent load (don't stack it with a full pytest run + a "
-            "C++ link). Process group was cleaned up.")
-    if res.killed_signal is not None:
-        name = signal.Signals(res.killed_signal).name
-        pytest.fail(
-            f"ROCm lit suite killed by signal {res.killed_signal} ({name}); "
-            f"process group cleaned up."
-            f"\n--- stdout ---\n{res.stdout}\n--- stderr ---\n{res.stderr}")
+    # run_checked handles the failure paths uniformly: timeout (fail, tree torn
+    # down), SIGKILL/OOM (skip — resource, not a defect), other signal (fail).
+    res = run_checked([lit, "-q", str(test_dir)],
+                      what="ROCm lit suite", timeout=_LIT_TIMEOUT_S)
 
     # lit returns non-zero if any fixture fails; surface its report on failure.
     assert res.returncode == 0, (

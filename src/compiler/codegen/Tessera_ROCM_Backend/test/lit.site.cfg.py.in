@@ -3,7 +3,12 @@ import os
 config.test_source_root = "@CMAKE_CURRENT_SOURCE_DIR@"
 config.test_exec_root = "@CMAKE_CURRENT_BINARY_DIR@"
 config.llvm_tools_dir = "@TESSERA_LLVM_TOOLS_DIR@"
-config.substitutions.append(('%trop', '@TESSERA_ROCM_OPT_EXECUTABLE@'))
+# Insert (not append) so `%trop` is applied before lit's built-in `%t` temp
+# substitution: `%t` is a prefix of `%trop`, and a lit that applies `%t` first
+# would corrupt `%trop` -> "<tmp>rop". Modern lit (18/22) sorts substitutions
+# longest-first so order is already safe, but inserting at the front makes the
+# config robust regardless of lit version.
+config.substitutions.insert(0, ('%trop', '@TESSERA_ROCM_OPT_EXECUTABLE@'))
 
 # Load the real test config (test_format + suffixes + PATH wiring).  Without
 # this load_config the site config sets roots but lit never learns how to

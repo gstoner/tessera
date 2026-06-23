@@ -75,6 +75,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_rocm_gemm.so tessera_rocm_wmma_gemm_{f16,"
                             "bf16} C ABI symbol (HIPRTC-compiled for the device "
                             "arch; f16/bf16 storage, f32 accumulate)",
+    "rocm_compiled":        "AMD GPU RDNA WMMA GEMM the Tessera compiler GENERATES "
+                            "(Stage L): tessera-opt generates + serializes the "
+                            "kernel to hsaco in-process (no mlir-opt), then HIP "
+                            "loads + launches it. Opt-in; f16 storage, f32 accum; "
+                            "the rocm_wmma lane stays the default + oracle",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -152,6 +157,22 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm matmul artifact runs a real RDNA WMMA matrix-core GEMM on "
                "the AMD GPU via the shipped tessera_rocm_wmma_gemm_{f16,bf16} "
                "C ABI symbol (HIPRTC-compiled for the device arch).",
+        execution_mode="hip_runtime"),
+    # --- AMD ROCm GPU (COMPILED lane — Stage L, opt-in) ---
+    # The kernel the Tessera compiler GENERATES: the in-process Stage L pipeline
+    # (generate-wmma-gemm-kernel -> ROCDL -> gpu-module-to-binary, all in
+    # tessera-opt, no mlir-opt shell-out) emits an hsaco that runs the same RDNA
+    # WMMA GEMM. OPT-IN: selected by compiler_path="rocm_compiled". The
+    # hand-written `rocm_wmma` lane stays the default + reference oracle until the
+    # compiled path's ragged-edge tiles reach perf parity (ROCM_AUDIT L4). f16.
+    ("rocm", "rocm_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_compiled", runtime_status="success",
+        reason="ROCm matmul artifact runs the COMPILER-GENERATED RDNA WMMA GEMM "
+               "(Stage L): tessera-opt generates + serializes the kernel to hsaco "
+               "in-process (no mlir-opt), then HIP loads + launches it. Opt-in; "
+               "the hand-written rocm_wmma lane stays the default + oracle.",
         execution_mode="hip_runtime"),
 }
 

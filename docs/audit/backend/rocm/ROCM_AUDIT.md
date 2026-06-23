@@ -321,9 +321,12 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   intrinsic is cross-checked against `rocdl_emit.wmma_intrinsic(dtype)` so the two
   emitters can't silently diverge — **folds the Python side-emitter (path 4) into
   the MLIR pass (path 3)**. *(Note: the ROCm lit suite under
-  `Tessera_ROCM_Backend/test/` is currently broken by a `%trop`/`%t` substitution
-  collision and is opt-in/skipped in CI — pre-existing; Stage J validates via the
-  Python fixture instead.)*
+  `Tessera_ROCM_Backend/test/` passes 12/12 on lit 18 + llvm-22 lit — the old
+  `%trop`/`%t` substitution-collision concern no longer bites (modern lit sorts
+  substitutions longest-first; the site config also now `insert`s `%trop` ahead
+  of the built-in `%t` to be robust across lit versions). Stage J additionally
+  validates via a Python fixture. The lit job stays opt-in in CI by design — it
+  needs `tessera-opt` built.)*
 - **Stage K — a real GEMM through the full stack vs. the oracle.** Two steps:
   - ✅ **Step 1 (2026-06-23) — chain + layout proven, oracle-matched.** A
     16×16×16 WMMA GEMM expressed at the **Target-IR level** (`tessera_rocm.wmma` +
@@ -409,12 +412,27 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     from the platform LLVM (the ROCDL serializer shells to it). The in-process
     hsaco executes on gfx1151 bit-identical to the oracle —
     `tests/unit/test_rocm_wmma_gemm_in_process.py`.
-  - **L4 — make it a `runtime.launch()` lane + flip the source of truth.** Once
-    L1–L3 land and perf matches, route `target="rocm"` matmul through the compiled
-    path; the hand-written HIPRTC kernel becomes the reference oracle / fast
-    fallback. Promote manifest/runtime rows only after dashboards agree.
+  - 🟢 **L4 — compiled `runtime.launch()` lane (2026-06-23, opt-in).** The
+    compiled path is now a real production-dispatch lane: an artifact with
+    `compiler_path="rocm_compiled"` routes through the execution matrix to
+    `_execute_rocm_compiled_gemm`, which drives the Stage L3 in-process pipeline
+    (tessera-opt → hsaco, cached per `(mt,nt)` since the kernel is shape-generic)
+    and launches it via HIP. Same `runtime.launch()` entry point as the
+    hand-written lane — only *which kernel runs* differs. Executes on gfx1151
+    bit-identical to the hand-written oracle through `launch()` across
+    `{16³, 64×48×32, 256³}`; size-adaptive `(mt,nt)` mirrors the oracle (3×4 once
+    min≥1024, else 2×4). f16 today (bf16 is a structured `invalid_artifact`, not a
+    miscompute — use `rocm_wmma`). New execution-matrix row + `KNOWN_EXECUTORS`
+    entry + `tests/unit/test_rocm_compiled_launch_execute.py`.
+    **Deliberately NOT flipped to default / promoted in the manifest** (Decision
+    #25): the hand-written `rocm_wmma` stays the default + reference oracle/fast
+    fallback because the compiled path's *masked ragged-edge* tiles aren't yet
+    perf-competitive (L2 caveat). Flipping the source of truth waits on the
+    masked-edge optimization + dashboards agreeing. Remaining for full L4:
+    masked-edge perf parity, then promote.
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
-  L1. Until L completes, the hand-written kernel stays the production lane.
+  L1. The hand-written kernel stays the production default + oracle until the
+  compiled lane reaches ragged-shape perf parity.
 
 10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
     correctness-first); the `runtime.launch()` artifact lane.

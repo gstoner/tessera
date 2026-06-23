@@ -5,4 +5,5 @@ apple_gpu,apple_gpu_mps,native_gpu,1,apple_gpu_mps,success,metal_runtime,Apple G
 apple_gpu,apple_value_target_ir,native_gpu,1,apple_gpu_value_target_ir,success,metal_runtime,"Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches named C ABI symbols for strict rank-3 batched matmul, native sparse attention, PPO policy-loss, and EBM value envelopes."
 cpu,jit_cpu_numpy,reference_cpu,1,jit_cpu_numpy,success,,CPU JIT artifact runs through the numpy reference path.
 cpu,native_cpu,native_cpu,1,native_cpu,success,,CPU artifact runs through the x86 AMX / native CPU runtime.
+rocm,rocm_compiled,native_gpu,1,rocm_compiled,success,hip_runtime,"ROCm matmul artifact runs the COMPILER-GENERATED RDNA WMMA GEMM (Stage L): tessera-opt generates + serializes the kernel to hsaco in-process (no mlir-opt), then HIP loads + launches it. Opt-in; the hand-written rocm_wmma lane stays the default + oracle."
 rocm,rocm_wmma,native_gpu,1,rocm_wmma,success,hip_runtime,"ROCm matmul artifact runs a real RDNA WMMA matrix-core GEMM on the AMD GPU via the shipped tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol (HIPRTC-compiled for the device arch)."

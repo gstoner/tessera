@@ -118,17 +118,18 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     assert "gpu.func @gemm" in out and "kernel" in out
     assert "memref<?xf16>, %arg1: memref<?xf16>, %arg2: memref<?xf32>" in out
     assert "index, %arg4: index, %arg5: index" in out
-    # Interior fast path / masked edge path split (Stage L2):
-    #   - vector.load: the contiguous A fragment on the fast (unmasked) path
-    #   - scf.if: the fastCond branch + the masked-path scf.if-guarded stores
-    #   - scf.for: the K-loop appears in both paths
-    assert "vector.load" in out                 # coalesced A fragment, fast path
-    assert out.count("scf.for") == 2            # K-loop in fast + masked path
-    assert "scf.if" in out                       # fast/masked split + edge stores
-    assert "tessera_rocm.wmma" in out          # the matrix op, generated
-    # For mt=nt=1: fast B (16 inserts) + masked A+B (32) = 48; stores 8 + 8 = 16.
-    assert out.count("vector.insert") == 48
-    assert out.count("memref.store") == 16
+    # Three-path split (Stage L2 + masked-edge perf, L4): kAligned ? (tileFull ?
+    # fast : edge) : masked.
+    #   - fast  — interior: contiguous vector.load A, unmasked B, unmasked store
+    #   - edge  — K-aligned ragged M/N: coalesced loads at clamped row/col + a
+    #             vector arith.select to zero OOB fragments; masked stores
+    #   - masked— ragged K: per-element clamp-and-select
+    #   so each of the 3 K-loops carries a tessera_rocm.wmma.
+    assert "vector.load" in out                 # coalesced A fragment (fast+edge)
+    assert "arith.select" in out                 # edge fragment-zeroing / clamps
+    assert out.count("scf.for") == 3            # one K-loop per path
+    assert out.count("tessera_rocm.wmma") == 3  # the matrix op in each path
+    assert "scf.if" in out                       # path dispatch + masked stores
     assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
 
 

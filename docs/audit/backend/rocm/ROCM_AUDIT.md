@@ -388,12 +388,22 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     sizes the compiled kernel **meets or exceeds** the hand-written at every swept
     tile — 1536³ all tiles 1.06×–2.56×; 2048³ peak **4×4 = 18.7 vs 9.0 TF/s
     (2.07×)**. The fast path is the whole win: before it, the masked-everywhere
-    kernel was 0.12–0.47×. Honest caveat: a tile whose extent isn't divisible by
-    16·`mt`/16·`nt` has a ragged band that drops to the (slower) masked path —
-    e.g. 3×4 at 1024/2048 (not ÷48) underperforms while 2×4/4×4 stay fast.
-    Optimizing the masked edge path (or padding) is follow-up. Autotuner
-    integration (auto-select `mt`/`nt` per shape) rides on the existing ladder
-    harness — the sweep script *is* the brute-force version.
+    kernel was 0.12–0.47×. Autotuner integration (auto-select `mt`/`nt` per shape)
+    rides on the existing ladder harness — the sweep script *is* the brute-force
+    version.
+  - ✅ **Masked ragged-edge perf parity (2026-06-23).** L2's first cut dropped any
+    tile whose extent isn't divisible by 16·`mt`/16·`nt` to a per-element scalar
+    masked path (3×4 at 1024/2048 → 0.44×/0.69×). Fixed by splitting the codegen
+    three ways: `kAligned ? (tileFull ? fast : edge) : masked`. The new **edge
+    path** (K-aligned but M/N ragged — the common case) keeps the coalesced
+    `vector.load`: it loads A/B at a row/col *clamped* into range, then zeroes the
+    OOB fragment with one loop-invariant vector `arith.select`, so the K-loop stays
+    vector-load speed; only the once-per-kernel stores are masked. The per-element
+    path is now reserved for ragged **K** (`K%16≠0`) only. Measured on gfx1151:
+    **3×4 at 2048 0.69×→1.82×, at 1024 0.44×→0.93×**; aligned unchanged/better
+    (1536³ 1.06×–3.82×, 2048³ 1.26×–3.93×). Ragged-M/N tiles now reach
+    parity-or-better; bit-identical to the oracle preserved. (Remaining slow path:
+    ragged-K, `K%16≠0` — uncommon.)
   - ✅ **L3 — in-process serialization (2026-06-23).** The GPU/ROCDL → LLVM-IR
     serialization spine is now linked into `tessera-opt` itself, so the WHOLE
     chain runs in ONE invocation — no `mlir-opt` shell-out (Stages I/K/L1/L2 rode
@@ -426,10 +436,13 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     entry + `tests/unit/test_rocm_compiled_launch_execute.py`.
     **Deliberately NOT flipped to default / promoted in the manifest** (Decision
     #25): the hand-written `rocm_wmma` stays the default + reference oracle/fast
-    fallback because the compiled path's *masked ragged-edge* tiles aren't yet
-    perf-competitive (L2 caveat). Flipping the source of truth waits on the
-    masked-edge optimization + dashboards agreeing. Remaining for full L4:
-    masked-edge perf parity, then promote.
+    fallback. The original blocker — masked ragged-edge perf — is now **resolved**
+    (see "Masked ragged-edge perf parity" above: ragged-M/N tiles reach
+    parity-or-better on gfx1151). The compiled lane is therefore *ready to promote*
+    on perf grounds. Flipping the source of truth is held as an explicit decision
+    (outward-facing default change) pending: (a) bf16 in the generated kernel
+    (f16-only today; bf16 routes to `rocm_wmma`), (b) the ragged-K (`K%16≠0`) fast
+    path, and (c) sign-off to flip the default + promote the manifest row.
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
   L1. The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.

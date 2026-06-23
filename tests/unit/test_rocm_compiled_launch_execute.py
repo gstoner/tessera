@@ -22,6 +22,16 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tessera
+
+
+# A file-defined jit fn so AST lowering works (decoration needs no GPU; the
+# executability decision is taken later, in runtime_artifact(), and is
+# host-gated).
+@tessera.jit(target="rocm")
+def _rocm_mm(a, b):
+    return tessera.ops.matmul(a, b)
+
 
 def test_execution_matrix_has_rocm_compiled_row():
     from tessera.compiler import execution_matrix as em
@@ -119,3 +129,47 @@ def test_launch_rocm_compiled_rejects_f32():
     assert res["ok"] is False
     assert res["runtime_status"] == "invalid_artifact"
     assert "f16/bf16" in res["reason"]
+
+
+# ── Stage L4 default flip: @jit(target="rocm") matmul -> compiled lane ────────
+
+def test_jit_rocm_matmul_defaults_to_compiled_lane():
+    """On a capable host the rocm matmul artifact is executable through the
+    COMPILER-GENERATED lane by default (was artifact_only). Off-device it stays
+    artifact_only — so this asserts the flip only where the lane can run."""
+    rt = _compiled_or_skip()
+    art = _rocm_mm.runtime_artifact()
+    md = art.metadata or {}
+    assert md.get("executable") is True
+    assert md.get("compiler_path") == "rocm_compiled"
+    assert md.get("execution_kind") == "native_gpu"
+    assert md.get("rocm_fallback_lane") == "rocm_wmma"
+
+    m, n, k = 128, 96, 64
+    rng = np.random.default_rng(3)
+    a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
+    b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
+    res = rt.launch(art, (a, b))
+    assert res["ok"] is True, res.get("reason")
+    assert res["compiler_path"] == "rocm_compiled"
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    assert float(np.max(np.abs(res["output"] - ref))) < 5e-2
+
+
+def test_compiled_lane_falls_back_to_oracle_when_unavailable(monkeypatch):
+    """When the compiled lane can't run (here: tessera-opt forced absent), the
+    executor degrades to the hand-written rocm_wmma oracle — so flipping the
+    default never regresses availability. A genuine kernel failure is NOT masked
+    (only _RocmCompiledUnavailable triggers the fallback)."""
+    rt = _compiled_or_skip()
+    monkeypatch.setattr(rt, "_tessera_opt_path", lambda: None)
+    rt._rocm_compiled_hsaco_cache.clear()  # don't serve a cached hsaco
+    m, n, k = 64, 48, 32
+    rng = np.random.default_rng(4)
+    a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
+    b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
+    # Direct executor call: compiled build raises _RocmCompiledUnavailable ->
+    # falls back to the hand-written oracle, which returns the correct result.
+    out = rt._execute_rocm_compiled_gemm(_artifact(rt, "rocm_compiled"), (a, b))
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    assert float(np.max(np.abs(out - ref))) < 1e-2

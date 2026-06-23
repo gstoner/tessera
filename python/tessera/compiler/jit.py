@@ -298,6 +298,20 @@ def _resolve_dispatch_via_package(value: "bool | str | None",
     return False
 
 
+def _rocm_compiled_lane_available() -> bool:
+    """True iff the compiler-generated ROCm matmul lane can run on THIS host:
+    ``tessera-opt`` is built AND a usable AMD GPU answers the runtime probe.
+    Host-gated, so a rocm matmul artifact is stamped ``executable`` only where the
+    lane actually runs; elsewhere (e.g. CI with no GPU) it stays ``artifact_only``
+    exactly as before — no behavior change off-device."""
+    try:
+        from .. import runtime as _rt
+        return (_rt._tessera_opt_path() is not None
+                and _rt._rocm_wmma_runtime_available())
+    except Exception:
+        return False
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -984,8 +998,24 @@ class JitFn:
         artifact = self.compile_bundle.artifact("target") if self.compile_bundle is not None else None
         return artifact.text if artifact is not None else None
 
+    def _uses_rocm_compiled_default(self) -> bool:
+        """Stage L4 — True iff this is a rocm single-matmul/gemm AND the
+        compiler-generated lane can run on THIS host (tessera-opt + a usable AMD
+        GPU). Host-gated, so off-device it is False and nothing changes. Shared by
+        ``execution_kind`` and the ``runtime_artifact`` stamping so the two never
+        diverge (``is_executable`` agrees with what ``launch()`` actually does)."""
+        return (
+            self.cpu_plan is not None
+            and str(self.cpu_plan.target_kind).startswith("rocm")
+            and len(self.cpu_plan.ops) == 1
+            and self.cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
+            and _rocm_compiled_lane_available()
+        )
+
     @property
     def execution_kind(self) -> str:
+        if self._uses_rocm_compiled_default():
+            return "native_gpu"
         if self.compile_bundle is not None:
             return self.compile_bundle.execution_kind
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
@@ -1225,6 +1255,36 @@ class JitFn:
                 "ops": ops_payload,
                 "mps_ops": [op["op_name"] for op in ops_payload],
                 "guards": gpu_guards,
+            })
+        elif self._uses_rocm_compiled_default():
+            # Stage L4 — the compiler-GENERATED RDNA WMMA GEMM is the default rocm
+            # matmul execution lane on a capable host (tessera-opt built + a usable
+            # AMD GPU). The hand-written kernel is the reference oracle + the
+            # availability fallback (runtime._execute_rocm_compiled_gemm degrades
+            # to it). Off-device this branch is skipped and the artifact stays
+            # artifact_only (the generic branch below) — no behavior change.
+            assert self.cpu_plan is not None  # narrowed by the guard above
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [o[1:] if o.startswith("%") else o
+                                 for o in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            metadata.update({
+                "executable": True,
+                "compiler_path": "rocm_compiled",
+                "execution_kind": "native_gpu",
+                "runtime_status": "ready",
+                "execution_mode": "hip_runtime",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "ops": ops_payload,
+                "cpu_tile": list(self.cpu_plan.tile),
+                "rocm_fallback_lane": "rocm_wmma",
             })
         elif self.cpu_plan is not None:
             metadata.update({

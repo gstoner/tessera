@@ -777,11 +777,19 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
         ),
         "notes": (
-            "RDNA 3.5 WMMA matrix-core GEMM executes on the AMD GPU through the "
-            "shipped libtessera_rocm_gemm.so symbols "
-            "(tessera_rocm_wmma_gemm_{f16,bf16}, HIPRTC-compiled for the device "
-            "arch at load); ROCm 7.2.4. Numerically validated vs numpy by the "
-            "execute_compare_fixture, and the runtime.launch() rocm_wmma lane."
+            "RDNA 3.5 WMMA matrix-core GEMM, f32<-{f16,bf16}, ROCm 7.2.4. "
+            "DEFAULT execution lane (Stage L4): @jit(target='rocm') matmul runs "
+            "the COMPILER-GENERATED WMMA kernel — tessera-opt generates + "
+            "serializes it to hsaco in-process (no mlir-opt), then HIP launches "
+            "it (runtime.launch() rocm_compiled lane); reaches parity-or-better "
+            "vs the hand-written kernel across aligned/ragged/f16/bf16. The "
+            "shipped hand-written libtessera_rocm_gemm.so symbol "
+            "(tessera_rocm_wmma_gemm_f16, the runtime_symbol above) is the "
+            "reference ORACLE the compiled kernel is checked bit-identical "
+            "against AND the availability fallback when the compiled lane can't "
+            "run on a host. Numerically validated vs numpy by the "
+            "execute_compare_fixture; the compiled lane is validated vs the "
+            "oracle by tests/unit/test_rocm_compiled_launch_execute.py."
         ),
     },
     "flash_attn": {

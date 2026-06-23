@@ -1325,23 +1325,32 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Stage L4 — the COMPILED GEMM lane (opt-in).
+# Stage L4 — the COMPILED GEMM lane (the default rocm matmul execution path).
 #
-# Where ``rocm_wmma`` above runs the hand-written HIPRTC kernel (the production
-# default + on-silicon oracle), this lane executes the kernel the *Tessera
-# compiler* generates: it drives the in-process Stage L pipeline through
-# ``tessera-opt`` (Stage L3 — no mlir-opt shell-out) to produce an hsaco, then
-# loads + launches it via HIP. The emitted kernel is problem-size-generic
-# (Stage L1), so ONE hsaco per (mt,nt) macro-tile serves every shape — cached.
+# This lane executes the kernel the *Tessera compiler* generates: it drives the
+# in-process Stage L pipeline through ``tessera-opt`` (Stage L3 — no mlir-opt
+# shell-out) to produce an hsaco, then loads + launches it via HIP. The emitted
+# kernel is problem-size-generic (L1), register-blocked (L2), and reaches
+# parity-or-better vs the hand-written kernel across aligned/ragged/f16/bf16
+# (L4). So `@jit(target="rocm")` matmul now executes through this lane by default
+# on a capable host (jit.py stamps ``compiler_path = "rocm_compiled"``).
 #
-# This lane is OPT-IN: a caller selects it by stamping ``compiler_path =
-# "rocm_compiled"`` on the artifact. The hand-written ``rocm_wmma`` lane stays
-# the default and the reference oracle/fallback until the compiled path's masked
-# ragged-edge tiles reach perf parity and the dashboards agree (ROCM_AUDIT L4).
+# The hand-written ``rocm_wmma`` HIPRTC kernel is now the reference oracle + the
+# availability fallback: if the compiled lane can't run here (no tessera-opt
+# built, no in-process serialization spine, or no usable AMD GPU) the executor
+# degrades to it, so flipping the default never regresses availability. ONE hsaco
+# per (mt,nt,chip,dtype) serves every shape — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
 _rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str], bytes] = {}
+
+
+class _RocmCompiledUnavailable(RuntimeError):
+    """The compiled ROCm lane can't run on this host (no tessera-opt, no
+    in-process serialization, or no usable AMD GPU). The executor degrades to the
+    hand-written ``rocm_wmma`` oracle on this — but NOT on a genuine kernel
+    failure (those surface, so a real compiled-lane bug is never masked)."""
 
 
 def _tessera_opt_path() -> Optional[Path]:
@@ -1395,7 +1404,7 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
         return cached
     opt = _tessera_opt_path()
     if opt is None:
-        raise RuntimeError(
+        raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm lane (build: "
             "ninja -C build tessera-opt)")
     directive = (
@@ -1418,12 +1427,13 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
                        input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise RuntimeError(
+        raise _RocmCompiledUnavailable(
             "tessera-opt did not serialize the compiled GEMM in-process "
             f"(Stage L3 spine missing? rc={r.returncode}): {r.stderr[:400]}")
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise RuntimeError("compiled ROCm lane: gpu.binary was not an ELF hsaco")
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm lane: gpu.binary was not an ELF hsaco")
     _rocm_compiled_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -1468,11 +1478,23 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
 
 
 def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
-    """Execute a ``target="rocm"`` matmul through the COMPILER-GENERATED WMMA
-    kernel (Stage L): generate + serialize in-process (tessera-opt, no mlir-opt),
-    then load + launch the hsaco via HIP. f16/bf16 storage, f32 accumulate.
-    Returns the MxN f32 result. Raises on missing tooling / device / unsupported
-    op or dtype — ``launch()`` maps the raise to ``invalid_artifact``."""
+    """The default ``target="rocm"`` matmul lane: run the COMPILER-GENERATED WMMA
+    kernel, falling back to the hand-written ``rocm_wmma`` oracle only when the
+    compiled lane is *unavailable* on this host (no tessera-opt / serialization /
+    GPU). A genuine compiled-kernel failure (malloc/launch) is NOT masked — it
+    surfaces, so a real bug is never hidden behind the fallback."""
+    try:
+        return _rocm_compiled_gemm_impl(artifact, args)
+    except _RocmCompiledUnavailable:
+        return _execute_rocm_wmma_artifact(artifact, args)
+
+
+def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Generate + serialize the kernel in-process (tessera-opt, no mlir-opt), then
+    load + launch the hsaco via HIP. f16/bf16 storage, f32 accumulate. Returns the
+    MxN f32 result. Raises ``_RocmCompiledUnavailable`` when the lane can't run
+    here, ``ValueError`` on a bad op/dtype/shape, ``RuntimeError`` on a real
+    kernel failure — ``launch()`` maps a raise to ``invalid_artifact``."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -1509,13 +1531,14 @@ def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
 
     hip = _load_hip_for_launch()
     if hip is None:
-        raise RuntimeError(
+        raise _RocmCompiledUnavailable(
             "libamdhip64.so not loadable — no ROCm execution lane on this host")
     if hip.hipInit(0) != 0:
-        raise RuntimeError("rocm_compiled: hipInit failed")
+        raise _RocmCompiledUnavailable("rocm_compiled: hipInit failed")
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise RuntimeError("rocm_compiled: no usable AMD GPU (module load failed)")
+        raise _RocmCompiledUnavailable(
+            "rocm_compiled: no usable AMD GPU (module load failed)")
     fn = ctypes.c_void_p()
     if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
         raise RuntimeError("rocm_compiled: kernel symbol 'gemm' not found")

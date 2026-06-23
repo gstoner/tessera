@@ -450,13 +450,26 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     fallback. The original blocker — masked ragged-edge perf — is now **resolved**
     (see "Masked ragged-edge perf parity" above: ragged-M/N tiles reach
     parity-or-better on gfx1151). The compiled lane is therefore *ready to promote*
-    on perf grounds. The earlier technical gaps are now **closed**: (a) bf16 is
-    generated + executes bit-identical to the bf16 oracle, and (b) the ragged-K
-    fast path lands (both above). What remains is purely the **decision** to flip
-    the default + promote the manifest row — held as an explicit, outward-facing
-    sign-off (the compiled lane generates + serializes via a tessera-opt subprocess
-    at launch, so flipping the production default is a deliberate call, not a
-    silent default change).
+    on perf grounds. The earlier technical gaps are now **closed**: bf16 +
+    ragged-K (above).
+  - ✅ **L4 default FLIPPED + manifest promoted (2026-06-23).** `@jit(target=
+    "rocm")` matmul now **executes through the compiler-generated lane by
+    default**: `jit.py` stamps `compiler_path="rocm_compiled"` /
+    `execution_kind="native_gpu"` / `executable=True` for a rocm single
+    matmul/gemm **when the compiled lane can run on the host** (tessera-opt built
+    + a usable AMD GPU — `_uses_rocm_compiled_default()`, shared by the
+    `execution_kind` property so `is_executable` agrees with what `launch()`
+    does). Off-device it stays `target_ir_artifact` / not-executable exactly as
+    before — host-gated, no behavior change in CI. The hand-written `rocm_wmma`
+    kernel is now the reference **oracle + availability fallback**:
+    `_execute_rocm_compiled_gemm` degrades to it on `_RocmCompiledUnavailable` (no
+    tessera-opt / no serialization spine / no GPU), but a *genuine* compiled-kernel
+    failure surfaces — the fallback never masks a real bug. Manifest matmul-row
+    notes + execution-matrix reasons promoted to record the compiled lane as
+    default and the hand-written symbol as oracle/fallback (the `runtime_symbol`
+    stays the hand-written proof anchor). Fixtures:
+    `test_rocm_compiled_launch_execute.py` (default flip executes + fallback),
+    `test_target_ir_contract.py` (host-gated). **Stage L is complete.**
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
   L1. The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.

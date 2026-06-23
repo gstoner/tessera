@@ -32,9 +32,8 @@ def test_jit_rocm_target_emits_mfma_and_async_copy_artifact():
     def mm(A, B):
         return ts.ops.matmul(A, B)
 
-    assert not mm.is_executable
+    # Target IR text is emitted regardless of the execution lane.
     assert mm.has_target_artifacts
-    assert "JIT_TARGET_IR_ARTIFACT_ONLY" in mm.explain_lowering()
     assert 'target = "rocm"' in mm.target_ir
     assert "tessera_rocm.mfma" in mm.target_ir
     assert "tessera_rocm.async_copy" in mm.target_ir
@@ -42,8 +41,22 @@ def test_jit_rocm_target_emits_mfma_and_async_copy_artifact():
 
     artifact = mm.runtime_artifact()
     assert artifact.metadata["target"] == "rocm"
-    assert artifact.metadata["compiler_path"] == "target_ir_artifact"
-    assert artifact.metadata["runtime_status"] == "artifact_only"
+    # Stage L4 — host-gated default flip. On a host with the compiler-generated
+    # lane (tessera-opt built + a usable AMD GPU) the rocm matmul executes via
+    # `rocm_compiled`; off-device it stays the inspection-only
+    # `target_ir_artifact` exactly as before. Assert whichever the host is —
+    # never claim executable where it can't run, nor artifact-only where it does.
+    from tessera.compiler.jit import _rocm_compiled_lane_available
+    if _rocm_compiled_lane_available():
+        assert mm.is_executable
+        assert artifact.metadata["compiler_path"] == "rocm_compiled"
+        assert artifact.metadata["runtime_status"] == "ready"
+        assert artifact.metadata["rocm_fallback_lane"] == "rocm_wmma"
+    else:
+        assert not mm.is_executable
+        assert "JIT_TARGET_IR_ARTIFACT_ONLY" in mm.explain_lowering()
+        assert artifact.metadata["compiler_path"] == "target_ir_artifact"
+        assert artifact.metadata["runtime_status"] == "artifact_only"
 
 
 def test_jit_hopper_target_emits_wgmma_tma_and_mbarrier_artifact():

@@ -141,6 +141,40 @@ Gluon v6 lesson generalized: measure the "obvious" optimization, don't assume.)
 starts to earn its keep), arch-aware LDS layout. Heed Gluon's v6 double-buffer
 regression.
 
+## Memory — APU zero-copy host buffers (opt-in; windowed win)
+
+On Strix Halo host and device share the same physical LPDDR5x, so the explicit
+H2D/D2H copies in the runtime symbol are physically redundant. Added an **opt-in**
+zero-copy path (`TESSERA_ROCM_ZEROCOPY=1`): `hipHostRegister` device-maps the
+caller's host buffers (`hipHostGetDevicePointer`) and the kernel reads/writes
+them directly — no `hipMalloc`, no `hipMemcpy`. Correct everywhere (subprocess
+fixture `test_zerocopy_path_matches_numpy_subprocess`); falls back to the copy
+path if registration is unsupported (rc=4). This changes **end-to-end
+`launch()` latency only**, not the kernel-only perf ladder.
+
+**Measured (gfx1151/WSL, CPU-wall, end-to-end per call, copy ÷ zero-copy):**
+
+| size | copy ms | zero-copy ms | winner |
+|------|--------:|-------------:|--------|
+| 256³  | 0.54 | 2.40 | copy (~4×) |
+| 512³  | 0.68 | 2.77 | copy (~4×) |
+| 768³  | 5.44 | 3.52 | **zero-copy 1.5×** |
+| 1024³ | 7.17 | 4.15 | **zero-copy 1.7×** |
+| 1536³ | 10.45 | 8.47 | **zero-copy 1.2×** |
+| 2048³ | 13.86 | 10.13 | **zero-copy 1.4×** |
+| 4096³ | 53.95 | 81.99 | copy (zc 1.5× slower) |
+
+A **windowed** win (~768³–2048³), not universal: below it, `hipHostRegister`
+per-call pinning overhead dominates the tiny kernel; above it, the kernel's
+repeated fragment re-reads through page-mapped, **non-coherent** host memory
+(`Coherent Host Access: FALSE`, XNACK off) lose locality vs device-local
+staging. Both register *and* malloc are Windows-driver round-trips under WSL, so
+the crossover is WSL-specific; bare-metal ROCm would differ. **Kept opt-in /
+off by default** — the copy path stays the portable correctness baseline. Bench:
+`tessera_rocm_wmma_gemm_f16_e2e_bench(M,N,K,iters,mt,nt,zerocopy,*ms)`. A
+size-gated auto-select is a possible follow-up but premature without bare-metal
+data.
+
 ## Next Work
 
 1. ✅ **Stage B — assemble (2026-06-22):** `rocdl_emit.py` emits the WMMA GEMM

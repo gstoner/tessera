@@ -19,13 +19,14 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 | `apple_gpu` | `apple_value_target_ir` | `apple_gpu_value_target_ir` | `native_gpu` | `metal_runtime` | Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches named C ABI symbols for strict rank-3 batched matmul, native sparse attention, PPO policy-loss, and EBM value envelopes. |
 | `cpu` | `jit_cpu_numpy` | `jit_cpu_numpy` | `reference_cpu` | - | CPU JIT artifact runs through the numpy reference path. |
 | `cpu` | `native_cpu` | `native_cpu` | `native_cpu` | - | CPU artifact runs through the x86 AMX / native CPU runtime. |
+| `rocm` | `rocm_wmma` | `rocm_wmma` | `native_gpu` | `hip_runtime` | ROCm matmul artifact runs a real RDNA WMMA matrix-core GEMM on the AMD GPU via the shipped tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol (HIPRTC-compiled for the device arch). |
 
 ## Targets with no executable row
 
 These targets are recognized by the capability registry (so an artifact can carry them and lower correctly) but have no executable runtime row. `launch()` returns `runtime_status = "unimplemented"` when the target capability is present, or `"missing_backend"` otherwise — never silent success, never a fabricated output.
 
 ```
-nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1200
+nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm_gfx90a, rocm_gfx940, rocm_gfx942, rocm_gfx950, rocm_gfx1100, rocm_gfx1200
 ```
 
 ## Known executor IDs
@@ -38,3 +39,4 @@ nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm, rocm_gfx90a, rocm_gf
 | `apple_value_target_ir` | Apple CPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.cpu.call value op (Value Target IR sprint; CPU cholesky executable) |
 | `jit_cpu_numpy` | JIT CPU fallback via the numpy reference path |
 | `native_cpu` | x86 AMX / native CPU runtime via the C runtime ABI |
+| `rocm_wmma` | AMD GPU RDNA WMMA matrix-core GEMM via the shipped libtessera_rocm_gemm.so tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol (HIPRTC-compiled for the device arch; f16/bf16 storage, f32 accumulate) |

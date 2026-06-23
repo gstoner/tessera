@@ -44,6 +44,20 @@ def ROCM_MFMAOp : TesseraROCM_Op<"mfma"> {
   let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
 
+def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
+  let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
+  let description = [{
+    The RDNA analog of `tessera_rocm.mfma`. RDNA GPUs (gfx11xx RDNA 3 / 3.5,
+    gfx12xx RDNA 4) have no MFMA matrix core; the equivalent instruction is
+    `V_WMMA_*` at a single 16x16x16 tile, wave32. RDNA 3 / 3.5 (gfx1100,
+    gfx1151) expose no FP8 WMMA — an FP8 matmul on those arches is a hard,
+    named error in the Tile->ROCm lowering rather than a silent fallback.
+  }];
+  let arguments = (ins AnyType:$a, AnyType:$b, AnyType:$acc);
+  let results = (outs AnyType:$res);
+  let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

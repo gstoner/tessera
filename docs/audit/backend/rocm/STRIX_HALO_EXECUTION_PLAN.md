@@ -9,6 +9,205 @@
 > so the MLIR→LLVM→AMDGPU codegen path becomes real and testable on owned silicon, and
 > it is the path that **generalizes to NVIDIA** where the Apple path does not.
 
+## Bring-up status — box landed (2026-06-22)
+
+The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
+LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
+
+- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` is a *transient
+  WSL enumeration*, not a permanent target.** The Radeon 8060S in Strix Halo
+  (Ryzen AI MAX+ 395) is RDNA 3.5, ISA `gfx1151` (RDNA 3.5 ISA Ref Guide, doc
+  70649, 23-Jul-2024). (`gfx1150` is the related Strix *Point* iGPU — Radeon
+  890M — a distinct part; the 8060S is `gfx1151`.) The toolchain **fully
+  supports `gfx1151`** — verified here: `hipcc --offload-arch=gfx1151` compiles
+  and `llc -mcpu=gfx1151` emits a real `v_wmma_f32_16x16x16_f16`. So **`gfx1151`
+  is the codegen target.** Today the WSL/ROCm 7.2.4 runtime *enumerates* the
+  device as `Name: gfx1100` (RDNA 3 discrete profile) — a **temporary WSL
+  limitation; AMD's WSL enablement will report the native RDNA 3.5 arch
+  (`gfx1151`)**. A `gfx1100` binary also assembles, so it is the current-WSL
+  transitional alias, but the bring-up targets `gfx1151` going forward. **Both
+  are RDNA, same 16×16×16 WMMA op family, no FP8 WMMA** — the rung-3 emit tests
+  assemble for both (gfx1151 primary + gfx1100), and the Stage C launcher uses
+  hipcc's device-default arch, so it auto-adapts when WSL starts reporting
+  `gfx1151`. Both archs are in `rocm_target.py`/`capabilities.py`.
+- **External gates from "Honest external gates" below are now cleared:**
+  `rocminfo` enumerates the GPU **without** any `HSA_OVERRIDE_GFX_VERSION`;
+  `hipcc --offload-arch=gfx1100` compiles a WMMA kernel (374 lines of AMDGCN
+  `.s`); the ROCm backend lit suite is **11/11**; `tessera-opt` +
+  `tessera-rocm-opt` build clean against LLVM/MLIR 22.1.8. So **Stages A and B
+  are fully unblocked**, and the box presence unblocks C/D.
+- **Build-state findings (verified in-tree):**
+  - The `--tessera-emit-rocdl` pipeline (linalg→scf.parallel→gpu→ROCDL) scaffold
+    exists in `tessera-opt`; the `tessera_rocm`/`rocdl` dialects are registered.
+  - **`lower-tile-to-rocm` had no WMMA path — it always emitted
+    `tessera_rocm.mfma` regardless of arch**, which is wrong for RDNA (no MFMA).
+    Fixed in the Stage A increment (2026-06-22): a `tessera_rocm.wmma` op +
+    arch-keyed selection (`gfx11xx` → WMMA) + a `llvm.amdgcn.wmma.contract`
+    ROCDL marker, with the no-FP8-on-RDNA gate preserved. Lit fixtures added.
+  - The HIP runtime `loader.cpp` already has real
+    `hipModuleLoad`/`hipModuleGetFunction`/`hipModuleLaunchKernel` (behind
+    `TESSERA_HAS_HIP`), **but it is a standalone `tessera_rocm_runtime` lib and
+    is NOT wired into the core C-ABI bridge `tsrRegisterGpuLauncher`**, and
+    there is **no HIPRTC** path (it loads a prebuilt `.hsaco`). That wiring is
+    the bulk of **Stage C**.
+  - The arch knob is `lower-tile-to-rocm{arch=gfxNNNN}` (and the FP8 gate). The
+    `--rocm-target=gfxNNNN` flag referenced by the `tests/tessera-ir/phase8/
+    rocm_7_2/*.mlir` fixtures is **stale — no tool implements it**; those
+    fixtures are not in the run suite. Canonical fixtures live in
+    `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`.
+  - **The MLIR `--tessera-emit-rocdl` pipeline is broken on this build:** it
+    references a pass `tessera-to-linalg` that is **not registered** in
+    `tessera-opt` here, so the pipeline string fails to build and aborts
+    (`-nvvm` too). That blocks the *MLIR-graph*→WMMA route. **Stage B does not
+    depend on it** — `rocdl_emit.py` (the AMD analog of `ptx_emit.py`) is a
+    direct LLVM-IR WMMA emitter, the established rung pattern. Registering
+    `tessera-to-linalg` into `tessera-opt` is its own follow-up.
+
+### Stage B — DONE, verified on the box (2026-06-22)
+
+`python/tessera/compiler/rocdl_emit.py` already implements rung 2.5 (emit
+`llvm.amdgcn.wmma.*` LLVM IR + host-free structural validators) **and** rung 3
+(`llc -mcpu=<arch>` → real `v_wmma_*` AMDGCN), the AMD mirror of `ptx_emit.py`.
+On the box this now runs for real (not skip-clean):
+
+- **rung 3 asm:** the K-reduction / operand-layout / D-store WMMA GEMMs lower to
+  AMDGCN with the documented `v_wmma_f32_16x16x16_{f16,bf16}`, lane-replication
+  (`v_and_b32 _,15,_`), and strided `global_store`s — now parametrized over
+  **gfx1100** (the box) as well as gfx1151.
+- **rung 3 object:** new `llc_object()` lowers the GEMM to a real relocatable
+  **AMD GPU ELF** (`EM_AMDGPU`) — the plan's "compiles A to a real object" gate,
+  confirmed for gfx1100/gfx1151 (`test_rung3_gemm_assembles_to_amdgpu_elf_object`).
+- `_find_llc()` now finds the apt.llvm.org `llc` (`/usr/lib/llvm-22/bin/llc`), so
+  the rung-3 tests run by default on the box. `tests/unit/test_rocdl_emit.py`:
+  **96 passed, 0 skipped.**
+
+### Stage C — DONE: first non-Apple kernel through the C-ABI launch bridge (2026-06-22)
+
+A real GPU kernel now **executes on the gfx1100 device through Tessera's C-ABI
+launch bridge** — the first non-Apple backend to do so. Mirrors the Apple G7
+proof (`test_runtime_abi_gpu_launch_bridge.py`): a hipcc-compiled harness
+registers a `tsrGpuLauncherFn` for `(target="rocm", "tessera_rocm_gemm_f32")`
+that runs a real `__global__` GEMM (hipMalloc / H2D / launch / sync / D2H) over
+the params' buffers + dims; it compiles a `rocm` artifact, launches via
+`tsrLaunchKernel`, and **verifies the GPU output equals `A @ B`**. An
+unregistered kernel name still returns `UNIMPLEMENTED` (the bridge never
+silently succeeds). Test: `tests/unit/test_runtime_abi_rocm_launch_bridge.py`.
+
+Two real fixes landed with it:
+- **Runtime CMake HIP-include bug:** with `-DTESSERA_ENABLE_HIP=ON`,
+  `hip_backend.cpp` was compiled without the HIP include path
+  (`fatal error: hip/hip_runtime.h`). `tessera_runtime` now links `hip::host`
+  (or falls back to `$ROCM_PATH/include`) — `libtessera_runtime.a` builds with
+  HIP enabled.
+- **WSL device-enumeration quirk:** `hipGetDeviceCount` reports **0** under WSL
+  even though kernels launch and compute correctly. The harness gates on a real
+  HIP probe (malloc + sync round-trip), not the device count, and skip-cleans
+  (`SKIP_NO_DEVICE`) when no usable GPU is present.
+
+**Honesty ceiling.** Stage C proves the *launch bridge + execution mechanics*
+with a correct (naive) GEMM kernel compiled by hipcc. It does **not** yet route
+the Stage A/B **WMMA** kernel, nor is the launcher auto-registered by a shipped
+ROCm runtime lib (it lives in the test harness, exactly as the Apple G7 proof
+does). That WMMA execute-compare is Stage D, below.
+
+### Stage D — WMMA matrix-core GEMM executes-and-compares through the bridge (2026-06-22)
+
+The real RDNA WMMA matrix instruction now runs on the device and produces a
+**numerically correct GEMM**, routed through the C-ABI launch bridge. The kernel
+uses `__builtin_amdgcn_wmma_f32_16x16x16_f16_w32` (the same
+`v_wmma_f32_16x16x16_f16` `rocdl_emit.py` emits), with the operand/accumulator
+fragment layout matching the grounded mapping in `rocdl_emit.py` (col = lane&15,
+row = 2·e + lane>>4). A 16×16×16 `f32 ← f16` tile vs a host reference: **maxerr
+≈ 3e-8 standalone, < 1e-2 through the bridge** (`f16` rounding). Test:
+`tests/unit/test_rocm_wmma_execute_compare.py`. We bring up `f32←f16` first
+(bf16 has documented gfx115x bugs).
+
+**What this clears, and what it does NOT.** This is a genuine on-hardware
+execute-and-compare of the WMMA op — the *numerical-proof* half of the
+`backend_manifest` `hardware_verified` contract (`execute_compare_fixture`). It
+is **deliberately NOT promoted to `hardware_verified` / `backend_kernel`
+complete**, because that status also requires a **shipped `runtime_symbol`** — a
+C-ABI kernel symbol that runs at dispatch from an auto-registered ROCm runtime
+lib (cf. Apple's `tessera_apple_gpu_mps_matmul_f32` in the shipped runtime).
+Today the WMMA kernel + launcher live in the *test harness* (exactly as the
+Apple G7 bridge proof does), not a shipped, auto-registering backend lib.
+Promoting the manifest row now — with a test-only symbol — would be the audit
+inflation Decision #25 forbids. **The formal `backend_kernel` flip is gated on
+the remaining "ship an auto-registered ROCm runtime launcher" item** (Next Work
+in `ROCM_AUDIT.md`); the numerical proof is in hand, so that flip becomes
+mechanical once the symbol ships. It is also a single 16×16×16 tile, not a
+general tiled/K-looped GEMM (a separate scale item).
+
+### Stage E — shipped runtime symbol + runtime.launch() lane + tiled/bf16 (2026-06-22)
+
+The WMMA kernel is now a **shipped, auto-built symbol** wired into the runtime:
+`libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_{f16,bf16}` (HIPRTC-
+compiled for the device arch at load), `runtime.launch()` dispatches
+`target="rocm"` matmul to it via the `rocm_wmma` execution-matrix lane, and the
+kernel is a **general tiled/K-looped GEMM** (any positive M/N/K, ragged edges
+zero-padded). The `backend_manifest` matmul row is `hardware_verified` for
+`{fp16, bf16}`. Closes the Stage D "ship an auto-registered launcher" gate.
+
+### Stage F — GEMM perf ladder (2026-06-22, in progress)
+
+Correctness done, now performance — grounded in the AMD **Gluon GEMM tutorial**
+v0→v9 ladder (`ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` §B1/§B2). Rungs are *measured*,
+not asserted: `tessera_rocm_wmma_gemm_f16_bench` (in the shipped lib) hipEvent-
+times kernel-only launches (buffers reused), and
+`benchmarks/rocm/benchmark_rocm_wmma_gemm.py` emits the stable JSON schema
+(Decision #12) + a `--ladder` sweep.
+
+**Rung 1 — output-tile register blocking (DONE).** Each 32-lane wave computes an
+MT×NT grid of 16×16 WMMA tiles; a loaded A fragment is reused across NT B-tiles
+and a B fragment across MT A-tiles, cutting global-load traffic per output
+element. Measured best-of-3 on **gfx1100/WSL (Ryzen AI Max+ 395 / Radeon 8060S)**,
+f16, kernel-only TFLOP/s:
+
+| MT×NT | 512³ | 1024³ | 2048³ |
+|------|-----:|------:|------:|
+| 1×1 (rung-0 naive) | 1.68 | 3.36 | 4.00 |
+| 2×2 | 1.72 | 2.24 | 3.37 |
+| **2×4 (production)** | 3.47 | **7.87** | **9.46** |
+| 4×2 | 3.91 | 4.91 | 8.79 |
+| 4×4 | 1.65 | 5.47 | 6.94 |
+
+**~2.3× over the naive baseline** at the compute-bound sizes. The empirical
+lesson mirrors Gluon exactly: the **tile shape is the lever, and the obvious
+choice can regress** — `2×2` lands *below* `1×1` here (occupancy/register
+pressure), while the non-square `2×4` wins. Shipped tiling = `kProdMT=2,
+kProdNT=4` in `tessera_rocm_gemm.cpp`; correctness unchanged (the
+execute-compare fixture passes at 2×4).
+
+**Rung 2 — LDS staging, multi-wave workgroup (IMPLEMENTED; did NOT win — kept
+behind the bench).** A WM×WN-wave workgroup cooperatively stages the A/B 16-wide
+K-panels for its macro-tile into LDS once per K-step, then every wave reads its
+WMMA fragments from LDS. Correct across shapes (fixture
+`test_shipped_rocm_wmma_lds_matches_numpy`), shipped as
+`tessera_rocm_wmma_gemm_f16_lds` + `..._bench_lds`. **Measured verdict on
+gfx1100 (best-of-3 f16 TFLOP/s, `--lds`):**
+
+| size | rung-1 reg 2×4 | best rung-2 LDS |
+|------|---------------:|----------------:|
+| 512³  | **3.47** | 3.20 (4×2w 1×2t) |
+| 1024³ | **8.09** | 7.85 (4×1w 2×4t) |
+| 2048³ | 8.88 | **9.38** (4×1w 2×4t) |
+| 4096³ | **11.40** | 8.46 |
+
+Single-buffer LDS staging is a **wash-to-regression** here: it loses at
+512/1024, edges +6% at 2048, and loses decisively at 4096. This is the Strix
+Halo unified-memory story — global bandwidth is shared with the CPU and is *not*
+the bottleneck LDS staging targets, so the `__syncthreads` + occupancy cost
+isn't repaid. So **production stays rung-1 register blocking (2×4).** This is the
+Gluon v6 lesson generalized: the "obvious next optimization" must be measured,
+not assumed. Rung 2 is kept as a shipped, correctness-guarded symbol because it
+is the **substrate for rung 3** (software pipelining needs LDS buffering) and
+should pay off on discrete RDNA / CDNA where global *is* the bottleneck.
+
+**Open rungs (next):** 2-/3-stage K-loop software pipelining over the LDS buffers
+(§B2) — the rung where LDS staging starts to earn its keep by overlapping global
+loads with WMMA; arch-aware LDS layout (swizzle vs pad). Per Gluon's v6 lesson,
+watch register budget — double-buffer can regress if it spills. Not wired yet.
+
 ## The hardware — three engines, three Tessera stories
 
 | Engine | What | Tessera status | Action |
@@ -125,3 +324,5 @@ Two viable emit paths for Stage A (pick after a spike):
 - `python/tessera/compiler/rocm_target.py`, `capabilities.py` — the grounded gfx1151 target model.
 - `docs/rocm_mfma_kernel_inventory.md` — CDNA MFMA inventory (RDNA WMMA inventory is a sibling TODO).
 - `compiler/ptx_emit.py`, `EVALUATOR_PLAN.md` §9.5 — the NVIDIA rung ladder this mirrors.
+- `python/tessera/compiler/rocdl_emit.py` + `tests/unit/test_rocdl_emit.py` — Stage B emitter (rung 2.5 + rung 3 `llc`), AMD analog of `ptx_emit.py`.
+- **RDNA 3.5 ISA Reference Guide** (AMD doc 70649, 23-Jul-2024) — authoritative WMMA spec (§7.9 / Table 33): <https://docs.amd.com/v/u/en-US/rdna35_instruction_set_architecture>. Note: docs.amd.com is a JS-rendered SPA — fetch the linked PDF, not the HTML.

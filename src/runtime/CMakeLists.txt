@@ -47,6 +47,28 @@ target_compile_definitions(tessera_runtime PRIVATE
     $<$<BOOL:${TESSERA_ENABLE_HIP}>:TESSERA_ENABLE_HIP>
 )
 
+# When the HIP backend is compiled (TESSERA_ENABLE_HIP), hip_backend.cpp needs
+# the HIP headers (and amdhip64 to link). The top-level build runs
+# find_package(hip CONFIG); prefer its imported target (carries include dirs +
+# the runtime lib), and fall back to a ROCm-prefix include so a bare
+# -DTESSERA_ENABLE_HIP=ON without the package still finds hip/hip_runtime.h.
+if(TESSERA_ENABLE_HIP)
+    if(NOT TARGET hip::host)
+        find_package(hip QUIET CONFIG)
+    endif()
+    if(TARGET hip::host)
+        target_link_libraries(tessera_runtime PUBLIC hip::host)
+    else()
+        if(DEFINED ENV{ROCM_PATH})
+            set(_tessera_rocm_prefix "$ENV{ROCM_PATH}")
+        else()
+            set(_tessera_rocm_prefix "/opt/rocm")
+        endif()
+        target_include_directories(tessera_runtime PUBLIC "${_tessera_rocm_prefix}/include")
+        message(STATUS "tessera_runtime: HIP enabled, using ROCm include ${_tessera_rocm_prefix}/include (hip::host target not found)")
+    endif()
+endif()
+
 # ------------------------------------------------------------------
 # Unit tests (standalone build or if explicitly requested)
 # ------------------------------------------------------------------

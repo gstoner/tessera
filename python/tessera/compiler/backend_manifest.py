@@ -749,6 +749,44 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Strix Halo bring-up (2026-06-22) — ROCm ops promoted to ``hardware_verified``.
+#
+# An op lands here only once it ships BOTH a real C-ABI ``runtime_symbol`` (an
+# auto-built backend lib that actually runs the kernel on an AMD GPU) AND a
+# checked-in ``execute_compare_fixture`` (see ``_NUMERICAL_FIXTURES``). This is
+# the ROCm analog of the per-op ``_APPLE_GPU_KERNELS`` hardware_verified rows.
+#
+# When an op is in this table the generic ROCm artifact_only row is REPLACED by
+# the hardware_verified row below — there is exactly one ``rocm`` entry per op.
+#
+# Honesty (Decision #25): ``dtypes``/``shape_envelope`` describe ONLY what the
+# shipped symbol actually proves. matmul is a general tiled/K-looped RDNA
+# **WMMA** GEMM, f32<-{f16,bf16} (ragged M/N/K zero-padded), and carries no MFMA
+# shape (WMMA, not the CDNA matrix-core path). It also backs the
+# runtime.launch() ``rocm_wmma`` execution lane.
+# ─────────────────────────────────────────────────────────────────────────────
+_ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
+    "matmul": {
+        "runtime_symbol": "tessera_rocm_wmma_gemm_f16",
+        "dtypes": ("fp16", "bf16"),
+        "feature_flags": ("wmma",),
+        "shape_envelope": (
+            "general tiled/K-looped GEMM, f32<-{f16,bf16}, any positive M/N/K "
+            "(ragged edges zero-padded), 16x16x16 WMMA tiles, one wave/tile "
+            "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
+        ),
+        "notes": (
+            "RDNA 3.5 WMMA matrix-core GEMM executes on the AMD GPU through the "
+            "shipped libtessera_rocm_gemm.so symbols "
+            "(tessera_rocm_wmma_gemm_{f16,bf16}, HIPRTC-compiled for the device "
+            "arch at load); ROCm 7.2.4. Numerically validated vs numpy by the "
+            "execute_compare_fixture, and the runtime.launch() rocm_wmma lane."
+        ),
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Audit follow-up A.3 (2026-05-31) — Per-(op, target) test fixtures that
 # exercise the numerical-correctness path end-to-end. Replaces the
 # conformance matrix's filename/content heuristic with first-class
@@ -771,6 +809,12 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # cpu
     ("matmul", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
+    # rocm — Strix Halo (gfx1151 / gfx1100 WSL) RDNA WMMA. The shipped
+    # `tessera_rocm_wmma_gemm_f16` C-ABI symbol (libtessera_rocm_gemm.so) is
+    # dlopened and its f32<-f16 16x16x16 WMMA GEMM compared to a numpy
+    # reference (maxerr < 1e-2). Skip-clean when no AMD GPU / HIPRTC. This is
+    # the numerical-proof half of the rocm matmul `hardware_verified` row.
+    ("matmul", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
     # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).
@@ -2183,35 +2227,55 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 roofline_target=roofline,
             ))
 
-    # ROCm MFMA — Sprint H-3 (2026-05-11): attach MFMA shape + hipcc
-    # version pin per kernel.
-    cap = _capability_status("rocm", op_name)
-    if cap is not None:
-        status, dtypes = cap
-        mapped = (
-            _FUSED_KERNEL_STATUS if status == "ready"
-            else _ARTIFACT_STATUS if status == "artifact_only"
-            else _PLANNED_STATUS
-        )
-        mfma = _ROCM_KERNEL_MFMA_SHAPES.get(op_name)
-        mfu = _ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942"))
-        # A1 (2026-06-18) — attach the unified MMA descriptor for GEMM-family
-        # ops, derived from a representative dtype on gfx942 (the `rocm` alias).
-        mma_desc = _rocm_mma_descriptor_for(op_name, dtypes)
+    # ROCm — Strix Halo bring-up (2026-06-22): ops with a shipped runtime
+    # symbol + execute-compare fixture are ``hardware_verified`` (RDNA WMMA);
+    # all others ride the generic MFMA artifact row (Sprint H-3, 2026-05-11:
+    # MFMA shape + hipcc version pin per kernel, HIP execution gated on Phase H).
+    rocm_hv = _ROCM_HARDWARE_VERIFIED.get(op_name)
+    if rocm_hv is not None:
+        # Both halves of the hardware_verified contract are pulled in BEFORE
+        # construction so the validator sees a complete (symbol + fixture) row.
         entries.append(BackendKernelEntry(
             target="rocm",
-            status=mapped,
-            dtypes=dtypes,
-            feature_flags=("mfma",),
-            notes=(
-                "ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H"
-                if mapped == _ARTIFACT_STATUS else ""
-            ),
-            mfma_shape=mfma,
+            status=_HARDWARE_VERIFIED_STATUS,
+            dtypes=tuple(rocm_hv["dtypes"]),
+            feature_flags=tuple(rocm_hv.get("feature_flags", ("wmma",))),
+            notes=str(rocm_hv.get("notes", "")),
+            runtime_symbol=rocm_hv["runtime_symbol"],
+            execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
+            shape_envelope=rocm_hv.get("shape_envelope"),
             hipcc_version_min="7.2.4",
-            expected_mfu=mfu,
-            mma_descriptor=mma_desc,
+            expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
         ))
+    else:
+        cap = _capability_status("rocm", op_name)
+        if cap is not None:
+            status, dtypes = cap
+            mapped = (
+                _FUSED_KERNEL_STATUS if status == "ready"
+                else _ARTIFACT_STATUS if status == "artifact_only"
+                else _PLANNED_STATUS
+            )
+            mfma = _ROCM_KERNEL_MFMA_SHAPES.get(op_name)
+            mfu = _ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942"))
+            # A1 (2026-06-18) — attach the unified MMA descriptor for
+            # GEMM-family ops, derived from a representative dtype on gfx942
+            # (the `rocm` alias).
+            mma_desc = _rocm_mma_descriptor_for(op_name, dtypes)
+            entries.append(BackendKernelEntry(
+                target="rocm",
+                status=mapped,
+                dtypes=dtypes,
+                feature_flags=("mfma",),
+                notes=(
+                    "ROCm 7.2.4 MFMA artifact ships; HIP execution gated on "
+                    "Phase H" if mapped == _ARTIFACT_STATUS else ""
+                ),
+                mfma_shape=mfma,
+                hipcc_version_min="7.2.4",
+                expected_mfu=mfu,
+                mma_descriptor=mma_desc,
+            ))
 
     # CPU numpy reference — always available as fallback
     cap = _capability_status("cpu", op_name)

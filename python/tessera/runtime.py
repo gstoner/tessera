@@ -1142,6 +1142,188 @@ def _execute_cpu_native_or_jit(artifact, args):
         return _execute_jit_cpu_artifact(artifact, args), "reference_cpu"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm WMMA GEMM executor (Strix Halo bring-up, 2026-06-22).
+#
+# The shipped libtessera_rocm_gemm.so exports the C-ABI GEMM symbols
+# ``tessera_rocm_wmma_gemm_f16`` / ``tessera_rocm_wmma_gemm_bf16``
+# (signature ``(const void* A, const void* B, void* D, int M, int N, int K)``)
+# that run a real RDNA WMMA matrix-core GEMM on the AMD GPU — the kernel is
+# HIPRTC-compiled for the device arch (gfx1151 / gfx1100) at load. This executor
+# is the ``runtime.launch()`` dispatch lane for ``target="rocm"`` artifacts whose
+# ``compiler_path == "rocm_wmma"`` (one matmul/gemm op, half-precision storage,
+# f32 accumulate).
+#
+# Host-gated exactly like the Apple GPU lane: the lib + a live HIP device exist
+# only on a ROCm box, so the loader/probe return None / False elsewhere and the
+# jit path never stamps ``executable=True`` (``launch()`` reports
+# ``unimplemented`` via the matrix's _UNIMPLEMENTED reason instead). Nothing here
+# is reachable — or claims to be — on a host without an AMD GPU.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_gemm_runtime: ctypes.CDLL | None = None
+_rocm_gemm_probe_ok: bool | None = None
+
+#: C-ABI GEMM symbols shipped by libtessera_rocm_gemm.so, keyed by storage dtype.
+_ROCM_GEMM_SYMBOLS = {
+    "float16": "tessera_rocm_wmma_gemm_f16",
+    "bfloat16": "tessera_rocm_wmma_gemm_bf16",
+}
+
+
+def _rocm_gemm_lib_path() -> Optional[Path]:
+    """Locate the shipped GEMM lib (env override → canonical CMake build dir)."""
+    env = os.environ.get("TESSERA_ROCM_GEMM_LIB")
+    candidates: list[Path] = []
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.append(
+        root / "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip"
+        / "libtessera_rocm_gemm.so")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _load_rocm_gemm_runtime() -> ctypes.CDLL | None:
+    """Load libtessera_rocm_gemm.so once, binding the GEMM symbol signatures.
+    Preloads the HIP runtime + HIPRTC globally so the lib resolves them. Returns
+    None (never raises) when the lib / ROCm deps are absent — the caller treats
+    that as "no ROCm execution lane on this host"."""
+    global _rocm_gemm_runtime
+    if _rocm_gemm_runtime is not None:
+        return _rocm_gemm_runtime
+    path = _rocm_gemm_lib_path()
+    if path is None:
+        return None
+    rocm_lib = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
+    for dep in ("libamdhip64.so", "libhiprtc.so"):
+        p = os.path.join(rocm_lib, dep)
+        if os.path.isfile(p):
+            try:
+                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                pass
+    try:
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    for sym in _ROCM_GEMM_SYMBOLS.values():
+        fn = getattr(lib, sym, None)
+        if fn is None:
+            # Older build without the bf16 sibling — bind what exists; the
+            # executor validates the specific symbol it needs per-dtype.
+            continue
+        fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                       ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        fn.restype = ctypes.c_int
+    _rocm_gemm_runtime = lib
+    return lib
+
+
+def _rocm_wmma_runtime_available() -> bool:
+    """Cached host probe: True iff the GEMM lib loads AND a real HIP device runs
+    a tiny WMMA GEMM (rc == 0). This is the gate the jit path consults before
+    stamping a rocm artifact ``executable`` — so ``native_gpu`` is never claimed
+    on a host without an AMD GPU. The probe runs the f16 symbol on a 16×16×16
+    zero GEMM; rc==2 (no device / no HIPRTC) ⇒ unavailable."""
+    global _rocm_gemm_probe_ok
+    if _rocm_gemm_probe_ok is not None:
+        return _rocm_gemm_probe_ok
+    _rocm_gemm_probe_ok = False
+    lib = _load_rocm_gemm_runtime()
+    if lib is None:
+        return False
+    fn = getattr(lib, _ROCM_GEMM_SYMBOLS["float16"], None)
+    if fn is None:
+        return False
+    try:
+        import numpy as np
+    except Exception:
+        return False
+    a = np.zeros((16, 16), np.float16)
+    b = np.zeros((16, 16), np.float16)
+    d = np.zeros((16, 16), np.float32)
+    try:
+        rc = fn(a.ctypes.data_as(ctypes.c_void_p),
+                b.ctypes.data_as(ctypes.c_void_p),
+                d.ctypes.data_as(ctypes.c_void_p), 16, 16, 16)
+    except Exception:
+        return False
+    _rocm_gemm_probe_ok = (rc == 0)
+    return _rocm_gemm_probe_ok
+
+
+def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute a ``target="rocm"`` single-matmul artifact on the AMD GPU through
+    the shipped ``tessera_rocm_wmma_gemm_{f16,bf16}`` C-ABI symbol (RDNA WMMA,
+    f32 accumulate). Returns the f32 result matrix. Raises on a missing lib /
+    device, an unsupported op set, or a kernel error — ``launch()`` maps the
+    raise to ``invalid_artifact``."""
+    import numpy as np
+
+    lib = _load_rocm_gemm_runtime()
+    if lib is None:
+        raise RuntimeError(
+            "libtessera_rocm_gemm.so not loadable — no ROCm execution lane "
+            "on this host (build target: tessera_rocm_gemm)")
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
+            "tessera.matmul", "tessera.gemm"):
+        raise ValueError(
+            "rocm_wmma executor handles exactly one matmul/gemm op; got "
+            f"{[o.get('op_name') for o in ops]!r}")
+
+    values = _bind_launch_args(args, arg_names)
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError("matmul requires exactly two operands")
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"rocm_wmma matmul needs rank-2 operands with matching K; got "
+            f"{a.shape} @ {b.shape}")
+
+    bf16 = _bfloat16_dtype()
+    if a.dtype == np.float16 and b.dtype == np.float16:
+        sym, store = _ROCM_GEMM_SYMBOLS["float16"], np.float16
+    elif bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
+        sym, store = _ROCM_GEMM_SYMBOLS["bfloat16"], bf16
+    else:
+        raise ValueError(
+            "rocm_wmma executor handles f16/bf16 storage (f32 accumulate); got "
+            f"{a.dtype} @ {b.dtype}")
+    fn = getattr(lib, sym, None)
+    if fn is None:
+        raise RuntimeError(
+            f"libtessera_rocm_gemm.so lacks {sym} — rebuild the tessera_rocm_gemm "
+            f"target for {store!r} support")
+
+    m, k = a.shape
+    n = b.shape[1]
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
+    d = np.zeros((m, n), dtype=np.float32)
+    rc = fn(a_c.ctypes.data_as(ctypes.c_void_p),
+            b_c.ctypes.data_as(ctypes.c_void_p),
+            d.ctypes.data_as(ctypes.c_void_p), int(m), int(n), int(k))
+    if rc == 1:
+        raise ValueError(
+            f"rocm_wmma kernel rejected shape ({m}x{n}x{k}) — M/N/K must be "
+            f"positive")
+    if rc == 2:
+        raise RuntimeError("rocm_wmma: no usable AMD GPU / HIPRTC at launch")
+    if rc != 0:
+        raise RuntimeError(f"rocm_wmma kernel returned rc={rc}")
+    return d
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -1151,6 +1333,7 @@ def _executor_table():
         "apple_gpu_value_target_ir": _execute_apple_value_target_ir_gpu_artifact,
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
+        "rocm_wmma":            _execute_rocm_wmma_artifact,
     }
 
 

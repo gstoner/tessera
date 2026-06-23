@@ -11,7 +11,7 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 
 | Status | Count |
 |---|---:|
-| ``artifact_only`` | 32 |
+| ``artifact_only`` | 31 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -84,7 +84,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 | factorized_matmul | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | fused_epilogue | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 | linear_general | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
-| matmul | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | 75% | - |
+| matmul | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 75% | - |
 | qkv_projection | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 
 ## How to read this

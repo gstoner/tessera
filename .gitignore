@@ -93,3 +93,7 @@ graphify-out/
 
 # Local Python virtualenv (scripts/setup_ubuntu.sh)
 .venv/
+
+# Stray ROCm installer artifact (do not commit)
+amdgpu-install_*.deb
+*.deb

@@ -185,17 +185,42 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
     "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
 })
 
+# Strix Halo bring-up (2026-06-22) — the ROCm ops whose ``hardware_verified``
+# claim is honestly earned: each ships a real C-ABI ``runtime_symbol``
+# (``libtessera_rocm_gemm.so``) that runs an RDNA WMMA kernel on the AMD GPU AND
+# a checked-in ``execute_compare_fixture`` that numerically validates it (and
+# skips clean — no false pass — on a host without an AMD GPU). This is the
+# "first real ROCm proof landed → extend the guard" event the original docstring
+# anticipated. The fixture only *executes* on a ROCm box; the manifest claim
+# rests on that on-silicon run (see docs/audit/backend/rocm/STRIX_HALO_EXECUTION_PLAN.md).
+_ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul"})
+
+
+def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:
+    """A hardware_verified row is honest only with both evidence fields AND on a
+    target whose proof has actually landed: Apple GPU encode-session ops, or the
+    Strix Halo ROCm WMMA ops. Anything else (other targets, unexpected ops) is
+    under-evidenced and must fail the guard."""
+    if not e.runtime_symbol or not e.execute_compare_fixture:
+        return False
+    if e.target == "apple_gpu":
+        return op in _APPLE_GPU_HARDWARE_VERIFIED_OPS
+    if e.target == "rocm":
+        return op in _ROCM_HARDWARE_VERIFIED_OPS
+    return False
+
 
 def test_only_apple_gpu_claims_hardware_verified_today() -> None:
-    """Every ``hardware_verified`` manifest entry must be one of the
-    Apple GPU encode-session ops with a real Metal kernel + checked-in
-    numerical fixture (Project 3 / Sprint A, 2026-06-01).
+    """Every ``hardware_verified`` manifest entry must be a target whose proof
+    has actually landed AND carry both evidence fields:
 
-    Discrete-accelerator targets (NVIDIA / ROCm) still may
-    NOT claim hardware_verified — that hardware isn't available on this
-    Mac, so any such claim would be under-evidenced. The Phase G/H
-    frontier audit tracks that gap. When real NVIDIA/ROCm
-    proof lands, extend this test to allow that target too."""
+    * Apple GPU encode-session ops — real Metal/MPSGraph kernel on this Mac's
+      GPU + checked-in execute_compare_fixture (Project 3 / Sprint A, 2026-06-01).
+    * ROCm WMMA ops — real RDNA WMMA kernel on an AMD GPU (Strix Halo bring-up,
+      2026-06-22) + skip-clean execute_compare_fixture.
+
+    NVIDIA is still NOT allowed (no on-silicon proof has landed); any such claim
+    would be under-evidenced. The Phase G/H frontier audit tracks that gap."""
     by_op = all_manifests()
     hw_verified: list[tuple[str, BackendKernelEntry]] = [
         (op, entry)
@@ -203,22 +228,15 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
         for entry in entries
         if entry.status == "hardware_verified"
     ]
-    # Every hardware_verified entry must be on the apple_gpu target,
-    # be one of the expected ops, and carry both evidence fields (the
-    # __post_init__ validator already enforces the latter, but we
-    # re-assert here so the guard documents the full contract).
     offenders = [
         (op, e) for op, e in hw_verified
-        if e.target != "apple_gpu"
-        or op not in _APPLE_GPU_HARDWARE_VERIFIED_OPS
-        or not e.runtime_symbol
-        or not e.execute_compare_fixture
+        if not _hardware_verified_claim_is_allowed(op, e)
     ]
     assert not offenders, (
-        "Unexpected hardware_verified claim — only Apple GPU encode-"
-        "session ops with a real Metal kernel + checked-in "
-        "execute_compare_fixture may claim it today (NVIDIA/ROCm "
-        "hardware is unavailable on this Mac). Offenders: "
+        "Unexpected hardware_verified claim — only Apple GPU encode-session ops "
+        "(real Metal kernel) and Strix Halo ROCm WMMA ops (real AMD-GPU kernel), "
+        "each with a checked-in execute_compare_fixture, may claim it; NVIDIA "
+        "proof has not landed. Offenders: "
         + ", ".join(
             f"{op}/{e.target} via {e.runtime_symbol}"
             for op, e in offenders

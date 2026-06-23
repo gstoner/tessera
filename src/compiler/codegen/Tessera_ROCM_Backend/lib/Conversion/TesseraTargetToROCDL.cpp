@@ -51,6 +51,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
       if (name == "tessera_rocm.wait")
         waitOps.push_back(op);
       else if (name == "tessera_rocm.mfma" ||
+               name == "tessera_rocm.wmma" ||
                name == "tessera_rocm.async_copy" ||
                name == "tessera_rocm.buffer_load" ||
                name == "tessera_rocm.ds_read_tr")
@@ -67,6 +68,8 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
       StringRef markerName = "llvm.tessera.rocm.unknown";
       if (opName == "tessera_rocm.mfma")
         markerName = "llvm.amdgcn.mfma.contract";
+      else if (opName == "tessera_rocm.wmma")
+        markerName = "llvm.amdgcn.wmma.contract";
       else if (opName == "tessera_rocm.async_copy")
         markerName = "llvm.amdgcn.raw.buffer.copy.contract";
       else if (opName == "tessera_rocm.buffer_load")

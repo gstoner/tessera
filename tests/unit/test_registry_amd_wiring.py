@@ -95,7 +95,11 @@ def test_nvidia_map_has_no_fp8_section():
 # ── A1: backend_manifest typed mma_descriptor field ─────────────────────────
 
 def test_backend_manifest_rocm_gemm_carries_mma_descriptor():
-    rocm = [e for e in bm.manifest_for("matmul") if e.target == "rocm"]
+    # batched_gemm rides the generic CDNA MFMA artifact path and carries the
+    # unified MMA descriptor. (matmul was promoted to the RDNA WMMA
+    # hardware_verified row on 2026-06-22 and intentionally drops the CDNA
+    # descriptor — see test_rocm_matmul_is_wmma_hardware_verified.)
+    rocm = [e for e in bm.manifest_for("batched_gemm") if e.target == "rocm"]
     assert rocm and rocm[0].mma_descriptor is not None
     assert isinstance(rocm[0].mma_descriptor, MmaDescriptor)
     # and it surfaces in the serialized manifest.

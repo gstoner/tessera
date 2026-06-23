@@ -137,9 +137,20 @@ is kept behind `benchmark_rocm_wmma_gemm.py --lds` as the substrate for rung-3
 software pipelining and for discrete RDNA/CDNA where it should pay off. (The
 Gluon v6 lesson generalized: measure the "obvious" optimization, don't assume.)
 
-**Open rungs:** K-loop software pipelining over the LDS buffers (where staging
-starts to earn its keep), arch-aware LDS layout. Heed Gluon's v6 double-buffer
-regression.
+**Rung 3 — 2-stage software pipelining (double-buffered LDS): implemented,
+measured, narrow-window win, NOT promoted.** Prefetch K-panel k+1 into a second
+LDS buffer while computing panel k. Correct (shipped `..._pipe` symbol +
+fixture); beats rung-1 by **~8% only in a 1024³–2048³ window** (size-dependent
+best config), loses at 512³ and ≥3072³. Production stays rung-1. Reproduce with
+`benchmark_rocm_wmma_gemm.py --pipe`.
+
+**Synthesis:** the memory-staging rungs (2 LDS, 3 pipelined LDS) and the
+zero-copy path all give *at most* a narrow single-digit win on this APU — unified
+LPDDR5x means global bandwidth isn't the bottleneck they target, and the rung-1
+register kernel is already compute/occupancy-bound (~11 of ~59 TFLOP/s f16 WMMA
+peak). **Next real lever = occupancy + WMMA issue/scheduling** (VGPR-budgeted
+macro-tiling, dual-issue), not staging. The rung-2/3 symbols are kept for
+discrete RDNA/CDNA (where global *is* the bottleneck) and as references.
 
 ## Memory — APU zero-copy host buffers (opt-in; windowed win)
 

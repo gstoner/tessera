@@ -152,6 +152,76 @@ extern "C" __global__ void %NAME%(
 }
 )HIPSRC";
 
+// Rung 3 — 2-stage software-pipelined, double-buffered LDS. Same WM×WN-wave /
+// MT×NT-register macro-tile as rung 2, but with TWO LDS buffers: while the wave
+// computes WMMA on panel k (buffer cur), the workgroup issues the global loads
+// of panel k+1 into buffer nxt, so global-load latency overlaps WMMA compute
+// instead of the strict load→sync→compute→sync of rung 2. ROCM_PATTERNS §B2
+// (Gluon v4→v5). This is the rung where LDS staging is *meant* to earn its keep;
+// whether it beats the rung-1 register kernel on this APU is an empirical
+// question (measured, not assumed). WM/WN/MT/NT literal ints → constexpr LDS.
+const char* kKernelTemplatePipe = R"HIPSRC(
+typedef %TYPE% wtype16 __attribute__((ext_vector_type(16)));
+typedef float  float8  __attribute__((ext_vector_type(8)));
+__device__ inline void tsr_load_panel(const %TYPE%* A, const %TYPE%* B,
+    %TYPE%* sA, %TYPE%* sB, int p, int tid, int nthreads,
+    int blockRow, int blockCol, int M, int N, int K, int WG_M, int WG_N) {
+  int k0 = p * 16;
+  for (int e = tid; e < WG_M * 16; e += nthreads) {
+    int row = e >> 4, kk = e & 15, gr = blockRow + row, gk = k0 + kk;
+    sA[e] = (gr < M && gk < K) ? A[gr * K + gk] : (%TYPE%)0;
+  }
+  for (int e = tid; e < 16 * WG_N; e += nthreads) {
+    int kk = e / WG_N, col = e % WG_N, gk = k0 + kk, gc = blockCol + col;
+    sB[e] = (gk < K && gc < N) ? B[gk * N + gc] : (%TYPE%)0;
+  }
+}
+extern "C" __global__ void %NAME%(
+    const %TYPE%* A, const %TYPE%* B, float* D, int M, int N, int K) {
+  constexpr int WM = %WM%, WN = %WN%, MT = %MT%, NT = %NT%;
+  constexpr int WG_M = WM * MT * 16, WG_N = WN * NT * 16;
+  __shared__ %TYPE% sA[2][WG_M * 16];
+  __shared__ %TYPE% sB[2][16 * WG_N];
+  int tid = threadIdx.x, nthreads = WM * WN * 32;
+  int waveId = tid >> 5, lane = tid & 31, l15 = lane & 15;
+  int rowOff = (waveId / WN) * MT * 16, colOff = (waveId % WN) * NT * 16;
+  int blockRow = blockIdx.y * WG_M, blockCol = blockIdx.x * WG_N;
+  float8 c[MT][NT];
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni) c[mi][ni] = (float8){0,0,0,0,0,0,0,0};
+  int npanels = (K + 15) / 16;
+  tsr_load_panel(A, B, sA[0], sB[0], 0, tid, nthreads, blockRow, blockCol,
+                 M, N, K, WG_M, WG_N);
+  __syncthreads();
+  for (int p = 0; p < npanels; ++p) {
+    int cur = p & 1, nxt = (p + 1) & 1;
+    if (p + 1 < npanels)   // prefetch next panel into the other buffer
+      tsr_load_panel(A, B, sA[nxt], sB[nxt], p + 1, tid, nthreads,
+                     blockRow, blockCol, M, N, K, WG_M, WG_N);
+    wtype16 bf[NT];
+    for (int ni = 0; ni < NT; ++ni) {
+      int bcol = colOff + ni * 16 + l15;
+      for (int i = 0; i < 16; ++i) bf[ni][i] = sB[cur][i * WG_N + bcol];
+    }
+    for (int mi = 0; mi < MT; ++mi) {
+      wtype16 a;
+      int arow = rowOff + mi * 16 + l15;
+      for (int i = 0; i < 16; ++i) a[i] = sA[cur][arow * 16 + i];
+      for (int ni = 0; ni < NT; ++ni)
+        c[mi][ni] = %WMMA%(a, bf[ni], c[mi][ni]);
+    }
+    __syncthreads();   // nxt fully loaded + cur done before buffer reuse
+  }
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni)
+      for (int e = 0; e < 8; ++e) {
+        int r = blockRow + rowOff + mi * 16 + e * 2 + (lane >> 4);
+        int col = blockCol + colOff + ni * 16 + l15;
+        if (r < M && col < N) D[r * N + col] = c[mi][ni][e];
+      }
+}
+)HIPSRC";
+
 std::string substitute(const std::string& tmpl, const std::string& from,
                        const std::string& to) {
   std::string out = tmpl;
@@ -210,6 +280,20 @@ bool compileVariantLDS(const char* type, const char* wmma, int wm, int wn,
                        int mt, int nt, const std::string& name,
                        hipModule_t* outMod, hipFunction_t* outFn) {
   std::string src = substitute(kKernelTemplateLDS, "%TYPE%", type);
+  src = substitute(src, "%WMMA%", wmma);
+  src = substitute(src, "%NAME%", name);
+  src = substitute(src, "%WM%", std::to_string(wm));
+  src = substitute(src, "%WN%", std::to_string(wn));
+  src = substitute(src, "%MT%", std::to_string(mt));
+  src = substitute(src, "%NT%", std::to_string(nt));
+  return compileSrc(src, name, outMod, outFn);
+}
+
+// Compile a rung-3 2-stage software-pipelined (double-buffered LDS) variant.
+bool compileVariantPipe(const char* type, const char* wmma, int wm, int wn,
+                        int mt, int nt, const std::string& name,
+                        hipModule_t* outMod, hipFunction_t* outFn) {
+  std::string src = substitute(kKernelTemplatePipe, "%TYPE%", type);
   src = substitute(src, "%WMMA%", wmma);
   src = substitute(src, "%NAME%", name);
   src = substitute(src, "%WM%", std::to_string(wm));
@@ -442,6 +526,43 @@ int runGemmLDS(const char* type, const char* wmma, const void* A,
   return rc;
 }
 
+// rung-3 (2-stage pipelined, double-buffered LDS) benchmark. 0/1/2/3 as above.
+int benchVariantPipe(const char* type, const char* wmma, int M, int N, int K,
+                     int iters, int wm, int wn, int mt, int nt, double* avg_ms) {
+  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || wm <= 0 || wn <= 0
+      || mt <= 0 || nt <= 0)
+    return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("benchpipe") + type + "_" + std::to_string(wm)
+                     + "_" + std::to_string(wn) + "_" + std::to_string(mt)
+                     + "x" + std::to_string(nt);
+  if (!compileVariantPipe(type, wmma, wm, wn, mt, nt, name, &mod, &fn)) return 2;
+  int wgM = wm * mt * 16, wgN = wn * nt * 16;
+  unsigned gx = (unsigned)((N + wgN - 1) / wgN);
+  unsigned gy = (unsigned)((M + wgM - 1) / wgM);
+  int rc = timedKernelLaunches(fn, gx, gy, wm * wn * 32, M, N, K, iters, avg_ms);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
+// Run a pipelined GEMM end-to-end (correctness path for the rung-3 kernel).
+int runGemmPipe(const char* type, const char* wmma, const void* A,
+                const void* B, void* D, int M, int N, int K, int wm, int wn,
+                int mt, int nt, size_t elemBytes) {
+  if (M <= 0 || N <= 0 || K <= 0) return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("runpipe") + type;
+  if (!compileVariantPipe(type, wmma, wm, wn, mt, nt, name, &mod, &fn)) return 2;
+  int wgM = wm * mt * 16, wgN = wn * nt * 16;
+  unsigned gx = (unsigned)((N + wgN - 1) / wgN);
+  unsigned gy = (unsigned)((M + wgM - 1) / wgM);
+  int rc = runDeviceGemm(fn, gx, gy, wm * wn * 32, A, B, D, M, N, K, elemBytes);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
 // END-TO-END CPU-timed benchmark: times the full launch()-equivalent path per
 // call — memory setup + transfer + launch + sync (+ teardown) — over real host
 // buffers, for ``zerocopy`` 0 (hipMalloc + H2D/D2H copy) vs 1 (hipHostRegister
@@ -532,6 +653,24 @@ extern "C" int tessera_rocm_wmma_gemm_f16_lds(const void* A, const void* B,
                                               int wm, int wn, int mt, int nt) {
   return runGemmLDS("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
                     A, B, D, M, N, K, wm, wn, mt, nt, sizeof(unsigned short));
+}
+
+// rung-3 2-stage pipelined (double-buffered LDS) kernel — device-timed bench.
+extern "C" int tessera_rocm_wmma_gemm_f16_bench_pipe(int M, int N, int K,
+                                                     int iters, int wm, int wn,
+                                                     int mt, int nt,
+                                                     double* avg_ms) {
+  return benchVariantPipe("__fp16",
+                          "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                          M, N, K, iters, wm, wn, mt, nt, avg_ms);
+}
+
+// rung-3 pipelined GEMM end-to-end (f16, f32 accumulate) — correctness path.
+extern "C" int tessera_rocm_wmma_gemm_f16_pipe(const void* A, const void* B,
+                                               void* D, int M, int N, int K,
+                                               int wm, int wn, int mt, int nt) {
+  return runGemmPipe("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                     A, B, D, M, N, K, wm, wn, mt, nt, sizeof(unsigned short));
 }
 
 // End-to-end CPU-timed benchmark of the full launch path. zerocopy: 0 = copy

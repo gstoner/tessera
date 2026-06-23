@@ -7,6 +7,16 @@ fixtures themselves stay green in ordinary CI.  Skips cleanly when the ROCm
 backend hasn't been configured/built or when ``lit`` isn't installed.
 
 Failure-path hardening (2026-06-22):
+  * **Stale-binary skip** — the suite runs whatever ``tessera-rocm-opt`` is in
+    the build dir; a binary that predates a source change produces confusing
+    FileCheck mismatches (e.g. an RDNA ``wmma`` op still emitted as ``mfma`` —
+    exactly what bit us). Before running we compare the binary's mtime against
+    its real source inputs — the ``lib`` / ``include`` / ``tools`` tree that
+    actually compiles into it, EXCLUDING the separate HIP ``runtime`` and the
+    lit ``test`` fixtures — and skip with a clear "rebuild" message when stale.
+    (``make -q`` is unusable here: CMake-generated Makefiles carry phony
+    always-run rules, so it reports "needs rebuild" even right after a build.
+    mtime, by contrast, correctly flips to fresh once you rebuild.)
   * **OOM notification** — a lit run killed by ``SIGKILL`` is almost always the
     OOM killer (macOS jetsam / Linux oom-killer under memory pressure) or an
     operator kill, NOT a fixture regression. We detect the signal exit and skip
@@ -14,12 +24,6 @@ Failure-path hardening (2026-06-22):
   * **Clean shutdown** — the lit subprocess runs in its own process group, so on
     a timeout or any error the whole tree (``lit`` → ``tessera-rocm-opt`` /
     ``FileCheck`` / ``not``) is torn down with ``killpg`` — no orphaned children.
-  * **Stale-binary hint** — a ``tessera-rocm-opt`` older than its sources gives
-    confusing FileCheck mismatches (e.g. an RDNA ``wmma`` op still emitted as
-    ``mfma``). On a fixture failure we append a "rebuild" hint when the binary
-    looks stale. (We do NOT pre-skip on mtime: git checkout/merge rewrites source
-    mtimes without changing content, so a pre-skip would false-positive after
-    every merge — the hint-on-failure path has no such cost.)
 """
 
 from __future__ import annotations
@@ -41,9 +45,15 @@ _SITE_CANDIDATES = [
     _REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/test/lit.site.cfg.py",
 ]
 
-# ROCm backend source tree + the build inputs whose mtime gates binary freshness.
+_OPT_TARGET = "tessera-rocm-opt"
+
+# ROCm backend source tree, and the sub-dirs whose mtime gates opt-binary
+# freshness: the IR/conversion/driver inputs that compile INTO tessera-rocm-opt.
+# Deliberately excludes ``runtime/`` (the HIP kernel → separate
+# libtessera_rocm_gemm.so) and ``test/`` (lit fixtures, not compiled in).
 _ROCM_SRC = _REPO / "src/compiler/codegen/Tessera_ROCM_Backend"
-_SRC_GLOBS = ("*.cpp", "*.h", "*.td", "*.inc", "CMakeLists.txt")
+_OPT_SRC_DIRS = ("lib", "include", "tools")
+_SRC_GLOBS = ("*.cpp", "*.h", "*.hpp", "*.td", "*.inc", "CMakeLists.txt")
 
 # Generous wall-clock ceiling: the suite runs in <1s; this only fires if a
 # tessera-rocm-opt invocation hangs, and exists so the test can't wedge CI.
@@ -61,43 +71,58 @@ def _site_dir() -> Path | None:
     return None
 
 
-def _rocm_opt_binary(test_dir: Path) -> Path | None:
-    """The built ``tessera-rocm-opt`` that the lit fixtures invoke (sibling
-    ``tools/`` dir of the test dir)."""
-    cand = test_dir.parent / "tools" / "tessera-rocm-opt"
+def _opt_binary(test_dir: Path) -> Path | None:
+    """The built ``tessera-rocm-opt`` the lit fixtures invoke (sibling ``tools/``
+    dir of the test dir)."""
+    cand = test_dir.parent / "tools" / _OPT_TARGET
     return cand if cand.is_file() else None
 
 
-def _newest_rocm_source_mtime() -> float:
-    """Newest mtime among the sources that compile into ``tessera-rocm-opt`` —
-    i.e. the IR/conversion/driver tree, EXCLUDING ``runtime/`` (the HIP kernel
-    that builds the separate ``libtessera_rocm_gemm.so``, not the opt driver)."""
+def _newest_opt_source_mtime() -> float:
+    """Newest mtime among the sources that compile into ``tessera-rocm-opt``."""
     newest = 0.0
-    for pat in _SRC_GLOBS:
-        for p in _ROCM_SRC.rglob(pat):
-            if "runtime" in p.parts:
-                continue
-            try:
-                newest = max(newest, p.stat().st_mtime)
-            except OSError:
-                pass
+    for sub in _OPT_SRC_DIRS:
+        base = _ROCM_SRC / sub
+        if not base.is_dir():
+            continue
+        for pat in _SRC_GLOBS:
+            for p in base.rglob(pat):
+                try:
+                    newest = max(newest, p.stat().st_mtime)
+                except OSError:
+                    pass
     return newest
 
 
-def _stale_binary_hint(test_dir: Path) -> str:
-    """A '(rebuild)' hint appended to a failure message when the opt binary is
-    older than its sources — the usual cause of a confusing FileCheck mismatch."""
-    binp = _rocm_opt_binary(test_dir)
+def _stale_binary_reason(test_dir: Path) -> str | None:
+    """Return a skip reason if ``tessera-rocm-opt`` predates its real source
+    inputs (so its lit output can't be trusted), else None. mtime, scoped to the
+    binary's actual deps, is the reliable signal here: it flips to fresh once you
+    rebuild (``make -q`` does not — see the module docstring). A git checkout that
+    rewrites a source mtime will read as stale even if content is unchanged, but
+    skipping with a 'rebuild' hint after a checkout is the safe, intended call."""
+    binp = _opt_binary(test_dir)
     if binp is None:
-        return ""
+        return None
     try:
-        if binp.stat().st_mtime < _newest_rocm_source_mtime():
-            return (f"\nNOTE: {binp} is OLDER than its sources — rebuild "
-                    f"tessera-rocm-opt; a stale binary is the usual cause of a "
-                    f"FileCheck mismatch here (e.g. RDNA wmma emitted as mfma).")
+        if binp.stat().st_mtime < _newest_opt_source_mtime():
+            return (
+                f"{binp} predates its sources — rebuild it before trusting the "
+                f"ROCm lit suite, e.g. `cmake --build {_build_root(test_dir)} "
+                f"--target {_OPT_TARGET}`. A stale binary causes confusing "
+                f"FileCheck mismatches (e.g. RDNA wmma emitted as mfma).")
     except OSError:
-        pass
-    return ""
+        return None
+    return None
+
+
+def _build_root(test_dir: Path) -> Path | None:
+    """The CMake build root (holds CMakeCache.txt) — used only to phrase the
+    rebuild hint."""
+    for p in test_dir.parents:
+        if (p / "CMakeCache.txt").is_file():
+            return p
+    return None
 
 
 class _LitResult:
@@ -157,6 +182,10 @@ def test_rocm_lit_suite_passes() -> None:
             "ROCm backend not configured (no generated lit.site.cfg.py); "
             "configure -DTESSERA_BUILD_ROCM_BACKEND=ON and build tessera-rocm-opt")
 
+    stale = _stale_binary_reason(test_dir)
+    if stale is not None:
+        pytest.skip(stale)
+
     res = _run_lit_clean([lit, "-q", str(test_dir)], timeout=_LIT_TIMEOUT_S)
 
     # ── Failure paths, most-specific first ──────────────────────────────────
@@ -180,10 +209,10 @@ def test_rocm_lit_suite_passes() -> None:
             f"process group cleaned up."
             f"\n--- stdout ---\n{res.stdout}\n--- stderr ---\n{res.stderr}")
 
-    # lit returns non-zero if any fixture fails; surface its report on failure,
-    # plus a rebuild hint when the opt binary looks stale (the usual cause).
+    # lit returns non-zero if any fixture fails; surface its report on failure.
     assert res.returncode == 0, (
-        f"ROCm lit suite failed (rc={res.returncode}):{_stale_binary_hint(test_dir)}\n"
+        f"ROCm lit suite failed (rc={res.returncode}). If you recently changed "
+        f"ROCm backend sources, rebuild {_OPT_TARGET} and retry.\n"
         f"--- stdout ---\n{res.stdout}\n--- stderr ---\n{res.stderr}")
     # Sanity: lit actually discovered tests (guards against a silent
     # "contained no tests" regression in the lit wiring).

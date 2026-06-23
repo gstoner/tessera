@@ -32,6 +32,26 @@ TABLE_PATH = REPO_ROOT / "docs" / "audit" / "generated" / "support_table.md"
 
 
 # ---------------------------------------------------------------------------
+# Shared expensive builds — done ONCE per module.
+#
+# audit.all_support_rows() walks the whole primitive-coverage registry across
+# the 8 axes (~10s), and render_markdown() rebuilds the same table. Several
+# tests below each called these independently — ~8×11s, a big chunk of the unit
+# suite. These tests only READ the result, so a module-scoped build is safe and
+# collapses the rebuilds to one each.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def support_rows():
+    return audit.all_support_rows()
+
+
+@pytest.fixture(scope="module")
+def support_markdown():
+    return audit.render_markdown()
+
+
+# ---------------------------------------------------------------------------
 # Eight-axis taxonomy contract
 # ---------------------------------------------------------------------------
 
@@ -44,10 +64,10 @@ def test_layer_axes_are_eight_in_canonical_order() -> None:
     )
 
 
-def test_axis_value_glyphs_cover_every_status_used() -> None:
+def test_axis_value_glyphs_cover_every_status_used(support_rows) -> None:
     """Every cell value the walkers emit must have a glyph — otherwise
     the compact summary view silently renders `?`."""
-    rows = audit.all_support_rows()
+    rows = support_rows
     seen = {cell.status for row in rows for cell in row.cells.values()}
     missing = seen - set(audit.AXIS_VALUE_GLYPHS)
     assert not missing, (
@@ -56,19 +76,19 @@ def test_axis_value_glyphs_cover_every_status_used() -> None:
     )
 
 
-def test_every_row_has_one_cell_per_axis() -> None:
+def test_every_row_has_one_cell_per_axis(support_rows) -> None:
     """The row contract: 8 cells, no more, no fewer."""
-    rows = audit.all_support_rows()
+    rows = support_rows
     for row in rows:
         assert set(row.cells.keys()) == set(audit.LAYER_AXES), (
             f"{row.op_name}: cells={sorted(row.cells.keys())}"
         )
 
 
-def test_axis_cells_carry_provenance() -> None:
+def test_axis_cells_carry_provenance(support_rows) -> None:
     """Every cell must name its source module / metadata path so the
     table is auditable without re-running the walk."""
-    rows = audit.all_support_rows()
+    rows = support_rows
     for row in rows:
         for axis, cell in row.cells.items():
             assert cell.source, f"{row.op_name}/{axis} missing provenance"
@@ -87,13 +107,13 @@ def test_generated_support_table_exists() -> None:
     )
 
 
-def test_generated_support_table_matches_audit() -> None:
+def test_generated_support_table_matches_audit(support_markdown) -> None:
     """The drift gate.  Fails when any of the four sources changed
     without the checked-in table being regenerated.
 
     Fix: ``python -m tessera.compiler.audit support_table``.
     """
-    expected = audit.render_markdown()
+    expected = support_markdown
     actual = TABLE_PATH.read_text()
     if expected != actual:
         # Surface the first ~20 differing lines so the failure message
@@ -156,7 +176,7 @@ def test_native_ga_ops_show_fused_at_target_ir() -> None:
         assert row.cells["bench"].status == "benchmarked", op
 
 
-def test_visual_complex_rows_match_public_api_and_backend_aliases() -> None:
+def test_visual_complex_rows_match_public_api_and_backend_aliases(support_rows) -> None:
     """M7 rows use public ``tessera.complex`` names while honoring the
     prefixed backend-manifest symbols.
 
@@ -176,7 +196,7 @@ def test_visual_complex_rows_match_public_api_and_backend_aliases() -> None:
     (``api`` / ``frontend`` / ``family`` + ``complex_add`` absence);
     the parametrized version focuses on tile/target axis status.
     """
-    rows = {row.op_name: row for row in audit.all_support_rows()}
+    rows = {row.op_name: row for row in support_rows}
     assert "complex_add" not in rows
 
     fused_ops = audit.m7_fused_public_ops()
@@ -204,20 +224,20 @@ def test_matmul_is_public_and_fused_at_target_ir() -> None:
     assert row.cells["target_ir"].status == "fused"
 
 
-def test_support_table_includes_canonical_program_section() -> None:
+def test_support_table_includes_canonical_program_section(support_markdown) -> None:
     """M1.5 acceptance: every canonical program (shipped or planned)
     has a row in the generated support table."""
     from tessera.compiler import canonical
-    text = audit.render_markdown()
+    text = support_markdown
     assert "## Canonical end-to-end programs" in text
     for program in canonical.CANONICAL_PROGRAMS:
         assert program.program_id in text, program.program_id
         assert program.status in text
 
 
-def test_runtime_axis_is_one_of_a_known_set() -> None:
+def test_runtime_axis_is_one_of_a_known_set(support_rows) -> None:
     """The runtime axis can only emit values we have glyphs for."""
-    rows = audit.all_support_rows()
+    rows = support_rows
     valid = set(audit.AXIS_VALUE_GLYPHS)
     for row in rows:
         assert row.cells["runtime"].status in valid, (

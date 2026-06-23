@@ -470,6 +470,24 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     stays the hand-written proof anchor). Fixtures:
     `test_rocm_compiled_launch_execute.py` (default flip executes + fallback),
     `test_target_ir_contract.py` (host-gated). **Stage L is complete.**
+  - ✅ **int8 + int4 WMMA in the compiled lane (2026-06-23).** gfx1151 WMMA dtype
+    support re-verified on the *real device compiler* (`hipcc --offload-arch=
+    gfx1151`): **f16, bf16, int8 (iu8), int4 (iu4)** all compile; **f32, tf32,
+    bf8/fp8 do NOT exist** on RDNA 3.5 (FP8 WMMA is RDNA 4 / gfx1200). Enabled
+    int8 + int4 in the compiled GEMM lane:
+    - **int8** (`dtype="int8"`): A/B loaded `vector<16xi8>` → bitcast to the iu8
+      ABI `vector<4xi32>`; i32 accumulate; D = i32. Stage J →
+      `rocdl.wmma.i32.16x16x16.iu8` (signed, clamp=0 = wrap).
+    - **int4** (`dtype="int4"`, opt-in via `metadata["wmma_dtype"]`): int4 values
+      in int8 containers (range [-8,7]); nibble-packed in-kernel to the iu4 ABI
+      `vector<2xi32>` → `rocdl.wmma.i32.16x16x16.iu4`. Correctness-first (no
+      coalesced load); packed-memory int4 + perf is future work.
+    Both execute on gfx1151 **bit-EXACT vs numpy int32 matmul** (integer is exact,
+    so numpy is the oracle) across aligned / ragged-M/N / ragged-K shapes —
+    `test_rocm_compiled_launch_execute.py`. The codegen generalized via a
+    `WmmaTypes` bundle (store/load/frag/acc/accElem + pack-kind) so f16/bf16/int8/
+    int4 share the one 3-path kernel. The hand-written `runtime_symbol` (f16/bf16)
+    is unchanged; int8/int4 are compiled-lane-only capabilities.
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
   L1. The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.

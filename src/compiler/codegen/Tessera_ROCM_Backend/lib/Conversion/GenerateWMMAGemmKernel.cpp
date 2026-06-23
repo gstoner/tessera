@@ -61,9 +61,14 @@ namespace {
 //             int8 the 16 i8 are bitcast to vector<4xi32> (the iu8 ABI).
 //   acc     : vector<8 x accElem> accumulator/result.
 //   accElem : f32 / i32 — the D memref element.
+//   pack    : how a loaded `load` vector becomes a `frag` operand —
+//             0 = identity (f16/bf16), 1 = bitcast vector<16xi8>->vector<4xi32>
+//             (int8/iu8), 2 = nibble-pack 16 i8 (each an int4 value in [-8,7])
+//             into vector<2xi32> (int4/iu4).
 struct WmmaTypes {
   Type store, load, frag, acc, accElem;
   bool isInt;
+  int pack;
 };
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
@@ -151,12 +156,35 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     colSafe[ni] = b.create<arith::SelectOp>(loc, colInb[ni], colN[ni], c0);
   }
 
-  // Reinterpret a loaded fragment (vector<16 x store>) as the wmma operand type
-  // — identity for f16/bf16, a bitcast to vector<4xi32> for int8 (the iu8 ABI).
+  // Reinterpret a loaded fragment (vector<16 x store>) as the wmma operand type.
+  //   pack 0 (f16/bf16): identity.
+  //   pack 1 (int8/iu8): bitcast vector<16xi8> -> vector<4xi32> (byte k -> word
+  //                      k/4, byte k%4 — the layout iu8 expects).
+  //   pack 2 (int4/iu4): nibble-pack 16 int4 values (held in int8, low nibble)
+  //                      into vector<2xi32> (value k -> word k/8, nibble k%8).
+  Type i32Ty = b.getIntegerType(32);
   auto toFrag = [&](OpBuilder &bb, Location l, Value v) -> Value {
-    if (fragTy == loadTy)
+    if (T.pack == 0)
       return v;
-    return bb.create<vector::BitCastOp>(l, fragTy, v);
+    if (T.pack == 1)
+      return bb.create<vector::BitCastOp>(l, fragTy, v);
+    // pack == 2: int4 nibble compaction.
+    Value cF = bb.create<arith::ConstantIntOp>(l, 0xF, 32);
+    Value words[2] = {bb.create<arith::ConstantIntOp>(l, 0, 32),
+                      bb.create<arith::ConstantIntOp>(l, 0, 32)};
+    for (int64_t k = 0; k < 16; ++k) {
+      Value e = bb.create<vector::ExtractOp>(l, v, ArrayRef<int64_t>{k}); // i8
+      Value ei = bb.create<arith::ExtUIOp>(l, i32Ty, e);
+      Value nib = bb.create<arith::AndIOp>(l, ei, cF);
+      Value sh = bb.create<arith::ConstantIntOp>(l, 4 * (k % 8), 32);
+      Value shf = bb.create<arith::ShLIOp>(l, nib, sh);
+      words[k / 8] = bb.create<arith::OrIOp>(l, words[k / 8], shf);
+    }
+    Value frag = bb.create<arith::ConstantOp>(
+        l, fragTy, DenseElementsAttr::get(cast<ShapedType>(fragTy), APInt(32, 0)));
+    frag = bb.create<vector::InsertOp>(l, words[0], frag, ArrayRef<int64_t>{0});
+    frag = bb.create<vector::InsertOp>(l, words[1], frag, ArrayRef<int64_t>{1});
+    return frag;
   };
 
   // WMMA accumulation over mt*nt fragments, reusing each loaded fragment.
@@ -410,19 +438,28 @@ struct GenerateWMMAGemmKernelPass
       StringRef dt = "f16";
       if (auto a = op->getAttrOfType<StringAttr>("dtype"))
         dt = a.getValue();
+      auto v8i32 = VectorType::get({8}, i32Ty);
+      auto v8f32 = VectorType::get({8}, f32Ty);
+      auto v16i8 = VectorType::get({16}, i8Ty);
       if (dt == "f16" || dt == "float16") {
         T = {f16Ty, VectorType::get({16}, f16Ty), VectorType::get({16}, f16Ty),
-             VectorType::get({8}, f32Ty), f32Ty, /*isInt=*/false};
+             v8f32, f32Ty, /*isInt=*/false, /*pack=*/0};
       } else if (dt == "bf16" || dt == "bfloat16") {
         T = {bf16Ty, VectorType::get({16}, bf16Ty),
-             VectorType::get({16}, bf16Ty), VectorType::get({8}, f32Ty), f32Ty,
-             /*isInt=*/false};
+             VectorType::get({16}, bf16Ty), v8f32, f32Ty, /*isInt=*/false,
+             /*pack=*/0};
       } else if (dt == "int8" || dt == "i8") {
-        T = {i8Ty, VectorType::get({16}, i8Ty), VectorType::get({4}, i32Ty),
-             VectorType::get({8}, i32Ty), i32Ty, /*isInt=*/true};
+        T = {i8Ty, v16i8, VectorType::get({4}, i32Ty), v8i32, i32Ty,
+             /*isInt=*/true, /*pack=*/1};
+      } else if (dt == "int4" || dt == "i4") {
+        // int4 values supplied in int8 containers (range [-8,7]); the low nibble
+        // is the int4 two's-complement. Nibble-packed in-kernel to the iu4 ABI
+        // vector<2xi32>; i32 accumulate. (correctness-first — no coalesced load.)
+        T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
+             /*isInt=*/true, /*pack=*/2};
       } else {
-        op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, or "
-                      "int8 (got '")
+        op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, "
+                      "int8, or int4 (got '")
             << dt << "')";
         return signalPassFailure();
       }

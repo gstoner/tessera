@@ -1335,6 +1335,11 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 # (L4). So `@jit(target="rocm")` matmul now executes through this lane by default
 # on a capable host (jit.py stamps ``compiler_path = "rocm_compiled"``).
 #
+# WMMA dtypes (all verified on gfx1151): f16/bf16 -> f32 accumulate; int8 -> i32
+# (rocdl iu8); int4 -> i32 (rocdl iu4, int4 values in int8 containers [-8,7],
+# opt-in via metadata["wmma_dtype"]="int4"). f32/tf32/fp8 WMMA do not exist on
+# RDNA 3.5.
+#
 # The hand-written ``rocm_wmma`` HIPRTC kernel is now the reference oracle + the
 # availability fallback: if the compiled lane can't run here (no tessera-opt
 # built, no in-process serialization spine, or no usable AMD GPU) the executor
@@ -1526,6 +1531,14 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(
             "rocm_compiled lane handles f16/bf16 (f32 acc) or int8 (i32 acc) "
             f"storage; got {a.dtype} @ {b.dtype}")
+    # int4 shares the int8 container (np.int8, values in [-8,7]); it is opt-in via
+    # an explicit metadata hint since the numpy dtype can't distinguish it.
+    if str(metadata.get("wmma_dtype") or "") in ("int4", "i4"):
+        if a.dtype != np.int8 or b.dtype != np.int8:
+            raise ValueError(
+                "rocm_compiled int4 lane needs int8 containers (int4 values in "
+                f"[-8,7]); got {a.dtype} @ {b.dtype}")
+        dtype_tag, store, out_dt = "int4", np.int8, np.int32
 
     m, k = a.shape
     n = b.shape[1]

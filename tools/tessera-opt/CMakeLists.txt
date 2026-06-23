@@ -17,6 +17,7 @@ target_link_libraries(tessera-opt PRIVATE
   MLIRLinalgTransforms
   MLIRMemRefDialect
   MLIRSCFDialect
+  MLIRVectorDialect
   MLIRTensorDialect
   MLIRUBDialect
   # Phase 4 GPU emission (2026-06-17): the linalg→gpu→NVVM passes (emission only;

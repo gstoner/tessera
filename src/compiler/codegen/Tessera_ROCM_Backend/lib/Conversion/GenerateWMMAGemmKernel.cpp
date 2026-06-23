@@ -54,11 +54,27 @@ using namespace mlir;
 
 namespace {
 
+// The WMMA element/fragment/accumulator types for one dtype.
+//   store   : A/B memref element (f16 / bf16 / i8).
+//   load    : vector<16 x store> — the fragment as loaded/built per lane.
+//   frag    : the `tessera_rocm.wmma` operand type. == load for f16/bf16; for
+//             int8 the 16 i8 are bitcast to vector<4xi32> (the iu8 ABI).
+//   acc     : vector<8 x accElem> accumulator/result.
+//   accElem : f32 / i32 — the D memref element.
+//   pack    : how a loaded `load` vector becomes a `frag` operand —
+//             0 = identity (f16/bf16), 1 = bitcast vector<16xi8>->vector<4xi32>
+//             (int8/iu8), 2 = nibble-pack 16 i8 (each an int4 value in [-8,7])
+//             into vector<2xi32> (int4/iu4).
+struct WmmaTypes {
+  Type store, load, frag, acc, accElem;
+  bool isInt;
+  int pack;
+};
+
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
-// `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index). `storeTy` is the A/B
-// storage element type (f16 or bf16); the accumulator is always f32.
+// `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
 void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
-                     int64_t mt, int64_t nt, Type storeTy) {
+                     int64_t mt, int64_t nt, const WmmaTypes &T) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -67,22 +83,40 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value N = gpuFunc.getArgument(4);
   Value K = gpuFunc.getArgument(5);
 
-  Type f32Ty = b.getF32Type();
-  auto fragTy = VectorType::get({16}, storeTy);
-  auto accTy = VectorType::get({8}, f32Ty);
+  Type loadTy = T.load;
+  Type fragTy = T.frag;
+  Type accTy = T.acc;
   auto slt = arith::CmpIPredicate::slt;
 
   Value c0 = b.create<arith::ConstantIndexOp>(loc, 0);
   Value c4 = b.create<arith::ConstantIndexOp>(loc, 4);
   Value c15 = b.create<arith::ConstantIndexOp>(loc, 15);
   Value c16 = b.create<arith::ConstantIndexOp>(loc, 16);
-  Value storeZero =
-      b.create<arith::ConstantOp>(loc, storeTy, b.getFloatAttr(storeTy, 0.0));
-  APFloat zeroAP = cast<FloatAttr>(b.getFloatAttr(storeTy, 0.0)).getValue();
-  Value fragZero = b.create<arith::ConstantOp>(
-      loc, fragTy, DenseElementsAttr::get(fragTy, zeroAP));
-  Value accZero = b.create<arith::ConstantOp>(
-      loc, accTy, DenseElementsAttr::get(accTy, APFloat(0.0f)));
+
+  // Zero constants: a scalar store-element zero (per-element masking), the
+  // loaded-fragment zero (edge select / masked-build init), and the accumulator
+  // zero — built from APInt for integer dtypes, APFloat otherwise.
+  Value storeZero, loadZero, accZero;
+  if (T.isInt) {
+    unsigned sw = cast<IntegerType>(T.store).getWidth();
+    storeZero = b.create<arith::ConstantOp>(loc, T.store,
+                                            b.getIntegerAttr(T.store, 0));
+    loadZero = b.create<arith::ConstantOp>(
+        loc, loadTy, DenseElementsAttr::get(cast<ShapedType>(loadTy),
+                                            APInt(sw, 0)));
+    accZero = b.create<arith::ConstantOp>(
+        loc, accTy, DenseElementsAttr::get(cast<ShapedType>(accTy),
+                                           APInt(32, 0)));
+  } else {
+    storeZero = b.create<arith::ConstantOp>(loc, T.store,
+                                            b.getFloatAttr(T.store, 0.0));
+    APFloat zAP = cast<FloatAttr>(b.getFloatAttr(T.store, 0.0)).getValue();
+    loadZero = b.create<arith::ConstantOp>(
+        loc, loadTy, DenseElementsAttr::get(cast<ShapedType>(loadTy), zAP));
+    accZero = b.create<arith::ConstantOp>(
+        loc, accTy, DenseElementsAttr::get(cast<ShapedType>(accTy),
+                                           APFloat(0.0f)));
+  }
 
   // lane = threadIdx.x & 15; lhi = threadIdx.x >> 4.
   Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
@@ -122,14 +156,50 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     colSafe[ni] = b.create<arith::SelectOp>(loc, colInb[ni], colN[ni], c0);
   }
 
+  // Reinterpret a loaded fragment (vector<16 x store>) as the wmma operand type.
+  //   pack 0 (f16/bf16): identity.
+  //   pack 1 (int8/iu8): bitcast vector<16xi8> -> vector<4xi32> (byte k -> word
+  //                      k/4, byte k%4 — the layout iu8 expects).
+  //   pack 2 (int4/iu4): nibble-pack 16 int4 values (held in int8, low nibble)
+  //                      into vector<2xi32> (value k -> word k/8, nibble k%8).
+  Type i32Ty = b.getIntegerType(32);
+  auto toFrag = [&](OpBuilder &bb, Location l, Value v) -> Value {
+    if (T.pack == 0)
+      return v;
+    if (T.pack == 1)
+      return bb.create<vector::BitCastOp>(l, fragTy, v);
+    // pack == 2: int4 nibble compaction.
+    Value cF = bb.create<arith::ConstantIntOp>(l, 0xF, 32);
+    Value words[2] = {bb.create<arith::ConstantIntOp>(l, 0, 32),
+                      bb.create<arith::ConstantIntOp>(l, 0, 32)};
+    for (int64_t k = 0; k < 16; ++k) {
+      Value e = bb.create<vector::ExtractOp>(l, v, ArrayRef<int64_t>{k}); // i8
+      Value ei = bb.create<arith::ExtUIOp>(l, i32Ty, e);
+      Value nib = bb.create<arith::AndIOp>(l, ei, cF);
+      Value sh = bb.create<arith::ConstantIntOp>(l, 4 * (k % 8), 32);
+      Value shf = bb.create<arith::ShLIOp>(l, nib, sh);
+      words[k / 8] = bb.create<arith::OrIOp>(l, words[k / 8], shf);
+    }
+    Value frag = bb.create<arith::ConstantOp>(
+        l, fragTy, DenseElementsAttr::get(cast<ShapedType>(fragTy), APInt(32, 0)));
+    frag = bb.create<vector::InsertOp>(l, words[0], frag, ArrayRef<int64_t>{0});
+    frag = bb.create<vector::InsertOp>(l, words[1], frag, ArrayRef<int64_t>{1});
+    return frag;
+  };
+
   // WMMA accumulation over mt*nt fragments, reusing each loaded fragment.
   auto wmmaAll = [&](OpBuilder &bb, Location l, ArrayRef<Value> aFrag,
                      ArrayRef<Value> bFrag, ValueRange acc) {
+    SmallVector<Value> af(mt), bf(nt);
+    for (int64_t mi = 0; mi < mt; ++mi)
+      af[mi] = toFrag(bb, l, aFrag[mi]);
+    for (int64_t ni = 0; ni < nt; ++ni)
+      bf[ni] = toFrag(bb, l, bFrag[ni]);
     SmallVector<Value> next(mt * nt);
     for (int64_t mi = 0; mi < mt; ++mi)
       for (int64_t ni = 0; ni < nt; ++ni) {
         OperationState wmma(l, "tessera_rocm.wmma");
-        wmma.addOperands({aFrag[mi], bFrag[ni], acc[mi * nt + ni]});
+        wmma.addOperands({af[mi], bf[ni], acc[mi * nt + ni]});
         wmma.addTypes({accTy});
         next[mi * nt + ni] = bb.create(wmma)->getResult(0);
       }
@@ -138,10 +208,10 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 
   // --- fast panel: interior tile, full K panel — no masking. ---
   auto fastPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
-    SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
+    SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
-      aFrag[mi] = bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
+      aFrag[mi] = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
     }
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
@@ -160,11 +230,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // --- edge panel: full K panel, ragged M/N — coalesced loads at a clamped
   //     row/col, then one vector select zeroes an OOB fragment. ---
   auto edgePanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
-    SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
+    SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arKsafe[mi], k0);
-      Value v = bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
-      aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, fragZero);
+      Value v = bb.create<vector::LoadOp>(l, loadTy, A, ValueRange{base});
+      aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, loadZero);
     }
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
@@ -179,7 +249,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     }
     for (int64_t ni = 0; ni < nt; ++ni)
       bFrag[ni] =
-          bb.create<arith::SelectOp>(l, colInb[ni], bFrag[ni], fragZero);
+          bb.create<arith::SelectOp>(l, colInb[ni], bFrag[ni], loadZero);
     return wmmaAll(bb, l, aFrag, bFrag, acc);
   };
 
@@ -187,7 +257,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   //     M/N. Runs once (the [kMain,K) remainder), so the cost is off the hot
   //     path. Correct for full or ragged M/N (masks are no-ops when in-bounds).
   auto maskedPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
-    SmallVector<Value> aFrag(mt, fragZero), bFrag(nt, fragZero);
+    SmallVector<Value> aFrag(mt, loadZero), bFrag(nt, loadZero);
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
       Value ak = bb.create<arith::AddIOp>(l, k0, ci);
@@ -354,38 +424,60 @@ struct GenerateWMMAGemmKernelPass
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
 
-      // dtype: f16 (default) or bf16 storage; f32 accumulate. RDNA exposes
-      // both f16 and bf16 WMMA at 16x16x16.
-      Type storeTy = b.getF16Type();
-      if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
-        StringRef dt = a.getValue();
-        if (dt == "f16" || dt == "float16")
-          storeTy = b.getF16Type();
-        else if (dt == "bf16" || dt == "bfloat16")
-          storeTy = b.getBF16Type();
-        else {
-          op->emitError("generate-wmma-gemm-kernel: dtype must be f16 or bf16 "
-                        "(got '")
-              << dt << "')";
-          return signalPassFailure();
-        }
+      // dtype: f16 (default) / bf16 (f32 accumulate), or int8 (i32 accumulate).
+      // All confirmed on gfx1151. The fragment/accumulator types follow dtype:
+      //   f16/bf16 : A/B vector<16x{f16,bf16}>, acc vector<8xf32>, D = f32.
+      //   int8     : A/B 16 i8 loaded as vector<16xi8> then bitcast to the iu8
+      //              ABI vector<4xi32>; acc vector<8xi32>, D = i32 (signed).
+      Type f16Ty = b.getF16Type();
+      Type bf16Ty = b.getBF16Type();
+      Type i8Ty = b.getIntegerType(8);
+      Type i32Ty = b.getIntegerType(32);
+      Type f32Ty = b.getF32Type();
+      WmmaTypes T;
+      StringRef dt = "f16";
+      if (auto a = op->getAttrOfType<StringAttr>("dtype"))
+        dt = a.getValue();
+      auto v8i32 = VectorType::get({8}, i32Ty);
+      auto v8f32 = VectorType::get({8}, f32Ty);
+      auto v16i8 = VectorType::get({16}, i8Ty);
+      if (dt == "f16" || dt == "float16") {
+        T = {f16Ty, VectorType::get({16}, f16Ty), VectorType::get({16}, f16Ty),
+             v8f32, f32Ty, /*isInt=*/false, /*pack=*/0};
+      } else if (dt == "bf16" || dt == "bfloat16") {
+        T = {bf16Ty, VectorType::get({16}, bf16Ty),
+             VectorType::get({16}, bf16Ty), v8f32, f32Ty, /*isInt=*/false,
+             /*pack=*/0};
+      } else if (dt == "int8" || dt == "i8") {
+        T = {i8Ty, v16i8, VectorType::get({4}, i32Ty), v8i32, i32Ty,
+             /*isInt=*/true, /*pack=*/1};
+      } else if (dt == "int4" || dt == "i4") {
+        // int4 values supplied in int8 containers (range [-8,7]); the low nibble
+        // is the int4 two's-complement. Nibble-packed in-kernel to the iu4 ABI
+        // vector<2xi32>; i32 accumulate. (correctness-first — no coalesced load.)
+        T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
+             /*isInt=*/true, /*pack=*/2};
+      } else {
+        op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, "
+                      "int8, or int4 (got '")
+            << dt << "')";
+        return signalPassFailure();
       }
 
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K) kernel { ... } }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
 
-      Type f32Ty = b.getF32Type();
       Type idxTy = b.getIndexType();
-      auto abTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
-      auto dTy = MemRefType::get({ShapedType::kDynamic}, f32Ty);
+      auto abTy = MemRefType::get({ShapedType::kDynamic}, T.store);
+      auto dTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
       auto fnTy = b.getFunctionType({abTy, abTy, dTy, idxTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
 
       OpBuilder bodyB(gpuFunc.getContext());
-      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, storeTy);
+      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T);
 
       op->erase();
     }

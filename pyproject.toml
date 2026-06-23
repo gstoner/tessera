@@ -43,6 +43,8 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.1.0",   # global per-test hang ceiling (see [tool.pytest.ini_options] timeout)
+    "pytest-xdist>=3.0.0",     # sharded runs via scripts/run_unit_tests.py (-n sized to RAM/cores)
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=4.0.0",
@@ -95,6 +97,14 @@ line_length = 88
 testpaths = ["tests/unit"]
 python_files = "test_*.py"
 pythonpath = [".", "python"]
+# Global per-test hang ceiling (pytest-timeout). A wedged compiler/driver
+# subprocess (tessera-opt / hipcc / lit / cmake) or an infinite loop fails the
+# one test after 300s instead of hanging the whole run. Active when
+# pytest-timeout is installed (CI + dev extras); a harmless "Unknown config
+# option" warning otherwise (verified: warns, does not error). For precise
+# clean-shutdown + OOM-skip of process *trees*, subprocess-spawning tests use
+# tests/unit/_subprocess.py on top of this net.
+timeout = 300
 markers = [
     "slow: long-running tests excluded from quick local sweeps",
     "performance: deterministic compiler performance and benchmark proxy tests",

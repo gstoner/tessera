@@ -52,6 +52,7 @@ when it differs from the checked-in copy.
 from __future__ import annotations
 
 import argparse
+import functools
 import re
 import sys
 from dataclasses import dataclass, field
@@ -430,8 +431,19 @@ def _family_for(op_name: str) -> str:
     return "uncategorized"
 
 
+@functools.cache
 def support_row_for(op_name: str) -> OpSupportRow:
-    """Build the 8-axis row for a single op name."""
+    """Build the 8-axis row for a single op name.
+
+    Memoized: this 8-axis walk is the root cost behind the support-table /
+    e2e-coverage / generated-doc tests, which build it hundreds of times per
+    run (``all_support_rows`` and ``all_e2e_coverage_rows`` both funnel through
+    here). The result is derived purely from the static op registries and is
+    only ever READ by consumers (cells are inspected, never mutated), and
+    ``all_support_rows`` returns a fresh list each call, so list-level sorts
+    stay safe. If a future test patches a registry input and expects a fresh
+    row, it will fail loudly — call ``support_row_for.cache_clear()`` there.
+    """
     cells = {axis: walker(op_name) for axis, walker in _AXIS_WALKERS.items()}
     return OpSupportRow(
         op_name=op_name,

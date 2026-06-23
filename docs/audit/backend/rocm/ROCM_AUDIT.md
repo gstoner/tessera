@@ -354,11 +354,28 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   against **both numpy and the `hardware_verified` hand-written kernel** (the
   on-silicon oracle). Milestone: "the compiler, not a hand-written kernel,
   produced the executing GEMM."
-- **Stage L — converge + in-process serialization.** Compiled path becomes a
-  production lane; link the MLIR ROCDL target + LLVM AMDGPU codegen + lld into a
-  Tessera tool so serialization needs no `mlir-opt` shell-out; carry the perf
-  lessons (3×4 occupancy tile, the ladder) into Tile IR tile attrs so the
-  autotuner sweeps the *compiled* kernel.
+- **Stage L — converge the compiled path to production.** Not a single change —
+  a program. Stages I–K proved the compiler can *generate* a correct executing
+  GEMM (16×16×16, bit-identical to the oracle). L makes that path production-grade
+  and the source of truth. Concrete sub-steps (each independently landable):
+  - **L1 — general-shape codegen.** Extend `generate-wmma-gemm-kernel` past the
+    single 16×16×16 tile: a grid over M/N output tiles + a K-loop accumulation,
+    ragged-edge masking. Execute-compare vs the oracle across the shapes the
+    GEMM perf-ladder used. (Largest sub-step; the rest depend on it.)
+  - **L2 — carry the perf lessons into Tile IR attrs.** Put the macro-tile
+    (`mt`/`nt`, the measured-best **3×4** for large) on the `wmma_gemm` directive /
+    Tile IR so the generated kernel is register-blocked, and the autotuner sweeps
+    the *compiled* kernel (reusing the existing ladder harness). Target: the
+    generated kernel reaches the hand-written kernel's TFLOP/s.
+  - **L3 — in-process serialization.** Link the MLIR ROCDL target + LLVM AMDGPU
+    codegen + lld into a Tessera tool so `gpu-module-to-binary` needs no `mlir-opt`
+    shell-out (Stages I/K ride the platform `mlir-opt`; a runtime lane can't).
+  - **L4 — make it a `runtime.launch()` lane + flip the source of truth.** Once
+    L1–L3 land and perf matches, route `target="rocm"` matmul through the compiled
+    path; the hand-written HIPRTC kernel becomes the reference oracle / fast
+    fallback. Promote manifest/runtime rows only after dashboards agree.
+  Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
+  L1. Until L completes, the hand-written kernel stays the production lane.
 
 10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
     correctness-first); the `runtime.launch()` artifact lane.

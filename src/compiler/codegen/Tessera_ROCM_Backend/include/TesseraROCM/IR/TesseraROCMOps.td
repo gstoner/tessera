@@ -54,12 +54,16 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     and stores the `vector<8xf32>` accumulator with the wave32 lane/element
     layout. So the GEMM is compiler-*generated*, not authored MLIR.
 
-    Carries the tile extents `m`/`n`/`k` and the kernel `name`. The first
-    realization is the single 16x16x16 tile (the proven shape — matches the
-    hardware_verified hand-written oracle bit-for-bit); other extents are a
-    named error until the multi-tile loop nest lands. This is the Target-IR
-    matmul-tile node; wiring Graph `tessera.matmul` → Tile → this op is the
-    remaining front-end glue.
+    `m`/`n`/`k` are the WMMA *instruction* tile (16x16x16 — the only tile RDNA's
+    `V_WMMA` exposes; other extents are a named error). The emitted kernel is
+    *problem-size-generic*: it takes the runtime `(M,N,K)` as `index` arguments,
+    a 2-D grid of one wave per 16x16 output tile, an `scf.for` K-loop, and
+    ragged-edge masking, so a single compiled kernel handles any shape. The
+    `M=N=K=16` launch reduces to the single tile that is bit-identical to the
+    hardware_verified hand-written oracle. Register-blocked macro-tiling (the
+    measured-best 3x4) is the next step, carried as a Tile-IR attr. This is the
+    Target-IR matmul-tile node; wiring Graph `tessera.matmul` → Tile → this op
+    is the remaining front-end glue.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k);
   let assemblyFormat = "attr-dict";

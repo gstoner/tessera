@@ -344,8 +344,8 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     hsaco → launch` executes on gfx1151 **bit-identical to the hand-written
     oracle** (vs numpy ~2e-7, vs oracle **0.0**). The milestone — *the Tessera
     compiler, not a hand-written kernel, produced the executing GEMM* — is met for
-    the 16×16×16 tile (other extents are a named error pending the multi-tile loop
-    nest). Fixture `tests/unit/test_rocm_wmma_gemm_generated.py`. Wiring Graph
+    the 16×16×16 tile (Stage L1 then generalized the kernel to any runtime shape).
+    Fixture `tests/unit/test_rocm_wmma_gemm_generated.py`. Wiring Graph
     `tessera.matmul` → Tile → the `wmma_gemm` directive is the remaining front-end
     glue (Stage L); the hand-written HIPRTC kernel stays the production lane +
     on-silicon oracle until the compiled path is multi-tile + perf-laddered.
@@ -358,10 +358,18 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   a program. Stages I–K proved the compiler can *generate* a correct executing
   GEMM (16×16×16, bit-identical to the oracle). L makes that path production-grade
   and the source of truth. Concrete sub-steps (each independently landable):
-  - **L1 — general-shape codegen.** Extend `generate-wmma-gemm-kernel` past the
-    single 16×16×16 tile: a grid over M/N output tiles + a K-loop accumulation,
-    ragged-edge masking. Execute-compare vs the oracle across the shapes the
-    GEMM perf-ladder used. (Largest sub-step; the rest depend on it.)
+  - ✅ **L1 — general-shape codegen (2026-06-23).** `generate-wmma-gemm-kernel`
+    now emits a **problem-size-generic** kernel: the directive's `m`/`n`/`k` are
+    the WMMA *instruction* tile (16×16×16, the only one RDNA exposes), and the
+    emitted `gpu.func` takes the runtime `(M,N,K)` as `index` args, a 2-D grid of
+    one wave per 16×16 output tile, an `scf.for` K-loop, and ragged-edge masking
+    (clamp-and-select loads, `scf.if`-guarded stores). One compiled kernel
+    computes any shape. Executes on gfx1151 vs numpy (<5e-2) **and bit-identical
+    to the hand-written oracle (0.0)** across square, rectangular, and ragged
+    (non-multiple-of-16) shapes — `{16³, 32³, 48×64×32, 40×24×48, 17×15×31}`.
+    Fixture `tests/unit/test_rocm_wmma_gemm_general.py`; the 16³ launch still
+    reduces to the Stage K single-tile case. MT=NT=1 (one tile/wave);
+    register-blocked macro-tiling (3×4) is L2.
   - **L2 — carry the perf lessons into Tile IR attrs.** Put the macro-tile
     (`mt`/`nt`, the measured-best **3×4** for large) on the `wmma_gemm` directive /
     Tile IR so the generated kernel is register-blocked, and the autotuner sweeps

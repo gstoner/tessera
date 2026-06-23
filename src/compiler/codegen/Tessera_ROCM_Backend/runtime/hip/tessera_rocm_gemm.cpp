@@ -88,6 +88,67 @@ extern "C" __global__ void %NAME%(
 }
 )HIPSRC";
 
+// Rung 2 — LDS-staged, multi-wave workgroup. A workgroup of WM×WN waves
+// cooperatively stages the A and B K-panels (16-wide) for its
+// (WM*MT*16)×(WN*NT*16) macro-tile into LDS once per K-step, then every wave
+// reads its WMMA fragments from LDS (not global) and does MT×NT register-blocked
+// WMMA. Global-load traffic per output element drops by the number of waves
+// sharing each staged panel. ROCM_PATTERNS §B2 ("pipelining + LDS layout"); the
+// staging here is the prerequisite single-buffer step before software
+// pipelining. WM/WN/MT/NT are literal ints → LDS sizes are constexpr.
+const char* kKernelTemplateLDS = R"HIPSRC(
+typedef %TYPE% wtype16 __attribute__((ext_vector_type(16)));
+typedef float  float8  __attribute__((ext_vector_type(8)));
+extern "C" __global__ void %NAME%(
+    const %TYPE%* A, const %TYPE%* B, float* D, int M, int N, int K) {
+  constexpr int WM = %WM%, WN = %WN%, MT = %MT%, NT = %NT%;
+  constexpr int WG_M = WM * MT * 16;     // workgroup macro-tile rows
+  constexpr int WG_N = WN * NT * 16;     // workgroup macro-tile cols
+  __shared__ %TYPE% smemA[WG_M * 16];    // [WG_M][16]  (row, k)
+  __shared__ %TYPE% smemB[16 * WG_N];    // [16][WG_N]  (k, col)
+  int tid = threadIdx.x;
+  int nthreads = WM * WN * 32;
+  int waveId = tid >> 5, lane = tid & 31, l15 = lane & 15;
+  int rowOff = (waveId / WN) * MT * 16;  // this wave's tile origin in the macro
+  int colOff = (waveId % WN) * NT * 16;
+  int blockRow = blockIdx.y * WG_M, blockCol = blockIdx.x * WG_N;
+  float8 c[MT][NT];
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni) c[mi][ni] = (float8){0,0,0,0,0,0,0,0};
+  for (int k0 = 0; k0 < K; k0 += 16) {
+    for (int e = tid; e < WG_M * 16; e += nthreads) {
+      int row = e >> 4, kk = e & 15, gr = blockRow + row, gk = k0 + kk;
+      smemA[e] = (gr < M && gk < K) ? A[gr * K + gk] : (%TYPE%)0;
+    }
+    for (int e = tid; e < 16 * WG_N; e += nthreads) {
+      int kk = e / WG_N, col = e % WG_N, gk = k0 + kk, gc = blockCol + col;
+      smemB[e] = (gk < K && gc < N) ? B[gk * N + gc] : (%TYPE%)0;
+    }
+    __syncthreads();
+    wtype16 bf[NT];
+    for (int ni = 0; ni < NT; ++ni) {
+      int bcol = colOff + ni * 16 + l15;
+      for (int i = 0; i < 16; ++i) bf[ni][i] = smemB[i * WG_N + bcol];
+    }
+    for (int mi = 0; mi < MT; ++mi) {
+      wtype16 a;
+      int arow = rowOff + mi * 16 + l15;
+      for (int i = 0; i < 16; ++i) a[i] = smemA[arow * 16 + i];
+      for (int ni = 0; ni < NT; ++ni)
+        c[mi][ni] = %WMMA%(a, bf[ni], c[mi][ni]);
+    }
+    __syncthreads();
+  }
+  for (int mi = 0; mi < MT; ++mi)
+    for (int ni = 0; ni < NT; ++ni)
+      for (int e = 0; e < 8; ++e) {
+        int r = blockRow + rowOff + mi * 16 + e * 2 + (lane >> 4);
+        int col = blockCol + colOff + ni * 16 + l15;
+        if (r < M && col < N) D[r * N + col] = c[mi][ni][e];
+      }
+}
+)HIPSRC";
+
 std::string substitute(const std::string& tmpl, const std::string& from,
                        const std::string& to) {
   std::string out = tmpl;
@@ -97,20 +158,13 @@ std::string substitute(const std::string& tmpl, const std::string& from,
   return out;
 }
 
-// Compile a kernel variant for (type, wmma builtin, MT, NT) on device 0's arch.
-// Returns true on success, handing back the module + function (caller owns the
-// module lifetime). Used both by the cached production kernels and the bench.
-bool compileVariant(const char* type, const char* wmma, int mt, int nt,
-                    const std::string& name, hipModule_t* outMod,
-                    hipFunction_t* outFn) {
+// HIPRTC-compile a fully-substituted kernel source for device 0's arch and hand
+// back the module + named function (caller owns the module). Shared by the
+// register-blocked (rung 1) and LDS-staged (rung 2) variants.
+bool compileSrc(const std::string& src, const std::string& name,
+                hipModule_t* outMod, hipFunction_t* outFn) {
   hipDeviceProp_t props;
   if (hipGetDeviceProperties(&props, 0) != hipSuccess) return false;
-
-  std::string src = substitute(kKernelTemplate, "%TYPE%", type);
-  src = substitute(src, "%WMMA%", wmma);
-  src = substitute(src, "%NAME%", name);
-  src = substitute(src, "%MT%", std::to_string(mt));
-  src = substitute(src, "%NT%", std::to_string(nt));
 
   hiprtcProgram prog;
   if (hiprtcCreateProgram(&prog, src.c_str(), "tessera_rocm_wmma_gemm.hip",
@@ -133,6 +187,33 @@ bool compileVariant(const char* type, const char* wmma, int mt, int nt,
   if (hipModuleGetFunction(outFn, *outMod, name.c_str()) != hipSuccess)
     return false;
   return true;
+}
+
+// Compile a rung-1 register-blocked variant for (type, wmma builtin, MT, NT).
+bool compileVariant(const char* type, const char* wmma, int mt, int nt,
+                    const std::string& name, hipModule_t* outMod,
+                    hipFunction_t* outFn) {
+  std::string src = substitute(kKernelTemplate, "%TYPE%", type);
+  src = substitute(src, "%WMMA%", wmma);
+  src = substitute(src, "%NAME%", name);
+  src = substitute(src, "%MT%", std::to_string(mt));
+  src = substitute(src, "%NT%", std::to_string(nt));
+  return compileSrc(src, name, outMod, outFn);
+}
+
+// Compile a rung-2 LDS-staged variant for (type, wmma, WM, WN waves, MT, NT
+// register tiles/wave).
+bool compileVariantLDS(const char* type, const char* wmma, int wm, int wn,
+                       int mt, int nt, const std::string& name,
+                       hipModule_t* outMod, hipFunction_t* outFn) {
+  std::string src = substitute(kKernelTemplateLDS, "%TYPE%", type);
+  src = substitute(src, "%WMMA%", wmma);
+  src = substitute(src, "%NAME%", name);
+  src = substitute(src, "%WM%", std::to_string(wm));
+  src = substitute(src, "%WN%", std::to_string(wn));
+  src = substitute(src, "%MT%", std::to_string(mt));
+  src = substitute(src, "%NT%", std::to_string(nt));
+  return compileSrc(src, name, outMod, outFn);
 }
 
 struct Kernel {
@@ -163,15 +244,11 @@ void gridFor(int M, int N, int mt, int nt, unsigned* gx, unsigned* gy) {
   *gy = (unsigned)((M + 16 * mt - 1) / (16 * mt));
 }
 
-// Run a general tiled GEMM through the cached production kernel.
-// Returns 0 / 1 (bad shape) / 2 (no device / compile) / 3 (device op failed).
-int runGemm(Kernel* k, const void* A, const void* B, void* D,
-            int M, int N, int K, size_t elemBytes) {
-  if (M <= 0 || N <= 0 || K <= 0) return 1;
-
-  std::call_once(k->once, compileProd, k);
-  if (!k->ready) return 2;
-
+// Launch `fn` once over an MxN problem (grid gx*gy, `threads`/block): H2D, one
+// launch, sync, D2H. elemBytes = storage element size. 0/3 = ok/device-failed.
+int runDeviceGemm(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
+                  const void* A, const void* B, void* D,
+                  int M, int N, int K, size_t elemBytes) {
   const size_t aBytes = (size_t)M * K * elemBytes;
   const size_t bBytes = (size_t)K * N * elemBytes;
   const size_t dBytes = (size_t)M * N * sizeof(float);
@@ -184,9 +261,7 @@ int runGemm(Kernel* k, const void* A, const void* B, void* D,
     if (hipMemcpy(dA, A, aBytes, hipMemcpyHostToDevice) != hipSuccess) break;
     if (hipMemcpy(dB, B, bBytes, hipMemcpyHostToDevice) != hipSuccess) break;
     void* args[] = {&dA, &dB, &dD, &M, &N, &K};
-    unsigned gx, gy;
-    gridFor(M, N, kProdMT, kProdNT, &gx, &gy);
-    if (hipModuleLaunchKernel(k->fn, gx, gy, 1, 32, 1, 1, 0, nullptr,
+    if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
                               args, nullptr) != hipSuccess) break;
     if (hipDeviceSynchronize() != hipSuccess) break;
     if (hipMemcpy(D, dD, dBytes, hipMemcpyDeviceToHost) != hipSuccess) break;
@@ -198,24 +273,23 @@ int runGemm(Kernel* k, const void* A, const void* B, void* D,
   return rc;
 }
 
-// Device-timed kernel benchmark for a single (type, MT, NT) variant. Allocates
-// the device buffers once, warms up, then hipEvent-times ``iters`` kernel-only
-// launches (no H2D/D2H in the loop) so the measurement is GEMM compute, not
-// transfer. Writes the average per-launch ms to *avg_ms. This is the rung-prover
-// for the perf ladder. Returns 0 / 1 (bad args) / 2 (no device / compile) /
-// 3 (device op failed).
-int benchVariant(const char* type, const char* wmma, int M, int N, int K,
-                 int iters, int mt, int nt, double* avg_ms) {
-  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || mt <= 0 || nt <= 0)
-    return 1;
+// Run a general tiled GEMM through the cached production (rung-1) kernel.
+// Returns 0 / 1 (bad shape) / 2 (no device / compile) / 3 (device op failed).
+int runGemm(Kernel* k, const void* A, const void* B, void* D,
+            int M, int N, int K, size_t elemBytes) {
+  if (M <= 0 || N <= 0 || K <= 0) return 1;
+  std::call_once(k->once, compileProd, k);
+  if (!k->ready) return 2;
+  unsigned gx, gy;
+  gridFor(M, N, kProdMT, kProdNT, &gx, &gy);
+  return runDeviceGemm(k->fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
+}
 
-  hipModule_t mod = nullptr;
-  hipFunction_t fn = nullptr;
-  // ``type`` is "__fp16"/"__bf16" — underscores are legal in the kernel name.
-  std::string name = std::string("bench") + type + "_" + std::to_string(mt)
-                     + "x" + std::to_string(nt);
-  if (!compileVariant(type, wmma, mt, nt, name, &mod, &fn)) return 2;
-
+// Device-time `iters` kernel-only launches of `fn` (buffers allocated + zeroed
+// once, warmup, hipEvent timing — no H2D/D2H in the timed loop) so the measure
+// is GEMM compute, not transfer. avg_ms <- mean per-launch ms. The rung-prover.
+int timedKernelLaunches(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
+                        int M, int N, int K, int iters, double* avg_ms) {
   const size_t elemBytes = sizeof(unsigned short);
   void *dA = nullptr, *dB = nullptr, *dD = nullptr;
   hipEvent_t start = nullptr, stop = nullptr;
@@ -227,18 +301,15 @@ int benchVariant(const char* type, const char* wmma, int M, int N, int K,
     hipMemset(dA, 0, (size_t)M * K * elemBytes);
     hipMemset(dB, 0, (size_t)K * N * elemBytes);
     void* args[] = {&dA, &dB, &dD, &M, &N, &K};
-    unsigned gx, gy;
-    gridFor(M, N, mt, nt, &gx, &gy);
-    // Warmup.
     for (int w = 0; w < 5; ++w)
-      if (hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, nullptr,
+      if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
                                 args, nullptr) != hipSuccess) { rc = 3; break; }
     if (hipDeviceSynchronize() != hipSuccess) break;
     if (hipEventCreate(&start) != hipSuccess) break;
     if (hipEventCreate(&stop) != hipSuccess) break;
     if (hipEventRecord(start, nullptr) != hipSuccess) break;
     for (int it = 0; it < iters; ++it)
-      if (hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, nullptr,
+      if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
                                 args, nullptr) != hipSuccess) { rc = 3; break; }
     if (hipEventRecord(stop, nullptr) != hipSuccess) break;
     if (hipEventSynchronize(stop) != hipSuccess) break;
@@ -252,6 +323,59 @@ int benchVariant(const char* type, const char* wmma, int M, int N, int K,
   if (dA) hipFree(dA);
   if (dB) hipFree(dB);
   if (dD) hipFree(dD);
+  return rc;
+}
+
+// rung-1 (register-blocked) benchmark. 0/1/2/3 as above.
+int benchVariant(const char* type, const char* wmma, int M, int N, int K,
+                 int iters, int mt, int nt, double* avg_ms) {
+  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || mt <= 0 || nt <= 0)
+    return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("bench") + type + "_" + std::to_string(mt)
+                     + "x" + std::to_string(nt);
+  if (!compileVariant(type, wmma, mt, nt, name, &mod, &fn)) return 2;
+  unsigned gx, gy;
+  gridFor(M, N, mt, nt, &gx, &gy);
+  int rc = timedKernelLaunches(fn, gx, gy, 32, M, N, K, iters, avg_ms);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
+// rung-2 (LDS-staged, WM×WN waves) benchmark. 0/1/2/3 as above.
+int benchVariantLDS(const char* type, const char* wmma, int M, int N, int K,
+                    int iters, int wm, int wn, int mt, int nt, double* avg_ms) {
+  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || wm <= 0 || wn <= 0
+      || mt <= 0 || nt <= 0)
+    return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("benchlds") + type + "_" + std::to_string(wm)
+                     + "_" + std::to_string(wn) + "_" + std::to_string(mt)
+                     + "x" + std::to_string(nt);
+  if (!compileVariantLDS(type, wmma, wm, wn, mt, nt, name, &mod, &fn)) return 2;
+  int wgM = wm * mt * 16, wgN = wn * nt * 16;
+  unsigned gx = (unsigned)((N + wgN - 1) / wgN);
+  unsigned gy = (unsigned)((M + wgM - 1) / wgM);
+  int rc = timedKernelLaunches(fn, gx, gy, wm * wn * 32, M, N, K, iters, avg_ms);
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
+// Run an LDS-staged GEMM end-to-end (correctness path for the rung-2 kernel).
+int runGemmLDS(const char* type, const char* wmma, const void* A,
+               const void* B, void* D, int M, int N, int K, int wm, int wn,
+               int mt, int nt, size_t elemBytes) {
+  if (M <= 0 || N <= 0 || K <= 0) return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("runlds") + type;
+  if (!compileVariantLDS(type, wmma, wm, wn, mt, nt, name, &mod, &fn)) return 2;
+  int wgM = wm * mt * 16, wgN = wn * nt * 16;
+  unsigned gx = (unsigned)((N + wgN - 1) / wgN);
+  unsigned gy = (unsigned)((M + wgM - 1) / wgM);
+  int rc = runDeviceGemm(fn, gx, gy, wm * wn * 32, A, B, D, M, N, K, elemBytes);
   if (mod) hipModuleUnload(mod);
   return rc;
 }
@@ -280,4 +404,24 @@ extern "C" int tessera_rocm_wmma_gemm_f16_bench(int M, int N, int K, int iters,
                                                 int mt, int nt, double* avg_ms) {
   return benchVariant("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
                       M, N, K, iters, mt, nt, avg_ms);
+}
+
+// Device-timed benchmark for the rung-2 LDS-staged kernel (f16): WM×WN waves per
+// workgroup, MT×NT register tiles per wave. avg_ms <- mean per-launch ms.
+extern "C" int tessera_rocm_wmma_gemm_f16_bench_lds(int M, int N, int K,
+                                                    int iters, int wm, int wn,
+                                                    int mt, int nt,
+                                                    double* avg_ms) {
+  return benchVariantLDS("__fp16",
+                         "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                         M, N, K, iters, wm, wn, mt, nt, avg_ms);
+}
+
+// Run the rung-2 LDS-staged GEMM end-to-end (f16, f32 accumulate) — the
+// correctness path for the LDS kernel. WM×WN waves, MT×NT register tiles/wave.
+extern "C" int tessera_rocm_wmma_gemm_f16_lds(const void* A, const void* B,
+                                              void* D, int M, int N, int K,
+                                              int wm, int wn, int mt, int nt) {
+  return runGemmLDS("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                    A, B, D, M, N, K, wm, wn, mt, nt, sizeof(unsigned short));
 }

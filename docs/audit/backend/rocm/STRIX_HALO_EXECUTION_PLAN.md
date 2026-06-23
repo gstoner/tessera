@@ -178,10 +178,35 @@ pressure), while the non-square `2×4` wins. Shipped tiling = `kProdMT=2,
 kProdNT=4` in `tessera_rocm_gemm.cpp`; correctness unchanged (the
 execute-compare fixture passes at 2×4).
 
-**Open rungs (next):** LDS staging of A/B K-panels (multi-wave workgroups, §B2);
-2-/3-stage K-loop software pipelining; arch-aware LDS layout (swizzle vs pad).
-Per Gluon's v6 lesson, watch register budget — double-buffer can regress if it
-spills. None of these are wired yet; this row is honest about being rung-1 only.
+**Rung 2 — LDS staging, multi-wave workgroup (IMPLEMENTED; did NOT win — kept
+behind the bench).** A WM×WN-wave workgroup cooperatively stages the A/B 16-wide
+K-panels for its macro-tile into LDS once per K-step, then every wave reads its
+WMMA fragments from LDS. Correct across shapes (fixture
+`test_shipped_rocm_wmma_lds_matches_numpy`), shipped as
+`tessera_rocm_wmma_gemm_f16_lds` + `..._bench_lds`. **Measured verdict on
+gfx1100 (best-of-3 f16 TFLOP/s, `--lds`):**
+
+| size | rung-1 reg 2×4 | best rung-2 LDS |
+|------|---------------:|----------------:|
+| 512³  | **3.47** | 3.20 (4×2w 1×2t) |
+| 1024³ | **8.09** | 7.85 (4×1w 2×4t) |
+| 2048³ | 8.88 | **9.38** (4×1w 2×4t) |
+| 4096³ | **11.40** | 8.46 |
+
+Single-buffer LDS staging is a **wash-to-regression** here: it loses at
+512/1024, edges +6% at 2048, and loses decisively at 4096. This is the Strix
+Halo unified-memory story — global bandwidth is shared with the CPU and is *not*
+the bottleneck LDS staging targets, so the `__syncthreads` + occupancy cost
+isn't repaid. So **production stays rung-1 register blocking (2×4).** This is the
+Gluon v6 lesson generalized: the "obvious next optimization" must be measured,
+not assumed. Rung 2 is kept as a shipped, correctness-guarded symbol because it
+is the **substrate for rung 3** (software pipelining needs LDS buffering) and
+should pay off on discrete RDNA / CDNA where global *is* the bottleneck.
+
+**Open rungs (next):** 2-/3-stage K-loop software pipelining over the LDS buffers
+(§B2) — the rung where LDS staging starts to earn its keep by overlapping global
+loads with WMMA; arch-aware LDS layout (swizzle vs pad). Per Gluon's v6 lesson,
+watch register budget — double-buffer can regress if it spills. Not wired yet.
 
 ## The hardware — three engines, three Tessera stories
 

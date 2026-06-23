@@ -45,6 +45,9 @@ PROD_MT, PROD_NT = 2, 4
 
 DEFAULT_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
 LADDER_TILINGS = [(1, 1), (1, 2), (1, 4), (2, 2), (2, 4), (4, 2), (4, 4)]
+# rung-2 LDS configs (WM, WN waves, MT, NT register tiles/wave) to compare
+# against the rung-1 production register tiling under --lds.
+LDS_CONFIGS = [(2, 2, 2, 4), (4, 1, 2, 4), (2, 2, 1, 4), (4, 2, 1, 2)]
 
 
 def _load_bench() -> Optional[ctypes.CDLL]:
@@ -67,6 +70,11 @@ def _load_bench() -> Optional[ctypes.CDLL]:
     fn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                    ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_double)]
     fn.restype = ctypes.c_int
+    lds = getattr(lib, "tessera_rocm_wmma_gemm_f16_bench_lds", None)
+    if lds is not None:
+        lds.argtypes = [ctypes.c_int] * 4 + [ctypes.c_int] * 4 + \
+            [ctypes.POINTER(ctypes.c_double)]
+        lds.restype = ctypes.c_int
     return lib
 
 
@@ -98,6 +106,21 @@ def _bench_one(lib, M, N, K, iters, mt, nt) -> Optional[float]:
     return best
 
 
+def _bench_lds(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
+    """Best-of-3 ms for one rung-2 LDS config; None if the symbol/kernel errs."""
+    fn = getattr(lib, "tessera_rocm_wmma_gemm_f16_bench_lds", None)
+    if fn is None:
+        return None
+    best = None
+    for _ in range(3):
+        ms = ctypes.c_double(0.0)
+        if fn(M, N, K, iters, wm, wn, mt, nt, ctypes.byref(ms)) != 0:
+            return None
+        if best is None or ms.value < best:
+            best = ms.value
+    return best
+
+
 def _row(M, N, K, ms, mt, nt, device, version) -> dict:
     sec = ms * 1e-3
     flops = 2 * M * N * K
@@ -119,7 +142,11 @@ def _row(M, N, K, ms, mt, nt, device, version) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ladder", action="store_true",
-                    help="sweep MTxNT output-tile blocking per size")
+                    help="sweep MTxNT output-tile blocking per size (rung 1)")
+    ap.add_argument("--lds", action="store_true",
+                    help="compare rung-2 LDS-staged configs vs the rung-1 "
+                         "production tiling (reproduces the 'LDS does not win on "
+                         "Strix Halo' finding)")
     ap.add_argument("--iters", type=int, default=100)
     ap.add_argument("--output", type=str, default=None,
                     help="write the JSON result rows here")
@@ -141,8 +168,39 @@ def main() -> int:
         return 0
 
     device = _device_name()
+
+    if args.lds:
+        # rung-1 (register) vs rung-2 (LDS) comparison. Finding on Strix Halo:
+        # register blocking wins; single-buffer LDS staging is a wash/regression
+        # (unified memory — global bandwidth isn't the bottleneck LDS targets).
+        rows = []
+        print(f"device: {device}   iters: {args.iters}   mode: rung1-vs-LDS")
+        for (M, N, K) in DEFAULT_SIZES:
+            print(f"\n{M}x{N}x{K}:")
+            ms = _bench_one(lib, M, N, K, args.iters, PROD_MT, PROD_NT)
+            if ms:
+                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version)
+                r["rung"] = "1_register"
+                rows.append(r)
+                print(f"  rung1 reg {PROD_MT}x{PROD_NT}:    {ms:8.4f} ms   "
+                      f"{r['tflops']:6.2f} TFLOP/s  <- production")
+            for (wm, wn, mt, nt) in LDS_CONFIGS:
+                ms = _bench_lds(lib, M, N, K, args.iters, wm, wn, mt, nt)
+                if ms is None:
+                    continue
+                r = _row(M, N, K, ms, mt, nt, device, version)
+                r["rung"] = "2_lds"
+                r["lds_waves_wm_wn"] = [wm, wn]
+                rows.append(r)
+                print(f"  rung2 LDS {wm}x{wn}w {mt}x{nt}t: {ms:8.4f} ms   "
+                      f"{r['tflops']:6.2f} TFLOP/s")
+        if args.output:
+            Path(args.output).write_text(json.dumps(rows, indent=2))
+            print(f"\nwrote {len(rows)} rows -> {args.output}")
+        return 0
+
     tilings = LADDER_TILINGS if args.ladder else [(PROD_MT, PROD_NT)]
-    rows: list[dict] = []
+    rows = []
     print(f"device: {device}   iters: {args.iters}   "
           f"mode: {'ladder' if args.ladder else 'production'}")
     for (M, N, K) in DEFAULT_SIZES:

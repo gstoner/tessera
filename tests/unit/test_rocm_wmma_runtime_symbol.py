@@ -98,6 +98,38 @@ def test_shipped_rocm_wmma_bf16_matches_numpy(shape):
     assert maxerr < 5e-2 * shape[2], f"bf16 WMMA GEMM{shape} maxerr={maxerr}"
 
 
+def _bind_lds(lib):
+    fn = lib.tessera_rocm_wmma_gemm_f16_lds
+    fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                   ctypes.c_int, ctypes.c_int, ctypes.c_int,   # M, N, K
+                   ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]  # wm,wn,mt,nt
+    fn.restype = ctypes.c_int
+    return fn
+
+
+# The rung-2 LDS-staged kernel (multi-wave workgroup, cooperative A/B staging).
+# It is NOT the production lane (register blocking wins on Strix Halo — see the
+# perf ladder in STRIX_HALO_EXECUTION_PLAN.md), but it ships as a symbol so it
+# stays correctness-guarded as the substrate for rung-3 software pipelining.
+@pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (128, 128, 128),
+                                   (100, 33, 80), (257, 129, 200)])
+def test_shipped_rocm_wmma_lds_matches_numpy(shape):
+    fn = _bind_lds(_load_lib())
+    M, N, K = shape
+    rng = np.random.default_rng(0)
+    A = (rng.standard_normal((M, K)) * 0.5).astype(np.float16)
+    B = (rng.standard_normal((K, N)) * 0.5).astype(np.float16)
+    D = np.zeros((M, N), dtype=np.float32)
+    rc = fn(A.ctypes.data_as(ctypes.c_void_p), B.ctypes.data_as(ctypes.c_void_p),
+            D.ctypes.data_as(ctypes.c_void_p), M, N, K, 2, 2, 2, 4)
+    if rc == 2:
+        pytest.skip("no usable AMD GPU / HIPRTC (LDS symbol returned rc=2)")
+    assert rc == 0, f"tessera_rocm_wmma_gemm_f16_lds{shape} returned {rc}"
+    ref = A.astype(np.float32) @ B.astype(np.float32)
+    maxerr = float(np.max(np.abs(D - ref)))
+    assert maxerr < 1e-2, f"LDS WMMA GEMM{shape} maxerr={maxerr}"
+
+
 def test_shipped_rocm_wmma_symbol_rejects_bad_shape():
     fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_f16")
     a = np.zeros((16, 16), dtype=np.float16)

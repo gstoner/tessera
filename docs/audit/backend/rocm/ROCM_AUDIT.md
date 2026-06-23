@@ -123,8 +123,19 @@ non-square `2×4` won — tile shape is the lever. Measured by the device-timed
 `tessera_rocm_wmma_gemm_f16_bench` symbol + `benchmarks/rocm/
 benchmark_rocm_wmma_gemm.py --ladder`; see STRIX_HALO_EXECUTION_PLAN.md Stage F.
 
-**Open rungs:** LDS staging (multi-wave workgroups), K-loop software pipelining,
-arch-aware LDS layout. Not yet wired — heed Gluon's v6 double-buffer regression.
+**Rung 2 — LDS staging (multi-wave workgroup): implemented, measured, did NOT
+win on this APU.** A WM×WN-wave workgroup cooperatively stages A/B K-panels into
+LDS, reused across waves. Numerically correct (shipped `..._lds` symbol +
+fixture), but **register blocking (rung 1) still wins** on Strix Halo: LDS loses
+at 512³/1024³/4096³ and edges only +6% at 2048³ — unified memory means global
+bandwidth isn't the bottleneck LDS targets. Production stays rung-1 2×4; rung-2
+is kept behind `benchmark_rocm_wmma_gemm.py --lds` as the substrate for rung-3
+software pipelining and for discrete RDNA/CDNA where it should pay off. (The
+Gluon v6 lesson generalized: measure the "obvious" optimization, don't assume.)
+
+**Open rungs:** K-loop software pipelining over the LDS buffers (where staging
+starts to earn its keep), arch-aware LDS layout. Heed Gluon's v6 double-buffer
+regression.
 
 ## Next Work
 

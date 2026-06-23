@@ -6,10 +6,36 @@ from __future__ import annotations
 import os
 import signal
 import sys
+import time
 
 import pytest
 
 from _subprocess import Result, run
+
+
+def _gone_or_zombie(pid: int) -> bool:
+    """True if ``pid`` is no longer a *running* process — either reaped (gone)
+    or a zombie awaiting its (now-dead) parent's reaper. After the runner kills
+    the process group, a grandchild is reparented to init and lingers briefly as
+    a zombie; on Linux ``os.kill(zombie, 0)`` still succeeds until init reaps it,
+    so a bare ``os.kill`` check races. A zombie is effectively dead (not an
+    orphan consuming resources)."""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return True  # reaped / gone
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            line = fh.read()
+        # `pid (comm) state ...` — comm may contain ')'; take the char after the
+        # last ')'.
+        return line[line.rfind(")") + 2] == "Z"
+    except OSError:
+        return True  # /proc entry vanished between the two checks (Linux)
+    except IndexError:
+        return False
+    # No /proc (e.g. macOS): the os.kill above is authoritative; still running.
+    return False
 
 
 def test_normal_exit_captures_output():
@@ -53,9 +79,17 @@ def test_timeout_kills_whole_process_tree():
             os.remove(pidfile)
         except OSError:
             pass
-    # The grandchild must be dead (clean group teardown, no orphan).
-    with pytest.raises(OSError):
-        os.kill(child_pid, 0)
+    # The grandchild must be torn down (clean group teardown, no orphan). Poll
+    # for it to stop running — it may briefly be a zombie before init reaps it.
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if _gone_or_zombie(child_pid):
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(
+            f"grandchild pid {child_pid} still running 10s after the timeout — "
+            f"the process group was not torn down (orphan leak)")
 
 
 def test_result_dataclass_signal_math():

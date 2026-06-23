@@ -131,6 +131,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if have_xdist and n > 1:
         cmd += ["-n", str(n)]
+        # Keep each test FILE on one worker (unless the caller chose a --dist).
+        # Two reasons: (1) module-scoped fixtures (e.g. the fixture verifier,
+        # the support-table audit) run once per file instead of re-running on
+        # every worker that happens to get one of the file's tests; (2) it
+        # avoids interleaving unrelated files' tests within a worker, which the
+        # suite's few global-state sensitivities are sensitive to.
+        if not any(a.startswith("--dist") for a in pa):
+            cmd += ["--dist", "loadfile"]
         sched = "sharded"
     else:
         sched = "serial"

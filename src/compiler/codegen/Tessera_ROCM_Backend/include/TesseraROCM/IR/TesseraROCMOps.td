@@ -73,7 +73,8 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,
-                       DefaultValuedAttr<I64Attr, "1">:$nt);
+                       DefaultValuedAttr<I64Attr, "1">:$nt,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 

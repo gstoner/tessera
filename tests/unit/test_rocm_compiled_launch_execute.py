@@ -83,14 +83,39 @@ def test_launch_rocm_compiled_matmul_f16_matches_numpy_and_oracle(shape):
         f"compiled lane != hand-written oracle at {shape}"
 
 
-def test_launch_rocm_compiled_rejects_bf16():
-    """The generated kernel is f16-storage today; bf16 is an explicit, structured
-    invalid_artifact (never a silent miscompute) — use rocm_wmma for bf16."""
+def test_launch_rocm_compiled_bf16_matches_numpy_and_oracle():
+    """bf16 storage (f32 accumulate): the generating pass emits bf16 fragments +
+    the rocdl.wmma.*.bf16 intrinsic. Compare to numpy and the hand-written bf16
+    oracle through the same launch() entry point."""
     rt = _compiled_or_skip()
     bf16 = pytest.importorskip("ml_dtypes").bfloat16
-    a = np.zeros((32, 32), bf16)
-    b = np.zeros((32, 32), bf16)
+    m, n, k = 96, 80, 64
+    rng = np.random.default_rng(9)
+    a = (rng.standard_normal((m, k)) * 0.4).astype(bf16)
+    b = (rng.standard_normal((k, n)) * 0.4).astype(bf16)
+
+    res = rt.launch(_artifact(rt, "rocm_compiled"), (a, b))
+    assert res["ok"] is True, res.get("reason")
+    assert res["compiler_path"] == "rocm_compiled"
+    out = res["output"]
+
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    # bf16 has ~8 mantissa bits; tolerance scales with K.
+    assert float(np.max(np.abs(out - ref))) < 5e-1, "bf16 vs numpy"
+
+    oracle = rt.launch(_artifact(rt, "rocm_wmma"), (a, b))
+    assert oracle["ok"] is True, oracle.get("reason")
+    assert float(np.max(np.abs(out - oracle["output"]))) == 0.0, \
+        "compiled bf16 lane != hand-written bf16 oracle"
+
+
+def test_launch_rocm_compiled_rejects_f32():
+    """f32 in is not a WMMA storage dtype — structured invalid_artifact, never a
+    silent miscompute."""
+    rt = _compiled_or_skip()
+    a = np.zeros((32, 32), np.float32)
+    b = np.zeros((32, 32), np.float32)
     res = rt.launch(_artifact(rt, "rocm_compiled"), (a, b))
     assert res["ok"] is False
     assert res["runtime_status"] == "invalid_artifact"
-    assert "f16" in res["reason"]
+    assert "f16/bf16" in res["reason"]

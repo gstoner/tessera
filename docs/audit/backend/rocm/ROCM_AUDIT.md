@@ -402,8 +402,19 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     path is now reserved for ragged **K** (`K%16≠0`) only. Measured on gfx1151:
     **3×4 at 2048 0.69×→1.82×, at 1024 0.44×→0.93×**; aligned unchanged/better
     (1536³ 1.06×–3.82×, 2048³ 1.26×–3.93×). Ragged-M/N tiles now reach
-    parity-or-better; bit-identical to the oracle preserved. (Remaining slow path:
-    ragged-K, `K%16≠0` — uncommon.)
+    parity-or-better; bit-identical to the oracle preserved.
+  - ✅ **Ragged-K fast path + bf16 (2026-06-23).** The K-loop is split so masking
+    never sits on the hot path: a main loop over the aligned range `[0, kMain)`
+    (`kMain = K` rounded down to ×16) using the fast/edge panel, then a **single
+    masked tail panel** for `[kMain, K)` when `K%16≠0`. So ragged K costs one
+    extra masked panel, not a masked K-loop. Measured at 2040³ (ragged K *and*
+    M/N): every tile **1.42×–3.62×** the hand-written — no cliff.
+    **bf16**: the directive carries `dtype` (default `f16`); the generating pass
+    emits bf16 fragments + memrefs and Stage J the `rocdl.wmma.f32.16x16x16.bf16`
+    intrinsic. Runtime compiled lane is dtype-keyed (hsaco cached per
+    `(mt,nt,chip,dtype)`). Executes bit-identical to the hand-written **bf16**
+    oracle. Fixtures: `test_rocm_wmma_gemm_general.py` (ragged-K 31/40),
+    `test_rocm_compiled_launch_execute.py` (bf16 vs oracle; f32 rejected).
   - ✅ **L3 — in-process serialization (2026-06-23).** The GPU/ROCDL → LLVM-IR
     serialization spine is now linked into `tessera-opt` itself, so the WHOLE
     chain runs in ONE invocation — no `mlir-opt` shell-out (Stages I/K/L1/L2 rode
@@ -439,10 +450,13 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     fallback. The original blocker — masked ragged-edge perf — is now **resolved**
     (see "Masked ragged-edge perf parity" above: ragged-M/N tiles reach
     parity-or-better on gfx1151). The compiled lane is therefore *ready to promote*
-    on perf grounds. Flipping the source of truth is held as an explicit decision
-    (outward-facing default change) pending: (a) bf16 in the generated kernel
-    (f16-only today; bf16 routes to `rocm_wmma`), (b) the ragged-K (`K%16≠0`) fast
-    path, and (c) sign-off to flip the default + promote the manifest row.
+    on perf grounds. The earlier technical gaps are now **closed**: (a) bf16 is
+    generated + executes bit-identical to the bf16 oracle, and (b) the ragged-K
+    fast path lands (both above). What remains is purely the **decision** to flip
+    the default + promote the manifest row — held as an explicit, outward-facing
+    sign-off (the compiled lane generates + serializes via a tessera-opt subprocess
+    at launch, so flipping the production default is a deliberate call, not a
+    silent default change).
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
   L1. The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.

@@ -118,18 +118,19 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     assert "gpu.func @gemm" in out and "kernel" in out
     assert "memref<?xf16>, %arg1: memref<?xf16>, %arg2: memref<?xf32>" in out
     assert "index, %arg4: index, %arg5: index" in out
-    # Three-path split (Stage L2 + masked-edge perf, L4): kAligned ? (tileFull ?
-    # fast : edge) : masked.
-    #   - fast  — interior: contiguous vector.load A, unmasked B, unmasked store
-    #   - edge  — K-aligned ragged M/N: coalesced loads at clamped row/col + a
-    #             vector arith.select to zero OOB fragments; masked stores
-    #   - masked— ragged K: per-element clamp-and-select
-    #   so each of the 3 K-loops carries a tessera_rocm.wmma.
+    # Dispatch: tileFull ? fast : edge, each = aligned main K-loop + a masked
+    # tail panel (scf.if needTail) for ragged K. So two scf.for K-loops (fast
+    # main, edge main); each path carries a wmma in the main loop and one in the
+    # tail panel -> four tessera_rocm.wmma total.
+    #   - fast — interior: contiguous vector.load A, unmasked B, unmasked store
+    #   - edge — ragged M/N: coalesced loads at clamped row/col + a vector
+    #            arith.select to zero OOB fragments; masked stores
+    #   - tail — ragged K (K%16!=0): per-element clamp-and-select, run once
     assert "vector.load" in out                 # coalesced A fragment (fast+edge)
-    assert "arith.select" in out                 # edge fragment-zeroing / clamps
-    assert out.count("scf.for") == 3            # one K-loop per path
-    assert out.count("tessera_rocm.wmma") == 3  # the matrix op in each path
-    assert "scf.if" in out                       # path dispatch + masked stores
+    assert "arith.select" in out                 # edge zeroing + tail/clamp masks
+    assert out.count("scf.for") == 2            # fast-main + edge-main K-loops
+    assert out.count("tessera_rocm.wmma") == 4  # 2 paths x (main + tail panel)
+    assert "scf.if" in out                       # tileFull dispatch + ragged-K tail
     assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
 
 

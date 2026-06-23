@@ -54,8 +54,11 @@ def _directive(mt=1, nt=1):
     )
 
 
-# (M, N, K): square-aligned, rectangular multi-tile, and ragged edges.
-_SHAPES = [(16, 16, 16), (32, 32, 32), (48, 64, 32), (40, 24, 48), (17, 15, 31)]
+# (M, N, K): square-aligned, rectangular multi-tile, and ragged edges — incl.
+# ragged K (K%16!=0: 31, 40) which exercises the aligned-main-loop + masked-tail
+# split, and a multi-tile ragged-K case (96x80x40).
+_SHAPES = [(16, 16, 16), (32, 32, 32), (48, 64, 32), (40, 24, 48),
+           (17, 15, 31), (96, 80, 40)]
 # (mt, nt) register-blocked macro-tiles: 1x1 (L1), small (2x4), oracle-best 3x4.
 _MACRO_TILES = [(1, 1), (2, 2), (2, 4), (3, 4)]
 

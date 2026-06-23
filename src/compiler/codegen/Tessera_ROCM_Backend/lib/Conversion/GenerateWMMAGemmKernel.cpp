@@ -7,28 +7,34 @@
 // accumulator with the wave32 lane/element layout. The GEMM is therefore
 // compiler-*generated*, not authored MLIR — the Stage K milestone.
 //
-// Stage L1 — *problem-size-generic* codegen. The directive's `m`/`n`/`k` are the
-// WMMA instruction tile (16x16x16 — the only tile RDNA's V_WMMA exposes; other
-// extents are a named error). The emitted kernel itself is generic over the
-// runtime problem size: it takes `(A, B, D : memref<?>, M, N, K : index)`, a
-// 2-D grid of one wave per macro-tile, an `scf.for` K-loop that accumulates
-// across 16-wide K panels, and ragged-edge masking so non-multiple-of-16 shapes
-// are correct.
+// Stage L1 — problem-size-generic: `m`/`n`/`k` are the WMMA instruction tile
+// (16x16x16 — the only tile RDNA's V_WMMA exposes). The kernel takes the runtime
+// `(A,B,D : memref<?>, M,N,K : index)`, a 2-D grid of one wave per macro-tile.
 //
-// Stage L2 — *register-blocked macro-tiling*. `mt`/`nt` (default 1) make each
-// wave compute an `mt`x`nt` grid of 16x16 output tiles: a loaded A fragment is
-// reused across the `nt` B-tiles and a loaded B fragment across the `mt`
-// A-tiles, so global-load traffic per output element drops ~the reuse factor.
-// This is the occupancy/VGPR-budgeted knob the hand-written oracle sweeps
-// (measured-best 3x4 for large problems). mt=nt=1 is the L1 single-tile body;
-// the M=N=K=16, mt=nt=1 launch is still bit-identical to the oracle.
+// Stage L2 — register-blocked: `mt`/`nt` (default 1) make each wave compute an
+// `mt`x`nt` grid of 16x16 output tiles with fragment reuse.
+//
+// dtype: f16 (default) or bf16 storage; f32 accumulate. The fragment element
+// type / memref element type follow `dtype`; Stage J emits the matching
+// rocdl.wmma.*.{f16,bf16} intrinsic.
+//
+// Performance structure — the K-loop is split so masking never sits on the hot
+// path. Per wave:
+//   * main loop over the aligned K range [0, kMain) (kMain = K rounded down to a
+//     multiple of 16), then a single masked tail panel for [kMain, K) when K is
+//     ragged. So ragged K costs one extra masked panel, not a masked K-loop.
+//   * the main panel is chosen by whether the wave's macro-tile is interior:
+//       - fast  (tile fully in-bounds): contiguous vector.load A, unmasked B.
+//       - edge  (tile straddles the M/N edge): load A/B at a row/col clamped
+//         into range, then zero an OOB fragment with ONE loop-invariant vector
+//         select — keeps coalesced loads, so ragged M/N stays vector-load speed.
+//   * stores are scf.if-masked only when the tile is ragged.
 //
 // Layout (RDNA wave32, identical to tessera_rocm_gemm.cpp + rocdl_emit.py):
 //   lane L -> lane = L & 15, lhi = L >> 4
 //   baseRow = blockIdx.y*16*mt, baseCol = blockIdx.x*16*nt
 //   A frag a[mi][i] = A[(baseRow+mi*16+lane)*K + (k0+i)]   (masked)
 //   B frag b[ni][i] = B[(k0+i)*N + (baseCol+ni*16+lane)]   (masked)
-//   c[mi][ni] = wmma(a[mi], b[ni], c[mi][ni])  over the K-loop
 //   D[(baseRow+mi*16+2e+lhi)*N + (baseCol+ni*16+lane)] = c[mi][ni][e]  (masked)
 //===----------------------------------------------------------------------===//
 
@@ -49,9 +55,10 @@ using namespace mlir;
 namespace {
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
-// `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index).
+// `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index). `storeTy` is the A/B
+// storage element type (f16 or bf16); the accumulator is always f32.
 void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
-                     int64_t mt, int64_t nt) {
+                     int64_t mt, int64_t nt, Type storeTy) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -60,9 +67,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value N = gpuFunc.getArgument(4);
   Value K = gpuFunc.getArgument(5);
 
-  Type f16Ty = b.getF16Type();
   Type f32Ty = b.getF32Type();
-  auto fragTy = VectorType::get({16}, f16Ty);
+  auto fragTy = VectorType::get({16}, storeTy);
   auto accTy = VectorType::get({8}, f32Ty);
   auto slt = arith::CmpIPredicate::slt;
 
@@ -70,11 +76,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value c4 = b.create<arith::ConstantIndexOp>(loc, 4);
   Value c15 = b.create<arith::ConstantIndexOp>(loc, 15);
   Value c16 = b.create<arith::ConstantIndexOp>(loc, 16);
-  Value f16Zero =
-      b.create<arith::ConstantOp>(loc, f16Ty, b.getFloatAttr(f16Ty, 0.0));
+  Value storeZero =
+      b.create<arith::ConstantOp>(loc, storeTy, b.getFloatAttr(storeTy, 0.0));
+  APFloat zeroAP = cast<FloatAttr>(b.getFloatAttr(storeTy, 0.0)).getValue();
   Value fragZero = b.create<arith::ConstantOp>(
-      loc, fragTy,
-      DenseElementsAttr::get(fragTy, APFloat(APFloat::IEEEhalf(), 0)));
+      loc, fragTy, DenseElementsAttr::get(fragTy, zeroAP));
   Value accZero = b.create<arith::ConstantOp>(
       loc, accTy, DenseElementsAttr::get(accTy, APFloat(0.0f)));
 
@@ -93,9 +99,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 
   // Per-tile (loop-invariant) values.
   //   arK[mi]     = row*K              — A-fragment base offset (fast path).
-  //   arKsafe[mi] = clamp(row,0)*K     — same, but with an OOB row clamped to 0
-  //                                      so the edge path can still issue a
-  //                                      contiguous vector.load (zeroed after).
+  //   arKsafe[mi] = clamp(row,0)*K     — same, OOB row clamped to 0 so the edge
+  //                                      path can still issue a vector.load.
   //   colSafe[ni] = clamp(col,0)       — likewise for the B column.
   SmallVector<Value> arM(mt), arK(mt), arKsafe(mt), arInb(mt), rowOrigin(mt);
   SmallVector<Value> colN(nt), colSafe(nt), colInb(nt);
@@ -118,8 +123,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   }
 
   // WMMA accumulation over mt*nt fragments, reusing each loaded fragment.
-  auto wmmaAll = [&](OpBuilder &bb, Location l, ValueRange aFrag,
-                     ValueRange bFrag, ValueRange acc) {
+  auto wmmaAll = [&](OpBuilder &bb, Location l, ArrayRef<Value> aFrag,
+                     ArrayRef<Value> bFrag, ValueRange acc) {
     SmallVector<Value> next(mt * nt);
     for (int64_t mi = 0; mi < mt; ++mi)
       for (int64_t ni = 0; ni < nt; ++ni) {
@@ -131,11 +136,87 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     return next;
   };
 
-  SmallVector<Value> initAccs(mt * nt, accZero);
+  // --- fast panel: interior tile, full K panel — no masking. ---
+  auto fastPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
+      aFrag[mi] = bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
+    }
+    for (int64_t i = 0; i < 16; ++i) {
+      Value ci = bb.create<arith::ConstantIndexOp>(l, i);
+      Value ak = bb.create<arith::AddIOp>(l, k0, ci);
+      Value akN = bb.create<arith::MulIOp>(l, ak, N);
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        Value lin = bb.create<arith::AddIOp>(l, akN, colN[ni]);
+        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
+        bFrag[ni] =
+            bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
+      }
+    }
+    return wmmaAll(bb, l, aFrag, bFrag, acc);
+  };
 
-  // Shared store: D[(rowOrigin[mi]+2e+lhi)*N + colN[ni]] = acc[e]. When `masked`,
-  // each store is scf.if-guarded against the ragged M/N edge (stores run once,
-  // outside the K-loop, so the guard cost is negligible).
+  // --- edge panel: full K panel, ragged M/N — coalesced loads at a clamped
+  //     row/col, then one vector select zeroes an OOB fragment. ---
+  auto edgePanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      Value base = bb.create<arith::AddIOp>(l, arKsafe[mi], k0);
+      Value v = bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
+      aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, fragZero);
+    }
+    for (int64_t i = 0; i < 16; ++i) {
+      Value ci = bb.create<arith::ConstantIndexOp>(l, i);
+      Value ak = bb.create<arith::AddIOp>(l, k0, ci);
+      Value akN = bb.create<arith::MulIOp>(l, ak, N);
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        Value lin = bb.create<arith::AddIOp>(l, akN, colSafe[ni]);
+        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
+        bFrag[ni] =
+            bb.create<vector::InsertOp>(l, v, bFrag[ni], ArrayRef<int64_t>{i});
+      }
+    }
+    for (int64_t ni = 0; ni < nt; ++ni)
+      bFrag[ni] =
+          bb.create<arith::SelectOp>(l, colInb[ni], bFrag[ni], fragZero);
+    return wmmaAll(bb, l, aFrag, bFrag, acc);
+  };
+
+  // --- masked panel: ragged K tail — per-element clamp-and-select on both K and
+  //     M/N. Runs once (the [kMain,K) remainder), so the cost is off the hot
+  //     path. Correct for full or ragged M/N (masks are no-ops when in-bounds).
+  auto maskedPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    SmallVector<Value> aFrag(mt, fragZero), bFrag(nt, fragZero);
+    for (int64_t i = 0; i < 16; ++i) {
+      Value ci = bb.create<arith::ConstantIndexOp>(l, i);
+      Value ak = bb.create<arith::AddIOp>(l, k0, ci);
+      Value akInb = bb.create<arith::CmpIOp>(l, slt, ak, K);
+      for (int64_t mi = 0; mi < mt; ++mi) {
+        Value inb = bb.create<arith::AndIOp>(l, arInb[mi], akInb);
+        Value lin = bb.create<arith::AddIOp>(l, arK[mi], ak);
+        Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
+        Value v = bb.create<memref::LoadOp>(l, A, ValueRange{safe});
+        Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
+        aFrag[mi] =
+            bb.create<vector::InsertOp>(l, vm, aFrag[mi], ArrayRef<int64_t>{i});
+      }
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        Value inb = bb.create<arith::AndIOp>(l, akInb, colInb[ni]);
+        Value lin = bb.create<arith::AddIOp>(
+            l, bb.create<arith::MulIOp>(l, ak, N), colN[ni]);
+        Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
+        Value v = bb.create<memref::LoadOp>(l, B, ValueRange{safe});
+        Value vm = bb.create<arith::SelectOp>(l, inb, v, storeZero);
+        bFrag[ni] =
+            bb.create<vector::InsertOp>(l, vm, bFrag[ni], ArrayRef<int64_t>{i});
+      }
+    }
+    return wmmaAll(bb, l, aFrag, bFrag, acc);
+  };
+
+  // Shared store. When `masked`, each store is scf.if-guarded against the ragged
+  // M/N edge (stores run once, so the guard cost is negligible).
   auto emitStore = [&](OpBuilder &sb, ValueRange accs, bool masked) {
     for (int64_t mi = 0; mi < mt; ++mi)
       for (int64_t ni = 0; ni < nt; ++ni) {
@@ -144,7 +225,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value twoE = sb.create<arith::ConstantIndexOp>(loc, e * 2);
           Value rowOff = sb.create<arith::AddIOp>(loc, twoE, lhi);
           Value r = sb.create<arith::AddIOp>(loc, rowOrigin[mi], rowOff);
-          Value dv = sb.create<vector::ExtractOp>(loc, accF, ArrayRef<int64_t>{e});
+          Value dv =
+              sb.create<vector::ExtractOp>(loc, accF, ArrayRef<int64_t>{e});
           Value didx = sb.create<arith::AddIOp>(
               loc, sb.create<arith::MulIOp>(loc, r, N), colN[ni]);
           if (!masked) {
@@ -161,132 +243,53 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       }
   };
 
-  // --- Path 1: interior fast path — tile fully in-bounds AND K%16==0, so no
-  //     masking at all. A is one contiguous vector.load; B is 16 unmasked
-  //     strided loads; stores unguarded.
-  auto emitFast = [&](OpBuilder &fb) {
-    auto kLoop = fb.create<scf::ForOp>(
-        loc, c0, K, c16, initAccs,
+  SmallVector<Value> initAccs(mt * nt, accZero);
+
+  // kMain = largest multiple of 16 <= K; the tail panel covers [kMain, K).
+  Value kRem = b.create<arith::RemUIOp>(loc, K, c16);
+  Value kMain = b.create<arith::SubIOp>(loc, K, kRem);
+  Value needTail =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, kRem, c0);
+
+  // Run the aligned main K-loop with `mainPanel`, fold the ragged-K tail (when
+  // present) through `maskedPanel`, and store (masked iff ragged M/N).
+  auto runPath = [&](OpBuilder &rb, function_ref<SmallVector<Value>(
+                                        OpBuilder &, Location, Value, ValueRange)>
+                                        mainPanel,
+                     bool masked) {
+    auto kLoop = rb.create<scf::ForOp>(
+        loc, c0, kMain, c16, initAccs,
         [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
-          SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
-          for (int64_t mi = 0; mi < mt; ++mi) {
-            Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
-            aFrag[mi] =
-                bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
-          }
-          for (int64_t i = 0; i < 16; ++i) {
-            Value ci = bb.create<arith::ConstantIndexOp>(l, i);
-            Value ak = bb.create<arith::AddIOp>(l, k0, ci);
-            Value akN = bb.create<arith::MulIOp>(l, ak, N);
-            for (int64_t ni = 0; ni < nt; ++ni) {
-              Value lin = bb.create<arith::AddIOp>(l, akN, colN[ni]);
-              Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
-              bFrag[ni] = bb.create<vector::InsertOp>(l, v, bFrag[ni],
-                                                      ArrayRef<int64_t>{i});
-            }
-          }
-          bb.create<scf::YieldOp>(l, wmmaAll(bb, l, aFrag, bFrag, iter));
+          bb.create<scf::YieldOp>(l, mainPanel(bb, l, k0, iter));
         });
-    emitStore(fb, kLoop.getResults(), /*masked=*/false);
+    auto tail = rb.create<scf::IfOp>(
+        loc, needTail,
+        [&](OpBuilder &tb, Location l) {
+          tb.create<scf::YieldOp>(
+              l, maskedPanel(tb, l, kMain, kLoop.getResults()));
+        },
+        [&](OpBuilder &eb, Location l) {
+          eb.create<scf::YieldOp>(l, ValueRange(kLoop.getResults()));
+        });
+    emitStore(rb, tail.getResults(), masked);
   };
 
-  // --- Path 2: K-aligned edge path — K%16==0 but the macro-tile straddles the
-  //     M/N edge. Keep the COALESCED loads: load A at a row clamped into range,
-  //     then zero the whole fragment with ONE vector select if the row is OOB;
-  //     load B at a clamped column, then one vector select per B tile. The
-  //     row/col masks are loop-invariant, so the K-loop stays vector-load speed
-  //     (vs the per-element scalar path below). Only the cheap stores are masked.
-  //     This is the common ragged case (K a multiple of 16).
-  auto emitEdge = [&](OpBuilder &eb) {
-    auto kLoop = eb.create<scf::ForOp>(
-        loc, c0, K, c16, initAccs,
-        [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
-          SmallVector<Value> aFrag(mt), bFrag(nt, fragZero);
-          for (int64_t mi = 0; mi < mt; ++mi) {
-            Value base = bb.create<arith::AddIOp>(l, arKsafe[mi], k0);
-            Value v = bb.create<vector::LoadOp>(l, fragTy, A, ValueRange{base});
-            aFrag[mi] = bb.create<arith::SelectOp>(l, arInb[mi], v, fragZero);
-          }
-          for (int64_t i = 0; i < 16; ++i) {
-            Value ci = bb.create<arith::ConstantIndexOp>(l, i);
-            Value ak = bb.create<arith::AddIOp>(l, k0, ci);
-            Value akN = bb.create<arith::MulIOp>(l, ak, N);
-            for (int64_t ni = 0; ni < nt; ++ni) {
-              Value lin = bb.create<arith::AddIOp>(l, akN, colSafe[ni]);
-              Value v = bb.create<memref::LoadOp>(l, B, ValueRange{lin});
-              bFrag[ni] = bb.create<vector::InsertOp>(l, v, bFrag[ni],
-                                                      ArrayRef<int64_t>{i});
-            }
-          }
-          for (int64_t ni = 0; ni < nt; ++ni)
-            bFrag[ni] = bb.create<arith::SelectOp>(l, colInb[ni], bFrag[ni],
-                                                   fragZero);
-          bb.create<scf::YieldOp>(l, wmmaAll(bb, l, aFrag, bFrag, iter));
-        });
-    emitStore(eb, kLoop.getResults(), /*masked=*/true);
-  };
-
-  // --- Path 3: fully-masked fallback — K NOT a multiple of 16 (ragged K tail).
-  //     Per-element clamp-and-select on both K and M/N. Rare; correctness-first.
-  auto emitMasked = [&](OpBuilder &mb) {
-    auto kLoop = mb.create<scf::ForOp>(
-        loc, c0, K, c16, initAccs,
-        [&](OpBuilder &bb, Location l, Value k0, ValueRange iter) {
-          SmallVector<Value> aFrag(mt, fragZero), bFrag(nt, fragZero);
-          for (int64_t i = 0; i < 16; ++i) {
-            Value ci = bb.create<arith::ConstantIndexOp>(l, i);
-            Value ak = bb.create<arith::AddIOp>(l, k0, ci);
-            Value akInb = bb.create<arith::CmpIOp>(l, slt, ak, K);
-            for (int64_t mi = 0; mi < mt; ++mi) {
-              Value inb = bb.create<arith::AndIOp>(l, arInb[mi], akInb);
-              Value lin = bb.create<arith::AddIOp>(l, arK[mi], ak);
-              Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
-              Value v = bb.create<memref::LoadOp>(l, A, ValueRange{safe});
-              Value vm = bb.create<arith::SelectOp>(l, inb, v, f16Zero);
-              aFrag[mi] = bb.create<vector::InsertOp>(l, vm, aFrag[mi],
-                                                      ArrayRef<int64_t>{i});
-            }
-            for (int64_t ni = 0; ni < nt; ++ni) {
-              Value inb = bb.create<arith::AndIOp>(l, akInb, colInb[ni]);
-              Value lin = bb.create<arith::AddIOp>(
-                  l, bb.create<arith::MulIOp>(l, ak, N), colN[ni]);
-              Value safe = bb.create<arith::SelectOp>(l, inb, lin, c0);
-              Value v = bb.create<memref::LoadOp>(l, B, ValueRange{safe});
-              Value vm = bb.create<arith::SelectOp>(l, inb, v, f16Zero);
-              bFrag[ni] = bb.create<vector::InsertOp>(l, vm, bFrag[ni],
-                                                      ArrayRef<int64_t>{i});
-            }
-          }
-          bb.create<scf::YieldOp>(l, wmmaAll(bb, l, aFrag, bFrag, iter));
-        });
-    emitStore(mb, kLoop.getResults(), /*masked=*/true);
-  };
-
-  // Dispatch: kAligned ? (tileFull ? fast : edge) : masked.
-  auto sle = arith::CmpIPredicate::sle;
+  // Dispatch on whether the macro-tile is interior (fast) or straddles the
+  // M/N edge (edge); ragged K is handled by the tail in both.
   Value rowEnd = b.create<arith::AddIOp>(loc, baseRow, c16mt);
   Value colEnd = b.create<arith::AddIOp>(loc, baseCol, c16nt);
+  auto sle = arith::CmpIPredicate::sle;
   Value rowFull = b.create<arith::CmpIOp>(loc, sle, rowEnd, M);
   Value colFull = b.create<arith::CmpIOp>(loc, sle, colEnd, N);
   Value tileFull = b.create<arith::AndIOp>(loc, rowFull, colFull);
-  Value kRem = b.create<arith::RemUIOp>(loc, K, c16);
-  Value kAligned =
-      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, kRem, c0);
 
-  auto outer = b.create<scf::IfOp>(loc, kAligned, /*withElseRegion=*/true);
+  auto outer = b.create<scf::IfOp>(loc, tileFull, /*withElseRegion=*/true);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(outer.thenBlock());
-    auto inner = b.create<scf::IfOp>(loc, tileFull, /*withElseRegion=*/true);
-    {
-      OpBuilder::InsertionGuard g2(b);
-      b.setInsertionPointToStart(inner.thenBlock());
-      emitFast(b);
-      b.setInsertionPointToStart(inner.elseBlock());
-      emitEdge(b);
-    }
+    runPath(b, fastPanel, /*masked=*/false);
     b.setInsertionPointToStart(outer.elseBlock());
-    emitMasked(b);
+    runPath(b, edgePanel, /*masked=*/true);
   }
   b.setInsertionPointToEnd(&gpuFunc.getBody().front());
   b.create<gpu::ReturnOp>(loc);
@@ -351,22 +354,38 @@ struct GenerateWMMAGemmKernelPass
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
 
+      // dtype: f16 (default) or bf16 storage; f32 accumulate. RDNA exposes
+      // both f16 and bf16 WMMA at 16x16x16.
+      Type storeTy = b.getF16Type();
+      if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
+        StringRef dt = a.getValue();
+        if (dt == "f16" || dt == "float16")
+          storeTy = b.getF16Type();
+        else if (dt == "bf16" || dt == "bfloat16")
+          storeTy = b.getBF16Type();
+        else {
+          op->emitError("generate-wmma-gemm-kernel: dtype must be f16 or bf16 "
+                        "(got '")
+              << dt << "')";
+          return signalPassFailure();
+        }
+      }
+
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K) kernel { ... } }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
 
-      Type f16Ty = b.getF16Type();
       Type f32Ty = b.getF32Type();
       Type idxTy = b.getIndexType();
-      auto abTy = MemRefType::get({ShapedType::kDynamic}, f16Ty);
+      auto abTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, f32Ty);
       auto fnTy = b.getFunctionType({abTy, abTy, dTy, idxTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
 
-      OpBuilder body(gpuFunc.getContext());
-      emitGeneralBody(body, loc, gpuFunc, mt, nt);
+      OpBuilder bodyB(gpuFunc.getContext());
+      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, storeTy);
 
       op->erase();
     }

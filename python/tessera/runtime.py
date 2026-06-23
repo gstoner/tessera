@@ -1340,8 +1340,8 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 # ragged-edge tiles reach perf parity and the dashboards agree (ROCM_AUDIT L4).
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
-#: hsaco bytes keyed by (mt, nt, chip) — the generated kernel is shape-generic.
-_rocm_compiled_hsaco_cache: dict[tuple[int, int, str], bytes] = {}
+#: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
+_rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str], bytes] = {}
 
 
 def _tessera_opt_path() -> Optional[Path]:
@@ -1385,11 +1385,11 @@ def _extract_hsaco_blob(text: str) -> bytes:
     return bytes(out)
 
 
-def _build_compiled_gemm_hsaco(mt: int, nt: int) -> bytes:
+def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
     """Generate + serialize the compiler's WMMA GEMM kernel to hsaco, fully
-    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip)."""
+    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype)."""
     chip = _rocm_chip()
-    key = (mt, nt, chip)
+    key = (mt, nt, chip, dtype)
     cached = _rocm_compiled_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1402,7 +1402,7 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int) -> bytes:
         'module {\n'
         '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
         'n = 16 : i64, k = 16 : i64, '
-        f'mt = {mt} : i64, nt = {nt} : i64}} : () -> ()\n'
+        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"}} : () -> ()\n'
         '}\n'
     )
     pipeline = (
@@ -1426,6 +1426,18 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int) -> bytes:
         raise RuntimeError("compiled ROCm lane: gpu.binary was not an ELF hsaco")
     _rocm_compiled_hsaco_cache[key] = hsaco
     return hsaco
+
+
+def _rocm_compiled_dtype(a, b):
+    """Map the operand numpy dtype to the compiled-kernel dtype tag, or None if
+    unsupported. f16 + bf16 are real WMMA storage types; f32 is not."""
+    import numpy as np
+    if a.dtype == np.float16 and b.dtype == np.float16:
+        return "f16", np.float16
+    bf16 = _bfloat16_dtype()
+    if bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
+        return "bf16", bf16
+    return None, None
 
 
 def _load_hip_for_launch() -> ctypes.CDLL | None:
@@ -1458,9 +1470,9 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
 def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
     """Execute a ``target="rocm"`` matmul through the COMPILER-GENERATED WMMA
     kernel (Stage L): generate + serialize in-process (tessera-opt, no mlir-opt),
-    then load + launch the hsaco via HIP. f16 storage / f32 accumulate. Returns
-    the MxN f32 result. Raises on missing tooling / device / unsupported op or
-    dtype — ``launch()`` maps the raise to ``invalid_artifact``."""
+    then load + launch the hsaco via HIP. f16/bf16 storage, f32 accumulate.
+    Returns the MxN f32 result. Raises on missing tooling / device / unsupported
+    op or dtype — ``launch()`` maps the raise to ``invalid_artifact``."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -1482,17 +1494,18 @@ def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(
             f"rocm_compiled matmul needs rank-2 operands with matching K; got "
             f"{a.shape} @ {b.shape}")
-    if a.dtype != np.float16 or b.dtype != np.float16:
-        # The generated kernel is f16-storage today; bf16 needs the bf16 wmma
-        # variant in the generating pass. Be explicit — don't silently miscompute.
+    dtype_tag, store = _rocm_compiled_dtype(a, b)
+    if dtype_tag is None:
+        # RDNA WMMA storage is f16 or bf16 (f32 accumulate). f32 in is not a
+        # WMMA storage dtype — be explicit, don't silently miscompute.
         raise ValueError(
-            "rocm_compiled lane handles f16 storage (f32 accumulate) today; got "
-            f"{a.dtype} @ {b.dtype} — use the rocm_wmma lane for bf16")
+            "rocm_compiled lane handles f16/bf16 storage (f32 accumulate); got "
+            f"{a.dtype} @ {b.dtype}")
 
     m, k = a.shape
     n = b.shape[1]
     mt, nt = _rocm_prod_tile(m, n, k)
-    hsaco = _build_compiled_gemm_hsaco(mt, nt)
+    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -1507,11 +1520,11 @@ def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
     if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
         raise RuntimeError("rocm_compiled: kernel symbol 'gemm' not found")
 
-    a_c = np.ascontiguousarray(a, dtype=np.float16)
-    b_c = np.ascontiguousarray(b, dtype=np.float16)
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
     d = np.zeros((m, n), dtype=np.float32)
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    nb = (2 * m * k, 2 * k * n, 4 * m * n)
+    nb = (2 * m * k, 2 * k * n, 4 * m * n)  # f16/bf16 are both 2 bytes
     for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
         if hip.hipMalloc(ctypes.byref(dev), size) != 0:
             raise RuntimeError("rocm_compiled: hipMalloc failed")

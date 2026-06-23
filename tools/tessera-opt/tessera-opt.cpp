@@ -76,6 +76,28 @@
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
 #include "TesseraROCM/Passes.h"
+// Stage L3 — in-process MLIR -> hsaco serialization (no mlir-opt shell-out).
+// Only meaningful in a full ROCm build (real HIP toolchain): the lean
+// artifact driver stays lean.
+#ifdef TESSERA_HAVE_CORE_TESSERA_IR
+#include "mlir/Target/LLVM/ROCDL/Target.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.h"
+// convert-gpu-to-rocdl gathers cf/arith/func/memref/vector/index/ub -> LLVM
+// patterns through each dialect's ConvertToLLVMPatternInterface external model;
+// those must be registered for the gpu.func body (incl. cf block args) to fully
+// lower (mlir-opt does this via registerAllExtensions).
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
+#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
+#include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
+#include "llvm/Support/TargetSelect.h"
+#endif
 #endif
 
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
@@ -273,6 +295,17 @@ static mlir::PassPipelineRegistration<> gEmitROCDL(
     });
 
 int main(int argc, char **argv) {
+#if defined(TESSERA_HAVE_ROCM_BACKEND) && defined(TESSERA_HAVE_CORE_TESSERA_IR)
+  // Stage L3: register the LLVM AMDGPU target (codegen + asm printer) so the
+  // gpu-module-to-binary pass can emit + ld.lld-link the hsaco entirely
+  // in-process. AMDGPU codegen ships in the shared libLLVM; ld.lld is found on
+  // PATH by the ROCDL target serializer.
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
+#endif
 #if (defined(TESSERA_HAVE_ROCM_BACKEND) || defined(TESSERA_HAVE_NVIDIA_BACKEND)) && !defined(TESSERA_HAVE_CORE_TESSERA_IR)
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
   // only the dialects and passes needed by the target contract spine are
@@ -346,6 +379,20 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendPasses();
+#ifdef TESSERA_HAVE_CORE_TESSERA_IR
+  // Stage L3 — the upstream GPU serialization spine, so the WHOLE chain runs in
+  // ONE tessera-opt invocation (a runtime launch lane can't shell out to
+  // mlir-opt). The full pipeline as a single --pass-pipeline string:
+  //   builtin.module(generate-wmma-gemm-kernel, lower-tessera-target-to-rocdl,
+  //     gpu.module(convert-scf-to-cf, convert-gpu-to-rocdl,
+  //                reconcile-unrealized-casts),
+  //     rocdl-attach-target{chip=gfx1151}, gpu-module-to-binary)
+  // convert-gpu-to-rocdl is already registered below; add the rest.
+  mlir::registerSCFToControlFlowPass();
+  mlir::registerReconcileUnrealizedCastsPass();
+  mlir::registerGpuROCDLAttachTargetPass();
+  mlir::registerGpuModuleToBinaryPass();
+#endif
 #endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendPasses();
@@ -430,6 +477,24 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_ROCM_BACKEND
   mlir::tessera_rocm::registerTesseraROCMBackendDialects(registry);
+#ifdef TESSERA_HAVE_CORE_TESSERA_IR
+  // Stage L3: LLVM-IR translations + the #rocdl.target serialization interface
+  // that gpu-module-to-binary needs to lower the gpu.module to an ELF hsaco.
+  mlir::registerBuiltinDialectTranslation(registry);
+  mlir::registerLLVMDialectTranslation(registry);
+  mlir::registerGPUDialectTranslation(registry);
+  mlir::registerROCDLDialectTranslation(registry);
+  mlir::ROCDL::registerROCDLTargetInterfaceExternalModels(registry);
+  // ConvertToLLVM external models so convert-gpu-to-rocdl lowers the whole
+  // gpu.func body (cf block args, arith, memref, vector, index, ub, func).
+  mlir::cf::registerConvertControlFlowToLLVMInterface(registry);
+  mlir::arith::registerConvertArithToLLVMInterface(registry);
+  mlir::registerConvertFuncToLLVMInterface(registry);
+  mlir::registerConvertMemRefToLLVMInterface(registry);
+  mlir::vector::registerConvertVectorToLLVMInterface(registry);
+  mlir::index::registerConvertIndexToLLVMInterface(registry);
+  mlir::ub::registerConvertUBToLLVMInterface(registry);
+#endif
 #endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendDialects(registry);

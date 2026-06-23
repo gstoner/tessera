@@ -391,9 +391,24 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     Optimizing the masked edge path (or padding) is follow-up. Autotuner
     integration (auto-select `mt`/`nt` per shape) rides on the existing ladder
     harness — the sweep script *is* the brute-force version.
-  - **L3 — in-process serialization.** Link the MLIR ROCDL target + LLVM AMDGPU
-    codegen + lld into a Tessera tool so `gpu-module-to-binary` needs no `mlir-opt`
-    shell-out (Stages I/K ride the platform `mlir-opt`; a runtime lane can't).
+  - ✅ **L3 — in-process serialization (2026-06-23).** The GPU/ROCDL → LLVM-IR
+    serialization spine is now linked into `tessera-opt` itself, so the WHOLE
+    chain runs in ONE invocation — no `mlir-opt` shell-out (Stages I/K/L1/L2 rode
+    the platform `mlir-opt` for `gpu-module-to-binary`; a runtime lane can't):
+    `tessera-opt - --pass-pipeline='builtin.module(generate-wmma-gemm-kernel,
+    lower-tessera-target-to-rocdl, gpu.module(convert-scf-to-cf,
+    convert-gpu-to-rocdl, reconcile-unrealized-casts),
+    rocdl-attach-target{chip=gfx1151}, gpu-module-to-binary)'` → `gpu.binary`
+    ELF. Wiring (all gated behind a full ROCm build — the lean artifact driver
+    stays lean): register `gpu-module-to-binary`/`rocdl-attach-target`/
+    `convert-scf-to-cf`/`reconcile-unrealized-casts`; the LLVM-IR translations +
+    `#rocdl.target` interface; the cf/arith/func/memref/vector/index/ub
+    ConvertToLLVM external models (what `convert-gpu-to-rocdl` needs to lower the
+    full `gpu.func` body — the missing piece vs `mlir-opt`); init the AMDGPU LLVM
+    target in `main`. AMDGPU codegen comes from the shared `libLLVM`; `ld.lld`
+    from the platform LLVM (the ROCDL serializer shells to it). The in-process
+    hsaco executes on gfx1151 bit-identical to the oracle —
+    `tests/unit/test_rocm_wmma_gemm_in_process.py`.
   - **L4 — make it a `runtime.launch()` lane + flip the source of truth.** Once
     L1–L3 land and perf matches, route `target="rocm"` matmul through the compiled
     path; the hand-written HIPRTC kernel becomes the reference oracle / fast

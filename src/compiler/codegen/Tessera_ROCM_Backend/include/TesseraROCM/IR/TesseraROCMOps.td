@@ -44,6 +44,27 @@ def ROCM_MFMAOp : TesseraROCM_Op<"mfma"> {
   let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
 
+def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
+  let summary = "A matmul tile to realize as a fragment-materialized WMMA kernel";
+  let description = [{
+    Stage K — the matmul *directive* the generating pass (`generate-wmma-gemm-
+    kernel`) expands into a real WMMA GEMM kernel: it emits a `gpu.module` +
+    `gpu.func` whose body loads the A/B tiles into RDNA WMMA fragment vectors
+    (`vector<16xf16>`), calls `tessera_rocm.wmma` (Stage J → real `rocdl.wmma`),
+    and stores the `vector<8xf32>` accumulator with the wave32 lane/element
+    layout. So the GEMM is compiler-*generated*, not authored MLIR.
+
+    Carries the tile extents `m`/`n`/`k` and the kernel `name`. The first
+    realization is the single 16x16x16 tile (the proven shape — matches the
+    hardware_verified hand-written oracle bit-for-bit); other extents are a
+    named error until the multi-tile loop nest lands. This is the Target-IR
+    matmul-tile node; wiring Graph `tessera.matmul` → Tile → this op is the
+    remaining front-end glue.
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{

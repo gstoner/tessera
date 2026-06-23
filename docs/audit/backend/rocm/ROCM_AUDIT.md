@@ -335,13 +335,20 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     Fixture `tests/unit/test_rocm_wmma_gemm_via_mlir.py`. (Also: registered the
     `vector` dialect in tessera-opt so a gpu kernel carrying WMMA fragment vectors
     parses + lowers there.)
-  - ⏳ **Step 2 — the generating pass (the "compiler-generated" milestone).**
-    `lower-tile-to-rocm` today emits the **abstract scalar** `tessera_rocm.wmma`
-    (→ marker), not the fragment-materialized kernel. The remaining work is a pass
-    that emits the Step-1 kernel body (fragment loads + real `tessera_rocm.wmma` +
-    accumulator stores) from a `tessera.matmul`, so the GEMM is compiler-*generated*
-    end to end, not authored MLIR. The Step-1 fixture is the target the pass must
-    reproduce; the hand-written HIPRTC kernel stays the on-silicon oracle.
+  - ✅ **Step 2 — the generating pass: the compiler GENERATES the GEMM
+    (2026-06-23).** New `tessera_rocm.wmma_gemm` matmul-directive op (m/n/k +
+    name) + the `generate-wmma-gemm-kernel` pass that expands it into a
+    fragment-materialized `gpu.func` (fragment loads + real `tessera_rocm.wmma` +
+    accumulator stores — **the kernel body is emitted by the pass, not authored**),
+    fully unrolled. The full chain `directive → generate → Stage J → Stage I →
+    hsaco → launch` executes on gfx1151 **bit-identical to the hand-written
+    oracle** (vs numpy ~2e-7, vs oracle **0.0**). The milestone — *the Tessera
+    compiler, not a hand-written kernel, produced the executing GEMM* — is met for
+    the 16×16×16 tile (other extents are a named error pending the multi-tile loop
+    nest). Fixture `tests/unit/test_rocm_wmma_gemm_generated.py`. Wiring Graph
+    `tessera.matmul` → Tile → the `wmma_gemm` directive is the remaining front-end
+    glue (Stage L); the hand-written HIPRTC kernel stays the production lane +
+    on-silicon oracle until the compiled path is multi-tile + perf-laddered.
 - **Stage K — a real GEMM through the full stack vs. the oracle.** Graph → Tile →
   `tessera_rocm` Target IR (real WMMA) → ROCDL → hsaco → launch, execute-compare
   against **both numpy and the `hardware_verified` hand-written kernel** (the

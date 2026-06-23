@@ -60,12 +60,20 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     a 2-D grid of one wave per 16x16 output tile, an `scf.for` K-loop, and
     ragged-edge masking, so a single compiled kernel handles any shape. The
     `M=N=K=16` launch reduces to the single tile that is bit-identical to the
-    hardware_verified hand-written oracle. Register-blocked macro-tiling (the
-    measured-best 3x4) is the next step, carried as a Tile-IR attr. This is the
-    Target-IR matmul-tile node; wiring Graph `tessera.matmul` → Tile → this op
-    is the remaining front-end glue.
+    hardware_verified hand-written oracle.
+
+    `mt`/`nt` (default 1) are the **register-blocked macro-tile**: each wave
+    computes an `mt`x`nt` grid of 16x16 output tiles, reusing a loaded A
+    fragment across the `nt` B-tiles and a loaded B fragment across the `mt`
+    A-tiles (output-tile register blocking — the occupancy/VGPR-budgeted knob
+    the hand-written oracle sweeps; measured-best is 3x4 for large problems).
+    The grid shrinks accordingly (one wave per `mt`x`nt` macro-tile). This is
+    the Target-IR matmul-tile node; wiring Graph `tessera.matmul` → Tile → this
+    op is the remaining front-end glue.
   }];
-  let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k);
+  let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
+                       DefaultValuedAttr<I64Attr, "1">:$mt,
+                       DefaultValuedAttr<I64Attr, "1">:$nt);
   let assemblyFormat = "attr-dict";
 }
 

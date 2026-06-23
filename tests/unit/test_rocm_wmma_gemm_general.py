@@ -44,14 +44,20 @@ ORACLE_LIB = (REPO / "build" / "src" / "compiler" / "codegen"
               / "libtessera_rocm_gemm.so")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
-_DIRECTIVE = '''
-module {
-  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, n = 16 : i64, k = 16 : i64} : () -> ()
-}
-'''
+def _directive(mt=1, nt=1):
+    return (
+        'module {\n'
+        '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
+        'n = 16 : i64, k = 16 : i64, '
+        f'mt = {mt} : i64, nt = {nt} : i64}} : () -> ()\n'
+        '}\n'
+    )
+
 
 # (M, N, K): square-aligned, rectangular multi-tile, and ragged edges.
 _SHAPES = [(16, 16, 16), (32, 32, 32), (48, 64, 32), (40, 24, 48), (17, 15, 31)]
+# (mt, nt) register-blocked macro-tiles: 1x1 (L1), small (2x4), oracle-best 3x4.
+_MACRO_TILES = [(1, 1), (2, 2), (2, 4), (3, 4)]
 
 
 def _find_mlir_opt():
@@ -98,7 +104,7 @@ def _extract_hsaco(text: str) -> bytes:
     return bytes(out)
 
 
-def _build_hsaco() -> bytes:
+def _build_hsaco(mt=1, nt=1) -> bytes:
     if not TESSERA_OPT.is_file():
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     mlir_opt = _find_mlir_opt()
@@ -107,7 +113,7 @@ def _build_hsaco() -> bytes:
     gen = subprocess.run(
         [str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel",
          "--lower-tessera-target-to-rocdl"],
-        input=_DIRECTIVE, capture_output=True, text=True)
+        input=_directive(mt, nt), capture_output=True, text=True)
     assert gen.returncode == 0, gen.stderr
     assert "rocdl.wmma.f32.16x16x16.f16" in gen.stdout
     pipeline = (
@@ -128,7 +134,7 @@ def _mr(p, size):
             ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
 
 
-def _launch(hip, fn, A, B, M, N, K):
+def _launch(hip, fn, A, B, M, N, K, mt=1, nt=1):
     """Run the compiler-generated kernel; returns the MxN f32 result."""
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
     nbytes = (2 * M * K, 2 * K * N, 4 * M * N)
@@ -146,7 +152,8 @@ def _launch(hip, fn, A, B, M, N, K):
     launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
                        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
                           ctypes.c_void_p])
-    gx, gy = (N + 15) // 16, (M + 15) // 16
+    # One wave per mt x nt macro-tile.
+    gx, gy = (N + 16 * nt - 1) // (16 * nt), (M + 16 * mt - 1) // (16 * mt)
     assert launch(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None) == 0
     assert hip.hipDeviceSynchronize() == 0
     D = np.zeros((M, N), dtype=np.float32)
@@ -200,3 +207,37 @@ def test_general_shape_matches_numpy_and_oracle(M, N, K):
     # oracle bit-for-bit, including on ragged (non-multiple-of-16) edges.
     assert float(np.max(np.abs(D - Do))) == 0.0, \
         f"compiler-generated GEMM != hand-written oracle at {M}x{N}x{K}"
+
+
+@pytest.mark.parametrize("mt,nt", _MACRO_TILES)
+def test_register_blocked_matches_oracle(mt, nt):
+    """Stage L2 — each wave computes an mt x nt grid of 16x16 output tiles
+    (register blocking, fragment reuse). Register blocking changes only data
+    reuse, not the per-output accumulation order, so the result stays
+    bit-identical to the hand-written oracle. Shape spans full + ragged
+    macro-tiles to exercise the grid math and edge masking."""
+    hsaco = _build_hsaco(mt, nt)
+    hip = _hip()
+    if hip is None:
+        pytest.skip("libamdhip64.so not loadable — no ROCm host")
+    if hip.hipInit(0) != 0:
+        pytest.skip("hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        pytest.skip("no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    assert hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") == 0
+
+    # A spread that is not a clean multiple of any macro-tile -> ragged edges.
+    M, N, K = 100, 96, 64
+    rng = np.random.default_rng(23 + mt * 7 + nt)
+    A = (rng.standard_normal((M, K)) * 0.4).astype(np.float16)
+    B = (rng.standard_normal((K, N)) * 0.4).astype(np.float16)
+
+    D = _launch(hip, fn, A, B, M, N, K, mt, nt)
+    ref = A.astype(np.float32) @ B.astype(np.float32)
+    assert float(np.max(np.abs(D - ref))) < 5e-2, f"vs numpy at {mt}x{nt}"
+
+    Do = _oracle(A, B, M, N, K)
+    assert float(np.max(np.abs(D - Do))) == 0.0, \
+        f"register-blocked {mt}x{nt} GEMM != hand-written oracle"

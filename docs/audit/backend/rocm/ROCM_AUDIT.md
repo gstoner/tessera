@@ -370,11 +370,27 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     Fixture `tests/unit/test_rocm_wmma_gemm_general.py`; the 16³ launch still
     reduces to the Stage K single-tile case. MT=NT=1 (one tile/wave);
     register-blocked macro-tiling (3×4) is L2.
-  - **L2 — carry the perf lessons into Tile IR attrs.** Put the macro-tile
-    (`mt`/`nt`, the measured-best **3×4** for large) on the `wmma_gemm` directive /
-    Tile IR so the generated kernel is register-blocked, and the autotuner sweeps
-    the *compiled* kernel (reusing the existing ladder harness). Target: the
-    generated kernel reaches the hand-written kernel's TFLOP/s.
+  - ✅ **L2 — register-blocked macro-tiling + perf parity (2026-06-23).** The
+    `wmma_gemm` directive carries `mt`/`nt` (default 1); each wave now computes an
+    `mt`×`nt` grid of 16×16 output tiles, reusing a loaded A fragment across the
+    `nt` B-tiles and a B fragment across the `mt` A-tiles. To make blocking
+    actually pay off, the kernel splits into an **interior fast path** (whole
+    macro-tile in-bounds *and* K%16==0 → single contiguous `vector.load` for each
+    A fragment, no element masking) and the **masked edge path** (clamp-and-select
+    loads + `scf.if` stores) for ragged tiles. All `(mt,nt)` ∈ {1×1,2×2,2×4,3×4}
+    stay bit-identical to the oracle on ragged 100×96×64
+    (`test_rocm_wmma_gemm_general.py::test_register_blocked_matches_oracle`).
+    **Measured on gfx1151** (`benchmarks/rocm/benchmark_rocm_compiled_gemm.py`,
+    kernel-only, vs the hand-written `_bench` at the *same* `(mt,nt)`): at aligned
+    sizes the compiled kernel **meets or exceeds** the hand-written at every swept
+    tile — 1536³ all tiles 1.06×–2.56×; 2048³ peak **4×4 = 18.7 vs 9.0 TF/s
+    (2.07×)**. The fast path is the whole win: before it, the masked-everywhere
+    kernel was 0.12–0.47×. Honest caveat: a tile whose extent isn't divisible by
+    16·`mt`/16·`nt` has a ragged band that drops to the (slower) masked path —
+    e.g. 3×4 at 1024/2048 (not ÷48) underperforms while 2×4/4×4 stay fast.
+    Optimizing the masked edge path (or padding) is follow-up. Autotuner
+    integration (auto-select `mt`/`nt` per shape) rides on the existing ladder
+    harness — the sweep script *is* the brute-force version.
   - **L3 — in-process serialization.** Link the MLIR ROCDL target + LLVM AMDGPU
     codegen + lld into a Tessera tool so `gpu-module-to-binary` needs no `mlir-opt`
     shell-out (Stages I/K ride the platform `mlir-opt`; a runtime lane can't).

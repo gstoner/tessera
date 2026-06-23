@@ -118,11 +118,17 @@ def test_generate_pass_emits_fragment_materialized_kernel():
     assert "gpu.func @gemm" in out and "kernel" in out
     assert "memref<?xf16>, %arg1: memref<?xf16>, %arg2: memref<?xf32>" in out
     assert "index, %arg4: index, %arg5: index" in out
-    assert "scf.for" in out                     # K-loop accumulation
-    assert "scf.if" in out                       # ragged-edge store mask
+    # Interior fast path / masked edge path split (Stage L2):
+    #   - vector.load: the contiguous A fragment on the fast (unmasked) path
+    #   - scf.if: the fastCond branch + the masked-path scf.if-guarded stores
+    #   - scf.for: the K-loop appears in both paths
+    assert "vector.load" in out                 # coalesced A fragment, fast path
+    assert out.count("scf.for") == 2            # K-loop in fast + masked path
+    assert "scf.if" in out                       # fast/masked split + edge stores
     assert "tessera_rocm.wmma" in out          # the matrix op, generated
-    assert out.count("vector.insert") == 32    # A+B fragments, unrolled in body
-    assert out.count("memref.store") == 8       # accumulator, unrolled
+    # For mt=nt=1: fast B (16 inserts) + masked A+B (32) = 48; stores 8 + 8 = 16.
+    assert out.count("vector.insert") == 48
+    assert out.count("memref.store") == 16
     assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
 
 

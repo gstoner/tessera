@@ -19,6 +19,11 @@ is available.
 | `../archive/benchmarks/matrix_multiplication/` | Archived | Blackwell concept sketch using non-existent APIs; future Blackwell work should land as Target IR tests/runtime kernels/operator cases. |
 | `DeepScholar-Bench/` | Active CPU smoke | Current-API research-synthesis smoke using `@tessera.jit`, matmul, softmax, layer_norm, and NumPy text/source embeddings. LOTUS integration remains optional and guarded. |
 | `lattice_reasoning_core/` | Active current-compiler probe | LDT-style lattice step plus MOPD, Mamba-2, GQA, and Latent MoE primitive microbenchmarks. Emits NumPy reference rows, public Tessera primitive rows, Apple GPU native rows when `metal_runtime` is observed, and an artifact-only integrated-step row for remaining LDT fusion work. |
+| `apple_gpu/` | Active Apple GPU lane | Real Metal-dispatch benchmark drivers (fusion sweeps, package-vs-live MTL4 lane, GA/EBM stack walk, Gumiho spec-decode, MLA decode, grouped GEMM, MoE overlap, …). Skips cleanly off Darwin / without `clang++`. See [`apple_gpu/README.md`](apple_gpu/README.md). |
+| `apple_cpu/` | Active Apple CPU probe | `benchmark_execution_kind.py` — empirically proves the `accelerate_native` vs `numpy_reference` execution-kind split (both link Accelerate on macOS, so the gate is "within a small factor", not "must beat numpy"). |
+| `rocm/` | Hardware-gated | `benchmark_rocm_wmma_gemm.py` — device-timed WMMA GEMM ladder against the shipped `libtessera_rocm_gemm.so` via its C-ABI entry point. Honestly gated: with no AMD GPU it emits an empty result set (exit 0) and never fabricates numbers. |
+| `linalg/` | Active CPU reference | `linalg_bench.py` — hardware-free cholesky/qr/svd/tri_solve reference path through `tessera.ops.*`, verified against numpy/scipy, in the canonical schema. |
+| `rl/` | Active proxy / hardware-gated | `benchmark_policy_losses.py` (PPO/GRPO/CISPO loss rows split by proof level — python_reference, compiler_decomposed_reference, apple_gpu_value_target_ir) and `benchmark_glm52_serving_pressure.py` (CPU reference for the scaled GLM-5.2 DSA/MLA/MTP serving contract). |
 
 ## Quick Checks
 
@@ -51,6 +56,8 @@ anchor for "yes, real surface, real reference."
 | Energy / EBM core       | (generic; quadratic energy + annealed Langevin)      | `benchmarks/energy_core/`               |
 | Cross-lane core         | `visual_complex_core` (M7 visual-complex milestone)  | `benchmarks/visual_complex_core/`       |
 | Lattice reasoning core  | LDT step + MOPD/Mamba-2/GQA/Latent-MoE primitives    | `benchmarks/lattice_reasoning_core/`    |
+| Long-memory core        | RULER / LongMemEval / MemoryArena resident-state     | `benchmarks/long_memory_core/`          |
+| Long-tail fusion core   | DLOP-Bench-style composite fusion (attn/SwiGLU/…)    | `benchmarks/dlop_longtail_core/`        |
 
 Each library-layer benchmark ships:
   * A small Python core (config + model + oracle + harness).
@@ -61,6 +68,14 @@ Each library-layer benchmark ships:
 The audit doc
 (`docs/audit/compiler/COMPILER_AUDIT.md`) tracks the
 six-layer compiler-correctness coverage for each category.
+
+## Support Files
+
+| File | Purpose |
+|---|---|
+| `perf_gate.py` | Gates a deterministic `tessera.telemetry.v1` report against a small JSON baseline (schema, latency, event-count checks). |
+| `baselines/` | Checked-in ratchet baselines — `cpu_smoke.json` (telemetry gate) and `apple_gpu_hot_paths.json` (`tessera.benchmark.ratchet.v1` median/max-latency rows; recorded by `apple_gpu/record_hot_path_baseline.py`). |
+| `compiler_support.py` | Back-compat shim re-exporting the shared compiler contract (`CompilerRun`, `compiler_matmul_relu`, `compiler_*_ir`) from `common/compiler_contract.py`. |
 
 ## Refactor Direction
 

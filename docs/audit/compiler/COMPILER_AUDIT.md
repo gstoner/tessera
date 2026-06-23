@@ -745,6 +745,92 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   C++ fusion-descriptor consumption, Schedule/Tile IR autotuner/LICM (hardware-
   gated), `forbid-ops` pipeline wiring, and the `jit.py` decorator extraction.
 
+### External input — TIRx / "Modern GPU Programming for MLSys" review (2026-06-23)
+
+Reviewed the CMU/mlc.ai book *Modern GPU Programming for MLSys*
+(https://mlc.ai/modern-gpu-programming-for-mlsys/, TIRx DSL — a TVM-TIR-derived
+Blackwell-gen Tile-IR/FA-4 stack). It is a parallel-universe analog of our Tile
+IR + FA-4 dialects (TMA, tcgen05, TMEM, mbarriers, warp specialization,
+clusters) and commits to several design choices we have not. Candidate work,
+**not yet started** — captured here so the Tile-IR/FA-4 thread (Per-IR scorecard
+row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
+`reference_mlsys_gpu_book`.
+
+- **C1 — Layout algebra vs. our flat `tessera.layout` string (HF, foundational).**
+  Today `tessera.layout` is a **string enum** (`row_major`/`col_major`/`bhsd`/
+  `nhwc`/`nchw` — `LayoutAssignmentPass.cpp` `producerLayout`/`consumerAcceptSet`)
+  and Tile IR carries only a coarse "optional swizzle" flag on `smem.alloc`
+  (`TileMemoryOps.td`). TIRx models layout as a compositional object:
+  `S[(shape):(strides)]` shape–stride pairs whose strides carry **named hardware
+  axes** (`@laneid/@reg/@warpid/@TLane/@TCol/@m/@gpuid`), with **replication**
+  `R[n:stride]` and **swizzle** as a *separate* non-affine `ComposeLayout(swizzle,
+  tile)` — never folded into the stride map. This is the abstraction the FA-4
+  warp-spec lowering (`WarpSpecializationPass`, `WGMMA`/`TMA`/`TileToX86`) is
+  missing — it would unify per-backend layout logic and give the autotuner a real
+  object to sweep (tile/lane/swizzle) instead of hardcoded `m64n64k16`. The
+  `@gpuid` axis means the *same* algebra spans intra-warp placement and our
+  mesh-level `ShardSpec` (Decision #3) at a different scope. **Increment that
+  fits today:** add a structured `TileLayoutAttr` (shard/replica/offset triples
+  + an explicit `SwizzleAttr` composition) to Tile IR ODS, keep the Graph-IR
+  string enum as the coarse producer/consumer contract, and lower the string →
+  structured attr at the Schedule→Tile boundary. Extends **Still Open → "Layout
+  and binding contracts are uneven"**.
+
+- **C2 — Barriers as a layout-reuse correctness property, not scheduling (HF→HG).**
+  TIRx's central inversion: in FA-4 one `128×512` TMEM allocation is aliased as
+  an fp32 view (S/O) *and* an fp16 view (P at 2× column density); the barriers
+  exist because each region is **reused** strictly after its prior consumer
+  finishes. So barrier requirements should be *generated* by an aliasing/reuse
+  analysis over TMEM/SMEM buffers, not emitted alongside `tessera.schedule.warp`
+  boundaries. Reinforces Decision #8 (warp roles structural) by making barrier
+  slots a function of buffer-reuse decisions. Targets `WarpSpecializationPass` +
+  the Queue dialect (currently "WarpSpec emits no queues/mbarriers" per the
+  scorecard).
+
+- **C3 — Typed barrier domains + a `PipelineState` SSA value (HF→HG).** Three
+  barrier primitives with distinct completion semantics — `TMABar`
+  (byte-count/engine-signaled), `TCGen05Bar` (MMA-completion), `MBarrier`
+  (thread-arrived) — and a `PipelineState` that auto-tracks `(stage, phase-bit)`
+  with producer initialized `phase=1` / consumer `phase=0` (the packaged fix for
+  the classic off-by-one ring deadlock). Our mbarriers are currently generic.
+  Targets the `AsyncCopy`/pipeline lowering + Queue dialect; pairs with C5.
+
+- **C4 — Separate *compute*-legalize from *storage*-legalize (HF).** TIRx runs
+  `BF16/FP8 ComputeLegalize` (rewrite math to f32-upcast form) early and
+  `…StorageLegalize` (packing) terminally — two passes. This is exactly our
+  storage-dtype-vs-accumulator split (Decision #15a, enforced statically by
+  `IRContractLegalityPass`) operationalized as *pass ordering*: `numeric_policy.
+  accum=fp32` becomes a compute-legalize rewrite, low-precision storage packing a
+  terminal pass. Gives the `numeric_policy` contract a concrete lowering home on
+  the executed lane. Lowest-risk item; closest to landing.
+
+- **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
+  three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global
+  `pipeline_stages`. Our FA-4 config exposes a single `pipeline_stages=2` knob
+  (`attn_lower.py`); attention wants per-ring depths the autotuner sweeps
+  separately. Also: persistent kernel + **L2-aware tile scheduler** ordering and
+  **cluster cross-CTA SMEM views** (`map_shared_rank`/`remote_view`/`cta_mask`) —
+  both GPU-only-tier, model when SM90/SM100 execution ungates (Phase G/H).
+
+- **C6 — A warp-spec diagnostics pass (HF, tooling).** The book's "Debugging
+  Warp-Specialized Kernels" appendix is a ready-made spec for a `tessera-opt`
+  verification pass: a roles/storage/handoff/lifetime worksheet with checkable
+  invariants — *arrival-count == init-count*, *producer/consumer initial phases
+  differ*, *no `cta_sync()`/`next_tile()` inside a divergent warpgroup branch*,
+  *`fence.proxy_async` before TMA store*, *`commit_group()`+`wait_group(0)` before
+  storage reuse*, *`cta_sync()` before writeback dealloc*. These are statically
+  checkable on warp-specialized Tile IR and would catch deadlocks/races at
+  compile time instead of as device hangs. Natural sibling to
+  `IRContractLegalityPass`/`LayoutLegalityPass`. Depends on C2/C3 landing the
+  typed barriers + reuse model first. Detailed mapping in the 2026-06-23 review
+  notes (this session).
+
+**Suggested order:** C4 (cheapest, validates #15a) → C1 (`TileLayoutAttr`,
+foundational) → C2+C3 (reuse model + typed barriers/`PipelineState`, mutually
+enabling) → C6 (diagnostics, needs C2/C3) → C5 (HG perf). Not to port: TIRx's
+TVM plumbing passes (`FlattenBuffer`/`MakePackedAPI`/`LowerWarpMemory`) — MLIR
+handles those differently.
+
 ## Next Work
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go

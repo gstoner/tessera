@@ -18,7 +18,7 @@ matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,
 matmul,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 matmul,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 matmul,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-matmul,rocm,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
+matmul,rocm,missing,complete,complete,complete,complete,complete,missing,complete,toolchain
 matmul_relu,apple_cpu,partial,complete,complete,complete,complete,partial,partial,partial,hardware_smoke
 matmul_relu,apple_gpu,partial,complete,complete,complete,complete,partial,complete,partial,hardware_smoke
 matmul_relu,cpu,partial,complete,complete,complete,complete,partial,partial,partial,

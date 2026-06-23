@@ -62,18 +62,38 @@ standalone / < 1e-2 through the bridge. Test
 `tests/unit/test_rocm_wmma_execute_compare.py`. This clears the *numerical-proof*
 half of the `hardware_verified` contract.
 
+## Manifest flip landed (2026-06-22) — rocm matmul row is `hardware_verified`
+
+The shipped runtime symbol now exists, so the `backend_manifest` matmul row was
+promoted `artifact_only → hardware_verified`:
+- **`runtime_symbol`** = `tessera_rocm_wmma_gemm_f16` (the C-ABI entry point in
+  `libtessera_rocm_gemm.so`; HIPRTC-compiles the RDNA WMMA kernel for the device
+  arch at load — no hipcc-as-compiler needed).
+- **`execute_compare_fixture`** = `tests/unit/test_rocm_wmma_runtime_symbol.py`
+  (dlopens the shipped symbol, compares f32←f16 16×16×16 WMMA GEMM to numpy,
+  maxerr < 1e-2; skip-clean with no AMD GPU / HIPRTC).
+- Honest dtype scope (Decision #25): the row claims **fp16 only** + WMMA (not the
+  CDNA MFMA shape/descriptor), `shape_envelope` documents the single-tile limit.
+- `rocm_target_map`: matmul → `hardware_verified | fp16`; `artifact_only` 32 → 31.
+- Lives in `_ROCM_HARDWARE_VERIFIED` (the ROCm analog of `_APPLE_GPU_KERNELS`).
+
+**No audit inflation:** the per-primitive `backend_kernel` axis stays **474 open
+/ 0 complete** — `primitive_is_complete(matmul)` is still `False` because x86 /
+apple / nvidia / cpu rows are not `hardware_verified`. Only the **rocm target
+row** is hardware-verified ("complete for this target", not the universal flip).
+
 ## Still Open
 
-- **The `backend_kernel` / `hardware_verified` flip is NOT done — and is gated,
-  honestly.** `hardware_verified` requires a *shipped* `runtime_symbol` (an
-  auto-registered ROCm runtime launcher) in addition to the now-satisfied
-  `execute_compare_fixture`. The Stage C/D kernels + launcher live in the test
-  harness (like Apple G7), so promoting the manifest row now would be Decision
-  #25 inflation. The flip becomes mechanical once the launcher ships.
-- No ROCm execution row in `../../generated/runtime_execution_matrix.md` yet
-  (same shipped-launcher gate).
-- Stage D proof is a single 16×16×16 tile + `f32←f16` only; general tiled/
-  K-looped GEMM and the bf16 combo (documented gfx115x bugs) are follow-ups.
+- **No ROCm row in `../../generated/runtime_execution_matrix.md` — deliberate, not
+  an oversight.** That matrix maps `(target, compiler_path) → runtime.launch()`
+  executor; ROCm stays in `execution_matrix._UNIMPLEMENTED_TARGETS` because the
+  shipped symbol is dlopened directly (like the pre-executor Apple G7 harness),
+  not yet routed through `launch()`. Adding a row would falsely claim
+  `launch()`-dispatch. Wiring an auto-registered ROCm executor into `launch()` is
+  the next step that earns that row.
+- Stage D / shipped-symbol proof is a single 16×16×16 tile + `f32←f16` only;
+  general tiled/K-looped GEMM and the bf16 combo (documented gfx115x bugs) are
+  follow-ups.
 
 ## Next Work
 
@@ -84,12 +104,14 @@ half of the `hardware_verified` contract.
    bridge on gfx1100 and matches `A @ B`; runtime HIP build fixed.
 3. ✅ **Stage D — prove (2026-06-22):** the WMMA `f32←f16` GEMM executes through
    the bridge and matches a host reference (`test_rocm_wmma_execute_compare.py`).
-4. **Ship an auto-registered ROCm runtime launcher** (move the harness WMMA
-   kernel + launcher into a hipcc-built backend lib that auto-registers via
-   `tsrRegisterGpuLauncher` with a real shipped `runtime_symbol`). This is the
-   one remaining gate to (a) promote the gfx1151 matmul manifest row to
-   `hardware_verified`, (b) flip `backend_kernel`, and (c) add a
-   `runtime_execution_matrix` ROCm row. Then extend to tiled/K-looped GEMM + bf16.
+4. ✅ **Ship the ROCm WMMA GEMM runtime symbol (2026-06-22):**
+   `libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_f16` (HIPRTC at
+   load), with the `test_rocm_wmma_runtime_symbol.py` execute-compare fixture.
+   The matmul manifest row is now `hardware_verified` (rocm target). **Still
+   pending:** wire an auto-registered ROCm executor into `runtime.launch()` so a
+   `runtime_execution_matrix` row is earned; then extend to tiled/K-looped GEMM +
+   bf16. (The per-primitive `backend_kernel` flip needs *all* targets — out of
+   scope for a single box.)
 5. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
    `--tessera-emit-rocdl` route works (Stage B currently rides the direct emitter).
 6. Promote manifest rows only after generated dashboards agree.

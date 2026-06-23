@@ -324,16 +324,24 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   `Tessera_ROCM_Backend/test/` is currently broken by a `%trop`/`%t` substitution
   collision and is opt-in/skipped in CI — pre-existing; Stage J validates via the
   Python fixture instead.)*
-- **Stage K — a real GEMM through the full stack vs. the oracle.** *Requires
-  fragment-materialization lowering:* today `lower-tile-to-rocm` emits the
-  **abstract scalar** `tessera_rocm.wmma` (→ marker), not a kernel that loads A/B
-  tiles into `vector<16xf16>` fragments, calls the real wmma, and stores the
-  `vector<8xf32>` accumulator with the RDNA lane/element layout. Building that
-  lowering (Graph/Tile matmul → fragment loads + real `tessera_rocm.wmma` + stores
-  → ROCDL → hsaco → launch) is the real Stage-K work; hand-authoring the GEMM in
-  MLIR would be "hand-written, in MLIR" and would NOT satisfy the milestone. The
-  hand-written HIPRTC kernel is the on-silicon **oracle** the compiled GEMM
-  execute-compares against (both numpy and the kernel).
+- **Stage K — a real GEMM through the full stack vs. the oracle.** Two steps:
+  - ✅ **Step 1 (2026-06-23) — chain + layout proven, oracle-matched.** A
+    16×16×16 WMMA GEMM expressed at the **Target-IR level** (`tessera_rocm.wmma` +
+    RDNA fragment load/store layout) compiles through Stage J (→ real `rocdl.wmma`)
+    + Stage I (→ hsaco) and **executes on gfx1151, bit-identical to the
+    hardware_verified hand-written oracle** (vs numpy ~2e-7, vs oracle **0.0**).
+    This locks the exact fragment layout the generating pass must produce and
+    proves the whole Target-IR→ROCDL→hsaco→execute chain on a real WMMA GEMM.
+    Fixture `tests/unit/test_rocm_wmma_gemm_via_mlir.py`. (Also: registered the
+    `vector` dialect in tessera-opt so a gpu kernel carrying WMMA fragment vectors
+    parses + lowers there.)
+  - ⏳ **Step 2 — the generating pass (the "compiler-generated" milestone).**
+    `lower-tile-to-rocm` today emits the **abstract scalar** `tessera_rocm.wmma`
+    (→ marker), not the fragment-materialized kernel. The remaining work is a pass
+    that emits the Step-1 kernel body (fragment loads + real `tessera_rocm.wmma` +
+    accumulator stores) from a `tessera.matmul`, so the GEMM is compiler-*generated*
+    end to end, not authored MLIR. The Step-1 fixture is the target the pass must
+    reproduce; the hand-written HIPRTC kernel stays the on-silicon oracle.
 - **Stage K — a real GEMM through the full stack vs. the oracle.** Graph → Tile →
   `tessera_rocm` Target IR (real WMMA) → ROCDL → hsaco → launch, execute-compare
   against **both numpy and the `hardware_verified` hand-written kernel** (the

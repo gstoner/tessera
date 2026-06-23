@@ -39,15 +39,24 @@ GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
             / "libtessera_rocm_gemm.so")
 ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 
-# The shipped production output-tile blocking (mirror of kProdMT/kProdNT in
-# tessera_rocm_gemm.cpp). Used for the default (non-ladder) row.
+# The shipped production output-tile blocking is SIZE-ADAPTIVE (mirror of
+# prodTile() in tessera_rocm_gemm.cpp): 2x4 for small problems, 3x4 once
+# min(M,N,K) >= 1024 (the occupancy lever — STRIX Stage H). PROD_* here is the
+# small-problem tile used for the default (non-ladder) row; the ladder sweep
+# covers the large-problem 3x4 explicitly.
 PROD_MT, PROD_NT = 2, 4
 
 DEFAULT_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
-LADDER_TILINGS = [(1, 1), (1, 2), (1, 4), (2, 2), (2, 4), (4, 2), (4, 4)]
+# Includes 3x4 (the size-adaptive large-problem production tile) and 4x4 (the
+# VGPR/occupancy cliff — runs slower despite more reuse; see STRIX Stage H).
+LADDER_TILINGS = [(1, 1), (1, 2), (1, 4), (2, 2), (2, 4), (4, 2),
+                  (3, 4), (4, 3), (2, 6), (4, 4)]
 # rung-2 LDS configs (WM, WN waves, MT, NT register tiles/wave) to compare
 # against the rung-1 production register tiling under --lds.
 LDS_CONFIGS = [(2, 2, 2, 4), (4, 1, 2, 4), (2, 2, 1, 4), (4, 2, 1, 2)]
+# rung-3 2-stage-pipelined configs to compare under --pipe (the two that win the
+# 1024³–2048³ window on gfx1151).
+PIPE_CONFIGS = [(4, 1, 1, 4), (2, 2, 2, 4), (2, 1, 2, 4), (2, 2, 1, 4)]
 
 
 def _load_bench() -> Optional[ctypes.CDLL]:
@@ -106,9 +115,9 @@ def _bench_one(lib, M, N, K, iters, mt, nt) -> Optional[float]:
     return best
 
 
-def _bench_lds(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
-    """Best-of-3 ms for one rung-2 LDS config; None if the symbol/kernel errs."""
-    fn = getattr(lib, "tessera_rocm_wmma_gemm_f16_bench_lds", None)
+def _bench_staged(lib, sym, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
+    """Best-of-3 ms for a staged (LDS/pipe) symbol; None if missing/errs."""
+    fn = getattr(lib, sym, None)
     if fn is None:
         return None
     best = None
@@ -119,6 +128,16 @@ def _bench_lds(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
         if best is None or ms.value < best:
             best = ms.value
     return best
+
+
+def _bench_lds(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
+    return _bench_staged(lib, "tessera_rocm_wmma_gemm_f16_bench_lds",
+                         M, N, K, iters, wm, wn, mt, nt)
+
+
+def _bench_pipe(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
+    return _bench_staged(lib, "tessera_rocm_wmma_gemm_f16_bench_pipe",
+                         M, N, K, iters, wm, wn, mt, nt)
 
 
 def _row(M, N, K, ms, mt, nt, device, version) -> dict:
@@ -147,6 +166,10 @@ def main() -> int:
                     help="compare rung-2 LDS-staged configs vs the rung-1 "
                          "production tiling (reproduces the 'LDS does not win on "
                          "Strix Halo' finding)")
+    ap.add_argument("--pipe", action="store_true",
+                    help="compare rung-3 2-stage-pipelined configs vs the rung-1 "
+                         "production tiling (rung-3 edges +8%% only in the "
+                         "1024³–2048³ window on Strix Halo)")
     ap.add_argument("--iters", type=int, default=100)
     ap.add_argument("--output", type=str, default=None,
                     help="write the JSON result rows here")
@@ -193,6 +216,36 @@ def main() -> int:
                 r["lds_waves_wm_wn"] = [wm, wn]
                 rows.append(r)
                 print(f"  rung2 LDS {wm}x{wn}w {mt}x{nt}t: {ms:8.4f} ms   "
+                      f"{r['tflops']:6.2f} TFLOP/s")
+        if args.output:
+            Path(args.output).write_text(json.dumps(rows, indent=2))
+            print(f"\nwrote {len(rows)} rows -> {args.output}")
+        return 0
+
+    if args.pipe:
+        # rung-1 (register) vs rung-3 (2-stage pipelined, double-buffered LDS).
+        # Finding on Strix Halo: rung-3 edges rung-1 by ~+8% only in the
+        # 1024³–2048³ window; loses at 512³ and ≥3072³. Production stays rung-1.
+        rows = []
+        print(f"device: {device}   iters: {args.iters}   mode: rung1-vs-pipe")
+        for (M, N, K) in DEFAULT_SIZES:
+            print(f"\n{M}x{N}x{K}:")
+            ms = _bench_one(lib, M, N, K, args.iters, PROD_MT, PROD_NT)
+            if ms:
+                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version)
+                r["rung"] = "1_register"
+                rows.append(r)
+                print(f"  rung1 reg {PROD_MT}x{PROD_NT}:     {ms:8.4f} ms   "
+                      f"{r['tflops']:6.2f} TFLOP/s  <- production")
+            for (wm, wn, mt, nt) in PIPE_CONFIGS:
+                ms = _bench_pipe(lib, M, N, K, args.iters, wm, wn, mt, nt)
+                if ms is None:
+                    continue
+                r = _row(M, N, K, ms, mt, nt, device, version)
+                r["rung"] = "3_pipe"
+                r["pipe_waves_wm_wn"] = [wm, wn]
+                rows.append(r)
+                print(f"  rung3 pipe {wm}x{wn}w {mt}x{nt}t: {ms:8.4f} ms   "
                       f"{r['tflops']:6.2f} TFLOP/s")
         if args.output:
             Path(args.output).write_text(json.dumps(rows, indent=2))

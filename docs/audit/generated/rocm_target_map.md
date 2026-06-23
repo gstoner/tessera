@@ -11,7 +11,7 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 
 | Status | Count |
 |---|---:|
-| ``artifact_only`` | 31 |
+| ``artifact_only`` | 30 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -46,7 +46,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 |---|---|---|---|---|---|---|
 | attn_sliding_window | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | deepseek_sparse_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| flash_attn | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 65% | - |
+| flash_attn | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 65% | - |
 | gated_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | gated_deltanet | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | gqa_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |

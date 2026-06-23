@@ -201,9 +201,24 @@ class TestG3ManifestWiring:
         assert rocm.mfma_shape == (32, 32, 8, 1)
         assert rocm.hipcc_version_min == "7.2.4"
 
-    def test_rocm_flash_attn_uses_16x16x16(self):
+    def test_rocm_flash_attn_is_wmma_hardware_verified(self):
+        # flash_attn on rocm executes natively on gfx1151 (RDNA 3.5) via the
+        # shipped libtessera_rocm_flash_attn.so WMMA kernel — the second op after
+        # matmul to do so. The hardware_verified WMMA row carries the wmma flag,
+        # not the CDNA MFMA shape (WMMA != MFMA). The 16x16x16 attention MFMA
+        # shape is still asserted below on the artifact-path attention family.
         from tessera.compiler.backend_manifest import manifest_for
         entries = {e.target: e for e in manifest_for("flash_attn")}
+        rocm = entries["rocm"]
+        assert rocm.status == "hardware_verified"
+        assert "wmma" in rocm.feature_flags
+        assert rocm.runtime_symbol == "tessera_rocm_wmma_flash_attn_f16"
+
+    def test_rocm_attention_family_uses_16x16x16(self):
+        # The artifact-path attention family (multi_head_attention) still carries
+        # the 16x16x16 MFMA score-tile shape (flash_attn moved to WMMA execution).
+        from tessera.compiler.backend_manifest import manifest_for
+        entries = {e.target: e for e in manifest_for("multi_head_attention")}
         assert entries["rocm"].mfma_shape == (16, 16, 16, 1)
 
     def test_rocm_matmul_has_mfu_target(self):

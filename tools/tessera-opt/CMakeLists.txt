@@ -42,7 +42,19 @@ if(APPLE)
     "LINKER:-no_warn_duplicate_libraries")
 endif()
 
-if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA) OR
+# Link core Tessera IR + passes (the `tessera` dialect, `tessera-to-linalg`, the
+# Phase-1 folders/canonicalizers, and the `--tessera-emit-{nvvm,rocdl}` MLIR-graph
+# route) UNLESS this is a hardware-free *target-artifact* build — a backend built
+# with no real toolchain present, kept lean to avoid pulling every upstream MLIR
+# component into the artifact driver. A backend built against a real toolchain
+# (CUDA or HIP) IS a full build and gets the core dialect + the emit route.
+#
+# The CUDA carve-out (`AND NOT TESSERA_ENABLE_CUDA`) already gave real NVIDIA
+# builds the full route; HIP was simply missing the symmetric carve-out, which
+# silently stripped the `tessera` dialect + `tessera-to-linalg` from tessera-opt
+# on a real ROCm box and left `--tessera-emit-rocdl` unable to parse a tessera
+# kernel (so the ROCDL emitter rode the direct rocdl_emit.py LLVM-IR path).
+if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
         (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
   target_compile_definitions(tessera-opt PRIVATE TESSERA_HAVE_CORE_TESSERA_IR)
   target_link_libraries(tessera-opt PRIVATE

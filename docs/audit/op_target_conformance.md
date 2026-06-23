@@ -99,7 +99,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
-| `rocm` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
+| `rocm` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
 
 ## `kv_cache_read`
 

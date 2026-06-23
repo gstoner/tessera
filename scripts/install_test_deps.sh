@@ -93,17 +93,32 @@ done
 # ---------------------------------------------------------------------------
 # The MLIR lit suite needs FileCheck + `not` from LLVM — NOT pip-installable.
 say "Checking LLVM lit helpers (FileCheck / not) for the MLIR fixtures"
-LLVM_OK=1
-for tool in FileCheck not; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    LLVM_OK=0
-    warn "$tool not on PATH"
+if command -v FileCheck >/dev/null 2>&1 && command -v not >/dev/null 2>&1; then
+  say "  ok: FileCheck + not on PATH ($(command -v FileCheck))"
+else
+  # Common case on a dev box: they ARE installed (apt llvm-NN-tools / Homebrew
+  # llvm) but the LLVM bin/ isn't on PATH. Find a bindir that has BOTH and print
+  # the exact export — far more useful than "reinstall LLVM".
+  FOUND_BIN=""
+  # Prefer an llvm-config's own bindir (matches the version we build against).
+  for cfg in llvm-config-${LLVM_VERSION:-22} llvm-config; do
+    command -v "$cfg" >/dev/null 2>&1 || continue
+    d="$("$cfg" --bindir 2>/dev/null || true)"
+    if [[ -x "$d/FileCheck" && -x "$d/not" ]]; then FOUND_BIN="$d"; break; fi
+  done
+  if [[ -z "$FOUND_BIN" ]]; then
+    for d in /usr/lib/llvm-*/bin /usr/local/opt/llvm/bin /opt/homebrew/opt/llvm/bin; do
+      if [[ -x "$d/FileCheck" && -x "$d/not" ]]; then FOUND_BIN="$d"; break; fi
+    done
   fi
-done
-if [[ $LLVM_OK -eq 0 ]]; then
-  warn "MLIR lit tests (tests/tessera-ir, tests/.../test/) need FileCheck + 'not'"
-  warn "from LLVM. Install them via:  bash scripts/setup_ubuntu.sh   (apt.llvm.org"
-  warn "LLVM 22), or 'apt-get install llvm-22-tools', then add its bin/ to PATH."
+  if [[ -n "$FOUND_BIN" ]]; then
+    warn "FileCheck + not are INSTALLED at ${FOUND_BIN} but not on PATH. Add it:"
+    warn "    export PATH=\"${FOUND_BIN}:\$PATH\""
+  else
+    warn "MLIR lit tests (tests/tessera-ir, tests/.../test/) need FileCheck + 'not'"
+    warn "from LLVM. Install them via:  bash scripts/setup_ubuntu.sh   (apt.llvm.org"
+    warn "LLVM 22), or 'apt-get install llvm-22-tools', then add its bin/ to PATH."
+  fi
   warn "Pure-Python unit tests (pytest tests/unit) do NOT need these."
 fi
 

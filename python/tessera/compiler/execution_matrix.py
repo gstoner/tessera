@@ -162,14 +162,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
 # test catches accidental status drift.
 #
 # Note: ``rocm`` is NO LONGER here — it has an executable ``rocm_wmma`` row
-# above (RDNA WMMA GEMM). The named ROCm sub-arches stay unimplemented: the
-# shipped GEMM symbol HIPRTC-compiles for whatever arch the device enumerates,
-# so the generic ``rocm`` lane covers execution; per-arch executor rows are a
-# follow-up only if a sub-arch needs a distinct dispatch.
+# above (RDNA WMMA GEMM). The named ROCm sub-arches — INCLUDING ``rocm_gfx1151``,
+# the Strix Halo box's own arch — stay listed here as "no per-arch executor row":
+# the shipped GEMM symbol HIPRTC-compiles for whatever arch the device
+# enumerates, so the generic ``rocm`` lane is what actually executes on gfx1151;
+# the sub-arch aliases earn distinct rows only if a sub-arch needs distinct
+# dispatch. Listing every registered ROCm sub-arch here (not just some) keeps the
+# classification total — every capability is either executable or explicitly
+# unimplemented, no silent ``lookup() -> None`` gaps.
 _UNIMPLEMENTED_TARGETS: tuple[str, ...] = (
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
     "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
-    "rocm_gfx1100", "rocm_gfx1200",
+    "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200",
 )
 
 

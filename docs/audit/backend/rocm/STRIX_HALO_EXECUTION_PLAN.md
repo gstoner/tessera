@@ -14,8 +14,16 @@
 The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
 LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
 
-- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` is a *transient
-  WSL enumeration*, not a permanent target.** The Radeon 8060S in Strix Halo
+> **Update (2026-06-23): the WSL transient is resolved — `rocminfo` now reports
+> the native `Name: gfx1151`.** AMD's WSL enablement landed, so the device
+> enumerates correctly as RDNA 3.5; the runtime kernels HIPRTC-compile for
+> `gfx1151` automatically. The `gfx1100` transitional-alias discussion below is
+> kept as bring-up provenance. (`gfx1100` remains a genuine, separately-supported
+> RDNA 3 discrete arch in the target/capability tables and emit tests — those
+> references are correct and unchanged.)
+
+- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` was a *transient
+  WSL enumeration* during early bring-up, now resolved.** The Radeon 8060S in Strix Halo
   (Ryzen AI MAX+ 395) is RDNA 3.5, ISA `gfx1151` (RDNA 3.5 ISA Ref Guide, doc
   70649, 23-Jul-2024). (`gfx1150` is the related Strix *Point* iGPU — Radeon
   890M — a distinct part; the 8060S is `gfx1151`.) The toolchain **fully
@@ -160,16 +168,16 @@ times kernel-only launches (buffers reused), and
 **Rung 1 — output-tile register blocking (DONE).** Each 32-lane wave computes an
 MT×NT grid of 16×16 WMMA tiles; a loaded A fragment is reused across NT B-tiles
 and a B fragment across MT A-tiles, cutting global-load traffic per output
-element. Measured best-of-3 on **gfx1100/WSL (Ryzen AI Max+ 395 / Radeon 8060S)**,
-f16, kernel-only TFLOP/s:
+element. Measured best-of-3 on **gfx1151 (Ryzen AI Max+ 395 / Radeon 8060S,
+RDNA 3.5)**, f16, kernel-only TFLOP/s:
 
 | MT×NT | 512³ | 1024³ | 2048³ |
 |------|-----:|------:|------:|
-| 1×1 (rung-0 naive) | 1.68 | 3.36 | 4.00 |
-| 2×2 | 1.72 | 2.24 | 3.37 |
-| **2×4 (production)** | 3.47 | **7.87** | **9.46** |
-| 4×2 | 3.91 | 4.91 | 8.79 |
-| 4×4 | 1.65 | 5.47 | 6.94 |
+| 1×1 (rung-0 naive) | 1.65 | 3.31 | 4.01 |
+| 2×2 | 1.73 | 2.21 | 3.32 |
+| **2×4 (production)** | 3.49 | **7.80** | **9.53** |
+| 4×2 | 3.93 | 4.88 | 8.77 |
+| 4×4 | 1.65 | 5.42 | 6.73 |
 
 **~2.3× over the naive baseline** at the compute-bound sizes. The empirical
 lesson mirrors Gluon exactly: the **tile shape is the lever, and the obvious
@@ -184,14 +192,14 @@ K-panels for its macro-tile into LDS once per K-step, then every wave reads its
 WMMA fragments from LDS. Correct across shapes (fixture
 `test_shipped_rocm_wmma_lds_matches_numpy`), shipped as
 `tessera_rocm_wmma_gemm_f16_lds` + `..._bench_lds`. **Measured verdict on
-gfx1100 (best-of-3 f16 TFLOP/s, `--lds`):**
+gfx1151 (best-of-3 f16 TFLOP/s, `--lds`):**
 
 | size | rung-1 reg 2×4 | best rung-2 LDS |
 |------|---------------:|----------------:|
-| 512³  | **3.47** | 3.20 (4×2w 1×2t) |
-| 1024³ | **8.09** | 7.85 (4×1w 2×4t) |
-| 2048³ | 8.88 | **9.38** (4×1w 2×4t) |
-| 4096³ | **11.40** | 8.46 |
+| 512³  | **3.47** | 3.17 (4×2w 1×2t) |
+| 1024³ | **7.79** | 7.69 (4×1w 2×4t) |
+| 2048³ | 8.88 | **9.41** (4×1w 2×4t) |
+| 4096³ | **11.06** | 8.44 (2×2w 2×4t) |
 
 Single-buffer LDS staging is a **wash-to-regression** here: it loses at
 512/1024, edges +6% at 2048, and loses decisively at 4096. This is the Strix
@@ -203,10 +211,107 @@ not assumed. Rung 2 is kept as a shipped, correctness-guarded symbol because it
 is the **substrate for rung 3** (software pipelining needs LDS buffering) and
 should pay off on discrete RDNA / CDNA where global *is* the bottleneck.
 
-**Open rungs (next):** 2-/3-stage K-loop software pipelining over the LDS buffers
-(§B2) — the rung where LDS staging starts to earn its keep by overlapping global
-loads with WMMA; arch-aware LDS layout (swizzle vs pad). Per Gluon's v6 lesson,
-watch register budget — double-buffer can regress if it spills. Not wired yet.
+**Rung 3 — 2-stage software pipelining, double-buffered LDS (IMPLEMENTED;
+narrow-window win, NOT promoted).** Two LDS buffers: while the wave computes
+WMMA on K-panel k, the workgroup prefetches panel k+1 into the other buffer, so
+global-load latency overlaps compute (Gluon v4→v5). Correct across shapes
+(fixture `test_shipped_rocm_wmma_pipe_matches_numpy`), shipped as
+`tessera_rocm_wmma_gemm_f16_pipe` + `..._bench_pipe`, swept via `--pipe`.
+**Measured on gfx1151 (best-of-7, kernel-only f16 TFLOP/s; best rung-3 config
+per size):**
+
+| size | rung-1 reg 2×4 | best rung-3 pipe | verdict |
+|------|---------------:|-----------------:|---------|
+| 512³  | **3.47** | 3.08 | rung-1 (0.89×) |
+| 1024³ | 7.87 | **8.54** (4×1w 1×4t) | rung-3 +8% |
+| 2048³ | 8.88 | **9.62** (2×2w 2×4t) | rung-3 +8% |
+| 3072³ | **10.76** | 9.97 | rung-1 (0.93×) |
+| 4096³ | **10.75** | 8.38 | rung-1 (0.78×) |
+
+Pipelining wins only in a **narrow 1024³–2048³ window (+8%)**, with a
+*size-dependent* best config, and loses at 512³ (occupancy/overhead) and ≥3072³
+(doubled LDS → lower occupancy; the register kernel's locality wins at large
+working sets). **Production stays rung-1 register blocking (2×4)** — a narrow,
+config-fragile +8% doesn't justify a size-gated autotuner here.
+
+**Synthesis — the staging rungs don't move this APU.** Rung 2 (LDS), rung 3
+(pipelined LDS), and the zero-copy host-buffer path all give *at most* a
+narrow-window single-digit win and lose elsewhere. They share one root cause:
+on Strix Halo's unified LPDDR5x, **global bandwidth/latency is not the
+bottleneck the memory-hierarchy rungs target** — the rung-1 register kernel
+already reuses fragments and is compute/occupancy-bound (~11 TFLOP/s, roughly
+~⅕ of the ~59 TFLOP/s f16 WMMA peak). The next real lever is therefore
+**occupancy + WMMA issue/scheduling** (larger cooperative macro-tiles sized to
+the VGPR/occupancy budget, dual-issue), not staging — Gluon's B1 "register-budget
+tiling is the lever" over its B2 "pipelining," confirmed empirically here.
+Arch-aware LDS layout + pipelining should still pay on discrete RDNA/CDNA where
+global *is* the bottleneck; the rung-2/3 symbols are kept for that and as
+references.
+
+### Stage H — occupancy lever: size-adaptive macro-tile (2026-06-23, landed)
+
+The Stage F synthesis named the next lever — **occupancy + VGPR-budgeted
+macro-tiling**, not memory staging. Tested it directly with a wider `(MT,NT)`
+sweep on the production register kernel (kernel-only, best-of-N, gfx1151):
+
+| size | 2×4 (prod) | 3×4 | 4×3 | 4×4 | winner |
+|------|-----------:|----:|----:|----:|--------|
+| 512³  | **3.46** | 2.98 | 3.24 | — | 2×4 |
+| 768³  | **7.04** | 6.40 | 6.97 | — | 2×4 |
+| 1024³ | 8.34 | **8.40** | 7.01 | — | ~tie |
+| 2048³ | 8.82 | **9.02** | 8.63 | 6.42 | 3×4 |
+| 3072³ | 10.31 | **12.87** | 12.21 | — | **3×4 +25%** |
+| 4096³ | 10.73 | 12.62 | **12.91** | 7.56 | **4×3 +20%** |
+*(TFLOP/s, f16; — = clearly off-pace.)*
+
+**Finding:** a bigger register macro-tile (3×4 = **12** WMMA tiles/wave) amortizes
+once there's enough work — **+20–25% at 3072³/4096³**, and never below 2×4 from
+1024³ up — but trails 2×4 at ≤768³. **4×4 (16 tiles) regresses sharply** (e.g.
+6.42 at 2048³): the **VGPR/occupancy cliff** — too many live accumulator
+registers (16×8 floats/lane) collapse waves-per-CU. That a 16-tile kernel doing
+*more* fragment reuse runs *slower* than the 12-tile one is the textbook
+occupancy-limited signature; 12 tiles is the measured sweet spot. (Direct VGPR
+readout isn't available — rocprof v1 is unsupported on this WSL device and
+rocprofv3 crashes against HIPRTC module loads — so the cliff is read off the
+TFLOP/s curve, not a counter.)
+
+**Promoted:** the shipped symbol is now **size-adaptive** — `prodTile(M,N,K)`
+picks 3×4 when `min(M,N,K) ≥ 1024` (never a regression there, big win at large),
+else 2×4. Confirms Gluon's B1 "register-budget tiling is the lever," and that the
+lever has a cliff. Correctness of both tiles is guarded by
+`test_rocm_wmma_runtime_symbol.py` (small → 2×4, the 1024³ ragged case → 3×4).
+This supersedes the staging rungs (2/3) as the production perf story on this APU.
+
+### Stage G — flash_attn executes on gfx1151 (2026-06-23): second op after matmul
+
+`flash_attn` now executes natively on the AMD GPU — the **second op after
+matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
+"the two ops that matter execute." `libtessera_rocm_flash_attn.so` exports
+`tessera_rocm_wmma_flash_attn_{f16,bf16}` (HIPRTC-compiled per head_dim at load).
+
+**Kernel** — FA-2 forward, single wave (32 lanes) per (query-tile-of-16, b·h):
+1. `S = scale · Q·Kᵀ` over head_dim chunks on **16×16×16 WMMA** → LDS scores
+2. **online softmax** (running max `m`, running sum `l`, per-row rescale) — one
+   lane per query row; scores + output accumulator staged in LDS
+3. `O += P·V` over head_dim chunks on **16×16×16 WMMA**
+
+Causal masking and ragged Sq/Sk (zero-pad load + −inf score mask + bounds-checked
+store) are handled; head_dim must be a multiple of 16. The WMMA fragment/output
+layout is identical to the GEMM kernel (A row = lane&15, B col = lane&15, output
+row = 2·e+(lane>>4)).
+
+**Proof** — `tests/unit/test_rocm_flash_attn_runtime_symbol.py` compares the GPU
+output to a numpy attention reference across f16/bf16, head_dim 16/32/64/128,
+multi batch/head, ragged shapes, and causal. Measured on gfx1151: **maxerr ~1e-4
+(f16)**, ~1e-3 (bf16). The `backend_manifest` flash_attn rocm row is
+`hardware_verified`.
+
+**Honest scope.** Forward only — no backward. **Correctness-first "rung 0"** (the
+attention analog of the naive GEMM tile before its perf ladder): single wave per
+query tile, one query-tile-of-16 per workgroup, LDS-resident accumulator — *not*
+a perf-tuned kernel. No `runtime.launch()` lane yet (needs flash_attn artifact
+plumbing for Q/K/V dispatch). Follow-ups: backward, a perf ladder (KV-tile
+register blocking, the same lever matmul's rung-1 found), the launch lane.
 
 ## The hardware — three engines, three Tessera stories
 

@@ -1439,15 +1439,18 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
 
 
 def _rocm_compiled_dtype(a, b):
-    """Map the operand numpy dtype to the compiled-kernel dtype tag, or None if
-    unsupported. f16 + bf16 are real WMMA storage types; f32 is not."""
+    """Map the operand numpy dtype to the compiled-kernel (tag, store, out)
+    triple, or (None, None, None) if unsupported. f16/bf16 (-> f32) and int8
+    (-> i32) are real gfx1151 WMMA storage types; f32 is not."""
     import numpy as np
     if a.dtype == np.float16 and b.dtype == np.float16:
-        return "f16", np.float16
+        return "f16", np.float16, np.float32
     bf16 = _bfloat16_dtype()
     if bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
-        return "bf16", bf16
-    return None, None
+        return "bf16", bf16, np.float32
+    if a.dtype == np.int8 and b.dtype == np.int8:
+        return "int8", np.int8, np.int32
+    return None, None, None
 
 
 def _load_hip_for_launch() -> ctypes.CDLL | None:
@@ -1516,13 +1519,13 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
         raise ValueError(
             f"rocm_compiled matmul needs rank-2 operands with matching K; got "
             f"{a.shape} @ {b.shape}")
-    dtype_tag, store = _rocm_compiled_dtype(a, b)
+    dtype_tag, store, out_dt = _rocm_compiled_dtype(a, b)
     if dtype_tag is None:
-        # RDNA WMMA storage is f16 or bf16 (f32 accumulate). f32 in is not a
-        # WMMA storage dtype — be explicit, don't silently miscompute.
+        # gfx1151 WMMA storage is f16/bf16 (f32 acc) or int8 (i32 acc). f32 in is
+        # not a WMMA storage dtype — be explicit, don't silently miscompute.
         raise ValueError(
-            "rocm_compiled lane handles f16/bf16 storage (f32 accumulate); got "
-            f"{a.dtype} @ {b.dtype}")
+            "rocm_compiled lane handles f16/bf16 (f32 acc) or int8 (i32 acc) "
+            f"storage; got {a.dtype} @ {b.dtype}")
 
     m, k = a.shape
     n = b.shape[1]
@@ -1545,9 +1548,10 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 
     a_c = np.ascontiguousarray(a, dtype=store)
     b_c = np.ascontiguousarray(b, dtype=store)
-    d = np.zeros((m, n), dtype=np.float32)
+    d = np.zeros((m, n), dtype=out_dt)
     da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    nb = (2 * m * k, 2 * k * n, 4 * m * n)  # f16/bf16 are both 2 bytes
+    ab = a_c.itemsize  # 1 (int8) or 2 (f16/bf16); D element is always 4 bytes
+    nb = (ab * m * k, ab * k * n, 4 * m * n)
     for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
         if hip.hipMalloc(ctypes.byref(dev), size) != 0:
             raise RuntimeError("rocm_compiled: hipMalloc failed")

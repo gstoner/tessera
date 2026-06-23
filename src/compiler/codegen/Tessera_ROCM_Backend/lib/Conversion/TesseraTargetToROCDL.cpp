@@ -13,12 +13,18 @@ using namespace mlir;
 namespace {
 
 // Stage J — lower a `tessera_rocm.wmma` that carries REAL RDNA WMMA fragment
-// vectors to the real `rocdl.wmma.f32.16x16x16.{f16,bf16}` intrinsic op (which
-// translates to `llvm.amdgcn.wmma.f32.16x16x16.*`, the same instruction
-// rocdl_emit.py emits and llc proves). The gfx11 / RDNA 3.5 ABI: A/B fragments
-// are `vector<16x{f16,bf16}>`, accumulator + result `vector<8xf32>`; the bf16
-// intrinsic takes the bit-pattern as `vector<16xi16>` (NOT native bf16), so bf16
-// fragments are bitcast first — matching rocdl_emit's `_WMMA_F32_INPUT` map.
+// vectors to the real `rocdl.wmma.*.16x16x16.*` intrinsic op (which translates
+// to `llvm.amdgcn.wmma.*`, the same instruction the hand-written builtins emit
+// and llc proves). The gfx11 / RDNA 3.5 WMMA ABI (all 16x16x16, wave32):
+//   * f16  in, f32 acc : A/B `vector<16xf16>`, acc/res `vector<8xf32>`.
+//   * bf16 in, f32 acc : A/B `vector<16xbf16>` (bitcast to `vector<16xi16>` —
+//     the intrinsic takes the bit-pattern), acc/res `vector<8xf32>`.
+//   * int8 in, i32 acc : A/B `vector<4xi32>` (16 int8 packed/lane), acc/res
+//     `vector<8xi32>`; signed (signA=signB=1), no saturating clamp.
+//   * int4 in, i32 acc : A/B `vector<2xi32>` (16 int4 packed/lane), acc/res
+//     `vector<8xi32>`; signed.
+// All confirmed supported on gfx1151 by the device compiler (hipcc
+// --offload-arch=gfx1151). FP8/F32/TF32 WMMA do not exist on RDNA 3.5.
 //
 // Returns true if it emitted the real op (and replaced/erased `op`); false when
 // the operands are NOT real fragments (abstract / scalar contract-level IR, e.g.
@@ -35,30 +41,56 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
     return v && v.getRank() == 1 && v.getNumElements() == n &&
            v.getElementType() == elt;
   };
-  Type f32 = rewriter.getF32Type();
-  // Accumulator + result must both be the WMMA f32 accumulator vector<8xf32>.
-  if (!isVec(c.getType(), 8, f32) || !isVec(resTy, 8, f32))
-    return false;
-
   Location loc = op->getLoc();
-  Type f16 = rewriter.getF16Type();
-  Type bf16 = rewriter.getBF16Type();
+  Type f32 = rewriter.getF32Type();
+  Type i32 = rewriter.getIntegerType(32);
 
-  if (isVec(a.getType(), 16, f16) && isVec(b.getType(), 16, f16)) {
-    Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_f16>(
-        loc, resTy, ValueRange{a, b, c});
-    rewriter.replaceOp(op, real->getResults());
-    return true;
+  // --- f32-accumulate family (f16 / bf16 inputs) ---
+  if (isVec(c.getType(), 8, f32) && isVec(resTy, 8, f32)) {
+    Type f16 = rewriter.getF16Type();
+    Type bf16 = rewriter.getBF16Type();
+    if (isVec(a.getType(), 16, f16) && isVec(b.getType(), 16, f16)) {
+      Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_f16>(
+          loc, resTy, ValueRange{a, b, c});
+      rewriter.replaceOp(op, real->getResults());
+      return true;
+    }
+    if (isVec(a.getType(), 16, bf16) && isVec(b.getType(), 16, bf16)) {
+      // RDNA bf16 WMMA takes the bf16 bit-pattern as <16 x i16>.
+      Type i16Vec = VectorType::get({16}, rewriter.getIntegerType(16));
+      Value ai = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, a);
+      Value bi = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, b);
+      Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf16>(
+          loc, resTy, ValueRange{ai, bi, c});
+      rewriter.replaceOp(op, real->getResults());
+      return true;
+    }
+    return false;
   }
-  if (isVec(a.getType(), 16, bf16) && isVec(b.getType(), 16, bf16)) {
-    // RDNA bf16 WMMA takes the bf16 bit-pattern as <16 x i16>.
-    Type i16Vec = VectorType::get({16}, rewriter.getIntegerType(16));
-    Value ai = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, a);
-    Value bi = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, b);
-    Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf16>(
-        loc, resTy, ValueRange{ai, bi, c});
-    rewriter.replaceOp(op, real->getResults());
-    return true;
+
+  // --- i32-accumulate family (int8 / int4 inputs), signed, non-saturating ---
+  if (isVec(c.getType(), 8, i32) && isVec(resTy, 8, i32)) {
+    // signA/signB/clamp are immarg attributes (the IU intrinsic class). Signed
+    // inputs (signA=signB=1); clamp=0 = no i32 saturation (wrap), matching a
+    // plain integer matmul against numpy's int32 accumulate.
+    SmallVector<NamedAttribute> attrs = {
+        rewriter.getNamedAttr("signA", rewriter.getBoolAttr(true)),
+        rewriter.getNamedAttr("signB", rewriter.getBoolAttr(true)),
+        rewriter.getNamedAttr("clamp", rewriter.getBoolAttr(false)),
+    };
+    if (isVec(a.getType(), 4, i32) && isVec(b.getType(), 4, i32)) {
+      Operation *real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu8>(
+          loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      rewriter.replaceOp(op, real->getResults());
+      return true;
+    }
+    if (isVec(a.getType(), 2, i32) && isVec(b.getType(), 2, i32)) {
+      Operation *real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu4>(
+          loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      rewriter.replaceOp(op, real->getResults());
+      return true;
+    }
+    return false;
   }
   return false;
 }

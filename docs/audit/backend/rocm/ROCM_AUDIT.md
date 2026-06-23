@@ -26,11 +26,15 @@ This document consolidates ROCm-specific audit material.
 ## Box landed (2026-06-22) — toolchain gates cleared
 
 A Strix Halo box (Ryzen AI Max+ 395) is now available: Ubuntu 24.04 (WSL2),
-ROCm **7.2.4**, LLVM/MLIR **22.1.8**. The iGPU enumerates as **`gfx1100`**
-(RDNA3 profile; same 16×16×16 WMMA family as gfx1151, no FP8 WMMA) — see
+ROCm **7.2.4**, LLVM/MLIR **22.1.8**. The iGPU enumerates as its native
+**`gfx1151`** (RDNA 3.5; 16×16×16 WMMA, no FP8 WMMA). *(During early bring-up
+WSL transiently reported `gfx1100`, the RDNA 3 discrete profile; AMD's WSL
+enablement resolved that on 2026-06-23 and `rocminfo` now shows `gfx1151`. The
+Stage B/C/D notes below that say "gfx1100" are accurate bring-up provenance —
+same WMMA family, so the kernels are identical.)* — see
 [`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md) "Bring-up status".
-Cleared: `rocminfo` enumerates without `HSA_OVERRIDE`; `hipcc` compiles WMMA for
-gfx1100; ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
+Cleared: `rocminfo` enumerates without `HSA_OVERRIDE`; `hipcc` compiles WMMA;
+ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
 
 **Stage A increment landed (2026-06-22):** `lower-tile-to-rocm` was emitting
 `tessera_rocm.mfma` for every arch — wrong for RDNA. Added a `tessera_rocm.wmma`
@@ -117,8 +121,8 @@ The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
 (grounded in the AMD Gluon v0→v9 tutorial, `ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`
 §B1/§B2). Rung 1 = **output-tile register blocking** (each wave computes an
 MT×NT grid of 16×16 WMMA tiles, reusing fragments). Shipped tiling **2×4** is
-**~2.3× over the 1×1 naive baseline** at 1024³/2048³ on gfx1100/WSL (Ryzen AI
-Max+ 395). The Gluon lesson reproduced: `2×2` *regressed below* naive; the
+**~2.3× over the 1×1 naive baseline** at 1024³/2048³ on gfx1151 (Ryzen AI
+Max+ 395, RDNA 3.5). The Gluon lesson reproduced: `2×2` *regressed below* naive; the
 non-square `2×4` won — tile shape is the lever. Measured by the device-timed
 `tessera_rocm_wmma_gemm_f16_bench` symbol + `benchmarks/rocm/
 benchmark_rocm_wmma_gemm.py --ladder`; see STRIX_HALO_EXECUTION_PLAN.md Stage F.
@@ -136,6 +140,40 @@ Gluon v6 lesson generalized: measure the "obvious" optimization, don't assume.)
 **Open rungs:** K-loop software pipelining over the LDS buffers (where staging
 starts to earn its keep), arch-aware LDS layout. Heed Gluon's v6 double-buffer
 regression.
+
+## Memory — APU zero-copy host buffers (opt-in; windowed win)
+
+On Strix Halo host and device share the same physical LPDDR5x, so the explicit
+H2D/D2H copies in the runtime symbol are physically redundant. Added an **opt-in**
+zero-copy path (`TESSERA_ROCM_ZEROCOPY=1`): `hipHostRegister` device-maps the
+caller's host buffers (`hipHostGetDevicePointer`) and the kernel reads/writes
+them directly — no `hipMalloc`, no `hipMemcpy`. Correct everywhere (subprocess
+fixture `test_zerocopy_path_matches_numpy_subprocess`); falls back to the copy
+path if registration is unsupported (rc=4). This changes **end-to-end
+`launch()` latency only**, not the kernel-only perf ladder.
+
+**Measured (gfx1151/WSL, CPU-wall, end-to-end per call, copy ÷ zero-copy):**
+
+| size | copy ms | zero-copy ms | winner |
+|------|--------:|-------------:|--------|
+| 256³  | 0.54 | 2.40 | copy (~4×) |
+| 512³  | 0.68 | 2.77 | copy (~4×) |
+| 768³  | 5.44 | 3.52 | **zero-copy 1.5×** |
+| 1024³ | 7.17 | 4.15 | **zero-copy 1.7×** |
+| 1536³ | 10.45 | 8.47 | **zero-copy 1.2×** |
+| 2048³ | 13.86 | 10.13 | **zero-copy 1.4×** |
+| 4096³ | 53.95 | 81.99 | copy (zc 1.5× slower) |
+
+A **windowed** win (~768³–2048³), not universal: below it, `hipHostRegister`
+per-call pinning overhead dominates the tiny kernel; above it, the kernel's
+repeated fragment re-reads through page-mapped, **non-coherent** host memory
+(`Coherent Host Access: FALSE`, XNACK off) lose locality vs device-local
+staging. Both register *and* malloc are Windows-driver round-trips under WSL, so
+the crossover is WSL-specific; bare-metal ROCm would differ. **Kept opt-in /
+off by default** — the copy path stays the portable correctness baseline. Bench:
+`tessera_rocm_wmma_gemm_f16_e2e_bench(M,N,K,iters,mt,nt,zerocopy,*ms)`. A
+size-gated auto-select is a possible follow-up but premature without bare-metal
+data.
 
 ## Next Work
 

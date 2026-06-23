@@ -9,9 +9,10 @@
 // that ``runtime.launch()`` dispatches ``target="rocm"`` matmul artifacts to.
 //
 // The device kernel is compiled at load time with **HIPRTC** for whatever arch
-// the device enumerates (gfx1100 under WSL today, gfx1151 after AMD's WSL
-// enablement) — so this object is built by the ordinary host C++ compiler and
-// only needs the HIP runtime + HIPRTC at link time, no hipcc-as-compiler.
+// the device enumerates (gfx1151 on the Strix Halo box; early-bring-up WSL
+// transiently reported gfx1100 — same WMMA family either way) — so this object
+// is built by the ordinary host C++ compiler and only needs the HIP runtime +
+// HIPRTC at link time, no hipcc-as-compiler.
 //
 // Kernel: D[MxN] = A[MxK] @ B[KxN], row-major, f16/bf16 in / f32 accumulate.
 // General tiled/K-looped GEMM. Each 32-lane wave computes an MTxNT grid of
@@ -33,6 +34,8 @@
 #include <hip/hip_runtime.h>
 #include <hip/hiprtc.h>
 
+#include <chrono>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -40,7 +43,7 @@
 namespace {
 
 // Production output-tile blocking factor for the shipped symbols. Measured-best
-// on gfx1100/gfx1151 (Strix Halo): 2x4 wins at the compute-bound sizes — ~2.3x
+// on gfx1151 (Strix Halo, RDNA 3.5): 2x4 wins at the compute-bound sizes — ~2.3x
 // over the 1x1 naive baseline at 1024^3/2048^3 — and notably 2x2 *regressed*
 // below naive (the AMD Gluon "the obvious tiling can lose; shape is the lever"
 // lesson). See the perf ladder in STRIX_HALO_EXECUTION_PLAN.md.
@@ -273,6 +276,60 @@ int runDeviceGemm(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
   return rc;
 }
 
+// Zero-copy launch for the Strix Halo APU: host and device share the same
+// physical LPDDR5x, so the explicit H2D/D2H copies in runDeviceGemm are
+// redundant. Instead, page-lock + device-map the caller's host buffers
+// (hipHostRegister + hipHostGetDevicePointer) and launch the kernel directly
+// against them — no hipMalloc, no hipMemcpy. After hipDeviceSynchronize the
+// caller's D buffer holds the result. Returns 0 / 3 (device op failed) /
+// 4 (host-register unsupported here — caller should fall back to the copy path;
+// e.g. some WSL/driver configs, unaligned/overlapping ranges).
+int runDeviceGemmZeroCopy(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
+                          const void* A, const void* B, void* D,
+                          int M, int N, int K, size_t elemBytes) {
+  const size_t aBytes = (size_t)M * K * elemBytes;
+  const size_t bBytes = (size_t)K * N * elemBytes;
+  const size_t dBytes = (size_t)M * N * sizeof(float);
+  void *hA = const_cast<void*>(A), *hB = const_cast<void*>(B);
+  bool rA = false, rB = false, rD = false;
+  void *dA = nullptr, *dB = nullptr, *dD = nullptr;
+  int rc = 4;  // default: treat any registration failure as "unsupported"
+  do {
+    if (hipHostRegister(hA, aBytes, hipHostRegisterMapped) != hipSuccess) break;
+    rA = true;
+    if (hipHostRegister(hB, bBytes, hipHostRegisterMapped) != hipSuccess) break;
+    rB = true;
+    if (hipHostRegister(D, dBytes, hipHostRegisterMapped) != hipSuccess) break;
+    rD = true;
+    if (hipHostGetDevicePointer(&dA, hA, 0) != hipSuccess) break;
+    if (hipHostGetDevicePointer(&dB, hB, 0) != hipSuccess) break;
+    if (hipHostGetDevicePointer(&dD, D, 0) != hipSuccess) break;
+    rc = 3;  // past setup: a failure now is a real device error, not "retry"
+    void* args[] = {&dA, &dB, &dD, &M, &N, &K};
+    if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
+                              args, nullptr) != hipSuccess) break;
+    if (hipDeviceSynchronize() != hipSuccess) break;
+    rc = 0;
+  } while (0);
+  if (rA) hipHostUnregister(hA);
+  if (rB) hipHostUnregister(hB);
+  if (rD) hipHostUnregister(D);
+  return rc;
+}
+
+// Whether the shipped symbols should use the zero-copy path. Opt-in via
+// TESSERA_ROCM_ZEROCOPY={1,true,on,yes} (cached once). Off by default — the
+// copy path is the portable correctness baseline; zero-copy is the APU tuning.
+bool zeroCopyEnabled() {
+  static int cached = -1;
+  if (cached < 0) {
+    const char* v = std::getenv("TESSERA_ROCM_ZEROCOPY");
+    cached = (v && (*v == '1' || *v == 't' || *v == 'T' || *v == 'y'
+                    || *v == 'Y' || *v == 'o' || *v == 'O')) ? 1 : 0;
+  }
+  return cached == 1;
+}
+
 // Run a general tiled GEMM through the cached production (rung-1) kernel.
 // Returns 0 / 1 (bad shape) / 2 (no device / compile) / 3 (device op failed).
 int runGemm(Kernel* k, const void* A, const void* B, void* D,
@@ -282,6 +339,11 @@ int runGemm(Kernel* k, const void* A, const void* B, void* D,
   if (!k->ready) return 2;
   unsigned gx, gy;
   gridFor(M, N, kProdMT, kProdNT, &gx, &gy);
+  if (zeroCopyEnabled()) {
+    int rc = runDeviceGemmZeroCopy(k->fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
+    if (rc != 4) return rc;        // 0 = ok, 3 = real device error — honor it
+    // rc == 4: host-register unsupported here → fall back to the copy path.
+  }
   return runDeviceGemm(k->fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
 }
 
@@ -380,6 +442,52 @@ int runGemmLDS(const char* type, const char* wmma, const void* A,
   return rc;
 }
 
+// END-TO-END CPU-timed benchmark: times the full launch()-equivalent path per
+// call — memory setup + transfer + launch + sync (+ teardown) — over real host
+// buffers, for ``zerocopy`` 0 (hipMalloc + H2D/D2H copy) vs 1 (hipHostRegister
+// device-mapped, no copy). This is the path real callers pay (unlike the
+// kernel-only *_bench), so it's where the APU zero-copy win shows up. CPU wall
+// clock (std::chrono) because hipHostRegister/hipMalloc are host-side, off the
+// timed stream. avg_ms <- mean per-call ms. 0/1/2/3 as elsewhere.
+int benchE2E(const char* type, const char* wmma, int M, int N, int K, int iters,
+             int mt, int nt, int zerocopy, double* avg_ms) {
+  if (M <= 0 || N <= 0 || K <= 0 || iters <= 0 || mt <= 0 || nt <= 0)
+    return 1;
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  std::string name = std::string("benche2e") + type + "_" + std::to_string(mt)
+                     + "x" + std::to_string(nt);
+  if (!compileVariant(type, wmma, mt, nt, name, &mod, &fn)) return 2;
+
+  const size_t elemBytes = sizeof(unsigned short);
+  std::vector<unsigned short> A((size_t)M * K, 0), B((size_t)K * N, 0);
+  std::vector<float> D((size_t)M * N, 0.0f);
+  unsigned gx, gy;
+  gridFor(M, N, mt, nt, &gx, &gy);
+  auto once = [&]() -> int {
+    return zerocopy
+      ? runDeviceGemmZeroCopy(fn, gx, gy, 32, A.data(), B.data(), D.data(),
+                              M, N, K, elemBytes)
+      : runDeviceGemm(fn, gx, gy, 32, A.data(), B.data(), D.data(),
+                      M, N, K, elemBytes);
+  };
+  int rc = 3;
+  bool failed = false;
+  for (int w = 0; w < 5 && !failed; ++w) if (once() != 0) failed = true;
+  if (!failed) {
+    auto t0 = std::chrono::steady_clock::now();
+    for (int it = 0; it < iters && !failed; ++it) if (once() != 0) failed = true;
+    auto t1 = std::chrono::steady_clock::now();
+    if (!failed) {
+      *avg_ms = std::chrono::duration<double, std::milli>(t1 - t0).count()
+                / (double)iters;
+      rc = 0;
+    }
+  }
+  if (mod) hipModuleUnload(mod);
+  return rc;
+}
+
 }  // namespace
 
 // D[MxN] = A[MxK] @ B[KxN], row-major. A/B: f16 host buffers; D: f32 host
@@ -424,4 +532,17 @@ extern "C" int tessera_rocm_wmma_gemm_f16_lds(const void* A, const void* B,
                                               int wm, int wn, int mt, int nt) {
   return runGemmLDS("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
                     A, B, D, M, N, K, wm, wn, mt, nt, sizeof(unsigned short));
+}
+
+// End-to-end CPU-timed benchmark of the full launch path. zerocopy: 0 = copy
+// (hipMalloc + H2D/D2H), 1 = zero-copy (hipHostRegister device-mapped). avg_ms
+// <- mean per-call ms. The APU win (if any) shows here, not in the kernel-only
+// *_bench. mt=nt aren't the production constants — pass them explicitly (use
+// 2,4 to match the shipped tiling).
+extern "C" int tessera_rocm_wmma_gemm_f16_e2e_bench(int M, int N, int K,
+                                                    int iters, int mt, int nt,
+                                                    int zerocopy,
+                                                    double* avg_ms) {
+  return benchE2E("__fp16", "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32",
+                  M, N, K, iters, mt, nt, zerocopy, avg_ms);
 }

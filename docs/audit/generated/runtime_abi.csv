@@ -564,6 +564,7 @@ rocm,tessera_rocm_wmma_gemm_bf16,rocm_wmma_gemm,bf16,src/compiler/codegen/Tesser
 rocm,tessera_rocm_wmma_gemm_f16,rocm_wmma_gemm,f16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp
 rocm,tessera_rocm_wmma_gemm_f16_bench,rocm_wmma_gemm_f16_bench,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp
 rocm,tessera_rocm_wmma_gemm_f16_bench_lds,rocm_wmma_gemm_f16_bench_lds,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp
+rocm,tessera_rocm_wmma_gemm_f16_e2e_bench,rocm_wmma_gemm_f16_e2e_bench,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp
 rocm,tessera_rocm_wmma_gemm_f16_lds,rocm_wmma_gemm_f16_lds,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp
 x86,tessera_x86_amx_available,amx_available,,src/compiler/codegen/tessera_x86_backend/include/tessera/x86/target.h
 x86,tessera_x86_amx_available,amx_available,,src/compiler/codegen/tessera_x86_backend/src/backend_x86.cpp

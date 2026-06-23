@@ -130,6 +130,52 @@ def test_shipped_rocm_wmma_lds_matches_numpy(shape):
     assert maxerr < 1e-2, f"LDS WMMA GEMM{shape} maxerr={maxerr}"
 
 
+def test_zerocopy_path_matches_numpy_subprocess():
+    """The opt-in APU zero-copy path (TESSERA_ROCM_ZEROCOPY=1) — hipHostRegister
+    device-mapped host buffers, no H2D/D2H copy — must match numpy. Run in a
+    subprocess because the flag is read once per process (cached static), so a
+    clean env is needed; this also keeps it isolated from the other in-process
+    rocm tests. Skip-clean when the lib isn't built / no GPU."""
+    import sys
+    if not GEMM_LIB.is_file():
+        pytest.skip(f"build the shipped GEMM lib: ninja -C build tessera_rocm_gemm")
+    sys.path.insert(0, str(Path(__file__).parent))
+    import _subprocess  # repo's timeout/OOM-aware runner
+
+    script = f"""
+import ctypes, os, sys
+import numpy as np
+for dep in ("libamdhip64.so", "libhiprtc.so"):
+    p = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib", dep)
+    if os.path.isfile(p):
+        try: ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+        except OSError: pass
+lib = ctypes.CDLL({str(GEMM_LIB)!r}, mode=ctypes.RTLD_GLOBAL)
+fn = lib.tessera_rocm_wmma_gemm_f16
+fn.argtypes = [ctypes.c_void_p]*3 + [ctypes.c_int]*3
+fn.restype = ctypes.c_int
+M, N, K = 128, 96, 64
+rng = np.random.default_rng(0)
+A = (rng.standard_normal((M, K)) * 0.5).astype(np.float16)
+B = (rng.standard_normal((K, N)) * 0.5).astype(np.float16)
+D = np.zeros((M, N), dtype=np.float32)
+rc = fn(A.ctypes.data_as(ctypes.c_void_p), B.ctypes.data_as(ctypes.c_void_p),
+        D.ctypes.data_as(ctypes.c_void_p), M, N, K)
+if rc == 2:
+    print("SKIP_NO_GPU"); sys.exit(0)
+assert rc == 0, f"rc={{rc}}"
+err = float(np.max(np.abs(D - A.astype(np.float32) @ B.astype(np.float32))))
+assert err < 1e-2, f"zerocopy maxerr={{err}}"
+print("ZEROCOPY_OK")
+"""
+    env = dict(os.environ, TESSERA_ROCM_ZEROCOPY="1")
+    res = _subprocess.run([sys.executable, "-c", script], env=env, timeout=120)
+    if "SKIP_NO_GPU" in res.stdout:
+        pytest.skip("no usable AMD GPU / HIPRTC (zero-copy symbol returned rc=2)")
+    assert res.ok and "ZEROCOPY_OK" in res.stdout, \
+        f"stdout={res.stdout!r} stderr={res.stderr!r}"
+
+
 def test_shipped_rocm_wmma_symbol_rejects_bad_shape():
     fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_f16")
     a = np.zeros((16, 16), dtype=np.float16)

@@ -148,15 +148,11 @@ if [[ $DO_PYTHON -eq 1 ]]; then
   python3 -m venv "${REPO_ROOT}/.venv"
   # shellcheck disable=SC1091
   . "${REPO_ROOT}/.venv/bin/activate"
-  python -m pip install --upgrade pip
-  # numpy is capped <2.2: numpy>=2.2 ships PEP 695 `type` statements + stricter
-  # reduction overloads in its bundled stubs that break the mypy ratchet under
-  # the project's python_version=3.10 type-check target (the macOS env pins the
-  # same band). Bump only alongside a baseline refresh.
-  python -m pip install \
-    "numpy>=2.0,<2.2" scipy ml_dtypes pyyaml click rich tqdm \
-    pytest pytest-cov mypy ruff black isort flake8 lit
-  python -c "import numpy, scipy, ml_dtypes; print('  python deps OK:', numpy.__version__)"
+  # Runtime numerics + test/lint/type tooling — delegated to the single source
+  # of truth so this script and install_test_deps.sh never drift (the latter
+  # also carries pytest-timeout / pytest-xdist and the numpy<2.2 mypy-ratchet
+  # cap, and verifies the install).
+  PYTHON=python bash "${REPO_ROOT}/scripts/install_test_deps.sh"
 else
   warn "skipping Python venv (--no-python)"
 fi

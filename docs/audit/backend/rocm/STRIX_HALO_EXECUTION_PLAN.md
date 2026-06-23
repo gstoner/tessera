@@ -14,8 +14,16 @@
 The Strix Halo box is here (Ubuntu 24.04 LTS under **WSL2**, ROCm **7.2.4**,
 LLVM/MLIR **22.1.8** from apt.llvm.org). Findings that update this plan:
 
-- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` is a *transient
-  WSL enumeration*, not a permanent target.** The Radeon 8060S in Strix Halo
+> **Update (2026-06-23): the WSL transient is resolved — `rocminfo` now reports
+> the native `Name: gfx1151`.** AMD's WSL enablement landed, so the device
+> enumerates correctly as RDNA 3.5; the runtime kernels HIPRTC-compile for
+> `gfx1151` automatically. The `gfx1100` transitional-alias discussion below is
+> kept as bring-up provenance. (`gfx1100` remains a genuine, separately-supported
+> RDNA 3 discrete arch in the target/capability tables and emit tests — those
+> references are correct and unchanged.)
+
+- **The part is RDNA 3.5 = `gfx1151` (the true ISA). `gfx1100` was a *transient
+  WSL enumeration* during early bring-up, now resolved.** The Radeon 8060S in Strix Halo
   (Ryzen AI MAX+ 395) is RDNA 3.5, ISA `gfx1151` (RDNA 3.5 ISA Ref Guide, doc
   70649, 23-Jul-2024). (`gfx1150` is the related Strix *Point* iGPU — Radeon
   890M — a distinct part; the 8060S is `gfx1151`.) The toolchain **fully
@@ -160,16 +168,16 @@ times kernel-only launches (buffers reused), and
 **Rung 1 — output-tile register blocking (DONE).** Each 32-lane wave computes an
 MT×NT grid of 16×16 WMMA tiles; a loaded A fragment is reused across NT B-tiles
 and a B fragment across MT A-tiles, cutting global-load traffic per output
-element. Measured best-of-3 on **gfx1100/WSL (Ryzen AI Max+ 395 / Radeon 8060S)**,
-f16, kernel-only TFLOP/s:
+element. Measured best-of-3 on **gfx1151 (Ryzen AI Max+ 395 / Radeon 8060S,
+RDNA 3.5)**, f16, kernel-only TFLOP/s:
 
 | MT×NT | 512³ | 1024³ | 2048³ |
 |------|-----:|------:|------:|
-| 1×1 (rung-0 naive) | 1.68 | 3.36 | 4.00 |
-| 2×2 | 1.72 | 2.24 | 3.37 |
-| **2×4 (production)** | 3.47 | **7.87** | **9.46** |
-| 4×2 | 3.91 | 4.91 | 8.79 |
-| 4×4 | 1.65 | 5.47 | 6.94 |
+| 1×1 (rung-0 naive) | 1.65 | 3.31 | 4.01 |
+| 2×2 | 1.73 | 2.21 | 3.32 |
+| **2×4 (production)** | 3.49 | **7.80** | **9.53** |
+| 4×2 | 3.93 | 4.88 | 8.77 |
+| 4×4 | 1.65 | 5.42 | 6.73 |
 
 **~2.3× over the naive baseline** at the compute-bound sizes. The empirical
 lesson mirrors Gluon exactly: the **tile shape is the lever, and the obvious
@@ -184,14 +192,14 @@ K-panels for its macro-tile into LDS once per K-step, then every wave reads its
 WMMA fragments from LDS. Correct across shapes (fixture
 `test_shipped_rocm_wmma_lds_matches_numpy`), shipped as
 `tessera_rocm_wmma_gemm_f16_lds` + `..._bench_lds`. **Measured verdict on
-gfx1100 (best-of-3 f16 TFLOP/s, `--lds`):**
+gfx1151 (best-of-3 f16 TFLOP/s, `--lds`):**
 
 | size | rung-1 reg 2×4 | best rung-2 LDS |
 |------|---------------:|----------------:|
-| 512³  | **3.47** | 3.20 (4×2w 1×2t) |
-| 1024³ | **8.09** | 7.85 (4×1w 2×4t) |
-| 2048³ | 8.88 | **9.38** (4×1w 2×4t) |
-| 4096³ | **11.40** | 8.46 |
+| 512³  | **3.47** | 3.17 (4×2w 1×2t) |
+| 1024³ | **7.79** | 7.69 (4×1w 2×4t) |
+| 2048³ | 8.88 | **9.41** (4×1w 2×4t) |
+| 4096³ | **11.06** | 8.44 (2×2w 2×4t) |
 
 Single-buffer LDS staging is a **wash-to-regression** here: it loses at
 512/1024, edges +6% at 2048, and loses decisively at 4096. This is the Strix

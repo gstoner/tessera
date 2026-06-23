@@ -26,11 +26,15 @@ This document consolidates ROCm-specific audit material.
 ## Box landed (2026-06-22) — toolchain gates cleared
 
 A Strix Halo box (Ryzen AI Max+ 395) is now available: Ubuntu 24.04 (WSL2),
-ROCm **7.2.4**, LLVM/MLIR **22.1.8**. The iGPU enumerates as **`gfx1100`**
-(RDNA3 profile; same 16×16×16 WMMA family as gfx1151, no FP8 WMMA) — see
+ROCm **7.2.4**, LLVM/MLIR **22.1.8**. The iGPU enumerates as its native
+**`gfx1151`** (RDNA 3.5; 16×16×16 WMMA, no FP8 WMMA). *(During early bring-up
+WSL transiently reported `gfx1100`, the RDNA 3 discrete profile; AMD's WSL
+enablement resolved that on 2026-06-23 and `rocminfo` now shows `gfx1151`. The
+Stage B/C/D notes below that say "gfx1100" are accurate bring-up provenance —
+same WMMA family, so the kernels are identical.)* — see
 [`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md) "Bring-up status".
-Cleared: `rocminfo` enumerates without `HSA_OVERRIDE`; `hipcc` compiles WMMA for
-gfx1100; ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
+Cleared: `rocminfo` enumerates without `HSA_OVERRIDE`; `hipcc` compiles WMMA;
+ROCm lit suite 11/11; `tessera-opt`/`tessera-rocm-opt` build clean.
 
 **Stage A increment landed (2026-06-22):** `lower-tile-to-rocm` was emitting
 `tessera_rocm.mfma` for every arch — wrong for RDNA. Added a `tessera_rocm.wmma`
@@ -117,8 +121,8 @@ The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
 (grounded in the AMD Gluon v0→v9 tutorial, `ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`
 §B1/§B2). Rung 1 = **output-tile register blocking** (each wave computes an
 MT×NT grid of 16×16 WMMA tiles, reusing fragments). Shipped tiling **2×4** is
-**~2.3× over the 1×1 naive baseline** at 1024³/2048³ on gfx1100/WSL (Ryzen AI
-Max+ 395). The Gluon lesson reproduced: `2×2` *regressed below* naive; the
+**~2.3× over the 1×1 naive baseline** at 1024³/2048³ on gfx1151 (Ryzen AI
+Max+ 395, RDNA 3.5). The Gluon lesson reproduced: `2×2` *regressed below* naive; the
 non-square `2×4` won — tile shape is the lever. Measured by the device-timed
 `tessera_rocm_wmma_gemm_f16_bench` symbol + `benchmarks/rocm/
 benchmark_rocm_wmma_gemm.py --ladder`; see STRIX_HALO_EXECUTION_PLAN.md Stage F.

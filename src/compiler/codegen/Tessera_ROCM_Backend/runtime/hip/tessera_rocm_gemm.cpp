@@ -9,9 +9,10 @@
 // that ``runtime.launch()`` dispatches ``target="rocm"`` matmul artifacts to.
 //
 // The device kernel is compiled at load time with **HIPRTC** for whatever arch
-// the device enumerates (gfx1100 under WSL today, gfx1151 after AMD's WSL
-// enablement) — so this object is built by the ordinary host C++ compiler and
-// only needs the HIP runtime + HIPRTC at link time, no hipcc-as-compiler.
+// the device enumerates (gfx1151 on the Strix Halo box; early-bring-up WSL
+// transiently reported gfx1100 — same WMMA family either way) — so this object
+// is built by the ordinary host C++ compiler and only needs the HIP runtime +
+// HIPRTC at link time, no hipcc-as-compiler.
 //
 // Kernel: D[MxN] = A[MxK] @ B[KxN], row-major, f16/bf16 in / f32 accumulate.
 // General tiled/K-looped GEMM. Each 32-lane wave computes an MTxNT grid of
@@ -40,7 +41,7 @@
 namespace {
 
 // Production output-tile blocking factor for the shipped symbols. Measured-best
-// on gfx1100/gfx1151 (Strix Halo): 2x4 wins at the compute-bound sizes — ~2.3x
+// on gfx1151 (Strix Halo, RDNA 3.5): 2x4 wins at the compute-bound sizes — ~2.3x
 // over the 1x1 naive baseline at 1024^3/2048^3 — and notably 2x2 *regressed*
 // below naive (the AMD Gluon "the obvious tiling can lose; shape is the lever"
 // lesson). See the perf ladder in STRIX_HALO_EXECUTION_PLAN.md.

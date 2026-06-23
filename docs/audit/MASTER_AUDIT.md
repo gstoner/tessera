@@ -1,6 +1,17 @@
 # Tessera Audit Master
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-22
+
+> **Reconciled 2026-06-22:** the multi-op compiler-metadata P1 is **closed** —
+> component-aware metadata (`component_ops`, `program_executable`,
+> `component_blockers`, `effects`, `shape_envelope`, `layout_contracts`,
+> `fusion_groups`, `outputs`) is derived per-component and carried to
+> `fn.runtime_artifact().metadata` (verified by direct inspection + 57 locking
+> tests), and fusion dispatch is authoritative (Phase 0 seam closed). The
+> follow-on Phase 1 has begun landing too (Graph-IR folders/canonicalizers on 7
+> ops; `LayoutAssignmentPass`). The `batching/sharding` long-tail counts below
+> were refreshed against
+> [`generated/s_series_status.md`](generated/s_series_status.md).
 
 This is the root audit document. It consolidates the current state, finished
 work, and remaining work across the compiler, runtime/backend, platform
@@ -11,7 +22,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 
 | Area | Current state | Still open |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, layout/effect contracts, and fixture-driven proof need to be first-class; remaining dashboard consolidation (target maps, e2e/s_series rollups) is optional cleanup. |
+| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: effect interfaces on the ~8 non-pure Graph-IR ops (CSE/DCE soundness), fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). |
 | Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU. | NVIDIA and ROCm have no executable runtime rows yet; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
@@ -51,7 +62,7 @@ Finished:
 
 Still needs work:
 
-- Make compile metadata component-aware for real multi-op programs.
+- ✅ Make compile metadata component-aware for real multi-op programs (2026-06-07; derived per-component and carried to `fn.runtime_artifact().metadata`, locked by 57 tests — see COMPILER_AUDIT Next Work #1).
 - Carry fusion groups, layout contracts, shape envelopes, effects, and backend strategy through the compiler artifact.
 - Stop rediscovering fusion/program identity separately in Target IR and runtime dispatch. *(Runtime half closed 2026-06-10 — the apple_gpu executor consumes `fusion_groups` known_chain metadata; Target IR C++ fusion passes still re-match. See [compiler/CODE_AUDIT_2026_06_10.md](compiler/CODE_AUDIT_2026_06_10.md).)*
 - Tie complete compiler claims to direct compare fixtures or hardware/package validation.
@@ -214,7 +225,13 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 
 ### P1
 
-- Multi-op compiler metadata and component-aware gates.
+- ✅ Multi-op compiler metadata and component-aware gates (landed 2026-06-07;
+  `component_ops` / `program_executable` / `component_blockers` +
+  `effects` / `shape_envelope` / `layout_contracts` / `fusion_groups` /
+  `outputs` carried to the `@jit` artifact, fusion dispatch authoritative).
+  Forward work moved to COMPILER_AUDIT **Phase 1**: effect interfaces on the
+  ~8 non-pure Graph-IR ops, and wiring `LayoutAssignmentPass` into the named
+  x86/GPU pipelines.
 - ✅ Apple binding/kernel descriptor unification (2026-06-09 — descriptor-driven dispatch + generated C++ runtime-ops table).
 - ✅ Apple feature-limit-guided lowering (2026-06-09 — bf16 gate, fused-chain caps, threads-per-row).
 - ✅ Canonical Apple one-command-buffer decode through `tessera.ops` / `@jit` (2026-06-02).
@@ -223,8 +240,12 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
 ### P2
 
 - **Batching/transpose/sharding long-tail — assessed closed for everything
-  provable (2026-06-17).** `transpose_rule` is fully closed (0 partial);
-  `batching_rule` has 4 partials; `sharding_rule` has 39. **All 43 residual
+  provable (2026-06-17).** `transpose_rule` and `lowering_rule` are fully closed
+  (0 partial); `batching_rule` and `sharding_rule` carry the only residual
+  partials — live counts are dashboard-owned in
+  [`generated/s_series_status.md`](generated/s_series_status.md) (6 + 47 = 53 as
+  of 2026-06-22, up from 4 + 39 = 43 on 2026-06-17 as the EDM/DiffusionBlocks
+  primitives in `427f595`/`25111fe` added mesh-gated rows). **All residual
   partials sit in genuinely distributed-mesh-gated categories** — `attention`
   (the reasoning-model fused family: sparse/delta/gated/lightning variants, where
   head-split equivalence isn't trivially true — the *standard* family was already

@@ -76,8 +76,8 @@ Two facts make the transition cheaper than it looks:
 
 | IR level | Real today | Dispatcher / stub | Primary gap to close |
 |---|---|---|---|
-| **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. No IR-optimization step between emission and execution. | Component-aware multi-op metadata (mostly landed); carry fusion/strategy as authoritative. |
-| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Zero `hasFolder`/`hasCanonicalizer`** on any op. No constant folding / general DCE-CSE on the executed path. `LayoutLegalityPass` is verify-only (no assignment). ~5 passes are attribute-stamp-only. | Folders/canonicalizers; effect interfaces on the 8 non-pure ops; `LayoutAssignmentPass`. |
+| **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
+| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast` folders + `matmul`/`transpose` canonicalizers (7 ops), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). Still open: the other ops have no folder; **effect interfaces on the 8 non-pure ops are absent (0 today)** so generic CSE/DCE isn't sound across them; `LayoutAssignmentPass` is **not yet wired into the named x86/GPU pipelines**. ~5 passes are attribute-stamp-only. | Effect interfaces on the 8 non-pure ops; broaden folder coverage; wire `LayoutAssignmentPass` into the named pipelines. |
 | **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. | Pipeline insertion is annotation-only (no real 1F1B order). OptimizerShard is pure attrs. No collective overlap (`ChunkPlanner`/`CollectiveScheduler` exist but are never invoked). | Real 1F1B ordering; wire the collective planners. |
 | **Tile IR (FA-4)** | `TilingPass` emits real `scf.for` M/N nests; `NVTMADescriptorPass` is a genuine hoist/dedup. | M/N blocking only — **no K-reduction loop**, fixed 16×16. **Flash-attn is straight-line** (no `scf.for` over KV; online-softmax is whole-tensor ops). WarpSpec emits no queues/mbarriers. WGMMA → hardcoded `m64n64k16`. | Converge GEMM to linalg K-loop; streaming flash-attn loop; autotuner→IR. |
 | **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
@@ -684,11 +684,16 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   during real lowering — full tessera-ir lit sweep 148 PASS / 19 UNSUPPORTED /
   0 FAIL confirms no existing fixture violates them. The earlier-open
   **Phase 1** of the closure plan
-  adds the missing *assignment* half — `LayoutAssignmentPass` (seed kernel layouts
+  added the missing *assignment* half — `LayoutAssignmentPass` (seed kernel layouts
   → propagate through pointwise → insert `cast{layout}`), with the legality pass
-  reused as its verifier. Phase 1 also covers the Graph-IR `hasFolder`/
-  `hasCanonicalizer` gap (zero today) and effect interfaces on the 8 non-pure ops
-  to make generic CSE/DCE sound.
+  reused as its verifier. **Landed 2026-06-22** (`test_layout_assignment.py` +
+  `layout_assignment.mlir`); still **not wired into the named x86/GPU pipelines**
+  (it mutates IR, so wiring is gated on a layout-sensitive backend consuming the
+  attrs). The Graph-IR `hasFolder`/`hasCanonicalizer` gap is **partly closed** —
+  7 ops now carry folders/canonicalizers wired into the `tessera_jit` CPU
+  `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); **effect interfaces on
+  the 8 non-pure ops remain absent (0 today)**, so making generic CSE/DCE sound
+  across them is the open remainder.
 - **Complete claims need fixtures.** A completed backend claim should resolve to
   an explicit compare fixture, `hardware_verified` row, or packaged validation.
 - **Compiler specs can still drift.** Generated dashboards must remain the

@@ -22,7 +22,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 
 | Area | Current state | Still open |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: broader Graph-IR folder coverage (per-op effect interfaces + opt-in `LayoutAssignmentPass` pipeline wiring landed 2026-06-22), fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). |
+| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). (COMPILER_AUDIT Phase 1 closed 2026-06-22 — effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
 | Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU. | NVIDIA and ROCm have no executable runtime rows yet; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
@@ -233,8 +233,10 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
   on the 23 non-pure Graph-IR ops (landed 2026-06-22 — `[Pure]` vs
   `MemWrite`/`MemRead`, so generic CSE/DCE is sound); ✅ `LayoutAssignmentPass`
   wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in
-  `assign-layouts` option (2026-06-22, default off). Still open — broadening
-  Graph-IR folder coverage beyond the 7 arithmetic/cast ops.
+  `assign-layouts` option (2026-06-22, default off); ✅ Graph-IR folder coverage
+  broadened to `reshape` (identity fold + `reshape(reshape(x))` chain-collapse,
+  2026-06-22). **COMPILER_AUDIT Phase 1 is closed** — further folders land
+  opportunistically.
 - ✅ Apple binding/kernel descriptor unification (2026-06-09 — descriptor-driven dispatch + generated C++ runtime-ops table).
 - ✅ Apple feature-limit-guided lowering (2026-06-09 — bf16 gate, fused-chain caps, threads-per-row).
 - ✅ Canonical Apple one-command-buffer decode through `tessera.ops` / `@jit` (2026-06-02).

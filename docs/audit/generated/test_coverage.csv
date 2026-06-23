@@ -351,7 +351,7 @@ reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,103,20,9,123,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,123 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reshape,7,7,0,14,0,,directly_tested,14 direct test references
+reshape,7,15,0,22,0,,directly_tested,22 direct test references
 retention,6,0,1,6,0,,directly_tested,6 direct test references
 rfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,directly_tested,79 direct test references

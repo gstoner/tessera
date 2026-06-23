@@ -1730,6 +1730,14 @@ def Tessera_ReshapeOp : Op<
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
+  // Phase 1 (front-to-back closure plan): broaden folder coverage beyond the
+  // arithmetic/cast ops. An identity reshape (result type == input type) folds
+  // to its input — the same structural identity as CastOp — and a chain
+  // reshape(reshape(x)) collapses to a single reshape to the final type. Both
+  // are guarded against dropping the optional tessera.dim_names_in/out symbolic
+  // -dim annotations that SymbolicDimEqualityPass reads.
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def Tessera_CastOp : Op<

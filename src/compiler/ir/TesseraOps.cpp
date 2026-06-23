@@ -2221,6 +2221,48 @@ OpFoldResult DivOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+// ── Phase 1 ReshapeOp folder + canonicalizer ────────────────────────────────
+// reshape is element-count preserving and shape-only (no value change), so a
+// no-op reshape is a structural identity and chained reshapes compose. Both
+// rewrites are skipped when the op carries the optional
+// `tessera.dim_names_in`/`tessera.dim_names_out` discardable attrs, so a
+// SymbolicDimEqualityPass checkpoint is never silently dropped.
+static bool reshapeCarriesDimNames(Operation *op) {
+  return op->hasAttr("tessera.dim_names_in") ||
+         op->hasAttr("tessera.dim_names_out");
+}
+
+// (1) identity reshape (result type == operand type) folds to its input.
+OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
+  if (getX().getType() == getY().getType() && !reshapeCarriesDimNames(*this) &&
+      !(*this)->hasAttr("tessera.layout"))
+    return getX();
+  return {};
+}
+
+namespace {
+// (2) reshape(reshape(x)) -> reshape(x): a chain of element-count-preserving
+// reshapes is one reshape straight to the final type.
+struct CollapseReshapeChain : public OpRewritePattern<ReshapeOp> {
+  using OpRewritePattern<ReshapeOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(ReshapeOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inner = op.getX().getDefiningOp<ReshapeOp>();
+    if (!inner)
+      return failure();
+    if (reshapeCarriesDimNames(op) || reshapeCarriesDimNames(inner))
+      return failure();
+    rewriter.replaceOpWithNewOp<ReshapeOp>(op, op.getType(), inner.getX());
+    return success();
+  }
+};
+} // namespace
+
+void ReshapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.add<CollapseReshapeChain>(context);
+}
+
 // Sprint V4b (2026-05-22) — SoftmaxOp: shape-preserving normalization
 // over an explicit axis.  When ``axis`` is set, normalize to
 // canonical (non-negative) form and require ``-rank <= axis < rank``.

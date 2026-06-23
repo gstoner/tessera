@@ -171,3 +171,33 @@ func.func @layout_cast_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
   %0 = "tessera.cast"(%x) {tessera.layout = "col_major"} : (tensor<4x8xf32>) -> tensor<4x8xf32>
   return %0 : tensor<4x8xf32>
 }
+
+// reshape(x): T -> T  folds to x (identity reshape, element-count preserving).
+// CHECK-LABEL: func.func @identity_reshape
+// CHECK-NOT: tessera.reshape
+// CHECK: return %arg0
+func.func @identity_reshape(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %0 = "tessera.reshape"(%x) : (tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}
+
+// reshape(reshape(x)) collapses to a single reshape straight to the final type.
+// CHECK-LABEL: func.func @reshape_chain
+// CHECK: tessera.reshape %arg0 : (tensor<4x8xf32>) -> tensor<32xf32>
+// CHECK-NOT: tessera.reshape
+func.func @reshape_chain(%x: tensor<4x8xf32>) -> tensor<32xf32> {
+  %0 = "tessera.reshape"(%x) : (tensor<4x8xf32>) -> tensor<2x16xf32>
+  %1 = "tessera.reshape"(%0) : (tensor<2x16xf32>) -> tensor<32xf32>
+  return %1 : tensor<32xf32>
+}
+
+// An identity reshape carrying tessera.dim_names_in/out is a SymbolicDimEquality
+// checkpoint, NOT dead weight — it must survive --canonicalize (both reshape
+// rewrites guard on the dim-name attrs). Contrast with @identity_reshape above.
+// CHECK-LABEL: func.func @dimnamed_reshape_survives
+// CHECK: tessera.reshape
+// CHECK-SAME: tessera.dim_names_in
+func.func @dimnamed_reshape_survives(%x: tensor<4x8xf32>) -> tensor<4x8xf32> {
+  %0 = "tessera.reshape"(%x) {tessera.dim_names_in = ["a", "b"]} : (tensor<4x8xf32>) -> tensor<4x8xf32>
+  return %0 : tensor<4x8xf32>
+}

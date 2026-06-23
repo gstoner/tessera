@@ -109,12 +109,44 @@ row** is hardware-verified ("complete for this target", not the universal flip).
   `tessera_rocm_wmma_gemm_bf16`. The matmul manifest row claims `{fp16, bf16}`;
   the fixture validates f16/bf16 over 16³, 64×48×32, 17³, 128×96×64, 100×33×80.
 
+## flash_attn WMMA executes on gfx1151 (2026-06-23) — second op after matmul
+
+`flash_attn` now executes natively on the AMD GPU — the **second op after
+matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
+"the two ops that matter execute." The `backend_manifest` flash_attn rocm row is
+`hardware_verified`:
+- **`runtime_symbol`** = `tessera_rocm_wmma_flash_attn_f16` (+ `_bf16`) in the
+  shipped `libtessera_rocm_flash_attn.so`; HIPRTC-compiles the RDNA WMMA kernel
+  per head_dim at load.
+- **kernel** = FA-2 forward, single wave per (query-tile-of-16, b·h): both QK^T
+  and P@V on 16×16×16 WMMA, online (running max/sum) softmax, scores + output
+  accumulator staged in LDS, causal masking + ragged Sq/Sk (zero-pad load + −inf
+  score mask + bounds-checked store). head_dim must be a multiple of 16.
+- **`execute_compare_fixture`** = `tests/unit/test_rocm_flash_attn_runtime_symbol.py`
+  — vs a numpy attention reference across f16/bf16, head_dim 16/32/64/128, multi
+  batch/head, ragged shapes, and causal. Measured on gfx1151: maxerr ~1e-4 (f16).
+  Skip-clean with no AMD GPU / HIPRTC.
+- Honest scope (Decision #25): WMMA `{fp16, bf16}` forward only — **no backward,
+  no perf ladder** (this is the correctness-first "rung 0" of attention, the
+  analog of the naive GEMM tile). It does **not** earn a `runtime.launch()` lane
+  yet: that needs flash_attn artifact plumbing (how a JIT'd attention artifact
+  carries Q/K/V + dispatches), a separate piece — so no `runtime_execution_matrix`
+  row is claimed (adding one with no producer would be over-claiming).
+
+**No audit inflation:** the per-primitive `backend_kernel` axis stays open —
+`primitive_is_complete(flash_attn)` is still `False` (x86/apple/nvidia/cpu rows
+are not all `hardware_verified`). Only the **rocm target row** flipped.
+
 ## Still Open
 
-- The matmul WMMA path is the proven GEMM; **flash_attn / other GEMM-family ops
-  on RDNA remain artifact_only** (CDNA MFMA shape, HIP execution gated). The
-  named ROCm sub-arches (gfx90a/942/950/1200) stay in `_UNIMPLEMENTED_TARGETS`
-  — the generic `rocm` lane covers execution via HIPRTC for the live device.
+- **Other GEMM-family / attention ops on RDNA remain artifact_only** beyond
+  matmul + flash_attn (CDNA MFMA shape, HIP execution gated): `multi_head_
+  attention`, `gqa/mqa`, the fused chains, etc. The named ROCm sub-arches
+  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
+  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the box's
+  own arch) is listed there too so the classification is total (no silent
+  `lookup() -> None`).
+- **flash_attn**: no backward pass; no perf ladder; no `runtime.launch()` lane.
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
@@ -196,16 +228,42 @@ data.
 3. ✅ **Stage D — prove (2026-06-22):** the WMMA `f32←f16` GEMM executes through
    the bridge and matches a host reference (`test_rocm_wmma_execute_compare.py`).
 4. ✅ **Ship the ROCm WMMA GEMM runtime symbol (2026-06-22):**
-   `libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_f16` (HIPRTC at
-   load), with the `test_rocm_wmma_runtime_symbol.py` execute-compare fixture.
-   The matmul manifest row is now `hardware_verified` (rocm target). **Still
-   pending:** wire an auto-registered ROCm executor into `runtime.launch()` so a
-   `runtime_execution_matrix` row is earned; then extend to tiled/K-looped GEMM +
-   bf16. (The per-primitive `backend_kernel` flip needs *all* targets — out of
-   scope for a single box.)
-5. Register `tessera-to-linalg` into `tessera-opt` so the MLIR-graph
-   `--tessera-emit-rocdl` route works (Stage B currently rides the direct emitter).
-6. Promote manifest rows only after generated dashboards agree.
+   `libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_{f16,bf16}` (HIPRTC
+   at load), with the `test_rocm_wmma_runtime_symbol.py` execute-compare fixture.
+   The matmul manifest row is `hardware_verified` (rocm target).
+5. ✅ **Wire the executor into `runtime.launch()` + generalize the kernel
+   (2026-06-22):** the executable `("rocm", "rocm_wmma")` row is earned in the
+   generated `runtime_execution_matrix` (`hip_runtime`); kernel extended to
+   tiled/K-looped GEMM + bf16. (The per-primitive `backend_kernel` flip still
+   needs *all* targets — out of scope for a single box.)
+6. ✅ **Occupancy lever — size-adaptive macro-tile (2026-06-23):** a wider
+   `(MT,NT)` sweep found a bigger register macro-tile (**3×4 = 12 WMMA tiles/
+   wave**) beats production 2×4 by **+20–25% at 3072³/4096³** and never regresses
+   from 1024³ up; **4×4 (16 tiles) regresses sharply — the VGPR/occupancy cliff**.
+   Promoted: the shipped symbol is size-adaptive (`min(M,N,K) ≥ 1024 → 3×4`, else
+   2×4). Confirms Gluon B1 "register-budget tiling is the lever," with a cliff.
+   See STRIX_HALO_EXECUTION_PLAN.md Stage H. (Direct VGPR readout unavailable on
+   this WSL box — rocprof v1 unsupported, rocprofv3 crashes vs HIPRTC — so the
+   cliff is read off the TFLOP/s curve.)
+7. ✅ **Extend hardware execution beyond matmul — `flash_attn` (2026-06-23):**
+   `libtessera_rocm_flash_attn.so` exports `tessera_rocm_wmma_flash_attn_{f16,
+   bf16}` (FA-2 forward, both matmuls on WMMA, online softmax, causal + ragged),
+   `hardware_verified` with `test_rocm_flash_attn_runtime_symbol.py`. Second op
+   after matmul to execute on ROCm. (Forward only; no perf ladder; no launch lane
+   — see the flash_attn section above.)
+8. ✅ **`--tessera-emit-rocdl` MLIR-graph route reachable on the box (2026-06-23):**
+   the tessera-opt CMake gate excluded core Tessera IR (+ `tessera-to-linalg`)
+   from *every* ROCm-backend build — the CUDA carve-out gave real NVIDIA builds
+   the full route but HIP was missing the symmetric one. Extended it
+   (`AND NOT TESSERA_ENABLE_HIP`) so a real HIP build links `TesseraIR`/
+   `TesseraPasses`; `--tessera-emit-rocdl`/`-nvvm` now lower a tessera kernel to
+   `gpu.module` + `rocdl.kernel`/`nvvm.kernel` (`test_gpu_emit_nvvm.py` 3/3). The
+   hardware-free ROCm *artifact* build (HIP off) stays lean. The direct
+   `rocdl_emit.py` LLVM-IR emitter remains the Stage B path; this adds the
+   MLIR-graph route alongside it.
+9. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
+   correctness-first); the `runtime.launch()` artifact lane.
+10. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated
 

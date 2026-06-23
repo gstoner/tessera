@@ -772,7 +772,8 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
         "feature_flags": ("wmma",),
         "shape_envelope": (
             "general tiled/K-looped GEMM, f32<-{f16,bf16}, any positive M/N/K "
-            "(ragged edges zero-padded), 16x16x16 WMMA tiles, one wave/tile "
+            "(ragged edges zero-padded), 16x16x16 WMMA tiles, size-adaptive "
+            "register macro-tile (2x4 small / 3x4 large — the occupancy lever) "
             "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
         ),
         "notes": (
@@ -781,6 +782,26 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "(tessera_rocm_wmma_gemm_{f16,bf16}, HIPRTC-compiled for the device "
             "arch at load); ROCm 7.2.4. Numerically validated vs numpy by the "
             "execute_compare_fixture, and the runtime.launch() rocm_wmma lane."
+        ),
+    },
+    "flash_attn": {
+        "runtime_symbol": "tessera_rocm_wmma_flash_attn_f16",
+        "dtypes": ("fp16", "bf16"),
+        "feature_flags": ("wmma",),
+        "shape_envelope": (
+            "FA-2 forward, f32<-{f16,bf16}, Q[B,H,Sq,D] x K/V[B,H,Sk,D], "
+            "head_dim D multiple of 16, any positive B/H/Sq/Sk (ragged Sq/Sk "
+            "zero-padded + masked), optional causal mask, both QK^T and P@V on "
+            "16x16x16 WMMA, online softmax, one wave per (query-tile, b*h). "
+            "Correctness-first (no perf ladder yet)"
+        ),
+        "notes": (
+            "RDNA 3.5 WMMA flash-attention forward executes on the AMD GPU "
+            "through the shipped libtessera_rocm_flash_attn.so symbols "
+            "(tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-compiled for the "
+            "device arch at load); ROCm 7.2.4. The second op after matmul to run "
+            "natively on a non-Apple backend. Numerically validated vs a numpy "
+            "attention reference by the execute_compare_fixture."
         ),
     },
 }
@@ -815,6 +836,13 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # reference (maxerr < 1e-2). Skip-clean when no AMD GPU / HIPRTC. This is
     # the numerical-proof half of the rocm matmul `hardware_verified` row.
     ("matmul", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
+    # rocm flash_attn — the shipped `tessera_rocm_wmma_flash_attn_{f16,bf16}`
+    # C-ABI symbols (libtessera_rocm_flash_attn.so) are dlopened and the FA-2
+    # forward (both QK^T and P@V on 16x16x16 WMMA, online softmax, causal +
+    # ragged) is compared to a numpy attention reference. Skip-clean when no AMD
+    # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
+    # `hardware_verified` row — the second op after matmul to execute on ROCm.
+    ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
     # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).

@@ -248,6 +248,71 @@ Arch-aware LDS layout + pipelining should still pay on discrete RDNA/CDNA where
 global *is* the bottleneck; the rung-2/3 symbols are kept for that and as
 references.
 
+### Stage H — occupancy lever: size-adaptive macro-tile (2026-06-23, landed)
+
+The Stage F synthesis named the next lever — **occupancy + VGPR-budgeted
+macro-tiling**, not memory staging. Tested it directly with a wider `(MT,NT)`
+sweep on the production register kernel (kernel-only, best-of-N, gfx1151):
+
+| size | 2×4 (prod) | 3×4 | 4×3 | 4×4 | winner |
+|------|-----------:|----:|----:|----:|--------|
+| 512³  | **3.46** | 2.98 | 3.24 | — | 2×4 |
+| 768³  | **7.04** | 6.40 | 6.97 | — | 2×4 |
+| 1024³ | 8.34 | **8.40** | 7.01 | — | ~tie |
+| 2048³ | 8.82 | **9.02** | 8.63 | 6.42 | 3×4 |
+| 3072³ | 10.31 | **12.87** | 12.21 | — | **3×4 +25%** |
+| 4096³ | 10.73 | 12.62 | **12.91** | 7.56 | **4×3 +20%** |
+*(TFLOP/s, f16; — = clearly off-pace.)*
+
+**Finding:** a bigger register macro-tile (3×4 = **12** WMMA tiles/wave) amortizes
+once there's enough work — **+20–25% at 3072³/4096³**, and never below 2×4 from
+1024³ up — but trails 2×4 at ≤768³. **4×4 (16 tiles) regresses sharply** (e.g.
+6.42 at 2048³): the **VGPR/occupancy cliff** — too many live accumulator
+registers (16×8 floats/lane) collapse waves-per-CU. That a 16-tile kernel doing
+*more* fragment reuse runs *slower* than the 12-tile one is the textbook
+occupancy-limited signature; 12 tiles is the measured sweet spot. (Direct VGPR
+readout isn't available — rocprof v1 is unsupported on this WSL device and
+rocprofv3 crashes against HIPRTC module loads — so the cliff is read off the
+TFLOP/s curve, not a counter.)
+
+**Promoted:** the shipped symbol is now **size-adaptive** — `prodTile(M,N,K)`
+picks 3×4 when `min(M,N,K) ≥ 1024` (never a regression there, big win at large),
+else 2×4. Confirms Gluon's B1 "register-budget tiling is the lever," and that the
+lever has a cliff. Correctness of both tiles is guarded by
+`test_rocm_wmma_runtime_symbol.py` (small → 2×4, the 1024³ ragged case → 3×4).
+This supersedes the staging rungs (2/3) as the production perf story on this APU.
+
+### Stage G — flash_attn executes on gfx1151 (2026-06-23): second op after matmul
+
+`flash_attn` now executes natively on the AMD GPU — the **second op after
+matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
+"the two ops that matter execute." `libtessera_rocm_flash_attn.so` exports
+`tessera_rocm_wmma_flash_attn_{f16,bf16}` (HIPRTC-compiled per head_dim at load).
+
+**Kernel** — FA-2 forward, single wave (32 lanes) per (query-tile-of-16, b·h):
+1. `S = scale · Q·Kᵀ` over head_dim chunks on **16×16×16 WMMA** → LDS scores
+2. **online softmax** (running max `m`, running sum `l`, per-row rescale) — one
+   lane per query row; scores + output accumulator staged in LDS
+3. `O += P·V` over head_dim chunks on **16×16×16 WMMA**
+
+Causal masking and ragged Sq/Sk (zero-pad load + −inf score mask + bounds-checked
+store) are handled; head_dim must be a multiple of 16. The WMMA fragment/output
+layout is identical to the GEMM kernel (A row = lane&15, B col = lane&15, output
+row = 2·e+(lane>>4)).
+
+**Proof** — `tests/unit/test_rocm_flash_attn_runtime_symbol.py` compares the GPU
+output to a numpy attention reference across f16/bf16, head_dim 16/32/64/128,
+multi batch/head, ragged shapes, and causal. Measured on gfx1151: **maxerr ~1e-4
+(f16)**, ~1e-3 (bf16). The `backend_manifest` flash_attn rocm row is
+`hardware_verified`.
+
+**Honest scope.** Forward only — no backward. **Correctness-first "rung 0"** (the
+attention analog of the naive GEMM tile before its perf ladder): single wave per
+query tile, one query-tile-of-16 per workgroup, LDS-resident accumulator — *not*
+a perf-tuned kernel. No `runtime.launch()` lane yet (needs flash_attn artifact
+plumbing for Q/K/V dispatch). Follow-ups: backward, a perf ladder (KV-tile
+register blocking, the same lever matmul's rung-1 found), the launch lane.
+
 ## The hardware — three engines, three Tessera stories
 
 | Engine | What | Tessera status | Action |

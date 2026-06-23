@@ -6,7 +6,7 @@ softmax,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact 
 softmax_safe,activation,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 attn_sliding_window,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 deepseek_sparse_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
-flash_attn,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",0.6500,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+flash_attn,attention,hardware_verified,"fp16,bf16",hipcc≥7.2.4,,0.6500,,"RDNA 3.5 WMMA flash-attention forward executes on the AMD GPU through the shipped libtessera_rocm_flash_attn.so symbols (tessera_rocm_wmma_flash_attn_{f16,bf16}, HIPRTC-compiled for the device arch at load); ROCm 7.2.4. The second op after matmul to run natively on a non-Apple backend. Numerically validated vs a numpy attention reference by the execute_compare_fixture."
 gated_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 gated_deltanet,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 gqa_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H

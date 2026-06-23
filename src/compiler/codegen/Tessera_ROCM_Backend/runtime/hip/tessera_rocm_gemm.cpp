@@ -36,19 +36,28 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
 
 namespace {
 
-// Production output-tile blocking factor for the shipped symbols. Measured-best
-// on gfx1151 (Strix Halo, RDNA 3.5): 2x4 wins at the compute-bound sizes — ~2.3x
-// over the 1x1 naive baseline at 1024^3/2048^3 — and notably 2x2 *regressed*
-// below naive (the AMD Gluon "the obvious tiling can lose; shape is the lever"
-// lesson). See the perf ladder in STRIX_HALO_EXECUTION_PLAN.md.
-constexpr int kProdMT = 2;
-constexpr int kProdNT = 4;
+// Production output-tile blocking — **size-adaptive** (the occupancy / VGPR-
+// budgeted macro-tiling lever, measured on gfx1151 Strix Halo, RDNA 3.5):
+//   - small problems (min(M,N,K) < kBigTileMinDim): 2x4 (8 WMMA tiles/wave).
+//     ~2.3x over the 1x1 naive baseline; 2x2 *regressed* below naive (the AMD
+//     Gluon "the obvious tiling can lose; shape is the lever" lesson).
+//   - large problems: 3x4 (12 WMMA tiles/wave) — a bigger register macro-tile
+//     amortizes once there is enough work: 3x4 is >= 2x4 at every size >= 1024
+//     and **+20-25% at 3072^3 / 4096^3**. 4x4 (16 tiles) regresses sharply —
+//     the VGPR/occupancy cliff — so 3x4 (12) is the measured sweet spot.
+// The crossover (min-dim 1024) is where 3x4 stops trailing 2x4 and never
+// regresses above it. See the perf ladder + occupancy sweep in
+// STRIX_HALO_EXECUTION_PLAN.md (Stage F / Stage H).
+constexpr int kProdMT = 2, kProdNT = 4;        // small-problem tile
+constexpr int kBigMT = 3,  kBigNT = 4;         // large-problem tile (occupancy)
+constexpr int kBigTileMinDim = 1024;           // min(M,N,K) crossover to kBig*
 
 // One HIPRTC source template per (storage dtype, MTxNT). ``%TYPE%`` / ``%WMMA%``
 // / ``%NAME%`` / ``%MT%`` / ``%NT%`` are substituted at load. MT/NT are literal
@@ -303,26 +312,49 @@ bool compileVariantPipe(const char* type, const char* wmma, int wm, int wn,
   return compileSrc(src, name, outMod, outFn);
 }
 
+// A shipped GEMM kernel caches its register-blocked variants per (MT,NT) — the
+// production lane now picks the tile by problem size (size-adaptive occupancy),
+// so more than one variant can be live. Keyed by mt*100+nt; compiled on first
+// use (head_dim-style on-demand HIPRTC), guarded by a mutex.
 struct Kernel {
-  std::once_flag once;
-  hipModule_t module = nullptr;
-  hipFunction_t fn = nullptr;
-  bool ready = false;
-  const char* name;
+  const char* tag;    // unique kernel-name stem
   const char* type;   // device element type
   const char* wmma;   // WMMA builtin
+  std::mutex mu;
+  std::map<int, hipFunction_t> fns;   // mt*100+nt -> function
+  std::vector<hipModule_t> mods;      // owned modules
 };
 
-Kernel g_f16{{}, nullptr, nullptr, false,
-             "tessera_rocm_wmma_gemm_f16_kernel", "__fp16",
-             "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32"};
-Kernel g_bf16{{}, nullptr, nullptr, false,
-              "tessera_rocm_wmma_gemm_bf16_kernel", "__bf16",
-              "__builtin_amdgcn_wmma_f32_16x16x16_bf16_w32"};
+Kernel g_f16{"tessera_rocm_wmma_gemm_f16_kernel", "__fp16",
+             "__builtin_amdgcn_wmma_f32_16x16x16_f16_w32", {}, {}, {}};
+Kernel g_bf16{"tessera_rocm_wmma_gemm_bf16_kernel", "__bf16",
+              "__builtin_amdgcn_wmma_f32_16x16x16_bf16_w32", {}, {}, {}};
 
-void compileProd(Kernel* k) {
-  k->ready = compileVariant(k->type, k->wmma, kProdMT, kProdNT, k->name,
-                            &k->module, &k->fn);
+// Get (compiling + caching on first use) the register-blocked variant for this
+// (mt,nt). Returns nullptr if HIPRTC compile / module load failed.
+hipFunction_t prodKernelFor(Kernel* k, int mt, int nt) {
+  std::lock_guard<std::mutex> lock(k->mu);
+  int key = mt * 100 + nt;
+  auto it = k->fns.find(key);
+  if (it != k->fns.end()) return it->second;
+  std::string name = std::string(k->tag) + "_" + std::to_string(mt) + "x"
+                     + std::to_string(nt);
+  hipModule_t mod = nullptr;
+  hipFunction_t fn = nullptr;
+  if (!compileVariant(k->type, k->wmma, mt, nt, name, &mod, &fn)) return nullptr;
+  k->mods.push_back(mod);
+  k->fns[key] = fn;
+  return fn;
+}
+
+// Size-adaptive production tile: a bigger register macro-tile (3x4, 12 WMMA
+// tiles/wave) wins on large problems but trails on small ones (the occupancy
+// sweep — STRIX Stage H). Crossover at min(M,N,K) = kBigTileMinDim.
+void prodTile(int M, int N, int K, int* mt, int* nt) {
+  int mn = M < N ? M : N;
+  int mnk = mn < K ? mn : K;
+  if (mnk >= kBigTileMinDim) { *mt = kBigMT; *nt = kBigNT; }
+  else { *mt = kProdMT; *nt = kProdNT; }
 }
 
 // Launch grid for an (MT,NT)-blocked kernel over an MxN output.
@@ -414,21 +446,24 @@ bool zeroCopyEnabled() {
   return cached == 1;
 }
 
-// Run a general tiled GEMM through the cached production (rung-1) kernel.
+// Run a general tiled GEMM through the cached production (rung-1) kernel, with
+// a size-adaptive output-tile (2x4 small / 3x4 large — the occupancy lever).
 // Returns 0 / 1 (bad shape) / 2 (no device / compile) / 3 (device op failed).
 int runGemm(Kernel* k, const void* A, const void* B, void* D,
             int M, int N, int K, size_t elemBytes) {
   if (M <= 0 || N <= 0 || K <= 0) return 1;
-  std::call_once(k->once, compileProd, k);
-  if (!k->ready) return 2;
+  int mt, nt;
+  prodTile(M, N, K, &mt, &nt);
+  hipFunction_t fn = prodKernelFor(k, mt, nt);
+  if (!fn) return 2;
   unsigned gx, gy;
-  gridFor(M, N, kProdMT, kProdNT, &gx, &gy);
+  gridFor(M, N, mt, nt, &gx, &gy);
   if (zeroCopyEnabled()) {
-    int rc = runDeviceGemmZeroCopy(k->fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
+    int rc = runDeviceGemmZeroCopy(fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
     if (rc != 4) return rc;        // 0 = ok, 3 = real device error — honor it
     // rc == 4: host-register unsupported here → fall back to the copy path.
   }
-  return runDeviceGemm(k->fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
+  return runDeviceGemm(fn, gx, gy, 32, A, B, D, M, N, K, elemBytes);
 }
 
 // Device-time `iters` kernel-only launches of `fn` (buffers allocated + zeroed

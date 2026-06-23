@@ -137,6 +137,43 @@ matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
 `primitive_is_complete(flash_attn)` is still `False` (x86/apple/nvidia/cpu rows
 are not all `hardware_verified`). Only the **rocm target row** flipped.
 
+## MLIR→hsaco→execute loop closed on gfx1151 (2026-06-23) — Stage I
+
+The architectural gap behind the two ops above: **they execute via hand-written
+HIP C++ (HIPRTC at load) and touch zero MLIR** — the Tessera IR stack (Graph →
+Schedule → Tile → Target IR → ROCDL) produced artifacts that never reached
+silicon. The `--tessera-emit-rocdl` reachability fix (PR #86) exposed this — it
+made the MLIR route *runnable*, which revealed it dead-ended at ROCDL text.
+
+**Stage I closes the loop on a real kernel.** A `tessera.add` Graph-IR kernel now
+compiles **through the IR stack to an executing hsaco**:
+
+```
+tessera kernel --(tessera-opt --tessera-emit-rocdl)--> gpu.module(ROCDL)
+  --(mlir-opt: gpu.module(convert-gpu-to-rocdl,reconcile-unrealized-casts),
+     rocdl-attach-target{chip=gfx1151}, gpu-module-to-binary)--> gpu.binary{hsaco ELF}
+  --(extract + hipModuleLoadData + launch, memref-descriptor ABI)--> executes
+```
+
+Measured on gfx1151: **maxerr = 0.0 vs numpy** (f32 add + mul). The kernel that
+executed was produced by the compiler's lowering pipeline, not hand-written.
+Fixture: `tests/unit/test_rocm_mlir_to_hsaco.py` (skip-clean without tools/GPU;
+also asserts the lowered module serializes to a real `\x7fELF` hsaco with no GPU).
+
+**Division of labour:** `tessera-opt` owns the Tessera-specific lowering
+(`--tessera-emit-rocdl`); the generic `gpu.module → hsaco` serialization is 100%
+upstream and rides the platform `mlir-opt` (apt LLVM 22). In-process
+serialization (no shell-out, for the `runtime.launch()` path) is deferred — it
+needs the MLIR ROCDL target + LLVM AMDGPU codegen + lld linked into a Tessera
+tool, a heavier link addressed when the compiled path becomes a runtime lane.
+
+**Honest scope:** the loop is proven for a **scalar element-wise** kernel (no
+WMMA) — it proves *the pipeline reaches silicon*, the smallest closed loop. The
+"proper" Target IR path (`tessera_rocm.wmma`) still emits **contract markers**,
+not real intrinsics; a real-WMMA GEMM through the full stack is **Stage J/K**
+(below). The hand-written HIPRTC kernels remain the production execution path and
+become the on-silicon **oracle** the compiled path validates against.
+
 ## Still Open
 
 - **Other GEMM-family / attention ops on RDNA remain artifact_only** beyond
@@ -261,9 +298,56 @@ data.
    hardware-free ROCm *artifact* build (HIP off) stays lean. The direct
    `rocdl_emit.py` LLVM-IR emitter remains the Stage B path; this adds the
    MLIR-graph route alongside it.
-9. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
-   correctness-first); the `runtime.launch()` artifact lane.
-10. Promote manifest rows only after generated dashboards agree.
+9. ✅ **MLIR→hsaco→execute loop closed — Stage I (2026-06-23):** a `tessera.add`
+   Graph-IR kernel compiles through `--tessera-emit-rocdl` → `gpu-module-to-binary`
+   → hsaco → `hipModuleLoadData` → executes on gfx1151, **maxerr = 0.0 vs numpy**.
+   The compiler's pipeline produced the executing kernel (not hand-written HIP).
+   Fixture `test_rocm_mlir_to_hsaco.py`. Scalar element-wise only — proves the
+   pipeline reaches silicon. See the Stage I section above.
+
+### Compiler-path roadmap (the real next steps — close the IR-stack/execution gap)
+
+The hand-written HIPRTC kernels execute but bypass the IR stack; the IR stack
+lowers but (for matmul/WMMA) doesn't execute. Converge them:
+
+- ✅ **Stage J — real WMMA in the Target IR (2026-06-23).** `lower-tessera-target-to-rocdl`
+  now lowers a `tessera_rocm.wmma` carrying **real RDNA fragment vectors**
+  (`vector<16x{f16,bf16}>` A/B, `vector<8xf32>` acc) to the real
+  `rocdl.wmma.f32.16x16x16.{f16,bf16}` op (bf16 bitcast to `<16xi16>`, the RDNA
+  ABI), which `mlir-translate` lowers to `llvm.amdgcn.wmma.f32.16x16x16.*` — the
+  **same intrinsic** `rocdl_emit.py` emits. Abstract/scalar WMMA (contract-level
+  IR, no fragments) still lowers to the marker. Validated by
+  `tests/unit/test_rocm_target_wmma_lowering.py` (5/5): the MLIR-pass LLVM-IR
+  intrinsic is cross-checked against `rocdl_emit.wmma_intrinsic(dtype)` so the two
+  emitters can't silently diverge — **folds the Python side-emitter (path 4) into
+  the MLIR pass (path 3)**. *(Note: the ROCm lit suite under
+  `Tessera_ROCM_Backend/test/` is currently broken by a `%trop`/`%t` substitution
+  collision and is opt-in/skipped in CI — pre-existing; Stage J validates via the
+  Python fixture instead.)*
+- **Stage K — a real GEMM through the full stack vs. the oracle.** *Requires
+  fragment-materialization lowering:* today `lower-tile-to-rocm` emits the
+  **abstract scalar** `tessera_rocm.wmma` (→ marker), not a kernel that loads A/B
+  tiles into `vector<16xf16>` fragments, calls the real wmma, and stores the
+  `vector<8xf32>` accumulator with the RDNA lane/element layout. Building that
+  lowering (Graph/Tile matmul → fragment loads + real `tessera_rocm.wmma` + stores
+  → ROCDL → hsaco → launch) is the real Stage-K work; hand-authoring the GEMM in
+  MLIR would be "hand-written, in MLIR" and would NOT satisfy the milestone. The
+  hand-written HIPRTC kernel is the on-silicon **oracle** the compiled GEMM
+  execute-compares against (both numpy and the kernel).
+- **Stage K — a real GEMM through the full stack vs. the oracle.** Graph → Tile →
+  `tessera_rocm` Target IR (real WMMA) → ROCDL → hsaco → launch, execute-compare
+  against **both numpy and the `hardware_verified` hand-written kernel** (the
+  on-silicon oracle). Milestone: "the compiler, not a hand-written kernel,
+  produced the executing GEMM."
+- **Stage L — converge + in-process serialization.** Compiled path becomes a
+  production lane; link the MLIR ROCDL target + LLVM AMDGPU codegen + lld into a
+  Tessera tool so serialization needs no `mlir-opt` shell-out; carry the perf
+  lessons (3×4 occupancy tile, the ladder) into Tile IR tile attrs so the
+  autotuner sweeps the *compiled* kernel.
+
+10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
+    correctness-first); the `runtime.launch()` artifact lane.
+11. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated
 

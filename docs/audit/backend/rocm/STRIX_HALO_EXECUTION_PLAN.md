@@ -313,6 +313,25 @@ a perf-tuned kernel. No `runtime.launch()` lane yet (needs flash_attn artifact
 plumbing for Q/K/V dispatch). Follow-ups: backward, a perf ladder (KV-tile
 register blocking, the same lever matmul's rung-1 found), the launch lane.
 
+### Stage I — the MLIR→hsaco→execute loop closes (2026-06-23)
+
+Stages C–H execute via **hand-written HIP C++** (HIPRTC at load) — they bypass
+the Tessera IR stack. Stage I proves the *compiler pipeline* reaches silicon: a
+`tessera.add` Graph-IR kernel lowers `--tessera-emit-rocdl` → (mlir-opt:
+`convert-gpu-to-rocdl` finish + `reconcile-unrealized-casts`, `rocdl-attach-target
+{chip=gfx1151}`, `gpu-module-to-binary`) → a `gpu.binary` whose `#gpu.object` is a
+real `\x7fELF` hsaco → extract → `hipModuleLoadData` → launch (the MLIR
+memref-descriptor kernel ABI) → **maxerr = 0.0 vs numpy** (f32 add + mul). The
+kernel that ran was produced by lowering, not hand-written.
+
+Fixture: `tests/unit/test_rocm_mlir_to_hsaco.py` (skip-clean without tools/GPU).
+Division: `tessera-opt` owns the Tessera lowering; the generic `gpu→hsaco`
+serialization rides the platform `mlir-opt` (apt LLVM 22). Scope: **scalar
+element-wise only** — proves the pipeline reaches silicon (smallest closed loop).
+Real WMMA through the full stack (`tessera_rocm.wmma` → real `amdgcn.wmma`, not
+the current contract *marker*) is Stage J; a full GEMM through the stack validated
+against the hand-written oracle is Stage K. See ROCM_AUDIT "Compiler-path roadmap."
+
 ## The hardware — three engines, three Tessera stories
 
 | Engine | What | Tessera status | Action |

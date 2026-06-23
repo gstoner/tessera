@@ -9,8 +9,17 @@ tessera`` does NOT eagerly pull the (heavier) training subpackage in.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
+
+# The committed package lives under ``<repo>/python`` and is normally imported
+# via conftest's in-process ``sys.path.insert`` (tessera is not pip-installed).
+# A spawned subprocess does NOT inherit that, so it must be handed the path
+# explicitly — otherwise the test is flaky on whether the *invoker* exported
+# PYTHONPATH=python.
+_REPO_PYTHON = str(Path(__file__).resolve().parents[2] / "python")
 
 
 def test_train_reachable_as_attribute():
@@ -39,11 +48,16 @@ def test_bare_import_tessera_does_not_eagerly_load_train():
         "or m.startswith('tessera.train.')]\n"
         "print(';'.join(sorted(loaded)))\n"
     )
+    env = {**os.environ}
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in (_REPO_PYTHON, env.get("PYTHONPATH", "")) if p
+    )
     proc = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
     leaked = [m for m in proc.stdout.strip().split(";") if m]
     assert not leaked, f"import tessera eagerly loaded train modules: {leaked}"

@@ -90,6 +90,21 @@ MFMA_GENERATOR_PATH = REPO / "scripts" / "generate_mfma_table.py"
 
 
 class TestH2MFMATableSync:
+    @pytest.fixture(autouse=True, scope="class")
+    def _generate_mfma_table(self):
+        """``mfma_table.inc`` is a generated, git-ignored build artifact — it is
+        NOT committed. These tests therefore must generate it themselves rather
+        than depend on a stale copy left on disk by a prior build or test run
+        (the source of an isolation-order flake: they pass only when something
+        upstream regenerated the table, and fail in isolation against a stale
+        one). Regenerate once per class from the `_MFMA_VARIANTS` source so the
+        format/sync/count assertions validate fresh generator output."""
+        subprocess.run(
+            [sys.executable, str(MFMA_GENERATOR_PATH)],
+            env={"PYTHONPATH": f"{REPO / 'python'}:{REPO}", "PATH": "/usr/bin:/bin"},
+            check=True, capture_output=True, text=True,
+        )
+
     def test_generator_script_exists(self):
         assert MFMA_GENERATOR_PATH.exists()
 

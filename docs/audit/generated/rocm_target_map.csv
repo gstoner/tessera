@@ -29,5 +29,5 @@ einsum,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFM
 factorized_matmul,tensor,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 fused_epilogue,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 linear_general,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
-matmul,tensor,hardware_verified,fp16,hipcc≥7.2.4,,0.7500,,RDNA 3.5 WMMA matrix-core GEMM executes on the AMD GPU through the shipped libtessera_rocm_gemm.so symbol (HIPRTC-compiled for the device arch at load); ROCm 7.2.4. Numerically validated vs numpy (maxerr < 1e-2) by the execute_compare_fixture.
+matmul,tensor,hardware_verified,"fp16,bf16",hipcc≥7.2.4,,0.7500,,"RDNA 3.5 WMMA matrix-core GEMM executes on the AMD GPU through the shipped libtessera_rocm_gemm.so symbols (tessera_rocm_wmma_gemm_{f16,bf16}, HIPRTC-compiled for the device arch at load); ROCm 7.2.4. Numerically validated vs numpy by the execute_compare_fixture, and the runtime.launch() rocm_wmma lane."
 qkv_projection,tensor,artifact_only,fp32,hipcc≥7.2.4,"(32, 32, 8, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H

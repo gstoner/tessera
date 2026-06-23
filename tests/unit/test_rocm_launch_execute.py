@@ -60,11 +60,13 @@ def _matmul_artifact(rt):
     })
 
 
-def test_launch_rocm_wmma_matmul_f16_matches_numpy():
+@pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (128, 96, 64)])
+def test_launch_rocm_wmma_matmul_f16_matches_numpy(shape):
     rt = _rocm_runtime_or_skip()
+    m, n, k = shape
     rng = np.random.default_rng(0)
-    a = (rng.standard_normal((16, 16)) * 0.5).astype(np.float16)
-    b = (rng.standard_normal((16, 16)) * 0.5).astype(np.float16)
+    a = (rng.standard_normal((m, k)) * 0.5).astype(np.float16)
+    b = (rng.standard_normal((k, n)) * 0.5).astype(np.float16)
     res = rt.launch(_matmul_artifact(rt), (a, b))
     assert res["ok"] is True, res.get("reason")
     assert res["runtime_status"] == "success"
@@ -72,7 +74,21 @@ def test_launch_rocm_wmma_matmul_f16_matches_numpy():
     assert res["execution_kind"] == "native_gpu"
     ref = a.astype(np.float32) @ b.astype(np.float32)
     maxerr = float(np.max(np.abs(res["output"] - ref)))
-    assert maxerr < 1e-2, f"rocm_wmma launch maxerr={maxerr}"
+    assert maxerr < 1e-2, f"rocm_wmma launch{shape} maxerr={maxerr}"
+
+
+def test_launch_rocm_wmma_matmul_bf16_matches_numpy():
+    rt = _rocm_runtime_or_skip()
+    bf16 = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(0)
+    a = (rng.standard_normal((64, 32)) * 0.5).astype(bf16)
+    b = (rng.standard_normal((32, 48)) * 0.5).astype(bf16)
+    res = rt.launch(_matmul_artifact(rt), (a, b))
+    assert res["ok"] is True, res.get("reason")
+    assert res["execution_kind"] == "native_gpu"
+    ref = a.astype(np.float32) @ b.astype(np.float32)
+    maxerr = float(np.max(np.abs(res["output"] - ref)))
+    assert maxerr < 5e-2 * 32, f"rocm_wmma bf16 launch maxerr={maxerr}"
 
 
 def test_launch_rocm_wmma_rejects_non_half_dtype():

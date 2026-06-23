@@ -84,7 +84,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 | factorized_matmul | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | fused_epilogue | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 | linear_general | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
-| matmul | hardware_verified | fp16 | hipcc≥7.2.4 | - | 75% | - |
+| matmul | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 75% | - |
 | qkv_projection | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 
 ## How to read this

@@ -760,25 +760,27 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
 # the hardware_verified row below — there is exactly one ``rocm`` entry per op.
 #
 # Honesty (Decision #25): ``dtypes``/``shape_envelope`` describe ONLY what the
-# shipped symbol actually proves, not the broader artifact dtype set. matmul is
-# a single 16x16x16 RDNA **WMMA** tile, f32<-f16 — tiled/K-looped GEMM and bf16
-# are follow-ups, so this row claims fp16 only and carries no MFMA shape (WMMA,
-# not the CDNA matrix-core path).
+# shipped symbol actually proves. matmul is a general tiled/K-looped RDNA
+# **WMMA** GEMM, f32<-{f16,bf16} (ragged M/N/K zero-padded), and carries no MFMA
+# shape (WMMA, not the CDNA matrix-core path). It also backs the
+# runtime.launch() ``rocm_wmma`` execution lane.
 # ─────────────────────────────────────────────────────────────────────────────
 _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
     "matmul": {
         "runtime_symbol": "tessera_rocm_wmma_gemm_f16",
-        "dtypes": ("fp16",),
+        "dtypes": ("fp16", "bf16"),
         "feature_flags": ("wmma",),
         "shape_envelope": (
-            "single 16x16x16 RDNA WMMA tile, f32<-f16 (gfx1151 Strix Halo / "
-            "gfx1100 WSL enumeration); tiled/K-looped GEMM + bf16 are follow-ups"
+            "general tiled/K-looped GEMM, f32<-{f16,bf16}, any positive M/N/K "
+            "(ragged edges zero-padded), 16x16x16 WMMA tiles, one wave/tile "
+            "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
         ),
         "notes": (
             "RDNA 3.5 WMMA matrix-core GEMM executes on the AMD GPU through the "
-            "shipped libtessera_rocm_gemm.so symbol (HIPRTC-compiled for the "
-            "device arch at load); ROCm 7.2.4. Numerically validated vs numpy "
-            "(maxerr < 1e-2) by the execute_compare_fixture."
+            "shipped libtessera_rocm_gemm.so symbols "
+            "(tessera_rocm_wmma_gemm_{f16,bf16}, HIPRTC-compiled for the device "
+            "arch at load); ROCm 7.2.4. Numerically validated vs numpy by the "
+            "execute_compare_fixture, and the runtime.launch() rocm_wmma lane."
         ),
     },
 }

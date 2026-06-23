@@ -29,7 +29,12 @@ GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
 ROCM_LIB_DIR = os.environ.get("ROCM_PATH", "/opt/rocm") + "/lib"
 
 
-def _load_symbol():
+def _bf16():
+    ml = pytest.importorskip("ml_dtypes")
+    return ml.bfloat16
+
+
+def _load_lib():
     if not GEMM_LIB.is_file():
         pytest.skip(f"build the shipped GEMM lib: ninja -C build tessera_rocm_gemm "
                     f"({GEMM_LIB} missing)")
@@ -41,38 +46,64 @@ def _load_symbol():
                 ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
             except OSError:
                 pass
-    lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL)
-    fn = lib.tessera_rocm_wmma_gemm_f16
+    return ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL)
+
+
+def _bind(lib, name):
+    fn = getattr(lib, name)
     fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                    ctypes.c_int, ctypes.c_int, ctypes.c_int]
     fn.restype = ctypes.c_int
     return fn
 
 
-def test_shipped_rocm_wmma_symbol_matches_numpy():
-    fn = _load_symbol()
+def _gemm(fn, store, M, N, K):
     rng = np.random.default_rng(0)
-    A = (rng.standard_normal((16, 16)) * 0.5).astype(np.float16)
-    B = (rng.standard_normal((16, 16)) * 0.5).astype(np.float16)
-    D = np.zeros((16, 16), dtype=np.float32)
+    A = (rng.standard_normal((M, K)) * 0.5).astype(store)
+    B = (rng.standard_normal((K, N)) * 0.5).astype(store)
+    D = np.zeros((M, N), dtype=np.float32)
     rc = fn(A.ctypes.data_as(ctypes.c_void_p),
             B.ctypes.data_as(ctypes.c_void_p),
-            D.ctypes.data_as(ctypes.c_void_p), 16, 16, 16)
+            D.ctypes.data_as(ctypes.c_void_p), M, N, K)
+    return rc, A, B, D
+
+
+# General tiled/K-looped GEMM over both storage dtypes — including ragged
+# (non-multiple-of-16) shapes that exercise the zero-pad load + bounds-checked
+# store, and a K-loop (K > 16).
+@pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (17, 17, 17),
+                                   (128, 96, 64)])
+def test_shipped_rocm_wmma_f16_matches_numpy(shape):
+    fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_f16")
+    rc, A, B, D = _gemm(fn, np.float16, *shape)
     if rc == 2:
         pytest.skip("no usable AMD GPU / HIPRTC (shipped symbol returned rc=2)")
-    assert rc == 0, f"tessera_rocm_wmma_gemm_f16 returned {rc}"
+    assert rc == 0, f"tessera_rocm_wmma_gemm_f16{shape} returned {rc}"
     ref = A.astype(np.float32) @ B.astype(np.float32)
     maxerr = float(np.max(np.abs(D - ref)))
-    assert maxerr < 1e-2, f"WMMA GEMM maxerr={maxerr} vs numpy reference"
+    assert maxerr < 1e-2, f"f16 WMMA GEMM{shape} maxerr={maxerr}"
 
 
-def test_shipped_rocm_wmma_symbol_rejects_unsupported_shape():
-    fn = _load_symbol()
-    A = np.zeros((16, 16), dtype=np.float16)
-    B = np.zeros((16, 16), dtype=np.float16)
-    D = np.zeros((16, 16), dtype=np.float32)
-    # 17x17x17 is not the single supported tile -> rc=1, no device needed.
-    rc = fn(A.ctypes.data_as(ctypes.c_void_p),
-            B.ctypes.data_as(ctypes.c_void_p),
-            D.ctypes.data_as(ctypes.c_void_p), 17, 17, 17)
-    assert rc == 1, f"expected rc=1 (unsupported shape), got {rc}"
+@pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (100, 33, 80)])
+def test_shipped_rocm_wmma_bf16_matches_numpy(shape):
+    bf16 = _bf16()
+    fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_bf16")
+    rc, A, B, D = _gemm(fn, bf16, *shape)
+    if rc == 2:
+        pytest.skip("no usable AMD GPU / HIPRTC (shipped symbol returned rc=2)")
+    assert rc == 0, f"tessera_rocm_wmma_gemm_bf16{shape} returned {rc}"
+    ref = A.astype(np.float32) @ B.astype(np.float32)
+    maxerr = float(np.max(np.abs(D - ref)))
+    # bf16 has ~8 mantissa bits — looser tolerance, scaled by the K-contraction.
+    assert maxerr < 5e-2 * shape[2], f"bf16 WMMA GEMM{shape} maxerr={maxerr}"
+
+
+def test_shipped_rocm_wmma_symbol_rejects_bad_shape():
+    fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_f16")
+    a = np.zeros((16, 16), dtype=np.float16)
+    d = np.zeros((16, 16), dtype=np.float32)
+    # Non-positive dim -> rc=1, no device needed (shape validated before launch).
+    rc = fn(a.ctypes.data_as(ctypes.c_void_p),
+            a.ctypes.data_as(ctypes.c_void_p),
+            d.ctypes.data_as(ctypes.c_void_p), 0, 16, 16)
+    assert rc == 1, f"expected rc=1 (bad shape), got {rc}"

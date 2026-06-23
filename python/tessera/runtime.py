@@ -1315,8 +1315,8 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
             d.ctypes.data_as(ctypes.c_void_p), int(m), int(n), int(k))
     if rc == 1:
         raise ValueError(
-            f"rocm_wmma kernel rejected shape ({m}x{n}x{k}) — outside the "
-            f"supported WMMA tiling")
+            f"rocm_wmma kernel rejected shape ({m}x{n}x{k}) — M/N/K must be "
+            f"positive")
     if rc == 2:
         raise RuntimeError("rocm_wmma: no usable AMD GPU / HIPRTC at launch")
     if rc != 0:

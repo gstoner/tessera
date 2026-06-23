@@ -70,11 +70,13 @@ promoted `artifact_only → hardware_verified`:
   `libtessera_rocm_gemm.so`; HIPRTC-compiles the RDNA WMMA kernel for the device
   arch at load — no hipcc-as-compiler needed).
 - **`execute_compare_fixture`** = `tests/unit/test_rocm_wmma_runtime_symbol.py`
-  (dlopens the shipped symbol, compares f32←f16 16×16×16 WMMA GEMM to numpy,
-  maxerr < 1e-2; skip-clean with no AMD GPU / HIPRTC).
-- Honest dtype scope (Decision #25): the row claims **fp16 only** + WMMA (not the
-  CDNA MFMA shape/descriptor), `shape_envelope` documents the single-tile limit.
-- `rocm_target_map`: matmul → `hardware_verified | fp16`; `artifact_only` 32 → 31.
+  (dlopens the shipped symbols, compares the WMMA GEMM to numpy across f16/bf16
+  and several shapes; skip-clean with no AMD GPU / HIPRTC).
+- Honest dtype scope (Decision #25): the row claims **{fp16, bf16}** + WMMA (not
+  the CDNA MFMA shape/descriptor); `shape_envelope` is the general tiled GEMM
+  (see the kernel-generalized note below).
+- `rocm_target_map`: matmul → `hardware_verified | fp16,bf16`; `artifact_only`
+  32 → 31.
 - Lives in `_ROCM_HARDWARE_VERIFIED` (the ROCm analog of `_APPLE_GPU_KERNELS`).
 
 **No audit inflation:** the per-primitive `backend_kernel` axis stays **474 open
@@ -82,18 +84,35 @@ promoted `artifact_only → hardware_verified`:
 apple / nvidia / cpu rows are not `hardware_verified`. Only the **rocm target
 row** is hardware-verified ("complete for this target", not the universal flip).
 
+## runtime.launch() lane wired + kernel generalized (2026-06-22)
+
+- **`runtime.launch()` now dispatches `target="rocm"` matmul to the GPU.** Added
+  the `rocm_wmma` executor (`runtime._execute_rocm_wmma_artifact` + a cached lib
+  loader + host probe), the `(rocm, rocm_wmma)` `native_gpu` row in
+  `execution_matrix._MATRIX`, and dropped `rocm` from `_UNIMPLEMENTED_TARGETS`
+  (named sub-arches stay — the shipped symbol HIPRTC-compiles for whatever arch
+  the device enumerates). So `../../generated/runtime_execution_matrix.md` now
+  carries an honest ROCm execution row. Proven end-to-end on the box: `launch()`
+  of a rocm matmul artifact runs a real WMMA GEMM, maxerr ~5e-7
+  (`test_rocm_launch_execute.py`).
+  - The `@jit(target="rocm")` auto-stamp is intentionally **not** wired:
+    `JitFn.is_executable` reads `compile_bundle.execution_kind` (compile-time),
+    which a host runtime probe can't honestly drive. `launch()` is the wired
+    lane (matches how Apple G7 earned its matrix row before full jit support).
+- **Kernel generalized to tiled/K-looped GEMM + bf16.** `tessera_rocm_gemm.cpp`
+  now does a general tiled GEMM (any positive M/N/K, 16×16 output tiles, K-loop,
+  ragged edges zero-padded) and ships a second symbol
+  `tessera_rocm_wmma_gemm_bf16`. The matmul manifest row claims `{fp16, bf16}`;
+  the fixture validates f16/bf16 over 16³, 64×48×32, 17³, 128×96×64, 100×33×80.
+
 ## Still Open
 
-- **No ROCm row in `../../generated/runtime_execution_matrix.md` — deliberate, not
-  an oversight.** That matrix maps `(target, compiler_path) → runtime.launch()`
-  executor; ROCm stays in `execution_matrix._UNIMPLEMENTED_TARGETS` because the
-  shipped symbol is dlopened directly (like the pre-executor Apple G7 harness),
-  not yet routed through `launch()`. Adding a row would falsely claim
-  `launch()`-dispatch. Wiring an auto-registered ROCm executor into `launch()` is
-  the next step that earns that row.
-- Stage D / shipped-symbol proof is a single 16×16×16 tile + `f32←f16` only;
-  general tiled/K-looped GEMM and the bf16 combo (documented gfx115x bugs) are
-  follow-ups.
+- The matmul WMMA path is the proven GEMM; **flash_attn / other GEMM-family ops
+  on RDNA remain artifact_only** (CDNA MFMA shape, HIP execution gated). The
+  named ROCm sub-arches (gfx90a/942/950/1200) stay in `_UNIMPLEMENTED_TARGETS`
+  — the generic `rocm` lane covers execution via HIPRTC for the live device.
+- Performance is untuned (one wave per 16×16 tile, no LDS staging / multi-tile
+  per wave); correctness-first. A perf ladder is the next backend track.
 
 ## Next Work
 

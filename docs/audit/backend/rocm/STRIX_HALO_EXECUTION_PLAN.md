@@ -211,10 +211,42 @@ not assumed. Rung 2 is kept as a shipped, correctness-guarded symbol because it
 is the **substrate for rung 3** (software pipelining needs LDS buffering) and
 should pay off on discrete RDNA / CDNA where global *is* the bottleneck.
 
-**Open rungs (next):** 2-/3-stage K-loop software pipelining over the LDS buffers
-(§B2) — the rung where LDS staging starts to earn its keep by overlapping global
-loads with WMMA; arch-aware LDS layout (swizzle vs pad). Per Gluon's v6 lesson,
-watch register budget — double-buffer can regress if it spills. Not wired yet.
+**Rung 3 — 2-stage software pipelining, double-buffered LDS (IMPLEMENTED;
+narrow-window win, NOT promoted).** Two LDS buffers: while the wave computes
+WMMA on K-panel k, the workgroup prefetches panel k+1 into the other buffer, so
+global-load latency overlaps compute (Gluon v4→v5). Correct across shapes
+(fixture `test_shipped_rocm_wmma_pipe_matches_numpy`), shipped as
+`tessera_rocm_wmma_gemm_f16_pipe` + `..._bench_pipe`, swept via `--pipe`.
+**Measured on gfx1151 (best-of-7, kernel-only f16 TFLOP/s; best rung-3 config
+per size):**
+
+| size | rung-1 reg 2×4 | best rung-3 pipe | verdict |
+|------|---------------:|-----------------:|---------|
+| 512³  | **3.47** | 3.08 | rung-1 (0.89×) |
+| 1024³ | 7.87 | **8.54** (4×1w 1×4t) | rung-3 +8% |
+| 2048³ | 8.88 | **9.62** (2×2w 2×4t) | rung-3 +8% |
+| 3072³ | **10.76** | 9.97 | rung-1 (0.93×) |
+| 4096³ | **10.75** | 8.38 | rung-1 (0.78×) |
+
+Pipelining wins only in a **narrow 1024³–2048³ window (+8%)**, with a
+*size-dependent* best config, and loses at 512³ (occupancy/overhead) and ≥3072³
+(doubled LDS → lower occupancy; the register kernel's locality wins at large
+working sets). **Production stays rung-1 register blocking (2×4)** — a narrow,
+config-fragile +8% doesn't justify a size-gated autotuner here.
+
+**Synthesis — the staging rungs don't move this APU.** Rung 2 (LDS), rung 3
+(pipelined LDS), and the zero-copy host-buffer path all give *at most* a
+narrow-window single-digit win and lose elsewhere. They share one root cause:
+on Strix Halo's unified LPDDR5x, **global bandwidth/latency is not the
+bottleneck the memory-hierarchy rungs target** — the rung-1 register kernel
+already reuses fragments and is compute/occupancy-bound (~11 TFLOP/s, roughly
+~⅕ of the ~59 TFLOP/s f16 WMMA peak). The next real lever is therefore
+**occupancy + WMMA issue/scheduling** (larger cooperative macro-tiles sized to
+the VGPR/occupancy budget, dual-issue), not staging — Gluon's B1 "register-budget
+tiling is the lever" over its B2 "pipelining," confirmed empirically here.
+Arch-aware LDS layout + pipelining should still pay on discrete RDNA/CDNA where
+global *is* the bottleneck; the rung-2/3 symbols are kept for that and as
+references.
 
 ## The hardware — three engines, three Tessera stories
 

@@ -185,15 +185,16 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
     "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
 })
 
-# Strix Halo bring-up (2026-06-22) — the ROCm ops whose ``hardware_verified``
-# claim is honestly earned: each ships a real C-ABI ``runtime_symbol``
-# (``libtessera_rocm_gemm.so``) that runs an RDNA WMMA kernel on the AMD GPU AND
-# a checked-in ``execute_compare_fixture`` that numerically validates it (and
-# skips clean — no false pass — on a host without an AMD GPU). This is the
-# "first real ROCm proof landed → extend the guard" event the original docstring
-# anticipated. The fixture only *executes* on a ROCm box; the manifest claim
+# Strix Halo bring-up — the ROCm ops whose ``hardware_verified`` claim is
+# honestly earned: each ships a real C-ABI ``runtime_symbol`` that runs an RDNA
+# WMMA kernel on the AMD GPU AND a checked-in ``execute_compare_fixture`` that
+# numerically validates it (and skips clean — no false pass — on a host without
+# an AMD GPU). The fixture only *executes* on a ROCm box; the manifest claim
 # rests on that on-silicon run (see docs/audit/backend/rocm/STRIX_HALO_EXECUTION_PLAN.md).
-_ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul"})
+#   - matmul  (2026-06-22): libtessera_rocm_gemm.so WMMA GEMM.
+#   - flash_attn (2026-06-23): libtessera_rocm_flash_attn.so FA-2 forward — the
+#     second op after matmul to execute natively on a non-Apple backend.
+_ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "flash_attn"})
 
 
 def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:

@@ -23,10 +23,10 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Area | Current state | Still open |
 |---|---|---|
 | Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). (COMPILER_AUDIT Phase 1 closed 2026-06-22 — effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU. | NVIDIA and ROCm have no executable runtime rows yet; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
+| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm now has one executable runtime row (`rocm`→`rocm_wmma`, gfx1151 WMMA GEMM). | NVIDIA has no executable runtime row yet; ROCm execution is one arch × matmul only; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA | CUDA/NVIDIA plans and target maps exist; artifacts/toolchain path is represented. | Real hardware execute-and-compare and runtime launch bridge remain. |
-| ROCm | ROCm/gfx target map and execute-and-compare plan exist. | Real HIP/ROCm hardware proof and runtime launch bridge remain. |
+| ROCm | gfx1151 (RDNA 3.5 / Strix Halo) executes **two** ops on real hardware — `matmul` (WMMA GEMM, perf ladder, `runtime.launch()` lane) and `flash_attn` (WMMA FA-2 forward), both `hardware_verified` with execute-compare fixtures. | flash_attn is forward-only / no perf ladder / no launch lane; the rest of the kernel surface stays artifact_only; CDNA (MI300-class) and NVIDIA hardware proof remain; the per-primitive `backend_kernel` axis still needs all targets. |
 | Coverage | Partial-op uplift is closed; direct-test debt is not ordinary missing tests. | Backend-kernel axis is still open across all S-series primitives; batching/transpose/sharding have smaller long-tail gaps. |
 | Domain tracks | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff plans have been reduced to clearer scope locks and implementation history. | Domain claims must stay tied to generated coverage and backend proof, not old roadmap prose. |
 
@@ -126,11 +126,17 @@ Finished:
 - Target maps exist for NVIDIA SM90 and ROCm.
 - CUDA/ROCm toolchain plans and execute-and-compare backlog are documented.
 - The repo distinguishes artifact generation from hardware execution.
+- **ROCm gfx1151 (RDNA 3.5 / Strix Halo) executes two ops, both hardware-verified**:
+  `matmul` (WMMA GEMM — launch bridge + `runtime.launch()` row + measured perf
+  ladder) and `flash_attn` (WMMA FA-2 forward — online softmax, causal, ragged).
+  Both with execute-compare fixtures on the box. First non-Apple backend kernels
+  through the C-ABI launch bridge.
 
 Still needs work:
 
-- Run real execute-and-compare on NVIDIA and ROCm hardware.
-- Add runtime launch bridges and execution-matrix rows only after real execution works.
+- Run real execute-and-compare on NVIDIA hardware, and on CDNA (MI300-class) ROCm.
+- Extend ROCm execution beyond matmul + flash_attn (the rest stay artifact_only);
+  flash_attn backward / perf ladder / `runtime.launch()` lane.
 - Promote backend manifest rows with toolchain, runtime ABI, smoke, and numerical proof.
 
 Primary detail:

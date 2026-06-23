@@ -21,4 +21,15 @@ if (hip_FOUND)
   if (TESSERA_HIPRTC_LIB)
     target_link_libraries(tessera_rocm_gemm PUBLIC ${TESSERA_HIPRTC_LIB})
   endif()
+
+  # Shipped ROCm WMMA flash-attention runtime symbol
+  # (tessera_rocm_wmma_flash_attn_{f16,bf16}). Same HIPRTC-at-load model as the
+  # GEMM symbol; the second op after matmul to execute natively on ROCm. The
+  # execute_compare_fixture (tests/unit/test_rocm_flash_attn_runtime_symbol.py)
+  # dlopens and numerically validates it against a CPU attention reference.
+  add_library(tessera_rocm_flash_attn SHARED tessera_rocm_flash_attn.cpp)
+  target_link_libraries(tessera_rocm_flash_attn PUBLIC hip::host)
+  if (TESSERA_HIPRTC_LIB)
+    target_link_libraries(tessera_rocm_flash_attn PUBLIC ${TESSERA_HIPRTC_LIB})
+  endif()
 endif()

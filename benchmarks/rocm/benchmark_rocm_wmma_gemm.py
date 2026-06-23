@@ -39,12 +39,18 @@ GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
             / "libtessera_rocm_gemm.so")
 ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 
-# The shipped production output-tile blocking (mirror of kProdMT/kProdNT in
-# tessera_rocm_gemm.cpp). Used for the default (non-ladder) row.
+# The shipped production output-tile blocking is SIZE-ADAPTIVE (mirror of
+# prodTile() in tessera_rocm_gemm.cpp): 2x4 for small problems, 3x4 once
+# min(M,N,K) >= 1024 (the occupancy lever — STRIX Stage H). PROD_* here is the
+# small-problem tile used for the default (non-ladder) row; the ladder sweep
+# covers the large-problem 3x4 explicitly.
 PROD_MT, PROD_NT = 2, 4
 
 DEFAULT_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
-LADDER_TILINGS = [(1, 1), (1, 2), (1, 4), (2, 2), (2, 4), (4, 2), (4, 4)]
+# Includes 3x4 (the size-adaptive large-problem production tile) and 4x4 (the
+# VGPR/occupancy cliff — runs slower despite more reuse; see STRIX Stage H).
+LADDER_TILINGS = [(1, 1), (1, 2), (1, 4), (2, 2), (2, 4), (4, 2),
+                  (3, 4), (4, 3), (2, 6), (4, 4)]
 # rung-2 LDS configs (WM, WN waves, MT, NT register tiles/wave) to compare
 # against the rung-1 production register tiling under --lds.
 LDS_CONFIGS = [(2, 2, 2, 4), (4, 1, 2, 4), (2, 2, 1, 4), (4, 2, 1, 2)]

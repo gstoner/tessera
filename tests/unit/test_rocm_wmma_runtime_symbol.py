@@ -71,8 +71,11 @@ def _gemm(fn, store, M, N, K):
 # General tiled/K-looped GEMM over both storage dtypes — including ragged
 # (non-multiple-of-16) shapes that exercise the zero-pad load + bounds-checked
 # store, and a K-loop (K > 16).
+# Small shapes exercise the 2x4 production tile; the last (min-dim >= 1024)
+# exercises the size-adaptive 3x4 large-problem tile (the occupancy lever — see
+# STRIX Stage H), including a ragged large shape.
 @pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (17, 17, 17),
-                                   (128, 96, 64)])
+                                   (128, 96, 64), (1024, 1037, 1031)])
 def test_shipped_rocm_wmma_f16_matches_numpy(shape):
     fn = _bind(_load_lib(), "tessera_rocm_wmma_gemm_f16")
     rc, A, B, D = _gemm(fn, np.float16, *shape)
@@ -81,7 +84,9 @@ def test_shipped_rocm_wmma_f16_matches_numpy(shape):
     assert rc == 0, f"tessera_rocm_wmma_gemm_f16{shape} returned {rc}"
     ref = A.astype(np.float32) @ B.astype(np.float32)
     maxerr = float(np.max(np.abs(D - ref)))
-    assert maxerr < 1e-2, f"f16 WMMA GEMM{shape} maxerr={maxerr}"
+    # Large-K contractions accumulate more rounding; scale the bound by K.
+    tol = 1e-2 if shape[2] <= 256 else 5e-2
+    assert maxerr < tol, f"f16 WMMA GEMM{shape} maxerr={maxerr}"
 
 
 @pytest.mark.parametrize("shape", [(16, 16, 16), (64, 48, 32), (100, 33, 80)])

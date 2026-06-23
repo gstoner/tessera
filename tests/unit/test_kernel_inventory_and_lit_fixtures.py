@@ -180,10 +180,24 @@ class TestG3ManifestWiring:
         assert rl is not None
         assert "compute-bound" in rl
 
-    def test_rocm_matmul_carries_mfma_shape(self):
+    def test_rocm_matmul_is_wmma_hardware_verified(self):
+        # Strix Halo bring-up (2026-06-22): the rocm matmul row was promoted to
+        # the RDNA WMMA hardware_verified path, so it no longer carries the CDNA
+        # MFMA (32,32,8,1) shape. The MFMA artifact contract still holds for the
+        # other GEMM-family ops (see test_rocm_gemm_carries_mfma_shape).
         from tessera.compiler.backend_manifest import manifest_for
-        entries = {e.target: e for e in manifest_for("matmul")}
-        rocm = entries["rocm"]
+        rocm = {e.target: e for e in manifest_for("matmul")}["rocm"]
+        assert rocm.status == "hardware_verified"
+        assert rocm.mfma_shape is None
+        assert "wmma" in rocm.feature_flags
+        assert rocm.runtime_symbol == "tessera_rocm_wmma_gemm_f16"
+        assert rocm.hipcc_version_min == "7.2.4"
+
+    def test_rocm_gemm_carries_mfma_shape(self):
+        # The CDNA MFMA artifact contract still holds for the (still
+        # artifact_only) GEMM-family ops that didn't get a WMMA proof.
+        from tessera.compiler.backend_manifest import manifest_for
+        rocm = {e.target: e for e in manifest_for("gemm")}["rocm"]
         assert rocm.mfma_shape == (32, 32, 8, 1)
         assert rocm.hipcc_version_min == "7.2.4"
 

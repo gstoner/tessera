@@ -71,6 +71,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "when their Metal/MPSGraph executor probes are active)",
     "native_cpu":           "x86 AMX / native CPU runtime via the C runtime ABI",
     "jit_cpu_numpy":        "JIT CPU fallback via the numpy reference path",
+    "rocm_wmma":            "AMD GPU RDNA WMMA matrix-core GEMM via the shipped "
+                            "libtessera_rocm_gemm.so tessera_rocm_wmma_gemm_{f16,"
+                            "bf16} C ABI symbol (HIPRTC-compiled for the device "
+                            "arch; f16/bf16 storage, f32 accumulate)",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -134,6 +138,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="reference_cpu", executable=True,
         executor_id="jit_cpu_numpy", runtime_status="success",
         reason="CPU JIT artifact runs through the numpy reference path."),
+    # --- AMD ROCm GPU (RDNA WMMA matrix-core GEMM) ---
+    # Strix Halo bring-up (2026-06-22): the shipped libtessera_rocm_gemm.so runs
+    # a real WMMA GEMM on the AMD GPU. The artifact is only stamped
+    # executable=True by the jit path on a host that passes the runtime probe
+    # (lib loads + a live HIP device); elsewhere launch() reports unimplemented.
+    # This row is host-independent — the dashboard renders it everywhere; only
+    # `metadata["executable"] is True` (a ROCm box) actually dispatches here.
+    ("rocm", "rocm_wmma"): ExecutionRow(
+        target="rocm", compiler_path="rocm_wmma",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_wmma", runtime_status="success",
+        reason="ROCm matmul artifact runs a real RDNA WMMA matrix-core GEMM on "
+               "the AMD GPU via the shipped tessera_rocm_wmma_gemm_{f16,bf16} "
+               "C ABI symbol (HIPRTC-compiled for the device arch).",
+        execution_mode="hip_runtime"),
 }
 
 
@@ -141,9 +160,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
 # row (yet). `launch()` reports `unimplemented` (target capability present) or
 # `missing_backend` (target capability absent). Listed explicitly so the drift
 # test catches accidental status drift.
+#
+# Note: ``rocm`` is NO LONGER here — it has an executable ``rocm_wmma`` row
+# above (RDNA WMMA GEMM). The named ROCm sub-arches stay unimplemented: the
+# shipped GEMM symbol HIPRTC-compiles for whatever arch the device enumerates,
+# so the generic ``rocm`` lane covers execution; per-arch executor rows are a
+# follow-up only if a sub-arch needs a distinct dispatch.
 _UNIMPLEMENTED_TARGETS: tuple[str, ...] = (
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
-    "rocm", "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
+    "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
     "rocm_gfx1100", "rocm_gfx1200",
 )
 

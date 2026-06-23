@@ -1324,6 +1324,259 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     return d
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage L4 — the COMPILED GEMM lane (the default rocm matmul execution path).
+#
+# This lane executes the kernel the *Tessera compiler* generates: it drives the
+# in-process Stage L pipeline through ``tessera-opt`` (Stage L3 — no mlir-opt
+# shell-out) to produce an hsaco, then loads + launches it via HIP. The emitted
+# kernel is problem-size-generic (L1), register-blocked (L2), and reaches
+# parity-or-better vs the hand-written kernel across aligned/ragged/f16/bf16
+# (L4). So `@jit(target="rocm")` matmul now executes through this lane by default
+# on a capable host (jit.py stamps ``compiler_path = "rocm_compiled"``).
+#
+# The hand-written ``rocm_wmma`` HIPRTC kernel is now the reference oracle + the
+# availability fallback: if the compiled lane can't run here (no tessera-opt
+# built, no in-process serialization spine, or no usable AMD GPU) the executor
+# degrades to it, so flipping the default never regresses availability. ONE hsaco
+# per (mt,nt,chip,dtype) serves every shape — cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_hip_launch_lib: ctypes.CDLL | None = None
+#: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
+_rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str], bytes] = {}
+
+
+class _RocmCompiledUnavailable(RuntimeError):
+    """The compiled ROCm lane can't run on this host (no tessera-opt, no
+    in-process serialization, or no usable AMD GPU). The executor degrades to the
+    hand-written ``rocm_wmma`` oracle on this — but NOT on a genuine kernel
+    failure (those surface, so a real compiled-lane bug is never masked)."""
+
+
+def _tessera_opt_path() -> Optional[Path]:
+    """Locate the tessera-opt driver (env override → canonical build dir)."""
+    env = os.environ.get("TESSERA_OPT")
+    if env and Path(env).is_file():
+        return Path(env)
+    p = (Path(__file__).resolve().parents[2]
+         / "build/tools/tessera-opt/tessera-opt")
+    return p if p.is_file() else None
+
+
+def _rocm_chip() -> str:
+    return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
+
+
+def _rocm_prod_tile(m: int, n: int, k: int) -> tuple[int, int]:
+    """Mirror the hand-written oracle's size-adaptive macro-tile (prodTile in
+    tessera_rocm_gemm.cpp): 3x4 once min(M,N,K) >= 1024, else 2x4."""
+    return (3, 4) if min(m, n, k) >= 1024 else (2, 4)
+
+
+def _extract_hsaco_blob(text: str) -> bytes:
+    """Decode the ELF bytes from a printed ``#gpu.object<..., bin = "...">``."""
+    i = text.index('bin = "') + len('bin = "')
+    out = bytearray()
+    j = i
+    hexd = "0123456789abcdefABCDEF"
+    simple = {"\\": 0x5C, '"': 0x22, "n": 0x0A, "t": 0x09, "r": 0x0D}
+    while j < len(text):
+        c = text[j]
+        if c == '"':
+            break
+        if c == "\\":
+            nx = text[j + 1:j + 3]
+            if len(nx) == 2 and nx[0] in hexd and nx[1] in hexd:
+                out.append(int(nx, 16)); j += 3; continue
+            if text[j + 1] in simple:
+                out.append(simple[text[j + 1]]); j += 2; continue
+        out.append(ord(c)); j += 1
+    return bytes(out)
+
+
+def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
+    """Generate + serialize the compiler's WMMA GEMM kernel to hsaco, fully
+    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype)."""
+    chip = _rocm_chip()
+    key = (mt, nt, chip, dtype)
+    cached = _rocm_compiled_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm lane (build: "
+            "ninja -C build tessera-opt)")
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
+        'n = 16 : i64, k = 16 : i64, '
+        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-wmma-gemm-kernel,"
+        "lower-tessera-target-to-rocdl,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled GEMM in-process "
+            f"(Stage L3 spine missing? rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm lane: gpu.binary was not an ELF hsaco")
+    _rocm_compiled_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+def _rocm_compiled_dtype(a, b):
+    """Map the operand numpy dtype to the compiled-kernel dtype tag, or None if
+    unsupported. f16 + bf16 are real WMMA storage types; f32 is not."""
+    import numpy as np
+    if a.dtype == np.float16 and b.dtype == np.float16:
+        return "f16", np.float16
+    bf16 = _bfloat16_dtype()
+    if bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
+        return "bf16", bf16
+    return None, None
+
+
+def _load_hip_for_launch() -> ctypes.CDLL | None:
+    """Load libamdhip64 with the module-launch ABI bound (cached)."""
+    global _rocm_hip_launch_lib
+    if _rocm_hip_launch_lib is not None:
+        return _rocm_hip_launch_lib
+    rocm_lib = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
+    for dep in ("libamdhip64.so", "libhiprtc.so"):
+        p = os.path.join(rocm_lib, dep)
+        if os.path.isfile(p):
+            try:
+                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                pass
+    try:
+        hip = ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    hip.hipMalloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    hip.hipMemcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
+                              ctypes.c_size_t, ctypes.c_int]
+    hip.hipModuleLaunchKernel.argtypes = (
+        [ctypes.c_void_p] + [ctypes.c_uint] * 6
+        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p])
+    _rocm_hip_launch_lib = hip
+    return hip
+
+
+def _execute_rocm_compiled_gemm(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The default ``target="rocm"`` matmul lane: run the COMPILER-GENERATED WMMA
+    kernel, falling back to the hand-written ``rocm_wmma`` oracle only when the
+    compiled lane is *unavailable* on this host (no tessera-opt / serialization /
+    GPU). A genuine compiled-kernel failure (malloc/launch) is NOT masked — it
+    surfaces, so a real bug is never hidden behind the fallback."""
+    try:
+        return _rocm_compiled_gemm_impl(artifact, args)
+    except _RocmCompiledUnavailable:
+        return _execute_rocm_wmma_artifact(artifact, args)
+
+
+def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Generate + serialize the kernel in-process (tessera-opt, no mlir-opt), then
+    load + launch the hsaco via HIP. f16/bf16 storage, f32 accumulate. Returns the
+    MxN f32 result. Raises ``_RocmCompiledUnavailable`` when the lane can't run
+    here, ``ValueError`` on a bad op/dtype/shape, ``RuntimeError`` on a real
+    kernel failure — ``launch()`` maps a raise to ``invalid_artifact``."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
+            "tessera.matmul", "tessera.gemm"):
+        raise ValueError(
+            "rocm_compiled executor handles exactly one matmul/gemm op; got "
+            f"{[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError("matmul requires exactly two operands")
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"rocm_compiled matmul needs rank-2 operands with matching K; got "
+            f"{a.shape} @ {b.shape}")
+    dtype_tag, store = _rocm_compiled_dtype(a, b)
+    if dtype_tag is None:
+        # RDNA WMMA storage is f16 or bf16 (f32 accumulate). f32 in is not a
+        # WMMA storage dtype — be explicit, don't silently miscompute.
+        raise ValueError(
+            "rocm_compiled lane handles f16/bf16 storage (f32 accumulate); got "
+            f"{a.dtype} @ {b.dtype}")
+
+    m, k = a.shape
+    n = b.shape[1]
+    mt, nt = _rocm_prod_tile(m, n, k)
+    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag)
+
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm_compiled: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm_compiled: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
+        raise RuntimeError("rocm_compiled: kernel symbol 'gemm' not found")
+
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
+    d = np.zeros((m, n), dtype=np.float32)
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    nb = (2 * m * k, 2 * k * n, 4 * m * n)  # f16/bf16 are both 2 bytes
+    for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm_compiled: hipMalloc failed")
+    hip.hipMemcpy(da, a_c.ctypes.data_as(ctypes.c_void_p), nb[0], 1)
+    hip.hipMemcpy(db, b_c.ctypes.data_as(ctypes.c_void_p), nb[1], 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(da, m * k) + _mr(db, k * n) + _mr(dd, m * n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + 16 * nt - 1) // (16 * nt)
+    gy = (m + 16 * mt - 1) // (16 * mt)
+    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (da, db, dd):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm_compiled: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
+    for dev in (da, db, dd):
+        hip.hipFree(dev)
+    return d
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -1334,6 +1587,7 @@ def _executor_table():
         "native_cpu":           _execute_cpu_native_or_jit,
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,
+        "rocm_compiled":        _execute_rocm_compiled_gemm,
     }
 
 

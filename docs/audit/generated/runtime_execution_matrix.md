@@ -19,7 +19,8 @@ Single source of truth for what `runtime.launch()` does with each `(target, comp
 | `apple_gpu` | `apple_value_target_ir` | `apple_gpu_value_target_ir` | `native_gpu` | `metal_runtime` | Apple GPU value-call (tessera_apple.gpu.kernel_call) dispatches named C ABI symbols for strict rank-3 batched matmul, native sparse attention, PPO policy-loss, and EBM value envelopes. |
 | `cpu` | `jit_cpu_numpy` | `jit_cpu_numpy` | `reference_cpu` | - | CPU JIT artifact runs through the numpy reference path. |
 | `cpu` | `native_cpu` | `native_cpu` | `native_cpu` | - | CPU artifact runs through the x86 AMX / native CPU runtime. |
-| `rocm` | `rocm_wmma` | `rocm_wmma` | `native_gpu` | `hip_runtime` | ROCm matmul artifact runs a real RDNA WMMA matrix-core GEMM on the AMD GPU via the shipped tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol (HIPRTC-compiled for the device arch). |
+| `rocm` | `rocm_compiled` | `rocm_compiled` | `native_gpu` | `hip_runtime` | ROCm matmul artifact runs the COMPILER-GENERATED RDNA WMMA GEMM (Stage L): tessera-opt generates + serializes the kernel to hsaco in-process (no mlir-opt), then HIP loads + launches it. The DEFAULT rocm matmul lane; degrades to the hand-written rocm_wmma oracle when the compiled lane is unavailable on the host. |
+| `rocm` | `rocm_wmma` | `rocm_wmma` | `native_gpu` | `hip_runtime` | ROCm matmul via the hand-written RDNA WMMA GEMM (tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol, HIPRTC-compiled for the device arch). Now the reference ORACLE + availability fallback for the compiled lane (rocm_compiled) — still directly selectable by stamping compiler_path="rocm_wmma". |
 
 ## Targets with no executable row
 
@@ -39,4 +40,5 @@ nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120, rocm_gfx90a, rocm_gfx940, 
 | `apple_value_target_ir` | Apple CPU value-call dispatch — invokes the C ABI symbol named in a tessera_apple.cpu.call value op (Value Target IR sprint; CPU cholesky executable) |
 | `jit_cpu_numpy` | JIT CPU fallback via the numpy reference path |
 | `native_cpu` | x86 AMX / native CPU runtime via the C runtime ABI |
+| `rocm_compiled` | AMD GPU RDNA WMMA GEMM the Tessera compiler GENERATES (Stage L): tessera-opt generates + serializes the kernel to hsaco in-process (no mlir-opt), then HIP loads + launches it. Opt-in; f16 storage, f32 accum; the rocm_wmma lane stays the default + oracle |
 | `rocm_wmma` | AMD GPU RDNA WMMA matrix-core GEMM via the shipped libtessera_rocm_gemm.so tessera_rocm_wmma_gemm_{f16,bf16} C ABI symbol (HIPRTC-compiled for the device arch; f16/bf16 storage, f32 accumulate) |

@@ -148,6 +148,30 @@ if(TARGET TesseraROCMConversion)
     ${CMAKE_BINARY_DIR}/src/compiler/codegen/Tessera_ROCM_Backend/lib/IR
   )
   target_link_libraries(tessera-opt PRIVATE TesseraROCMIR TesseraROCMConversion)
+  # Stage L3 — in-process MLIR -> hsaco serialization (no mlir-opt shell-out):
+  # the GPU/ROCDL -> LLVM-IR translations + the #rocdl.target serializer that
+  # gpu-module-to-binary drives (AMDGPU codegen from the shared libLLVM; ld.lld
+  # from the platform LLVM). Only needed in a full ROCm build (real toolchain).
+  if(TESSERA_BUILD_ROCM_BACKEND AND (TESSERA_ENABLE_HIP OR TESSERA_ENABLE_CUDA))
+    target_link_libraries(tessera-opt PRIVATE
+      MLIRROCDLTarget
+      MLIRGPUToLLVMIRTranslation
+      MLIRROCDLToLLVMIRTranslation
+      MLIRBuiltinToLLVMIRTranslation
+      MLIRLLVMToLLVMIRTranslation
+      MLIRTargetLLVMIRExport
+      MLIRSCFToControlFlow            # convert-scf-to-cf (finish-lower)
+      MLIRReconcileUnrealizedCasts    # reconcile-unrealized-casts (finish-lower)
+      # ConvertToLLVM external models gathered by convert-gpu-to-rocdl.
+      MLIRControlFlowToLLVM
+      MLIRArithToLLVM
+      MLIRFuncToLLVM
+      MLIRMemRefToLLVM
+      MLIRVectorToLLVM
+      MLIRIndexToLLVM
+      MLIRUBToLLVM
+    )
+  endif()
 endif()
 
 # NVIDIA backend: hardware-free Hopper/Blackwell Target IR / NVVM artifact pipeline.

@@ -106,16 +106,31 @@ def _need_tools():
 
 def test_generate_pass_emits_fragment_materialized_kernel():
     """No GPU needed: the pass turns the directive into a gpu.func whose body is
-    the fragment-materialized WMMA kernel (loads + tessera_rocm.wmma + stores)."""
+    the problem-size-generic, fragment-materialized WMMA kernel — a runtime
+    (M,N,K) signature, an scf.for K-loop, masked fragment loads + tessera_rocm.
+    wmma + masked stores."""
     _need_tools()
     r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
                        input=_DIRECTIVE, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     out = r.stdout
+    # Problem-size-generic ABI: dynamic memrefs + runtime M,N,K index args.
     assert "gpu.func @gemm" in out and "kernel" in out
-    assert "tessera_rocm.wmma" in out          # the matrix op, generated
-    assert out.count("vector.insert") == 16    # B fragment, unrolled
-    assert out.count("memref.store") == 8       # accumulator, unrolled
+    assert "memref<?xf16>, %arg1: memref<?xf16>, %arg2: memref<?xf32>" in out
+    assert "index, %arg4: index, %arg5: index" in out
+    # Dispatch: tileFull ? fast : edge, each = aligned main K-loop + a masked
+    # tail panel (scf.if needTail) for ragged K. So two scf.for K-loops (fast
+    # main, edge main); each path carries a wmma in the main loop and one in the
+    # tail panel -> four tessera_rocm.wmma total.
+    #   - fast — interior: contiguous vector.load A, unmasked B, unmasked store
+    #   - edge — ragged M/N: coalesced loads at clamped row/col + a vector
+    #            arith.select to zero OOB fragments; masked stores
+    #   - tail — ragged K (K%16!=0): per-element clamp-and-select, run once
+    assert "vector.load" in out                 # coalesced A fragment (fast+edge)
+    assert "arith.select" in out                 # edge zeroing + tail/clamp masks
+    assert out.count("scf.for") == 2            # fast-main + edge-main K-loops
+    assert out.count("tessera_rocm.wmma") == 4  # 2 paths x (main + tail panel)
+    assert "scf.if" in out                       # tileFull dispatch + ragged-K tail
     assert '"tessera_rocm.wmma_gemm"' not in out   # directive consumed
 
 
@@ -163,11 +178,16 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     hip.hipMemcpy(da, A.ctypes.data_as(ctypes.c_void_p), 512, 1)
     hip.hipMemcpy(db, B.ctypes.data_as(ctypes.c_void_p), 512, 1)
 
-    def mr(p):
+    # Problem-size-generic kernel ABI: 3 dynamic-memref descriptors (5 fields:
+    # alloc, aligned, offset, size, stride) + runtime M,N,K as i64. The grid
+    # is one wave per 16x16 output tile; M=N=K=16 -> grid (1,1,1).
+    def mr(p, size):
         return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
-                ctypes.c_int64(0), ctypes.c_int64(256), ctypes.c_int64(1)]
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
 
-    args = mr(da) + mr(db) + mr(dd)
+    M = N = Kd = 16
+    args = (mr(da, M * Kd) + mr(db, Kd * N) + mr(dd, M * N)
+            + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(Kd)])
     arr = (ctypes.c_void_p * len(args))()
     for i, a in enumerate(args):
         arr[i] = ctypes.cast(ctypes.byref(a), ctypes.c_void_p)
@@ -175,7 +195,8 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle():
     launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
                        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
                           ctypes.c_void_p])
-    assert launch(fn, 1, 1, 1, 32, 1, 1, 0, None, arr, None) == 0
+    gx, gy = (N + 15) // 16, (M + 15) // 16
+    assert launch(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None) == 0
     assert hip.hipDeviceSynchronize() == 0
     D = np.zeros((16, 16), dtype=np.float32)
     hip.hipMemcpy(D.ctypes.data_as(ctypes.c_void_p), dd, 1024, 2)

@@ -321,9 +321,12 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   intrinsic is cross-checked against `rocdl_emit.wmma_intrinsic(dtype)` so the two
   emitters can't silently diverge — **folds the Python side-emitter (path 4) into
   the MLIR pass (path 3)**. *(Note: the ROCm lit suite under
-  `Tessera_ROCM_Backend/test/` is currently broken by a `%trop`/`%t` substitution
-  collision and is opt-in/skipped in CI — pre-existing; Stage J validates via the
-  Python fixture instead.)*
+  `Tessera_ROCM_Backend/test/` passes 12/12 on lit 18 + llvm-22 lit — the old
+  `%trop`/`%t` substitution-collision concern no longer bites (modern lit sorts
+  substitutions longest-first; the site config also now `insert`s `%trop` ahead
+  of the built-in `%t` to be robust across lit versions). Stage J additionally
+  validates via a Python fixture. The lit job stays opt-in in CI by design — it
+  needs `tessera-opt` built.)*
 - **Stage K — a real GEMM through the full stack vs. the oracle.** Two steps:
   - ✅ **Step 1 (2026-06-23) — chain + layout proven, oracle-matched.** A
     16×16×16 WMMA GEMM expressed at the **Target-IR level** (`tessera_rocm.wmma` +
@@ -344,8 +347,8 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     hsaco → launch` executes on gfx1151 **bit-identical to the hand-written
     oracle** (vs numpy ~2e-7, vs oracle **0.0**). The milestone — *the Tessera
     compiler, not a hand-written kernel, produced the executing GEMM* — is met for
-    the 16×16×16 tile (other extents are a named error pending the multi-tile loop
-    nest). Fixture `tests/unit/test_rocm_wmma_gemm_generated.py`. Wiring Graph
+    the 16×16×16 tile (Stage L1 then generalized the kernel to any runtime shape).
+    Fixture `tests/unit/test_rocm_wmma_gemm_generated.py`. Wiring Graph
     `tessera.matmul` → Tile → the `wmma_gemm` directive is the remaining front-end
     glue (Stage L); the hand-written HIPRTC kernel stays the production lane +
     on-silicon oracle until the compiled path is multi-tile + perf-laddered.
@@ -358,24 +361,118 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   a program. Stages I–K proved the compiler can *generate* a correct executing
   GEMM (16×16×16, bit-identical to the oracle). L makes that path production-grade
   and the source of truth. Concrete sub-steps (each independently landable):
-  - **L1 — general-shape codegen.** Extend `generate-wmma-gemm-kernel` past the
-    single 16×16×16 tile: a grid over M/N output tiles + a K-loop accumulation,
-    ragged-edge masking. Execute-compare vs the oracle across the shapes the
-    GEMM perf-ladder used. (Largest sub-step; the rest depend on it.)
-  - **L2 — carry the perf lessons into Tile IR attrs.** Put the macro-tile
-    (`mt`/`nt`, the measured-best **3×4** for large) on the `wmma_gemm` directive /
-    Tile IR so the generated kernel is register-blocked, and the autotuner sweeps
-    the *compiled* kernel (reusing the existing ladder harness). Target: the
-    generated kernel reaches the hand-written kernel's TFLOP/s.
-  - **L3 — in-process serialization.** Link the MLIR ROCDL target + LLVM AMDGPU
-    codegen + lld into a Tessera tool so `gpu-module-to-binary` needs no `mlir-opt`
-    shell-out (Stages I/K ride the platform `mlir-opt`; a runtime lane can't).
-  - **L4 — make it a `runtime.launch()` lane + flip the source of truth.** Once
-    L1–L3 land and perf matches, route `target="rocm"` matmul through the compiled
-    path; the hand-written HIPRTC kernel becomes the reference oracle / fast
-    fallback. Promote manifest/runtime rows only after dashboards agree.
+  - ✅ **L1 — general-shape codegen (2026-06-23).** `generate-wmma-gemm-kernel`
+    now emits a **problem-size-generic** kernel: the directive's `m`/`n`/`k` are
+    the WMMA *instruction* tile (16×16×16, the only one RDNA exposes), and the
+    emitted `gpu.func` takes the runtime `(M,N,K)` as `index` args, a 2-D grid of
+    one wave per 16×16 output tile, an `scf.for` K-loop, and ragged-edge masking
+    (clamp-and-select loads, `scf.if`-guarded stores). One compiled kernel
+    computes any shape. Executes on gfx1151 vs numpy (<5e-2) **and bit-identical
+    to the hand-written oracle (0.0)** across square, rectangular, and ragged
+    (non-multiple-of-16) shapes — `{16³, 32³, 48×64×32, 40×24×48, 17×15×31}`.
+    Fixture `tests/unit/test_rocm_wmma_gemm_general.py`; the 16³ launch still
+    reduces to the Stage K single-tile case. MT=NT=1 (one tile/wave);
+    register-blocked macro-tiling (3×4) is L2.
+  - ✅ **L2 — register-blocked macro-tiling + perf parity (2026-06-23).** The
+    `wmma_gemm` directive carries `mt`/`nt` (default 1); each wave now computes an
+    `mt`×`nt` grid of 16×16 output tiles, reusing a loaded A fragment across the
+    `nt` B-tiles and a B fragment across the `mt` A-tiles. To make blocking
+    actually pay off, the kernel splits into an **interior fast path** (whole
+    macro-tile in-bounds *and* K%16==0 → single contiguous `vector.load` for each
+    A fragment, no element masking) and the **masked edge path** (clamp-and-select
+    loads + `scf.if` stores) for ragged tiles. All `(mt,nt)` ∈ {1×1,2×2,2×4,3×4}
+    stay bit-identical to the oracle on ragged 100×96×64
+    (`test_rocm_wmma_gemm_general.py::test_register_blocked_matches_oracle`).
+    **Measured on gfx1151** (`benchmarks/rocm/benchmark_rocm_compiled_gemm.py`,
+    kernel-only, vs the hand-written `_bench` at the *same* `(mt,nt)`): at aligned
+    sizes the compiled kernel **meets or exceeds** the hand-written at every swept
+    tile — 1536³ all tiles 1.06×–2.56×; 2048³ peak **4×4 = 18.7 vs 9.0 TF/s
+    (2.07×)**. The fast path is the whole win: before it, the masked-everywhere
+    kernel was 0.12–0.47×. Autotuner integration (auto-select `mt`/`nt` per shape)
+    rides on the existing ladder harness — the sweep script *is* the brute-force
+    version.
+  - ✅ **Masked ragged-edge perf parity (2026-06-23).** L2's first cut dropped any
+    tile whose extent isn't divisible by 16·`mt`/16·`nt` to a per-element scalar
+    masked path (3×4 at 1024/2048 → 0.44×/0.69×). Fixed by splitting the codegen
+    three ways: `kAligned ? (tileFull ? fast : edge) : masked`. The new **edge
+    path** (K-aligned but M/N ragged — the common case) keeps the coalesced
+    `vector.load`: it loads A/B at a row/col *clamped* into range, then zeroes the
+    OOB fragment with one loop-invariant vector `arith.select`, so the K-loop stays
+    vector-load speed; only the once-per-kernel stores are masked. The per-element
+    path is now reserved for ragged **K** (`K%16≠0`) only. Measured on gfx1151:
+    **3×4 at 2048 0.69×→1.82×, at 1024 0.44×→0.93×**; aligned unchanged/better
+    (1536³ 1.06×–3.82×, 2048³ 1.26×–3.93×). Ragged-M/N tiles now reach
+    parity-or-better; bit-identical to the oracle preserved.
+  - ✅ **Ragged-K fast path + bf16 (2026-06-23).** The K-loop is split so masking
+    never sits on the hot path: a main loop over the aligned range `[0, kMain)`
+    (`kMain = K` rounded down to ×16) using the fast/edge panel, then a **single
+    masked tail panel** for `[kMain, K)` when `K%16≠0`. So ragged K costs one
+    extra masked panel, not a masked K-loop. Measured at 2040³ (ragged K *and*
+    M/N): every tile **1.42×–3.62×** the hand-written — no cliff.
+    **bf16**: the directive carries `dtype` (default `f16`); the generating pass
+    emits bf16 fragments + memrefs and Stage J the `rocdl.wmma.f32.16x16x16.bf16`
+    intrinsic. Runtime compiled lane is dtype-keyed (hsaco cached per
+    `(mt,nt,chip,dtype)`). Executes bit-identical to the hand-written **bf16**
+    oracle. Fixtures: `test_rocm_wmma_gemm_general.py` (ragged-K 31/40),
+    `test_rocm_compiled_launch_execute.py` (bf16 vs oracle; f32 rejected).
+  - ✅ **L3 — in-process serialization (2026-06-23).** The GPU/ROCDL → LLVM-IR
+    serialization spine is now linked into `tessera-opt` itself, so the WHOLE
+    chain runs in ONE invocation — no `mlir-opt` shell-out (Stages I/K/L1/L2 rode
+    the platform `mlir-opt` for `gpu-module-to-binary`; a runtime lane can't):
+    `tessera-opt - --pass-pipeline='builtin.module(generate-wmma-gemm-kernel,
+    lower-tessera-target-to-rocdl, gpu.module(convert-scf-to-cf,
+    convert-gpu-to-rocdl, reconcile-unrealized-casts),
+    rocdl-attach-target{chip=gfx1151}, gpu-module-to-binary)'` → `gpu.binary`
+    ELF. Wiring (all gated behind a full ROCm build — the lean artifact driver
+    stays lean): register `gpu-module-to-binary`/`rocdl-attach-target`/
+    `convert-scf-to-cf`/`reconcile-unrealized-casts`; the LLVM-IR translations +
+    `#rocdl.target` interface; the cf/arith/func/memref/vector/index/ub
+    ConvertToLLVM external models (what `convert-gpu-to-rocdl` needs to lower the
+    full `gpu.func` body — the missing piece vs `mlir-opt`); init the AMDGPU LLVM
+    target in `main`. AMDGPU codegen comes from the shared `libLLVM`; `ld.lld`
+    from the platform LLVM (the ROCDL serializer shells to it). The in-process
+    hsaco executes on gfx1151 bit-identical to the oracle —
+    `tests/unit/test_rocm_wmma_gemm_in_process.py`.
+  - 🟢 **L4 — compiled `runtime.launch()` lane (2026-06-23, opt-in).** The
+    compiled path is now a real production-dispatch lane: an artifact with
+    `compiler_path="rocm_compiled"` routes through the execution matrix to
+    `_execute_rocm_compiled_gemm`, which drives the Stage L3 in-process pipeline
+    (tessera-opt → hsaco, cached per `(mt,nt)` since the kernel is shape-generic)
+    and launches it via HIP. Same `runtime.launch()` entry point as the
+    hand-written lane — only *which kernel runs* differs. Executes on gfx1151
+    bit-identical to the hand-written oracle through `launch()` across
+    `{16³, 64×48×32, 256³}`; size-adaptive `(mt,nt)` mirrors the oracle (3×4 once
+    min≥1024, else 2×4). f16 today (bf16 is a structured `invalid_artifact`, not a
+    miscompute — use `rocm_wmma`). New execution-matrix row + `KNOWN_EXECUTORS`
+    entry + `tests/unit/test_rocm_compiled_launch_execute.py`.
+    **Deliberately NOT flipped to default / promoted in the manifest** (Decision
+    #25): the hand-written `rocm_wmma` stays the default + reference oracle/fast
+    fallback. The original blocker — masked ragged-edge perf — is now **resolved**
+    (see "Masked ragged-edge perf parity" above: ragged-M/N tiles reach
+    parity-or-better on gfx1151). The compiled lane is therefore *ready to promote*
+    on perf grounds. The earlier technical gaps are now **closed**: bf16 +
+    ragged-K (above).
+  - ✅ **L4 default FLIPPED + manifest promoted (2026-06-23).** `@jit(target=
+    "rocm")` matmul now **executes through the compiler-generated lane by
+    default**: `jit.py` stamps `compiler_path="rocm_compiled"` /
+    `execution_kind="native_gpu"` / `executable=True` for a rocm single
+    matmul/gemm **when the compiled lane can run on the host** (tessera-opt built
+    + a usable AMD GPU — `_uses_rocm_compiled_default()`, shared by the
+    `execution_kind` property so `is_executable` agrees with what `launch()`
+    does). Off-device it stays `target_ir_artifact` / not-executable exactly as
+    before — host-gated, no behavior change in CI. The hand-written `rocm_wmma`
+    kernel is now the reference **oracle + availability fallback**:
+    `_execute_rocm_compiled_gemm` degrades to it on `_RocmCompiledUnavailable` (no
+    tessera-opt / no serialization spine / no GPU), but a *genuine* compiled-kernel
+    failure surfaces — the fallback never masks a real bug. Manifest matmul-row
+    notes + execution-matrix reasons promoted to record the compiled lane as
+    default and the hand-written symbol as oracle/fallback (the `runtime_symbol`
+    stays the hand-written proof anchor). Fixtures:
+    `test_rocm_compiled_launch_execute.py` (default flip executes + fallback),
+    `test_target_ir_contract.py` (host-gated). **Stage L is complete.**
   Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
-  L1. Until L completes, the hand-written kernel stays the production lane.
+  L1. The hand-written kernel stays the production default + oracle until the
+  compiled lane reaches ragged-shape perf parity.
 
 10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
     correctness-first); the `runtime.launch()` artifact lane.

@@ -2,11 +2,34 @@
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassOptions.h"
 #include "mlir/Transforms/Passes.h"
 
 using namespace mlir;
 
 namespace tessera {
+
+// Opt-in knob for the named lowering pipelines: run LayoutAssignmentPass
+// (seed kernel layouts → propagate through pointwise → insert
+// `tessera.cast{layout}` markers) immediately before LayoutLegalityPass, so the
+// two-sided layout contract (assign + verify) executes inside the pipeline.
+//
+// Default OFF on purpose. The assignment inserts same-type `tessera.cast`
+// markers that are deliberately preserved from canonicalization, and no backend
+// consumes them yet (rank-2 CPU JIT is layout-agnostic; Apple GPU is hand-MSL).
+// Leaving it off keeps the *executing* x86/GPU lowering byte-identical; turning
+// it on (e.g. `tessera-lower-to-x86{assign-layouts=true}`) exercises and
+// verifies the assignment half end-to-end. When a layout-sensitive backend
+// lands, this flips to default-on and the markers become real reorders.
+struct TesseraLoweringPipelineOptions
+    : public PassPipelineOptions<TesseraLoweringPipelineOptions> {
+  Option<bool> assignLayouts{
+      *this, "assign-layouts",
+      llvm::cl::desc("Run LayoutAssignmentPass before layout legality "
+                     "(default false; no backend consumes the cast{layout} "
+                     "markers yet, so the default lowering path is unchanged)."),
+      llvm::cl::init(false)};
+};
 
 // Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
 // sequence was copy-pasted into tessera-lower-to-x86, tessera-lower-to-gpu,
@@ -59,12 +82,17 @@ void registerTesseraPasses() {
   //   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
   //   4. tessera-tiling                — tessera.matmul → scf.for tile loops
   //   5. tessera-tile-to-x86           — tiled matmul → func.call @tessera_x86_*
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     lowerToX86("tessera-lower-to-x86",
                "Full Phase 2 lowering chain to x86 AMX/AVX-512 backend",
-      [](OpPassManager &pm) {
+      [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
+        // 2026-06-22: optional layout *assignment* runs just before legality so
+        // the verifier validates the assignment + inserted cast{layout} markers.
+        // Opt-in (default off) — see TesseraLoweringPipelineOptions.
+        if (opts.assignLayouts)
+          pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality now runs in the named pipelines (was
         // standalone) — early, so unknown-layout / producer-consumer-mismatch /
         // scale-without-layout violations surface with the other structural
@@ -185,12 +213,15 @@ void registerTesseraPasses() {
   //   7. tessera-nvwgmma-lowering      — tile.mma → wgmma.mma_async PTX
   //   8. tessera-nvtma-descriptor      — TMA descriptor hoisting + mbarrier init
   //   9. tessera-nvflash-attn-emitter  — FA-4 kernel finalisation
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     lowerToGPU("tessera-lower-to-gpu",
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
-      [](OpPassManager &pm) {
+      [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
         pm.addPass(createDistributionLoweringPass());
+        // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
+        if (opts.assignLayouts)
+          pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
         // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
@@ -234,9 +265,13 @@ void registerTesseraPasses() {
   // When SM_100/SM_120 add post-WGMMA passes (TCGEN05 / TMEM), they go
   // here under the corresponding alias.
 
-  auto buildCUDA13Pipeline = [](OpPassManager &pm) {
+  auto buildCUDA13Pipeline = [](OpPassManager &pm,
+                                const TesseraLoweringPipelineOptions &opts) {
     addGraphIRPreLoweringPasses(pm);
     pm.addPass(createDistributionLoweringPass());
+    // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
+    if (opts.assignLayouts)
+      pm.addPass(createLayoutAssignmentPass());
     // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
     pm.addPass(createLayoutLegalityPass());
     // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
@@ -251,27 +286,27 @@ void registerTesseraPasses() {
     pm.addPass(createNVFlashAttnKernelEmitterPass());
   };
 
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipeline("tessera-nvidia-pipeline",
                    "Sprint G-5: NVIDIATargetPipeline (CUDA 13.3, default SM_90) — "
                    "WarpSpec → AsyncCopy → WGMMA → TMA → NVPTXLowering. "
                    "Toolchain pin: nvcc 13.3, PTX ISA 9.3, NCCL 2.22.",
                    buildCUDA13Pipeline);
 
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM90("tessera-nvidia-pipeline-sm90",
                        "Sprint G-5: NVIDIATargetPipeline pinned to SM_90 (Hopper) "
                        "under CUDA 13.3.  Emits WGMMA + TMA + mbarrier paths.",
                        buildCUDA13Pipeline);
 
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM100("tessera-nvidia-pipeline-sm100",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_100 (Blackwell) "
                         "under CUDA 13.3.  Emits TCGEN05 / TMEM / block-scaled MMA "
                         "paths via the WGMMA lowering's sm=100 mode.",
                         buildCUDA13Pipeline);
 
-  ::mlir::PassPipelineRegistration<>
+  ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>
     nvidiaPipelineSM120("tessera-nvidia-pipeline-sm120",
                         "Sprint G-5: NVIDIATargetPipeline pinned to SM_120 (Rubin) "
                         "under CUDA 13.3 (preliminary intrinsic set).",

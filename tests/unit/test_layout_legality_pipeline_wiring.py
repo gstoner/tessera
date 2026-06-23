@@ -21,7 +21,7 @@ def _pipeline_body(src: str, anchor: str) -> str:
     """Return the chunk of Passes.cpp from `anchor` to the next pass-manager
     builder boundary — enough to check a builder's pass list."""
     i = src.index(anchor)
-    return src[i:i + 1200]
+    return src[i:i + 1800]
 
 
 def test_layout_legality_in_all_three_lowering_pipelines():
@@ -51,3 +51,24 @@ def test_layout_legality_runs_before_symbolic_dim_equality():
         assert "createLayoutLegalityPass()" in body
         assert body.index("createLayoutLegalityPass()") < \
             body.index("createSymbolicDimEqualityPass()")
+
+
+def test_layout_assignment_is_opt_in_and_runs_before_legality():
+    """LayoutAssignmentPass (2026-06-22) is wired into the same three builders
+    behind the `assign-layouts` option (default off, so the executing lowering
+    path is unchanged), and runs before LayoutLegalityPass so the legality pass
+    verifies the assignment."""
+    src = _PASSES.read_text(encoding="utf-8")
+    # The opt-in option struct + flag exist.
+    assert "struct TesseraLoweringPipelineOptions" in src
+    assert 'assign-layouts' in src
+    assert 'llvm::cl::init(false)' in src
+    for anchor in ('"tessera-lower-to-x86"', '"tessera-lower-to-gpu"',
+                   "buildCUDA13Pipeline = "):
+        body = _pipeline_body(src, anchor)
+        assert "createLayoutAssignmentPass()" in body
+        # Gated on the option (never unconditionally added).
+        assert "opts.assignLayouts" in body
+        # Assignment is scheduled before its verifier.
+        assert body.index("createLayoutAssignmentPass()") < \
+            body.index("createLayoutLegalityPass()")

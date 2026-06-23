@@ -63,18 +63,28 @@ def test_no_mode_flag_is_required():
 
 # ---- exit-code contract -------------------------------------------------
 
-def test_verify_fixtures_returns_zero_when_all_pass():
-    """The dashboard ships 11 declared fixtures, all numerically
-    correct on this Mac as of audit-followup ship time. Run the
-    real verifier and assert exit code 0."""
-    # The CLI prints a multi-line summary; we don't care about the
-    # stdout shape here, only the exit code.
+@pytest.fixture(scope="module")
+def real_verify_result():
+    """Run the real fixture verifier ONCE and share its (rc, output).
+
+    ``_verify_fixtures()`` invokes pytest on every declared fixture (~a minute),
+    so the three contract checks that exercise a real run must not each pay that
+    cost — doing so was ~3×66s ≈ 200s, ~20% of the whole unit suite. The two
+    *patched* tests below (bogus map / mocked subprocess) deliberately do NOT use
+    this fixture: they need their own state and are already fast."""
     buf = io.StringIO()
     with redirect_stdout(buf):
         rc = cli_cm._verify_fixtures()
-    assert rc == 0, (
-        f"verify-fixtures returned {rc}; output was:\n{buf.getvalue()}")
-    assert "FAIL" not in buf.getvalue().split("summary:")[0], (
+    return rc, buf.getvalue()
+
+
+def test_verify_fixtures_returns_zero_when_all_pass(real_verify_result):
+    """The dashboard ships 11 declared fixtures, all numerically
+    correct on this Mac as of audit-followup ship time. Run the
+    real verifier and assert exit code 0."""
+    rc, output = real_verify_result
+    assert rc == 0, f"verify-fixtures returned {rc}; output was:\n{output}"
+    assert "FAIL" not in output.split("summary:")[0], (
         "summary reported 0 failures but per-fixture log shows FAIL")
 
 
@@ -122,26 +132,20 @@ def test_fixtures_are_run_once_per_file_not_per_pair():
 
 # ---- summary reporting --------------------------------------------------
 
-def test_summary_line_reports_total_pair_count():
+def test_summary_line_reports_total_pair_count(real_verify_result):
     """The summary line must enumerate every declared (op, target)
     pair — not just unique files."""
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        cli_cm._verify_fixtures()
-    output = buf.getvalue()
+    _rc, output = real_verify_result
     n_pairs = len(bm._NUMERICAL_FIXTURES)
     # The header line names the pair count.
     assert f"{n_pairs} declared (op, target) pair" in output, output
 
 
-def test_per_fixture_line_names_covered_pairs():
+def test_per_fixture_line_names_covered_pairs(real_verify_result):
     """The per-file line must list which (op, target) pairs each
     invocation covers. Catches a regression where the CLI runs pytest
     once but loses the pair-attribution mapping."""
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        cli_cm._verify_fixtures()
-    output = buf.getvalue()
+    _rc, output = real_verify_result
     # Every (op, target) pair must appear in some per-file line.
     for (op, target) in bm._NUMERICAL_FIXTURES:
         assert f"{op}/{target}" in output, (

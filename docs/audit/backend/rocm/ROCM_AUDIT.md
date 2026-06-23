@@ -111,8 +111,20 @@ row** is hardware-verified ("complete for this target", not the universal flip).
   on RDNA remain artifact_only** (CDNA MFMA shape, HIP execution gated). The
   named ROCm sub-arches (gfx90a/942/950/1200) stay in `_UNIMPLEMENTED_TARGETS`
   — the generic `rocm` lane covers execution via HIPRTC for the live device.
-- Performance is untuned (one wave per 16×16 tile, no LDS staging / multi-tile
-  per wave); correctness-first. A perf ladder is the next backend track.
+## Perf ladder — rung 1 landed (2026-06-22)
+
+The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
+(grounded in the AMD Gluon v0→v9 tutorial, `ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`
+§B1/§B2). Rung 1 = **output-tile register blocking** (each wave computes an
+MT×NT grid of 16×16 WMMA tiles, reusing fragments). Shipped tiling **2×4** is
+**~2.3× over the 1×1 naive baseline** at 1024³/2048³ on gfx1100/WSL (Ryzen AI
+Max+ 395). The Gluon lesson reproduced: `2×2` *regressed below* naive; the
+non-square `2×4` won — tile shape is the lever. Measured by the device-timed
+`tessera_rocm_wmma_gemm_f16_bench` symbol + `benchmarks/rocm/
+benchmark_rocm_wmma_gemm.py --ladder`; see STRIX_HALO_EXECUTION_PLAN.md Stage F.
+
+**Open rungs:** LDS staging (multi-wave workgroups), K-loop software pipelining,
+arch-aware LDS layout. Not yet wired — heed Gluon's v6 double-buffer regression.
 
 ## Next Work
 

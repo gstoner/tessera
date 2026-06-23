@@ -138,6 +138,51 @@ in `ROCM_AUDIT.md`); the numerical proof is in hand, so that flip becomes
 mechanical once the symbol ships. It is also a single 16×16×16 tile, not a
 general tiled/K-looped GEMM (a separate scale item).
 
+### Stage E — shipped runtime symbol + runtime.launch() lane + tiled/bf16 (2026-06-22)
+
+The WMMA kernel is now a **shipped, auto-built symbol** wired into the runtime:
+`libtessera_rocm_gemm.so` exports `tessera_rocm_wmma_gemm_{f16,bf16}` (HIPRTC-
+compiled for the device arch at load), `runtime.launch()` dispatches
+`target="rocm"` matmul to it via the `rocm_wmma` execution-matrix lane, and the
+kernel is a **general tiled/K-looped GEMM** (any positive M/N/K, ragged edges
+zero-padded). The `backend_manifest` matmul row is `hardware_verified` for
+`{fp16, bf16}`. Closes the Stage D "ship an auto-registered launcher" gate.
+
+### Stage F — GEMM perf ladder (2026-06-22, in progress)
+
+Correctness done, now performance — grounded in the AMD **Gluon GEMM tutorial**
+v0→v9 ladder (`ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` §B1/§B2). Rungs are *measured*,
+not asserted: `tessera_rocm_wmma_gemm_f16_bench` (in the shipped lib) hipEvent-
+times kernel-only launches (buffers reused), and
+`benchmarks/rocm/benchmark_rocm_wmma_gemm.py` emits the stable JSON schema
+(Decision #12) + a `--ladder` sweep.
+
+**Rung 1 — output-tile register blocking (DONE).** Each 32-lane wave computes an
+MT×NT grid of 16×16 WMMA tiles; a loaded A fragment is reused across NT B-tiles
+and a B fragment across MT A-tiles, cutting global-load traffic per output
+element. Measured best-of-3 on **gfx1100/WSL (Ryzen AI Max+ 395 / Radeon 8060S)**,
+f16, kernel-only TFLOP/s:
+
+| MT×NT | 512³ | 1024³ | 2048³ |
+|------|-----:|------:|------:|
+| 1×1 (rung-0 naive) | 1.68 | 3.36 | 4.00 |
+| 2×2 | 1.72 | 2.24 | 3.37 |
+| **2×4 (production)** | 3.47 | **7.87** | **9.46** |
+| 4×2 | 3.91 | 4.91 | 8.79 |
+| 4×4 | 1.65 | 5.47 | 6.94 |
+
+**~2.3× over the naive baseline** at the compute-bound sizes. The empirical
+lesson mirrors Gluon exactly: the **tile shape is the lever, and the obvious
+choice can regress** — `2×2` lands *below* `1×1` here (occupancy/register
+pressure), while the non-square `2×4` wins. Shipped tiling = `kProdMT=2,
+kProdNT=4` in `tessera_rocm_gemm.cpp`; correctness unchanged (the
+execute-compare fixture passes at 2×4).
+
+**Open rungs (next):** LDS staging of A/B K-panels (multi-wave workgroups, §B2);
+2-/3-stage K-loop software pipelining; arch-aware LDS layout (swizzle vs pad).
+Per Gluon's v6 lesson, watch register budget — double-buffer can regress if it
+spills. None of these are wired yet; this row is honest about being rung-1 only.
+
 ## The hardware — three engines, three Tessera stories
 
 | Engine | What | Tessera status | Action |

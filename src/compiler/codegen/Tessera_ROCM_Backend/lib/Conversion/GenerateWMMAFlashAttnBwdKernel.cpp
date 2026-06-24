@@ -415,7 +415,13 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   b.create<gpu::BarrierOp>(loc);
 
   Value nQ = b.create<arith::DivUIOp>(loc, e.add(Sq, c15), c16);
-  auto qloop = b.create<scf::ForOp>(loc, c0, nQ, c1);
+  // Causal tile-skip: a query tile qt contributes to key tile `ktile` only if
+  // some query >= some key, i.e. qt*16+15 >= ktile*16  <=>  qt >= ktile. So for
+  // causal, start the query loop at `ktile` (skip the tiles entirely below the
+  // diagonal); the diagonal tile qt==ktile is still per-element masked. ~halves
+  // the query-tile work for causal. Non-causal starts at 0.
+  Value qStart = e.sel(isCausal, ktile, c0);
+  auto qloop = b.create<scf::ForOp>(loc, qStart, nQ, c1);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(qloop.getBody());
@@ -536,10 +542,16 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   }
   b.create<gpu::BarrierOp>(loc);
 
-  // Iterate every key tile; the per-element causal/OOB mask in
-  // recomputeScoreTile zeroes the contributions beyond the diagonal (a causal
-  // loop-bound is a future perf optimization, deliberately not risked here).
-  Value nK = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
+  // Causal tile-skip: a key tile kt contributes to query tile `qtile` only if
+  // some key <= some query, i.e. kt*16 <= qtile*16+15  <=>  kt <= qtile. So for
+  // causal, bound the key loop at qtile+1 (skip the tiles entirely above the
+  // diagonal); the diagonal tile kt==qtile is still per-element masked. ~halves
+  // the key-tile work for causal. The per-element mask in recomputeScoreTile
+  // still guards the boundary, so this only drops provably-zero tiles.
+  Value nKfull = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
+  Value cKlimit = e.add(qtile, c1);
+  Value nKcausal = e.sel(e.lt(cKlimit, nKfull), cKlimit, nKfull);
+  Value nK = e.sel(isCausal, nKcausal, nKfull);
   auto kloop = b.create<scf::ForOp>(loc, c0, nK, c1);
   {
     OpBuilder::InsertionGuard g(b);

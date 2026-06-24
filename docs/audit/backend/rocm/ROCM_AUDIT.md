@@ -579,10 +579,18 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
         the forward, not serial VALU). **~3.4× faster: ~4.1–4.4 TFLOP/s @ D=64,
         ~2.1 @ 128** — now WMMA-bound like the forward (correctness unchanged:
         dQ/dK/dV rel-err ~2–4e-4, `test_rocm_flash_attn_bwd_compiled.py` 5/5).
+      - **rung 2 (2026-06-24): causal tile-skip** in `_dkdv` (query loop starts
+        at the key tile) and `_dq` (key loop bounded at the query tile) — the
+        diagonal tile is still per-element masked, so only provably-zero tiles
+        are dropped. **~1.7× for causal** (measured causal-vs-non-causal at S=
+        1024/2048: 1.64–1.71×; theoretical max 2×, gap = diagonal tiles + the
+        fixed `_pre`/accumulator overhead). Correctness unchanged (5/5, incl. the
+        causal cases). The forward already had this bound.
       Remaining next rungs (shared with the forward): occupancy (1 wave/block →
-      multi-wave), fewer barriers, causal tile-skip. Memory double-buffering is
-      NOT a lever here — the kernels are WMMA/occupancy-bound, not staging-bound
-      (measured: GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128).
+      multi-wave) and fewer LDS round-trips/barriers — the larger non-causal
+      lever, a real kernel restructure. Memory double-buffering is NOT a lever
+      here — the kernels are WMMA/occupancy-bound, not staging-bound (measured:
+      GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128 on LDS footprint).
     - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
       contract + executor + matrix row) — the same additive step matmul took at
       L4; the compiled kernel + in-process execution already exist.

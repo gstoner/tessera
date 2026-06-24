@@ -126,9 +126,10 @@ matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
   — vs a numpy attention reference across f16/bf16, head_dim 16/32/64/128, multi
   batch/head, ragged shapes, and causal. Measured on gfx1151: maxerr ~1e-4 (f16).
   Skip-clean with no AMD GPU / HIPRTC.
-- Honest scope (Decision #25): WMMA `{fp16, bf16}` forward only — **no backward,
-  no perf ladder** (this is the correctness-first "rung 0" of attention, the
-  analog of the naive GEMM tile).
+- Honest scope (Decision #25): this *hand-written runtime symbol* is WMMA
+  `{fp16, bf16}` **forward only**. The compiler-generated lane now covers both
+  forward and **backward** (+ measured perf ladders) — see the compiler-path
+  item 10 below; the hand-written symbol stays the forward oracle.
 
 ✅ **flash_attn is now ALSO compiler-generated (2026-06-23) — the second
 compiler-generated op (after matmul Stage K/L).** A `tessera_rocm.flash_attn`
@@ -197,7 +198,10 @@ become the on-silicon **oracle** the compiled path validates against.
   `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the box's
   own arch) is listed there too so the classification is total (no silent
   `lookup() -> None`).
-- **flash_attn**: no backward pass; no perf ladder; no `runtime.launch()` lane.
+- **flash_attn**: compiler-generated forward + backward both execute on gfx1151
+  with measured perf ladders (item 10). Still open: a `runtime.launch()`
+  executor-table lane, and the backward perf optimizations (WMMA logsumexp
+  pre-pass, causal tile-skip, pipelining).
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
@@ -536,11 +540,27 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       design — the kernel is correctness-first (one wave per query tile, LDS
       round-trips, online-softmax barriers, no KV-tile pipelining / double
       buffering / multi-wave query tiles). The ladder quantifies the headroom.
-    - **backward pass — still open.** The largest remaining attention piece: no
-      hand-written oracle exists (forward-only), so it is a new kernel
-      (recompute S; dV = Pᵀ@dO; dP = dO@Vᵀ; dS = softmax-jacobian(dP); dQ = dS@K;
-      dK = dSᵀ@Q) validated against a numpy attention-backward reference. A
-      focused standalone effort, comparable in size to the forward.
+    - ✅ **backward pass — compiler-generated (2026-06-23).** The
+      `generate-wmma-flash-attn-bwd-kernel` pass expands one
+      `tessera_rocm.flash_attn_bwd` directive into the textbook FA-2 backward
+      as THREE fragment-materialized WMMA kernels (no stored attention matrix —
+      S/P recomputed per tile): `_pre` (scalar logsumexp `L` + `D=rowsum(O·dO)`),
+      `_dkdv` (per key-tile: recompute S/P, `dP=dO@Vᵀ`, `dS=P·(dP−D)`, accumulate
+      `dV+=Pᵀ@dO` and `dK+=scale·dSᵀ@Q` — P/dS staged in LDS, reread transposed),
+      `_dq` (per query-tile: `dQ+=scale·dS@K`). All three use the same RDNA WMMA
+      `C[m,n]=Σ_k A[m,k]B[n,k]` primitive + Stage J→I lowering as the forward.
+      Executes on gfx1151 vs a numpy attention-backward reference (itself checked
+      against finite differences): **rel-err ~2–4e-4** (f16 storage, f32
+      accumulate) across head_dim 16/64, causal + non-causal, ragged —
+      `tests/unit/test_rocm_flash_attn_bwd_compiled.py`. flash_attn (fwd+bwd) is
+      now the third compiler-generated op on ROCm after matmul.
+    - ✅ **backward perf ladder, measured (2026-06-23)** —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_bwd_compiled.py` on gfx1151:
+      **~1.1–1.3 TFLOP/s at head_dim 64, ~0.67 at 128** (~10·B·H·Sq·Sk·D FLOPs).
+      Lower than the forward by design — five matmuls plus a *scalar* logsumexp
+      pre-pass (no WMMA in `_pre`), recompute-per-tile, no causal loop-bound /
+      double-buffering. Perf optimizations (WMMA logsumexp, causal tile-skip,
+      pipelining) are the obvious next rung; correctness-first landed first.
     - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
       contract + executor + matrix row) — the same additive step matmul took at
       L4; the compiled kernel + in-process execution already exist.

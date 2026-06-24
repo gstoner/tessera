@@ -4,6 +4,7 @@ add_mlir_library(TesseraROCMConversion
   KernelABI.cpp
   GenerateWMMAGemmKernel.cpp
   GenerateWMMAFlashAttnKernel.cpp
+  GenerateWMMAFlashAttnBwdKernel.cpp
   Passes.cpp
   LINK_LIBS PUBLIC
     MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRFuncDialect MLIRTransformUtils

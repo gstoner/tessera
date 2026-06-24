@@ -12,6 +12,7 @@ std::unique_ptr<mlir::Pass> createLowerTesseraTargetToROCDLPass();
 std::unique_ptr<mlir::Pass> createLowerKernelABIPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMAGemmKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnBwdKernelPass();
 void buildTesseraROCMBackendPipeline(mlir::OpPassManager &pm);
 void registerTesseraROCMPasses();
 void registerTesseraROCMDialects(mlir::DialectRegistry &registry);

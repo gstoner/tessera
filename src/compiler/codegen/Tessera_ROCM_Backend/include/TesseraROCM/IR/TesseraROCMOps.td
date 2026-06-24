@@ -101,6 +101,39 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
+  let summary = "An FA-2 backward pass to realize as three WMMA kernels";
+  let description = [{
+    The backward analog of `tessera_rocm.flash_attn`: the directive the
+    `generate-wmma-flash-attn-bwd-kernel` pass expands into THREE real,
+    fragment-materialized RDNA WMMA kernels — the textbook FA-2 backward
+    structure (no stored attention matrix; recompute S/P per tile):
+
+      * `<name>_pre`  — one wave per (16-query tile, b*h). Scalar pass:
+        `D[q] = sum_d O[q,d]*dO[q,d]` and `L[q] = logsumexp_k(scale*Q@K^T)`
+        (online max/sum). Writes the L / D scratch arrays the matmul kernels
+        read so the backward is self-contained (does not depend on the forward
+        having saved its softmax stats).
+      * `<name>_dkdv` — one wave per (16-key tile, b*h). Loops query tiles:
+        recompute `S=scale*Q@K^T` and `P=exp(S-L)` (WMMA), `dP=dO@V^T` (WMMA),
+        `dS=P*(dP-D)`; accumulates `dV += P^T@dO` and `dK += scale*dS^T@Q`
+        (WMMA, contraction over queries — P / dS are staged in LDS and reread
+        transposed, the layout bridge).
+      * `<name>_dq`   — one wave per (16-query tile, b*h). Loops key tiles:
+        same `S`/`P`/`dP`/`dS`, accumulates `dQ += scale*dS@K` (WMMA,
+        contraction over keys; dS reread from LDS in natural layout).
+
+    `head_dim` (a multiple of 16) is the compile-time D; B/H/Sq/Sk/scale/causal
+    are runtime kernel arguments. `dtype` is the f16/bf16 storage (f32 softmax +
+    accumulate). Q/K/V/dO are `[b,h,s,d]` row-major store-type; O is f32; the
+    dQ/dK/dV outputs and the L/D scratch are f32. Validated against a numpy
+    attention-backward reference (itself checked vs finite differences).
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{

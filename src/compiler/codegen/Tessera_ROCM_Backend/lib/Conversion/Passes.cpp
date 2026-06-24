@@ -30,6 +30,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createLowerTesseraTargetToROCDLPass(); });
   registerPass([]() { return createGenerateWMMAGemmKernelPass(); });
   registerPass([]() { return createGenerateWMMAFlashAttnKernelPass(); });
+  registerPass([]() { return createGenerateWMMAFlashAttnBwdKernelPass(); });
   PassPipelineRegistration<> pipeline(
       "tessera-rocm-backend",
       "Lower Tessera ROCm target IR through ABI conversion and ROCDL",

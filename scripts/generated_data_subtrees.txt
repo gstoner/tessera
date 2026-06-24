@@ -1,0 +1,14 @@
+# Generated / machine-extracted data archives that live under the doc tree but
+# are regenerated wholesale from source (not authored prose). They are exempt
+# from BOTH doc gates:
+#   - docs-lint path/link checks      (scripts/lint_docs.py)
+#   - authored-doc freshness gate     (python/tessera/compiler/docs_manifest.py)
+#
+# This file is the single source of truth for that exemption: adding a new
+# generated archive here is the ONLY edit needed to exempt it from both gates.
+# Provenance for these files is tracked via per-doc meta.json sha256, not gate
+# checks. One repo-root-relative subtree prefix per line; '#' starts a comment.
+
+# RDNA ISA data archive — extracted from AMD's ISA PDFs by
+# docs/reference/isa/rdna/tools/build_archive.py
+docs/reference/isa

@@ -32,10 +32,13 @@ namespace tile {
 // no-ops — surface a clear diagnostic).
 static const llvm::StringSet<> &knownHardwareAxes() {
   static const llvm::StringSet<> kSet = {
-      // memory / TMEM storage axes (these are what alias — see C2)
-      "m", "tlane", "tcol",
-      // thread placement
-      "laneid", "warpid", "reg", "tid_in_wg", "wid_in_wg",
+      // memory storage axes (these are what alias — see C2). `m` is generic
+      // linear memory; `lds` is AMD shared memory (LDS); `tlane`/`tcol` are
+      // NVIDIA Blackwell TMEM.
+      "m", "lds", "tlane", "tcol",
+      // thread placement. `warpid` (NVIDIA warp) and `waveid` (AMD wave) are
+      // the same axis named for each ISA — neither backend is privileged.
+      "laneid", "warpid", "waveid", "reg", "tid_in_wg", "wid_in_wg",
       // grid / cluster placement
       "bx", "by", "bz", "cbx", "cby", "cbz",
       // device placement (same algebra as ShardSpec, Decision #3)
@@ -175,10 +178,16 @@ void TileLayoutAttr::print(AsmPrinter &p) const {
 LogicalResult
 TileBarrierAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                         StringRef kind, int64_t expect) {
-  static const llvm::StringSet<> kKinds = {"tma", "tcgen05", "mbarrier"};
+  // Completion-semantics domains, named per ISA — NVIDIA: tma (byte-count/
+  // engine), tcgen05 (MMA-complete), mbarrier (thread-arrival); AMD: s_barrier
+  // (workgroup/wave arrival), waitcnt (async vmcnt/lgkmcnt counter). Neither
+  // backend is privileged in the contract.
+  static const llvm::StringSet<> kKinds = {"tma",       "tcgen05",   "mbarrier",
+                                           "s_barrier", "waitcnt"};
   if (!kKinds.contains(kind))
     return emitError() << "TILE_BARRIER_UNKNOWN_KIND: kind \"" << kind
-                       << "\" is not one of {tma, tcgen05, mbarrier}";
+                       << "\" is not one of {tma, tcgen05, mbarrier, s_barrier, "
+                          "waitcnt}";
   if (expect < 0)
     return emitError() << "TILE_BARRIER_NEGATIVE_EXPECT: expect must be >= 0 "
                           "(got "
@@ -211,10 +220,14 @@ LogicalResult TileBufferRefAttr::verify(
   if (name.empty())
     return emitError() << "TILE_BUFFER_REF_EMPTY_NAME: a buffer reference must "
                           "name a buffer";
-  static const llvm::StringSet<> kSpaces = {"smem", "tmem", "gmem", "reg"};
+  // Memory spaces, named per ISA. `smem` (NVIDIA shared) and `lds` (AMD Local
+  // Data Share) are the same on-chip scratchpad named for each backend; `tmem`
+  // is NVIDIA Blackwell tensor memory; `gmem` global; `reg` registers.
+  static const llvm::StringSet<> kSpaces = {"smem", "lds",  "tmem",
+                                            "gmem", "reg"};
   if (!kSpaces.contains(space))
     return emitError() << "TILE_BUFFER_REF_BAD_SPACE: space \"" << space
-                       << "\" is not one of {smem, tmem, gmem, reg}";
+                       << "\" is not one of {smem, lds, tmem, gmem, reg}";
   static const llvm::StringSet<> kAccess = {"read", "write", "free"};
   if (!kAccess.contains(access))
     return emitError() << "TILE_BUFFER_REF_BAD_ACCESS: access \"" << access

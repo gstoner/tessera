@@ -13,6 +13,12 @@ func.func @typed_barriers() {
   "test.bar"() {b = #tile.barrier<kind = "tcgen05", expect = 1>} : () -> ()
   // CHECK: #tile.barrier<kind = "mbarrier", expect = 128>
   "test.bar"() {b = #tile.barrier<kind = "mbarrier", expect = 128>} : () -> ()
+  // AMD is first-class: s_barrier (workgroup arrival) + waitcnt (async counter)
+  // are the AMD completion-semantics domains alongside the NVIDIA ones.
+  // CHECK: #tile.barrier<kind = "s_barrier", expect = 256>
+  "test.bar"() {b = #tile.barrier<kind = "s_barrier", expect = 256>} : () -> ()
+  // CHECK: #tile.barrier<kind = "waitcnt", expect = 0>
+  "test.bar"() {b = #tile.barrier<kind = "waitcnt", expect = 0>} : () -> ()
   return
 }
 

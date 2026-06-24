@@ -1070,7 +1070,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="TILE_LAYOUT_UNKNOWN_AXIS", pass_origin="TileLayoutAttr",
         severity="error",
         summary="A #tile.layout axis is not a known hardware axis.",
-        fix_hint="Use one of {m, tlane, tcol, laneid, warpid, reg, tid_in_wg, wid_in_wg, bx, by, bz, cbx, cby, cbz, gpuid_x, gpuid_y}.",
+        fix_hint="Use a known hardware axis — NVIDIA: m/tlane/tcol/laneid/warpid/reg/...; AMD: lds (shared) / waveid; plus bx/by/bz, cbx/cby/cbz, gpuid_x/y.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
     ),
     DiagnosticCode(
@@ -1085,7 +1085,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         code="TILE_BARRIER_UNKNOWN_KIND", pass_origin="TileBarrierAttr",
         severity="error",
         summary="A #tile.barrier kind is not one of {tma, tcgen05, mbarrier}.",
-        fix_hint="Pick the completion semantics: tma (byte-count) / tcgen05 (MMA) / mbarrier (thread-arrival).",
+        fix_hint="Pick the completion semantics — NVIDIA: tma (byte-count) / tcgen05 (MMA) / mbarrier (thread-arrival); AMD: s_barrier (workgroup arrival) / waitcnt (async counter).",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
     ),
     DiagnosticCode(
@@ -1135,8 +1135,8 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
         code="TILE_BUFFER_REF_BAD_SPACE", pass_origin="TileBufferRefAttr",
         severity="error",
-        summary="A #tile.buffer_ref space is not one of {smem, tmem, gmem, reg}.",
-        fix_hint="Use a known memory space: smem / tmem / gmem / reg.",
+        summary="A #tile.buffer_ref space is not one of {smem, lds, tmem, gmem, reg}.",
+        fix_hint="Use a known memory space: smem (NVIDIA shared) / lds (AMD) / tmem / gmem / reg.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
     ),
     DiagnosticCode(

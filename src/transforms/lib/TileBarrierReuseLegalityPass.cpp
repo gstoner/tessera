@@ -51,7 +51,10 @@ namespace {
 // therefore alias. Placement on register/lane/warp/grid axes does not alias a
 // shared storage region.
 static bool isStorageAxis(StringRef ax) {
-  return ax == "m" || ax == "tlane" || ax == "tcol";
+  // Memory-resident axes that can alias: `m` (linear / NVIDIA SMEM), `lds` (AMD
+  // Local Data Share), `tlane`/`tcol` (NVIDIA TMEM). LDS reuse needs an
+  // intervening barrier exactly as SMEM does — ROCm is first-class here.
+  return ax == "m" || ax == "lds" || ax == "tlane" || ax == "tcol";
 }
 
 // Linear footprint of a layout restricted to its storage-axis shard dims:

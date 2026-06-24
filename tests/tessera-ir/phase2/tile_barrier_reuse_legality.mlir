@@ -60,3 +60,17 @@ func.func @register_fragment_no_hazard() {
     tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }
+
+// -----
+
+// ROCm is first-class: reuse of an AMD LDS buffer (the `lds` storage axis)
+// without a barrier is the same race as the NVIDIA SMEM/TMEM cases above.
+func.func @lds_alias_race() {
+  // expected-note @+1 {{previous write to buffer "lds0" here}}
+  "tile.lds_write"() {tile.buf = #tile.buffer_ref<name = "lds0", space = "lds", access = "write">,
+    tile.layout = #tile.layout<shard = [128] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : () -> ()
+  // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer "lds0"}}
+  "tile.lds_write"() {tile.buf = #tile.buffer_ref<name = "lds0", space = "lds", access = "write">,
+    tile.layout = #tile.layout<shard = [256] : [1] on ["lds"], replica = [] : [] on [], offset = 0>} : () -> ()
+  return
+}

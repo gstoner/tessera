@@ -41,6 +41,18 @@ func.func @buffer_ref() {
   "test.buf"() {b = #tile.buffer_ref<name = "warpspec.0.smem.0", space = "smem", access = "write">} : () -> ()
   // CHECK: #tile.buffer_ref<name = "acc", space = "tmem", access = "free">
   "test.buf"() {b = #tile.buffer_ref<name = "acc", space = "tmem", access = "free">} : () -> ()
+  // AMD is first-class: LDS (Local Data Share) is a named memory space.
+  // CHECK: #tile.buffer_ref<name = "kv", space = "lds", access = "write">
+  "test.buf"() {b = #tile.buffer_ref<name = "kv", space = "lds", access = "write">} : () -> ()
+  return
+}
+
+// Backend-neutral layout vocabulary — an AMD tile placed on LDS + wave axes,
+// exactly as the NVIDIA fragment above uses smem/warp (neither is privileged).
+// CHECK-LABEL: func.func @amd_lds_layout
+func.func @amd_lds_layout() {
+  // CHECK: #tile.layout<shard = [64, 32] : [32, 1] on ["lds", "waveid"], replica = [] : [] on [], offset = 0>
+  "test.buf"() {frag = #tile.layout<shard = [64, 32] : [32, 1] on ["lds", "waveid"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }
 

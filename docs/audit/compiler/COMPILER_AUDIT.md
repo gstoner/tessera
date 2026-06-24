@@ -867,11 +867,13 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `factor = container_bits / storage_bits` (fp4/nvfp4/int4 → 2 per int8, fp6 →
   1) — the form a backend's packed load/store reads; bad widths emit
   `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
-  `storage_pack_consume.mlir`. *Still open (HG):* the real packed memory codegen
-  in the NVIDIA sub-byte emitter that consumes `tessera.storage_pack`, and then
-  flipping `legalize-dtypes` from opt-in to default on that target (safe once the
-  marker is consumed). Also still pending: wiring `legalize-dtypes` ON by default
-  in the named pipelines.
+  `storage_pack_consume.mlir`. **The real consumer ships on AMD today, not a
+  future NVIDIA emitter** — `GenerateWMMAGemmKernel` already nibble-packs 16 int4
+  into `vector<2xi32>` (iu4 ABI) and bitcasts int8 to `vector<4xi32>` (iu8). *Real
+  integration task (coordinated with the ROCm backend, not a blind rewire):*
+  reconcile `tessera.storage_pack {factor}` with the ROCm WMMA `pack` model so
+  one packing contract feeds both AMD (shipping) and NVIDIA (future), then flip
+  `legalize-dtypes` opt-in → default per target.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global
@@ -1049,6 +1051,24 @@ clean. *Next (the SSA half):* promote buffer/barrier *identity* from a string
 name to an SSA `!tile.buffer` handle produced by a `tile.alloc` op and consumed
 by `tile.dealloc` (def-use lifetimes instead of name matching) — a TypeDef +
 op-pair refactor that lets C2/C6 track real values, scoped as a focused follow-on.
+
+**Backend parity — ROCm is first-class, not second-class to CUDA (2026-06-23).**
+The C1–C6 IR contracts were initially NVIDIA-shaped (the typed vocabularies only
+spoke CUDA). Corrected: the contracts now name AMD hardware natively, neither
+backend privileged — `#tile.layout` axes add `lds` (AMD shared) + `waveid` (AMD
+wave) alongside `m`/`warpid`; `#tile.barrier` kinds add `s_barrier` (workgroup
+arrival) + `waitcnt` (async vmcnt/lgkmcnt) alongside tma/tcgen05/mbarrier;
+`#tile.buffer_ref` space adds `lds`; and C2's storage-aliasing treats `lds` as a
+memory axis, so **LDS reuse-without-barrier is caught exactly like SMEM/TMEM**
+(`tile_{layout_attr,pipeline_attrs,barrier_reuse_legality}.mlir` carry the AMD
+cases). Reality check that drove this: the ROCm WMMA lane is the *more active
+execution path* (the #87–90 commits ship real hsaco + int4/int8 WMMA + flash-attn
+fwd/bwd on gfx1151), so it earns first-class treatment in the shared contracts.
+*Deliberately NOT done:* bolting the NVIDIA pass-chain / legality gates onto
+`tessera-lower-to-rocm` — that lane is a different (direct WMMA kernel-gen)
+architecture the backend team actively owns; the gates apply there only once/if
+ROCm grows a warp-specialized Tile-IR path, and wiring them is a coordinated
+change, not a unilateral one.
 
 ## Next Work
 

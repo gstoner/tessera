@@ -205,6 +205,23 @@ LogicalResult TilePipelineStateAttr::verify(
   return success();
 }
 
+LogicalResult TileBufferRefAttr::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, StringRef name,
+    StringRef space, StringRef access) {
+  if (name.empty())
+    return emitError() << "TILE_BUFFER_REF_EMPTY_NAME: a buffer reference must "
+                          "name a buffer";
+  static const llvm::StringSet<> kSpaces = {"smem", "tmem", "gmem", "reg"};
+  if (!kSpaces.contains(space))
+    return emitError() << "TILE_BUFFER_REF_BAD_SPACE: space \"" << space
+                       << "\" is not one of {smem, tmem, gmem, reg}";
+  static const llvm::StringSet<> kAccess = {"read", "write", "free"};
+  if (!kAccess.contains(access))
+    return emitError() << "TILE_BUFFER_REF_BAD_ACCESS: access \"" << access
+                       << "\" is not one of {read, write, free}";
+  return success();
+}
+
 LogicalResult TilePipelineDepthsAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, int64_t q, int64_t kv,
     int64_t tmem) {

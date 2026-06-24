@@ -188,22 +188,39 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
     ),
     PipelineSpec(
         name="tessera-lower-to-gpu",
+        # C4 (TIRx): the optional `legalize-dtypes` pipeline option inserts
+        # tessera-compute-legalize before the contract check and
+        # tessera-storage-legalize terminally (default off → byte-identical).
+        # C2/C3/C6 (TIRx): the warp-spec legality gates run after
+        # WarpSpecialization (which emits the #tile.* markers).
         passes=(
             "tessera-effect-annotate",
             "canonicalize",
             "tessera-distribution-lower",
+            "tessera-layout-legality",
+            "tessera-ir-contracts",
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
+            "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
         ),
-        required_dialects=("tessera", "func", "scf", "arith"),
+        required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm90", "nvidia_sm100", "nvidia_sm120"),
-        verifier_passes=("tessera-symdim-equality",),
+        verifier_passes=(
+            "tessera-layout-legality",
+            "tessera-ir-contracts",
+            "tessera-symdim-equality",
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
+            "tessera-tile-barrier-reuse-legality",
+        ),
         lit_fixtures=(),
         phase="lowering",
         status="wired",
-        sprint="Phase 3",
+        sprint="Phase 3 + C2/C3/C4/C6 (TIRx)",
     ),
     PipelineSpec(
         name="tessera-lower-to-rocm",
@@ -253,9 +270,18 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
+            # C2/C3/C6 (TIRx): warp-spec legality gates on the markers
+            # WarpSpecialization emits (phase asymmetry, reuse, structure).
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
+            "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
             "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
+            # Second placement — over the typed #tile.barrier markers
+            # NVTMADescriptor emits (kind consistency + arrival-count).
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
             "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "func", "scf", "arith"),
@@ -327,9 +353,18 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-symdim-equality",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
+            # C2/C3/C6 (TIRx): warp-spec legality gates on the markers
+            # WarpSpecialization emits (phase asymmetry, reuse, structure).
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
+            "tessera-tile-barrier-reuse-legality",
             "tessera-async-copy-lowering",
             "tessera-wgmma-lowering",
             "tessera-tma-descriptor",
+            # Second placement — over the typed #tile.barrier markers
+            # NVTMADescriptor emits (kind consistency + arrival-count).
+            "tessera-tile-pipeline-legality",
+            "tessera-warpspec-legality",
             "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "func", "scf", "arith"),

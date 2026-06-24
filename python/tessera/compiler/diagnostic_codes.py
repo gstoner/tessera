@@ -1045,6 +1045,181 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         language="python",
         status="spec_contract",
     ),
+
+    # ───────────────────────────────────────────────────────────────────────
+    # TIRx review (C1–C6, 2026-06-23) — Tile-IR layout/barrier/pipeline
+    # verifiers + the C2/C3/C6 legality-pass gates. See COMPILER_AUDIT items
+    # C1–C6.
+    # ───────────────────────────────────────────────────────────────────────
+    # C1 — #tile.layout / #tile.swizzle attribute verifier (TileLayoutAttr).
+    DiagnosticCode(
+        code="TILE_LAYOUT_RANK_MISMATCH", pass_origin="TileLayoutAttr",
+        severity="error",
+        summary="A #tile.layout shard/replica's extents, strides, and axes arrays differ in length.",
+        fix_hint="Give the shard (and replica) equal-length [extents]:[strides] on [axes].",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_LAYOUT_NONPOSITIVE_EXTENT", pass_origin="TileLayoutAttr",
+        severity="error",
+        summary="A #tile.layout shard/replica extent is <= 0.",
+        fix_hint="Use positive extents; a dynamic tile carries no layout (buffer identity only).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_LAYOUT_UNKNOWN_AXIS", pass_origin="TileLayoutAttr",
+        severity="error",
+        summary="A #tile.layout axis is not a known hardware axis.",
+        fix_hint="Use one of {m, tlane, tcol, laneid, warpid, reg, tid_in_wg, wid_in_wg, bx, by, bz, cbx, cby, cbz, gpuid_x, gpuid_y}.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_LAYOUT_BAD_SWIZZLE", pass_origin="TileLayoutAttr",
+        severity="error",
+        summary="The swizzle clause of a #tile.layout is not a #tile.swizzle attribute.",
+        fix_hint="Use `swizzle = #tile.swizzle<per_element=…, len=…, atom=…>`.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C1", sprint="C1 (TIRx)",
+    ),
+    # C3 — #tile.barrier / #tile.pipeline_state attribute verifiers.
+    DiagnosticCode(
+        code="TILE_BARRIER_UNKNOWN_KIND", pass_origin="TileBarrierAttr",
+        severity="error",
+        summary="A #tile.barrier kind is not one of {tma, tcgen05, mbarrier}.",
+        fix_hint="Pick the completion semantics: tma (byte-count) / tcgen05 (MMA) / mbarrier (thread-arrival).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_BARRIER_NEGATIVE_EXPECT", pass_origin="TileBarrierAttr",
+        severity="error",
+        summary="A #tile.barrier expect (arrival / byte count) is negative.",
+        fix_hint="Use expect >= 0.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_BAD_DEPTH", pass_origin="TilePipelineStateAttr",
+        severity="error",
+        summary="A #tile.pipeline_state depth is < 1.",
+        fix_hint="Ring depth must be >= 1.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_STAGE_OOB", pass_origin="TilePipelineStateAttr",
+        severity="error",
+        summary="A #tile.pipeline_state stage is not in [0, depth).",
+        fix_hint="Keep stage within the ring: 0 <= stage < depth.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_BAD_PHASE", pass_origin="TilePipelineStateAttr",
+        severity="error",
+        summary="A #tile.pipeline_state phase parity bit is not 0 or 1.",
+        fix_hint="phase is the parity bit — 0 or 1.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_BAD_ROLE", pass_origin="TilePipelineStateAttr",
+        severity="error",
+        summary="A #tile.pipeline_state role is not producer or consumer.",
+        fix_hint="role is producer | consumer.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    # Typed #tile.buffer_ref contract verifier (TileBufferRefAttr) — replaces
+    # the tile.buffer/tile.access string markers with a typed space + access.
+    DiagnosticCode(
+        code="TILE_BUFFER_REF_EMPTY_NAME", pass_origin="TileBufferRefAttr",
+        severity="error",
+        summary="A #tile.buffer_ref has an empty name.",
+        fix_hint="Name the buffer the reference points at.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_BUFFER_REF_BAD_SPACE", pass_origin="TileBufferRefAttr",
+        severity="error",
+        summary="A #tile.buffer_ref space is not one of {smem, tmem, gmem, reg}.",
+        fix_hint="Use a known memory space: smem / tmem / gmem / reg.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_BUFFER_REF_BAD_ACCESS", pass_origin="TileBufferRefAttr",
+        severity="error",
+        summary="A #tile.buffer_ref access is not one of {read, write, free}.",
+        fix_hint="Use a known access mode: read / write / free.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
+    ),
+    # C5 — #tile.pipeline_depths attribute verifier.
+    DiagnosticCode(
+        code="TILE_PIPELINE_DEPTHS_NONPOSITIVE", pass_origin="TilePipelineDepthsAttr",
+        severity="error",
+        summary="A #tile.pipeline_depths ring depth (q/kv/tmem) is < 1.",
+        fix_hint="Each independent ring depth must be >= 1 (book defaults q=2, kv=3, tmem=2).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C5", sprint="C5 (TIRx)",
+    ),
+    # C2 — TileBarrierReuseLegalityPass.
+    DiagnosticCode(
+        code="TILE_BARRIER_REUSE_MISSING_BARRIER", pass_origin="TileBarrierReuseLegality",
+        severity="error",
+        summary="A buffer is written over an overlapping storage footprint with no intervening barrier — a reuse race.",
+        fix_hint="Insert an mbarrier / wait_async between the two writes to the reused region.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C2", sprint="C2 (TIRx)",
+    ),
+    # C3 — TilePipelineLegalityPass.
+    DiagnosticCode(
+        code="TILE_PIPELINE_PHASE_ASYMMETRY", pass_origin="TilePipelineLegality",
+        severity="error",
+        summary="A pipeline's initial producer is not phase=1 / consumer not phase=0 — the off-by-one ring deadlock.",
+        fix_hint="Initialize the producer ring at phase=1 and the consumer at phase=0.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_BARRIER_KIND_MISMATCH", pass_origin="TilePipelineLegality",
+        severity="error",
+        summary="One tile.barrier_id is used with two different #tile.barrier kinds.",
+        fix_hint="Keep one completion semantics (kind) per barrier id.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C3", sprint="C3 (TIRx)",
+    ),
+    # C6 — WarpSpecLegalityPass (the 7 appendix invariants).
+    DiagnosticCode(
+        code="WARPSPEC_INIT_UNDER_GUARD", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A barrier init runs inside a warp-role-guarded region instead of CTA top level.",
+        fix_hint="Hoist mbarrier init to CTA scope (thread 0), outside any warp-role region.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="WARPSPEC_COLLECTIVE_IN_DIVERGENT_BRANCH", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A collective (cta_sync / cluster_sync / next_tile) sits inside a warp-role-guarded region.",
+        fix_hint="Move the collective to a point all warps reach (outside the warp-role region).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="WARPSPEC_LOOP_COUNT_DISAGREE", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="Producer/consumer loops on one tile.pipeline declare different tile.trip_count.",
+        fix_hint="Give the producer (TMA) and consumer (MMA) loops the same trip count.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="WARPSPEC_MISSING_VISIBILITY_FENCE", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A TMA store has no prior visibility fence (fence.proxy_async / commit_group) in its block.",
+        fix_hint="Emit a fence.proxy_async before the TMA store so the async engine sees fresh shared memory.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="WARPSPEC_ARRIVAL_COUNT_MISMATCH", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="#tile.barrier sites on one tile.barrier_id disagree on expect (arrival count != init count).",
+        fix_hint="Match the arrive count (copy_async expect_tx) to the init count (setup_descriptor).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
+    DiagnosticCode(
+        code="WARPSPEC_USE_AFTER_FREE", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A buffer free has no prior cta_sync in its block — a warp may still be reading it during writeback.",
+        fix_hint="Emit a cta_sync before deallocating the buffer (the writeback-dealloc epilogue).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
+    ),
 )
 
 

@@ -109,12 +109,14 @@ static SmallVector<int64_t> tileExtents(Operation *op) {
 // (C2) runs on real lowering output and C1's layout vocabulary appears on the
 // staged shared-memory / TMEM tiles. axisNames must match the tile rank (2).
 static void stampBufferWrite(OpBuilder &b, Operation *op, const Twine &buffer,
-                             ArrayRef<int64_t> extents,
+                             StringRef space, ArrayRef<int64_t> extents,
                              ArrayRef<StringRef> axisNames) {
-  op->setAttr("tile.access", b.getStringAttr("write"));
-  op->setAttr("tile.buffer", b.getStringAttr(buffer.str()));
+  // Typed buffer reference (name + space + access) replaces the old
+  // tile.buffer/tile.access string pair.
+  op->setAttr("tile.buf", tile::TileBufferRefAttr::get(
+                              b.getContext(), buffer.str(), space, "write"));
   if (extents.empty() || extents.size() != axisNames.size())
-    return; // buffer/access stamped; no layout when the shape is unknown.
+    return; // buffer stamped; no layout when the shape is unknown.
   // Dynamic / placeholder dims (kDynamic, -1) can't form a legal layout — stamp
   // buffer identity only rather than crash the #tile.layout verifier.
   for (int64_t e : extents)
@@ -237,8 +239,8 @@ struct WarpSpecializationPass
           o->moveBefore(prodWarp);
       }
 
-      // Buffers allocated this region (freed in the epilogue below).
-      SmallVector<std::string> regionBuffers;
+      // Buffers allocated this region (name, space) — freed in the epilogue.
+      SmallVector<std::pair<std::string, std::string>> regionBuffers;
 
       Block *prodBody = b.createBlock(&prodWarp->getRegion(0));
       b.setInsertionPointToEnd(prodBody);
@@ -248,9 +250,9 @@ struct WarpSpecializationPass
       for (Operation *p : producerOps) {
         if (p->getName().getStringRef() == "tile.async_copy") {
           std::string name = (pipelineId + ".smem." + Twine(smemIdx++)).str();
-          stampBufferWrite(b, p, name, tileExtents(p),
+          stampBufferWrite(b, p, name, "smem", tileExtents(p),
                            {StringRef("m"), StringRef("m")});
-          regionBuffers.push_back(name);
+          regionBuffers.push_back({name, "smem"});
         }
         p->moveBefore(prodBody, prodBody->end());
       }
@@ -282,9 +284,9 @@ struct WarpSpecializationPass
         if (c->getName().getStringRef() == "tile.mma") {
           std::string name =
               (pipelineId + ".tmem.acc." + Twine(accIdx++)).str();
-          stampBufferWrite(b, c, name, tileExtents(c),
+          stampBufferWrite(b, c, name, "tmem", tileExtents(c),
                            {StringRef("tlane"), StringRef("tcol")});
-          regionBuffers.push_back(name);
+          regionBuffers.push_back({name, "tmem"});
         }
         c->moveBefore(consBody, consBody->end());
       }
@@ -307,10 +309,11 @@ struct WarpSpecializationPass
       if (Operation *term = entryBlock.getTerminator()) {
         b.setInsertionPoint(term);
         b.create(OperationState(loc, "tile.cta_sync"));
-        for (const std::string &name : regionBuffers) {
+        for (const auto &[name, space] : regionBuffers) {
           OperationState freeSt(loc, "tile.buffer_free");
-          freeSt.addAttribute("tile.buffer", b.getStringAttr(name));
-          freeSt.addAttribute("tile.access", b.getStringAttr("free"));
+          freeSt.addAttribute("tile.buf", tile::TileBufferRefAttr::get(
+                                              b.getContext(), name, space,
+                                              "free"));
           b.create(freeSt);
         }
       }

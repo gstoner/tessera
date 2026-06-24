@@ -107,8 +107,10 @@ static bool isVisibilityFence(Operation *op) {
 static bool isBufferFree(Operation *op) {
   if (op->hasAttr("tile.buffer_free"))
     return true;
-  if (auto a = op->getAttrOfType<StringAttr>("tile.access"))
-    if (a.getValue() == "free")
+  // Typed buffer reference with access = free.
+  if (auto bref =
+          op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf"))
+    if (bref.getAccess() == "free")
       return true;
   StringRef n = op->getName().getStringRef();
   return n.contains("buffer_free") || n.contains("dealloc");

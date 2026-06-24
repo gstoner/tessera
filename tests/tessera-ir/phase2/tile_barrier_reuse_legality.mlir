@@ -12,10 +12,10 @@
 // expected-error/note below are what verify this case.)
 func.func @tmem_alias_race() {
   // expected-note @+1 {{previous write to buffer "tmem0" here}}
-  "tile.tmem_write"() {tile.access = "write", tile.buffer = "tmem0",
+  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
     tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
   // expected-error @+1 {{TILE_BARRIER_REUSE_MISSING_BARRIER: buffer "tmem0"}}
-  "tile.tmem_write"() {tile.access = "write", tile.buffer = "tmem0",
+  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
     tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }
@@ -26,11 +26,11 @@ func.func @tmem_alias_race() {
 // the reuse hazard, so the layout reuse is legal.
 // CHECK-LABEL: func.func @tmem_alias_barriered
 func.func @tmem_alias_barriered() {
-  "tile.tmem_write"() {tile.access = "write", tile.buffer = "tmem0",
+  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
     tile.layout = #tile.layout<shard = [128] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
   // CHECK: tile.mbarrier_wait
   "tile.mbarrier_wait"() : () -> ()
-  "tile.tmem_write"() {tile.access = "write", tile.buffer = "tmem0",
+  "tile.tmem_write"() {tile.buf = #tile.buffer_ref<name = "tmem0", space = "tmem", access = "write">,
     tile.layout = #tile.layout<shard = [256] : [1] on ["tlane"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }
@@ -41,9 +41,9 @@ func.func @tmem_alias_barriered() {
 // (stages 0 and 1) — footprints do not overlap, so no barrier is required.
 // CHECK-LABEL: func.func @double_buffer_disjoint
 func.func @double_buffer_disjoint() {
-  "tile.smem_write"() {tile.access = "write", tile.buffer = "smem0",
+  "tile.smem_write"() {tile.buf = #tile.buffer_ref<name = "smem0", space = "smem", access = "write">,
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : () -> ()
-  "tile.smem_write"() {tile.access = "write", tile.buffer = "smem0",
+  "tile.smem_write"() {tile.buf = #tile.buffer_ref<name = "smem0", space = "smem", access = "write">,
     tile.layout = #tile.layout<shard = [128] : [1] on ["m"], replica = [] : [] on [], offset = 128>} : () -> ()
   return
 }
@@ -54,9 +54,9 @@ func.func @double_buffer_disjoint() {
 // two writes to the "same" buffer name carry no aliasing hazard.
 // CHECK-LABEL: func.func @register_fragment_no_hazard
 func.func @register_fragment_no_hazard() {
-  "tile.reg_write"() {tile.access = "write", tile.buffer = "frag",
+  "tile.reg_write"() {tile.buf = #tile.buffer_ref<name = "frag", space = "reg", access = "write">,
     tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : () -> ()
-  "tile.reg_write"() {tile.access = "write", tile.buffer = "frag",
+  "tile.reg_write"() {tile.buf = #tile.buffer_ref<name = "frag", space = "reg", access = "write">,
     tile.layout = #tile.layout<shard = [8, 4] : [4, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>} : () -> ()
   return
 }

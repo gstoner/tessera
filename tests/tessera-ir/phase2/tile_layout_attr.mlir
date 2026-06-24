@@ -33,6 +33,17 @@ func.func @tmem_replicated_scale() {
   return
 }
 
+// The typed #tile.buffer_ref contract (name + space + access) replaces the old
+// tile.buffer/tile.access string markers.
+// CHECK-LABEL: func.func @buffer_ref
+func.func @buffer_ref() {
+  // CHECK: #tile.buffer_ref<name = "warpspec.0.smem.0", space = "smem", access = "write">
+  "test.buf"() {b = #tile.buffer_ref<name = "warpspec.0.smem.0", space = "smem", access = "write">} : () -> ()
+  // CHECK: #tile.buffer_ref<name = "acc", space = "tmem", access = "free">
+  "test.buf"() {b = #tile.buffer_ref<name = "acc", space = "tmem", access = "free">} : () -> ()
+  return
+}
+
 // -----
 
 func.func @bad_unknown_axis() {
@@ -54,5 +65,29 @@ func.func @bad_rank_mismatch() {
 func.func @bad_nonpositive_extent() {
   // expected-error @+1 {{TILE_LAYOUT_NONPOSITIVE_EXTENT}}
   "test.buf"() {l = #tile.layout<shard = [0] : [1] on ["m"], replica = [] : [] on [], offset = 0>} : () -> ()
+  return
+}
+
+// -----
+
+func.func @bad_buffer_space() {
+  // expected-error @+1 {{TILE_BUFFER_REF_BAD_SPACE}}
+  "test.buf"() {b = #tile.buffer_ref<name = "x", space = "bogus", access = "write">} : () -> ()
+  return
+}
+
+// -----
+
+func.func @bad_buffer_access() {
+  // expected-error @+1 {{TILE_BUFFER_REF_BAD_ACCESS}}
+  "test.buf"() {b = #tile.buffer_ref<name = "x", space = "smem", access = "bogus">} : () -> ()
+  return
+}
+
+// -----
+
+func.func @bad_buffer_empty_name() {
+  // expected-error @+1 {{TILE_BUFFER_REF_EMPTY_NAME}}
+  "test.buf"() {b = #tile.buffer_ref<name = "", space = "smem", access = "write">} : () -> ()
   return
 }

@@ -19,7 +19,7 @@
 //
 // Op conventions (kept attribute-driven so it works on the value lane and on
 // unregistered husks alike):
-//   write op   : `tile.access = "write"`, `tile.buffer = "<name>"`,
+//   write op   : `tile.buf = #tile.buffer_ref<name, space, access="write">`,
 //                `tile.layout = #tile.layout<...>`
 //   barrier op : op name contains "mbarrier" / "wait_async" / "barrier", OR
 //                carries a `tile.barrier` unit attribute. A barrier releases the
@@ -129,16 +129,17 @@ struct TileBarrierReuseLegality
           return;
         }
 
-        auto access = op->getAttrOfType<StringAttr>("tile.access");
-        if (!access || access.getValue() != "write")
+        // Typed buffer reference: a write to a named buffer in a memory space.
+        auto bufRef =
+            op->getAttrOfType<tessera::tile::TileBufferRefAttr>("tile.buf");
+        if (!bufRef || bufRef.getAccess() != "write")
           return;
-        auto bufAttr = op->getAttrOfType<StringAttr>("tile.buffer");
         auto layout =
             op->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
-        if (!bufAttr || !layout)
+        if (!layout)
           return;
 
-        StringRef buf = bufAttr.getValue();
+        StringRef buf = bufRef.getName();
         std::optional<std::pair<int64_t, int64_t>> fp = storageFootprint(layout);
 
         auto it = pending.find(buf);

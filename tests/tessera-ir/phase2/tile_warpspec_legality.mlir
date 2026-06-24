@@ -87,6 +87,6 @@ func.func @arrival_count_mismatch() {
 // (which DOES precede the frees with a cta_sync, so correct lowering is clean).
 func.func @use_after_free() {
   // expected-error @+1 {{WARPSPEC_USE_AFTER_FREE}}
-  "tile.buffer_free"() {tile.access = "free", tile.buffer = "warpspec.0.smem.0"} : () -> ()
+  "tile.buffer_free"() {tile.buf = #tile.buffer_ref<name = "warpspec.0.smem.0", space = "smem", access = "free">} : () -> ()
   return
 }

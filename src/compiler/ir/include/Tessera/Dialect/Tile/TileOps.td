@@ -286,6 +286,31 @@ def Tile_PipelineStateAttr
 // kernel that consumes these depths stay hardware-gated (Phase G/H).
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Typed buffer-reference contract (2026-06-23) — strengthens the C2/C6 marker
+// conventions (`tile.buffer` string + `tile.access` string) into one typed
+// attribute whose memory space and access mode are a closed, verifier-checked
+// set. The buffer identity is still a name today; the next step is an SSA
+// `!tile.buffer` handle produced by `tile.alloc` / consumed by `tile.dealloc`
+// (def-use lifetimes instead of name matching) — see COMPILER_AUDIT.
+//===----------------------------------------------------------------------===//
+
+def Tile_BufferRefAttr : Tile_Attr<"TileBufferRef", "buffer_ref"> {
+  let summary = "A typed staged-buffer reference: name + memory space + access";
+  let description = [{
+    Replaces the bare `tile.buffer="…"` + `tile.access="…"` string markers. The
+    `space` (smem / tmem / gmem) and `access` (read / write / free) are typed,
+    closed sets enforced by the verifier — a stronger contract than two free
+    strings. Carried as `tile.buf = #tile.buffer_ref<…>` on staged writes/frees.
+  }];
+  let parameters = (ins StringRefParameter<"">:$name,
+                        StringRefParameter<"">:$space,
+                        StringRefParameter<"">:$access);
+  let assemblyFormat =
+      "`<` `name` `=` $name `,` `space` `=` $space `,` `access` `=` $access `>`";
+  let genVerifyDecl = 1;
+}
+
 def Tile_PipelineDepthsAttr
     : Tile_Attr<"TilePipelineDepths", "pipeline_depths"> {
   let summary = "Independent per-ring pipeline depths (FA-4: Q / KV / TMEM)";

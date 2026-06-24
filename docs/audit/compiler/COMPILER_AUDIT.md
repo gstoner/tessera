@@ -1019,6 +1019,26 @@ sweep, persistent/L2-aware tile scheduling + cluster cross-CTA SMEM views (C5),
 WarpSpec stamping `#tile.pipeline_depths`, and the kernels that consume the
 per-ring depths. There is no remaining hardware-free TIRx-review work.
 
+**Registry sync + typed-contract hardening LANDED (2026-06-23).** Two follow-ups
+after the C1–C6 feature: (1) the Python meta-registries now reflect the new
+surface — `dialects_manifest` registers the `tile` dialect; `diagnostic_codes`
+registers the 23 new MLIR codes (TILE_LAYOUT_* / TILE_BARRIER_* / TILE_PIPELINE_*
+/ TILE_PIPELINE_DEPTHS_NONPOSITIVE / TILE_BUFFER_REF_* / WARPSPEC_*);
+`pass_metadata` adds the 5 new passes (compute/storage-legalize + the C2/C3/C6
+gates) with their codes/dialects/required-attrs; `pipeline_registry` reflects the
+two gate placements + the `legalize-dtypes` option in the GPU/nvidia pipelines.
+All drift gates green (108 registry tests, 17 generated docs in sync). (2) The
+first **typed contract** strengthening of the marker conventions: the loose
+`tile.buffer` + `tile.access` string pair is replaced by a typed
+`#tile.buffer_ref<name, space, access>` attribute whose `space` (smem/tmem/gmem/
+reg) and `access` (read/write/free) are closed, verifier-checked sets
+(`TILE_BUFFER_REF_{EMPTY_NAME,BAD_SPACE,BAD_ACCESS}`). WarpSpec emits it on staged
+writes + the dealloc epilogue; C2/C6 read the typed handle; flash_attn lowers
+clean. *Next (the SSA half):* promote buffer/barrier *identity* from a string
+name to an SSA `!tile.buffer` handle produced by a `tile.alloc` op and consumed
+by `tile.dealloc` (def-use lifetimes instead of name matching) — a TypeDef +
+op-pair refactor that lets C2/C6 track real values, scoped as a focused follow-on.
+
 ## Next Work
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go

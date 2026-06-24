@@ -96,6 +96,22 @@ class PassMetadata:
 
 REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
+        name="tessera-compute-legalize",
+        cpp_class="ComputeLegalize",
+        summary=(
+            "C4 (TIRx): stamps `numeric_policy.accum` (fp32, or int32 for "
+            "int4/int8) on any op whose storage is reduced-precision and lacks "
+            "an accumulator — Decision #15a as an early rewrite. Opt-in via the "
+            "named pipelines' `legalize-dtypes` option; runs before "
+            "IRContractLegality so the stamped accum passes the contract."
+        ),
+        input_dialects=("tessera",),
+        output_dialects=("tessera",),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="C4 (TIRx)",
+    ),
+    PassMetadata(
         name="tessera-distribution-lower",
         cpp_class="DistributionLoweringPass",
         summary=(
@@ -147,6 +163,20 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="V2 + V4a",
     ),
     PassMetadata(
+        name="tessera-storage-legalize",
+        cpp_class="StorageLegalize",
+        summary=(
+            "C4 (TIRx): terminal packing — stamps `tessera.storage_packed` + "
+            "`tessera.storage_container` on sub-byte / block-scaled storage "
+            "(fp4 / nvfp4 / fp6 / int4). Opt-in via `legalize-dtypes`; runs last."
+        ),
+        input_dialects=("tessera",),
+        output_dialects=("tessera",),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="C4 (TIRx)",
+    ),
+    PassMetadata(
         name="tessera-symdim-equality",
         cpp_class="SymbolicDimEquality",
         summary=(
@@ -183,6 +213,68 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         must_run_after=("tessera-distribution-lower",),
         pass_kind="verifier",
         sprint="V5 + V2-flow + V3a + V3b + V3c",
+    ),
+    PassMetadata(
+        name="tessera-tile-barrier-reuse-legality",
+        cpp_class="TileBarrierReuseLegality",
+        summary=(
+            "C2 (TIRx): barriers as a layout-reuse correctness property — two "
+            "writes to overlapping storage-axis (m/tlane/tcol) footprints of one "
+            "tile.buffer with no intervening barrier are a race. Runs after "
+            "WarpSpecialization (which emits the #tile.layout + tile.buffer/"
+            "tile.access markers) in the GPU / nvidia pipelines."
+        ),
+        input_dialects=("tessera", "tile", "func"),
+        output_dialects=("tessera", "tile", "func"),
+        required_attrs=("tile.buf", "tile.layout"),
+        diagnostic_codes=("TILE_BARRIER_REUSE_MISSING_BARRIER",),
+        pass_kind="verifier",
+        sprint="C2 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-tile-pipeline-legality",
+        cpp_class="TilePipelineLegality",
+        summary=(
+            "C3 (TIRx): cross-op pipeline legality — initial producer phase=1 / "
+            "consumer phase=0 asymmetry (the off-by-one ring-deadlock fix) and "
+            "per-tile.barrier_id #tile.barrier kind consistency. Runs after "
+            "WarpSpecialization and again after NVTMADescriptor (typed barriers)."
+        ),
+        input_dialects=("tessera", "tile", "func"),
+        output_dialects=("tessera", "tile", "func"),
+        required_attrs=("tile.pipeline", "tile.pipeline_state",
+                        "tile.barrier", "tile.barrier_id"),
+        diagnostic_codes=(
+            "TILE_PIPELINE_PHASE_ASYMMETRY",
+            "TILE_PIPELINE_BARRIER_KIND_MISMATCH",
+        ),
+        pass_kind="verifier",
+        sprint="C3 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-warpspec-legality",
+        cpp_class="WarpSpecLegality",
+        summary=(
+            "C6 (TIRx): the 7 'Debugging Warp-Specialized Kernels' appendix "
+            "invariants — init placement, collective-in-branch, loop-count "
+            "agreement, TMA visibility fence, arrival-count==init-count, "
+            "use-after-free. Runs after WarpSpecialization and again after "
+            "NVTMADescriptor in the GPU / nvidia pipelines."
+        ),
+        input_dialects=("tessera", "tile", "func", "scf"),
+        output_dialects=("tessera", "tile", "func", "scf"),
+        required_attrs=("tile.warp_role", "tile.barrier", "tile.barrier_id",
+                        "tile.pipeline", "tile.trip_count", "tile.buf"),
+        diagnostic_codes=(
+            "WARPSPEC_ARRIVAL_COUNT_MISMATCH",
+            "WARPSPEC_COLLECTIVE_IN_DIVERGENT_BRANCH",
+            "WARPSPEC_INIT_UNDER_GUARD",
+            "WARPSPEC_LOOP_COUNT_DISAGREE",
+            "WARPSPEC_MISSING_VISIBILITY_FENCE",
+            "WARPSPEC_USE_AFTER_FREE",
+        ),
+        pass_kind="verifier",
+        sprint="C6 (TIRx)",
     ),
 )
 

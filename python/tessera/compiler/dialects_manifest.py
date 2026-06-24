@@ -146,6 +146,23 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         standalone_lit_parseable=False,
         sprint="V8",
     ),
+    # Sprint 9 value-lane Tile IR dialect (src/compiler/ir), grown in the TIRx
+    # review (C1/C3/C5) with first-class attributes: #tile.layout / #tile.swizzle
+    # / #tile.barrier / #tile.pipeline_state / #tile.pipeline_depths. Built into
+    # core TesseraIR and registered unconditionally in tessera-opt.cpp (no
+    # cmake_flag). Holds AttrDefs but no TypeDefs today.
+    DialectSpec(
+        name="tile",
+        target="TesseraTileDialect",
+        header="src/compiler/ir/include/Tessera/Dialect/Tile/TileDialect.h",
+        cpp_dir="src/compiler/ir",
+        register_fn="tessera::tile::registerTileDialect",
+        cmake_flag=None,
+        eager_load_parent="tessera",
+        has_typedefs=False,
+        standalone_lit_parseable=True,
+        sprint="Sprint 9 / C1 (TIRx)",
+    ),
 )
 
 

@@ -622,11 +622,20 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
         1024/2048: 1.64–1.71×; theoretical max 2×, gap = diagonal tiles + the
         fixed `_pre`/accumulator overhead). Correctness unchanged (5/5, incl. the
         causal cases). The forward already had this bound.
+      - **LDS-traffic lever investigated, NO clean win (2026-06-24, measured).**
+        The forward's rung-2 (fuse a separate rescale into the accumulate) has no
+        backward analog — the backward has no separate rescale pass. The dominant
+        backward LDS is the `_dkdv` `dKacc`+`dVacc` accumulators (the worst
+        occupancy in the suite: hsaco-decoded **3 waves/CU @ D=128**, 17408 B
+        LDS). Moving them to registers (the only way to cut that LDS) **spills**:
+        `_dkdv` already uses 232 VGPR @ D=64 / 207 @ D=128, and per-lane
+        accumulators add D/2–D VGPRs → over the 256 ceiling. So `_dkdv` is stuck
+        between an LDS-occupancy limit and a VGPR-spill limit — no clean lever
+        without a from-scratch tiling redesign.
       Remaining next rungs (shared with the forward): occupancy (1 wave/block →
-      multi-wave) and fewer LDS round-trips/barriers — the larger non-causal
-      lever, a real kernel restructure. Memory double-buffering is NOT a lever
-      here — the kernels are WMMA/occupancy-bound, not staging-bound (measured:
-      GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128 on LDS footprint).
+      multi-wave) — a real kernel restructure. Memory double-buffering is NOT a
+      lever — WMMA/occupancy-bound, not staging-bound (GEMM ~20 vs FA ~4 TFLOP/s,
+      FA drops at D=128 on LDS footprint).
     - ✅ **`runtime.launch()` executor-table lane (2026-06-24)** — flash_attn now
       reaches the runtime executor table like matmul. Artifact stamped
       `compiler_path="rocm_flash_attn_compiled"` → `execution_matrix` row →

@@ -527,8 +527,23 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
   The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.
 
-10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
-    correctness-first); the `runtime.launch()` artifact lane.
+10. flash_attn follow-ups:
+    - ✅ **compiler-generated forward** (2026-06-23) — the `generate-wmma-flash-
+      attn-kernel` pass; executes on gfx1151 vs numpy (see the flash_attn section).
+    - ✅ **forward perf ladder, measured** (2026-06-23) —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_compiled.py` on gfx1151:
+      **~4.0 TFLOP/s at head_dim 64, ~2.4 at 128** (FA-2 fwd FLOPs). Modest by
+      design — the kernel is correctness-first (one wave per query tile, LDS
+      round-trips, online-softmax barriers, no KV-tile pipelining / double
+      buffering / multi-wave query tiles). The ladder quantifies the headroom.
+    - **backward pass — still open.** The largest remaining attention piece: no
+      hand-written oracle exists (forward-only), so it is a new kernel
+      (recompute S; dV = Pᵀ@dO; dP = dO@Vᵀ; dS = softmax-jacobian(dP); dQ = dS@K;
+      dK = dSᵀ@Q) validated against a numpy attention-backward reference. A
+      focused standalone effort, comparable in size to the forward.
+    - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
+      contract + executor + matrix row) — the same additive step matmul took at
+      L4; the compiled kernel + in-process execution already exist.
 11. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated

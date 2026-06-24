@@ -417,9 +417,31 @@ struct ROCMWaveLdsLegalityPass
       // old count-based guess produced is structurally impossible here). The
       // string `outstanding` set + pendingLdsWrites remain for the C2 LDS
       // write/write check and a conservative fallback on token-less IR.
+      //
+      // Loop handling: this is a single program-order PreOrder walk (it descends
+      // into scf.for/while bodies but visits each body once). That is sound and
+      // conservative for legality — an in-body copy/wait/mma chain is checked by
+      // its SSA token results, and a loop-carried token arrives as a block
+      // argument (handled above: assumed resident, never false-rejected). It is
+      // intentionally NOT an iterative dataflow fixpoint; cross-iteration LDS
+      // reuse hazards are the domain of the write/write check below.
       llvm::SmallPtrSet<Value, 8> outstandingTokens; // minted, not retired
       llvm::SmallPtrSet<Value, 8> retiredTokens;     // waited or drained
       SmallVector<std::string> outstanding;          // barrier ids (fallback)
+      // Token-less fallback CONTRACT (intentional, see wave_lds_depends_on_
+      // legality.mlir @double_buffer_inferred): a token-less / depends_on-less
+      // mma is assumed to consume the MOST-RECENTLY-RETIRED stage (the
+      // prefetch->wait->compute idiom). So the only hazard this fallback flags is
+      // "copies in flight and NOTHING has ever been retired" — there is no
+      // resident stage for the mma to consume yet. Once any wait has retired a
+      // stage, a token-less mma is assumed to read it; a live prefetch issued
+      // afterwards (the next-iteration stage) is NOT its dependency. This is
+      // deliberately permissive: it does NOT try to disambiguate which stage a
+      // bare mma reads (impossible token-less), and it does NOT need to — a
+      // buffer that an unwaited prefetch clobbers is caught independently by the
+      // LDS write/write (OVERLAPPING_WRITE) check below. Precise per-stage
+      // checking requires threading a !tile.async_token or annotating
+      // tile.depends_on (both handled above, before this fallback).
       bool sawAnyWait = false;
       unsigned synth = 0;
       llvm::DenseMap<StringRef, PendingWrite> pendingLdsWrites;
@@ -472,6 +494,13 @@ struct ROCMWaveLdsLegalityPass
           for (Value operand : op->getOperands())
             if (isToken(operand)) {
               hasTokenOperand = true;
+              // Loop-carried token (a block argument, e.g. an scf.for iter_arg):
+              // its producer/retirement live on the back-edge, which this single-
+              // visit walk cannot follow. Treat it as resident rather than false-
+              // reject the pipelined loop; the in-body copy/wait/mma edges are
+              // still checked precisely from their SSA results below.
+              if (isa<BlockArgument>(operand))
+                continue;
               if (!retiredTokens.count(operand)) {
                 op->emitOpError(
                     "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma consumes an async "

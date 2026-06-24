@@ -46,3 +46,20 @@ func.func @no_async_input(%A: tensor<64x64xbf16>, %B: tensor<64x64xbf16>)
       : (tensor<64x64xbf16>, tensor<64x64xbf16>) -> tensor<64x64xf32>
   return %C : tensor<64x64xf32>
 }
+
+// -----
+
+// Held-but-unwaited: the mma carries the copy's completion token (presence is
+// satisfied) but NO tile.wait_async retires it before the mma — the copy is
+// still in flight when the matrix op runs. Presence-only would miss this; the
+// retirement check (converging with the ROCm legality) flags it.
+func.func @token_held_unwaited(%A: tensor<64x64xbf16>, %B: tensor<64x64xbf16>)
+    -> tensor<64x64xf32> {
+  %tA, %tok = "tile.async_copy"(%A)
+      : (tensor<64x64xbf16>) -> (tensor<64x64xbf16>, !tile.async_token)
+  // expected-error @+1 {{WARPSPEC_MMA_TOKEN_NOT_RETIRED}}
+  %C = "tile.mma"(%tA, %B, %tok) {sm = 90 : i32}
+      : (tensor<64x64xbf16>, tensor<64x64xbf16>, !tile.async_token)
+        -> tensor<64x64xf32>
+  return %C : tensor<64x64xf32>
+}

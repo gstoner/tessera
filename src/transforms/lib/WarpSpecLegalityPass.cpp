@@ -245,28 +245,61 @@ struct WarpSpecLegality
 
       // Token synchronization (Phase C-NV) — the SSA half of arrival==init.
       // arrival==init (above) checks the mbarrier *byte count* via #tile.barrier.
-      // This checks the *ordering* edge via the !tile.async_token: a consumer
-      // tile.mma that reads a producer's async-staged tile must also read a
-      // completion token from that same producer (the copy/warp it depends on),
-      // so the matrix op is gated on copy completion by SSA, not program order.
-      // WarpSpecialization auto-mints this edge; a missing one is a race.
-      func.walk([&](Operation *mma) {
-        if (mma->getName().getStringRef() != "tile.mma")
+      // This checks the *ordering* edge via the !tile.async_token, in two parts:
+      //   (a) PRESENCE — a consumer tile.mma that reads a producer's async-staged
+      //       tile must also read a completion token from that same producer, so
+      //       the matrix op is gated on copy completion by SSA, not program order
+      //       (WARPSPEC_MMA_NOT_TOKEN_SYNCED).
+      //   (b) RETIREMENT — a token minted directly by a tile.async_copy /
+      //       tile.tma.copy_async must be RETIRED by a prior tile.wait_async
+      //       before the mma; merely *holding* an unwaited token is a held-but-
+      //       unwaited race (WARPSPEC_MMA_TOKEN_NOT_RETIRED). This converges with
+      //       the ROCm legality, which also requires retirement, not just
+      //       presence. Warp-boundary tokens (schedule.warp results) and loop-
+      //       carried tokens (block args) are retired structurally inside the
+      //       producer / on the back-edge, so retirement is checked only for the
+      //       direct-copy case this single-visit walk can prove.
+      // Single ordered walk so "retired before this mma" is well-defined.
+      llvm::SmallPtrSet<Value, 8> retiredTokens;
+      func.walk<WalkOrder::PreOrder>([&](Operation *op) {
+        StringRef n = op->getName().getStringRef();
+        if (n == "tile.wait_async") {
+          for (Value v : op->getOperands())
+            if (isa<tessera::tile::AsyncTokenType>(v.getType()))
+              retiredTokens.insert(v);
+          return;
+        }
+        if (n != "tile.mma")
           return;
         // Per producer the mma reads from: did it read data, and a token?
         llvm::DenseMap<Operation *, std::pair<bool, bool>> fromProducer;
-        for (Value operand : mma->getOperands()) {
+        for (Value operand : op->getOperands()) {
           Operation *def = operand.getDefiningOp();
           if (!def || !isAsyncDataProducer(def))
             continue;
-          bool isToken =
-              isa<tessera::tile::AsyncTokenType>(operand.getType());
+          bool isToken = isa<tessera::tile::AsyncTokenType>(operand.getType());
           auto &flags = fromProducer[def];
           (isToken ? flags.second : flags.first) = true;
+          // (b) retirement, only for a token minted directly by a copy op.
+          if (isToken) {
+            StringRef dn = def->getName().getStringRef();
+            bool directCopy =
+                dn == "tile.async_copy" || dn == "tile.tma.copy_async";
+            if (directCopy && !isa<BlockArgument>(operand) &&
+                !retiredTokens.count(operand)) {
+              op->emitOpError(
+                  "WARPSPEC_MMA_TOKEN_NOT_RETIRED: tile.mma holds an async-copy "
+                  "completion token that no prior tile.wait_async retired — the "
+                  "copy is still in flight when the matrix op runs (held-but-"
+                  "unwaited race). Add a tile.wait_async on the token before the "
+                  "mma.");
+              anyError = true;
+            }
+          }
         }
         for (auto &entry : fromProducer) {
           if (entry.second.first && !entry.second.second) {
-            mma->emitOpError(
+            op->emitOpError(
                 "WARPSPEC_MMA_NOT_TOKEN_SYNCED: tile.mma reads an async-staged "
                 "tile from a producer but has no !tile.async_token completion "
                 "edge to it — the matrix op is not gated on copy completion "

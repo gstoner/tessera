@@ -51,11 +51,20 @@ class Tile_Type<string name, string typeMnemonic, list<Trait> traits = []>
 // #tile.barrier<kind=tma,expect=…>; ROCm vmcnt stays in the legality's
 // outstanding-set arithmetic). Threading it from tile.async_copy's result into
 // tile.wait_async / tile.mma operands turns the copy→consumer synchronization
-// dependency into a verifier-checkable SSA def-use edge, replacing the
-// transitional tile.barrier_id / tile.depends_on string markers + program order.
-// It rides the ops' existing Variadic<AnyType> slots, so no op signature changes
-// and every generic-form fixture stays valid; the planner starts emitting it in
-// Phase C. Kept backend-neutral (one type, no NVIDIA/ROCm privilege).
+// dependency into an SSA def-use edge that a legality PASS can check by
+// dataflow instead of program order.
+//
+// Scope (accurate state, not aspiration): this is an ADDITIVE, optimization-
+// fence SSA edge. It is checked by the opt-in legality passes
+// (tessera-warpspec-legality on NV, rocm-wave-lds-legality on ROCm), NOT by an
+// op verifier — the type rides the ops' existing Variadic<AnyType> slots, so
+// nothing structurally forces single-producer / produced-before-consumed beyond
+// MLIR's generic SSA dominance. And it does NOT yet retire the string markers:
+// on the ROCm path the tile.barrier_id / tile.depends_on FIFO is still the
+// load-bearing dependency model and the token is redundant decoration there;
+// the token replaced program-order reasoning on the NV warp-spec path. Both
+// models coexist as of Phase C/D; full unification is future work. Kept
+// backend-neutral (one type, no NVIDIA/ROCm privilege).
 def Tile_AsyncTokenType : Tile_Type<"AsyncToken", "async_token"> {
   let summary = "Completion token for an asynchronous tile copy";
 }
@@ -198,8 +207,10 @@ def Tile_SVDOp           : Tile_LinalgOp<"svd">;
 // (`"tile.async_copy"(...)`), legal only because TesseraTileDialect calls
 // allowUnknownOperations(true). Registering them makes the seam a first-class op
 // — a precondition for giving tile.async_copy a typed completion result (the
-// !tile.async_token SSA edge added in Phase B), which replaces the transitional
-// `tile.barrier_id` / `tile.depends_on` string markers + program-order reasoning.
+// !tile.async_token SSA edge added in Phase B), the additive dependency edge
+// that supersedes program-order reasoning on the NV path and coexists with the
+// `tile.barrier_id` / `tile.depends_on` FIFO still load-bearing on ROCm (see the
+// AsyncToken type doc above — full unification of the two is future work).
 //
 // DELIBERATELY NOT `[Pure]`, unlike the matmul/gemm value carriers above. These
 // ops carry synchronization/ordering semantics; `[Pure]` (= NoMemoryEffect +

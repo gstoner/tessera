@@ -243,21 +243,10 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     }
     b.create<gpu::BarrierOp>(loc);
 
-    // rescale sAcc by the per-row correction: for i=tid; i<16*D; i+=32.
-    {
-      auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
-      OpBuilder::InsertionGuard g2(b);
-      b.setInsertionPointToStart(lp.getBody());
-      Value i = lp.getInductionVar();
-      Value r = b.create<arith::DivUIOp>(loc, i, cD);
-      Value sc = b.create<memref::LoadOp>(loc, scorr, ValueRange{r});
-      Value av = b.create<memref::LoadOp>(loc, sAcc, ValueRange{i});
-      b.create<memref::StoreOp>(loc, b.create<arith::MulFOp>(loc, av, sc), sAcc,
-                                ValueRange{i});
-    }
-    b.create<gpu::BarrierOp>(loc);
-
-    // O += P @ V over D/16 chunks.
+    // O += P @ V over D/16 chunks. The per-row online-softmax correction is
+    // FUSED into the accumulator write below (sAcc = sAcc*corr + cpe) instead of
+    // a separate rescale pass — saves a full 16*D LDS read+write pass and one
+    // barrier per KV tile (each sAcc entry is written exactly once per tile).
     for (int64_t dc = 0; dc < DC; ++dc) {
       Value dc16 = ci(dc * 16);
       Value pRow = mul(l15, c16);
@@ -280,7 +269,11 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         Value cpe = b.create<vector::ExtractOp>(loc, cpv, ArrayRef<int64_t>{e});
         Value idx = add(mul(qi, cD), d);
         Value cur = b.create<memref::LoadOp>(loc, sAcc, ValueRange{idx});
-        b.create<memref::StoreOp>(loc, b.create<arith::AddFOp>(loc, cur, cpe),
+        // fused rescale: sAcc = sAcc*corr + cpe (corr = this tile's per-row
+        // online-softmax correction, written to scorr by the softmax above).
+        Value sc = b.create<memref::LoadOp>(loc, scorr, ValueRange{qi});
+        Value resc = b.create<arith::MulFOp>(loc, cur, sc);
+        b.create<memref::StoreOp>(loc, b.create<arith::AddFOp>(loc, resc, cpe),
                                   sAcc, ValueRange{idx});
       }
     }

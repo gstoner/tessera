@@ -554,14 +554,28 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
         D=64, 4 @ 128 — 25%/12% of the 32-wave cap; VGPRs not the limit at D=64).
       - **rung 1 (2026-06-24): drop `sQ` LDS staging** — read Q from global for
         the QK^T A-fragment instead of staging it (sQ was the 2nd-largest LDS
-        buffer). LDS 7360→5312 B @ D=64 → **8→12 waves/CU (+50%)**, and **~4.0→
-        ~5.3 TFLOP/s @ D=64 (~1.3×)**, correctness unchanged (5/5). D=128
-        unchanged (~2.40): VGPRs are maxed there (256/lane), so it is no longer
-        LDS-bound — the next D=128 lever is register pressure (the `sAcc` f32
-        accumulator), a bigger restructure with spill risk.
-      The win confirms occupancy was a real (latency-hiding) lever, not just a
-      ceiling. Remaining: multi-wave query tiles / fewer barriers for the deeper
-      non-causal headroom.
+        buffer). LDS 7360→5312 B @ D=64 → **8→12 waves/CU (+50%)**, **~4.0→~5.3
+        TFLOP/s @ D=64 (~1.3×)**. D=128 occupancy 4→6 waves but perf flat (~2.40)
+        — D=128 is *also* LDS-limited (NOT VGPR-bound; VGPRs allow 24 waves, LDS
+        caps at 6), so at 4–6 waves occupancy wasn't its binding constraint;
+        LDS *traffic* was (see rung 2). 5/5.
+      - **rung 2 (2026-06-24): fuse the online-softmax rescale into P@V** —
+        instead of a separate `sAcc *= corr` pass (a full 16·D LDS read+write +
+        a barrier per KV tile) then `sAcc += P@V`, do `sAcc = sAcc*corr + P@V` in
+        the P@V write (each sAcc entry is written exactly once per tile). Removes
+        one LDS pass + one barrier/tile. **~5.3→~6.8 TFLOP/s @ D=64 (~1.3×) AND
+        ~2.4→~3.18 @ D=128 (~1.3×)** — LDS-traffic reduction helps the LDS-bound
+        D=128 case too. 5/5. Cumulative forward: **~4.0→~6.8 @ D=64 (~1.7×)**,
+        ~2.4→~3.18 @ D=128.
+      Key insight: LDS traffic / lgkmcnt stalls (not just occupancy) are the real
+      lever. Investigated but DEFERRED (measured, don't pay cleanly): (a) D=128
+      occupancy is LDS-limited by `sAcc` (16·D·f32 = 8 KB) — can't shrink without
+      f16 accumulation (precision loss) or register residency (D/2=64 VGPR/lane →
+      spills, fewer waves); (b) multi-wave query tiles — the 16-query tile maps
+      naturally to 16 lanes, so extra waves don't collaborate without a from-
+      scratch warp-specialized redesign. FA forward at ~6.8 is ~34% of the GEMM
+      peak (~20), reasonable given FA's softmax overhead; further gains need a
+      different kernel design, not a rung.
     - ✅ **backward pass — compiler-generated (2026-06-23).** The
       `generate-wmma-flash-attn-bwd-kernel` pass expands one
       `tessera_rocm.flash_attn_bwd` directive into the textbook FA-2 backward

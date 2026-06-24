@@ -1,0 +1,105 @@
+# 7.9. Wave Matrix Multiply Accumulate (WMMA)
+
+> RDNA3 ISA — pages 81–84
+
+    Where "out of range" means the lane offset goes outside a group of 16 lanes (e.g. 0..15, or 16..31).
+
+7.7.2. DPP8
+DPP8 allows arbitrary cross-lane swizzling within groups of 8 lanes. There are two forms of DPP8: normal,
+which reads zero from lanes whose EXEC mask bit is zero, and DPP8FI, which fetches data from inactive lanes
+instead of using the value zero.
+
+DPP8 follows DPP16’s "BC = 1" behavior and assumes all source lanes are in-range.
+
+DPP8 Instruction Fields
+
+Field                Size       Description
+SRC                  8          Source 0 (VGPR). Since the VOP1/VOP2 source0 slot was filled with the constant "DPP" or
+                                "DPPFI", this field provides the actual source-0 vgpr.
+SEL0                 3          Selects which lane to pull data from, within a group of 8 lanes.
+SEL1                            SEL0 selects which lane to read from to supply data into lane 0.
+SEL2                            SEL1 selects which lane to read from to supply data into lane 1.
+SEL3                            etc.
+SEL4                            0 = read from lane 0, 1 = read from lane 1, … 7 = read from lane 7.
+SEL5                            Lanes 0-7 can pull from any of lanes 0-7; lanes 8-15 can pull from lanes 8-15, etc.
+SEL6
+SEL7
+
+7.8. VGPR Indexing
+The VALU provides a set of instructions that move or swap VGPRs where the source, dest or both are indexed
+by a value in the M0 register. Indices are unsigned.
+
+                                         Table 32. VGPR Indexing Instructions
+Instruction                 Index                       Function
+V_MOVRELD_B32               M0[31:0]                    Move with relative destination:
+                                                        VGPR[dst + M0[31:0]] = VGPR[src]
+V_MOVRELS_B32                                           Move with relative source:
+                                                        VGPR[dst] = VGPR[src + M0[31:0]]
+V_MOVRELSD_B32                                          Move with relative source and destination:
+                                                        VGPR[dst + M0[31:0]] = VGPR[src + M0[31:0]]
+V_MOVRELSD_2_B32            Src: M0[9:0]                Move with relative source and destination, each different:
+                            Dst: M0[25:16]              VGPR[dst + M0[25:16]] = VGPR[src + M0[9:0]]
+V_SWAPREL_B32                                           Swap two VGPRs, each relative to a separate index:
+                                                        tmp = VGPR[src + M0[9:0]]
+                                                        VGPR[src + M0[9:0]] = VGPR[dst + M0[25:16]]
+                                                        VGPR[dst + M0[25:16]] = tmp
+
+7.9. Wave Matrix Multiply Accumulate (WMMA)
+Wave Matrix Multiply-Accumulate (WMMA) instructions provide acceleration for common matrix arithmetic
+operations. The instructions are encoded using the VOP3P encoding.
+
+These perform: A * B + C ⇒ D, where A, B, C and D are matrices.
+
+   Additional information can be found on the GPUOpen blog: https://gpuopen.com/learn/
+   wmma_on_rdna3/
+
+   The AMD Matrix Instruction Calculator (https://github.com/RadeonOpenCompute/
+   amd_matrix_instruction_calculator) contains a helper tool that allows developers to view detailed
+   information about the WMMA instructions in the RDNA architecture. It allows users to query instruction-
+   level information such as computational throughput and register usage. It also allows users to generate
+   mappings between matrix element and hardware registers for each matrix instruction and their
+   modifiers.
+
+WMMA does not generate any ALU exceptions.
+
+These are all encoded using VOP3P. The NEG[1:0] field is repurposed for the "IU" integer types to indicate
+whether the inputs are signed or not (0=unsigned, 1=signed). For WMMA_*UI8/UI4, NEG[1:0] indicates whether
+SRC0 and 1 are signed or unsigned, and NEG[2] and NEG_HI[2:0] must be zero. For WMMA*_F16/BF16, NEG[1:0] is
+applied on SRC1 and SRC0’s low 16bit. NEG_HI[1:0] is applied on SRC1 and SRC0’s high 16bit. {NEG_HI[2],
+NEG[2]} is applied on SRC2, act as {ABS, NEG}. The destination is signed for the integer types. Neg[0] applies to
+the A-matrix, and Neg[1] to the B-matrix. Neg[2] must be set to zero.
+
+                                          Table 33. WMMA Instructions
+              Instruction                        Matrix A    Matrix B     Matrix C    Result Matrix
+              V_WMMA_F32_16X16X16_F16            16x16 F16   16x16 F16    16x16 F32   16x16 F32
+              V_WMMA_F32_16X16X16_BF16           16x16 BF16 16x16 BF16 16x16 F32      16x16 F32
+              V_WMMA_F16_16X16X16_F16            16x16 F16   16x16 F16    16x16 F16   16x16 F16
+              V_WMMA_BF16_16X16X16_BF16          16x16 BF16 16x16 BF16 16x16 BF16 16x16 BF16
+              V_WMMA_I32_16X16X16_IU8            16x16 IU8   16x16 IU8    16x16 I32   16x16 I32
+              V_WMMA_I32_16X16X16_IU4            16x16 IU4   16x16 IU4    16x16 I32   16x16 I32
+
+"IU4" and "IU8" mean that the operand is either signed or unsigned (4 or 8 bits) as indicate by the NEG bits.
+
+These instructions work over multiple cycles to compute the result matrix and internally use the DOT
+instructions. In order to achieve this performance, the user must arrange the data such that:
+  • A and B matrices: lanes 0-15 data are replicated into lanes 16-31 (for wave64: also into lanes 32-47 and 48-
+    63).
+
+WMMA supports only round-to-nearest-even rounding for float types.
+
+Inline constants: can only be used for C-matrix. For F16 and BF16, the inline value is replicated into both low
+and high halves of the DWORD.
+
+Back-to-back dependent WMMA instructions require one V_NOP (or independent VALU op) between them if
+the first instruction’s matrix D is the same or overlaps with the second instruction’s matrices A or B. Matrix A/B
+can overlap C as long as C is distinct from D. The typical case is that C and D are the same.
+
+Simplified example of matrix multiplication on 4x4 matrices:
+
+This diagram below shows the A, B, C and D matrices in the traditional point of view: one row is a horizontal
+strip of entries, and columns are a vertical strip. This is the linear algebra view, regardless of layout in memory
+or in VGPRs. The matrix operation is defined as: D = A * B + C. Each entry in D is the result of multiplication of
+a row from A with a column from B, added to the C value for that entry.
+
+This diagram below shows how the matrices are laid out in VGPRs when M = N = K = 16. Note that the A matrix
+is column-major while the others are in row-major order.

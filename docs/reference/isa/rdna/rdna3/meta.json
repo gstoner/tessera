@@ -1,0 +1,10 @@
+{
+  "key": "rdna3",
+  "name": "RDNA3",
+  "title": "\"RDNA3\" Instruction Set Architecture: Reference Guide",
+  "kind": "isa",
+  "source_pdf": "rdna3-shader-instruction-set-architecture-feb-2023_0.pdf",
+  "pages": 609,
+  "sha256": "d87bdd09e85839e86c1374b5485f76c57cbb81a3bfbd4eb8a5ab197509151a72",
+  "section_count": 236
+}

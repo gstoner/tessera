@@ -1,0 +1,76 @@
+{
+  "docs": [
+    {
+      "key": "rdna3",
+      "name": "RDNA3",
+      "kind": "isa",
+      "source_pdf": "rdna3-shader-instruction-set-architecture-feb-2023_0.pdf",
+      "pages": 609,
+      "sections": 236,
+      "instructions": 1464,
+      "encodings": 23,
+      "api_commands": 0,
+      "paths": {
+        "meta": "rdna3/meta.json",
+        "sections": "rdna3/sections.json",
+        "instructions": "rdna3/instructions.json",
+        "encodings": "rdna3/encodings.json",
+        "api": null
+      }
+    },
+    {
+      "key": "rdna35",
+      "name": "RDNA3.5",
+      "kind": "isa",
+      "source_pdf": "rdna35_instruction_set_architecture.pdf",
+      "pages": 653,
+      "sections": 238,
+      "instructions": 1522,
+      "encodings": 23,
+      "api_commands": 0,
+      "paths": {
+        "meta": "rdna35/meta.json",
+        "sections": "rdna35/sections.json",
+        "instructions": "rdna35/instructions.json",
+        "encodings": "rdna35/encodings.json",
+        "api": null
+      }
+    },
+    {
+      "key": "rdna4",
+      "name": "RDNA4",
+      "kind": "isa",
+      "source_pdf": "rdna4-instruction-set-architecture.pdf",
+      "pages": 707,
+      "sections": 255,
+      "instructions": 1566,
+      "encodings": 20,
+      "api_commands": 0,
+      "paths": {
+        "meta": "rdna4/meta.json",
+        "sections": "rdna4/sections.json",
+        "instructions": "rdna4/instructions.json",
+        "encodings": "rdna4/encodings.json",
+        "api": null
+      }
+    },
+    {
+      "key": "mes",
+      "name": "Micro Engine Scheduler",
+      "kind": "spec",
+      "source_pdf": "micro_engine_scheduler.pdf",
+      "pages": 54,
+      "sections": 54,
+      "instructions": 0,
+      "encodings": 0,
+      "api_commands": 29,
+      "paths": {
+        "meta": "mes/meta.json",
+        "sections": "mes/sections.json",
+        "instructions": null,
+        "encodings": null,
+        "api": "mes/api.json"
+      }
+    }
+  ]
+}

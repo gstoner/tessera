@@ -1,0 +1,9144 @@
+[
+  {
+    "name": "FLAT_ATOMIC_ADD_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 86,
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "FLAT_ATOMIC_ADD_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "FLAT_ATOMIC_ADD_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "FLAT_ATOMIC_AND_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "FLAT_ATOMIC_AND_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "FLAT_ATOMIC_CMPSWAP_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "FLAT_ATOMIC_CMPSWAP_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "FLAT_ATOMIC_CMPSWAP_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 80,
+    "rdna35": 80
+  },
+  {
+    "name": "FLAT_ATOMIC_COND_SUB_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 80
+  },
+  {
+    "name": "FLAT_ATOMIC_DEC_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "FLAT_ATOMIC_DEC_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "FLAT_ATOMIC_INC_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 63,
+    "rdna35": 63,
+    "rdna4": 63
+  },
+  {
+    "name": "FLAT_ATOMIC_INC_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 82,
+    "rdna35": 82
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_I32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_I64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_NUM_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 82
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "FLAT_ATOMIC_MAX_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 81,
+    "rdna35": 81
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_I32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_I64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_NUM_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 81
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "FLAT_ATOMIC_MIN_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "FLAT_ATOMIC_OR_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 61,
+    "rdna35": 61,
+    "rdna4": 61
+  },
+  {
+    "name": "FLAT_ATOMIC_OR_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "FLAT_ATOMIC_PK_ADD_BF16",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 90
+  },
+  {
+    "name": "FLAT_ATOMIC_PK_ADD_F16",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 89
+  },
+  {
+    "name": "FLAT_ATOMIC_SUB_CLAMP_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 55
+  },
+  {
+    "name": "FLAT_ATOMIC_SUB_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "FLAT_ATOMIC_SUB_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "FLAT_ATOMIC_SWAP_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "FLAT_ATOMIC_SWAP_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "FLAT_ATOMIC_XOR_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 62,
+    "rdna35": 62,
+    "rdna4": 62
+  },
+  {
+    "name": "FLAT_ATOMIC_XOR_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "FLAT_LOAD_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "FLAT_LOAD_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "FLAT_LOAD_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "FLAT_LOAD_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "FLAT_LOAD_D16_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "FLAT_LOAD_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "FLAT_LOAD_D16_HI_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "FLAT_LOAD_D16_HI_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "FLAT_LOAD_D16_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "FLAT_LOAD_D16_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "FLAT_LOAD_I16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "FLAT_LOAD_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "FLAT_LOAD_U16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "FLAT_LOAD_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "FLAT_STORE_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "FLAT_STORE_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "FLAT_STORE_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "FLAT_STORE_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "FLAT_STORE_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "FLAT_STORE_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "FLAT_STORE_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "FLAT_STORE_D16_HI_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "GLOBAL_ATOMIC_ADD_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 86,
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "GLOBAL_ATOMIC_ADD_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "GLOBAL_ATOMIC_ADD_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "GLOBAL_ATOMIC_AND_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "GLOBAL_ATOMIC_AND_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "GLOBAL_ATOMIC_CMPSWAP_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "GLOBAL_ATOMIC_CMPSWAP_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "GLOBAL_ATOMIC_CMPSWAP_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 80,
+    "rdna35": 80
+  },
+  {
+    "name": "GLOBAL_ATOMIC_COND_SUB_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 80
+  },
+  {
+    "name": "GLOBAL_ATOMIC_CSUB_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 55,
+    "rdna35": 55
+  },
+  {
+    "name": "GLOBAL_ATOMIC_DEC_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "GLOBAL_ATOMIC_DEC_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "GLOBAL_ATOMIC_INC_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 63,
+    "rdna35": 63,
+    "rdna4": 63
+  },
+  {
+    "name": "GLOBAL_ATOMIC_INC_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 82,
+    "rdna35": 82
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_I32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_I64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_NUM_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 82
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MAX_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 81,
+    "rdna35": 81
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_I32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_I64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_NUM_F32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 81
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "GLOBAL_ATOMIC_MIN_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "GLOBAL_ATOMIC_ORDERED_ADD_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 115
+  },
+  {
+    "name": "GLOBAL_ATOMIC_OR_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 61,
+    "rdna35": 61,
+    "rdna4": 61
+  },
+  {
+    "name": "GLOBAL_ATOMIC_OR_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "GLOBAL_ATOMIC_PK_ADD_BF16",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 90
+  },
+  {
+    "name": "GLOBAL_ATOMIC_PK_ADD_F16",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 89
+  },
+  {
+    "name": "GLOBAL_ATOMIC_SUB_CLAMP_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 55
+  },
+  {
+    "name": "GLOBAL_ATOMIC_SUB_U32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "GLOBAL_ATOMIC_SUB_U64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "GLOBAL_ATOMIC_SWAP_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "GLOBAL_ATOMIC_SWAP_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "GLOBAL_ATOMIC_XOR_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 62,
+    "rdna35": 62,
+    "rdna4": 62
+  },
+  {
+    "name": "GLOBAL_ATOMIC_XOR_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "GLOBAL_INV",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 43
+  },
+  {
+    "name": "GLOBAL_LOAD_ADDTID_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "GLOBAL_LOAD_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "GLOBAL_LOAD_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "GLOBAL_LOAD_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "GLOBAL_LOAD_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "GLOBAL_LOAD_BLOCK",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 83
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_HI_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_HI_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "GLOBAL_LOAD_D16_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "GLOBAL_LOAD_I16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "GLOBAL_LOAD_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "GLOBAL_LOAD_TR_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 87
+  },
+  {
+    "name": "GLOBAL_LOAD_TR_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 88
+  },
+  {
+    "name": "GLOBAL_LOAD_U16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "GLOBAL_LOAD_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "GLOBAL_STORE_ADDTID_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "GLOBAL_STORE_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "GLOBAL_STORE_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "GLOBAL_STORE_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "GLOBAL_STORE_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "GLOBAL_STORE_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "GLOBAL_STORE_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "GLOBAL_STORE_BLOCK",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 84
+  },
+  {
+    "name": "GLOBAL_STORE_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "GLOBAL_STORE_D16_HI_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "GLOBAL_WB",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 44
+  },
+  {
+    "name": "GLOBAL_WBINV",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 79
+  },
+  {
+    "name": "SCRATCH_LOAD_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "SCRATCH_LOAD_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "SCRATCH_LOAD_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "SCRATCH_LOAD_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "SCRATCH_LOAD_BLOCK",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 83
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_HI_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_HI_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "SCRATCH_LOAD_D16_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "SCRATCH_LOAD_I16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "SCRATCH_LOAD_I8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "SCRATCH_LOAD_U16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "SCRATCH_LOAD_U8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "SCRATCH_STORE_B128",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "SCRATCH_STORE_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "SCRATCH_STORE_B32",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "SCRATCH_STORE_B64",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "SCRATCH_STORE_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "SCRATCH_STORE_B96",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "SCRATCH_STORE_BLOCK",
+    "family": "FLAT, Scratch and Global",
+    "rdna4": 84
+  },
+  {
+    "name": "SCRATCH_STORE_D16_HI_B16",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "SCRATCH_STORE_D16_HI_B8",
+    "family": "FLAT, Scratch and Global",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "DS_ADD_F32",
+    "family": "LDS & GDS",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "DS_ADD_GS_REG_RTN",
+    "family": "LDS & GDS",
+    "rdna3": 122,
+    "rdna35": 122
+  },
+  {
+    "name": "DS_ADD_RTN_F32",
+    "family": "LDS & GDS",
+    "rdna3": 121,
+    "rdna35": 121,
+    "rdna4": 121
+  },
+  {
+    "name": "DS_ADD_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "DS_ADD_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 96,
+    "rdna35": 96,
+    "rdna4": 96
+  },
+  {
+    "name": "DS_ADD_U32",
+    "family": "LDS & GDS",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "DS_ADD_U64",
+    "family": "LDS & GDS",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "DS_AND_B32",
+    "family": "LDS & GDS",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "DS_AND_B64",
+    "family": "LDS & GDS",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "DS_AND_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "DS_AND_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 105,
+    "rdna35": 105,
+    "rdna4": 105
+  },
+  {
+    "name": "DS_APPEND",
+    "family": "LDS & GDS",
+    "rdna3": 62,
+    "rdna35": 62,
+    "rdna4": 62
+  },
+  {
+    "name": "DS_BPERMUTE_B32",
+    "family": "LDS & GDS",
+    "rdna3": 179,
+    "rdna35": 179,
+    "rdna4": 179
+  },
+  {
+    "name": "DS_BVH_STACK_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 173,
+    "rdna35": 173
+  },
+  {
+    "name": "DS_CMPSTORE_B32",
+    "family": "LDS & GDS",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "DS_CMPSTORE_B64",
+    "family": "LDS & GDS",
+    "rdna3": 80,
+    "rdna35": 80,
+    "rdna4": 80
+  },
+  {
+    "name": "DS_CMPSTORE_F32",
+    "family": "LDS & GDS",
+    "rdna3": 17,
+    "rdna35": 17
+  },
+  {
+    "name": "DS_CMPSTORE_F64",
+    "family": "LDS & GDS",
+    "rdna3": 81,
+    "rdna35": 81
+  },
+  {
+    "name": "DS_CMPSTORE_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 48,
+    "rdna35": 48,
+    "rdna4": 48
+  },
+  {
+    "name": "DS_CMPSTORE_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 112,
+    "rdna35": 112,
+    "rdna4": 112
+  },
+  {
+    "name": "DS_CMPSTORE_RTN_F32",
+    "family": "LDS & GDS",
+    "rdna3": 49,
+    "rdna35": 49
+  },
+  {
+    "name": "DS_CMPSTORE_RTN_F64",
+    "family": "LDS & GDS",
+    "rdna3": 113,
+    "rdna35": 113
+  },
+  {
+    "name": "DS_CONDXCHG32_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 126,
+    "rdna35": 126,
+    "rdna4": 126
+  },
+  {
+    "name": "DS_CONSUME",
+    "family": "LDS & GDS",
+    "rdna3": 61,
+    "rdna35": 61,
+    "rdna4": 61
+  },
+  {
+    "name": "DS_DEC_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "DS_DEC_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 100,
+    "rdna35": 100,
+    "rdna4": 100
+  },
+  {
+    "name": "DS_DEC_U32",
+    "family": "LDS & GDS",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "DS_DEC_U64",
+    "family": "LDS & GDS",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "DS_INC_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "DS_INC_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 99,
+    "rdna35": 99,
+    "rdna4": 99
+  },
+  {
+    "name": "DS_INC_U32",
+    "family": "LDS & GDS",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "DS_INC_U64",
+    "family": "LDS & GDS",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "DS_LOAD_2ADDR_B32",
+    "family": "LDS & GDS",
+    "rdna3": 55,
+    "rdna35": 55,
+    "rdna4": 55
+  },
+  {
+    "name": "DS_LOAD_2ADDR_B64",
+    "family": "LDS & GDS",
+    "rdna3": 119,
+    "rdna35": 119,
+    "rdna4": 119
+  },
+  {
+    "name": "DS_LOAD_2ADDR_STRIDE64_B32",
+    "family": "LDS & GDS",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "DS_LOAD_2ADDR_STRIDE64_B64",
+    "family": "LDS & GDS",
+    "rdna3": 120,
+    "rdna35": 120,
+    "rdna4": 120
+  },
+  {
+    "name": "DS_LOAD_ADDTID_B32",
+    "family": "LDS & GDS",
+    "rdna3": 177,
+    "rdna35": 177,
+    "rdna4": 177
+  },
+  {
+    "name": "DS_LOAD_B128",
+    "family": "LDS & GDS",
+    "rdna3": 255,
+    "rdna35": 255,
+    "rdna4": 255
+  },
+  {
+    "name": "DS_LOAD_B32",
+    "family": "LDS & GDS",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "DS_LOAD_B64",
+    "family": "LDS & GDS",
+    "rdna3": 118,
+    "rdna35": 118,
+    "rdna4": 118
+  },
+  {
+    "name": "DS_LOAD_B96",
+    "family": "LDS & GDS",
+    "rdna3": 254,
+    "rdna35": 254,
+    "rdna4": 254
+  },
+  {
+    "name": "DS_LOAD_I16",
+    "family": "LDS & GDS",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "DS_LOAD_I8",
+    "family": "LDS & GDS",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "DS_LOAD_I8_D16",
+    "family": "LDS & GDS",
+    "rdna3": 164,
+    "rdna35": 164,
+    "rdna4": 164
+  },
+  {
+    "name": "DS_LOAD_I8_D16_HI",
+    "family": "LDS & GDS",
+    "rdna3": 165,
+    "rdna35": 165,
+    "rdna4": 165
+  },
+  {
+    "name": "DS_LOAD_U16",
+    "family": "LDS & GDS",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "DS_LOAD_U16_D16",
+    "family": "LDS & GDS",
+    "rdna3": 166,
+    "rdna35": 166,
+    "rdna4": 166
+  },
+  {
+    "name": "DS_LOAD_U16_D16_HI",
+    "family": "LDS & GDS",
+    "rdna3": 167,
+    "rdna35": 167,
+    "rdna4": 167
+  },
+  {
+    "name": "DS_LOAD_U8",
+    "family": "LDS & GDS",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "DS_LOAD_U8_D16",
+    "family": "LDS & GDS",
+    "rdna3": 162,
+    "rdna35": 162,
+    "rdna4": 162
+  },
+  {
+    "name": "DS_LOAD_U8_D16_HI",
+    "family": "LDS & GDS",
+    "rdna3": 163,
+    "rdna35": 163,
+    "rdna4": 163
+  },
+  {
+    "name": "DS_MAX_F32",
+    "family": "LDS & GDS",
+    "rdna3": 19,
+    "rdna35": 19
+  },
+  {
+    "name": "DS_MAX_F64",
+    "family": "LDS & GDS",
+    "rdna3": 83,
+    "rdna35": 83
+  },
+  {
+    "name": "DS_MAX_I32",
+    "family": "LDS & GDS",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "DS_MAX_I64",
+    "family": "LDS & GDS",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "DS_MAX_RTN_F32",
+    "family": "LDS & GDS",
+    "rdna3": 51,
+    "rdna35": 51
+  },
+  {
+    "name": "DS_MAX_RTN_F64",
+    "family": "LDS & GDS",
+    "rdna3": 115,
+    "rdna35": 115
+  },
+  {
+    "name": "DS_MAX_RTN_I32",
+    "family": "LDS & GDS",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "DS_MAX_RTN_I64",
+    "family": "LDS & GDS",
+    "rdna3": 102,
+    "rdna35": 102,
+    "rdna4": 102
+  },
+  {
+    "name": "DS_MAX_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "DS_MAX_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 104,
+    "rdna35": 104,
+    "rdna4": 104
+  },
+  {
+    "name": "DS_MAX_U32",
+    "family": "LDS & GDS",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "DS_MAX_U64",
+    "family": "LDS & GDS",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "DS_MIN_F32",
+    "family": "LDS & GDS",
+    "rdna3": 18,
+    "rdna35": 18
+  },
+  {
+    "name": "DS_MIN_F64",
+    "family": "LDS & GDS",
+    "rdna3": 82,
+    "rdna35": 82
+  },
+  {
+    "name": "DS_MIN_I32",
+    "family": "LDS & GDS",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "DS_MIN_I64",
+    "family": "LDS & GDS",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "DS_MIN_RTN_F32",
+    "family": "LDS & GDS",
+    "rdna3": 50,
+    "rdna35": 50
+  },
+  {
+    "name": "DS_MIN_RTN_F64",
+    "family": "LDS & GDS",
+    "rdna3": 114,
+    "rdna35": 114
+  },
+  {
+    "name": "DS_MIN_RTN_I32",
+    "family": "LDS & GDS",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "DS_MIN_RTN_I64",
+    "family": "LDS & GDS",
+    "rdna3": 101,
+    "rdna35": 101,
+    "rdna4": 101
+  },
+  {
+    "name": "DS_MIN_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "DS_MIN_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 103,
+    "rdna35": 103,
+    "rdna4": 103
+  },
+  {
+    "name": "DS_MIN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "DS_MIN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "DS_MSKOR_B32",
+    "family": "LDS & GDS",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "DS_MSKOR_B64",
+    "family": "LDS & GDS",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "DS_MSKOR_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "DS_MSKOR_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 108,
+    "rdna35": 108,
+    "rdna4": 108
+  },
+  {
+    "name": "DS_NOP",
+    "family": "LDS & GDS",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "DS_ORDERED_COUNT",
+    "family": "LDS & GDS",
+    "rdna3": 63,
+    "rdna35": 63
+  },
+  {
+    "name": "DS_OR_B32",
+    "family": "LDS & GDS",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "DS_OR_B64",
+    "family": "LDS & GDS",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "DS_OR_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 42,
+    "rdna35": 42,
+    "rdna4": 42
+  },
+  {
+    "name": "DS_OR_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 106,
+    "rdna35": 106,
+    "rdna4": 106
+  },
+  {
+    "name": "DS_PERMUTE_B32",
+    "family": "LDS & GDS",
+    "rdna3": 178,
+    "rdna35": 178,
+    "rdna4": 178
+  },
+  {
+    "name": "DS_RSUB_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "DS_RSUB_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 98,
+    "rdna35": 98,
+    "rdna4": 98
+  },
+  {
+    "name": "DS_RSUB_U32",
+    "family": "LDS & GDS",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "DS_RSUB_U64",
+    "family": "LDS & GDS",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "DS_STOREXCHG_2ADDR_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 46,
+    "rdna35": 46,
+    "rdna4": 46
+  },
+  {
+    "name": "DS_STOREXCHG_2ADDR_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 110,
+    "rdna35": 110,
+    "rdna4": 110
+  },
+  {
+    "name": "DS_STOREXCHG_2ADDR_STRIDE64_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 47,
+    "rdna35": 47,
+    "rdna4": 47
+  },
+  {
+    "name": "DS_STOREXCHG_2ADDR_STRIDE64_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 111,
+    "rdna35": 111,
+    "rdna4": 111
+  },
+  {
+    "name": "DS_STOREXCHG_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "DS_STOREXCHG_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 109,
+    "rdna35": 109,
+    "rdna4": 109
+  },
+  {
+    "name": "DS_STORE_2ADDR_B32",
+    "family": "LDS & GDS",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "DS_STORE_2ADDR_B64",
+    "family": "LDS & GDS",
+    "rdna3": 78,
+    "rdna35": 78,
+    "rdna4": 78
+  },
+  {
+    "name": "DS_STORE_2ADDR_STRIDE64_B32",
+    "family": "LDS & GDS",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "DS_STORE_2ADDR_STRIDE64_B64",
+    "family": "LDS & GDS",
+    "rdna3": 79,
+    "rdna35": 79,
+    "rdna4": 79
+  },
+  {
+    "name": "DS_STORE_ADDTID_B32",
+    "family": "LDS & GDS",
+    "rdna3": 176,
+    "rdna35": 176,
+    "rdna4": 176
+  },
+  {
+    "name": "DS_STORE_B128",
+    "family": "LDS & GDS",
+    "rdna3": 223,
+    "rdna35": 223,
+    "rdna4": 223
+  },
+  {
+    "name": "DS_STORE_B16",
+    "family": "LDS & GDS",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "DS_STORE_B16_D16_HI",
+    "family": "LDS & GDS",
+    "rdna3": 161,
+    "rdna35": 161,
+    "rdna4": 161
+  },
+  {
+    "name": "DS_STORE_B32",
+    "family": "LDS & GDS",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "DS_STORE_B64",
+    "family": "LDS & GDS",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "DS_STORE_B8",
+    "family": "LDS & GDS",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "DS_STORE_B8_D16_HI",
+    "family": "LDS & GDS",
+    "rdna3": 160,
+    "rdna35": 160,
+    "rdna4": 160
+  },
+  {
+    "name": "DS_STORE_B96",
+    "family": "LDS & GDS",
+    "rdna3": 222,
+    "rdna35": 222,
+    "rdna4": 222
+  },
+  {
+    "name": "DS_SUB_GS_REG_RTN",
+    "family": "LDS & GDS",
+    "rdna3": 123,
+    "rdna35": 123
+  },
+  {
+    "name": "DS_SUB_RTN_U32",
+    "family": "LDS & GDS",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "DS_SUB_RTN_U64",
+    "family": "LDS & GDS",
+    "rdna3": 97,
+    "rdna35": 97,
+    "rdna4": 97
+  },
+  {
+    "name": "DS_SUB_U32",
+    "family": "LDS & GDS",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "DS_SUB_U64",
+    "family": "LDS & GDS",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "DS_SWIZZLE_B32",
+    "family": "LDS & GDS",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "DS_WRAP_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 52,
+    "rdna35": 52
+  },
+  {
+    "name": "DS_XOR_B32",
+    "family": "LDS & GDS",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "DS_XOR_B64",
+    "family": "LDS & GDS",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "DS_XOR_RTN_B32",
+    "family": "LDS & GDS",
+    "rdna3": 43,
+    "rdna35": 43,
+    "rdna4": 43
+  },
+  {
+    "name": "DS_XOR_RTN_B64",
+    "family": "LDS & GDS",
+    "rdna3": 107,
+    "rdna35": 107,
+    "rdna4": 107
+  },
+  {
+    "name": "IMAGE_ATOMIC_ADD",
+    "family": "MIMG",
+    "rdna3": 12,
+    "rdna35": 12
+  },
+  {
+    "name": "IMAGE_ATOMIC_AND",
+    "family": "MIMG",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "IMAGE_ATOMIC_CMPSWAP",
+    "family": "MIMG",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "IMAGE_ATOMIC_DEC",
+    "family": "MIMG",
+    "rdna3": 22,
+    "rdna35": 22
+  },
+  {
+    "name": "IMAGE_ATOMIC_INC",
+    "family": "MIMG",
+    "rdna3": 21,
+    "rdna35": 21
+  },
+  {
+    "name": "IMAGE_ATOMIC_OR",
+    "family": "MIMG",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "IMAGE_ATOMIC_SMAX",
+    "family": "MIMG",
+    "rdna3": 16,
+    "rdna35": 16
+  },
+  {
+    "name": "IMAGE_ATOMIC_SMIN",
+    "family": "MIMG",
+    "rdna3": 14,
+    "rdna35": 14
+  },
+  {
+    "name": "IMAGE_ATOMIC_SUB",
+    "family": "MIMG",
+    "rdna3": 13,
+    "rdna35": 13
+  },
+  {
+    "name": "IMAGE_ATOMIC_SWAP",
+    "family": "MIMG",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "IMAGE_ATOMIC_UMAX",
+    "family": "MIMG",
+    "rdna3": 17,
+    "rdna35": 17
+  },
+  {
+    "name": "IMAGE_ATOMIC_UMIN",
+    "family": "MIMG",
+    "rdna3": 15,
+    "rdna35": 15
+  },
+  {
+    "name": "IMAGE_ATOMIC_XOR",
+    "family": "MIMG",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "IMAGE_BVH64_INTERSECT_RAY",
+    "family": "MIMG",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "IMAGE_BVH_INTERSECT_RAY",
+    "family": "MIMG",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "IMAGE_GATHER4",
+    "family": "MIMG",
+    "rdna3": 47,
+    "rdna35": 47,
+    "rdna4": 47
+  },
+  {
+    "name": "IMAGE_GATHER4H",
+    "family": "MIMG",
+    "rdna3": 144,
+    "rdna35": 144,
+    "rdna4": 144
+  },
+  {
+    "name": "IMAGE_GATHER4_B",
+    "family": "MIMG",
+    "rdna3": 49,
+    "rdna35": 49,
+    "rdna4": 49
+  },
+  {
+    "name": "IMAGE_GATHER4_B_CL",
+    "family": "MIMG",
+    "rdna3": 97,
+    "rdna35": 97,
+    "rdna4": 97
+  },
+  {
+    "name": "IMAGE_GATHER4_C",
+    "family": "MIMG",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "IMAGE_GATHER4_CL",
+    "family": "MIMG",
+    "rdna3": 96,
+    "rdna35": 96,
+    "rdna4": 96
+  },
+  {
+    "name": "IMAGE_GATHER4_C_B",
+    "family": "MIMG",
+    "rdna3": 100,
+    "rdna35": 100,
+    "rdna4": 100
+  },
+  {
+    "name": "IMAGE_GATHER4_C_B_CL",
+    "family": "MIMG",
+    "rdna3": 101,
+    "rdna35": 101,
+    "rdna4": 101
+  },
+  {
+    "name": "IMAGE_GATHER4_C_CL",
+    "family": "MIMG",
+    "rdna3": 98,
+    "rdna35": 98,
+    "rdna4": 98
+  },
+  {
+    "name": "IMAGE_GATHER4_C_L",
+    "family": "MIMG",
+    "rdna3": 99,
+    "rdna35": 99,
+    "rdna4": 99
+  },
+  {
+    "name": "IMAGE_GATHER4_C_LZ",
+    "family": "MIMG",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "IMAGE_GATHER4_C_LZ_O",
+    "family": "MIMG",
+    "rdna3": 55,
+    "rdna35": 55,
+    "rdna4": 55
+  },
+  {
+    "name": "IMAGE_GATHER4_L",
+    "family": "MIMG",
+    "rdna3": 48,
+    "rdna35": 48,
+    "rdna4": 48
+  },
+  {
+    "name": "IMAGE_GATHER4_LZ",
+    "family": "MIMG",
+    "rdna3": 50,
+    "rdna35": 50,
+    "rdna4": 50
+  },
+  {
+    "name": "IMAGE_GATHER4_LZ_O",
+    "family": "MIMG",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "IMAGE_GATHER4_O",
+    "family": "MIMG",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "IMAGE_GET_LOD",
+    "family": "MIMG",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "IMAGE_GET_RESINFO",
+    "family": "MIMG",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "IMAGE_LOAD",
+    "family": "MIMG",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "IMAGE_LOAD_MIP",
+    "family": "MIMG",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "IMAGE_LOAD_MIP_PCK",
+    "family": "MIMG",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "IMAGE_LOAD_MIP_PCK_SGN",
+    "family": "MIMG",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "IMAGE_LOAD_PCK",
+    "family": "MIMG",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "IMAGE_LOAD_PCK_SGN",
+    "family": "MIMG",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "IMAGE_MSAA_LOAD",
+    "family": "MIMG",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "IMAGE_SAMPLE",
+    "family": "MIMG",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "IMAGE_SAMPLE_B",
+    "family": "MIMG",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "IMAGE_SAMPLE_B_CL",
+    "family": "MIMG",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "IMAGE_SAMPLE_B_CL_O",
+    "family": "MIMG",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "IMAGE_SAMPLE_B_O",
+    "family": "MIMG",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "IMAGE_SAMPLE_C",
+    "family": "MIMG",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "IMAGE_SAMPLE_CL",
+    "family": "MIMG",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "IMAGE_SAMPLE_CL_O",
+    "family": "MIMG",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_B",
+    "family": "MIMG",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_B_CL",
+    "family": "MIMG",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_B_CL_O",
+    "family": "MIMG",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_B_O",
+    "family": "MIMG",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_CL",
+    "family": "MIMG",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_CL_O",
+    "family": "MIMG",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D",
+    "family": "MIMG",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_CL",
+    "family": "MIMG",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_CL_G16",
+    "family": "MIMG",
+    "rdna3": 84,
+    "rdna35": 84,
+    "rdna4": 84
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_CL_O",
+    "family": "MIMG",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_CL_O_G16",
+    "family": "MIMG",
+    "rdna3": 86,
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_G16",
+    "family": "MIMG",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_O",
+    "family": "MIMG",
+    "rdna3": 43,
+    "rdna35": 43,
+    "rdna4": 43
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_D_O_G16",
+    "family": "MIMG",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_L",
+    "family": "MIMG",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_LZ",
+    "family": "MIMG",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_LZ_O",
+    "family": "MIMG",
+    "rdna3": 46,
+    "rdna35": 46,
+    "rdna4": 46
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_L_O",
+    "family": "MIMG",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "IMAGE_SAMPLE_C_O",
+    "family": "MIMG",
+    "rdna3": 42,
+    "rdna35": 42,
+    "rdna4": 42
+  },
+  {
+    "name": "IMAGE_SAMPLE_D",
+    "family": "MIMG",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_CL",
+    "family": "MIMG",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_CL_G16",
+    "family": "MIMG",
+    "rdna3": 95,
+    "rdna35": 95,
+    "rdna4": 95
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_CL_O",
+    "family": "MIMG",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_CL_O_G16",
+    "family": "MIMG",
+    "rdna3": 85,
+    "rdna35": 85,
+    "rdna4": 85
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_G16",
+    "family": "MIMG",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_O",
+    "family": "MIMG",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "IMAGE_SAMPLE_D_O_G16",
+    "family": "MIMG",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "IMAGE_SAMPLE_L",
+    "family": "MIMG",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "IMAGE_SAMPLE_LZ",
+    "family": "MIMG",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "IMAGE_SAMPLE_LZ_O",
+    "family": "MIMG",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "IMAGE_SAMPLE_L_O",
+    "family": "MIMG",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "IMAGE_SAMPLE_O",
+    "family": "MIMG",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "IMAGE_STORE",
+    "family": "MIMG",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "IMAGE_STORE_MIP",
+    "family": "MIMG",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "IMAGE_STORE_MIP_PCK",
+    "family": "MIMG",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "IMAGE_STORE_PCK",
+    "family": "MIMG",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "TBUFFER_LOAD_D16_FORMAT_X",
+    "family": "MTBUF",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 136
+  },
+  {
+    "name": "TBUFFER_LOAD_D16_FORMAT_XY",
+    "family": "MTBUF",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 137
+  },
+  {
+    "name": "TBUFFER_LOAD_D16_FORMAT_XYZ",
+    "family": "MTBUF",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 138
+  },
+  {
+    "name": "TBUFFER_LOAD_D16_FORMAT_XYZW",
+    "family": "MTBUF",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 139
+  },
+  {
+    "name": "TBUFFER_LOAD_FORMAT_X",
+    "family": "MTBUF",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 128
+  },
+  {
+    "name": "TBUFFER_LOAD_FORMAT_XY",
+    "family": "MTBUF",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 129
+  },
+  {
+    "name": "TBUFFER_LOAD_FORMAT_XYZ",
+    "family": "MTBUF",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 130
+  },
+  {
+    "name": "TBUFFER_LOAD_FORMAT_XYZW",
+    "family": "MTBUF",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 131
+  },
+  {
+    "name": "TBUFFER_STORE_D16_FORMAT_X",
+    "family": "MTBUF",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 140
+  },
+  {
+    "name": "TBUFFER_STORE_D16_FORMAT_XY",
+    "family": "MTBUF",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 141
+  },
+  {
+    "name": "TBUFFER_STORE_D16_FORMAT_XYZ",
+    "family": "MTBUF",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 142
+  },
+  {
+    "name": "TBUFFER_STORE_D16_FORMAT_XYZW",
+    "family": "MTBUF",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 143
+  },
+  {
+    "name": "TBUFFER_STORE_FORMAT_X",
+    "family": "MTBUF",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 132
+  },
+  {
+    "name": "TBUFFER_STORE_FORMAT_XY",
+    "family": "MTBUF",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 133
+  },
+  {
+    "name": "TBUFFER_STORE_FORMAT_XYZ",
+    "family": "MTBUF",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 134
+  },
+  {
+    "name": "TBUFFER_STORE_FORMAT_XYZW",
+    "family": "MTBUF",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 135
+  },
+  {
+    "name": "BUFFER_ATOMIC_ADD_F32",
+    "family": "MUBUF",
+    "rdna3": 86,
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "BUFFER_ATOMIC_ADD_U32",
+    "family": "MUBUF",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "BUFFER_ATOMIC_ADD_U64",
+    "family": "MUBUF",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "BUFFER_ATOMIC_AND_B32",
+    "family": "MUBUF",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "BUFFER_ATOMIC_AND_B64",
+    "family": "MUBUF",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "BUFFER_ATOMIC_CMPSWAP_B32",
+    "family": "MUBUF",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "BUFFER_ATOMIC_CMPSWAP_B64",
+    "family": "MUBUF",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "BUFFER_ATOMIC_CMPSWAP_F32",
+    "family": "MUBUF",
+    "rdna3": 80,
+    "rdna35": 80
+  },
+  {
+    "name": "BUFFER_ATOMIC_CSUB_U32",
+    "family": "MUBUF",
+    "rdna3": 55,
+    "rdna35": 55
+  },
+  {
+    "name": "BUFFER_ATOMIC_DEC_U32",
+    "family": "MUBUF",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "BUFFER_ATOMIC_DEC_U64",
+    "family": "MUBUF",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "BUFFER_ATOMIC_INC_U32",
+    "family": "MUBUF",
+    "rdna3": 63,
+    "rdna35": 63,
+    "rdna4": 63
+  },
+  {
+    "name": "BUFFER_ATOMIC_INC_U64",
+    "family": "MUBUF",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_F32",
+    "family": "MUBUF",
+    "rdna3": 82,
+    "rdna35": 82
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_I32",
+    "family": "MUBUF",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_I64",
+    "family": "MUBUF",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_U32",
+    "family": "MUBUF",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_U64",
+    "family": "MUBUF",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_F32",
+    "family": "MUBUF",
+    "rdna3": 81,
+    "rdna35": 81
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_I32",
+    "family": "MUBUF",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_I64",
+    "family": "MUBUF",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_U32",
+    "family": "MUBUF",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_U64",
+    "family": "MUBUF",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "BUFFER_ATOMIC_OR_B32",
+    "family": "MUBUF",
+    "rdna3": 61,
+    "rdna35": 61,
+    "rdna4": 61
+  },
+  {
+    "name": "BUFFER_ATOMIC_OR_B64",
+    "family": "MUBUF",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "BUFFER_ATOMIC_SUB_U32",
+    "family": "MUBUF",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "BUFFER_ATOMIC_SUB_U64",
+    "family": "MUBUF",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "BUFFER_ATOMIC_SWAP_B32",
+    "family": "MUBUF",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "BUFFER_ATOMIC_SWAP_B64",
+    "family": "MUBUF",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "BUFFER_ATOMIC_XOR_B32",
+    "family": "MUBUF",
+    "rdna3": 62,
+    "rdna35": 62,
+    "rdna4": 62
+  },
+  {
+    "name": "BUFFER_ATOMIC_XOR_B64",
+    "family": "MUBUF",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "BUFFER_GL0_INV",
+    "family": "MUBUF",
+    "rdna3": 43,
+    "rdna35": 43
+  },
+  {
+    "name": "BUFFER_GL1_INV",
+    "family": "MUBUF",
+    "rdna3": 44,
+    "rdna35": 44
+  },
+  {
+    "name": "BUFFER_LOAD_B128",
+    "family": "MUBUF",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "BUFFER_LOAD_B32",
+    "family": "MUBUF",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "BUFFER_LOAD_B64",
+    "family": "MUBUF",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "BUFFER_LOAD_B96",
+    "family": "MUBUF",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "BUFFER_LOAD_D16_B16",
+    "family": "MUBUF",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "BUFFER_LOAD_D16_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "BUFFER_LOAD_D16_FORMAT_XY",
+    "family": "MUBUF",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "BUFFER_LOAD_D16_FORMAT_XYZ",
+    "family": "MUBUF",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "BUFFER_LOAD_D16_FORMAT_XYZW",
+    "family": "MUBUF",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "BUFFER_LOAD_D16_HI_B16",
+    "family": "MUBUF",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "BUFFER_LOAD_D16_HI_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "BUFFER_LOAD_D16_HI_I8",
+    "family": "MUBUF",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "BUFFER_LOAD_D16_HI_U8",
+    "family": "MUBUF",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "BUFFER_LOAD_D16_I8",
+    "family": "MUBUF",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "BUFFER_LOAD_D16_U8",
+    "family": "MUBUF",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "BUFFER_LOAD_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "BUFFER_LOAD_FORMAT_XY",
+    "family": "MUBUF",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "BUFFER_LOAD_FORMAT_XYZ",
+    "family": "MUBUF",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "BUFFER_LOAD_FORMAT_XYZW",
+    "family": "MUBUF",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "BUFFER_LOAD_I16",
+    "family": "MUBUF",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "BUFFER_LOAD_I8",
+    "family": "MUBUF",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "BUFFER_LOAD_U16",
+    "family": "MUBUF",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "BUFFER_LOAD_U8",
+    "family": "MUBUF",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "BUFFER_STORE_B128",
+    "family": "MUBUF",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "BUFFER_STORE_B16",
+    "family": "MUBUF",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "BUFFER_STORE_B32",
+    "family": "MUBUF",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "BUFFER_STORE_B64",
+    "family": "MUBUF",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "BUFFER_STORE_B8",
+    "family": "MUBUF",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "BUFFER_STORE_B96",
+    "family": "MUBUF",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "BUFFER_STORE_D16_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "BUFFER_STORE_D16_FORMAT_XY",
+    "family": "MUBUF",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "BUFFER_STORE_D16_FORMAT_XYZ",
+    "family": "MUBUF",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "BUFFER_STORE_D16_FORMAT_XYZW",
+    "family": "MUBUF",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "BUFFER_STORE_D16_HI_B16",
+    "family": "MUBUF",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "BUFFER_STORE_D16_HI_B8",
+    "family": "MUBUF",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "BUFFER_STORE_D16_HI_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "BUFFER_STORE_FORMAT_X",
+    "family": "MUBUF",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "BUFFER_STORE_FORMAT_XY",
+    "family": "MUBUF",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "BUFFER_STORE_FORMAT_XYZ",
+    "family": "MUBUF",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "BUFFER_STORE_FORMAT_XYZW",
+    "family": "MUBUF",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "DS_DIRECT_LOAD",
+    "family": "Parameter and Direct Load from LDS",
+    "rdna4": 1
+  },
+  {
+    "name": "DS_PARAM_LOAD",
+    "family": "Parameter and Direct Load from LDS",
+    "rdna4": 0
+  },
+  {
+    "name": "LDS_DIRECT_LOAD",
+    "family": "Parameter and Direct Load from LDS",
+    "rdna3": 1,
+    "rdna35": 1
+  },
+  {
+    "name": "LDS_PARAM_LOAD",
+    "family": "Parameter and Direct Load from LDS",
+    "rdna3": 0,
+    "rdna35": 0
+  },
+  {
+    "name": "S_BUFFER_LOAD_B128",
+    "family": "SMEM",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 18
+  },
+  {
+    "name": "S_BUFFER_LOAD_B256",
+    "family": "SMEM",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 19
+  },
+  {
+    "name": "S_BUFFER_LOAD_B32",
+    "family": "SMEM",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 16
+  },
+  {
+    "name": "S_BUFFER_LOAD_B512",
+    "family": "SMEM",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 20
+  },
+  {
+    "name": "S_BUFFER_LOAD_B64",
+    "family": "SMEM",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 17
+  },
+  {
+    "name": "S_BUFFER_LOAD_B96",
+    "family": "SMEM",
+    "rdna4": 21
+  },
+  {
+    "name": "S_BUFFER_LOAD_I16",
+    "family": "SMEM",
+    "rdna4": 26
+  },
+  {
+    "name": "S_BUFFER_LOAD_I8",
+    "family": "SMEM",
+    "rdna4": 24
+  },
+  {
+    "name": "S_BUFFER_LOAD_U16",
+    "family": "SMEM",
+    "rdna4": 27
+  },
+  {
+    "name": "S_BUFFER_LOAD_U8",
+    "family": "SMEM",
+    "rdna4": 25
+  },
+  {
+    "name": "S_BUFFER_PREFETCH_DATA",
+    "family": "SMEM",
+    "rdna4": 39
+  },
+  {
+    "name": "S_DCACHE_INV",
+    "family": "SMEM",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "S_GL1_INV",
+    "family": "SMEM",
+    "rdna3": 32,
+    "rdna35": 32
+  },
+  {
+    "name": "S_LOAD_B128",
+    "family": "SMEM",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "S_LOAD_B256",
+    "family": "SMEM",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "S_LOAD_B32",
+    "family": "SMEM",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "S_LOAD_B512",
+    "family": "SMEM",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "S_LOAD_B64",
+    "family": "SMEM",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "S_LOAD_B96",
+    "family": "SMEM",
+    "rdna4": 5
+  },
+  {
+    "name": "S_LOAD_I16",
+    "family": "SMEM",
+    "rdna4": 10
+  },
+  {
+    "name": "S_LOAD_I8",
+    "family": "SMEM",
+    "rdna4": 8
+  },
+  {
+    "name": "S_LOAD_U16",
+    "family": "SMEM",
+    "rdna4": 11
+  },
+  {
+    "name": "S_LOAD_U8",
+    "family": "SMEM",
+    "rdna4": 9
+  },
+  {
+    "name": "S_PREFETCH_DATA",
+    "family": "SMEM",
+    "rdna4": 38
+  },
+  {
+    "name": "S_PREFETCH_DATA_PC_REL",
+    "family": "SMEM",
+    "rdna4": 40
+  },
+  {
+    "name": "S_PREFETCH_INST",
+    "family": "SMEM",
+    "rdna4": 36
+  },
+  {
+    "name": "S_PREFETCH_INST_PC_REL",
+    "family": "SMEM",
+    "rdna4": 37
+  },
+  {
+    "name": "S_ABS_I32",
+    "family": "SOP1",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "S_ALLOC_VGPR",
+    "family": "SOP1",
+    "rdna4": 83
+  },
+  {
+    "name": "S_AND_NOT0_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "S_AND_NOT0_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "S_AND_NOT0_WREXEC_B32",
+    "family": "SOP1",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "S_AND_NOT0_WREXEC_B64",
+    "family": "SOP1",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "S_AND_NOT1_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 48,
+    "rdna35": 48,
+    "rdna4": 48
+  },
+  {
+    "name": "S_AND_NOT1_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 49,
+    "rdna35": 49,
+    "rdna4": 49
+  },
+  {
+    "name": "S_AND_NOT1_WREXEC_B32",
+    "family": "SOP1",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "S_AND_NOT1_WREXEC_B64",
+    "family": "SOP1",
+    "rdna3": 55,
+    "rdna35": 55,
+    "rdna4": 55
+  },
+  {
+    "name": "S_AND_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "S_AND_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "S_BARRIER_SIGNAL",
+    "family": "SOP1",
+    "rdna4": 78
+  },
+  {
+    "name": "S_BARRIER_SIGNAL_ISFIRST",
+    "family": "SOP1",
+    "rdna4": 79
+  },
+  {
+    "name": "S_BCNT0_I32_B32",
+    "family": "SOP1",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "S_BCNT0_I32_B64",
+    "family": "SOP1",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "S_BCNT1_I32_B32",
+    "family": "SOP1",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "S_BCNT1_I32_B64",
+    "family": "SOP1",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "S_BITREPLICATE_B64_B32",
+    "family": "SOP1",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "S_BITSET0_B32",
+    "family": "SOP1",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "S_BITSET0_B64",
+    "family": "SOP1",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "S_BITSET1_B32",
+    "family": "SOP1",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "S_BITSET1_B64",
+    "family": "SOP1",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "S_BREV_B32",
+    "family": "SOP1",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "S_BREV_B64",
+    "family": "SOP1",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "S_CEIL_F16",
+    "family": "SOP1",
+    "rdna35": 107,
+    "rdna4": 107
+  },
+  {
+    "name": "S_CEIL_F32",
+    "family": "SOP1",
+    "rdna35": 96,
+    "rdna4": 96
+  },
+  {
+    "name": "S_CLS_I32",
+    "family": "SOP1",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "S_CLS_I32_I64",
+    "family": "SOP1",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "S_CLZ_I32_U32",
+    "family": "SOP1",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "S_CLZ_I32_U64",
+    "family": "SOP1",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "S_CMOV_B32",
+    "family": "SOP1",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "S_CMOV_B64",
+    "family": "SOP1",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "S_CTZ_I32_B32",
+    "family": "SOP1",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "S_CTZ_I32_B64",
+    "family": "SOP1",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "S_CVT_F16_F32",
+    "family": "SOP1",
+    "rdna35": 104,
+    "rdna4": 104
+  },
+  {
+    "name": "S_CVT_F32_F16",
+    "family": "SOP1",
+    "rdna35": 105,
+    "rdna4": 105
+  },
+  {
+    "name": "S_CVT_F32_I32",
+    "family": "SOP1",
+    "rdna35": 100,
+    "rdna4": 100
+  },
+  {
+    "name": "S_CVT_F32_U32",
+    "family": "SOP1",
+    "rdna35": 101,
+    "rdna4": 101
+  },
+  {
+    "name": "S_CVT_HI_F32_F16",
+    "family": "SOP1",
+    "rdna35": 106,
+    "rdna4": 106
+  },
+  {
+    "name": "S_CVT_I32_F32",
+    "family": "SOP1",
+    "rdna35": 102,
+    "rdna4": 102
+  },
+  {
+    "name": "S_CVT_U32_F32",
+    "family": "SOP1",
+    "rdna35": 103,
+    "rdna4": 103
+  },
+  {
+    "name": "S_FLOOR_F16",
+    "family": "SOP1",
+    "rdna35": 108,
+    "rdna4": 108
+  },
+  {
+    "name": "S_FLOOR_F32",
+    "family": "SOP1",
+    "rdna35": 97,
+    "rdna4": 97
+  },
+  {
+    "name": "S_GETPC_B64",
+    "family": "SOP1",
+    "rdna3": 71,
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "S_GET_BARRIER_STATE",
+    "family": "SOP1",
+    "rdna4": 80
+  },
+  {
+    "name": "S_MOVRELD_B32",
+    "family": "SOP1",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "S_MOVRELD_B64",
+    "family": "SOP1",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "S_MOVRELSD_2_B32",
+    "family": "SOP1",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "S_MOVRELS_B32",
+    "family": "SOP1",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "S_MOVRELS_B64",
+    "family": "SOP1",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "S_MOV_B32",
+    "family": "SOP1",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "S_MOV_B64",
+    "family": "SOP1",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "S_NAND_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "S_NAND_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "S_NOR_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "S_NOR_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "S_NOT_B32",
+    "family": "SOP1",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "S_NOT_B64",
+    "family": "SOP1",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "S_OR_NOT0_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 46,
+    "rdna35": 46,
+    "rdna4": 46
+  },
+  {
+    "name": "S_OR_NOT0_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 47,
+    "rdna35": 47,
+    "rdna4": 47
+  },
+  {
+    "name": "S_OR_NOT1_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 50,
+    "rdna35": 50,
+    "rdna4": 50
+  },
+  {
+    "name": "S_OR_NOT1_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "S_OR_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "S_OR_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "S_QUADMASK_B32",
+    "family": "SOP1",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "S_QUADMASK_B64",
+    "family": "SOP1",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "S_RFE_B64",
+    "family": "SOP1",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "S_RNDNE_F16",
+    "family": "SOP1",
+    "rdna35": 110,
+    "rdna4": 110
+  },
+  {
+    "name": "S_RNDNE_F32",
+    "family": "SOP1",
+    "rdna35": 99,
+    "rdna4": 99
+  },
+  {
+    "name": "S_SENDMSG_RTN_B32",
+    "family": "SOP1",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "S_SENDMSG_RTN_B64",
+    "family": "SOP1",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "S_SETPC_B64",
+    "family": "SOP1",
+    "rdna3": 72,
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "S_SEXT_I32_I16",
+    "family": "SOP1",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "S_SEXT_I32_I8",
+    "family": "SOP1",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "S_SLEEP_VAR",
+    "family": "SOP1",
+    "rdna4": 88
+  },
+  {
+    "name": "S_SWAPPC_B64",
+    "family": "SOP1",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "S_TRUNC_F16",
+    "family": "SOP1",
+    "rdna35": 109,
+    "rdna4": 109
+  },
+  {
+    "name": "S_TRUNC_F32",
+    "family": "SOP1",
+    "rdna35": 98,
+    "rdna4": 98
+  },
+  {
+    "name": "S_WQM_B32",
+    "family": "SOP1",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "S_WQM_B64",
+    "family": "SOP1",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "S_XNOR_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 42,
+    "rdna35": 42,
+    "rdna4": 42
+  },
+  {
+    "name": "S_XNOR_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 43,
+    "rdna35": 43,
+    "rdna4": 43
+  },
+  {
+    "name": "S_XOR_SAVEEXEC_B32",
+    "family": "SOP1",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "S_XOR_SAVEEXEC_B64",
+    "family": "SOP1",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "S_ABSDIFF_I32",
+    "family": "SOP2",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "S_ADDC_U32",
+    "family": "SOP2",
+    "rdna3": 4,
+    "rdna35": 4
+  },
+  {
+    "name": "S_ADD_CO_CI_U32",
+    "family": "SOP2",
+    "rdna4": 4
+  },
+  {
+    "name": "S_ADD_CO_I32",
+    "family": "SOP2",
+    "rdna4": 2
+  },
+  {
+    "name": "S_ADD_CO_U32",
+    "family": "SOP2",
+    "rdna4": 0
+  },
+  {
+    "name": "S_ADD_F16",
+    "family": "SOP2",
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "S_ADD_F32",
+    "family": "SOP2",
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "S_ADD_I32",
+    "family": "SOP2",
+    "rdna3": 2,
+    "rdna35": 2
+  },
+  {
+    "name": "S_ADD_NC_U64",
+    "family": "SOP2",
+    "rdna4": 83
+  },
+  {
+    "name": "S_ADD_U32",
+    "family": "SOP2",
+    "rdna3": 0,
+    "rdna35": 0
+  },
+  {
+    "name": "S_AND_B32",
+    "family": "SOP2",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "S_AND_B64",
+    "family": "SOP2",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "S_AND_NOT1_B32",
+    "family": "SOP2",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "S_AND_NOT1_B64",
+    "family": "SOP2",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "S_ASHR_I32",
+    "family": "SOP2",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "S_ASHR_I64",
+    "family": "SOP2",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "S_BFE_I32",
+    "family": "SOP2",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "S_BFE_I64",
+    "family": "SOP2",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "S_BFE_U32",
+    "family": "SOP2",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "S_BFE_U64",
+    "family": "SOP2",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "S_BFM_B32",
+    "family": "SOP2",
+    "rdna3": 42,
+    "rdna35": 42,
+    "rdna4": 42
+  },
+  {
+    "name": "S_BFM_B64",
+    "family": "SOP2",
+    "rdna3": 43,
+    "rdna35": 43,
+    "rdna4": 43
+  },
+  {
+    "name": "S_CSELECT_B32",
+    "family": "SOP2",
+    "rdna3": 48,
+    "rdna35": 48,
+    "rdna4": 48
+  },
+  {
+    "name": "S_CSELECT_B64",
+    "family": "SOP2",
+    "rdna3": 49,
+    "rdna35": 49,
+    "rdna4": 49
+  },
+  {
+    "name": "S_CVT_PK_RTZ_F16_F32",
+    "family": "SOP2",
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "S_FMAAK_F32",
+    "family": "SOP2",
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "S_FMAC_F16",
+    "family": "SOP2",
+    "rdna35": 78,
+    "rdna4": 78
+  },
+  {
+    "name": "S_FMAC_F32",
+    "family": "SOP2",
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "S_FMAMK_F32",
+    "family": "SOP2",
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "S_LSHL1_ADD_U32",
+    "family": "SOP2",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "S_LSHL2_ADD_U32",
+    "family": "SOP2",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "S_LSHL3_ADD_U32",
+    "family": "SOP2",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "S_LSHL4_ADD_U32",
+    "family": "SOP2",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "S_LSHL_B32",
+    "family": "SOP2",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "S_LSHL_B64",
+    "family": "SOP2",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "S_LSHR_B32",
+    "family": "SOP2",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "S_LSHR_B64",
+    "family": "SOP2",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "S_MAXIMUM_F16",
+    "family": "SOP2",
+    "rdna4": 82
+  },
+  {
+    "name": "S_MAXIMUM_F32",
+    "family": "SOP2",
+    "rdna4": 80
+  },
+  {
+    "name": "S_MAX_F16",
+    "family": "SOP2",
+    "rdna35": 76
+  },
+  {
+    "name": "S_MAX_F32",
+    "family": "SOP2",
+    "rdna35": 67
+  },
+  {
+    "name": "S_MAX_I32",
+    "family": "SOP2",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "S_MAX_NUM_F16",
+    "family": "SOP2",
+    "rdna4": 76
+  },
+  {
+    "name": "S_MAX_NUM_F32",
+    "family": "SOP2",
+    "rdna4": 67
+  },
+  {
+    "name": "S_MAX_U32",
+    "family": "SOP2",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "S_MINIMUM_F16",
+    "family": "SOP2",
+    "rdna4": 81
+  },
+  {
+    "name": "S_MINIMUM_F32",
+    "family": "SOP2",
+    "rdna4": 79
+  },
+  {
+    "name": "S_MIN_F16",
+    "family": "SOP2",
+    "rdna35": 75
+  },
+  {
+    "name": "S_MIN_F32",
+    "family": "SOP2",
+    "rdna35": 66
+  },
+  {
+    "name": "S_MIN_I32",
+    "family": "SOP2",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "S_MIN_NUM_F16",
+    "family": "SOP2",
+    "rdna4": 75
+  },
+  {
+    "name": "S_MIN_NUM_F32",
+    "family": "SOP2",
+    "rdna4": 66
+  },
+  {
+    "name": "S_MIN_U32",
+    "family": "SOP2",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "S_MUL_F16",
+    "family": "SOP2",
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "S_MUL_F32",
+    "family": "SOP2",
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "S_MUL_HI_I32",
+    "family": "SOP2",
+    "rdna3": 46,
+    "rdna35": 46,
+    "rdna4": 46
+  },
+  {
+    "name": "S_MUL_HI_U32",
+    "family": "SOP2",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "S_MUL_I32",
+    "family": "SOP2",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "S_MUL_U64",
+    "family": "SOP2",
+    "rdna4": 85
+  },
+  {
+    "name": "S_NAND_B32",
+    "family": "SOP2",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "S_NAND_B64",
+    "family": "SOP2",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "S_NOR_B32",
+    "family": "SOP2",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "S_NOR_B64",
+    "family": "SOP2",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "S_OR_B32",
+    "family": "SOP2",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "S_OR_B64",
+    "family": "SOP2",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "S_OR_NOT1_B32",
+    "family": "SOP2",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "S_OR_NOT1_B64",
+    "family": "SOP2",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "S_PACK_HH_B32_B16",
+    "family": "SOP2",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "S_PACK_HL_B32_B16",
+    "family": "SOP2",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "S_PACK_LH_B32_B16",
+    "family": "SOP2",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "S_PACK_LL_B32_B16",
+    "family": "SOP2",
+    "rdna3": 50,
+    "rdna35": 50,
+    "rdna4": 50
+  },
+  {
+    "name": "S_SUBB_U32",
+    "family": "SOP2",
+    "rdna3": 5,
+    "rdna35": 5
+  },
+  {
+    "name": "S_SUB_CO_CI_U32",
+    "family": "SOP2",
+    "rdna4": 5
+  },
+  {
+    "name": "S_SUB_CO_I32",
+    "family": "SOP2",
+    "rdna4": 3
+  },
+  {
+    "name": "S_SUB_CO_U32",
+    "family": "SOP2",
+    "rdna4": 1
+  },
+  {
+    "name": "S_SUB_F16",
+    "family": "SOP2",
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "S_SUB_F32",
+    "family": "SOP2",
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "S_SUB_I32",
+    "family": "SOP2",
+    "rdna3": 3,
+    "rdna35": 3
+  },
+  {
+    "name": "S_SUB_NC_U64",
+    "family": "SOP2",
+    "rdna4": 84
+  },
+  {
+    "name": "S_SUB_U32",
+    "family": "SOP2",
+    "rdna3": 1,
+    "rdna35": 1
+  },
+  {
+    "name": "S_XNOR_B32",
+    "family": "SOP2",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "S_XNOR_B64",
+    "family": "SOP2",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "S_XOR_B32",
+    "family": "SOP2",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "S_XOR_B64",
+    "family": "SOP2",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "S_BITCMP0_B32",
+    "family": "SOPC",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "S_BITCMP0_B64",
+    "family": "SOPC",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "S_BITCMP1_B32",
+    "family": "SOPC",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "S_BITCMP1_B64",
+    "family": "SOPC",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "S_CMP_EQ_F16",
+    "family": "SOPC",
+    "rdna35": 82,
+    "rdna4": 82
+  },
+  {
+    "name": "S_CMP_EQ_F32",
+    "family": "SOPC",
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "S_CMP_EQ_I32",
+    "family": "SOPC",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "S_CMP_EQ_U32",
+    "family": "SOPC",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "S_CMP_EQ_U64",
+    "family": "SOPC",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "S_CMP_GE_F16",
+    "family": "SOPC",
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "S_CMP_GE_F32",
+    "family": "SOPC",
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "S_CMP_GE_I32",
+    "family": "SOPC",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "S_CMP_GE_U32",
+    "family": "SOPC",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "S_CMP_GT_F16",
+    "family": "SOPC",
+    "rdna35": 84,
+    "rdna4": 84
+  },
+  {
+    "name": "S_CMP_GT_F32",
+    "family": "SOPC",
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "S_CMP_GT_I32",
+    "family": "SOPC",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "S_CMP_GT_U32",
+    "family": "SOPC",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "S_CMP_LE_F16",
+    "family": "SOPC",
+    "rdna35": 83,
+    "rdna4": 83
+  },
+  {
+    "name": "S_CMP_LE_F32",
+    "family": "SOPC",
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "S_CMP_LE_I32",
+    "family": "SOPC",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "S_CMP_LE_U32",
+    "family": "SOPC",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "S_CMP_LG_F16",
+    "family": "SOPC",
+    "rdna35": 85,
+    "rdna4": 85
+  },
+  {
+    "name": "S_CMP_LG_F32",
+    "family": "SOPC",
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "S_CMP_LG_I32",
+    "family": "SOPC",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "S_CMP_LG_U32",
+    "family": "SOPC",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "S_CMP_LG_U64",
+    "family": "SOPC",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "S_CMP_LT_F16",
+    "family": "SOPC",
+    "rdna35": 81,
+    "rdna4": 81
+  },
+  {
+    "name": "S_CMP_LT_F32",
+    "family": "SOPC",
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "S_CMP_LT_I32",
+    "family": "SOPC",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "S_CMP_LT_U32",
+    "family": "SOPC",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "S_CMP_NEQ_F16",
+    "family": "SOPC",
+    "rdna35": 93,
+    "rdna4": 93
+  },
+  {
+    "name": "S_CMP_NEQ_F32",
+    "family": "SOPC",
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "S_CMP_NGE_F16",
+    "family": "SOPC",
+    "rdna35": 89,
+    "rdna4": 89
+  },
+  {
+    "name": "S_CMP_NGE_F32",
+    "family": "SOPC",
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "S_CMP_NGT_F16",
+    "family": "SOPC",
+    "rdna35": 91,
+    "rdna4": 91
+  },
+  {
+    "name": "S_CMP_NGT_F32",
+    "family": "SOPC",
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "S_CMP_NLE_F16",
+    "family": "SOPC",
+    "rdna35": 92,
+    "rdna4": 92
+  },
+  {
+    "name": "S_CMP_NLE_F32",
+    "family": "SOPC",
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "S_CMP_NLG_F16",
+    "family": "SOPC",
+    "rdna35": 90,
+    "rdna4": 90
+  },
+  {
+    "name": "S_CMP_NLG_F32",
+    "family": "SOPC",
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "S_CMP_NLT_F16",
+    "family": "SOPC",
+    "rdna35": 94,
+    "rdna4": 94
+  },
+  {
+    "name": "S_CMP_NLT_F32",
+    "family": "SOPC",
+    "rdna35": 78,
+    "rdna4": 78
+  },
+  {
+    "name": "S_CMP_O_F16",
+    "family": "SOPC",
+    "rdna35": 87,
+    "rdna4": 87
+  },
+  {
+    "name": "S_CMP_O_F32",
+    "family": "SOPC",
+    "rdna35": 71,
+    "rdna4": 71
+  },
+  {
+    "name": "S_CMP_U_F16",
+    "family": "SOPC",
+    "rdna35": 88,
+    "rdna4": 88
+  },
+  {
+    "name": "S_CMP_U_F32",
+    "family": "SOPC",
+    "rdna35": 72,
+    "rdna4": 72
+  },
+  {
+    "name": "S_ADDK_CO_I32",
+    "family": "SOPK",
+    "rdna4": 15
+  },
+  {
+    "name": "S_ADDK_I32",
+    "family": "SOPK",
+    "rdna3": 15,
+    "rdna35": 15
+  },
+  {
+    "name": "S_CALL_B64",
+    "family": "SOPK",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "S_CMOVK_I32",
+    "family": "SOPK",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "S_CMPK_EQ_I32",
+    "family": "SOPK",
+    "rdna3": 3,
+    "rdna35": 3
+  },
+  {
+    "name": "S_CMPK_EQ_U32",
+    "family": "SOPK",
+    "rdna3": 9,
+    "rdna35": 9
+  },
+  {
+    "name": "S_CMPK_GE_I32",
+    "family": "SOPK",
+    "rdna3": 6,
+    "rdna35": 6
+  },
+  {
+    "name": "S_CMPK_GE_U32",
+    "family": "SOPK",
+    "rdna3": 12,
+    "rdna35": 12
+  },
+  {
+    "name": "S_CMPK_GT_I32",
+    "family": "SOPK",
+    "rdna3": 5,
+    "rdna35": 5
+  },
+  {
+    "name": "S_CMPK_GT_U32",
+    "family": "SOPK",
+    "rdna3": 11,
+    "rdna35": 11
+  },
+  {
+    "name": "S_CMPK_LE_I32",
+    "family": "SOPK",
+    "rdna3": 8,
+    "rdna35": 8
+  },
+  {
+    "name": "S_CMPK_LE_U32",
+    "family": "SOPK",
+    "rdna3": 14,
+    "rdna35": 14
+  },
+  {
+    "name": "S_CMPK_LG_I32",
+    "family": "SOPK",
+    "rdna3": 4,
+    "rdna35": 4
+  },
+  {
+    "name": "S_CMPK_LG_U32",
+    "family": "SOPK",
+    "rdna3": 10,
+    "rdna35": 10
+  },
+  {
+    "name": "S_CMPK_LT_I32",
+    "family": "SOPK",
+    "rdna3": 7,
+    "rdna35": 7
+  },
+  {
+    "name": "S_CMPK_LT_U32",
+    "family": "SOPK",
+    "rdna3": 13,
+    "rdna35": 13
+  },
+  {
+    "name": "S_GETREG_B32",
+    "family": "SOPK",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "S_MOVK_I32",
+    "family": "SOPK",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "S_MULK_I32",
+    "family": "SOPK",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "S_SETREG_B32",
+    "family": "SOPK",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "S_SETREG_IMM32_B32",
+    "family": "SOPK",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "S_VERSION",
+    "family": "SOPK",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "S_WAITCNT_EXPCNT",
+    "family": "SOPK",
+    "rdna3": 26,
+    "rdna35": 26
+  },
+  {
+    "name": "S_WAITCNT_LGKMCNT",
+    "family": "SOPK",
+    "rdna3": 27,
+    "rdna35": 27
+  },
+  {
+    "name": "S_WAITCNT_VMCNT",
+    "family": "SOPK",
+    "rdna3": 25,
+    "rdna35": 25
+  },
+  {
+    "name": "S_WAITCNT_VSCNT",
+    "family": "SOPK",
+    "rdna3": 24,
+    "rdna35": 24
+  },
+  {
+    "name": "S_BARRIER",
+    "family": "SOPP",
+    "rdna3": 61,
+    "rdna35": 61
+  },
+  {
+    "name": "S_BARRIER_WAIT",
+    "family": "SOPP",
+    "rdna4": 20
+  },
+  {
+    "name": "S_BRANCH",
+    "family": "SOPP",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "S_CBRANCH_CDBGSYS",
+    "family": "SOPP",
+    "rdna3": 39,
+    "rdna35": 39
+  },
+  {
+    "name": "S_CBRANCH_CDBGSYS_AND_USER",
+    "family": "SOPP",
+    "rdna3": 42,
+    "rdna35": 42
+  },
+  {
+    "name": "S_CBRANCH_CDBGSYS_OR_USER",
+    "family": "SOPP",
+    "rdna3": 41,
+    "rdna35": 41
+  },
+  {
+    "name": "S_CBRANCH_CDBGUSER",
+    "family": "SOPP",
+    "rdna3": 40,
+    "rdna35": 40
+  },
+  {
+    "name": "S_CBRANCH_EXECNZ",
+    "family": "SOPP",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "S_CBRANCH_EXECZ",
+    "family": "SOPP",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "S_CBRANCH_SCC0",
+    "family": "SOPP",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "S_CBRANCH_SCC1",
+    "family": "SOPP",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "S_CBRANCH_VCCNZ",
+    "family": "SOPP",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "S_CBRANCH_VCCZ",
+    "family": "SOPP",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "S_CLAUSE",
+    "family": "SOPP",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "S_CODE_END",
+    "family": "SOPP",
+    "rdna3": 31,
+    "rdna35": 31,
+    "rdna4": 31
+  },
+  {
+    "name": "S_DECPERFLEVEL",
+    "family": "SOPP",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "S_DELAY_ALU",
+    "family": "SOPP",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "S_DENORM_MODE",
+    "family": "SOPP",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "S_ENDPGM",
+    "family": "SOPP",
+    "rdna3": 48,
+    "rdna35": 48,
+    "rdna4": 48
+  },
+  {
+    "name": "S_ENDPGM_ORDERED_PS_DONE",
+    "family": "SOPP",
+    "rdna3": 50,
+    "rdna35": 50
+  },
+  {
+    "name": "S_ENDPGM_SAVED",
+    "family": "SOPP",
+    "rdna3": 49,
+    "rdna35": 49,
+    "rdna4": 49
+  },
+  {
+    "name": "S_ICACHE_INV",
+    "family": "SOPP",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "S_INCPERFLEVEL",
+    "family": "SOPP",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "S_NOP",
+    "family": "SOPP",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "S_ROUND_MODE",
+    "family": "SOPP",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "S_SENDMSG",
+    "family": "SOPP",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "S_SENDMSGHALT",
+    "family": "SOPP",
+    "rdna3": 55,
+    "rdna35": 55,
+    "rdna4": 55
+  },
+  {
+    "name": "S_SETHALT",
+    "family": "SOPP",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "S_SETKILL",
+    "family": "SOPP",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "S_SETPRIO",
+    "family": "SOPP",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "S_SET_INST_PREFETCH_DISTANCE",
+    "family": "SOPP",
+    "rdna3": 4,
+    "rdna35": 4
+  },
+  {
+    "name": "S_SLEEP",
+    "family": "SOPP",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "S_TRAP",
+    "family": "SOPP",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "S_WAITCNT",
+    "family": "SOPP",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "S_WAIT_BVHCNT",
+    "family": "SOPP",
+    "rdna4": 67
+  },
+  {
+    "name": "S_WAIT_DSCNT",
+    "family": "SOPP",
+    "rdna4": 70
+  },
+  {
+    "name": "S_WAIT_EVENT",
+    "family": "SOPP",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "S_WAIT_EXPCNT",
+    "family": "SOPP",
+    "rdna4": 68
+  },
+  {
+    "name": "S_WAIT_IDLE",
+    "family": "SOPP",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "S_WAIT_KMCNT",
+    "family": "SOPP",
+    "rdna4": 71
+  },
+  {
+    "name": "S_WAIT_LOADCNT",
+    "family": "SOPP",
+    "rdna4": 64
+  },
+  {
+    "name": "S_WAIT_LOADCNT_DSCNT",
+    "family": "SOPP",
+    "rdna4": 72
+  },
+  {
+    "name": "S_WAIT_SAMPLECNT",
+    "family": "SOPP",
+    "rdna4": 66
+  },
+  {
+    "name": "S_WAIT_STORECNT",
+    "family": "SOPP",
+    "rdna4": 65
+  },
+  {
+    "name": "S_WAIT_STORECNT_DSCNT",
+    "family": "SOPP",
+    "rdna4": 73
+  },
+  {
+    "name": "S_WAKEUP",
+    "family": "SOPP",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "BUFFER_ATOMIC_COND_SUB_U32",
+    "family": "VBUFFER",
+    "rdna4": 80
+  },
+  {
+    "name": "BUFFER_ATOMIC_MAX_NUM_F32",
+    "family": "VBUFFER",
+    "rdna4": 82
+  },
+  {
+    "name": "BUFFER_ATOMIC_MIN_NUM_F32",
+    "family": "VBUFFER",
+    "rdna4": 81
+  },
+  {
+    "name": "BUFFER_ATOMIC_PK_ADD_BF16",
+    "family": "VBUFFER",
+    "rdna4": 90
+  },
+  {
+    "name": "BUFFER_ATOMIC_PK_ADD_F16",
+    "family": "VBUFFER",
+    "rdna4": 89
+  },
+  {
+    "name": "BUFFER_ATOMIC_SUB_CLAMP_U32",
+    "family": "VBUFFER",
+    "rdna4": 55
+  },
+  {
+    "name": "DS_BPERMUTE_FI_B32",
+    "family": "VDS",
+    "rdna4": 205
+  },
+  {
+    "name": "DS_BVH_STACK_PUSH4_POP1_RTN_B32",
+    "family": "VDS",
+    "rdna4": 224
+  },
+  {
+    "name": "DS_BVH_STACK_PUSH8_POP1_RTN_B32",
+    "family": "VDS",
+    "rdna4": 225
+  },
+  {
+    "name": "DS_BVH_STACK_PUSH8_POP2_RTN_B64",
+    "family": "VDS",
+    "rdna4": 226
+  },
+  {
+    "name": "DS_COND_SUB_RTN_U32",
+    "family": "VDS",
+    "rdna4": 168
+  },
+  {
+    "name": "DS_COND_SUB_U32",
+    "family": "VDS",
+    "rdna4": 152
+  },
+  {
+    "name": "DS_MAX_NUM_F32",
+    "family": "VDS",
+    "rdna4": 19
+  },
+  {
+    "name": "DS_MAX_NUM_F64",
+    "family": "VDS",
+    "rdna4": 83
+  },
+  {
+    "name": "DS_MAX_NUM_RTN_F32",
+    "family": "VDS",
+    "rdna4": 51
+  },
+  {
+    "name": "DS_MAX_NUM_RTN_F64",
+    "family": "VDS",
+    "rdna4": 115
+  },
+  {
+    "name": "DS_MIN_NUM_F32",
+    "family": "VDS",
+    "rdna4": 18
+  },
+  {
+    "name": "DS_MIN_NUM_F64",
+    "family": "VDS",
+    "rdna4": 82
+  },
+  {
+    "name": "DS_MIN_NUM_RTN_F32",
+    "family": "VDS",
+    "rdna4": 50
+  },
+  {
+    "name": "DS_MIN_NUM_RTN_F64",
+    "family": "VDS",
+    "rdna4": 114
+  },
+  {
+    "name": "DS_PK_ADD_BF16",
+    "family": "VDS",
+    "rdna4": 155
+  },
+  {
+    "name": "DS_PK_ADD_F16",
+    "family": "VDS",
+    "rdna4": 154
+  },
+  {
+    "name": "DS_PK_ADD_RTN_BF16",
+    "family": "VDS",
+    "rdna4": 171
+  },
+  {
+    "name": "DS_PK_ADD_RTN_F16",
+    "family": "VDS",
+    "rdna4": 170
+  },
+  {
+    "name": "DS_SUB_CLAMP_RTN_U32",
+    "family": "VDS",
+    "rdna4": 169
+  },
+  {
+    "name": "DS_SUB_CLAMP_U32",
+    "family": "VDS",
+    "rdna4": 153
+  },
+  {
+    "name": "IMAGE_ATOMIC_ADD_FLT",
+    "family": "VIMAGE",
+    "rdna4": 131
+  },
+  {
+    "name": "IMAGE_ATOMIC_ADD_UINT",
+    "family": "VIMAGE",
+    "rdna4": 12
+  },
+  {
+    "name": "IMAGE_ATOMIC_DEC_UINT",
+    "family": "VIMAGE",
+    "rdna4": 22
+  },
+  {
+    "name": "IMAGE_ATOMIC_INC_UINT",
+    "family": "VIMAGE",
+    "rdna4": 21
+  },
+  {
+    "name": "IMAGE_ATOMIC_MAX_FLT",
+    "family": "VIMAGE",
+    "rdna4": 133
+  },
+  {
+    "name": "IMAGE_ATOMIC_MAX_INT",
+    "family": "VIMAGE",
+    "rdna4": 16
+  },
+  {
+    "name": "IMAGE_ATOMIC_MAX_UINT",
+    "family": "VIMAGE",
+    "rdna4": 17
+  },
+  {
+    "name": "IMAGE_ATOMIC_MIN_FLT",
+    "family": "VIMAGE",
+    "rdna4": 132
+  },
+  {
+    "name": "IMAGE_ATOMIC_MIN_INT",
+    "family": "VIMAGE",
+    "rdna4": 14
+  },
+  {
+    "name": "IMAGE_ATOMIC_MIN_UINT",
+    "family": "VIMAGE",
+    "rdna4": 15
+  },
+  {
+    "name": "IMAGE_ATOMIC_PK_ADD_BF16",
+    "family": "VIMAGE",
+    "rdna4": 135
+  },
+  {
+    "name": "IMAGE_ATOMIC_PK_ADD_F16",
+    "family": "VIMAGE",
+    "rdna4": 134
+  },
+  {
+    "name": "IMAGE_ATOMIC_SUB_UINT",
+    "family": "VIMAGE",
+    "rdna4": 13
+  },
+  {
+    "name": "IMAGE_BVH8_INTERSECT_RAY",
+    "family": "VIMAGE",
+    "rdna4": 129
+  },
+  {
+    "name": "IMAGE_BVH_DUAL_INTERSECT_RAY",
+    "family": "VIMAGE",
+    "rdna4": 128
+  },
+  {
+    "name": "V_INTERP_P10_F16_F32",
+    "family": "VINTERP",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "V_INTERP_P10_F32",
+    "family": "VINTERP",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "V_INTERP_P10_RTZ_F16_F32",
+    "family": "VINTERP",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "V_INTERP_P2_F16_F32",
+    "family": "VINTERP",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "V_INTERP_P2_F32",
+    "family": "VINTERP",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "V_INTERP_P2_RTZ_F16_F32",
+    "family": "VINTERP",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "V_BFREV_B32",
+    "family": "VOP1",
+    "rdna3": 440,
+    "rdna35": 440,
+    "rdna4": 440
+  },
+  {
+    "name": "V_CEIL_F16",
+    "family": "VOP1",
+    "rdna3": 476,
+    "rdna35": 476,
+    "rdna4": 476
+  },
+  {
+    "name": "V_CEIL_F32",
+    "family": "VOP1",
+    "rdna3": 418,
+    "rdna35": 418,
+    "rdna4": 418
+  },
+  {
+    "name": "V_CEIL_F64",
+    "family": "VOP1",
+    "rdna3": 408,
+    "rdna35": 408,
+    "rdna4": 408
+  },
+  {
+    "name": "V_CLS_I32",
+    "family": "VOP1",
+    "rdna3": 443,
+    "rdna35": 443,
+    "rdna4": 443
+  },
+  {
+    "name": "V_CLZ_I32_U32",
+    "family": "VOP1",
+    "rdna3": 441,
+    "rdna35": 441,
+    "rdna4": 441
+  },
+  {
+    "name": "V_COS_F16",
+    "family": "VOP1",
+    "rdna3": 481,
+    "rdna35": 481,
+    "rdna4": 481
+  },
+  {
+    "name": "V_COS_F32",
+    "family": "VOP1",
+    "rdna3": 438,
+    "rdna35": 438,
+    "rdna4": 438
+  },
+  {
+    "name": "V_CTZ_I32_B32",
+    "family": "VOP1",
+    "rdna3": 442,
+    "rdna35": 442,
+    "rdna4": 442
+  },
+  {
+    "name": "V_CVT_F16_F32",
+    "family": "VOP1",
+    "rdna3": 394,
+    "rdna35": 394,
+    "rdna4": 394
+  },
+  {
+    "name": "V_CVT_F16_I16",
+    "family": "VOP1",
+    "rdna3": 465,
+    "rdna35": 465,
+    "rdna4": 465
+  },
+  {
+    "name": "V_CVT_F16_U16",
+    "family": "VOP1",
+    "rdna3": 464,
+    "rdna35": 464,
+    "rdna4": 464
+  },
+  {
+    "name": "V_CVT_F32_BF8",
+    "family": "VOP1",
+    "rdna4": 493
+  },
+  {
+    "name": "V_CVT_F32_F16",
+    "family": "VOP1",
+    "rdna3": 395,
+    "rdna35": 395,
+    "rdna4": 395
+  },
+  {
+    "name": "V_CVT_F32_F64",
+    "family": "VOP1",
+    "rdna3": 399,
+    "rdna35": 399,
+    "rdna4": 399
+  },
+  {
+    "name": "V_CVT_F32_FP8",
+    "family": "VOP1",
+    "rdna4": 492
+  },
+  {
+    "name": "V_CVT_F32_I32",
+    "family": "VOP1",
+    "rdna3": 389,
+    "rdna35": 389,
+    "rdna4": 389
+  },
+  {
+    "name": "V_CVT_F32_U32",
+    "family": "VOP1",
+    "rdna3": 390,
+    "rdna35": 390,
+    "rdna4": 390
+  },
+  {
+    "name": "V_CVT_F32_UBYTE0",
+    "family": "VOP1",
+    "rdna3": 401,
+    "rdna35": 401,
+    "rdna4": 401
+  },
+  {
+    "name": "V_CVT_F32_UBYTE1",
+    "family": "VOP1",
+    "rdna3": 402,
+    "rdna35": 402,
+    "rdna4": 402
+  },
+  {
+    "name": "V_CVT_F32_UBYTE2",
+    "family": "VOP1",
+    "rdna3": 403,
+    "rdna35": 403,
+    "rdna4": 403
+  },
+  {
+    "name": "V_CVT_F32_UBYTE3",
+    "family": "VOP1",
+    "rdna3": 404,
+    "rdna35": 404,
+    "rdna4": 404
+  },
+  {
+    "name": "V_CVT_F64_F32",
+    "family": "VOP1",
+    "rdna3": 400,
+    "rdna35": 400,
+    "rdna4": 400
+  },
+  {
+    "name": "V_CVT_F64_I32",
+    "family": "VOP1",
+    "rdna3": 388,
+    "rdna35": 388,
+    "rdna4": 388
+  },
+  {
+    "name": "V_CVT_F64_U32",
+    "family": "VOP1",
+    "rdna3": 406,
+    "rdna35": 406,
+    "rdna4": 406
+  },
+  {
+    "name": "V_CVT_FLOOR_I32_F32",
+    "family": "VOP1",
+    "rdna3": 397,
+    "rdna35": 397,
+    "rdna4": 397
+  },
+  {
+    "name": "V_CVT_I16_F16",
+    "family": "VOP1",
+    "rdna3": 467,
+    "rdna35": 467,
+    "rdna4": 467
+  },
+  {
+    "name": "V_CVT_I32_F32",
+    "family": "VOP1",
+    "rdna3": 392,
+    "rdna35": 392,
+    "rdna4": 392
+  },
+  {
+    "name": "V_CVT_I32_F64",
+    "family": "VOP1",
+    "rdna3": 387,
+    "rdna35": 387,
+    "rdna4": 387
+  },
+  {
+    "name": "V_CVT_I32_I16",
+    "family": "VOP1",
+    "rdna3": 490,
+    "rdna35": 490,
+    "rdna4": 490
+  },
+  {
+    "name": "V_CVT_NEAREST_I32_F32",
+    "family": "VOP1",
+    "rdna3": 396,
+    "rdna35": 396,
+    "rdna4": 396
+  },
+  {
+    "name": "V_CVT_NORM_I16_F16",
+    "family": "VOP1",
+    "rdna3": 483,
+    "rdna35": 483,
+    "rdna4": 483
+  },
+  {
+    "name": "V_CVT_NORM_U16_F16",
+    "family": "VOP1",
+    "rdna3": 484,
+    "rdna35": 484,
+    "rdna4": 484
+  },
+  {
+    "name": "V_CVT_OFF_F32_I4",
+    "family": "VOP1",
+    "rdna3": 398,
+    "rdna35": 398,
+    "rdna4": 398
+  },
+  {
+    "name": "V_CVT_PK_F32_BF8",
+    "family": "VOP1",
+    "rdna4": 495
+  },
+  {
+    "name": "V_CVT_PK_F32_FP8",
+    "family": "VOP1",
+    "rdna4": 494
+  },
+  {
+    "name": "V_CVT_U16_F16",
+    "family": "VOP1",
+    "rdna3": 466,
+    "rdna35": 466,
+    "rdna4": 466
+  },
+  {
+    "name": "V_CVT_U32_F32",
+    "family": "VOP1",
+    "rdna3": 391,
+    "rdna35": 391,
+    "rdna4": 391
+  },
+  {
+    "name": "V_CVT_U32_F64",
+    "family": "VOP1",
+    "rdna3": 405,
+    "rdna35": 405,
+    "rdna4": 405
+  },
+  {
+    "name": "V_CVT_U32_U16",
+    "family": "VOP1",
+    "rdna3": 491,
+    "rdna35": 491,
+    "rdna4": 491
+  },
+  {
+    "name": "V_EXP_F16",
+    "family": "VOP1",
+    "rdna3": 472,
+    "rdna35": 472,
+    "rdna4": 472
+  },
+  {
+    "name": "V_EXP_F32",
+    "family": "VOP1",
+    "rdna3": 421,
+    "rdna35": 421,
+    "rdna4": 421
+  },
+  {
+    "name": "V_FLOOR_F16",
+    "family": "VOP1",
+    "rdna3": 475,
+    "rdna35": 475,
+    "rdna4": 475
+  },
+  {
+    "name": "V_FLOOR_F32",
+    "family": "VOP1",
+    "rdna3": 420,
+    "rdna35": 420,
+    "rdna4": 420
+  },
+  {
+    "name": "V_FLOOR_F64",
+    "family": "VOP1",
+    "rdna3": 410,
+    "rdna35": 410,
+    "rdna4": 410
+  },
+  {
+    "name": "V_FRACT_F16",
+    "family": "VOP1",
+    "rdna3": 479,
+    "rdna35": 479,
+    "rdna4": 479
+  },
+  {
+    "name": "V_FRACT_F32",
+    "family": "VOP1",
+    "rdna3": 416,
+    "rdna35": 416,
+    "rdna4": 416
+  },
+  {
+    "name": "V_FRACT_F64",
+    "family": "VOP1",
+    "rdna3": 446,
+    "rdna35": 446,
+    "rdna4": 446
+  },
+  {
+    "name": "V_FREXP_EXP_I16_F16",
+    "family": "VOP1",
+    "rdna3": 474,
+    "rdna35": 474,
+    "rdna4": 474
+  },
+  {
+    "name": "V_FREXP_EXP_I32_F32",
+    "family": "VOP1",
+    "rdna3": 447,
+    "rdna35": 447,
+    "rdna4": 447
+  },
+  {
+    "name": "V_FREXP_EXP_I32_F64",
+    "family": "VOP1",
+    "rdna3": 444,
+    "rdna35": 444,
+    "rdna4": 444
+  },
+  {
+    "name": "V_FREXP_MANT_F16",
+    "family": "VOP1",
+    "rdna3": 473,
+    "rdna35": 473,
+    "rdna4": 473
+  },
+  {
+    "name": "V_FREXP_MANT_F32",
+    "family": "VOP1",
+    "rdna3": 448,
+    "rdna35": 448,
+    "rdna4": 448
+  },
+  {
+    "name": "V_FREXP_MANT_F64",
+    "family": "VOP1",
+    "rdna3": 445,
+    "rdna35": 445,
+    "rdna4": 445
+  },
+  {
+    "name": "V_LOG_F16",
+    "family": "VOP1",
+    "rdna3": 471,
+    "rdna35": 471,
+    "rdna4": 471
+  },
+  {
+    "name": "V_LOG_F32",
+    "family": "VOP1",
+    "rdna3": 423,
+    "rdna35": 423,
+    "rdna4": 423
+  },
+  {
+    "name": "V_MOVRELD_B32",
+    "family": "VOP1",
+    "rdna3": 450,
+    "rdna35": 450,
+    "rdna4": 450
+  },
+  {
+    "name": "V_MOVRELSD_2_B32",
+    "family": "VOP1",
+    "rdna3": 456,
+    "rdna35": 456,
+    "rdna4": 456
+  },
+  {
+    "name": "V_MOVRELSD_B32",
+    "family": "VOP1",
+    "rdna3": 452,
+    "rdna35": 452,
+    "rdna4": 452
+  },
+  {
+    "name": "V_MOVRELS_B32",
+    "family": "VOP1",
+    "rdna3": 451,
+    "rdna35": 451,
+    "rdna4": 451
+  },
+  {
+    "name": "V_MOV_B16",
+    "family": "VOP1",
+    "rdna3": 412,
+    "rdna35": 412,
+    "rdna4": 412
+  },
+  {
+    "name": "V_MOV_B32",
+    "family": "VOP1",
+    "rdna3": 385,
+    "rdna35": 385,
+    "rdna4": 385
+  },
+  {
+    "name": "V_NOP",
+    "family": "VOP1",
+    "rdna3": 384,
+    "rdna35": 384,
+    "rdna4": 384
+  },
+  {
+    "name": "V_NOT_B16",
+    "family": "VOP1",
+    "rdna3": 489,
+    "rdna35": 489,
+    "rdna4": 489
+  },
+  {
+    "name": "V_NOT_B32",
+    "family": "VOP1",
+    "rdna3": 439,
+    "rdna35": 439,
+    "rdna4": 439
+  },
+  {
+    "name": "V_PERMLANE64_B32",
+    "family": "VOP1",
+    "rdna3": 103,
+    "rdna35": 103,
+    "rdna4": 103
+  },
+  {
+    "name": "V_PIPEFLUSH",
+    "family": "VOP1",
+    "rdna3": 411,
+    "rdna35": 411,
+    "rdna4": 411
+  },
+  {
+    "name": "V_RCP_F16",
+    "family": "VOP1",
+    "rdna3": 468,
+    "rdna35": 468,
+    "rdna4": 468
+  },
+  {
+    "name": "V_RCP_F32",
+    "family": "VOP1",
+    "rdna3": 426,
+    "rdna35": 426,
+    "rdna4": 426
+  },
+  {
+    "name": "V_RCP_F64",
+    "family": "VOP1",
+    "rdna3": 431,
+    "rdna35": 431,
+    "rdna4": 431
+  },
+  {
+    "name": "V_RCP_IFLAG_F32",
+    "family": "VOP1",
+    "rdna3": 427,
+    "rdna35": 427,
+    "rdna4": 427
+  },
+  {
+    "name": "V_READFIRSTLANE_B32",
+    "family": "VOP1",
+    "rdna3": 386,
+    "rdna35": 386,
+    "rdna4": 386
+  },
+  {
+    "name": "V_RNDNE_F16",
+    "family": "VOP1",
+    "rdna3": 478,
+    "rdna35": 478,
+    "rdna4": 478
+  },
+  {
+    "name": "V_RNDNE_F32",
+    "family": "VOP1",
+    "rdna3": 419,
+    "rdna35": 419,
+    "rdna4": 419
+  },
+  {
+    "name": "V_RNDNE_F64",
+    "family": "VOP1",
+    "rdna3": 409,
+    "rdna35": 409,
+    "rdna4": 409
+  },
+  {
+    "name": "V_RSQ_F16",
+    "family": "VOP1",
+    "rdna3": 470,
+    "rdna35": 470,
+    "rdna4": 470
+  },
+  {
+    "name": "V_RSQ_F32",
+    "family": "VOP1",
+    "rdna3": 430,
+    "rdna35": 430,
+    "rdna4": 430
+  },
+  {
+    "name": "V_RSQ_F64",
+    "family": "VOP1",
+    "rdna3": 433,
+    "rdna35": 433,
+    "rdna4": 433
+  },
+  {
+    "name": "V_SAT_PK_U8_I16",
+    "family": "VOP1",
+    "rdna3": 482,
+    "rdna35": 482,
+    "rdna4": 482
+  },
+  {
+    "name": "V_SIN_F16",
+    "family": "VOP1",
+    "rdna3": 480,
+    "rdna35": 480,
+    "rdna4": 480
+  },
+  {
+    "name": "V_SIN_F32",
+    "family": "VOP1",
+    "rdna3": 437,
+    "rdna35": 437,
+    "rdna4": 437
+  },
+  {
+    "name": "V_SQRT_F16",
+    "family": "VOP1",
+    "rdna3": 469,
+    "rdna35": 469,
+    "rdna4": 469
+  },
+  {
+    "name": "V_SQRT_F32",
+    "family": "VOP1",
+    "rdna3": 435,
+    "rdna35": 435,
+    "rdna4": 435
+  },
+  {
+    "name": "V_SQRT_F64",
+    "family": "VOP1",
+    "rdna3": 436,
+    "rdna35": 436,
+    "rdna4": 436
+  },
+  {
+    "name": "V_SWAPREL_B32",
+    "family": "VOP1",
+    "rdna3": 104,
+    "rdna35": 104,
+    "rdna4": 104
+  },
+  {
+    "name": "V_SWAP_B16",
+    "family": "VOP1",
+    "rdna3": 102,
+    "rdna35": 102,
+    "rdna4": 102
+  },
+  {
+    "name": "V_SWAP_B32",
+    "family": "VOP1",
+    "rdna3": 101,
+    "rdna35": 101,
+    "rdna4": 101
+  },
+  {
+    "name": "V_TRUNC_F16",
+    "family": "VOP1",
+    "rdna3": 477,
+    "rdna35": 477,
+    "rdna4": 477
+  },
+  {
+    "name": "V_TRUNC_F32",
+    "family": "VOP1",
+    "rdna3": 417,
+    "rdna35": 417,
+    "rdna4": 417
+  },
+  {
+    "name": "V_TRUNC_F64",
+    "family": "VOP1",
+    "rdna3": 407,
+    "rdna35": 407,
+    "rdna4": 407
+  },
+  {
+    "name": "V_ADD_CO_CI_U32",
+    "family": "VOP2",
+    "rdna3": 288,
+    "rdna35": 288,
+    "rdna4": 288
+  },
+  {
+    "name": "V_ADD_F16",
+    "family": "VOP2",
+    "rdna3": 306,
+    "rdna35": 306,
+    "rdna4": 306
+  },
+  {
+    "name": "V_ADD_F32",
+    "family": "VOP2",
+    "rdna3": 259,
+    "rdna35": 259,
+    "rdna4": 259
+  },
+  {
+    "name": "V_ADD_NC_U32",
+    "family": "VOP2",
+    "rdna3": 293,
+    "rdna35": 293,
+    "rdna4": 293
+  },
+  {
+    "name": "V_AND_B32",
+    "family": "VOP2",
+    "rdna3": 283,
+    "rdna35": 283,
+    "rdna4": 283
+  },
+  {
+    "name": "V_ASHRREV_I32",
+    "family": "VOP2",
+    "rdna3": 282,
+    "rdna35": 282,
+    "rdna4": 282
+  },
+  {
+    "name": "V_CNDMASK_B32",
+    "family": "VOP2",
+    "rdna3": 257,
+    "rdna35": 257,
+    "rdna4": 257
+  },
+  {
+    "name": "V_CVT_PK_RTZ_F16_F32",
+    "family": "VOP2",
+    "rdna3": 303,
+    "rdna35": 303,
+    "rdna4": 303
+  },
+  {
+    "name": "V_DOT2ACC_F32_F16",
+    "family": "VOP2",
+    "rdna3": 2,
+    "rdna35": 2
+  },
+  {
+    "name": "V_FMAAK_F16",
+    "family": "VOP2",
+    "rdna3": 56,
+    "rdna35": 56,
+    "rdna4": 56
+  },
+  {
+    "name": "V_FMAAK_F32",
+    "family": "VOP2",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "V_FMAC_DX9_ZERO_F32",
+    "family": "VOP2",
+    "rdna3": 262,
+    "rdna35": 262
+  },
+  {
+    "name": "V_FMAC_F16",
+    "family": "VOP2",
+    "rdna3": 310,
+    "rdna35": 310,
+    "rdna4": 310
+  },
+  {
+    "name": "V_FMAC_F32",
+    "family": "VOP2",
+    "rdna3": 299,
+    "rdna35": 299,
+    "rdna4": 299
+  },
+  {
+    "name": "V_FMAMK_F16",
+    "family": "VOP2",
+    "rdna3": 55,
+    "rdna35": 55,
+    "rdna4": 55
+  },
+  {
+    "name": "V_FMAMK_F32",
+    "family": "VOP2",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "V_LDEXP_F16",
+    "family": "VOP2",
+    "rdna3": 315,
+    "rdna35": 315,
+    "rdna4": 315
+  },
+  {
+    "name": "V_LSHLREV_B32",
+    "family": "VOP2",
+    "rdna3": 280,
+    "rdna35": 280,
+    "rdna4": 280
+  },
+  {
+    "name": "V_LSHRREV_B32",
+    "family": "VOP2",
+    "rdna3": 281,
+    "rdna35": 281,
+    "rdna4": 281
+  },
+  {
+    "name": "V_MAX_F16",
+    "family": "VOP2",
+    "rdna3": 313,
+    "rdna35": 313
+  },
+  {
+    "name": "V_MAX_F32",
+    "family": "VOP2",
+    "rdna3": 272,
+    "rdna35": 272
+  },
+  {
+    "name": "V_MAX_I32",
+    "family": "VOP2",
+    "rdna3": 274,
+    "rdna35": 274,
+    "rdna4": 274
+  },
+  {
+    "name": "V_MAX_NUM_F16",
+    "family": "VOP2",
+    "rdna4": 305
+  },
+  {
+    "name": "V_MAX_NUM_F32",
+    "family": "VOP2",
+    "rdna4": 278
+  },
+  {
+    "name": "V_MAX_NUM_F64",
+    "family": "VOP2",
+    "rdna4": 270
+  },
+  {
+    "name": "V_MAX_U32",
+    "family": "VOP2",
+    "rdna3": 276,
+    "rdna35": 276,
+    "rdna4": 276
+  },
+  {
+    "name": "V_MIN_F16",
+    "family": "VOP2",
+    "rdna3": 314,
+    "rdna35": 314
+  },
+  {
+    "name": "V_MIN_F32",
+    "family": "VOP2",
+    "rdna3": 271,
+    "rdna35": 271
+  },
+  {
+    "name": "V_MIN_I32",
+    "family": "VOP2",
+    "rdna3": 273,
+    "rdna35": 273,
+    "rdna4": 273
+  },
+  {
+    "name": "V_MIN_NUM_F16",
+    "family": "VOP2",
+    "rdna4": 304
+  },
+  {
+    "name": "V_MIN_NUM_F32",
+    "family": "VOP2",
+    "rdna4": 277
+  },
+  {
+    "name": "V_MIN_NUM_F64",
+    "family": "VOP2",
+    "rdna4": 269
+  },
+  {
+    "name": "V_MIN_U32",
+    "family": "VOP2",
+    "rdna3": 275,
+    "rdna35": 275,
+    "rdna4": 275
+  },
+  {
+    "name": "V_MUL_DX9_ZERO_F32",
+    "family": "VOP2",
+    "rdna3": 263,
+    "rdna35": 263,
+    "rdna4": 263
+  },
+  {
+    "name": "V_MUL_F16",
+    "family": "VOP2",
+    "rdna3": 309,
+    "rdna35": 309,
+    "rdna4": 309
+  },
+  {
+    "name": "V_MUL_F32",
+    "family": "VOP2",
+    "rdna3": 264,
+    "rdna35": 264,
+    "rdna4": 264
+  },
+  {
+    "name": "V_MUL_HI_I32_I24",
+    "family": "VOP2",
+    "rdna3": 266,
+    "rdna35": 266,
+    "rdna4": 266
+  },
+  {
+    "name": "V_MUL_HI_U32_U24",
+    "family": "VOP2",
+    "rdna3": 268,
+    "rdna35": 268,
+    "rdna4": 268
+  },
+  {
+    "name": "V_MUL_I32_I24",
+    "family": "VOP2",
+    "rdna3": 265,
+    "rdna35": 265,
+    "rdna4": 265
+  },
+  {
+    "name": "V_MUL_U32_U24",
+    "family": "VOP2",
+    "rdna3": 267,
+    "rdna35": 267,
+    "rdna4": 267
+  },
+  {
+    "name": "V_OR_B32",
+    "family": "VOP2",
+    "rdna3": 284,
+    "rdna35": 284,
+    "rdna4": 284
+  },
+  {
+    "name": "V_PK_FMAC_F16",
+    "family": "VOP2",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "V_SUBREV_CO_CI_U32",
+    "family": "VOP2",
+    "rdna3": 290,
+    "rdna35": 290,
+    "rdna4": 290
+  },
+  {
+    "name": "V_SUBREV_F16",
+    "family": "VOP2",
+    "rdna3": 308,
+    "rdna35": 308,
+    "rdna4": 308
+  },
+  {
+    "name": "V_SUBREV_F32",
+    "family": "VOP2",
+    "rdna3": 261,
+    "rdna35": 261,
+    "rdna4": 261
+  },
+  {
+    "name": "V_SUBREV_NC_U32",
+    "family": "VOP2",
+    "rdna3": 295,
+    "rdna35": 295,
+    "rdna4": 295
+  },
+  {
+    "name": "V_SUB_CO_CI_U32",
+    "family": "VOP2",
+    "rdna3": 289,
+    "rdna35": 289,
+    "rdna4": 289
+  },
+  {
+    "name": "V_SUB_F16",
+    "family": "VOP2",
+    "rdna3": 307,
+    "rdna35": 307,
+    "rdna4": 307
+  },
+  {
+    "name": "V_SUB_F32",
+    "family": "VOP2",
+    "rdna3": 260,
+    "rdna35": 260,
+    "rdna4": 260
+  },
+  {
+    "name": "V_SUB_NC_U32",
+    "family": "VOP2",
+    "rdna3": 294,
+    "rdna35": 294,
+    "rdna4": 294
+  },
+  {
+    "name": "V_XNOR_B32",
+    "family": "VOP2",
+    "rdna3": 286,
+    "rdna35": 286,
+    "rdna4": 286
+  },
+  {
+    "name": "V_XOR_B32",
+    "family": "VOP2",
+    "rdna3": 285,
+    "rdna35": 285,
+    "rdna4": 285
+  },
+  {
+    "name": "V_ADD3_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 597,
+    "rdna35": 597,
+    "rdna4": 597
+  },
+  {
+    "name": "V_ADD_CO_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 768,
+    "rdna35": 768,
+    "rdna4": 768
+  },
+  {
+    "name": "V_ADD_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 807,
+    "rdna35": 807,
+    "rdna4": 258
+  },
+  {
+    "name": "V_ADD_LSHL_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 583,
+    "rdna35": 583,
+    "rdna4": 583
+  },
+  {
+    "name": "V_ADD_NC_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 781,
+    "rdna35": 781,
+    "rdna4": 781
+  },
+  {
+    "name": "V_ADD_NC_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 806,
+    "rdna35": 806,
+    "rdna4": 806
+  },
+  {
+    "name": "V_ADD_NC_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 771,
+    "rdna35": 771,
+    "rdna4": 771
+  },
+  {
+    "name": "V_ALIGNBIT_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 534,
+    "rdna35": 534,
+    "rdna4": 534
+  },
+  {
+    "name": "V_ALIGNBYTE_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 535,
+    "rdna35": 535,
+    "rdna4": 535
+  },
+  {
+    "name": "V_AND_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 866,
+    "rdna35": 866,
+    "rdna4": 866
+  },
+  {
+    "name": "V_AND_OR_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 599,
+    "rdna35": 599,
+    "rdna4": 599
+  },
+  {
+    "name": "V_ASHRREV_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 826,
+    "rdna35": 826,
+    "rdna4": 826
+  },
+  {
+    "name": "V_ASHRREV_I64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 830,
+    "rdna35": 830,
+    "rdna4": 830
+  },
+  {
+    "name": "V_BCNT_U32_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 798,
+    "rdna35": 798,
+    "rdna4": 798
+  },
+  {
+    "name": "V_BFE_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 529,
+    "rdna35": 529,
+    "rdna4": 529
+  },
+  {
+    "name": "V_BFE_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 528,
+    "rdna35": 528,
+    "rdna4": 528
+  },
+  {
+    "name": "V_BFI_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 530,
+    "rdna35": 530,
+    "rdna4": 530
+  },
+  {
+    "name": "V_BFM_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 797,
+    "rdna35": 797,
+    "rdna4": 797
+  },
+  {
+    "name": "V_CNDMASK_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 605,
+    "rdna35": 605,
+    "rdna4": 605
+  },
+  {
+    "name": "V_CUBEID_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 524,
+    "rdna35": 524,
+    "rdna4": 524
+  },
+  {
+    "name": "V_CUBEMA_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 527,
+    "rdna35": 527,
+    "rdna4": 527
+  },
+  {
+    "name": "V_CUBESC_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 525,
+    "rdna35": 525,
+    "rdna4": 525
+  },
+  {
+    "name": "V_CUBETC_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 526,
+    "rdna35": 526,
+    "rdna4": 526
+  },
+  {
+    "name": "V_CVT_PK_BF8_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 874
+  },
+  {
+    "name": "V_CVT_PK_FP8_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 873
+  },
+  {
+    "name": "V_CVT_PK_I16_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 774,
+    "rdna35": 774,
+    "rdna4": 774
+  },
+  {
+    "name": "V_CVT_PK_I16_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 804,
+    "rdna35": 804,
+    "rdna4": 804
+  },
+  {
+    "name": "V_CVT_PK_NORM_I16_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 786,
+    "rdna35": 786,
+    "rdna4": 786
+  },
+  {
+    "name": "V_CVT_PK_NORM_I16_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 801,
+    "rdna35": 801,
+    "rdna4": 801
+  },
+  {
+    "name": "V_CVT_PK_NORM_U16_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 787,
+    "rdna35": 787,
+    "rdna4": 787
+  },
+  {
+    "name": "V_CVT_PK_NORM_U16_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 802,
+    "rdna35": 802,
+    "rdna4": 802
+  },
+  {
+    "name": "V_CVT_PK_U16_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 775,
+    "rdna35": 775,
+    "rdna4": 775
+  },
+  {
+    "name": "V_CVT_PK_U16_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 803,
+    "rdna35": 803,
+    "rdna4": 803
+  },
+  {
+    "name": "V_CVT_PK_U8_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 550,
+    "rdna35": 550,
+    "rdna4": 550
+  },
+  {
+    "name": "V_CVT_SR_BF8_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 876
+  },
+  {
+    "name": "V_CVT_SR_FP8_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 875
+  },
+  {
+    "name": "V_DIV_FIXUP_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 596,
+    "rdna35": 596,
+    "rdna4": 596
+  },
+  {
+    "name": "V_DIV_FIXUP_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 551,
+    "rdna35": 551,
+    "rdna4": 551
+  },
+  {
+    "name": "V_DIV_FIXUP_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 552,
+    "rdna35": 552,
+    "rdna4": 552
+  },
+  {
+    "name": "V_DIV_FMAS_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 567,
+    "rdna35": 567,
+    "rdna4": 567
+  },
+  {
+    "name": "V_DIV_FMAS_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 568,
+    "rdna35": 568,
+    "rdna4": 568
+  },
+  {
+    "name": "V_DIV_SCALE_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 764,
+    "rdna35": 764,
+    "rdna4": 764
+  },
+  {
+    "name": "V_DIV_SCALE_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 765,
+    "rdna35": 765,
+    "rdna4": 765
+  },
+  {
+    "name": "V_DOT2_BF16_BF16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 615,
+    "rdna35": 615,
+    "rdna4": 615
+  },
+  {
+    "name": "V_DOT2_F16_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 614,
+    "rdna35": 614,
+    "rdna4": 614
+  },
+  {
+    "name": "V_FMA_DX9_ZERO_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 521,
+    "rdna35": 521,
+    "rdna4": 521
+  },
+  {
+    "name": "V_FMA_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 584,
+    "rdna35": 584,
+    "rdna4": 584
+  },
+  {
+    "name": "V_FMA_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 531,
+    "rdna35": 531,
+    "rdna4": 531
+  },
+  {
+    "name": "V_FMA_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 532,
+    "rdna35": 532,
+    "rdna4": 532
+  },
+  {
+    "name": "V_LDEXP_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 796,
+    "rdna35": 796,
+    "rdna4": 796
+  },
+  {
+    "name": "V_LDEXP_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 811,
+    "rdna35": 811,
+    "rdna4": 811
+  },
+  {
+    "name": "V_LERP_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 533,
+    "rdna35": 533,
+    "rdna4": 533
+  },
+  {
+    "name": "V_LSHLREV_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 824,
+    "rdna35": 824,
+    "rdna4": 824
+  },
+  {
+    "name": "V_LSHLREV_B64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 828,
+    "rdna35": 828,
+    "rdna4": 287
+  },
+  {
+    "name": "V_LSHL_ADD_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 582,
+    "rdna35": 582,
+    "rdna4": 582
+  },
+  {
+    "name": "V_LSHL_OR_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 598,
+    "rdna35": 598,
+    "rdna4": 598
+  },
+  {
+    "name": "V_LSHRREV_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 825,
+    "rdna35": 825,
+    "rdna4": 825
+  },
+  {
+    "name": "V_LSHRREV_B64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 829,
+    "rdna35": 829,
+    "rdna4": 829
+  },
+  {
+    "name": "V_MAD_CO_I64_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 767
+  },
+  {
+    "name": "V_MAD_CO_U64_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 766
+  },
+  {
+    "name": "V_MAD_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 595,
+    "rdna35": 595,
+    "rdna4": 595
+  },
+  {
+    "name": "V_MAD_I32_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 602,
+    "rdna35": 602,
+    "rdna4": 602
+  },
+  {
+    "name": "V_MAD_I32_I24",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 522,
+    "rdna35": 522,
+    "rdna4": 522
+  },
+  {
+    "name": "V_MAD_I64_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 767,
+    "rdna35": 767
+  },
+  {
+    "name": "V_MAD_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 577,
+    "rdna35": 577,
+    "rdna4": 577
+  },
+  {
+    "name": "V_MAD_U32_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 601,
+    "rdna35": 601,
+    "rdna4": 601
+  },
+  {
+    "name": "V_MAD_U32_U24",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 523,
+    "rdna35": 523,
+    "rdna4": 523
+  },
+  {
+    "name": "V_MAD_U64_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 766,
+    "rdna35": 766
+  },
+  {
+    "name": "V_MAX3_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 588,
+    "rdna35": 588
+  },
+  {
+    "name": "V_MAX3_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 540,
+    "rdna35": 540
+  },
+  {
+    "name": "V_MAX3_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 589,
+    "rdna35": 589,
+    "rdna4": 589
+  },
+  {
+    "name": "V_MAX3_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 541,
+    "rdna35": 541,
+    "rdna4": 541
+  },
+  {
+    "name": "V_MAX3_NUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 556
+  },
+  {
+    "name": "V_MAX3_NUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 554
+  },
+  {
+    "name": "V_MAX3_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 590,
+    "rdna35": 590,
+    "rdna4": 590
+  },
+  {
+    "name": "V_MAX3_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 542,
+    "rdna35": 542,
+    "rdna4": 542
+  },
+  {
+    "name": "V_MAXIMUM3_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 560
+  },
+  {
+    "name": "V_MAXIMUM3_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 558
+  },
+  {
+    "name": "V_MAXIMUMMINIMUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 623
+  },
+  {
+    "name": "V_MAXIMUMMINIMUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 621
+  },
+  {
+    "name": "V_MAXIMUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 872
+  },
+  {
+    "name": "V_MAXIMUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 870
+  },
+  {
+    "name": "V_MAXIMUM_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 834
+  },
+  {
+    "name": "V_MAXMIN_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 608,
+    "rdna35": 608
+  },
+  {
+    "name": "V_MAXMIN_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 606,
+    "rdna35": 606
+  },
+  {
+    "name": "V_MAXMIN_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 612,
+    "rdna35": 612,
+    "rdna4": 612
+  },
+  {
+    "name": "V_MAXMIN_NUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 619
+  },
+  {
+    "name": "V_MAXMIN_NUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 617
+  },
+  {
+    "name": "V_MAXMIN_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 610,
+    "rdna35": 610,
+    "rdna4": 610
+  },
+  {
+    "name": "V_MAX_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 810,
+    "rdna35": 810
+  },
+  {
+    "name": "V_MAX_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 778,
+    "rdna35": 778,
+    "rdna4": 778
+  },
+  {
+    "name": "V_MAX_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 777,
+    "rdna35": 777,
+    "rdna4": 777
+  },
+  {
+    "name": "V_MBCNT_HI_U32_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 800,
+    "rdna35": 800,
+    "rdna4": 800
+  },
+  {
+    "name": "V_MBCNT_LO_U32_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 799,
+    "rdna35": 799,
+    "rdna4": 799
+  },
+  {
+    "name": "V_MED3_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 591,
+    "rdna35": 591
+  },
+  {
+    "name": "V_MED3_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 543,
+    "rdna35": 543
+  },
+  {
+    "name": "V_MED3_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 592,
+    "rdna35": 592,
+    "rdna4": 592
+  },
+  {
+    "name": "V_MED3_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 544,
+    "rdna35": 544,
+    "rdna4": 544
+  },
+  {
+    "name": "V_MED3_NUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 562
+  },
+  {
+    "name": "V_MED3_NUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 561
+  },
+  {
+    "name": "V_MED3_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 593,
+    "rdna35": 593,
+    "rdna4": 593
+  },
+  {
+    "name": "V_MED3_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 545,
+    "rdna35": 545,
+    "rdna4": 545
+  },
+  {
+    "name": "V_MIN3_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 585,
+    "rdna35": 585
+  },
+  {
+    "name": "V_MIN3_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 537,
+    "rdna35": 537
+  },
+  {
+    "name": "V_MIN3_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 586,
+    "rdna35": 586,
+    "rdna4": 586
+  },
+  {
+    "name": "V_MIN3_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 538,
+    "rdna35": 538,
+    "rdna4": 538
+  },
+  {
+    "name": "V_MIN3_NUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 555
+  },
+  {
+    "name": "V_MIN3_NUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 553
+  },
+  {
+    "name": "V_MIN3_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 587,
+    "rdna35": 587,
+    "rdna4": 587
+  },
+  {
+    "name": "V_MIN3_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 539,
+    "rdna35": 539,
+    "rdna4": 539
+  },
+  {
+    "name": "V_MINIMUM3_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 559
+  },
+  {
+    "name": "V_MINIMUM3_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 557
+  },
+  {
+    "name": "V_MINIMUMMAXIMUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 622
+  },
+  {
+    "name": "V_MINIMUMMAXIMUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 620
+  },
+  {
+    "name": "V_MINIMUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 871
+  },
+  {
+    "name": "V_MINIMUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 869
+  },
+  {
+    "name": "V_MINIMUM_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 833
+  },
+  {
+    "name": "V_MINMAX_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 609,
+    "rdna35": 609
+  },
+  {
+    "name": "V_MINMAX_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 607,
+    "rdna35": 607
+  },
+  {
+    "name": "V_MINMAX_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 613,
+    "rdna35": 613,
+    "rdna4": 613
+  },
+  {
+    "name": "V_MINMAX_NUM_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 618
+  },
+  {
+    "name": "V_MINMAX_NUM_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 616
+  },
+  {
+    "name": "V_MINMAX_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 611,
+    "rdna35": 611,
+    "rdna4": 611
+  },
+  {
+    "name": "V_MIN_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 809,
+    "rdna35": 809
+  },
+  {
+    "name": "V_MIN_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 780,
+    "rdna35": 780,
+    "rdna4": 780
+  },
+  {
+    "name": "V_MIN_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 779,
+    "rdna35": 779,
+    "rdna4": 779
+  },
+  {
+    "name": "V_MQSAD_PK_U16_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 571,
+    "rdna35": 571,
+    "rdna4": 571
+  },
+  {
+    "name": "V_MQSAD_U32_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 573,
+    "rdna35": 573,
+    "rdna4": 573
+  },
+  {
+    "name": "V_MSAD_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 569,
+    "rdna35": 569,
+    "rdna4": 569
+  },
+  {
+    "name": "V_MULLIT_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 536,
+    "rdna35": 536,
+    "rdna4": 536
+  },
+  {
+    "name": "V_MUL_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 808,
+    "rdna35": 808,
+    "rdna4": 262
+  },
+  {
+    "name": "V_MUL_HI_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 814,
+    "rdna35": 814,
+    "rdna4": 814
+  },
+  {
+    "name": "V_MUL_HI_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 813,
+    "rdna35": 813,
+    "rdna4": 813
+  },
+  {
+    "name": "V_MUL_LO_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 773,
+    "rdna35": 773,
+    "rdna4": 773
+  },
+  {
+    "name": "V_MUL_LO_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 812,
+    "rdna35": 812,
+    "rdna4": 812
+  },
+  {
+    "name": "V_OR3_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 600,
+    "rdna35": 600,
+    "rdna4": 600
+  },
+  {
+    "name": "V_OR_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 867,
+    "rdna35": 867,
+    "rdna4": 867
+  },
+  {
+    "name": "V_PACK_B32_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 785,
+    "rdna35": 785,
+    "rdna4": 785
+  },
+  {
+    "name": "V_PERMLANE16_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 603,
+    "rdna35": 603,
+    "rdna4": 603
+  },
+  {
+    "name": "V_PERMLANE16_VAR_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 783
+  },
+  {
+    "name": "V_PERMLANEX16_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 604,
+    "rdna35": 604,
+    "rdna4": 604
+  },
+  {
+    "name": "V_PERMLANEX16_VAR_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 784
+  },
+  {
+    "name": "V_PERM_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 580,
+    "rdna35": 580,
+    "rdna4": 580
+  },
+  {
+    "name": "V_QSAD_PK_U16_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 570,
+    "rdna35": 570,
+    "rdna4": 570
+  },
+  {
+    "name": "V_READLANE_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 864,
+    "rdna35": 864,
+    "rdna4": 864
+  },
+  {
+    "name": "V_SAD_HI_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 547,
+    "rdna35": 547,
+    "rdna4": 547
+  },
+  {
+    "name": "V_SAD_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 548,
+    "rdna35": 548,
+    "rdna4": 548
+  },
+  {
+    "name": "V_SAD_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 549,
+    "rdna35": 549,
+    "rdna4": 549
+  },
+  {
+    "name": "V_SAD_U8",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 546,
+    "rdna35": 546,
+    "rdna4": 546
+  },
+  {
+    "name": "V_SUBREV_CO_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 770,
+    "rdna35": 770,
+    "rdna4": 770
+  },
+  {
+    "name": "V_SUB_CO_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 769,
+    "rdna35": 769,
+    "rdna4": 769
+  },
+  {
+    "name": "V_SUB_NC_I16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 782,
+    "rdna35": 782,
+    "rdna4": 782
+  },
+  {
+    "name": "V_SUB_NC_I32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 805,
+    "rdna35": 805,
+    "rdna4": 805
+  },
+  {
+    "name": "V_SUB_NC_U16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 772,
+    "rdna35": 772,
+    "rdna4": 772
+  },
+  {
+    "name": "V_S_EXP_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 641
+  },
+  {
+    "name": "V_S_EXP_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 640
+  },
+  {
+    "name": "V_S_LOG_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 643
+  },
+  {
+    "name": "V_S_LOG_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 642
+  },
+  {
+    "name": "V_S_RCP_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 645
+  },
+  {
+    "name": "V_S_RCP_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 644
+  },
+  {
+    "name": "V_S_RSQ_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 647
+  },
+  {
+    "name": "V_S_RSQ_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 646
+  },
+  {
+    "name": "V_S_SQRT_F16",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 649
+  },
+  {
+    "name": "V_S_SQRT_F32",
+    "family": "VOP3 & VOP3SD",
+    "rdna4": 648
+  },
+  {
+    "name": "V_TRIG_PREOP_F64",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 815,
+    "rdna35": 815,
+    "rdna4": 815
+  },
+  {
+    "name": "V_WRITELANE_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 865,
+    "rdna35": 865,
+    "rdna4": 865
+  },
+  {
+    "name": "V_XAD_U32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 581,
+    "rdna35": 581,
+    "rdna4": 581
+  },
+  {
+    "name": "V_XOR3_B32",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 576,
+    "rdna35": 576,
+    "rdna4": 576
+  },
+  {
+    "name": "V_XOR_B16",
+    "family": "VOP3 & VOP3SD",
+    "rdna3": 868,
+    "rdna35": 868,
+    "rdna4": 868
+  },
+  {
+    "name": "V_DOT2_F32_BF16",
+    "family": "VOP3P",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "V_DOT2_F32_F16",
+    "family": "VOP3P",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "V_DOT4_F32_BF8_BF8",
+    "family": "VOP3P",
+    "rdna4": 39
+  },
+  {
+    "name": "V_DOT4_F32_BF8_FP8",
+    "family": "VOP3P",
+    "rdna4": 37
+  },
+  {
+    "name": "V_DOT4_F32_FP8_BF8",
+    "family": "VOP3P",
+    "rdna4": 36
+  },
+  {
+    "name": "V_DOT4_F32_FP8_FP8",
+    "family": "VOP3P",
+    "rdna4": 38
+  },
+  {
+    "name": "V_DOT4_I32_IU8",
+    "family": "VOP3P",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "V_DOT4_U32_U8",
+    "family": "VOP3P",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "V_DOT8_I32_IU4",
+    "family": "VOP3P",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "V_DOT8_U32_U4",
+    "family": "VOP3P",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "V_FMA_MIXHI_F16",
+    "family": "VOP3P",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "V_FMA_MIXLO_F16",
+    "family": "VOP3P",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "V_FMA_MIX_F32",
+    "family": "VOP3P",
+    "rdna3": 32,
+    "rdna35": 32,
+    "rdna4": 32
+  },
+  {
+    "name": "V_PK_ADD_F16",
+    "family": "VOP3P",
+    "rdna3": 15,
+    "rdna35": 15,
+    "rdna4": 15
+  },
+  {
+    "name": "V_PK_ADD_I16",
+    "family": "VOP3P",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "V_PK_ADD_U16",
+    "family": "VOP3P",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "V_PK_ASHRREV_I16",
+    "family": "VOP3P",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "V_PK_FMA_F16",
+    "family": "VOP3P",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "V_PK_LSHLREV_B16",
+    "family": "VOP3P",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "V_PK_LSHRREV_B16",
+    "family": "VOP3P",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "V_PK_MAD_I16",
+    "family": "VOP3P",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "V_PK_MAD_U16",
+    "family": "VOP3P",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "V_PK_MAXIMUM_F16",
+    "family": "VOP3P",
+    "rdna4": 30
+  },
+  {
+    "name": "V_PK_MAX_F16",
+    "family": "VOP3P",
+    "rdna3": 18,
+    "rdna35": 18
+  },
+  {
+    "name": "V_PK_MAX_I16",
+    "family": "VOP3P",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "V_PK_MAX_NUM_F16",
+    "family": "VOP3P",
+    "rdna4": 28
+  },
+  {
+    "name": "V_PK_MAX_U16",
+    "family": "VOP3P",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "V_PK_MINIMUM_F16",
+    "family": "VOP3P",
+    "rdna4": 29
+  },
+  {
+    "name": "V_PK_MIN_F16",
+    "family": "VOP3P",
+    "rdna3": 17,
+    "rdna35": 17
+  },
+  {
+    "name": "V_PK_MIN_I16",
+    "family": "VOP3P",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "V_PK_MIN_NUM_F16",
+    "family": "VOP3P",
+    "rdna4": 27
+  },
+  {
+    "name": "V_PK_MIN_U16",
+    "family": "VOP3P",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "V_PK_MUL_F16",
+    "family": "VOP3P",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "V_PK_MUL_LO_U16",
+    "family": "VOP3P",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "V_PK_SUB_I16",
+    "family": "VOP3P",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "V_PK_SUB_U16",
+    "family": "VOP3P",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "V_SWMMAC_BF16_16X16X32_BF16",
+    "family": "VOP3P",
+    "rdna4": 83
+  },
+  {
+    "name": "V_SWMMAC_F16_16X16X32_F16",
+    "family": "VOP3P",
+    "rdna4": 82
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_BF16",
+    "family": "VOP3P",
+    "rdna4": 81
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_BF8_BF8",
+    "family": "VOP3P",
+    "rdna4": 90
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_BF8_FP8",
+    "family": "VOP3P",
+    "rdna4": 89
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_F16",
+    "family": "VOP3P",
+    "rdna4": 80
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_FP8_BF8",
+    "family": "VOP3P",
+    "rdna4": 88
+  },
+  {
+    "name": "V_SWMMAC_F32_16X16X32_FP8_FP8",
+    "family": "VOP3P",
+    "rdna4": 87
+  },
+  {
+    "name": "V_SWMMAC_I32_16X16X32_IU4",
+    "family": "VOP3P",
+    "rdna4": 85
+  },
+  {
+    "name": "V_SWMMAC_I32_16X16X32_IU8",
+    "family": "VOP3P",
+    "rdna4": 84
+  },
+  {
+    "name": "V_SWMMAC_I32_16X16X64_IU4",
+    "family": "VOP3P",
+    "rdna4": 86
+  },
+  {
+    "name": "V_WMMA_BF16_16X16X16_BF16",
+    "family": "VOP3P",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "V_WMMA_F16_16X16X16_F16",
+    "family": "VOP3P",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_BF16",
+    "family": "VOP3P",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_BF8_BF8",
+    "family": "VOP3P",
+    "rdna4": 73
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_BF8_FP8",
+    "family": "VOP3P",
+    "rdna4": 72
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_F16",
+    "family": "VOP3P",
+    "rdna3": 64,
+    "rdna35": 64,
+    "rdna4": 64
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_FP8_BF8",
+    "family": "VOP3P",
+    "rdna4": 71
+  },
+  {
+    "name": "V_WMMA_F32_16X16X16_FP8_FP8",
+    "family": "VOP3P",
+    "rdna4": 70
+  },
+  {
+    "name": "V_WMMA_I32_16X16X16_IU4",
+    "family": "VOP3P",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "V_WMMA_I32_16X16X16_IU8",
+    "family": "VOP3P",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "V_WMMA_I32_16X16X32_IU4",
+    "family": "VOP3P",
+    "rdna4": 74
+  },
+  {
+    "name": "V_CMPX_CLASS_F16",
+    "family": "VOPC",
+    "rdna3": 253,
+    "rdna35": 253,
+    "rdna4": 253
+  },
+  {
+    "name": "V_CMPX_CLASS_F32",
+    "family": "VOPC",
+    "rdna3": 254,
+    "rdna35": 254,
+    "rdna4": 254
+  },
+  {
+    "name": "V_CMPX_CLASS_F64",
+    "family": "VOPC",
+    "rdna3": 255,
+    "rdna35": 255,
+    "rdna4": 255
+  },
+  {
+    "name": "V_CMPX_EQ_F16",
+    "family": "VOPC",
+    "rdna3": 130,
+    "rdna35": 130,
+    "rdna4": 130
+  },
+  {
+    "name": "V_CMPX_EQ_F32",
+    "family": "VOPC",
+    "rdna3": 146,
+    "rdna35": 146,
+    "rdna4": 146
+  },
+  {
+    "name": "V_CMPX_EQ_F64",
+    "family": "VOPC",
+    "rdna3": 162,
+    "rdna35": 162,
+    "rdna4": 162
+  },
+  {
+    "name": "V_CMPX_EQ_I16",
+    "family": "VOPC",
+    "rdna3": 178,
+    "rdna35": 178,
+    "rdna4": 178
+  },
+  {
+    "name": "V_CMPX_EQ_I32",
+    "family": "VOPC",
+    "rdna3": 194,
+    "rdna35": 194,
+    "rdna4": 194
+  },
+  {
+    "name": "V_CMPX_EQ_I64",
+    "family": "VOPC",
+    "rdna3": 210,
+    "rdna35": 210,
+    "rdna4": 210
+  },
+  {
+    "name": "V_CMPX_EQ_U16",
+    "family": "VOPC",
+    "rdna3": 186,
+    "rdna35": 186,
+    "rdna4": 186
+  },
+  {
+    "name": "V_CMPX_EQ_U32",
+    "family": "VOPC",
+    "rdna3": 202,
+    "rdna35": 202,
+    "rdna4": 202
+  },
+  {
+    "name": "V_CMPX_EQ_U64",
+    "family": "VOPC",
+    "rdna3": 218,
+    "rdna35": 218,
+    "rdna4": 218
+  },
+  {
+    "name": "V_CMPX_F_F16",
+    "family": "VOPC",
+    "rdna3": 128,
+    "rdna35": 128
+  },
+  {
+    "name": "V_CMPX_F_F32",
+    "family": "VOPC",
+    "rdna3": 144,
+    "rdna35": 144
+  },
+  {
+    "name": "V_CMPX_F_F64",
+    "family": "VOPC",
+    "rdna3": 160,
+    "rdna35": 160
+  },
+  {
+    "name": "V_CMPX_F_I32",
+    "family": "VOPC",
+    "rdna3": 192,
+    "rdna35": 192
+  },
+  {
+    "name": "V_CMPX_F_I64",
+    "family": "VOPC",
+    "rdna3": 208,
+    "rdna35": 208
+  },
+  {
+    "name": "V_CMPX_F_U32",
+    "family": "VOPC",
+    "rdna3": 200,
+    "rdna35": 200
+  },
+  {
+    "name": "V_CMPX_F_U64",
+    "family": "VOPC",
+    "rdna3": 216,
+    "rdna35": 216
+  },
+  {
+    "name": "V_CMPX_GE_F16",
+    "family": "VOPC",
+    "rdna3": 134,
+    "rdna35": 134,
+    "rdna4": 134
+  },
+  {
+    "name": "V_CMPX_GE_F32",
+    "family": "VOPC",
+    "rdna3": 150,
+    "rdna35": 150,
+    "rdna4": 150
+  },
+  {
+    "name": "V_CMPX_GE_F64",
+    "family": "VOPC",
+    "rdna3": 166,
+    "rdna35": 166,
+    "rdna4": 166
+  },
+  {
+    "name": "V_CMPX_GE_I16",
+    "family": "VOPC",
+    "rdna3": 182,
+    "rdna35": 182,
+    "rdna4": 182
+  },
+  {
+    "name": "V_CMPX_GE_I32",
+    "family": "VOPC",
+    "rdna3": 198,
+    "rdna35": 198,
+    "rdna4": 198
+  },
+  {
+    "name": "V_CMPX_GE_I64",
+    "family": "VOPC",
+    "rdna3": 214,
+    "rdna35": 214,
+    "rdna4": 214
+  },
+  {
+    "name": "V_CMPX_GE_U16",
+    "family": "VOPC",
+    "rdna3": 190,
+    "rdna35": 190,
+    "rdna4": 190
+  },
+  {
+    "name": "V_CMPX_GE_U32",
+    "family": "VOPC",
+    "rdna3": 206,
+    "rdna35": 206,
+    "rdna4": 206
+  },
+  {
+    "name": "V_CMPX_GE_U64",
+    "family": "VOPC",
+    "rdna3": 222,
+    "rdna35": 222,
+    "rdna4": 222
+  },
+  {
+    "name": "V_CMPX_GT_F16",
+    "family": "VOPC",
+    "rdna3": 132,
+    "rdna35": 132,
+    "rdna4": 132
+  },
+  {
+    "name": "V_CMPX_GT_F32",
+    "family": "VOPC",
+    "rdna3": 148,
+    "rdna35": 148,
+    "rdna4": 148
+  },
+  {
+    "name": "V_CMPX_GT_F64",
+    "family": "VOPC",
+    "rdna3": 164,
+    "rdna35": 164,
+    "rdna4": 164
+  },
+  {
+    "name": "V_CMPX_GT_I16",
+    "family": "VOPC",
+    "rdna3": 180,
+    "rdna35": 180,
+    "rdna4": 180
+  },
+  {
+    "name": "V_CMPX_GT_I32",
+    "family": "VOPC",
+    "rdna3": 196,
+    "rdna35": 196,
+    "rdna4": 196
+  },
+  {
+    "name": "V_CMPX_GT_I64",
+    "family": "VOPC",
+    "rdna3": 212,
+    "rdna35": 212,
+    "rdna4": 212
+  },
+  {
+    "name": "V_CMPX_GT_U16",
+    "family": "VOPC",
+    "rdna3": 188,
+    "rdna35": 188,
+    "rdna4": 188
+  },
+  {
+    "name": "V_CMPX_GT_U32",
+    "family": "VOPC",
+    "rdna3": 204,
+    "rdna35": 204,
+    "rdna4": 204
+  },
+  {
+    "name": "V_CMPX_GT_U64",
+    "family": "VOPC",
+    "rdna3": 220,
+    "rdna35": 220,
+    "rdna4": 220
+  },
+  {
+    "name": "V_CMPX_LE_F16",
+    "family": "VOPC",
+    "rdna3": 131,
+    "rdna35": 131,
+    "rdna4": 131
+  },
+  {
+    "name": "V_CMPX_LE_F32",
+    "family": "VOPC",
+    "rdna3": 147,
+    "rdna35": 147,
+    "rdna4": 147
+  },
+  {
+    "name": "V_CMPX_LE_F64",
+    "family": "VOPC",
+    "rdna3": 163,
+    "rdna35": 163,
+    "rdna4": 163
+  },
+  {
+    "name": "V_CMPX_LE_I16",
+    "family": "VOPC",
+    "rdna3": 179,
+    "rdna35": 179,
+    "rdna4": 179
+  },
+  {
+    "name": "V_CMPX_LE_I32",
+    "family": "VOPC",
+    "rdna3": 195,
+    "rdna35": 195,
+    "rdna4": 195
+  },
+  {
+    "name": "V_CMPX_LE_I64",
+    "family": "VOPC",
+    "rdna3": 211,
+    "rdna35": 211,
+    "rdna4": 211
+  },
+  {
+    "name": "V_CMPX_LE_U16",
+    "family": "VOPC",
+    "rdna3": 187,
+    "rdna35": 187,
+    "rdna4": 187
+  },
+  {
+    "name": "V_CMPX_LE_U32",
+    "family": "VOPC",
+    "rdna3": 203,
+    "rdna35": 203,
+    "rdna4": 203
+  },
+  {
+    "name": "V_CMPX_LE_U64",
+    "family": "VOPC",
+    "rdna3": 219,
+    "rdna35": 219,
+    "rdna4": 219
+  },
+  {
+    "name": "V_CMPX_LG_F16",
+    "family": "VOPC",
+    "rdna3": 133,
+    "rdna35": 133,
+    "rdna4": 133
+  },
+  {
+    "name": "V_CMPX_LG_F32",
+    "family": "VOPC",
+    "rdna3": 149,
+    "rdna35": 149,
+    "rdna4": 149
+  },
+  {
+    "name": "V_CMPX_LG_F64",
+    "family": "VOPC",
+    "rdna3": 165,
+    "rdna35": 165,
+    "rdna4": 165
+  },
+  {
+    "name": "V_CMPX_LT_F16",
+    "family": "VOPC",
+    "rdna3": 129,
+    "rdna35": 129,
+    "rdna4": 129
+  },
+  {
+    "name": "V_CMPX_LT_F32",
+    "family": "VOPC",
+    "rdna3": 145,
+    "rdna35": 145,
+    "rdna4": 145
+  },
+  {
+    "name": "V_CMPX_LT_F64",
+    "family": "VOPC",
+    "rdna3": 161,
+    "rdna35": 161,
+    "rdna4": 161
+  },
+  {
+    "name": "V_CMPX_LT_I16",
+    "family": "VOPC",
+    "rdna3": 177,
+    "rdna35": 177,
+    "rdna4": 177
+  },
+  {
+    "name": "V_CMPX_LT_I32",
+    "family": "VOPC",
+    "rdna3": 193,
+    "rdna35": 193,
+    "rdna4": 193
+  },
+  {
+    "name": "V_CMPX_LT_I64",
+    "family": "VOPC",
+    "rdna3": 209,
+    "rdna35": 209,
+    "rdna4": 209
+  },
+  {
+    "name": "V_CMPX_LT_U16",
+    "family": "VOPC",
+    "rdna3": 185,
+    "rdna35": 185,
+    "rdna4": 185
+  },
+  {
+    "name": "V_CMPX_LT_U32",
+    "family": "VOPC",
+    "rdna3": 201,
+    "rdna35": 201,
+    "rdna4": 201
+  },
+  {
+    "name": "V_CMPX_LT_U64",
+    "family": "VOPC",
+    "rdna3": 217,
+    "rdna35": 217,
+    "rdna4": 217
+  },
+  {
+    "name": "V_CMPX_NEQ_F16",
+    "family": "VOPC",
+    "rdna3": 141,
+    "rdna35": 141,
+    "rdna4": 141
+  },
+  {
+    "name": "V_CMPX_NEQ_F32",
+    "family": "VOPC",
+    "rdna3": 157,
+    "rdna35": 157,
+    "rdna4": 157
+  },
+  {
+    "name": "V_CMPX_NEQ_F64",
+    "family": "VOPC",
+    "rdna3": 173,
+    "rdna35": 173,
+    "rdna4": 173
+  },
+  {
+    "name": "V_CMPX_NE_I16",
+    "family": "VOPC",
+    "rdna3": 181,
+    "rdna35": 181,
+    "rdna4": 181
+  },
+  {
+    "name": "V_CMPX_NE_I32",
+    "family": "VOPC",
+    "rdna3": 197,
+    "rdna35": 197,
+    "rdna4": 197
+  },
+  {
+    "name": "V_CMPX_NE_I64",
+    "family": "VOPC",
+    "rdna3": 213,
+    "rdna35": 213,
+    "rdna4": 213
+  },
+  {
+    "name": "V_CMPX_NE_U16",
+    "family": "VOPC",
+    "rdna3": 189,
+    "rdna35": 189,
+    "rdna4": 189
+  },
+  {
+    "name": "V_CMPX_NE_U32",
+    "family": "VOPC",
+    "rdna3": 205,
+    "rdna35": 205,
+    "rdna4": 205
+  },
+  {
+    "name": "V_CMPX_NE_U64",
+    "family": "VOPC",
+    "rdna3": 221,
+    "rdna35": 221,
+    "rdna4": 221
+  },
+  {
+    "name": "V_CMPX_NGE_F16",
+    "family": "VOPC",
+    "rdna3": 137,
+    "rdna35": 137,
+    "rdna4": 137
+  },
+  {
+    "name": "V_CMPX_NGE_F32",
+    "family": "VOPC",
+    "rdna3": 153,
+    "rdna35": 153,
+    "rdna4": 153
+  },
+  {
+    "name": "V_CMPX_NGE_F64",
+    "family": "VOPC",
+    "rdna3": 169,
+    "rdna35": 169,
+    "rdna4": 169
+  },
+  {
+    "name": "V_CMPX_NGT_F16",
+    "family": "VOPC",
+    "rdna3": 139,
+    "rdna35": 139,
+    "rdna4": 139
+  },
+  {
+    "name": "V_CMPX_NGT_F32",
+    "family": "VOPC",
+    "rdna3": 155,
+    "rdna35": 155,
+    "rdna4": 155
+  },
+  {
+    "name": "V_CMPX_NGT_F64",
+    "family": "VOPC",
+    "rdna3": 171,
+    "rdna35": 171,
+    "rdna4": 171
+  },
+  {
+    "name": "V_CMPX_NLE_F16",
+    "family": "VOPC",
+    "rdna3": 140,
+    "rdna35": 140,
+    "rdna4": 140
+  },
+  {
+    "name": "V_CMPX_NLE_F32",
+    "family": "VOPC",
+    "rdna3": 156,
+    "rdna35": 156,
+    "rdna4": 156
+  },
+  {
+    "name": "V_CMPX_NLE_F64",
+    "family": "VOPC",
+    "rdna3": 172,
+    "rdna35": 172,
+    "rdna4": 172
+  },
+  {
+    "name": "V_CMPX_NLG_F16",
+    "family": "VOPC",
+    "rdna3": 138,
+    "rdna35": 138,
+    "rdna4": 138
+  },
+  {
+    "name": "V_CMPX_NLG_F32",
+    "family": "VOPC",
+    "rdna3": 154,
+    "rdna35": 154,
+    "rdna4": 154
+  },
+  {
+    "name": "V_CMPX_NLG_F64",
+    "family": "VOPC",
+    "rdna3": 170,
+    "rdna35": 170,
+    "rdna4": 170
+  },
+  {
+    "name": "V_CMPX_NLT_F16",
+    "family": "VOPC",
+    "rdna3": 142,
+    "rdna35": 142,
+    "rdna4": 142
+  },
+  {
+    "name": "V_CMPX_NLT_F32",
+    "family": "VOPC",
+    "rdna3": 158,
+    "rdna35": 158,
+    "rdna4": 158
+  },
+  {
+    "name": "V_CMPX_NLT_F64",
+    "family": "VOPC",
+    "rdna3": 174,
+    "rdna35": 174,
+    "rdna4": 174
+  },
+  {
+    "name": "V_CMPX_O_F16",
+    "family": "VOPC",
+    "rdna3": 135,
+    "rdna35": 135,
+    "rdna4": 135
+  },
+  {
+    "name": "V_CMPX_O_F32",
+    "family": "VOPC",
+    "rdna3": 151,
+    "rdna35": 151,
+    "rdna4": 151
+  },
+  {
+    "name": "V_CMPX_O_F64",
+    "family": "VOPC",
+    "rdna3": 167,
+    "rdna35": 167,
+    "rdna4": 167
+  },
+  {
+    "name": "V_CMPX_T_F16",
+    "family": "VOPC",
+    "rdna3": 143,
+    "rdna35": 143
+  },
+  {
+    "name": "V_CMPX_T_F32",
+    "family": "VOPC",
+    "rdna3": 159,
+    "rdna35": 159
+  },
+  {
+    "name": "V_CMPX_T_F64",
+    "family": "VOPC",
+    "rdna3": 175,
+    "rdna35": 175
+  },
+  {
+    "name": "V_CMPX_T_I32",
+    "family": "VOPC",
+    "rdna3": 199,
+    "rdna35": 199
+  },
+  {
+    "name": "V_CMPX_T_I64",
+    "family": "VOPC",
+    "rdna3": 215,
+    "rdna35": 215
+  },
+  {
+    "name": "V_CMPX_T_U32",
+    "family": "VOPC",
+    "rdna3": 207,
+    "rdna35": 207
+  },
+  {
+    "name": "V_CMPX_T_U64",
+    "family": "VOPC",
+    "rdna3": 223,
+    "rdna35": 223
+  },
+  {
+    "name": "V_CMPX_U_F16",
+    "family": "VOPC",
+    "rdna3": 136,
+    "rdna35": 136,
+    "rdna4": 136
+  },
+  {
+    "name": "V_CMPX_U_F32",
+    "family": "VOPC",
+    "rdna3": 152,
+    "rdna35": 152,
+    "rdna4": 152
+  },
+  {
+    "name": "V_CMPX_U_F64",
+    "family": "VOPC",
+    "rdna3": 168,
+    "rdna35": 168,
+    "rdna4": 168
+  },
+  {
+    "name": "V_CMP_CLASS_F16",
+    "family": "VOPC",
+    "rdna3": 125,
+    "rdna35": 125,
+    "rdna4": 125
+  },
+  {
+    "name": "V_CMP_CLASS_F32",
+    "family": "VOPC",
+    "rdna3": 126,
+    "rdna35": 126,
+    "rdna4": 126
+  },
+  {
+    "name": "V_CMP_CLASS_F64",
+    "family": "VOPC",
+    "rdna3": 127,
+    "rdna35": 127,
+    "rdna4": 127
+  },
+  {
+    "name": "V_CMP_EQ_F16",
+    "family": "VOPC",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "V_CMP_EQ_F32",
+    "family": "VOPC",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "V_CMP_EQ_F64",
+    "family": "VOPC",
+    "rdna3": 34,
+    "rdna35": 34,
+    "rdna4": 34
+  },
+  {
+    "name": "V_CMP_EQ_I16",
+    "family": "VOPC",
+    "rdna3": 50,
+    "rdna35": 50,
+    "rdna4": 50
+  },
+  {
+    "name": "V_CMP_EQ_I32",
+    "family": "VOPC",
+    "rdna3": 66,
+    "rdna35": 66,
+    "rdna4": 66
+  },
+  {
+    "name": "V_CMP_EQ_I64",
+    "family": "VOPC",
+    "rdna3": 82,
+    "rdna35": 82,
+    "rdna4": 82
+  },
+  {
+    "name": "V_CMP_EQ_U16",
+    "family": "VOPC",
+    "rdna3": 58,
+    "rdna35": 58,
+    "rdna4": 58
+  },
+  {
+    "name": "V_CMP_EQ_U32",
+    "family": "VOPC",
+    "rdna3": 74,
+    "rdna35": 74,
+    "rdna4": 74
+  },
+  {
+    "name": "V_CMP_EQ_U64",
+    "family": "VOPC",
+    "rdna3": 90,
+    "rdna35": 90,
+    "rdna4": 90
+  },
+  {
+    "name": "V_CMP_F_F16",
+    "family": "VOPC",
+    "rdna3": 0,
+    "rdna35": 0
+  },
+  {
+    "name": "V_CMP_F_F32",
+    "family": "VOPC",
+    "rdna3": 16,
+    "rdna35": 16
+  },
+  {
+    "name": "V_CMP_F_F64",
+    "family": "VOPC",
+    "rdna3": 32,
+    "rdna35": 32
+  },
+  {
+    "name": "V_CMP_F_I32",
+    "family": "VOPC",
+    "rdna3": 64,
+    "rdna35": 64
+  },
+  {
+    "name": "V_CMP_F_I64",
+    "family": "VOPC",
+    "rdna3": 80,
+    "rdna35": 80
+  },
+  {
+    "name": "V_CMP_F_U32",
+    "family": "VOPC",
+    "rdna3": 72,
+    "rdna35": 72
+  },
+  {
+    "name": "V_CMP_F_U64",
+    "family": "VOPC",
+    "rdna3": 88,
+    "rdna35": 88
+  },
+  {
+    "name": "V_CMP_GE_F16",
+    "family": "VOPC",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "V_CMP_GE_F32",
+    "family": "VOPC",
+    "rdna3": 22,
+    "rdna35": 22,
+    "rdna4": 22
+  },
+  {
+    "name": "V_CMP_GE_F64",
+    "family": "VOPC",
+    "rdna3": 38,
+    "rdna35": 38,
+    "rdna4": 38
+  },
+  {
+    "name": "V_CMP_GE_I16",
+    "family": "VOPC",
+    "rdna3": 54,
+    "rdna35": 54,
+    "rdna4": 54
+  },
+  {
+    "name": "V_CMP_GE_I32",
+    "family": "VOPC",
+    "rdna3": 70,
+    "rdna35": 70,
+    "rdna4": 70
+  },
+  {
+    "name": "V_CMP_GE_I64",
+    "family": "VOPC",
+    "rdna3": 86,
+    "rdna35": 86,
+    "rdna4": 86
+  },
+  {
+    "name": "V_CMP_GE_U16",
+    "family": "VOPC",
+    "rdna3": 62,
+    "rdna35": 62,
+    "rdna4": 62
+  },
+  {
+    "name": "V_CMP_GE_U32",
+    "family": "VOPC",
+    "rdna3": 78,
+    "rdna35": 78,
+    "rdna4": 78
+  },
+  {
+    "name": "V_CMP_GE_U64",
+    "family": "VOPC",
+    "rdna3": 94,
+    "rdna35": 94,
+    "rdna4": 94
+  },
+  {
+    "name": "V_CMP_GT_F16",
+    "family": "VOPC",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "V_CMP_GT_F32",
+    "family": "VOPC",
+    "rdna3": 20,
+    "rdna35": 20,
+    "rdna4": 20
+  },
+  {
+    "name": "V_CMP_GT_F64",
+    "family": "VOPC",
+    "rdna3": 36,
+    "rdna35": 36,
+    "rdna4": 36
+  },
+  {
+    "name": "V_CMP_GT_I16",
+    "family": "VOPC",
+    "rdna3": 52,
+    "rdna35": 52,
+    "rdna4": 52
+  },
+  {
+    "name": "V_CMP_GT_I32",
+    "family": "VOPC",
+    "rdna3": 68,
+    "rdna35": 68,
+    "rdna4": 68
+  },
+  {
+    "name": "V_CMP_GT_I64",
+    "family": "VOPC",
+    "rdna3": 84,
+    "rdna35": 84,
+    "rdna4": 84
+  },
+  {
+    "name": "V_CMP_GT_U16",
+    "family": "VOPC",
+    "rdna3": 60,
+    "rdna35": 60,
+    "rdna4": 60
+  },
+  {
+    "name": "V_CMP_GT_U32",
+    "family": "VOPC",
+    "rdna3": 76,
+    "rdna35": 76,
+    "rdna4": 76
+  },
+  {
+    "name": "V_CMP_GT_U64",
+    "family": "VOPC",
+    "rdna3": 92,
+    "rdna35": 92,
+    "rdna4": 92
+  },
+  {
+    "name": "V_CMP_LE_F16",
+    "family": "VOPC",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "V_CMP_LE_F32",
+    "family": "VOPC",
+    "rdna3": 19,
+    "rdna35": 19,
+    "rdna4": 19
+  },
+  {
+    "name": "V_CMP_LE_F64",
+    "family": "VOPC",
+    "rdna3": 35,
+    "rdna35": 35,
+    "rdna4": 35
+  },
+  {
+    "name": "V_CMP_LE_I16",
+    "family": "VOPC",
+    "rdna3": 51,
+    "rdna35": 51,
+    "rdna4": 51
+  },
+  {
+    "name": "V_CMP_LE_I32",
+    "family": "VOPC",
+    "rdna3": 67,
+    "rdna35": 67,
+    "rdna4": 67
+  },
+  {
+    "name": "V_CMP_LE_I64",
+    "family": "VOPC",
+    "rdna3": 83,
+    "rdna35": 83,
+    "rdna4": 83
+  },
+  {
+    "name": "V_CMP_LE_U16",
+    "family": "VOPC",
+    "rdna3": 59,
+    "rdna35": 59,
+    "rdna4": 59
+  },
+  {
+    "name": "V_CMP_LE_U32",
+    "family": "VOPC",
+    "rdna3": 75,
+    "rdna35": 75,
+    "rdna4": 75
+  },
+  {
+    "name": "V_CMP_LE_U64",
+    "family": "VOPC",
+    "rdna3": 91,
+    "rdna35": 91,
+    "rdna4": 91
+  },
+  {
+    "name": "V_CMP_LG_F16",
+    "family": "VOPC",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  },
+  {
+    "name": "V_CMP_LG_F32",
+    "family": "VOPC",
+    "rdna3": 21,
+    "rdna35": 21,
+    "rdna4": 21
+  },
+  {
+    "name": "V_CMP_LG_F64",
+    "family": "VOPC",
+    "rdna3": 37,
+    "rdna35": 37,
+    "rdna4": 37
+  },
+  {
+    "name": "V_CMP_LT_F16",
+    "family": "VOPC",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "V_CMP_LT_F32",
+    "family": "VOPC",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "V_CMP_LT_F64",
+    "family": "VOPC",
+    "rdna3": 33,
+    "rdna35": 33,
+    "rdna4": 33
+  },
+  {
+    "name": "V_CMP_LT_I16",
+    "family": "VOPC",
+    "rdna3": 49,
+    "rdna35": 49,
+    "rdna4": 49
+  },
+  {
+    "name": "V_CMP_LT_I32",
+    "family": "VOPC",
+    "rdna3": 65,
+    "rdna35": 65,
+    "rdna4": 65
+  },
+  {
+    "name": "V_CMP_LT_I64",
+    "family": "VOPC",
+    "rdna3": 81,
+    "rdna35": 81,
+    "rdna4": 81
+  },
+  {
+    "name": "V_CMP_LT_U16",
+    "family": "VOPC",
+    "rdna3": 57,
+    "rdna35": 57,
+    "rdna4": 57
+  },
+  {
+    "name": "V_CMP_LT_U32",
+    "family": "VOPC",
+    "rdna3": 73,
+    "rdna35": 73,
+    "rdna4": 73
+  },
+  {
+    "name": "V_CMP_LT_U64",
+    "family": "VOPC",
+    "rdna3": 89,
+    "rdna35": 89,
+    "rdna4": 89
+  },
+  {
+    "name": "V_CMP_NEQ_F16",
+    "family": "VOPC",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "V_CMP_NEQ_F32",
+    "family": "VOPC",
+    "rdna3": 29,
+    "rdna35": 29,
+    "rdna4": 29
+  },
+  {
+    "name": "V_CMP_NEQ_F64",
+    "family": "VOPC",
+    "rdna3": 45,
+    "rdna35": 45,
+    "rdna4": 45
+  },
+  {
+    "name": "V_CMP_NE_I16",
+    "family": "VOPC",
+    "rdna3": 53,
+    "rdna35": 53,
+    "rdna4": 53
+  },
+  {
+    "name": "V_CMP_NE_I32",
+    "family": "VOPC",
+    "rdna3": 69,
+    "rdna35": 69,
+    "rdna4": 69
+  },
+  {
+    "name": "V_CMP_NE_I64",
+    "family": "VOPC",
+    "rdna3": 85,
+    "rdna35": 85,
+    "rdna4": 85
+  },
+  {
+    "name": "V_CMP_NE_U16",
+    "family": "VOPC",
+    "rdna3": 61,
+    "rdna35": 61,
+    "rdna4": 61
+  },
+  {
+    "name": "V_CMP_NE_U32",
+    "family": "VOPC",
+    "rdna3": 77,
+    "rdna35": 77,
+    "rdna4": 77
+  },
+  {
+    "name": "V_CMP_NE_U64",
+    "family": "VOPC",
+    "rdna3": 93,
+    "rdna35": 93,
+    "rdna4": 93
+  },
+  {
+    "name": "V_CMP_NGE_F16",
+    "family": "VOPC",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "V_CMP_NGE_F32",
+    "family": "VOPC",
+    "rdna3": 25,
+    "rdna35": 25,
+    "rdna4": 25
+  },
+  {
+    "name": "V_CMP_NGE_F64",
+    "family": "VOPC",
+    "rdna3": 41,
+    "rdna35": 41,
+    "rdna4": 41
+  },
+  {
+    "name": "V_CMP_NGT_F16",
+    "family": "VOPC",
+    "rdna3": 11,
+    "rdna35": 11,
+    "rdna4": 11
+  },
+  {
+    "name": "V_CMP_NGT_F32",
+    "family": "VOPC",
+    "rdna3": 27,
+    "rdna35": 27,
+    "rdna4": 27
+  },
+  {
+    "name": "V_CMP_NGT_F64",
+    "family": "VOPC",
+    "rdna3": 43,
+    "rdna35": 43,
+    "rdna4": 43
+  },
+  {
+    "name": "V_CMP_NLE_F16",
+    "family": "VOPC",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "V_CMP_NLE_F32",
+    "family": "VOPC",
+    "rdna3": 28,
+    "rdna35": 28,
+    "rdna4": 28
+  },
+  {
+    "name": "V_CMP_NLE_F64",
+    "family": "VOPC",
+    "rdna3": 44,
+    "rdna35": 44,
+    "rdna4": 44
+  },
+  {
+    "name": "V_CMP_NLG_F16",
+    "family": "VOPC",
+    "rdna3": 10,
+    "rdna35": 10,
+    "rdna4": 10
+  },
+  {
+    "name": "V_CMP_NLG_F32",
+    "family": "VOPC",
+    "rdna3": 26,
+    "rdna35": 26,
+    "rdna4": 26
+  },
+  {
+    "name": "V_CMP_NLG_F64",
+    "family": "VOPC",
+    "rdna3": 42,
+    "rdna35": 42,
+    "rdna4": 42
+  },
+  {
+    "name": "V_CMP_NLT_F16",
+    "family": "VOPC",
+    "rdna3": 14,
+    "rdna35": 14,
+    "rdna4": 14
+  },
+  {
+    "name": "V_CMP_NLT_F32",
+    "family": "VOPC",
+    "rdna3": 30,
+    "rdna35": 30,
+    "rdna4": 30
+  },
+  {
+    "name": "V_CMP_NLT_F64",
+    "family": "VOPC",
+    "rdna3": 46,
+    "rdna35": 46,
+    "rdna4": 46
+  },
+  {
+    "name": "V_CMP_O_F16",
+    "family": "VOPC",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "V_CMP_O_F32",
+    "family": "VOPC",
+    "rdna3": 23,
+    "rdna35": 23,
+    "rdna4": 23
+  },
+  {
+    "name": "V_CMP_O_F64",
+    "family": "VOPC",
+    "rdna3": 39,
+    "rdna35": 39,
+    "rdna4": 39
+  },
+  {
+    "name": "V_CMP_T_F16",
+    "family": "VOPC",
+    "rdna3": 15,
+    "rdna35": 15
+  },
+  {
+    "name": "V_CMP_T_F32",
+    "family": "VOPC",
+    "rdna3": 31,
+    "rdna35": 31
+  },
+  {
+    "name": "V_CMP_T_F64",
+    "family": "VOPC",
+    "rdna3": 47,
+    "rdna35": 47
+  },
+  {
+    "name": "V_CMP_T_I32",
+    "family": "VOPC",
+    "rdna3": 71,
+    "rdna35": 71
+  },
+  {
+    "name": "V_CMP_T_I64",
+    "family": "VOPC",
+    "rdna3": 87,
+    "rdna35": 87
+  },
+  {
+    "name": "V_CMP_T_U32",
+    "family": "VOPC",
+    "rdna3": 79,
+    "rdna35": 79
+  },
+  {
+    "name": "V_CMP_T_U64",
+    "family": "VOPC",
+    "rdna3": 95,
+    "rdna35": 95
+  },
+  {
+    "name": "V_CMP_U_F16",
+    "family": "VOPC",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "V_CMP_U_F32",
+    "family": "VOPC",
+    "rdna3": 24,
+    "rdna35": 24,
+    "rdna4": 24
+  },
+  {
+    "name": "V_CMP_U_F64",
+    "family": "VOPC",
+    "rdna3": 40,
+    "rdna35": 40,
+    "rdna4": 40
+  },
+  {
+    "name": "V_DUAL_ADD_F32",
+    "family": "VOPD",
+    "rdna3": 4,
+    "rdna35": 4,
+    "rdna4": 4
+  },
+  {
+    "name": "V_DUAL_ADD_NC_U32",
+    "family": "VOPD",
+    "rdna3": 16,
+    "rdna35": 16,
+    "rdna4": 16
+  },
+  {
+    "name": "V_DUAL_AND_B32",
+    "family": "VOPD",
+    "rdna3": 18,
+    "rdna35": 18,
+    "rdna4": 18
+  },
+  {
+    "name": "V_DUAL_CNDMASK_B32",
+    "family": "VOPD",
+    "rdna3": 9,
+    "rdna35": 9,
+    "rdna4": 9
+  },
+  {
+    "name": "V_DUAL_DOT2ACC_F32_BF16",
+    "family": "VOPD",
+    "rdna3": 13,
+    "rdna35": 13,
+    "rdna4": 13
+  },
+  {
+    "name": "V_DUAL_DOT2ACC_F32_F16",
+    "family": "VOPD",
+    "rdna3": 12,
+    "rdna35": 12,
+    "rdna4": 12
+  },
+  {
+    "name": "V_DUAL_FMAAK_F32",
+    "family": "VOPD",
+    "rdna3": 1,
+    "rdna35": 1,
+    "rdna4": 1
+  },
+  {
+    "name": "V_DUAL_FMAC_F32",
+    "family": "VOPD",
+    "rdna3": 0,
+    "rdna35": 0,
+    "rdna4": 0
+  },
+  {
+    "name": "V_DUAL_FMAMK_F32",
+    "family": "VOPD",
+    "rdna3": 2,
+    "rdna35": 2,
+    "rdna4": 2
+  },
+  {
+    "name": "V_DUAL_LSHLREV_B32",
+    "family": "VOPD",
+    "rdna3": 17,
+    "rdna35": 17,
+    "rdna4": 17
+  },
+  {
+    "name": "V_DUAL_MAX_F32",
+    "family": "VOPD",
+    "rdna3": 10,
+    "rdna35": 10
+  },
+  {
+    "name": "V_DUAL_MAX_NUM_F32",
+    "family": "VOPD",
+    "rdna4": 10
+  },
+  {
+    "name": "V_DUAL_MIN_F32",
+    "family": "VOPD",
+    "rdna3": 11,
+    "rdna35": 11
+  },
+  {
+    "name": "V_DUAL_MIN_NUM_F32",
+    "family": "VOPD",
+    "rdna4": 11
+  },
+  {
+    "name": "V_DUAL_MOV_B32",
+    "family": "VOPD",
+    "rdna3": 8,
+    "rdna35": 8,
+    "rdna4": 8
+  },
+  {
+    "name": "V_DUAL_MUL_DX9_ZERO_F32",
+    "family": "VOPD",
+    "rdna3": 7,
+    "rdna35": 7,
+    "rdna4": 7
+  },
+  {
+    "name": "V_DUAL_MUL_F32",
+    "family": "VOPD",
+    "rdna3": 3,
+    "rdna35": 3,
+    "rdna4": 3
+  },
+  {
+    "name": "V_DUAL_SUBREV_F32",
+    "family": "VOPD",
+    "rdna3": 6,
+    "rdna35": 6,
+    "rdna4": 6
+  },
+  {
+    "name": "V_DUAL_SUB_F32",
+    "family": "VOPD",
+    "rdna3": 5,
+    "rdna35": 5,
+    "rdna4": 5
+  }
+]

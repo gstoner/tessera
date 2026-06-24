@@ -1,0 +1,10 @@
+{
+  "key": "rdna35",
+  "name": "RDNA3.5",
+  "title": "\"RDNA3.5\" Instruction Set Architecture: Reference Guide",
+  "kind": "isa",
+  "source_pdf": "rdna35_instruction_set_architecture.pdf",
+  "pages": 653,
+  "sha256": "bc42e0f4a1e183521bd419914a0f28d99cdb6363d8c0384e16bd3e44f48e50b8",
+  "section_count": 238
+}

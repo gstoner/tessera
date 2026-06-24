@@ -74,6 +74,14 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   bridge hook exists; remaining is a registered CUDA launcher + real silicon).
 - **ROCm runtime execution:** no execution-matrix rows yet (same — a registered
   HIP launcher + real silicon).
+
+> **ISA reference data:** structured RDNA3 / RDNA3.5 / RDNA4 instruction +
+> encoding archive (opcodes, pseudocode, microcode bit-fields, cross-version
+> matrix) extracted from AMD's ISA guides lives at
+> [`docs/reference/isa/rdna/`](../../reference/isa/rdna/README.md). Use the
+> cross-version matrix to confirm an op exists on a target before emitting it
+> (e.g. FP8/BF8 WMMA + sparse SWMMAC are RDNA4-only; gfx1151/Strix Halo is
+> RDNA3.5). Regenerate with `tools/build_archive.py`.
 - **Universal backend-kernel axis:** every S-series primitive entry is still
   open on backend-kernel proof (universal Phase-G/H gate) — live count in
   [`../generated/s_series_status.md`](../generated/s_series_status.md).

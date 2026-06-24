@@ -1,0 +1,287 @@
+{
+  "frame_size_dwords": 64,
+  "opcodes": {
+    "MES_SCH_API_SET_HW_RSRC": 0,
+    "MES_SCH_API_SET_SCHEDULING_CONFIG": 1,
+    "MES_SCH_API_ADD_QUEUE": 2,
+    "MES_SCH_API_REMOVE_QUEUE": 3,
+    "MES_SCH_API_PERFORM_YIELD": 4,
+    "MES_SCH_API_SET_GANG_PRIORITY_LEVEL": 5,
+    "MES_SCH_API_SUSPEND": 6,
+    "MES_SCH_API_RESUME": 7,
+    "MES_SCH_API_RESET": 8,
+    "MES_SCH_API_SET_LOG_BUFFER": 9,
+    "MES_SCH_API_CHANGE_GANG_PRORITY": 10,
+    "MES_SCH_API_QUERY_SCHEDULER_STATUS": 11,
+    "MES_SCH_API_PROGRAM_GDS": 12,
+    "MES_SCH_API_SET_DEBUG_VMID": 13,
+    "MES_SCH_API_MISC": 14,
+    "MES_SCH_API_UPDATE_ROOT_PAGE_TABLE": 15,
+    "MES_SCH_API_AMD_LOG": 16,
+    "MES_SCH_API_SET_SE_MODE": 17,
+    "MES_SCH_API_SET_GANG_SUBMIT": 18
+  },
+  "commands": [
+    {
+      "name": "MES_SCH_API_SET_HW_RSRC",
+      "opcode": 0,
+      "union": "",
+      "purpose": "This is the first API that KMD submits to MES during initialization.",
+      "page_start": 18,
+      "page_end": 20,
+      "file": "sections/mes-sch-api-set-hw-rsrc.md"
+    },
+    {
+      "name": "MES_SCH_API_ADD_QUEUE",
+      "opcode": 2,
+      "union": "MESAPI__ADD_QUEUE",
+      "purpose": "The KMD uses this API to add a use queue into the scheduler's internal structure to schedule it",
+      "page_start": 22,
+      "page_end": 24,
+      "file": "sections/mes-sch-api-add-queue.md"
+    },
+    {
+      "name": "MES_SCH_API_AMD_LOG",
+      "opcode": 16,
+      "union": "MESAPI__REMOVE_QUEUE",
+      "purpose": "Copy MES_SCH_CONTEXT to AMGLOG specified memory location for TDR analysis.",
+      "page_start": 26,
+      "page_end": 26,
+      "file": "sections/mes-sch-api-amd-log.md"
+    },
+    {
+      "name": "MES_SCH_API_REMOVE_QUEUE",
+      "opcode": 3,
+      "union": "MESAPI__REMOVE_QUEUE",
+      "purpose": "The KMD uses this API to remove a user queue from the scheduler's internal structure.",
+      "page_start": 26,
+      "page_end": 26,
+      "file": "sections/mes-sch-api-remove-queue.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_SCHEDULING_CONFIG",
+      "opcode": 1,
+      "union": "",
+      "purpose": "Corresponds to Windows DDI DxgkDdiSetProrityBands.",
+      "page_start": 27,
+      "page_end": 27,
+      "file": "sections/mes-sch-api-set-scheduling-config.md"
+    },
+    {
+      "name": "MES_SCH_API_PERFORM_YIELD",
+      "opcode": 4,
+      "union": "",
+      "purpose": "This API is not currently supported.",
+      "page_start": 28,
+      "page_end": 28,
+      "file": "sections/mes-sch-api-perform-yield.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_GANG_PRIORITY_LEVEL",
+      "opcode": 5,
+      "union": "MESAPI__SUSPEND",
+      "purpose": "This API is not currently supported.",
+      "page_start": 29,
+      "page_end": 29,
+      "file": "sections/mes-sch-api-set-gang-priority-level.md"
+    },
+    {
+      "name": "MES_SCH_API_SUSPEND",
+      "opcode": 6,
+      "union": "MESAPI__SUSPEND",
+      "purpose": "When MES_SCH_API_SET_HW_RSRC.legacy_sch_mode is set, the KMD uses this API to",
+      "page_start": 29,
+      "page_end": 29,
+      "file": "sections/mes-sch-api-suspend.md"
+    },
+    {
+      "name": "MES_SCH_API_RESUME",
+      "opcode": 7,
+      "union": "MESAPI__RESUME",
+      "purpose": "The KMD uses this API to resume a single queue suspended by MES_SCH_API_SUSPEND, or",
+      "page_start": 30,
+      "page_end": 30,
+      "file": "sections/mes-sch-api-resume.md"
+    },
+    {
+      "name": "MES_SCH_API_RESET",
+      "opcode": 8,
+      "union": "MESAPI__RESET",
+      "purpose": "In Windows, the KMD uses this API for hang detection and reset. The MES scheduler returns a",
+      "page_start": 31,
+      "page_end": 32,
+      "file": "sections/mes-sch-api-reset.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_LOG_BUFFER",
+      "opcode": 9,
+      "union": "MESAPI__SET_LOGGING_BUFFER",
+      "purpose": "The KMD uses this API to save log buffer information passed from Windows OS DDI",
+      "page_start": 34,
+      "page_end": 35,
+      "file": "sections/mes-sch-api-set-log-buffer.md"
+    },
+    {
+      "name": "MES_SCH_API_CHANGE_GANG_PRORITY",
+      "opcode": 10,
+      "union": "MESAPI__CHANGE_GANG_PRIORITY_LEVEL",
+      "purpose": "In the Windows use-case, this API corresponds to DDI",
+      "page_start": 34,
+      "page_end": 35,
+      "file": "sections/mes-sch-api-change-gang-prority.md"
+    },
+    {
+      "name": "MES_SCH_API_QUERY_SCHEDULER_STATUS",
+      "opcode": 11,
+      "union": "MESAPI__QUERY_MES_STATUS",
+      "purpose": "The KMD uses this API to query status/info from MES firmware.",
+      "page_start": 36,
+      "page_end": 36,
+      "file": "sections/mes-sch-api-query-scheduler-status.md"
+    },
+    {
+      "name": "MES_API_QUERY_MES__GET_CTX_ARRAY_SIZE",
+      "opcode": null,
+      "union": "",
+      "purpose": "The KMD uses this to query MES internal structure size.",
+      "page_start": 36,
+      "page_end": 36,
+      "file": "sections/mes-api-query-mes-get-ctx-array-size.md"
+    },
+    {
+      "name": "MES_API_QUERY_MES__HEALTHY_CHECK",
+      "opcode": null,
+      "union": "MESAPI__PROGRAM_GDS",
+      "purpose": "The KMD uses this API to check if MES is running and responding.",
+      "page_start": 37,
+      "page_end": 37,
+      "file": "sections/mes-api-query-mes-healthy-check.md"
+    },
+    {
+      "name": "MES_SCH_API_PROGRAM_GDS",
+      "opcode": 12,
+      "union": "MESAPI__PROGRAM_GDS",
+      "purpose": "The KMD uses this API to request MES for GDS programming for the target process. GDS",
+      "page_start": 37,
+      "page_end": 37,
+      "file": "sections/mes-sch-api-program-gds.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_DEBUG_VMID",
+      "opcode": 13,
+      "union": "MESAPI__SET_DEBUG_VMID",
+      "purpose": "The KMD uses this API to set up the page table for a process that requests debug VMID for",
+      "page_start": 38,
+      "page_end": 39,
+      "file": "sections/mes-sch-api-set-debug-vmid.md"
+    },
+    {
+      "name": "MES_SCH_API_UPDATE_ROOT_PAGE_TABLE",
+      "opcode": 15,
+      "union": "MESAPI__UPDATE_ROOT_PAGE_TABLE",
+      "purpose": "The KMD uses this API to change page table base of a process.",
+      "page_start": 40,
+      "page_end": 40,
+      "file": "sections/mes-sch-api-update-root-page-table.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_SE_MODE",
+      "opcode": 17,
+      "union": "MESAPI__SET_SE_MODE",
+      "purpose": "The API allows the driver to turn off the second shader engine.",
+      "page_start": 40,
+      "page_end": 40,
+      "file": "sections/mes-sch-api-set-se-mode.md"
+    },
+    {
+      "name": "MES_SCH_API_SET_GANG_SUBMIT",
+      "opcode": 18,
+      "union": "MESAPI__SET_GANG_SUBMIT",
+      "purpose": "The KMD uses this API to pair two queues together for the purpose of gang submission. MES",
+      "page_start": 41,
+      "page_end": 41,
+      "file": "sections/mes-sch-api-set-gang-submit.md"
+    },
+    {
+      "name": "MES_SCH_API_MISC",
+      "opcode": 14,
+      "union": "MESAPI__MISC",
+      "purpose": "This API contains miscellaneous non-scheduling functionalities. Each functionality has a sub-",
+      "page_start": 42,
+      "page_end": 42,
+      "file": "sections/mes-sch-api-misc.md"
+    },
+    {
+      "name": "MESAPI_MISC__WRITE_REG",
+      "opcode": null,
+      "union": "",
+      "purpose": "Perform register write on request of KMD.",
+      "page_start": 43,
+      "page_end": 43,
+      "file": "sections/mesapi-misc-write-reg.md"
+    },
+    {
+      "name": "MESAPI_MISC__INV_GART",
+      "opcode": null,
+      "union": "",
+      "purpose": "Perform GART invalidation.",
+      "page_start": 43,
+      "page_end": 43,
+      "file": "sections/mesapi-misc-inv-gart.md"
+    },
+    {
+      "name": "MESAPI_MISC__QUERY_STATUS",
+      "opcode": null,
+      "union": "",
+      "purpose": "The KMD uses this to trigger an interrupt from KIQ.",
+      "page_start": 44,
+      "page_end": 44,
+      "file": "sections/mesapi-misc-query-status.md"
+    },
+    {
+      "name": "MESAPI_MISC__READ_REG",
+      "opcode": null,
+      "union": "",
+      "purpose": "Perform register read on request of the KMD.",
+      "page_start": 44,
+      "page_end": 44,
+      "file": "sections/mesapi-misc-read-reg.md"
+    },
+    {
+      "name": "MESAPI_MISC__WAIT_REG_MEM",
+      "opcode": null,
+      "union": "",
+      "purpose": "The KMD uses this API to request for the MES to wait on specific register values.",
+      "page_start": 44,
+      "page_end": 44,
+      "file": "sections/mesapi-misc-wait-reg-mem.md"
+    },
+    {
+      "name": "MESAPI_MISC__SET_SHADER_DEBUGGER",
+      "opcode": null,
+      "union": "",
+      "purpose": "This API enables shader debugger register programming.",
+      "page_start": 45,
+      "page_end": 45,
+      "file": "sections/mesapi-misc-set-shader-debugger.md"
+    },
+    {
+      "name": "MESAPI_MISC__NOTIFY_WORK_ON_UNMAPPED_QUEUE",
+      "opcode": null,
+      "union": "",
+      "purpose": "KMD uses this API as a workaround for aggregate doorbell. Meant to be called when an",
+      "page_start": 46,
+      "page_end": 46,
+      "file": "sections/mesapi-misc-notify-work-on-unmapped-queue.md"
+    },
+    {
+      "name": "MESAPI_MISC__NOTIFY_TO_UNMAP_PROCESSES",
+      "opcode": null,
+      "union": "",
+      "purpose": "The KMD uses this API to request the MES to unmap queues for all processes.",
+      "page_start": 46,
+      "page_end": 46,
+      "file": "sections/mesapi-misc-notify-to-unmap-processes.md"
+    }
+  ]
+}

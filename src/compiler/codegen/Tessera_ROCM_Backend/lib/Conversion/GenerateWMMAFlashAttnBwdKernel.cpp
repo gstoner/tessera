@@ -116,12 +116,26 @@ static MemRefType ldsT(MLIRContext *ctx, int64_t n, Type e) {
 }
 
 //===----------------------------------------------------------------------===//
-// <name>_pre : scalar L (logsumexp) + D (rowsum O*dO) per query row.
+// <name>_pre : L (logsumexp) + D (rowsum O*dO) per query row.
 //   args: (Q, K, dO : memref<?xstore>, O, L, Dd : memref<?xf32>,
 //          Sq, Sk : index, scale : f32, causal : index)
+//
+// L is computed with the SAME WMMA QK^T + online-softmax-stats path as the
+// forward (one wave / 16-query tile; LDS-staged Q; S = scale*Q@K^T on WMMA over
+// D/16 chunks; running max/sum). This replaces the original O(Sq*Sk*D) per-lane
+// SCALAR dot-product loop — the measured long pole of the backward (the matmul
+// rate is the same WMMA the forward uses, instead of serial VALU). D stays a
+// cheap O(D) per-row elementwise rowsum (not on the hot path).
 //===----------------------------------------------------------------------===//
 void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
              Type storeTy) {
+  MLIRContext *ctx = b.getContext();
+  Type f32 = b.getF32Type();
+  Value sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
+  Value sS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, f32), loc);
+  Value sm = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
+  Value sl = f.addWorkgroupAttribution(ldsT(ctx, 16, f32), loc);
+
   b.setInsertionPointToStart(&f.getBody().front());
   Emit e(b, loc, storeTy, D);
   Value Q = f.getArgument(0), Kk = f.getArgument(1), dO = f.getArgument(2);
@@ -129,8 +143,11 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value Sq = f.getArgument(6), Sk = f.getArgument(7);
   Value scale = f.getArgument(8), causal = f.getArgument(9);
 
-  Value c0 = e.ci(0), c1 = e.ci(1), c16 = e.ci(16), cD = e.ci(D);
+  Value c0 = e.ci(0), c1 = e.ci(1), c15 = e.ci(15), c16 = e.ci(16),
+        c32 = e.ci(32), cD = e.ci(D), c16D = e.ci(16 * D);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value l15 = b.create<arith::AndIOp>(loc, tid, c15);
+  Value half = b.create<arith::ShRUIOp>(loc, tid, e.ci(4));
   Value qtile = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value q0 = e.mul(qtile, c16);
@@ -139,72 +156,136 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
 
-  // lanes 0..15 each own one query row.
-  Value lt16 = e.lt(tid, c16);
-  auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
-  OpBuilder::InsertionGuard g(b);
-  b.setInsertionPointToStart(ifo.thenBlock());
-  Value gq = e.add(q0, tid);
-  Value inb = e.lt(gq, Sq);
-  Value gqSafe = e.sel(inb, gq, c0);
-  Value rowBase = e.add(qbase, e.mul(gqSafe, cD));
-
-  // D[q] = sum_d O[q,d]*dO[q,d]
-  auto dloop = b.create<scf::ForOp>(loc, c0, cD, c1, ValueRange{e.zerof});
+  // Stage Q into sQ (all 32 lanes cooperatively): for i = tid; i < 16*D; i+=32.
   {
-    OpBuilder::InsertionGuard g2(b);
-    b.setInsertionPointToStart(dloop.getBody());
-    Value d = dloop.getInductionVar();
-    Value acc = dloop.getRegionIterArg(0);
-    Value idx = e.add(rowBase, d);
-    Value ov = e.f32load(O, idx);
-    Value dov = e.toF32(b.create<memref::LoadOp>(loc, dO, ValueRange{idx}));
-    b.create<scf::YieldOp>(loc, ValueRange{e.addf(acc, e.mulf(ov, dov))});
+    auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(lp.getBody());
+    Value i = lp.getInductionVar();
+    Value r = b.create<arith::DivUIOp>(loc, i, cD);
+    Value c = b.create<arith::RemUIOp>(loc, i, cD);
+    Value gq = e.add(q0, r);
+    Value gInb = e.lt(gq, Sq);
+    Value gidx = e.add(e.add(qbase, e.mul(gq, cD)), c);
+    Value qv = b.create<memref::LoadOp>(loc, Q, ValueRange{e.sel(gInb, gidx, c0)});
+    b.create<memref::StoreOp>(loc, e.sel(gInb, qv, e.storeZero), sQ,
+                              ValueRange{i});
   }
-  Value Dq = dloop.getResult(0);
-
-  // L[q] = logsumexp_k(scale * Q@K^T), online max/sum over keys.
-  auto kloop = b.create<scf::ForOp>(loc, c0, Sk, c1,
-                                    ValueRange{e.negInf, e.zerof});
+  // lanes 0..15 own a query row: init running max/sum, and compute the cheap
+  // D[q] = sum_d O[q,d]*dO[q,d] rowsum here (off the hot KV path).
   {
-    OpBuilder::InsertionGuard g2(b);
-    b.setInsertionPointToStart(kloop.getBody());
-    Value k = kloop.getInductionVar();
-    Value m = kloop.getRegionIterArg(0), l = kloop.getRegionIterArg(1);
-    Value kRow = e.add(kbase, e.mul(k, cD));
-    // s = scale * sum_d Q[gq,d]*K[k,d]
-    auto sloop = b.create<scf::ForOp>(loc, c0, cD, c1, ValueRange{e.zerof});
+    Value lt16 = e.lt(tid, c16);
+    auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(ifo.thenBlock());
+    b.create<memref::StoreOp>(loc, e.negInf, sm, ValueRange{tid});
+    b.create<memref::StoreOp>(loc, e.zerof, sl, ValueRange{tid});
+    Value gq = e.add(q0, tid);
+    Value inb = e.lt(gq, Sq);
+    Value rowBase = e.add(qbase, e.mul(e.sel(inb, gq, c0), cD));
+    auto dloop = b.create<scf::ForOp>(loc, c0, cD, c1, ValueRange{e.zerof});
     {
-      OpBuilder::InsertionGuard g3(b);
-      b.setInsertionPointToStart(sloop.getBody());
-      Value d = sloop.getInductionVar();
-      Value acc = sloop.getRegionIterArg(0);
-      Value qv = e.toF32(
-          b.create<memref::LoadOp>(loc, Q, ValueRange{e.add(rowBase, d)}));
-      Value kv = e.toF32(
-          b.create<memref::LoadOp>(loc, Kk, ValueRange{e.add(kRow, d)}));
-      b.create<scf::YieldOp>(loc, ValueRange{e.addf(acc, e.mulf(qv, kv))});
+      OpBuilder::InsertionGuard g2(b);
+      b.setInsertionPointToStart(dloop.getBody());
+      Value idx = e.add(rowBase, dloop.getInductionVar());
+      Value ov = e.f32load(O, idx);
+      Value dov = e.toF32(b.create<memref::LoadOp>(loc, dO, ValueRange{idx}));
+      b.create<scf::YieldOp>(
+          loc, ValueRange{e.addf(dloop.getRegionIterArg(0), e.mulf(ov, dov))});
     }
-    Value s = e.mulf(sloop.getResult(0), scale);
-    // causal: key k > query gq -> mask out (s = -inf).
-    Value masked = b.create<arith::AndIOp>(loc, isCausal, e.lt(gq, k));
-    s = e.sel(masked, e.negInf, s);
-    Value mnew = b.create<arith::MaxNumFOp>(loc, m, s);
-    Value corr = b.create<math::ExpOp>(loc, e.subf(m, mnew));
-    Value pl = b.create<math::ExpOp>(loc, e.subf(s, mnew));
-    Value lnew = e.addf(e.mulf(l, corr), pl);
-    b.create<scf::YieldOp>(loc, ValueRange{mnew, lnew});
-  }
-  Value mfin = kloop.getResult(0), lfin = kloop.getResult(1);
-  Value Lq = e.addf(mfin, b.create<math::LogOp>(loc, lfin));
-
-  auto wif = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
-  {
+    auto wif = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
     OpBuilder::InsertionGuard g2(b);
     b.setInsertionPointToStart(wif.thenBlock());
-    Value gidx = e.add(e.mul(bh, Sq), gq);
-    b.create<memref::StoreOp>(loc, Lq, L, ValueRange{gidx});
-    b.create<memref::StoreOp>(loc, Dq, Dd, ValueRange{gidx});
+    b.create<memref::StoreOp>(loc, dloop.getResult(0), Dd,
+                              ValueRange{e.add(e.mul(bh, Sq), gq)});
+  }
+  b.create<gpu::BarrierOp>(loc);
+
+  // KV-tile bounds (causal: only tiles up to the query tile's diagonal).
+  Value nKV = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
+  Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
+  Value ckt = b.create<arith::DivUIOp>(loc, e.add(q0, c15), c16);
+  Value lastKt = e.sel(isCausal, ckt, nKVm1);
+  lastKt = e.sel(e.lt(nKVm1, lastKt), nKVm1, lastKt);
+  Value upper = e.add(lastKt, c1);
+
+  // KV loop: S = scale*Q@K^T (WMMA over D/16 chunks) -> sS, then online max/sum.
+  auto kloop = b.create<scf::ForOp>(loc, c0, upper, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(kloop.getBody());
+    Value k0 = e.mul(kloop.getInductionVar(), c16);
+    Value kr = e.add(k0, l15);
+    Value krInb = e.lt(kr, Sk);
+    Value cs = e.accZero;
+    for (int64_t dc = 0; dc < e.DC; ++dc) {
+      Value dc16 = e.ci(dc * 16);
+      Value aRow = e.add(e.mul(l15, cD), dc16);
+      Value aFrag = e.buildFrag([&](int64_t i) {
+        return b.create<memref::LoadOp>(loc, sQ, ValueRange{e.add(aRow, e.ci(i))});
+      });
+      Value bBase = e.sel(krInb, e.add(e.add(kbase, e.mul(kr, cD)), dc16), c0);
+      Value bFrag = e.buildFrag([&](int64_t i) {
+        Value v = b.create<memref::LoadOp>(loc, Kk, ValueRange{e.add(bBase, e.ci(i))});
+        return e.sel(krInb, v, e.storeZero);
+      });
+      cs = e.wmma(aFrag, bFrag, cs);
+    }
+    // mask + scale -> sS[qi*16 + l15], qi = 2e+half.
+    Value gk = e.add(k0, l15);
+    for (int64_t el = 0; el < 8; ++el) {
+      Value qi = e.add(e.ci(2 * el), half);
+      Value v0 = e.mulf(e.ext(cs, el), scale);
+      Value cmask = b.create<arith::AndIOp>(loc, isCausal,
+                                            e.lt(e.add(q0, qi), gk));
+      Value masked = b.create<arith::OrIOp>(loc, e.ge(gk, Sk), cmask);
+      b.create<memref::StoreOp>(loc, e.sel(masked, e.negInf, v0), sS,
+                                ValueRange{e.add(e.mul(qi, c16), l15)});
+    }
+    b.create<gpu::BarrierOp>(loc);
+    // online softmax stats — lanes 0..15 own query row qi = tid.
+    {
+      Value lt16 = e.lt(tid, c16);
+      auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
+      OpBuilder::InsertionGuard g2(b);
+      b.setInsertionPointToStart(ifo.thenBlock());
+      Value qRow = e.mul(tid, c16);
+      Value rmax = e.negInf;
+      for (int64_t ki = 0; ki < 16; ++ki)
+        rmax = b.create<arith::MaxNumFOp>(
+            loc, rmax, e.f32load(sS, e.add(qRow, e.ci(ki))));
+      Value mold = e.f32load(sm, tid);
+      Value mnew = b.create<arith::MaxNumFOp>(loc, mold, rmax);
+      Value moldSmall =
+          b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE, mold, e.negInf);
+      Value corr = e.sel(moldSmall, e.zerof,
+                         b.create<math::ExpOp>(loc, e.subf(mold, mnew)));
+      Value rsum = e.zerof;
+      for (int64_t ki = 0; ki < 16; ++ki) {
+        Value s = e.f32load(sS, e.add(qRow, e.ci(ki)));
+        rsum = e.addf(rsum, b.create<math::ExpOp>(loc, e.subf(s, mnew)));
+      }
+      b.create<memref::StoreOp>(loc, e.addf(e.mulf(e.f32load(sl, tid), corr),
+                                            rsum), sl, ValueRange{tid});
+      b.create<memref::StoreOp>(loc, mnew, sm, ValueRange{tid});
+    }
+    b.create<gpu::BarrierOp>(loc);
+  }
+
+  // L[q] = sm[q] + log(sl[q]) per query row (lanes 0..15, gq < Sq).
+  b.setInsertionPointAfter(kloop);
+  {
+    Value lt16 = e.lt(tid, c16);
+    auto ifo = b.create<scf::IfOp>(loc, lt16, /*withElse=*/false);
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(ifo.thenBlock());
+    Value gq = e.add(q0, tid);
+    auto wif = b.create<scf::IfOp>(loc, e.lt(gq, Sq), /*withElse=*/false);
+    OpBuilder::InsertionGuard g2(b);
+    b.setInsertionPointToStart(wif.thenBlock());
+    Value Lq = e.addf(e.f32load(sm, tid),
+                      b.create<math::LogOp>(loc, e.f32load(sl, tid)));
+    b.create<memref::StoreOp>(loc, Lq, L, ValueRange{e.add(e.mul(bh, Sq), gq)});
   }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);

@@ -11,8 +11,11 @@ counted in wall-clock but not the FLOP rate; non-causal full attention).
 Honest gating: no GPU / tools -> a clear note + empty result set (exit 0). The
 compiled backward is correctness-first (recompute S/P per tile, no double-
 buffering / causal loop-bound) — this ladder characterizes THAT kernel; it is
-not a tuned attention-backward kernel. Emits the stable benchmark JSON
-(Decision #12).
+not a tuned attention-backward kernel. The `_pre` logsumexp pass now uses WMMA
+QK^T + online softmax (was a per-lane scalar dot-product loop, the measured long
+pole): ~3.4x faster backward — ~4.1-4.4 TFLOP/s at head_dim 64 (was ~1.1-1.3),
+~2.1 at 128 (was ~0.67), now WMMA-bound like the forward. Emits the stable
+benchmark JSON (Decision #12).
 
 Usage::
 

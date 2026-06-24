@@ -61,7 +61,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   auto ldsT = [&](int64_t n, Type e) {
     return MemRefType::get({n}, e, MemRefLayoutAttrInterface(), ws);
   };
-  Value sQ = f.addWorkgroupAttribution(ldsT(16 * D, storeTy), loc);
+  // Occupancy: Q is NOT staged in LDS — it is read straight from global for the
+  // QK^T A-fragment each KV tile. Staging cost 16*D*sizeof(store) of LDS (the
+  // 2nd-largest buffer after sAcc), and the kernel is occupancy=LDS-limited
+  // (measured: 8 waves/CU @ D=64, 4 @ 128). Dropping sQ frees ~2-4 KB/block →
+  // ~+50% resident waves; the extra global Q reloads are hidden by the higher
+  // occupancy (the kernel is latency-bound, not bandwidth-bound).
   Value sS = f.addWorkgroupAttribution(ldsT(16 * 16, f32), loc);
   Value sAcc = f.addWorkgroupAttribution(ldsT(16 * D, f32), loc);
   Value sm = f.addWorkgroupAttribution(ldsT(16, f32), loc);
@@ -103,22 +108,13 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   auto mul = [&](Value x, Value y) { return b.create<arith::MulIOp>(loc, x, y); };
   auto add = [&](Value x, Value y) { return b.create<arith::AddIOp>(loc, x, y); };
 
-  // --- stage Q into sQ + zero sAcc: for i = tid; i < 16*D; i += 32 ---
+  // --- zero sAcc: for i = tid; i < 16*D; i += 32 --- (Q is read from global)
   {
     auto lp = b.create<scf::ForOp>(loc, tid, c16D, c32);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(lp.getBody());
-    Value i = lp.getInductionVar();
-    Value r = b.create<arith::DivUIOp>(loc, i, cD);
-    Value c = b.create<arith::RemUIOp>(loc, i, cD);
-    Value gq = add(q0, r);
-    Value inb = b.create<arith::CmpIOp>(loc, slt, gq, Sq);
-    Value gidx = add(add(qbase, mul(gq, cD)), c);
-    Value safe = b.create<arith::SelectOp>(loc, inb, gidx, c0);
-    Value qv = b.create<memref::LoadOp>(loc, Q, ValueRange{safe});
-    Value qm = b.create<arith::SelectOp>(loc, inb, qv, storeZero);
-    b.create<memref::StoreOp>(loc, qm, sQ, ValueRange{i});
-    b.create<memref::StoreOp>(loc, zerof, sAcc, ValueRange{i});
+    b.create<memref::StoreOp>(loc, zerof, sAcc,
+                              ValueRange{lp.getInductionVar()});
   }
   // if (tid < 16) { sm[tid] = -1e30; sl[tid] = 0; }
   {
@@ -170,13 +166,18 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     Value kr_l15 = add(k0, l15);
     Value krInb = b.create<arith::CmpIOp>(loc, slt, kr_l15, Sk);
 
-    // S = scale * Q @ K^T over D/16 chunks.
+    // S = scale * Q @ K^T over D/16 chunks. Q row = q0 + l15, read from global
+    // (no LDS staging — see the sQ note above), masked on the query bound.
+    Value qrow_l15 = add(q0, l15);
+    Value qrInb = b.create<arith::CmpIOp>(loc, slt, qrow_l15, Sq);
     Value cs = accZero;
     for (int64_t dc = 0; dc < DC; ++dc) {
       Value dc16 = ci(dc * 16);
-      Value aRow = add(mul(l15, cD), dc16);
+      Value aBase = add(add(qbase, mul(qrow_l15, cD)), dc16);
+      Value aSafe = b.create<arith::SelectOp>(loc, qrInb, aBase, c0);
       Value aFrag = buildFrag(b, loc, [&](int64_t i) {
-        return b.create<memref::LoadOp>(loc, sQ, ValueRange{add(aRow, ci(i))});
+        Value v = b.create<memref::LoadOp>(loc, Q, ValueRange{add(aSafe, ci(i))});
+        return b.create<arith::SelectOp>(loc, qrInb, v, storeZero);
       });
       Value bBase = add(add(kbase, mul(kr_l15, cD)), dc16);
       Value bSafe = b.create<arith::SelectOp>(loc, krInb, bBase, c0);

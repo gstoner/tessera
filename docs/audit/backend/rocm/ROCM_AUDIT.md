@@ -202,6 +202,19 @@ not real intrinsics; a real-WMMA GEMM through the full stack is **Stage J/K**
 (below). The hand-written HIPRTC kernels remain the production execution path and
 become the on-silicon **oracle** the compiled path validates against.
 
+> **Update (2026-06-24): the staging seam is now runnable too.** Both halves of
+> the Tile→ROCm seam that were contract-marker-only now have executable
+> lowerings: `tessera_rocm.wmma` (Stage J → real `rocdl.wmma`, the GEMM/FA
+> kernels) and `tessera_rocm.async_copy` (the new `--lower-rocm-async-copy` pass
+> → a cooperative global→LDS copy loop; `tessera_rocm.wait` → `gpu.barrier`).
+> Proven end-to-end on gfx1151: a global→LDS→global round-trip
+> (`test_rocm_async_copy_runnable.py`) AND a real **WMMA GEMM tile with A/B
+> staged through async_copy** that matches `A@B`
+> (`test_rocm_gemm_staged_async_copy.py`). The markers remain for the
+> IR-contract path when these passes are not run. *Measured caveat:* no current
+> FA/GEMM shape is staging-bound, so this is infrastructure — the pipeline-routed
+> double-buffer perf payoff lands only when a staging-bound kernel uses it.
+
 ## Still Open
 
 - **Other GEMM-family / attention ops on RDNA remain artifact_only** beyond

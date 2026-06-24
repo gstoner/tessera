@@ -7,6 +7,7 @@
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 int main(int argc, char **argv){
@@ -19,7 +20,7 @@ int main(int argc, char **argv){
   registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect,
-                  mlir::scf::SCFDialect,
+                  mlir::scf::SCFDialect, mlir::vector::VectorDialect,
                   tessera::tile::TesseraTileDialect>();
   mlir::tessera_rocm::registerTesseraROCMDialects(registry);
   mlir::tessera_rocm::registerTesseraROCMPasses();

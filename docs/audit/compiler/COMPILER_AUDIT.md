@@ -1153,6 +1153,28 @@ synced/unsynced/no-async cases), ROCm 22/22 unaffected, diagnostic registry (two
 new codes) + apple-value + rocm-tiling pytest (198) green, generated-doc drift
 clean.
 
+**Op-layer convergence — Phase D hygiene (2026-06-23).** The ROCm planner no
+longer stamps the redundant `tile.depends_on` string on a `tile.mma`: the threaded
+`!tile.async_token` operand is the sole dependency representation it emits. A
+frontend may still *provide* `tile.depends_on` as an explicit input (the planner's
+`inferMmaDeps` consults it to decide the token), and the legality pass keeps a
+`depends_on` fallback for hand-written token-less IR — so the input contract and
+the token-less path are intact while the duplicated output marker is gone.
+`tile.barrier_id` is **kept** (it names the vmcnt counter identity for ROCDL
+emission and is the lowering's FIFO fallback key — not redundant with the
+"completed" token). Two Phase-D items were assessed and deliberately *not* done:
+(1) **token non-optional in ODS** — the four sync ops are `Variadic<AnyType>` by
+design (the value lane / Apple use them with no token), and the token edge is
+already *enforced* at the right layer by the backend legality passes
+(`ROCM_WAVE_LDS_MISSING_WAITCNT`, `WARPSPEC_MMA_NOT_TOKEN_SYNCED`); an ODS-level
+required operand would break the token-less lanes for no added safety. (2) **bulk
+fixture pretty-form / strict migration** — the Tile dialect's
+`allowUnknownOperations(true)` makes `--allow-unregistered-dialect` functionally
+redundant on these paths already, so the migration is cosmetic flag-removal across
+~29 fixtures with real FileCheck-rewrite risk and no functional gain; left as
+opt-in. Verified: ROCm lit 22/22 (double buffer still accepted via the token edge
+with no `depends_on`), tessera-ir phase2/3 + registry/tiling pytest green.
+
 ## Next Work
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go

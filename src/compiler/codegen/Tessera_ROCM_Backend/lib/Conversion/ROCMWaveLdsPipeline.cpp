@@ -314,16 +314,15 @@ struct ROCMWaveLdsPipelinePass
           if (!op->hasAttr("tile.rocm_matrix_path"))
             op->setAttr("tile.rocm_matrix_path",
                         builder.getStringAttr("wmma_or_mfma_by_arch"));
+          // Resolve the stage(s) this mma depends on and record them for token
+          // threading. The SSA token operand the threading adds below is the
+          // source of truth (Phase D) — the planner no longer also stamps the
+          // redundant tile.depends_on string. A frontend may still *provide*
+          // tile.depends_on as an explicit input (inferMmaDeps consults it), and
+          // the legality pass keeps a depends_on fallback for token-less IR.
           SmallVector<std::string> deps = inferMmaDeps(op);
-          if (!deps.empty()) {
-            if (!op->hasAttr("tile.depends_on")) {
-              SmallVector<Attribute> attrs;
-              for (const std::string &id : deps)
-                attrs.push_back(builder.getStringAttr(id));
-              op->setAttr("tile.depends_on", builder.getArrayAttr(attrs));
-            }
+          if (!deps.empty())
             mmaConsumes.push_back({op, deps});
-          }
           return;
         }
       });

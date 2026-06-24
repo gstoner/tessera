@@ -8,6 +8,7 @@ import functools
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -79,19 +80,36 @@ def is_archive_path(path: Path) -> bool:
     return "archive" in path.parts
 
 
-# Machine-generated data archives that live under the doc tree but are extracted
-# wholesale from source (not authored prose).  Markdown-link and inline-path
-# linting produce false positives on their content — e.g. ISA pseudocode like
-# ``vgpr[4](data)`` parses as a markdown link, and archive-relative pointers like
-# ``tools/build_archive.py`` are resolved against the repo root.  Skip them
-# entirely, mirroring the ``archive`` and planning-subtree exemptions; provenance
-# is tracked via per-doc ``meta.json`` sha256 instead.
-GENERATED_DATA_SUBTREES = ("docs/reference/isa",)
+def load_generated_data_subtrees(root: Path) -> tuple[str, ...]:
+    """Repo-root-relative subtree prefixes for machine-generated data archives
+    that live under the doc tree but are extracted wholesale from source (not
+    authored prose).  Markdown-link and inline-path linting produce false
+    positives on their content — e.g. ISA pseudocode like ``vgpr[4](data)``
+    parses as a markdown link, and archive-relative pointers like
+    ``tools/build_archive.py`` are resolved against the repo root — so they are
+    skipped entirely, mirroring the ``archive`` and planning-subtree exemptions.
+
+    Single source of truth (shared with the docs-freshness gate in
+    ``docs_manifest.py``) is ``scripts/generated_data_subtrees.txt``.  A missing
+    file is surfaced as a warning, not a silent pass, then treated as empty."""
+    config = root / "scripts" / "generated_data_subtrees.txt"
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        print(f"warning: cannot read {config}: {exc}; no generated-data "
+              "exemptions applied", file=sys.stderr)
+        return ()
+    out = []
+    for raw in lines:
+        entry = raw.split("#", 1)[0].strip().strip("/")
+        if entry:
+            out.append(entry)
+    return tuple(out)
 
 
-def is_generated_data_path(rel: Path) -> bool:
+def is_generated_data_path(rel: Path, subtrees: tuple[str, ...]) -> bool:
     posix = rel.as_posix()
-    return any(posix == s or posix.startswith(s + "/") for s in GENERATED_DATA_SUBTREES)
+    return any(posix == s or posix.startswith(s + "/") for s in subtrees)
 
 
 def is_planning_doc(rel: Path) -> bool:
@@ -111,19 +129,21 @@ def is_text_file(path: Path) -> bool:
 
 
 def iter_files(root: Path, scan_paths: tuple[str, ...]):
+    generated = load_generated_data_subtrees(root)
     for raw_path in scan_paths:
         path = root / raw_path
         if not path.exists():
             continue
         if path.is_file():
             rel = path.relative_to(root)
-            if not is_archive_path(rel) and not is_generated_data_path(rel) and is_text_file(path):
+            if (not is_archive_path(rel) and not is_generated_data_path(rel, generated)
+                    and is_text_file(path)):
                 yield path
             continue
         for candidate in path.rglob("*"):
             rel = candidate.relative_to(root)
             if (candidate.is_file() and not is_archive_path(rel)
-                    and not is_generated_data_path(rel) and is_text_file(candidate)):
+                    and not is_generated_data_path(rel, generated) and is_text_file(candidate)):
                 yield candidate
 
 

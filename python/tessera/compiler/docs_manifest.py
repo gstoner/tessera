@@ -67,14 +67,26 @@ _EXEMPT_DOCS: frozenset[str] = frozenset({
 
 # Machine-generated data archives that live under a canonical doc root but are
 # regenerated wholesale from source (not hand-authored prose), so the
-# authored-doc freshness gate does not apply.  Matched by path prefix; keep this
-# small and justify every entry.
-_EXEMPT_PREFIXES: tuple[str, ...] = (
-    # RDNA ISA data archive — extracted from AMD's ISA PDFs by
-    # docs/reference/isa/rdna/tools/build_archive.py (780+ generated section
-    # files); provenance is tracked via per-doc meta.json sha256, not frontmatter.
-    "docs/reference/isa/",
-)
+# authored-doc freshness gate does not apply.  Matched by path prefix.
+#
+# Single source of truth (shared with the docs-lint exemption in
+# scripts/lint_docs.py) is scripts/generated_data_subtrees.txt — adding a new
+# generated archive there is the only edit needed to exempt it from both gates.
+def _load_exempt_prefixes() -> tuple[str, ...]:
+    config = _REPO_ROOT / "scripts" / "generated_data_subtrees.txt"
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ()                                        # gate stays strict
+    out = []
+    for raw in lines:
+        entry = raw.split("#", 1)[0].strip().strip("/")
+        if entry:
+            out.append(entry + "/")                      # prefix-match form
+    return tuple(out)
+
+
+_EXEMPT_PREFIXES: tuple[str, ...] = _load_exempt_prefixes()
 
 
 # ─────────────────────────────────────────────────────────────────────────

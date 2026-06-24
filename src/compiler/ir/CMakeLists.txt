@@ -42,6 +42,9 @@ mlir_tablegen(Tessera/Dialect/Tile/TileOpsDialect.cpp.inc -gen-dialect-defs -dia
 # C1 (2026-06-23) — first-class layout attributes (#tile.layout / #tile.swizzle).
 mlir_tablegen(Tessera/Dialect/Tile/TileAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=tile)
 mlir_tablegen(Tessera/Dialect/Tile/TileAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=tile)
+# Phase B (2026-06-23) — first-class !tile.async_token type (SSA completion edge).
+mlir_tablegen(Tessera/Dialect/Tile/TileTypes.h.inc -gen-typedef-decls -typedefs-dialect=tile)
+mlir_tablegen(Tessera/Dialect/Tile/TileTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=tile)
 add_public_tablegen_target(TesseraTileIRTableGen)
 
 add_mlir_dialect_library(TesseraIR

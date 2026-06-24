@@ -13,6 +13,10 @@
 #define GET_ATTRDEF_CLASSES
 #include "Tessera/Dialect/Tile/TileAttrs.cpp.inc"
 
+// Phase B (2026-06-23) — generated type storage/printer/parser (!tile.async_token).
+#define GET_TYPEDEF_CLASSES
+#include "Tessera/Dialect/Tile/TileTypes.cpp.inc"
+
 #include "Tessera/Dialect/Tile/TileOpsDialect.cpp.inc"
 
 #define GET_OP_CLASSES
@@ -260,13 +264,19 @@ void TesseraTileDialect::initialize() {
 #define GET_ATTRDEF_LIST
 #include "Tessera/Dialect/Tile/TileAttrs.cpp.inc"
       >();
-  // Sprint 9: the value-lane contraction + linalg ops above are registered and
-  // verified. The artifact lane still emits other transient tile.* ops
-  // (tile.mma / tile.async_copy / tile.kv_cache / debug husks) that are not yet
-  // ODS-registered — allow them as opaque so registering this dialect does not
-  // break the artifact pipeline. The Apple *value* lane produces only the
-  // registered ops, so it runs with NO --allow-unregistered-dialect (the win);
-  // registering the remaining tile ops is a follow-on.
+  // Phase B (2026-06-23): first-class !tile.async_token type.
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "Tessera/Dialect/Tile/TileTypes.cpp.inc"
+      >();
+  // The contraction/linalg value-lane ops and the four sync ops (async_copy /
+  // wait_async / mma / s_barrier, registered in Phase A0) are all first-class
+  // now. The artifact lane still emits other transient tile.* ops (tile.tma.* /
+  // tile.tmem.* / tile.kv_cache / debug husks) that are not yet ODS-registered —
+  // allow them as opaque so registering this dialect does not break the artifact
+  // pipeline. The Apple *value* lane produces only registered ops, so it runs
+  // with NO --allow-unregistered-dialect (the win); registering the remaining
+  // tile ops is a follow-on.
   allowUnknownOperations(true);
 }
 

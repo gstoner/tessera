@@ -24,6 +24,11 @@
 #define GET_ATTRDEF_CLASSES
 #include "Tessera/Dialect/Tile/TileAttrs.h.inc"
 
+// Phase B (2026-06-23) — generated type declarations (!tile.async_token). Must
+// precede the op classes; ops may carry the token as an operand/result type.
+#define GET_TYPEDEF_CLASSES
+#include "Tessera/Dialect/Tile/TileTypes.h.inc"
+
 #define GET_OP_CLASSES
 #include "Tessera/Dialect/Tile/TileOps.h.inc"
 

@@ -32,10 +32,33 @@ def Tessera_Tile_Dialect : Dialect {
   // (#tile.layout / #tile.swizzle), so it needs the generated attribute
   // printer/parser hooks.
   let useDefaultAttributePrinterParser = 1;
+  // Phase B (2026-06-23) — the dialect now owns the !tile.async_token type
+  // (the SSA completion edge for async_copy→wait/mma), so it needs the
+  // generated type printer/parser hooks.
+  let useDefaultTypePrinterParser = 1;
 }
 
 class Tile_Op<string mnemonic, list<Trait> traits = []> :
     Op<Tessera_Tile_Dialect, mnemonic, traits>;
+
+class Tile_Type<string name, string typeMnemonic, list<Trait> traits = []>
+    : TypeDef<Tessera_Tile_Dialect, name, traits> {
+  let mnemonic = typeMnemonic;
+}
+
+// Phase B (2026-06-23) — async-copy completion token. Payload-free SSA value: it
+// carries "this async copy completed", NOT a count (NV expect-bytes stays in
+// #tile.barrier<kind=tma,expect=…>; ROCm vmcnt stays in the legality's
+// outstanding-set arithmetic). Threading it from tile.async_copy's result into
+// tile.wait_async / tile.mma operands turns the copy→consumer synchronization
+// dependency into a verifier-checkable SSA def-use edge, replacing the
+// transitional tile.barrier_id / tile.depends_on string markers + program order.
+// It rides the ops' existing Variadic<AnyType> slots, so no op signature changes
+// and every generic-form fixture stays valid; the planner starts emitting it in
+// Phase C. Kept backend-neutral (one type, no NVIDIA/ROCm privilege).
+def Tile_AsyncTokenType : Tile_Type<"AsyncToken", "async_token"> {
+  let summary = "Completion token for an asynchronous tile copy";
+}
 
 // Rank-2 dense matmul: C = A @ B (non-transposed value envelope).
 def Tile_MatmulOp : Tile_Op<"matmul", [Pure]> {

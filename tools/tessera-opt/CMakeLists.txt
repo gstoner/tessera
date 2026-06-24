@@ -162,6 +162,8 @@ if(TARGET TesseraROCMConversion)
       MLIRTargetLLVMIRExport
       MLIRSCFToControlFlow            # convert-scf-to-cf (finish-lower)
       MLIRReconcileUnrealizedCasts    # reconcile-unrealized-casts (finish-lower)
+      MLIRMathToLLVM                  # flash_attn softmax exp (math.exp -> llvm)
+      MLIRMathDialect
       # ConvertToLLVM external models gathered by convert-gpu-to-rocdl.
       MLIRControlFlowToLLVM
       MLIRArithToLLVM

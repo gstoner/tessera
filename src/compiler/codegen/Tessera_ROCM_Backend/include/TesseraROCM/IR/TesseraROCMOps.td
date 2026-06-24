@@ -68,12 +68,68 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     A-tiles (output-tile register blocking — the occupancy/VGPR-budgeted knob
     the hand-written oracle sweeps; measured-best is 3x4 for large problems).
     The grid shrinks accordingly (one wave per `mt`x`nt` macro-tile). This is
-    the Target-IR matmul-tile node; wiring Graph `tessera.matmul` → Tile → this
-    op is the remaining front-end glue.
+    the Target-IR matmul-tile node: the Graph `tessera.matmul` → Tile → Target-IR
+    lowering (`_lower_rocm_op` on `tile.mma`) now EMITS this directive, so it is
+    produced by the IR stack (not only synthesized by the runtime).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,
                        DefaultValuedAttr<I64Attr, "1">:$nt,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
+  let summary = "An FA-2 forward attention op to realize as a WMMA kernel";
+  let description = [{
+    The attention analog of `tessera_rocm.wmma_gemm`: the directive the
+    `generate-wmma-flash-attn-kernel` pass expands into a real, fragment-
+    materialized RDNA WMMA **flash-attention forward** kernel. One wave per
+    (16-query tile, b*h): stage Q in LDS, then for each 16-key tile compute
+    `S = scale * Q@K^T` (WMMA over head-dim chunks), apply the causal/ragged
+    mask, do an online softmax (running max/sum, rescale), and accumulate
+    `O += P@V` (WMMA). Scores are staged in LDS so the QK^T accumulator layout
+    is reread in the P@V A-fragment layout. Mirrors the hardware_verified
+    hand-written kernel (`tessera_rocm_wmma_flash_attn_*`).
+
+    `head_dim` (a multiple of 16) is the compile-time D; B/H/Sq/Sk/scale/causal
+    are runtime kernel arguments. `dtype` is the f16/bf16 storage (f32 softmax +
+    accumulate). Q/K/V are `[b,h,s,d]` row-major; O is f32.
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
+  let summary = "An FA-2 backward pass to realize as three WMMA kernels";
+  let description = [{
+    The backward analog of `tessera_rocm.flash_attn`: the directive the
+    `generate-wmma-flash-attn-bwd-kernel` pass expands into THREE real,
+    fragment-materialized RDNA WMMA kernels — the textbook FA-2 backward
+    structure (no stored attention matrix; recompute S/P per tile):
+
+      * `<name>_pre`  — one wave per (16-query tile, b*h). Scalar pass:
+        `D[q] = sum_d O[q,d]*dO[q,d]` and `L[q] = logsumexp_k(scale*Q@K^T)`
+        (online max/sum). Writes the L / D scratch arrays the matmul kernels
+        read so the backward is self-contained (does not depend on the forward
+        having saved its softmax stats).
+      * `<name>_dkdv` — one wave per (16-key tile, b*h). Loops query tiles:
+        recompute `S=scale*Q@K^T` and `P=exp(S-L)` (WMMA), `dP=dO@V^T` (WMMA),
+        `dS=P*(dP-D)`; accumulates `dV += P^T@dO` and `dK += scale*dS^T@Q`
+        (WMMA, contraction over queries — P / dS are staged in LDS and reread
+        transposed, the layout bridge).
+      * `<name>_dq`   — one wave per (16-query tile, b*h). Loops key tiles:
+        same `S`/`P`/`dP`/`dS`, accumulates `dQ += scale*dS@K` (WMMA,
+        contraction over keys; dS reread from LDS in natural layout).
+
+    `head_dim` (a multiple of 16) is the compile-time D; B/H/Sq/Sk/scale/causal
+    are runtime kernel arguments. `dtype` is the f16/bf16 storage (f32 softmax +
+    accumulate). Q/K/V/dO are `[b,h,s,d]` row-major store-type; O is f32; the
+    dQ/dK/dV outputs and the L/D scratch are f32. Validated against a numpy
+    attention-backward reference (itself checked vs finite differences).
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }

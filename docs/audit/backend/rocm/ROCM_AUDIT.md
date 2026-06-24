@@ -126,12 +126,27 @@ matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
   — vs a numpy attention reference across f16/bf16, head_dim 16/32/64/128, multi
   batch/head, ragged shapes, and causal. Measured on gfx1151: maxerr ~1e-4 (f16).
   Skip-clean with no AMD GPU / HIPRTC.
-- Honest scope (Decision #25): WMMA `{fp16, bf16}` forward only — **no backward,
-  no perf ladder** (this is the correctness-first "rung 0" of attention, the
-  analog of the naive GEMM tile). It does **not** earn a `runtime.launch()` lane
-  yet: that needs flash_attn artifact plumbing (how a JIT'd attention artifact
-  carries Q/K/V + dispatches), a separate piece — so no `runtime_execution_matrix`
-  row is claimed (adding one with no producer would be over-claiming).
+- Honest scope (Decision #25): this *hand-written runtime symbol* is WMMA
+  `{fp16, bf16}` **forward only**. The compiler-generated lane now covers both
+  forward and **backward** (+ measured perf ladders) — see the compiler-path
+  item 10 below; the hand-written symbol stays the forward oracle.
+
+✅ **flash_attn is now ALSO compiler-generated (2026-06-23) — the second
+compiler-generated op (after matmul Stage K/L).** A `tessera_rocm.flash_attn`
+directive (`head_dim`, `dtype`) is expanded by the new
+`generate-wmma-flash-attn-kernel` pass into a fragment-materialized FA-2 forward
+`gpu.func` — LDS-staged Q (gpu.func workgroup attributions), `QK^T` on WMMA
+(`tessera_rocm.wmma`), online softmax (`math.exp` → LLVM exp via the math
+ConvertToLLVM interface now registered in tessera-opt), `P@V` on WMMA, scores
+staged in LDS to bridge the QK^T-accumulator → P@V-A-fragment layout — a faithful
+MLIR re-emission of the hand-written kernel. It lowers through Stage J + Stage I
+**entirely in-process (no mlir-opt)** and **executes on gfx1151 matching a numpy
+attention reference** (maxerr < 2e-2 across head_dim 16/64, causal/non-causal,
+ragged Sq/Sk) — `tests/unit/test_rocm_flash_attn_compiled.py`. The remaining glue
+for a `runtime.launch()` executor-table lane (a flash_attn op-metadata contract +
+executor + matrix row, the same additive step matmul took at L4) is not yet
+wired, so no `runtime_execution_matrix` row is claimed (adding one with no
+producer would be over-claiming).
 
 **No audit inflation:** the per-primitive `backend_kernel` axis stays open —
 `primitive_is_complete(flash_attn)` is still `False` (x86/apple/nvidia/cpu rows
@@ -183,7 +198,10 @@ become the on-silicon **oracle** the compiled path validates against.
   `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the box's
   own arch) is listed there too so the classification is total (no silent
   `lookup() -> None`).
-- **flash_attn**: no backward pass; no perf ladder; no `runtime.launch()` lane.
+- **flash_attn**: compiler-generated forward + backward both execute on gfx1151
+  with measured perf ladders (item 10). Still open: a `runtime.launch()`
+  executor-table lane, and the backward perf optimizations (WMMA logsumexp
+  pre-pass, causal tile-skip, pipelining).
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
@@ -480,20 +498,72 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       `rocdl.wmma.i32.16x16x16.iu8` (signed, clamp=0 = wrap).
     - **int4** (`dtype="int4"`, opt-in via `metadata["wmma_dtype"]`): int4 values
       in int8 containers (range [-8,7]); nibble-packed in-kernel to the iu4 ABI
-      `vector<2xi32>` → `rocdl.wmma.i32.16x16x16.iu4`. Correctness-first (no
-      coalesced load); packed-memory int4 + perf is future work.
+      `vector<2xi32>` → `rocdl.wmma.i32.16x16x16.iu4`.
     Both execute on gfx1151 **bit-EXACT vs numpy int32 matmul** (integer is exact,
     so numpy is the oracle) across aligned / ragged-M/N / ragged-K shapes —
     `test_rocm_compiled_launch_execute.py`. The codegen generalized via a
     `WmmaTypes` bundle (store/load/frag/acc/accElem + pack-kind) so f16/bf16/int8/
     int4 share the one 3-path kernel. The hand-written `runtime_symbol` (f16/bf16)
     is unchanged; int8/int4 are compiled-lane-only capabilities.
-  Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
-  L1. The hand-written kernel stays the production default + oracle until the
+  - ✅ **int dtype perf sweep — measured (2026-06-23).** `benchmarks/rocm/
+    benchmark_rocm_compiled_gemm_dtype.py` (kernel-only, best macro-tile) on
+    gfx1151 at 2048³: **f16 ≈ 23.2 TFLOP/s, bf16 ≈ 23.1, int8 ≈ 21.0 TOP/s,
+    int4 ≈ 23.8 TOP/s** — all within ~10%. The finding: **RDNA 3.5 WMMA runs
+    iu8/iu4 at the same matrix-op rate as f16** (no low-precision FLOP-rate
+    multiplier), so the compiled int paths are already compute-competitive and the
+    int4 nibble-pack overhead is amortized. **Consequence:** packed-memory int4
+    (2 int4/byte) would buy *memory footprint* (½) + bandwidth, **not compute**
+    on this arch — so it is deliberately deferred (its large, sub-byte-strided-B
+    layout is unjustified by a compute speedup that doesn't exist here). Measured,
+    not assumed (Decision #25).
+  - ✅ **Front-end glue wired (2026-06-23).** The Graph `tessera.matmul` → Tile →
+    Target-IR lowering (`_lower_rocm_op` on `tile.mma` in `target_ir.py`) now
+    EMITS the executable `tessera_rocm.wmma_gemm` directive (m=n=k=16 WMMA tile +
+    dtype) alongside the abstract `tessera_rocm.mfma` marker. So a
+    `@jit(target="rocm")` matmul's `target_ir` contains the directive the
+    `generate-wmma-gemm-kernel` pass consumes — the directive is now produced by
+    the IR stack (Decision #19), not only synthesized by the runtime. Verified
+    GPU-free in `test_rocm_matmul_front_end_glue.py`: the directive appears with
+    the right attrs AND the extracted directive feeds the generate pass into a
+    `gpu.func` + WMMA op. (The runtime lane still synthesizes a clean directive at
+    launch for the per-shape `mt`/`nt` perf choice; the canonical *lowering* now
+    owns directive production.)
+  The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.
 
-10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0
-    correctness-first); the `runtime.launch()` artifact lane.
+10. flash_attn follow-ups:
+    - ✅ **compiler-generated forward** (2026-06-23) — the `generate-wmma-flash-
+      attn-kernel` pass; executes on gfx1151 vs numpy (see the flash_attn section).
+    - ✅ **forward perf ladder, measured** (2026-06-23) —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_compiled.py` on gfx1151:
+      **~4.0 TFLOP/s at head_dim 64, ~2.4 at 128** (FA-2 fwd FLOPs). Modest by
+      design — the kernel is correctness-first (one wave per query tile, LDS
+      round-trips, online-softmax barriers, no KV-tile pipelining / double
+      buffering / multi-wave query tiles). The ladder quantifies the headroom.
+    - ✅ **backward pass — compiler-generated (2026-06-23).** The
+      `generate-wmma-flash-attn-bwd-kernel` pass expands one
+      `tessera_rocm.flash_attn_bwd` directive into the textbook FA-2 backward
+      as THREE fragment-materialized WMMA kernels (no stored attention matrix —
+      S/P recomputed per tile): `_pre` (scalar logsumexp `L` + `D=rowsum(O·dO)`),
+      `_dkdv` (per key-tile: recompute S/P, `dP=dO@Vᵀ`, `dS=P·(dP−D)`, accumulate
+      `dV+=Pᵀ@dO` and `dK+=scale·dSᵀ@Q` — P/dS staged in LDS, reread transposed),
+      `_dq` (per query-tile: `dQ+=scale·dS@K`). All three use the same RDNA WMMA
+      `C[m,n]=Σ_k A[m,k]B[n,k]` primitive + Stage J→I lowering as the forward.
+      Executes on gfx1151 vs a numpy attention-backward reference (itself checked
+      against finite differences): **rel-err ~2–4e-4** (f16 storage, f32
+      accumulate) across head_dim 16/64, causal + non-causal, ragged —
+      `tests/unit/test_rocm_flash_attn_bwd_compiled.py`. flash_attn (fwd+bwd) is
+      now the third compiler-generated op on ROCm after matmul.
+    - ✅ **backward perf ladder, measured (2026-06-23)** —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_bwd_compiled.py` on gfx1151:
+      **~1.1–1.3 TFLOP/s at head_dim 64, ~0.67 at 128** (~10·B·H·Sq·Sk·D FLOPs).
+      Lower than the forward by design — five matmuls plus a *scalar* logsumexp
+      pre-pass (no WMMA in `_pre`), recompute-per-tile, no causal loop-bound /
+      double-buffering. Perf optimizations (WMMA logsumexp, causal tile-skip,
+      pipelining) are the obvious next rung; correctness-first landed first.
+    - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
+      contract + executor + matrix row) — the same additive step matmul took at
+      L4; the compiled kernel + in-process execution already exist.
 11. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated

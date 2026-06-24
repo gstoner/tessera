@@ -3,11 +3,13 @@ add_mlir_library(TesseraROCMConversion
   TesseraTargetToROCDL.cpp
   KernelABI.cpp
   GenerateWMMAGemmKernel.cpp
+  GenerateWMMAFlashAttnKernel.cpp
+  GenerateWMMAFlashAttnBwdKernel.cpp
   Passes.cpp
   LINK_LIBS PUBLIC
     MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRFuncDialect MLIRTransformUtils
     MLIRGPUDialect MLIRSCFDialect MLIRVectorDialect MLIRArithDialect
-    MLIRMemRefDialect
+    MLIRMemRefDialect MLIRMathDialect
     TesseraROCMIR)
 target_include_directories(TesseraROCMConversion PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../include

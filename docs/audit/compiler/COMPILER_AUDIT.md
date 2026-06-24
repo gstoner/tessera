@@ -869,11 +869,20 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
   `storage_pack_consume.mlir`. **The real consumer ships on AMD today, not a
   future NVIDIA emitter** — `GenerateWMMAGemmKernel` already nibble-packs 16 int4
-  into `vector<2xi32>` (iu4 ABI) and bitcasts int8 to `vector<4xi32>` (iu8). *Real
-  integration task (coordinated with the ROCm backend, not a blind rewire):*
-  reconcile `tessera.storage_pack {factor}` with the ROCm WMMA `pack` model so
-  one packing contract feeds both AMD (shipping) and NVIDIA (future), then flip
-  `legalize-dtypes` opt-in → default per target.
+  into `vector<2xi32>` (iu4 ABI) and bitcasts int8 to `vector<4xi32>` (iu8).
+  **Reconciliation LANDED (2026-06-23).** `GenerateWMMAGemmKernel` now *consumes*
+  `tessera.storage_pack`: the descriptor's `logical` selects the WMMA dtype and
+  its `factor` is checked against the WMMA integer pack mode (int4 → 2 nibble-
+  pack, int8 → 1), `DTYPE_PACK_FACTOR_MISMATCH` on drift — so the abstract C4
+  descriptor drives the real, shipping AMD int4/int8 codegen (one packing
+  contract for both backends). Additive: falls back to the legacy `dtype` attr
+  when no descriptor, so the existing ROCm tests are unchanged. Verified on a
+  ROCm-backend build (`-DTESSERA_BUILD_ROCM_BACKEND=ON -DTESSERA_ENABLE_HIP=OFF`
+  builds the MLIR passes against Homebrew LLVM/ROCDL — no HIP/`/opt/rocm`
+  needed): ROCm lit 13/13 incl. `wmma_gemm_storage_pack.mlir` (descriptor drives
+  int4 → `vector<2xi32>` iu4 ABI; factor-mismatch caught). *Still open:* flip
+  `legalize-dtypes` opt-in → default per target now that the marker is consumed;
+  the NVIDIA sub-byte emitter is the symmetric future consumer.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global

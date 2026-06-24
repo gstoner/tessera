@@ -436,8 +436,19 @@ struct GenerateWMMAGemmKernelPass
       Type f32Ty = b.getF32Type();
       WmmaTypes T;
       StringRef dt = "f16";
-      if (auto a = op->getAttrOfType<StringAttr>("dtype"))
+      // C4 reconciliation (2026-06-23): if the directive carries the
+      // backend-neutral `tessera.storage_pack = {logical, container, factor}`
+      // descriptor (from StoragePackConsume), its `logical` selects the dtype —
+      // one packing contract feeds both AMD (here) and NVIDIA. Fall back to the
+      // legacy `dtype` attr when no descriptor is present (non-breaking).
+      DictionaryAttr packDesc =
+          op->getAttrOfType<DictionaryAttr>("tessera.storage_pack");
+      if (packDesc) {
+        if (auto logical = packDesc.getAs<StringAttr>("logical"))
+          dt = logical.getValue();
+      } else if (auto a = op->getAttrOfType<StringAttr>("dtype")) {
         dt = a.getValue();
+      }
       auto v8i32 = VectorType::get({8}, i32Ty);
       auto v8f32 = VectorType::get({8}, f32Ty);
       auto v16i8 = VectorType::get({16}, i8Ty);
@@ -462,6 +473,23 @@ struct GenerateWMMAGemmKernelPass
                       "int8, or int4 (got '")
             << dt << "')";
         return signalPassFailure();
+      }
+
+      // C4 reconciliation: the storage-pack `factor` (logical sub-byte values per
+      // byte container) IS the WMMA integer pack mode (int8 -> 1, int4 -> 2), so
+      // they must agree — a mismatch means the dtype contract and the WMMA ABI
+      // have drifted.
+      if (packDesc && T.isInt) {
+        if (auto fAttr = packDesc.getAs<IntegerAttr>("factor")) {
+          int64_t factor = fAttr.getInt();
+          if (factor != T.pack) {
+            op->emitError("DTYPE_PACK_FACTOR_MISMATCH: tessera.storage_pack "
+                          "factor ")
+                << factor << " disagrees with the WMMA int pack mode " << T.pack
+                << " for dtype '" << dt << "'.";
+            return signalPassFailure();
+          }
+        }
       }
 
       // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K) kernel { ... } }

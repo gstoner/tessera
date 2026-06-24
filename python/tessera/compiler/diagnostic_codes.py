@@ -1221,6 +1221,15 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
     ),
 
+    # C4 reconciliation (2026-06-23) — the ROCm WMMA kernel generator consumes
+    # the storage-pack descriptor; its factor must match the WMMA int pack mode.
+    DiagnosticCode(
+        code="DTYPE_PACK_FACTOR_MISMATCH", pass_origin="GenerateWMMAGemmKernel",
+        severity="error",
+        summary="A tessera.storage_pack factor disagrees with the ROCm WMMA integer pack mode (int8->1, int4->2) for the dtype.",
+        fix_hint="Make the storage-pack factor (container_bits/storage_bits) match the WMMA ABI pack mode; they describe the same packing.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
+    ),
     # C4 part 1 (2026-06-23) — the storage-pack consumer (StoragePackConsume).
     DiagnosticCode(
         code="DTYPE_PACK_BAD_WIDTHS", pass_origin="StoragePackConsume",

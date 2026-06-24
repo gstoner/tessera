@@ -1,0 +1,84 @@
+# Chapter 6. Scalar ALU Operations
+
+> RDNA4 ISA — pages 68–69
+
+Chapter 6. Scalar ALU Operations
+Scalar ALU (SALU) instructions operate on values that are common to all work-items in the wave. These
+operations consist of 32-bit integer or float arithmetic, and 32- or 64-bit bit-wise operations. The SALU also can
+perform operations directly on the Program Counter, allowing the program to create a call stack in SGPRs.
+Many operations also set the Scalar Condition Code bit (SCC) to indicate the result of a comparison, a carry-out,
+or whether the instruction result was zero.
+
+6.1. SALU Instruction Formats
+SALU instructions are encoded in one of five microcode formats, shown below:
+
+Name          Size        Function
+SOP1          32 bit      SALU op with 1 input
+SOP2          32 bit      SALU op with 2 inputs
+SOPK          32 bit      SALU op with 1 constant signed 16-bit integer input
+SOPC          32 bit      SALU compare op
+SOPP          32 bit      SALU program control op
+
+Each of these instruction formats uses some of these fields:
+
+Field                    Description
+OP                       Opcode: instruction to be executed.
+SDST                     Destination SGPR, M0, NULL or EXEC.
+SSRC0                    First source operand.
+SSRC1                    Second source operand.
+SIMM16                   Signed immediate 16-bit integer constant.
+
+6.2. Scalar ALU Operands
+The table below lists the operands available to SALU instructions. In the table below, 0-127 can be used as
+scalar sources or destinations; 128-255 can only be used as sources.
+
+                                                 Table 28. Scalar Operands
+
+                        Code      Meaning
+Scalar      Scalar Dest 0-105     SGPR 0 .. 105             Scalar GPRs. One DWORD each.
+Source (8   (7 bits)    106       VCC_LO                    VCC[31:0]
+bits)                   107       VCC_HI                    VCC[63:32]
+                        108-123   TTMP0 .. TTMP15           Trap handler temporary SGPRs (privileged)
+                        124       NULL                      Reads return zero, writes are ignored. When used as an
+                                                            SALU destination, nullifies the instruction.
+                        125       M0                        Temporary register, use for a variety of functions
+                        126       EXEC_LO                   EXEC[31:0]
+                        127       EXEC_HI                   EXEC[63:32]
+            Integer     128       0                         Inline constant zero
+            Inline      129-192   int 1 .. 64               Integer inline constants
+            Constants   193-208   int -1 .. -16
+                        209-231   Reserved                  Reserved
+                        230       Reserved                  Reserved
+                        231       Reserved                  Reserved
+                        232-234   Reserved                  Reserved
+                        235       SHARED_BASE               Memory Aperture Definition
+                        236       SHARED_LIMIT
+                        237       PRIVATE_BASE
+                        238       PRIVATE_LIMIT
+                        239       Reserved                  Reserved
+            Float Inline 240      0.5                       Inline floating point constants. Can be used in 16, 32 and
+            Constants 241         -0.5                      64 bit floating point math. They may be used with non-
+                        242       1.0                       float instructions but the value is treated as an integer with
+                                                            the hex value of the float.
+                        243       -1.0
+                        244       2.0                       1/(2*PI) is 0.15915494. The hex values are:
+                        245       -2.0                      half: 0x3118
+                        246       4.0                       single: 0x3e22f983
+                        247       -4.0                      double: 0x3fc45f306dc9c882
+                        248       1.0 / (2 * PI)
+                        249-252   Reserved                  Reserved
+                        253       SCC                       { 31’b0, SCC }
+                        254       Reserved                  Reserved
+                        255       Literal constant32        32 bit constant from instruction stream
+
+SALU destinations are in the range 0-127.
+
+SALU instructions can use a 32-bit or 64-bit literal constant. This constant is part of the instruction stream and
+is available to all SALU microcode formats except SOPP and SOPK (except literal is allowed in
+S_SETREG_IMM32_B32). Literal constants are used by setting the source instruction field to "literal" (255), and
+then the following instruction DWORD is used as the source value.
+
+If the destination SGPR is out-of-range, no SGPR is written with the result and SCC is not updated.
+
+If an instruction uses 64-bit data in SGPRs, the SGPR pair must be aligned to an even boundary. For example, it
+is legal to use SGPRs 2 and 3 or 8 and 9 (but not 11 and 12) to represent 64-bit data.

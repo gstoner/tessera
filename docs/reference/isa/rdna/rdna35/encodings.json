@@ -1,0 +1,1120 @@
+[
+  {
+    "format": "SOP2",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SSRC0",
+        "bits": "[7:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SSRC1",
+        "bits": "[15:8]",
+        "desc": "Second scalar source operand."
+      },
+      {
+        "name": "SDST",
+        "bits": "[22:16]",
+        "desc": "Scalar destination."
+      },
+      {
+        "name": "OP",
+        "bits": "[29:23]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:30]",
+        "desc": "'b10"
+      }
+    ]
+  },
+  {
+    "format": "SOPK",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SIMM16",
+        "bits": "[15:0]",
+        "desc": "Signed immediate 16-bit value."
+      },
+      {
+        "name": "SDST",
+        "bits": "[22:16]",
+        "desc": "Scalar destination, and can provide second source operand."
+      },
+      {
+        "name": "OP",
+        "bits": "[27:23]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:28]",
+        "desc": "'b1011"
+      }
+    ]
+  },
+  {
+    "format": "SOP1",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SSRC0",
+        "bits": "[7:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "OP",
+        "bits": "[15:8]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "SDST",
+        "bits": "[22:16]",
+        "desc": "Scalar destination."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:23]",
+        "desc": "'b10_1111101"
+      }
+    ]
+  },
+  {
+    "format": "SOPC",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SSRC0",
+        "bits": "[7:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SSRC1",
+        "bits": "[15:8]",
+        "desc": "Second scalar source operand."
+      },
+      {
+        "name": "OP",
+        "bits": "[22:16]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:23]",
+        "desc": "'b10_1111110"
+      }
+    ]
+  },
+  {
+    "format": "SOPP",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SIMM16",
+        "bits": "[15:0]",
+        "desc": "Signed immediate 16-bit value."
+      },
+      {
+        "name": "OP",
+        "bits": "[22:16]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:23]",
+        "desc": "'b10_1111111"
+      }
+    ]
+  },
+  {
+    "format": "SMEM",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SBASE",
+        "bits": "[5:0]",
+        "desc": "SGPR-pair that provides base address or SGPR-quad that provides V#. (LSB of SGPR"
+      },
+      {
+        "name": "SDATA",
+        "bits": "[12:6]",
+        "desc": "SGPR that provides write data or accepts return data."
+      },
+      {
+        "name": "DLC",
+        "bits": "[14]",
+        "desc": "Device level coherent."
+      },
+      {
+        "name": "GLC",
+        "bits": "[16]",
+        "desc": "Globally memory Coherent. Force bypass of L1 cache, or for atomics, cause pre-op"
+      },
+      {
+        "name": "OP",
+        "bits": "[25:18]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b111101"
+      },
+      {
+        "name": "OFFSET",
+        "bits": "[52:32]",
+        "desc": "An immediate signed byte offset. Ignored for cache invalidations."
+      },
+      {
+        "name": "SOFFSET",
+        "bits": "[63:57]",
+        "desc": "SGPR that supplies an unsigned byte offset. Disabled if set to NULL."
+      }
+    ]
+  },
+  {
+    "format": "VOP2",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRC0",
+        "bits": "[8:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "VSRC1",
+        "bits": "[16:9]",
+        "desc": "VGPR that provides the second operand."
+      },
+      {
+        "name": "VDST",
+        "bits": "[24:17]",
+        "desc": "Destination VGPR."
+      },
+      {
+        "name": "OP",
+        "bits": "[30:25]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31]",
+        "desc": "'b0"
+      }
+    ]
+  },
+  {
+    "format": "VOP1",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRC0",
+        "bits": "[8:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "OP",
+        "bits": "[16:9]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "VDST",
+        "bits": "[24:17]",
+        "desc": "Destination VGPR."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:25]",
+        "desc": "'b0_111111"
+      }
+    ]
+  },
+  {
+    "format": "VOPC",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRC0",
+        "bits": "[8:0]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "VSRC1",
+        "bits": "[16:9]",
+        "desc": "VGPR that provides the second operand."
+      },
+      {
+        "name": "OP",
+        "bits": "[24:17]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:25]",
+        "desc": "'b0_111110"
+      }
+    ]
+  },
+  {
+    "format": "VOP3",
+    "page": 153,
+    "fields": [
+      {
+        "name": "VDST",
+        "bits": "[7:0]",
+        "desc": "Destination VGPR"
+      },
+      {
+        "name": "ABS",
+        "bits": "[10:8]",
+        "desc": "Absolute value of input. [8] = src0, [9] = src1, [10] = src2"
+      },
+      {
+        "name": "OPSEL",
+        "bits": "[14:11]",
+        "desc": "Operand select for 16-bit data. 0 = select low half, 1 = select high half. [11] = src0,"
+      },
+      {
+        "name": "CLMP",
+        "bits": "[15]",
+        "desc": "Clamp output"
+      },
+      {
+        "name": "OP",
+        "bits": "[25:16]",
+        "desc": "Opcode. See next table."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b110101"
+      },
+      {
+        "name": "SRC0",
+        "bits": "[40:32]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SRC1",
+        "bits": "[49:41]",
+        "desc": "Second input operand. Same options as SRC0."
+      },
+      {
+        "name": "SRC2",
+        "bits": "[58:50]",
+        "desc": "Third input operand. Same options as SRC0."
+      },
+      {
+        "name": "OMOD",
+        "bits": "[60:59]",
+        "desc": "Output Modifier: 0=none, 1=*2, 2=*4, 3=*0.5"
+      },
+      {
+        "name": "NEG",
+        "bits": "[63:61]",
+        "desc": "Negate input. [61] = src0, [62] = src1, [63] = src2"
+      }
+    ]
+  },
+  {
+    "format": "VOP3SD",
+    "page": 153,
+    "fields": [
+      {
+        "name": "VDST",
+        "bits": "[7:0]",
+        "desc": "Destination VGPR"
+      },
+      {
+        "name": "SDST",
+        "bits": "[14:8]",
+        "desc": "Scalar destination"
+      },
+      {
+        "name": "CLMP",
+        "bits": "[15]",
+        "desc": "Clamp result"
+      },
+      {
+        "name": "OP",
+        "bits": "[25:16]",
+        "desc": "Opcode. see next table."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b110101"
+      },
+      {
+        "name": "SRC0",
+        "bits": "[40:32]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SRC1",
+        "bits": "[49:41]",
+        "desc": "Second input operand. Same options as SRC0."
+      },
+      {
+        "name": "SRC2",
+        "bits": "[58:50]",
+        "desc": "Third input operand. Same options as SRC0."
+      },
+      {
+        "name": "OMOD",
+        "bits": "[60:59]",
+        "desc": "Output Modifier: 0=none, 1=*2, 2=*4, 3=*0.5"
+      },
+      {
+        "name": "NEG",
+        "bits": "[63:61]",
+        "desc": "Negate input. [61] = src0, [62] = src1, [63] = src2"
+      }
+    ]
+  },
+  {
+    "format": "VOP3P",
+    "page": 153,
+    "fields": [
+      {
+        "name": "VDST",
+        "bits": "[7:0]",
+        "desc": "Destination VGPR"
+      },
+      {
+        "name": "NEG_HI",
+        "bits": "[10:8]",
+        "desc": "Negate sources 0,1,2 of the high 16-bits."
+      },
+      {
+        "name": "OPSEL",
+        "bits": "[13:11]",
+        "desc": "Select low or high for low sources 0=[11], 1=[12], 2=[13]."
+      },
+      {
+        "name": "OPSEL_HI2",
+        "bits": "[14]",
+        "desc": "Select low or high for high sources 0=[14], 1=[60], 2=[59]."
+      },
+      {
+        "name": "CLMP",
+        "bits": "[15]",
+        "desc": "1 = clamp result."
+      },
+      {
+        "name": "OP",
+        "bits": "[22:16]",
+        "desc": "Opcode. see next table."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b11001100"
+      },
+      {
+        "name": "SRC0",
+        "bits": "[40:32]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SRC1",
+        "bits": "[49:41]",
+        "desc": "Second input operand. Same options as SRC0."
+      },
+      {
+        "name": "SRC2",
+        "bits": "[58:50]",
+        "desc": "Third input operand. Same options as SRC0."
+      },
+      {
+        "name": "OPSEL_HI",
+        "bits": "[60:59]",
+        "desc": "See OPSEL_HI2."
+      },
+      {
+        "name": "NEG",
+        "bits": "[63:61]",
+        "desc": "Negate input for low 16-bits of sources. [61] = src0, [62] = src1, [63] = src2"
+      }
+    ]
+  },
+  {
+    "format": "VOPD",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRCX0",
+        "bits": "[8:0]",
+        "desc": "Source 0 for opcode X. First operand for the instruction."
+      },
+      {
+        "name": "VSRCX1",
+        "bits": "[16:9]",
+        "desc": "Source VGPR 1 for opcode X."
+      },
+      {
+        "name": "OPY",
+        "bits": "[21:17]",
+        "desc": "Opcode Y. see next table."
+      },
+      {
+        "name": "OPX",
+        "bits": "[25:22]",
+        "desc": "Opcode X. see next table."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b110010"
+      },
+      {
+        "name": "SRCY0",
+        "bits": "[40:32]",
+        "desc": "Source 0 for opcode Y. See SRCX0 for enumerations"
+      },
+      {
+        "name": "VSRCY1",
+        "bits": "[48:41]",
+        "desc": "Source VGPR 1 for opcode Y."
+      },
+      {
+        "name": "VDSTY",
+        "bits": "[55:49]",
+        "desc": "Instruction Y destination VGPR, excluding LSB. LSB is the opposite of VDSTX[0]."
+      },
+      {
+        "name": "VDSTX",
+        "bits": "[63:56]",
+        "desc": "Instruction X destination VGPR"
+      }
+    ]
+  },
+  {
+    "format": "DPP16",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRC0",
+        "bits": "[39:32]",
+        "desc": "Real SRC0 operand (VGPR)."
+      },
+      {
+        "name": "DPP_CTRL",
+        "bits": "[48:40]",
+        "desc": "See next table: \"DPP_CTRL Enumeration\""
+      },
+      {
+        "name": "FI",
+        "bits": "[50]",
+        "desc": "Fetch invalid data: 0 = read zero for any inactive lanes; 1 = read VGPRs even for"
+      },
+      {
+        "name": "BC",
+        "bits": "[51]",
+        "desc": "Bounds Control: 0 = do not write when source is out of range, 1 = write."
+      },
+      {
+        "name": "SRC0_NEG",
+        "bits": "[52]",
+        "desc": "1 = negate source 0."
+      },
+      {
+        "name": "SRC0_ABS",
+        "bits": "[53]",
+        "desc": "1 = Absolute value of source 0."
+      },
+      {
+        "name": "SRC1_NEG",
+        "bits": "[54]",
+        "desc": "1 = negate source 1."
+      },
+      {
+        "name": "SRC1_ABS",
+        "bits": "[55]",
+        "desc": "1 = Absolute value of source 1."
+      },
+      {
+        "name": "BANK_MASK",
+        "bits": "[59:56]",
+        "desc": "Bank Mask Applies to the VGPR destination write only, does not impact the thread"
+      },
+      {
+        "name": "ROW_MASK",
+        "bits": "[63:60]",
+        "desc": "Row Mask Applies to the VGPR destination write only, does not impact the thread"
+      }
+    ]
+  },
+  {
+    "format": "DPP8",
+    "page": 153,
+    "fields": [
+      {
+        "name": "SRC0",
+        "bits": "[39:32]",
+        "desc": "Real SRC0 operand (VGPR)."
+      },
+      {
+        "name": "LANE_SEL0",
+        "bits": "[42:40]",
+        "desc": "Which lane to read for 1st output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL1",
+        "bits": "[45:43]",
+        "desc": "Which lane to read for 2nd output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL2",
+        "bits": "[48:46]",
+        "desc": "Which lane to read for 3rd output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL3",
+        "bits": "[51:49]",
+        "desc": "Which lane to read for 4th output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL4",
+        "bits": "[54:52]",
+        "desc": "Which lane to read for 5th output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL5",
+        "bits": "[57:55]",
+        "desc": "Which lane to read for 6th output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL6",
+        "bits": "[60:58]",
+        "desc": "Which lane to read for 7th output lane per 8-lane group"
+      },
+      {
+        "name": "LANE_SEL7",
+        "bits": "[63:61]",
+        "desc": "Which lane to read for 8th output lane per 8-lane group"
+      }
+    ]
+  },
+  {
+    "format": "VINTERP",
+    "page": 153,
+    "fields": [
+      {
+        "name": "VDST",
+        "bits": "[7:0]",
+        "desc": "Destination VGPR"
+      },
+      {
+        "name": "WAITEXP",
+        "bits": "[10:8]",
+        "desc": "Wait for EXPcnt to be less-than or equal-to this value before issuing instruction."
+      },
+      {
+        "name": "OPSEL",
+        "bits": "[14:11]",
+        "desc": "Select low or high for low sources 0=[11], 1=[12], 2=[13], dst=[14]."
+      },
+      {
+        "name": "CLMP",
+        "bits": "[15]",
+        "desc": "1 = clamp result."
+      },
+      {
+        "name": "OP",
+        "bits": "[22:16]",
+        "desc": "Opcode. see next table."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b11001101"
+      },
+      {
+        "name": "SRC0",
+        "bits": "[40:32]",
+        "desc": "Source 0. First operand for the instruction: VGPR 0-255."
+      },
+      {
+        "name": "SRC0",
+        "bits": "[40:32]",
+        "desc": "Source 0. First operand for the instruction."
+      },
+      {
+        "name": "SRC1",
+        "bits": "[49:41]",
+        "desc": "Second input operand. Same options as SRC0."
+      },
+      {
+        "name": "SRC2",
+        "bits": "[58:50]",
+        "desc": "Third input operand. Same options as SRC0."
+      },
+      {
+        "name": "NEG",
+        "bits": "[63:61]",
+        "desc": "Negate input for low 16-bits of sources. [61] = src0, [62] = src1, [63] = src2"
+      }
+    ]
+  },
+  {
+    "format": "LDSDIR",
+    "page": 153,
+    "fields": [
+      {
+        "name": "VDST",
+        "bits": "[7:0]",
+        "desc": "Destination VGPR"
+      },
+      {
+        "name": "ATTR_CHAN",
+        "bits": "[9:8]",
+        "desc": "Attribute channel: 0=X, 1=Y, 2=Z, 3=W"
+      },
+      {
+        "name": "ATTR",
+        "bits": "[15:10]",
+        "desc": "Attribute number: 0 - 32."
+      },
+      {
+        "name": "WAIT_VA",
+        "bits": "[19:16]",
+        "desc": "Wait for previous VALU instructions to complete to resolve data dependency. Value"
+      },
+      {
+        "name": "OP",
+        "bits": "[21:20]",
+        "desc": "Opcode:"
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:24]",
+        "desc": "'b11001110"
+      }
+    ]
+  },
+  {
+    "format": "DS",
+    "page": 153,
+    "fields": [
+      {
+        "name": "OFFSET0",
+        "bits": "[7:0]",
+        "desc": "First address offset"
+      },
+      {
+        "name": "OFFSET1",
+        "bits": "[15:8]",
+        "desc": "Second address offset. For some opcodes this is concatenated with OFFSET0."
+      },
+      {
+        "name": "GDS",
+        "bits": "[17]",
+        "desc": "1=GDS, 0=LDS operation."
+      },
+      {
+        "name": "OP",
+        "bits": "[25:18]",
+        "desc": "See Opcode table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b110110"
+      },
+      {
+        "name": "ADDR",
+        "bits": "[39:32]",
+        "desc": "VGPR that supplies the address."
+      },
+      {
+        "name": "DATA0",
+        "bits": "[47:40]",
+        "desc": "First data VGPR."
+      },
+      {
+        "name": "DATA1",
+        "bits": "[55:48]",
+        "desc": "Second data VGPR."
+      },
+      {
+        "name": "VDST",
+        "bits": "[63:56]",
+        "desc": "Destination VGPR when results returned to VGPRs."
+      }
+    ]
+  },
+  {
+    "format": "MTBUF",
+    "page": 153,
+    "fields": [
+      {
+        "name": "OFFSET",
+        "bits": "[11:0]",
+        "desc": "Address offset, unsigned byte."
+      },
+      {
+        "name": "SLC",
+        "bits": "[12]",
+        "desc": "System Level Coherent. Used in conjunction with DLC to determine L2 cache"
+      },
+      {
+        "name": "DLC",
+        "bits": "[13]",
+        "desc": "0 = normal, 1 = Device Coherent"
+      },
+      {
+        "name": "GLC",
+        "bits": "[14]",
+        "desc": "0 = normal, 1 = globally coherent (bypass L0 cache) or for atomics, return pre-op"
+      },
+      {
+        "name": "OP",
+        "bits": "[18:15]",
+        "desc": "Opcode. See table below."
+      },
+      {
+        "name": "FORMAT",
+        "bits": "[25:19]",
+        "desc": "Data Format of data in memory buffer. See Buffer Image format Table"
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b111010"
+      },
+      {
+        "name": "VADDR",
+        "bits": "[39:32]",
+        "desc": "Address of VGPR to supply first component of address (offset or index). When both"
+      },
+      {
+        "name": "VDATA",
+        "bits": "[47:40]",
+        "desc": "Address of VGPR to supply first component of write data or receive first component"
+      },
+      {
+        "name": "SRSRC",
+        "bits": "[52:48]",
+        "desc": "SGPR to supply V# (resource constant) in 4 or 8 consecutive SGPRs. It is missing 2"
+      },
+      {
+        "name": "TFE",
+        "bits": "[53]",
+        "desc": "Partially resident texture, texture fault enable."
+      },
+      {
+        "name": "OFFEN",
+        "bits": "[54]",
+        "desc": "1 = enable offset VGPR, 0 = use zero for address offset"
+      },
+      {
+        "name": "IDXEN",
+        "bits": "[55]",
+        "desc": "1 = enable index VGPR, 0 = use zero for address index"
+      },
+      {
+        "name": "SOFFSET",
+        "bits": "[63:56]",
+        "desc": "Address offset, unsigned byte."
+      }
+    ]
+  },
+  {
+    "format": "MUBUF",
+    "page": 153,
+    "fields": [
+      {
+        "name": "OFFSET",
+        "bits": "[11:0]",
+        "desc": "Address offset, unsigned byte."
+      },
+      {
+        "name": "SLC",
+        "bits": "[12]",
+        "desc": "System Level Coherent. Used in conjunction with DLC to determine L2 cache"
+      },
+      {
+        "name": "DLC",
+        "bits": "[13]",
+        "desc": "0 = normal, 1 = Device Coherent"
+      },
+      {
+        "name": "GLC",
+        "bits": "[14]",
+        "desc": "0 = normal, 1 = globally coherent (bypass L0 cache) or for atomics, return pre-op"
+      },
+      {
+        "name": "OP",
+        "bits": "[25:18]",
+        "desc": "Opcode. See table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b111000"
+      },
+      {
+        "name": "VADDR",
+        "bits": "[39:32]",
+        "desc": "Address of VGPR to supply first component of address (offset or index). When both"
+      },
+      {
+        "name": "VDATA",
+        "bits": "[47:40]",
+        "desc": "Address of VGPR to supply first component of write data or receive first component"
+      },
+      {
+        "name": "SRSRC",
+        "bits": "[52:48]",
+        "desc": "SGPR to supply V# (resource constant) in 4 or 8 consecutive SGPRs. It is missing 2"
+      },
+      {
+        "name": "TFE",
+        "bits": "[53]",
+        "desc": "Partially resident texture, texture fault enable."
+      },
+      {
+        "name": "OFFEN",
+        "bits": "[54]",
+        "desc": "1 = enable offset VGPR, 0 = use zero for address offset"
+      },
+      {
+        "name": "IDXEN",
+        "bits": "[55]",
+        "desc": "1 = enable index VGPR, 0 = use zero for address index"
+      },
+      {
+        "name": "SOFFSET",
+        "bits": "[63:56]",
+        "desc": "Address offset, unsigned byte."
+      }
+    ]
+  },
+  {
+    "format": "MIMG",
+    "page": 153,
+    "fields": [
+      {
+        "name": "NSA",
+        "bits": "[0]",
+        "desc": "Non-sequential address. Specifies that an additional instruction DWORD exists"
+      },
+      {
+        "name": "DIM",
+        "bits": "[4:2]",
+        "desc": "Dimensionality of the resource constant. Set to bits [3:1] of the resource type field."
+      },
+      {
+        "name": "UNRM",
+        "bits": "[7]",
+        "desc": "Force address to be un-normalized. User must set to 1 for Image stores & atomics."
+      },
+      {
+        "name": "DMASK",
+        "bits": "[11:8]",
+        "desc": "Data VGPR enable mask: 1 .. 4 consecutive VGPRs"
+      },
+      {
+        "name": "SLC",
+        "bits": "[12]",
+        "desc": "System Level Coherent. Used in conjunction with DLC to determine L2 cache"
+      },
+      {
+        "name": "DLC",
+        "bits": "[13]",
+        "desc": "0 = normal, 1 = Device Coherent"
+      },
+      {
+        "name": "GLC",
+        "bits": "[14]",
+        "desc": "0 = normal, 1 = globally coherent (bypass L0 cache) or for atomics, return pre-op"
+      },
+      {
+        "name": "R128",
+        "bits": "[15]",
+        "desc": "Resource constant size: 1 = 128bit, 0 = 256bit"
+      },
+      {
+        "name": "A16",
+        "bits": "[16]",
+        "desc": "Address components are 16-bits (instead of the usual 32 bits)."
+      },
+      {
+        "name": "D16",
+        "bits": "[17]",
+        "desc": "Data components are 16-bits (instead of the usual 32 bits)."
+      },
+      {
+        "name": "OP",
+        "bits": "[25:18]",
+        "desc": "Opcode. See table below."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b111100"
+      },
+      {
+        "name": "VADDR",
+        "bits": "[39:32]",
+        "desc": "Address of VGPR to supply first component of address."
+      },
+      {
+        "name": "VDATA",
+        "bits": "[47:40]",
+        "desc": "Address of VGPR to supply first component of write data or receive first component"
+      },
+      {
+        "name": "SRSRC",
+        "bits": "[52:48]",
+        "desc": "SGPR to supply T# (resource constant) in 4 or 8 consecutive SGPRs. It is missing 2"
+      },
+      {
+        "name": "TFE",
+        "bits": "[53]",
+        "desc": "Partially resident texture, texture fault enable."
+      },
+      {
+        "name": "LWE",
+        "bits": "[54]",
+        "desc": "LOD Warning Enable. When set to 1, a texture fetch may return \"LOD_CLAMPED ="
+      },
+      {
+        "name": "SSAMP",
+        "bits": "[62:58]",
+        "desc": "SGPR to supply S# (sampler constant) in 4 or 8 consecutive SGPRs. It is missing 2"
+      },
+      {
+        "name": "ADDR1",
+        "bits": "[71:64]",
+        "desc": "Second Address register or group. Present only when NSA=1."
+      },
+      {
+        "name": "ADDR2",
+        "bits": "[79:72]",
+        "desc": "Third Address register or group. Present only when NSA=1."
+      }
+    ]
+  },
+  {
+    "format": "FLAT",
+    "page": 153,
+    "fields": [
+      {
+        "name": "OFFSET",
+        "bits": "[12:0]",
+        "desc": "Address offset"
+      },
+      {
+        "name": "DLC",
+        "bits": "[13]",
+        "desc": "0 = normal, 1 = Device Coherent"
+      },
+      {
+        "name": "GLC",
+        "bits": "[14]",
+        "desc": "0 = normal, 1 = globally coherent (bypass L0 cache) or for atomics, return pre-op"
+      },
+      {
+        "name": "SLC",
+        "bits": "[15]",
+        "desc": "System Level Coherent. Used in conjunction with DLC to determine L2 cache"
+      },
+      {
+        "name": "SEG",
+        "bits": "[17:16]",
+        "desc": "Memory Segment (instruction type): 0 = flat, 1 = scratch, 2 = global."
+      },
+      {
+        "name": "OP",
+        "bits": "[24:18]",
+        "desc": "Opcode. See tables below for FLAT, SCRATCH and GLOBAL opcodes."
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b110111"
+      },
+      {
+        "name": "ADDR",
+        "bits": "[39:32]",
+        "desc": "VGPR that holds address or offset. For 64-bit addresses, ADDR has the LSBs and"
+      },
+      {
+        "name": "DATA",
+        "bits": "[47:40]",
+        "desc": "VGPR that supplies data."
+      },
+      {
+        "name": "SADDR",
+        "bits": "[54:48]",
+        "desc": "Scalar SGPR that provides an address of offset (unsigned). Set this field to NULL or"
+      },
+      {
+        "name": "SVE",
+        "bits": "[55]",
+        "desc": "Scratch VGPR Enable. 1 = scratch address includes a VGPR to provide an offset; 0 ="
+      },
+      {
+        "name": "VDST",
+        "bits": "[63:56]",
+        "desc": "Destination VGPR for data returned from memory to VGPRs."
+      }
+    ]
+  },
+  {
+    "format": "EXP",
+    "page": 153,
+    "fields": [
+      {
+        "name": "EN",
+        "bits": "[3:0]",
+        "desc": "VGPR Enables: [0] enables VSRC0, \u2026 [3] enables VSRC3."
+      },
+      {
+        "name": "TARGET",
+        "bits": "[9:4]",
+        "desc": "Export destination:"
+      },
+      {
+        "name": "DONE",
+        "bits": "[11]",
+        "desc": "Indicates that this is the last export from the shader. Used only for Position and"
+      },
+      {
+        "name": "ROW",
+        "bits": "[13]",
+        "desc": "Row to export"
+      },
+      {
+        "name": "ENCODING",
+        "bits": "[31:26]",
+        "desc": "'b111110"
+      },
+      {
+        "name": "VSRC0",
+        "bits": "[39:32]",
+        "desc": "VGPR for source 0."
+      },
+      {
+        "name": "VSRC1",
+        "bits": "[47:40]",
+        "desc": "VGPR for source 1."
+      },
+      {
+        "name": "VSRC2",
+        "bits": "[55:48]",
+        "desc": "VGPR for source 2."
+      },
+      {
+        "name": "VSRC3",
+        "bits": "[63:56]",
+        "desc": "VGPR for source 3."
+      }
+    ]
+  }
+]

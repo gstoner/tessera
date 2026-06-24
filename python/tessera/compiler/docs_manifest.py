@@ -65,6 +65,18 @@ _EXEMPT_DOCS: frozenset[str] = frozenset({
 })
 
 
+# Machine-generated data archives that live under a canonical doc root but are
+# regenerated wholesale from source (not hand-authored prose), so the
+# authored-doc freshness gate does not apply.  Matched by path prefix; keep this
+# small and justify every entry.
+_EXEMPT_PREFIXES: tuple[str, ...] = (
+    # RDNA ISA data archive — extracted from AMD's ISA PDFs by
+    # docs/reference/isa/rdna/tools/build_archive.py (780+ generated section
+    # files); provenance is tracked via per-doc meta.json sha256, not frontmatter.
+    "docs/reference/isa/",
+)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Frontmatter + body parsing
 # ─────────────────────────────────────────────────────────────────────────
@@ -199,7 +211,7 @@ def collect_doc_manifest() -> tuple[DocEntry, ...]:
             continue
         for path in sorted(root_path.rglob("*.md")):
             rel = path.relative_to(_REPO_ROOT).as_posix()
-            if rel in _EXEMPT_DOCS:
+            if rel in _EXEMPT_DOCS or rel.startswith(_EXEMPT_PREFIXES):
                 continue
             entries.append(_parse_doc(path))
     return tuple(entries)

@@ -1,0 +1,10 @@
+{
+  "key": "rdna4",
+  "name": "RDNA4",
+  "title": "\"RDNA4\" Instruction Set Architecture: Reference Guide",
+  "kind": "isa",
+  "source_pdf": "rdna4-instruction-set-architecture.pdf",
+  "pages": 707,
+  "sha256": "96dc97df3468a4e63a13095e2540ba13aaa75cf4635a29516b59760695e25e0c",
+  "section_count": 255
+}

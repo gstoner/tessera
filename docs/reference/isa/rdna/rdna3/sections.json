@@ -1,0 +1,1890 @@
+[
+  {
+    "id": "rdna3-instruction-set-architecture-reference-guide",
+    "title": "\"RDNA3\" Instruction Set Architecture: Reference Guide",
+    "level": 0,
+    "page_start": 1,
+    "page_end": 3,
+    "file": "sections/rdna3-instruction-set-architecture-reference-guide.md"
+  },
+  {
+    "id": "contents",
+    "title": "Contents",
+    "level": 0,
+    "page_start": 4,
+    "page_end": 9,
+    "file": "sections/contents.md"
+  },
+  {
+    "id": "preface",
+    "title": "Preface",
+    "level": 0,
+    "page_start": 10,
+    "page_end": 10,
+    "file": "sections/preface.md"
+  },
+  {
+    "id": "about-this-document",
+    "title": "About This Document",
+    "level": 1,
+    "page_start": 10,
+    "page_end": 10,
+    "file": "sections/about-this-document.md"
+  },
+  {
+    "id": "audience",
+    "title": "Audience",
+    "level": 1,
+    "page_start": 10,
+    "page_end": 10,
+    "file": "sections/audience.md"
+  },
+  {
+    "id": "organization",
+    "title": "Organization",
+    "level": 1,
+    "page_start": 10,
+    "page_end": 10,
+    "file": "sections/organization.md"
+  },
+  {
+    "id": "related-documents",
+    "title": "Related Documents",
+    "level": 1,
+    "page_start": 11,
+    "page_end": 11,
+    "file": "sections/related-documents.md"
+  },
+  {
+    "id": "additional-information",
+    "title": "Additional Information",
+    "level": 1,
+    "page_start": 11,
+    "page_end": 11,
+    "file": "sections/additional-information.md"
+  },
+  {
+    "id": "chapter-1-introduction",
+    "title": "Chapter 1. Introduction",
+    "level": 0,
+    "page_start": 12,
+    "page_end": 13,
+    "file": "sections/chapter-1-introduction.md"
+  },
+  {
+    "id": "1-1-terminology",
+    "title": "1.1. Terminology",
+    "level": 1,
+    "page_start": 12,
+    "page_end": 13,
+    "file": "sections/1-1-terminology.md"
+  },
+  {
+    "id": "1-2-hardware-overview",
+    "title": "1.2. Hardware Overview",
+    "level": 1,
+    "page_start": 14,
+    "page_end": 14,
+    "file": "sections/1-2-hardware-overview.md"
+  },
+  {
+    "id": "1-2-1-work-group-processor-wgp",
+    "title": "1.2.1. Work-group Processor (WGP)",
+    "level": 2,
+    "page_start": 15,
+    "page_end": 15,
+    "file": "sections/1-2-1-work-group-processor-wgp.md"
+  },
+  {
+    "id": "1-2-2-data-sharing",
+    "title": "1.2.2. Data Sharing",
+    "level": 2,
+    "page_start": 15,
+    "page_end": 15,
+    "file": "sections/1-2-2-data-sharing.md"
+  },
+  {
+    "id": "1-2-3-device-memory",
+    "title": "1.2.3. Device Memory",
+    "level": 2,
+    "page_start": 16,
+    "page_end": 17,
+    "file": "sections/1-2-3-device-memory.md"
+  },
+  {
+    "id": "chapter-2-shader-concepts",
+    "title": "Chapter 2. Shader Concepts",
+    "level": 0,
+    "page_start": 18,
+    "page_end": 18,
+    "file": "sections/chapter-2-shader-concepts.md"
+  },
+  {
+    "id": "2-1-wave32-and-wave64",
+    "title": "2.1. Wave32 and Wave64",
+    "level": 1,
+    "page_start": 18,
+    "page_end": 18,
+    "file": "sections/2-1-wave32-and-wave64.md"
+  },
+  {
+    "id": "2-2-shader-types",
+    "title": "2.2. Shader Types",
+    "level": 1,
+    "page_start": 19,
+    "page_end": 19,
+    "file": "sections/2-2-shader-types.md"
+  },
+  {
+    "id": "2-2-1-compute-shaders",
+    "title": "2.2.1. Compute Shaders",
+    "level": 2,
+    "page_start": 19,
+    "page_end": 19,
+    "file": "sections/2-2-1-compute-shaders.md"
+  },
+  {
+    "id": "2-2-2-graphics-shaders",
+    "title": "2.2.2. Graphics Shaders",
+    "level": 2,
+    "page_start": 19,
+    "page_end": 19,
+    "file": "sections/2-2-2-graphics-shaders.md"
+  },
+  {
+    "id": "2-3-work-groups",
+    "title": "2.3. Work-groups",
+    "level": 1,
+    "page_start": 20,
+    "page_end": 20,
+    "file": "sections/2-3-work-groups.md"
+  },
+  {
+    "id": "2-4-shader-padding-requirement",
+    "title": "2.4. Shader Padding Requirement",
+    "level": 1,
+    "page_start": 21,
+    "page_end": 21,
+    "file": "sections/2-4-shader-padding-requirement.md"
+  },
+  {
+    "id": "chapter-3-wave-state",
+    "title": "Chapter 3. Wave State",
+    "level": 0,
+    "page_start": 22,
+    "page_end": 22,
+    "file": "sections/chapter-3-wave-state.md"
+  },
+  {
+    "id": "3-1-state-overview",
+    "title": "3.1. State Overview",
+    "level": 1,
+    "page_start": 22,
+    "page_end": 22,
+    "file": "sections/3-1-state-overview.md"
+  },
+  {
+    "id": "3-2-control-state-pc-and-exec",
+    "title": "3.2. Control State: PC and EXEC",
+    "level": 1,
+    "page_start": 23,
+    "page_end": 23,
+    "file": "sections/3-2-control-state-pc-and-exec.md"
+  },
+  {
+    "id": "3-2-1-program-counter-pc",
+    "title": "3.2.1. Program Counter (PC)",
+    "level": 2,
+    "page_start": 23,
+    "page_end": 23,
+    "file": "sections/3-2-1-program-counter-pc.md"
+  },
+  {
+    "id": "3-2-2-execute-mask",
+    "title": "3.2.2. EXECute Mask",
+    "level": 2,
+    "page_start": 23,
+    "page_end": 23,
+    "file": "sections/3-2-2-execute-mask.md"
+  },
+  {
+    "id": "3-2-3-instruction-skipping-exec-0",
+    "title": "3.2.3. Instruction Skipping: EXEC==0",
+    "level": 2,
+    "page_start": 24,
+    "page_end": 25,
+    "file": "sections/3-2-3-instruction-skipping-exec-0.md"
+  },
+  {
+    "id": "3-3-storage-state-sgpr-vgpr-lds",
+    "title": "3.3. Storage State: SGPR, VGPR, LDS",
+    "level": 1,
+    "page_start": 24,
+    "page_end": 25,
+    "file": "sections/3-3-storage-state-sgpr-vgpr-lds.md"
+  },
+  {
+    "id": "3-3-1-sgprs",
+    "title": "3.3.1. SGPRs",
+    "level": 2,
+    "page_start": 24,
+    "page_end": 25,
+    "file": "sections/3-3-1-sgprs.md"
+  },
+  {
+    "id": "3-3-2-vgprs",
+    "title": "3.3.2. VGPRs",
+    "level": 2,
+    "page_start": 26,
+    "page_end": 26,
+    "file": "sections/3-3-2-vgprs.md"
+  },
+  {
+    "id": "3-3-3-memory-alignment-and-out-of-range-behavior",
+    "title": "3.3.3. Memory Alignment and Out-of-Range Behavior",
+    "level": 2,
+    "page_start": 27,
+    "page_end": 27,
+    "file": "sections/3-3-3-memory-alignment-and-out-of-range-behavior.md"
+  },
+  {
+    "id": "3-3-4-lds",
+    "title": "3.3.4. LDS",
+    "level": 2,
+    "page_start": 28,
+    "page_end": 28,
+    "file": "sections/3-3-4-lds.md"
+  },
+  {
+    "id": "3-4-wave-state-registers",
+    "title": "3.4. Wave State Registers",
+    "level": 1,
+    "page_start": 29,
+    "page_end": 30,
+    "file": "sections/3-4-wave-state-registers.md"
+  },
+  {
+    "id": "3-4-1-status-register",
+    "title": "3.4.1. Status register",
+    "level": 2,
+    "page_start": 29,
+    "page_end": 30,
+    "file": "sections/3-4-1-status-register.md"
+  },
+  {
+    "id": "3-4-2-mode-register",
+    "title": "3.4.2. Mode register",
+    "level": 2,
+    "page_start": 31,
+    "page_end": 31,
+    "file": "sections/3-4-2-mode-register.md"
+  },
+  {
+    "id": "3-4-3-m0-miscellaneous-register",
+    "title": "3.4.3. M0 : Miscellaneous Register",
+    "level": 2,
+    "page_start": 32,
+    "page_end": 32,
+    "file": "sections/3-4-3-m0-miscellaneous-register.md"
+  },
+  {
+    "id": "3-4-4-null",
+    "title": "3.4.4. NULL",
+    "level": 2,
+    "page_start": 32,
+    "page_end": 32,
+    "file": "sections/3-4-4-null.md"
+  },
+  {
+    "id": "3-4-5-scc-scalar-condition-code",
+    "title": "3.4.5. SCC: Scalar Condition Code",
+    "level": 2,
+    "page_start": 32,
+    "page_end": 32,
+    "file": "sections/3-4-5-scc-scalar-condition-code.md"
+  },
+  {
+    "id": "3-4-6-vector-compares-vcc-and-vccz",
+    "title": "3.4.6. Vector Compares: VCC and VCCZ",
+    "level": 2,
+    "page_start": 33,
+    "page_end": 33,
+    "file": "sections/3-4-6-vector-compares-vcc-and-vccz.md"
+  },
+  {
+    "id": "3-4-7-flat-scratch",
+    "title": "3.4.7. FLAT_SCRATCH",
+    "level": 2,
+    "page_start": 33,
+    "page_end": 33,
+    "file": "sections/3-4-7-flat-scratch.md"
+  },
+  {
+    "id": "3-4-8-hardware-internal-registers",
+    "title": "3.4.8. Hardware Internal Registers",
+    "level": 2,
+    "page_start": 34,
+    "page_end": 35,
+    "file": "sections/3-4-8-hardware-internal-registers.md"
+  },
+  {
+    "id": "3-4-9-trap-and-exception-registers",
+    "title": "3.4.9. Trap and Exception registers",
+    "level": 2,
+    "page_start": 34,
+    "page_end": 35,
+    "file": "sections/3-4-9-trap-and-exception-registers.md"
+  },
+  {
+    "id": "3-4-10-time",
+    "title": "3.4.10. Time",
+    "level": 2,
+    "page_start": 36,
+    "page_end": 36,
+    "file": "sections/3-4-10-time.md"
+  },
+  {
+    "id": "3-5-initial-wave-state",
+    "title": "3.5. Initial Wave State",
+    "level": 1,
+    "page_start": 37,
+    "page_end": 39,
+    "file": "sections/3-5-initial-wave-state.md"
+  },
+  {
+    "id": "3-5-1-exec-initialization",
+    "title": "3.5.1. EXEC initialization",
+    "level": 2,
+    "page_start": 37,
+    "page_end": 39,
+    "file": "sections/3-5-1-exec-initialization.md"
+  },
+  {
+    "id": "3-5-2-flat-scratch-initialization",
+    "title": "3.5.2. FLAT_SCRATCH Initialization",
+    "level": 2,
+    "page_start": 37,
+    "page_end": 39,
+    "file": "sections/3-5-2-flat-scratch-initialization.md"
+  },
+  {
+    "id": "3-5-3-sgpr-initialization",
+    "title": "3.5.3. SGPR Initialization",
+    "level": 2,
+    "page_start": 37,
+    "page_end": 39,
+    "file": "sections/3-5-3-sgpr-initialization.md"
+  },
+  {
+    "id": "3-5-4-which-vgprs-get-initialized",
+    "title": "3.5.4. Which VGPRs Get Initialized",
+    "level": 2,
+    "page_start": 40,
+    "page_end": 41,
+    "file": "sections/3-5-4-which-vgprs-get-initialized.md"
+  },
+  {
+    "id": "3-5-5-lds-initialization",
+    "title": "3.5.5. LDS Initialization",
+    "level": 2,
+    "page_start": 42,
+    "page_end": 42,
+    "file": "sections/3-5-5-lds-initialization.md"
+  },
+  {
+    "id": "chapter-4-shader-instruction-set",
+    "title": "Chapter 4. Shader Instruction Set",
+    "level": 0,
+    "page_start": 43,
+    "page_end": 43,
+    "file": "sections/chapter-4-shader-instruction-set.md"
+  },
+  {
+    "id": "4-1-common-instruction-fields",
+    "title": "4.1. Common Instruction Fields",
+    "level": 1,
+    "page_start": 43,
+    "page_end": 43,
+    "file": "sections/4-1-common-instruction-fields.md"
+  },
+  {
+    "id": "4-1-1-cache-controls-slc-glc-and-dlc",
+    "title": "4.1.1. Cache Controls: SLC, GLC and DLC",
+    "level": 2,
+    "page_start": 44,
+    "page_end": 46,
+    "file": "sections/4-1-1-cache-controls-slc-glc-and-dlc.md"
+  },
+  {
+    "id": "chapter-5-program-flow-control",
+    "title": "Chapter 5. Program Flow Control",
+    "level": 0,
+    "page_start": 47,
+    "page_end": 47,
+    "file": "sections/chapter-5-program-flow-control.md"
+  },
+  {
+    "id": "5-1-program-control",
+    "title": "5.1. Program Control",
+    "level": 1,
+    "page_start": 47,
+    "page_end": 47,
+    "file": "sections/5-1-program-control.md"
+  },
+  {
+    "id": "5-2-instruction-clauses",
+    "title": "5.2. Instruction Clauses",
+    "level": 1,
+    "page_start": 48,
+    "page_end": 48,
+    "file": "sections/5-2-instruction-clauses.md"
+  },
+  {
+    "id": "5-2-1-clause-breaks",
+    "title": "5.2.1. Clause Breaks",
+    "level": 2,
+    "page_start": 49,
+    "page_end": 49,
+    "file": "sections/5-2-1-clause-breaks.md"
+  },
+  {
+    "id": "5-3-send-message-types",
+    "title": "5.3. Send Message Types",
+    "level": 1,
+    "page_start": 50,
+    "page_end": 50,
+    "file": "sections/5-3-send-message-types.md"
+  },
+  {
+    "id": "5-4-branching",
+    "title": "5.4. Branching",
+    "level": 1,
+    "page_start": 51,
+    "page_end": 51,
+    "file": "sections/5-4-branching.md"
+  },
+  {
+    "id": "5-5-work-groups-and-barriers",
+    "title": "5.5. Work-groups and Barriers",
+    "level": 1,
+    "page_start": 51,
+    "page_end": 51,
+    "file": "sections/5-5-work-groups-and-barriers.md"
+  },
+  {
+    "id": "5-6-data-dependency-resolution",
+    "title": "5.6. Data Dependency Resolution",
+    "level": 1,
+    "page_start": 52,
+    "page_end": 52,
+    "file": "sections/5-6-data-dependency-resolution.md"
+  },
+  {
+    "id": "5-7-alu-instruction-software-scheduling",
+    "title": "5.7. ALU Instruction Software Scheduling",
+    "level": 1,
+    "page_start": 53,
+    "page_end": 54,
+    "file": "sections/5-7-alu-instruction-software-scheduling.md"
+  },
+  {
+    "id": "chapter-6-scalar-alu-operations",
+    "title": "Chapter 6. Scalar ALU Operations",
+    "level": 0,
+    "page_start": 55,
+    "page_end": 57,
+    "file": "sections/chapter-6-scalar-alu-operations.md"
+  },
+  {
+    "id": "6-1-salu-instruction-formats",
+    "title": "6.1. SALU Instruction Formats",
+    "level": 1,
+    "page_start": 55,
+    "page_end": 57,
+    "file": "sections/6-1-salu-instruction-formats.md"
+  },
+  {
+    "id": "6-2-scalar-alu-operands",
+    "title": "6.2. Scalar ALU Operands",
+    "level": 1,
+    "page_start": 55,
+    "page_end": 57,
+    "file": "sections/6-2-scalar-alu-operands.md"
+  },
+  {
+    "id": "6-3-scalar-condition-code-scc",
+    "title": "6.3. Scalar Condition Code (SCC)",
+    "level": 1,
+    "page_start": 58,
+    "page_end": 58,
+    "file": "sections/6-3-scalar-condition-code-scc.md"
+  },
+  {
+    "id": "6-4-integer-arithmetic-instructions",
+    "title": "6.4. Integer Arithmetic Instructions",
+    "level": 1,
+    "page_start": 58,
+    "page_end": 58,
+    "file": "sections/6-4-integer-arithmetic-instructions.md"
+  },
+  {
+    "id": "6-5-conditional-move-instructions",
+    "title": "6.5. Conditional Move Instructions",
+    "level": 1,
+    "page_start": 59,
+    "page_end": 60,
+    "file": "sections/6-5-conditional-move-instructions.md"
+  },
+  {
+    "id": "6-6-comparison-instructions",
+    "title": "6.6. Comparison Instructions",
+    "level": 1,
+    "page_start": 59,
+    "page_end": 60,
+    "file": "sections/6-6-comparison-instructions.md"
+  },
+  {
+    "id": "6-7-bit-wise-instructions",
+    "title": "6.7. Bit-Wise Instructions",
+    "level": 1,
+    "page_start": 59,
+    "page_end": 60,
+    "file": "sections/6-7-bit-wise-instructions.md"
+  },
+  {
+    "id": "6-8-access-instructions",
+    "title": "6.8. Access Instructions",
+    "level": 1,
+    "page_start": 61,
+    "page_end": 62,
+    "file": "sections/6-8-access-instructions.md"
+  },
+  {
+    "id": "6-9-memory-aperture-query",
+    "title": "6.9. Memory Aperture Query",
+    "level": 1,
+    "page_start": 61,
+    "page_end": 62,
+    "file": "sections/6-9-memory-aperture-query.md"
+  },
+  {
+    "id": "chapter-7-vector-alu-operations",
+    "title": "Chapter 7. Vector ALU Operations",
+    "level": 0,
+    "page_start": 63,
+    "page_end": 64,
+    "file": "sections/chapter-7-vector-alu-operations.md"
+  },
+  {
+    "id": "7-1-microcode-encodings",
+    "title": "7.1. Microcode Encodings",
+    "level": 1,
+    "page_start": 63,
+    "page_end": 64,
+    "file": "sections/7-1-microcode-encodings.md"
+  },
+  {
+    "id": "7-2-operands",
+    "title": "7.2. Operands",
+    "level": 1,
+    "page_start": 65,
+    "page_end": 65,
+    "file": "sections/7-2-operands.md"
+  },
+  {
+    "id": "7-2-1-non-standard-uses-of-operand-fields",
+    "title": "7.2.1. Non-Standard Uses of Operand Fields",
+    "level": 2,
+    "page_start": 66,
+    "page_end": 66,
+    "file": "sections/7-2-1-non-standard-uses-of-operand-fields.md"
+  },
+  {
+    "id": "7-2-2-inputs-operands",
+    "title": "7.2.2. Inputs Operands",
+    "level": 2,
+    "page_start": 67,
+    "page_end": 68,
+    "file": "sections/7-2-2-inputs-operands.md"
+  },
+  {
+    "id": "7-2-3-output-operands",
+    "title": "7.2.3. Output Operands",
+    "level": 2,
+    "page_start": 69,
+    "page_end": 69,
+    "file": "sections/7-2-3-output-operands.md"
+  },
+  {
+    "id": "7-2-4-denormalized-and-rounding-modes",
+    "title": "7.2.4. Denormalized and Rounding Modes",
+    "level": 2,
+    "page_start": 70,
+    "page_end": 70,
+    "file": "sections/7-2-4-denormalized-and-rounding-modes.md"
+  },
+  {
+    "id": "7-2-5-instructions-using-sgprs-as-mask-or-carry",
+    "title": "7.2.5. Instructions using SGPRs as Mask or Carry",
+    "level": 2,
+    "page_start": 71,
+    "page_end": 71,
+    "file": "sections/7-2-5-instructions-using-sgprs-as-mask-or-carry.md"
+  },
+  {
+    "id": "7-2-6-wave64-use-of-sgprs",
+    "title": "7.2.6. Wave64 use of SGPRs",
+    "level": 2,
+    "page_start": 71,
+    "page_end": 71,
+    "file": "sections/7-2-6-wave64-use-of-sgprs.md"
+  },
+  {
+    "id": "7-2-7-out-of-range-gprs",
+    "title": "7.2.7. Out-of-Range GPRs",
+    "level": 2,
+    "page_start": 71,
+    "page_end": 71,
+    "file": "sections/7-2-7-out-of-range-gprs.md"
+  },
+  {
+    "id": "7-2-8-permlane-specific-rules",
+    "title": "7.2.8. PERMLANE Specific Rules",
+    "level": 2,
+    "page_start": 71,
+    "page_end": 71,
+    "file": "sections/7-2-8-permlane-specific-rules.md"
+  },
+  {
+    "id": "7-3-instructions",
+    "title": "7.3. Instructions",
+    "level": 1,
+    "page_start": 72,
+    "page_end": 73,
+    "file": "sections/7-3-instructions.md"
+  },
+  {
+    "id": "7-4-16-bit-math-and-vgprs",
+    "title": "7.4. 16-bit Math and VGPRs",
+    "level": 1,
+    "page_start": 74,
+    "page_end": 75,
+    "file": "sections/7-4-16-bit-math-and-vgprs.md"
+  },
+  {
+    "id": "7-5-packed-math",
+    "title": "7.5. Packed Math",
+    "level": 1,
+    "page_start": 74,
+    "page_end": 75,
+    "file": "sections/7-5-packed-math.md"
+  },
+  {
+    "id": "7-5-1-inline-constants-with-packed-math",
+    "title": "7.5.1. Inline Constants with Packed Math",
+    "level": 2,
+    "page_start": 76,
+    "page_end": 76,
+    "file": "sections/7-5-1-inline-constants-with-packed-math.md"
+  },
+  {
+    "id": "7-6-dual-issue-valu",
+    "title": "7.6. Dual Issue VALU",
+    "level": 1,
+    "page_start": 77,
+    "page_end": 77,
+    "file": "sections/7-6-dual-issue-valu.md"
+  },
+  {
+    "id": "7-7-data-parallel-processing-dpp",
+    "title": "7.7. Data Parallel Processing (DPP)",
+    "level": 1,
+    "page_start": 78,
+    "page_end": 78,
+    "file": "sections/7-7-data-parallel-processing-dpp.md"
+  },
+  {
+    "id": "7-7-1-dpp16",
+    "title": "7.7.1. DPP16",
+    "level": 2,
+    "page_start": 79,
+    "page_end": 80,
+    "file": "sections/7-7-1-dpp16.md"
+  },
+  {
+    "id": "7-7-2-dpp8",
+    "title": "7.7.2. DPP8",
+    "level": 2,
+    "page_start": 81,
+    "page_end": 84,
+    "file": "sections/7-7-2-dpp8.md"
+  },
+  {
+    "id": "7-8-vgpr-indexing",
+    "title": "7.8. VGPR Indexing",
+    "level": 1,
+    "page_start": 81,
+    "page_end": 84,
+    "file": "sections/7-8-vgpr-indexing.md"
+  },
+  {
+    "id": "7-9-wave-matrix-multiply-accumulate-wmma",
+    "title": "7.9. Wave Matrix Multiply Accumulate (WMMA)",
+    "level": 1,
+    "page_start": 81,
+    "page_end": 84,
+    "file": "sections/7-9-wave-matrix-multiply-accumulate-wmma.md"
+  },
+  {
+    "id": "chapter-8-scalar-memory-operations",
+    "title": "Chapter 8. Scalar Memory Operations",
+    "level": 0,
+    "page_start": 85,
+    "page_end": 85,
+    "file": "sections/chapter-8-scalar-memory-operations.md"
+  },
+  {
+    "id": "8-1-microcode-encoding",
+    "title": "8.1. Microcode Encoding",
+    "level": 1,
+    "page_start": 85,
+    "page_end": 85,
+    "file": "sections/8-1-microcode-encoding.md"
+  },
+  {
+    "id": "8-1-1-scalar-memory-addressing",
+    "title": "8.1.1. Scalar Memory Addressing",
+    "level": 2,
+    "page_start": 86,
+    "page_end": 86,
+    "file": "sections/8-1-1-scalar-memory-addressing.md"
+  },
+  {
+    "id": "8-1-2-loads-using-buffer-constant",
+    "title": "8.1.2. Loads using Buffer Constant",
+    "level": 2,
+    "page_start": 86,
+    "page_end": 86,
+    "file": "sections/8-1-2-loads-using-buffer-constant.md"
+  },
+  {
+    "id": "8-1-3-s-dcache-inv-and-s-gl1-inv",
+    "title": "8.1.3. S_DCACHE_INV and S_GL1_INV",
+    "level": 2,
+    "page_start": 86,
+    "page_end": 86,
+    "file": "sections/8-1-3-s-dcache-inv-and-s-gl1-inv.md"
+  },
+  {
+    "id": "8-2-dependency-checking",
+    "title": "8.2. Dependency Checking",
+    "level": 1,
+    "page_start": 87,
+    "page_end": 87,
+    "file": "sections/8-2-dependency-checking.md"
+  },
+  {
+    "id": "8-3-scalar-memory-clauses-and-groups",
+    "title": "8.3. Scalar Memory Clauses and Groups",
+    "level": 1,
+    "page_start": 87,
+    "page_end": 87,
+    "file": "sections/8-3-scalar-memory-clauses-and-groups.md"
+  },
+  {
+    "id": "8-4-alignment-and-bounds-checking",
+    "title": "8.4. Alignment and Bounds Checking",
+    "level": 1,
+    "page_start": 87,
+    "page_end": 87,
+    "file": "sections/8-4-alignment-and-bounds-checking.md"
+  },
+  {
+    "id": "8-4-1-address-and-gpr-range-checking",
+    "title": "8.4.1. Address and GPR Range Checking",
+    "level": 2,
+    "page_start": 88,
+    "page_end": 88,
+    "file": "sections/8-4-1-address-and-gpr-range-checking.md"
+  },
+  {
+    "id": "chapter-9-vector-memory-buffer-instructions",
+    "title": "Chapter 9. Vector Memory Buffer Instructions",
+    "level": 0,
+    "page_start": 89,
+    "page_end": 92,
+    "file": "sections/chapter-9-vector-memory-buffer-instructions.md"
+  },
+  {
+    "id": "9-1-buffer-instructions",
+    "title": "9.1. Buffer Instructions",
+    "level": 1,
+    "page_start": 89,
+    "page_end": 92,
+    "file": "sections/9-1-buffer-instructions.md"
+  },
+  {
+    "id": "9-2-vgpr-usage",
+    "title": "9.2. VGPR Usage",
+    "level": 1,
+    "page_start": 93,
+    "page_end": 94,
+    "file": "sections/9-2-vgpr-usage.md"
+  },
+  {
+    "id": "9-3-buffer-data",
+    "title": "9.3. Buffer Data",
+    "level": 1,
+    "page_start": 95,
+    "page_end": 95,
+    "file": "sections/9-3-buffer-data.md"
+  },
+  {
+    "id": "9-3-1-d16-instructions",
+    "title": "9.3.1. D16 Instructions",
+    "level": 2,
+    "page_start": 96,
+    "page_end": 96,
+    "file": "sections/9-3-1-d16-instructions.md"
+  },
+  {
+    "id": "9-3-2-load-store-format-and-data-format-mismatches",
+    "title": "9.3.2. LOAD/STORE_FORMAT and DATA-FORMAT mismatches",
+    "level": 2,
+    "page_start": 96,
+    "page_end": 96,
+    "file": "sections/9-3-2-load-store-format-and-data-format-mismatches.md"
+  },
+  {
+    "id": "9-4-buffer-addressing",
+    "title": "9.4. Buffer Addressing",
+    "level": 1,
+    "page_start": 96,
+    "page_end": 96,
+    "file": "sections/9-4-buffer-addressing.md"
+  },
+  {
+    "id": "9-4-1-range-checking",
+    "title": "9.4.1. Range Checking",
+    "level": 2,
+    "page_start": 97,
+    "page_end": 98,
+    "file": "sections/9-4-1-range-checking.md"
+  },
+  {
+    "id": "9-4-2-swizzled-buffer-addressing",
+    "title": "9.4.2. Swizzled Buffer Addressing",
+    "level": 2,
+    "page_start": 99,
+    "page_end": 99,
+    "file": "sections/9-4-2-swizzled-buffer-addressing.md"
+  },
+  {
+    "id": "9-5-alignment",
+    "title": "9.5. Alignment",
+    "level": 1,
+    "page_start": 100,
+    "page_end": 100,
+    "file": "sections/9-5-alignment.md"
+  },
+  {
+    "id": "9-6-buffer-resource",
+    "title": "9.6. Buffer Resource",
+    "level": 1,
+    "page_start": 101,
+    "page_end": 102,
+    "file": "sections/9-6-buffer-resource.md"
+  },
+  {
+    "id": "chapter-10-vector-memory-image-instructions",
+    "title": "Chapter 10. Vector Memory Image Instructions",
+    "level": 0,
+    "page_start": 103,
+    "page_end": 104,
+    "file": "sections/chapter-10-vector-memory-image-instructions.md"
+  },
+  {
+    "id": "10-1-image-instructions",
+    "title": "10.1. Image Instructions",
+    "level": 1,
+    "page_start": 103,
+    "page_end": 104,
+    "file": "sections/10-1-image-instructions.md"
+  },
+  {
+    "id": "10-1-1-texture-fault-enable-tfe-and-lod-warning-enable-lwe",
+    "title": "10.1.1. Texture Fault Enable (TFE) and LOD Warning Enable (LWE)",
+    "level": 2,
+    "page_start": 105,
+    "page_end": 105,
+    "file": "sections/10-1-1-texture-fault-enable-tfe-and-lod-warning-enable-lwe.md"
+  },
+  {
+    "id": "10-1-2-d16-instructions",
+    "title": "10.1.2. D16 Instructions",
+    "level": 2,
+    "page_start": 106,
+    "page_end": 106,
+    "file": "sections/10-1-2-d16-instructions.md"
+  },
+  {
+    "id": "10-1-3-a16-instructions",
+    "title": "10.1.3. A16 Instructions",
+    "level": 2,
+    "page_start": 106,
+    "page_end": 106,
+    "file": "sections/10-1-3-a16-instructions.md"
+  },
+  {
+    "id": "10-1-4-g16-instructions",
+    "title": "10.1.4. G16 Instructions",
+    "level": 2,
+    "page_start": 106,
+    "page_end": 106,
+    "file": "sections/10-1-4-g16-instructions.md"
+  },
+  {
+    "id": "10-1-5-image-non-sequential-address-nsa",
+    "title": "10.1.5. Image Non-Sequential Address (NSA)",
+    "level": 2,
+    "page_start": 106,
+    "page_end": 106,
+    "file": "sections/10-1-5-image-non-sequential-address-nsa.md"
+  },
+  {
+    "id": "10-2-image-opcodes-with-no-sampler",
+    "title": "10.2. Image Opcodes with No Sampler",
+    "level": 1,
+    "page_start": 107,
+    "page_end": 108,
+    "file": "sections/10-2-image-opcodes-with-no-sampler.md"
+  },
+  {
+    "id": "10-3-image-opcodes-with-a-sampler",
+    "title": "10.3. Image Opcodes with a Sampler",
+    "level": 1,
+    "page_start": 109,
+    "page_end": 109,
+    "file": "sections/10-3-image-opcodes-with-a-sampler.md"
+  },
+  {
+    "id": "10-4-vgpr-usage",
+    "title": "10.4. VGPR Usage",
+    "level": 1,
+    "page_start": 110,
+    "page_end": 111,
+    "file": "sections/10-4-vgpr-usage.md"
+  },
+  {
+    "id": "10-4-1-data-format-in-vgprs",
+    "title": "10.4.1. Data format in VGPRs",
+    "level": 2,
+    "page_start": 112,
+    "page_end": 112,
+    "file": "sections/10-4-1-data-format-in-vgprs.md"
+  },
+  {
+    "id": "10-5-image-resource",
+    "title": "10.5. Image Resource",
+    "level": 1,
+    "page_start": 112,
+    "page_end": 112,
+    "file": "sections/10-5-image-resource.md"
+  },
+  {
+    "id": "10-6-image-sampler",
+    "title": "10.6. Image Sampler",
+    "level": 1,
+    "page_start": 113,
+    "page_end": 114,
+    "file": "sections/10-6-image-sampler.md"
+  },
+  {
+    "id": "10-7-data-formats",
+    "title": "10.7. Data Formats",
+    "level": 1,
+    "page_start": 115,
+    "page_end": 115,
+    "file": "sections/10-7-data-formats.md"
+  },
+  {
+    "id": "10-8-vector-memory-instruction-data-dependencies",
+    "title": "10.8. Vector Memory Instruction Data Dependencies",
+    "level": 1,
+    "page_start": 116,
+    "page_end": 116,
+    "file": "sections/10-8-vector-memory-instruction-data-dependencies.md"
+  },
+  {
+    "id": "10-9-ray-tracing",
+    "title": "10.9. Ray Tracing",
+    "level": 1,
+    "page_start": 116,
+    "page_end": 116,
+    "file": "sections/10-9-ray-tracing.md"
+  },
+  {
+    "id": "10-9-1-instruction-definition-and-fields",
+    "title": "10.9.1. Instruction definition and fields",
+    "level": 2,
+    "page_start": 116,
+    "page_end": 116,
+    "file": "sections/10-9-1-instruction-definition-and-fields.md"
+  },
+  {
+    "id": "10-9-2-using-bvh-with-nsa",
+    "title": "10.9.2. Using BVH with NSA",
+    "level": 2,
+    "page_start": 117,
+    "page_end": 117,
+    "file": "sections/10-9-2-using-bvh-with-nsa.md"
+  },
+  {
+    "id": "10-9-3-texture-resource-definition",
+    "title": "10.9.3. Texture Resource Definition",
+    "level": 2,
+    "page_start": 118,
+    "page_end": 118,
+    "file": "sections/10-9-3-texture-resource-definition.md"
+  },
+  {
+    "id": "10-10-partially-resident-textures",
+    "title": "10.10. Partially Resident Textures",
+    "level": 1,
+    "page_start": 119,
+    "page_end": 119,
+    "file": "sections/10-10-partially-resident-textures.md"
+  },
+  {
+    "id": "chapter-11-global-scratch-and-flat-address-space",
+    "title": "Chapter 11. Global, Scratch and Flat Address Space",
+    "level": 0,
+    "page_start": 120,
+    "page_end": 121,
+    "file": "sections/chapter-11-global-scratch-and-flat-address-space.md"
+  },
+  {
+    "id": "11-1-instructions",
+    "title": "11.1. Instructions",
+    "level": 1,
+    "page_start": 122,
+    "page_end": 122,
+    "file": "sections/11-1-instructions.md"
+  },
+  {
+    "id": "11-1-1-flat",
+    "title": "11.1.1. FLAT",
+    "level": 2,
+    "page_start": 122,
+    "page_end": 122,
+    "file": "sections/11-1-1-flat.md"
+  },
+  {
+    "id": "11-1-2-global",
+    "title": "11.1.2. Global",
+    "level": 2,
+    "page_start": 123,
+    "page_end": 123,
+    "file": "sections/11-1-2-global.md"
+  },
+  {
+    "id": "11-1-3-scratch",
+    "title": "11.1.3. Scratch",
+    "level": 2,
+    "page_start": 123,
+    "page_end": 123,
+    "file": "sections/11-1-3-scratch.md"
+  },
+  {
+    "id": "11-2-addressing",
+    "title": "11.2. Addressing",
+    "level": 1,
+    "page_start": 124,
+    "page_end": 124,
+    "file": "sections/11-2-addressing.md"
+  },
+  {
+    "id": "11-3-memory-error-checking",
+    "title": "11.3. Memory Error Checking",
+    "level": 1,
+    "page_start": 125,
+    "page_end": 125,
+    "file": "sections/11-3-memory-error-checking.md"
+  },
+  {
+    "id": "11-4-data",
+    "title": "11.4. Data",
+    "level": 1,
+    "page_start": 126,
+    "page_end": 126,
+    "file": "sections/11-4-data.md"
+  },
+  {
+    "id": "chapter-12-data-share-operations",
+    "title": "Chapter 12. Data Share Operations",
+    "level": 0,
+    "page_start": 127,
+    "page_end": 127,
+    "file": "sections/chapter-12-data-share-operations.md"
+  },
+  {
+    "id": "12-1-overview",
+    "title": "12.1. Overview",
+    "level": 1,
+    "page_start": 127,
+    "page_end": 127,
+    "file": "sections/12-1-overview.md"
+  },
+  {
+    "id": "12-1-1-dataflow-in-memory-hierarchy",
+    "title": "12.1.1. Dataflow in Memory Hierarchy",
+    "level": 2,
+    "page_start": 128,
+    "page_end": 128,
+    "file": "sections/12-1-1-dataflow-in-memory-hierarchy.md"
+  },
+  {
+    "id": "12-1-2-lds-modes-and-allocation-cu-vs-wgp-mode",
+    "title": "12.1.2. LDS Modes and Allocation: CU vs. WGP Mode",
+    "level": 2,
+    "page_start": 128,
+    "page_end": 128,
+    "file": "sections/12-1-2-lds-modes-and-allocation-cu-vs-wgp-mode.md"
+  },
+  {
+    "id": "12-1-3-lds-access-methods",
+    "title": "12.1.3. LDS Access Methods",
+    "level": 2,
+    "page_start": 128,
+    "page_end": 128,
+    "file": "sections/12-1-3-lds-access-methods.md"
+  },
+  {
+    "id": "12-2-pixel-parameter-interpolation",
+    "title": "12.2. Pixel Parameter Interpolation",
+    "level": 1,
+    "page_start": 129,
+    "page_end": 131,
+    "file": "sections/12-2-pixel-parameter-interpolation.md"
+  },
+  {
+    "id": "12-2-1-lds-parameter-loads",
+    "title": "12.2.1. LDS Parameter Loads",
+    "level": 2,
+    "page_start": 129,
+    "page_end": 131,
+    "file": "sections/12-2-1-lds-parameter-loads.md"
+  },
+  {
+    "id": "12-3-valu-parameter-interpolation",
+    "title": "12.3. VALU Parameter Interpolation",
+    "level": 1,
+    "page_start": 132,
+    "page_end": 132,
+    "file": "sections/12-3-valu-parameter-interpolation.md"
+  },
+  {
+    "id": "12-3-1-16-bit-parameter-interpolation",
+    "title": "12.3.1. 16-bit Parameter Interpolation",
+    "level": 2,
+    "page_start": 133,
+    "page_end": 133,
+    "file": "sections/12-3-1-16-bit-parameter-interpolation.md"
+  },
+  {
+    "id": "12-4-lds-direct-load",
+    "title": "12.4. LDS Direct Load",
+    "level": 1,
+    "page_start": 133,
+    "page_end": 133,
+    "file": "sections/12-4-lds-direct-load.md"
+  },
+  {
+    "id": "12-5-data-share-indexed-and-atomic-access",
+    "title": "12.5. Data Share Indexed and Atomic Access",
+    "level": 1,
+    "page_start": 134,
+    "page_end": 136,
+    "file": "sections/12-5-data-share-indexed-and-atomic-access.md"
+  },
+  {
+    "id": "12-5-1-lds-atomic-ops",
+    "title": "12.5.1. LDS Atomic Ops",
+    "level": 2,
+    "page_start": 137,
+    "page_end": 137,
+    "file": "sections/12-5-1-lds-atomic-ops.md"
+  },
+  {
+    "id": "12-5-2-lds-lane-permute-ops",
+    "title": "12.5.2. LDS Lane-permute Ops",
+    "level": 2,
+    "page_start": 137,
+    "page_end": 137,
+    "file": "sections/12-5-2-lds-lane-permute-ops.md"
+  },
+  {
+    "id": "12-5-3-ds-stack-operations-for-ray-tracing",
+    "title": "12.5.3. DS Stack Operations for Ray Tracing",
+    "level": 2,
+    "page_start": 138,
+    "page_end": 138,
+    "file": "sections/12-5-3-ds-stack-operations-for-ray-tracing.md"
+  },
+  {
+    "id": "12-6-global-data-share",
+    "title": "12.6. Global Data Share",
+    "level": 1,
+    "page_start": 139,
+    "page_end": 139,
+    "file": "sections/12-6-global-data-share.md"
+  },
+  {
+    "id": "12-6-1-gs-ngg-streamout-instructions",
+    "title": "12.6.1. GS NGG Streamout Instructions",
+    "level": 2,
+    "page_start": 139,
+    "page_end": 139,
+    "file": "sections/12-6-1-gs-ngg-streamout-instructions.md"
+  },
+  {
+    "id": "12-7-alignment-and-errors",
+    "title": "12.7. Alignment and Errors",
+    "level": 1,
+    "page_start": 140,
+    "page_end": 140,
+    "file": "sections/12-7-alignment-and-errors.md"
+  },
+  {
+    "id": "chapter-13-float-memory-atomics",
+    "title": "Chapter 13. Float Memory Atomics",
+    "level": 0,
+    "page_start": 141,
+    "page_end": 141,
+    "file": "sections/chapter-13-float-memory-atomics.md"
+  },
+  {
+    "id": "13-1-rounding",
+    "title": "13.1. Rounding",
+    "level": 1,
+    "page_start": 141,
+    "page_end": 141,
+    "file": "sections/13-1-rounding.md"
+  },
+  {
+    "id": "13-2-denormals",
+    "title": "13.2. Denormals",
+    "level": 1,
+    "page_start": 141,
+    "page_end": 141,
+    "file": "sections/13-2-denormals.md"
+  },
+  {
+    "id": "13-3-nan-handling",
+    "title": "13.3. NaN Handling",
+    "level": 1,
+    "page_start": 142,
+    "page_end": 142,
+    "file": "sections/13-3-nan-handling.md"
+  },
+  {
+    "id": "13-4-global-wave-sync-atomic-ordered-count",
+    "title": "13.4. Global Wave Sync & Atomic Ordered Count",
+    "level": 1,
+    "page_start": 143,
+    "page_end": 144,
+    "file": "sections/13-4-global-wave-sync-atomic-ordered-count.md"
+  },
+  {
+    "id": "13-4-1-gws-and-ordered-count-programming-rule",
+    "title": "13.4.1. GWS and Ordered Count Programming Rule",
+    "level": 2,
+    "page_start": 143,
+    "page_end": 144,
+    "file": "sections/13-4-1-gws-and-ordered-count-programming-rule.md"
+  },
+  {
+    "id": "13-4-2-exec-handling",
+    "title": "13.4.2. EXEC Handling",
+    "level": 2,
+    "page_start": 143,
+    "page_end": 144,
+    "file": "sections/13-4-2-exec-handling.md"
+  },
+  {
+    "id": "13-4-3-ordered-count",
+    "title": "13.4.3. Ordered Count",
+    "level": 2,
+    "page_start": 143,
+    "page_end": 144,
+    "file": "sections/13-4-3-ordered-count.md"
+  },
+  {
+    "id": "13-4-4-global-wave-sync",
+    "title": "13.4.4. Global Wave Sync",
+    "level": 2,
+    "page_start": 145,
+    "page_end": 147,
+    "file": "sections/13-4-4-global-wave-sync.md"
+  },
+  {
+    "id": "chapter-14-export-position-color-mrt",
+    "title": "Chapter 14. Export: Position, Color/MRT",
+    "level": 0,
+    "page_start": 148,
+    "page_end": 148,
+    "file": "sections/chapter-14-export-position-color-mrt.md"
+  },
+  {
+    "id": "14-1-pixel-shader-exports",
+    "title": "14.1. Pixel Shader Exports",
+    "level": 1,
+    "page_start": 149,
+    "page_end": 150,
+    "file": "sections/14-1-pixel-shader-exports.md"
+  },
+  {
+    "id": "14-2-primitive-shader-exports-from-gs-shader-stage",
+    "title": "14.2. Primitive Shader Exports (From GS shader stage)",
+    "level": 1,
+    "page_start": 149,
+    "page_end": 150,
+    "file": "sections/14-2-primitive-shader-exports-from-gs-shader-stage.md"
+  },
+  {
+    "id": "14-3-dependency-checking",
+    "title": "14.3. Dependency Checking",
+    "level": 1,
+    "page_start": 149,
+    "page_end": 150,
+    "file": "sections/14-3-dependency-checking.md"
+  },
+  {
+    "id": "chapter-15-microcode-formats",
+    "title": "Chapter 15. Microcode Formats",
+    "level": 0,
+    "page_start": 151,
+    "page_end": 152,
+    "file": "sections/chapter-15-microcode-formats.md"
+  },
+  {
+    "id": "15-1-scalar-alu-and-control-formats",
+    "title": "15.1. Scalar ALU and Control Formats",
+    "level": 1,
+    "page_start": 153,
+    "page_end": 153,
+    "file": "sections/15-1-scalar-alu-and-control-formats.md"
+  },
+  {
+    "id": "15-1-1-sop2",
+    "title": "15.1.1. SOP2",
+    "level": 2,
+    "page_start": 153,
+    "page_end": 153,
+    "file": "sections/15-1-1-sop2.md"
+  },
+  {
+    "id": "15-1-2-sopk",
+    "title": "15.1.2. SOPK",
+    "level": 2,
+    "page_start": 154,
+    "page_end": 154,
+    "file": "sections/15-1-2-sopk.md"
+  },
+  {
+    "id": "15-1-3-sop1",
+    "title": "15.1.3. SOP1",
+    "level": 2,
+    "page_start": 155,
+    "page_end": 156,
+    "file": "sections/15-1-3-sop1.md"
+  },
+  {
+    "id": "15-1-4-sopc",
+    "title": "15.1.4. SOPC",
+    "level": 2,
+    "page_start": 157,
+    "page_end": 158,
+    "file": "sections/15-1-4-sopc.md"
+  },
+  {
+    "id": "15-1-5-sopp",
+    "title": "15.1.5. SOPP",
+    "level": 2,
+    "page_start": 159,
+    "page_end": 159,
+    "file": "sections/15-1-5-sopp.md"
+  },
+  {
+    "id": "15-2-scalar-memory-format",
+    "title": "15.2. Scalar Memory Format",
+    "level": 1,
+    "page_start": 160,
+    "page_end": 160,
+    "file": "sections/15-2-scalar-memory-format.md"
+  },
+  {
+    "id": "15-2-1-smem",
+    "title": "15.2.1. SMEM",
+    "level": 2,
+    "page_start": 160,
+    "page_end": 160,
+    "file": "sections/15-2-1-smem.md"
+  },
+  {
+    "id": "15-3-vector-alu-formats",
+    "title": "15.3. Vector ALU Formats",
+    "level": 1,
+    "page_start": 161,
+    "page_end": 161,
+    "file": "sections/15-3-vector-alu-formats.md"
+  },
+  {
+    "id": "15-3-1-vop2",
+    "title": "15.3.1. VOP2",
+    "level": 2,
+    "page_start": 161,
+    "page_end": 161,
+    "file": "sections/15-3-1-vop2.md"
+  },
+  {
+    "id": "15-3-2-vop1",
+    "title": "15.3.2. VOP1",
+    "level": 2,
+    "page_start": 162,
+    "page_end": 163,
+    "file": "sections/15-3-2-vop1.md"
+  },
+  {
+    "id": "15-3-3-vopc",
+    "title": "15.3.3. VOPC",
+    "level": 2,
+    "page_start": 164,
+    "page_end": 167,
+    "file": "sections/15-3-3-vopc.md"
+  },
+  {
+    "id": "15-3-4-vop3",
+    "title": "15.3.4. VOP3",
+    "level": 2,
+    "page_start": 168,
+    "page_end": 173,
+    "file": "sections/15-3-4-vop3.md"
+  },
+  {
+    "id": "15-3-5-vop3sd",
+    "title": "15.3.5. VOP3SD",
+    "level": 2,
+    "page_start": 174,
+    "page_end": 174,
+    "file": "sections/15-3-5-vop3sd.md"
+  },
+  {
+    "id": "15-3-6-vop3p",
+    "title": "15.3.6. VOP3P",
+    "level": 2,
+    "page_start": 175,
+    "page_end": 176,
+    "file": "sections/15-3-6-vop3p.md"
+  },
+  {
+    "id": "15-3-7-vopd",
+    "title": "15.3.7. VOPD",
+    "level": 2,
+    "page_start": 177,
+    "page_end": 178,
+    "file": "sections/15-3-7-vopd.md"
+  },
+  {
+    "id": "15-3-8-dpp16",
+    "title": "15.3.8. DPP16",
+    "level": 2,
+    "page_start": 179,
+    "page_end": 179,
+    "file": "sections/15-3-8-dpp16.md"
+  },
+  {
+    "id": "15-3-9-dpp8",
+    "title": "15.3.9. DPP8",
+    "level": 2,
+    "page_start": 180,
+    "page_end": 180,
+    "file": "sections/15-3-9-dpp8.md"
+  },
+  {
+    "id": "15-4-vector-parameter-interpolation-format",
+    "title": "15.4. Vector Parameter Interpolation Format",
+    "level": 1,
+    "page_start": 181,
+    "page_end": 181,
+    "file": "sections/15-4-vector-parameter-interpolation-format.md"
+  },
+  {
+    "id": "15-4-1-vinterp",
+    "title": "15.4.1. VINTERP",
+    "level": 2,
+    "page_start": 181,
+    "page_end": 181,
+    "file": "sections/15-4-1-vinterp.md"
+  },
+  {
+    "id": "15-5-parameter-and-direct-load-from-lds",
+    "title": "15.5. Parameter and Direct Load from LDS",
+    "level": 1,
+    "page_start": 182,
+    "page_end": 183,
+    "file": "sections/15-5-parameter-and-direct-load-from-lds.md"
+  },
+  {
+    "id": "15-5-1-ldsdir",
+    "title": "15.5.1. LDSDIR",
+    "level": 2,
+    "page_start": 182,
+    "page_end": 183,
+    "file": "sections/15-5-1-ldsdir.md"
+  },
+  {
+    "id": "15-6-lds-and-gds-format",
+    "title": "15.6. LDS and GDS Format",
+    "level": 1,
+    "page_start": 184,
+    "page_end": 185,
+    "file": "sections/15-6-lds-and-gds-format.md"
+  },
+  {
+    "id": "15-6-1-ds",
+    "title": "15.6.1. DS",
+    "level": 2,
+    "page_start": 184,
+    "page_end": 185,
+    "file": "sections/15-6-1-ds.md"
+  },
+  {
+    "id": "15-7-vector-memory-buffer-formats",
+    "title": "15.7. Vector Memory Buffer Formats",
+    "level": 1,
+    "page_start": 186,
+    "page_end": 186,
+    "file": "sections/15-7-vector-memory-buffer-formats.md"
+  },
+  {
+    "id": "15-7-1-mtbuf",
+    "title": "15.7.1. MTBUF",
+    "level": 2,
+    "page_start": 186,
+    "page_end": 186,
+    "file": "sections/15-7-1-mtbuf.md"
+  },
+  {
+    "id": "15-7-2-mubuf",
+    "title": "15.7.2. MUBUF",
+    "level": 2,
+    "page_start": 187,
+    "page_end": 188,
+    "file": "sections/15-7-2-mubuf.md"
+  },
+  {
+    "id": "15-8-vector-memory-image-format",
+    "title": "15.8. Vector Memory Image Format",
+    "level": 1,
+    "page_start": 189,
+    "page_end": 191,
+    "file": "sections/15-8-vector-memory-image-format.md"
+  },
+  {
+    "id": "15-8-1-mimg",
+    "title": "15.8.1. MIMG",
+    "level": 2,
+    "page_start": 189,
+    "page_end": 191,
+    "file": "sections/15-8-1-mimg.md"
+  },
+  {
+    "id": "15-9-flat-formats",
+    "title": "15.9. Flat Formats",
+    "level": 1,
+    "page_start": 192,
+    "page_end": 192,
+    "file": "sections/15-9-flat-formats.md"
+  },
+  {
+    "id": "15-9-1-flat",
+    "title": "15.9.1. FLAT",
+    "level": 2,
+    "page_start": 192,
+    "page_end": 192,
+    "file": "sections/15-9-1-flat.md"
+  },
+  {
+    "id": "15-9-2-global",
+    "title": "15.9.2. GLOBAL",
+    "level": 2,
+    "page_start": 193,
+    "page_end": 193,
+    "file": "sections/15-9-2-global.md"
+  },
+  {
+    "id": "15-9-3-scratch",
+    "title": "15.9.3. SCRATCH",
+    "level": 2,
+    "page_start": 194,
+    "page_end": 194,
+    "file": "sections/15-9-3-scratch.md"
+  },
+  {
+    "id": "15-10-export-format",
+    "title": "15.10. Export Format",
+    "level": 1,
+    "page_start": 195,
+    "page_end": 195,
+    "file": "sections/15-10-export-format.md"
+  },
+  {
+    "id": "15-10-1-exp",
+    "title": "15.10.1. EXP",
+    "level": 2,
+    "page_start": 195,
+    "page_end": 195,
+    "file": "sections/15-10-1-exp.md"
+  },
+  {
+    "id": "chapter-16-instructions",
+    "title": "Chapter 16. Instructions",
+    "level": 0,
+    "page_start": 196,
+    "page_end": 196,
+    "file": "sections/chapter-16-instructions.md"
+  },
+  {
+    "id": "16-1-sop2-instructions",
+    "title": "16.1. SOP2 Instructions",
+    "level": 1,
+    "page_start": 197,
+    "page_end": 208,
+    "file": "sections/16-1-sop2-instructions.md"
+  },
+  {
+    "id": "16-2-sopk-instructions",
+    "title": "16.2. SOPK Instructions",
+    "level": 1,
+    "page_start": 209,
+    "page_end": 216,
+    "file": "sections/16-2-sopk-instructions.md"
+  },
+  {
+    "id": "16-3-sop1-instructions",
+    "title": "16.3. SOP1 Instructions",
+    "level": 1,
+    "page_start": 217,
+    "page_end": 237,
+    "file": "sections/16-3-sop1-instructions.md"
+  },
+  {
+    "id": "16-4-sopc-instructions",
+    "title": "16.4. SOPC Instructions",
+    "level": 1,
+    "page_start": 238,
+    "page_end": 241,
+    "file": "sections/16-4-sopc-instructions.md"
+  },
+  {
+    "id": "16-5-sopp-instructions",
+    "title": "16.5. SOPP Instructions",
+    "level": 1,
+    "page_start": 242,
+    "page_end": 254,
+    "file": "sections/16-5-sopp-instructions.md"
+  },
+  {
+    "id": "16-6-smem-instructions",
+    "title": "16.6. SMEM Instructions",
+    "level": 1,
+    "page_start": 255,
+    "page_end": 258,
+    "file": "sections/16-6-smem-instructions.md"
+  },
+  {
+    "id": "16-7-vop2-instructions",
+    "title": "16.7. VOP2 Instructions",
+    "level": 1,
+    "page_start": 259,
+    "page_end": 272,
+    "file": "sections/16-7-vop2-instructions.md"
+  },
+  {
+    "id": "16-7-1-vop2-using-vop3-or-vop3sd-encoding",
+    "title": "16.7.1. VOP2 using VOP3 or VOP3SD encoding",
+    "level": 2,
+    "page_start": 273,
+    "page_end": 273,
+    "file": "sections/16-7-1-vop2-using-vop3-or-vop3sd-encoding.md"
+  },
+  {
+    "id": "16-8-vop1-instructions",
+    "title": "16.8. VOP1 Instructions",
+    "level": 1,
+    "page_start": 274,
+    "page_end": 302,
+    "file": "sections/16-8-vop1-instructions.md"
+  },
+  {
+    "id": "16-8-1-vop1-using-vop3-encoding",
+    "title": "16.8.1. VOP1 using VOP3 encoding",
+    "level": 2,
+    "page_start": 303,
+    "page_end": 303,
+    "file": "sections/16-8-1-vop1-using-vop3-encoding.md"
+  },
+  {
+    "id": "16-9-vopc-instructions",
+    "title": "16.9. VOPC Instructions",
+    "level": 1,
+    "page_start": 304,
+    "page_end": 358,
+    "file": "sections/16-9-vopc-instructions.md"
+  },
+  {
+    "id": "16-9-1-vopc-using-vop3-encoding",
+    "title": "16.9.1. VOPC using VOP3 encoding",
+    "level": 2,
+    "page_start": 359,
+    "page_end": 359,
+    "file": "sections/16-9-1-vopc-using-vop3-encoding.md"
+  },
+  {
+    "id": "16-10-vop3p-instructions",
+    "title": "16.10. VOP3P Instructions",
+    "level": 1,
+    "page_start": 360,
+    "page_end": 368,
+    "file": "sections/16-10-vop3p-instructions.md"
+  },
+  {
+    "id": "16-11-vopd-instructions",
+    "title": "16.11. VOPD Instructions",
+    "level": 1,
+    "page_start": 369,
+    "page_end": 370,
+    "file": "sections/16-11-vopd-instructions.md"
+  },
+  {
+    "id": "16-11-1-vopd-x-instructions",
+    "title": "16.11.1. VOPD X-Instructions",
+    "level": 2,
+    "page_start": 369,
+    "page_end": 370,
+    "file": "sections/16-11-1-vopd-x-instructions.md"
+  },
+  {
+    "id": "16-11-2-vopd-y-instructions",
+    "title": "16.11.2. VOPD Y-Instructions",
+    "level": 2,
+    "page_start": 371,
+    "page_end": 373,
+    "file": "sections/16-11-2-vopd-y-instructions.md"
+  },
+  {
+    "id": "16-12-vop3-vop3sd-instructions",
+    "title": "16.12. VOP3 & VOP3SD Instructions",
+    "level": 1,
+    "page_start": 374,
+    "page_end": 506,
+    "file": "sections/16-12-vop3-vop3sd-instructions.md"
+  },
+  {
+    "id": "16-13-vinterp-instructions",
+    "title": "16.13. VINTERP Instructions",
+    "level": 1,
+    "page_start": 507,
+    "page_end": 509,
+    "file": "sections/16-13-vinterp-instructions.md"
+  },
+  {
+    "id": "16-14-parameter-and-direct-load-from-lds-instructions",
+    "title": "16.14. Parameter and Direct Load from LDS Instructions",
+    "level": 1,
+    "page_start": 510,
+    "page_end": 510,
+    "file": "sections/16-14-parameter-and-direct-load-from-lds-instructions.md"
+  },
+  {
+    "id": "16-15-lds-gds-instructions",
+    "title": "16.15. LDS & GDS Instructions",
+    "level": 1,
+    "page_start": 511,
+    "page_end": 545,
+    "file": "sections/16-15-lds-gds-instructions.md"
+  },
+  {
+    "id": "16-15-1-lds-instruction-limitations",
+    "title": "16.15.1. LDS Instruction Limitations",
+    "level": 2,
+    "page_start": 546,
+    "page_end": 546,
+    "file": "sections/16-15-1-lds-instruction-limitations.md"
+  },
+  {
+    "id": "16-16-mubuf-instructions",
+    "title": "16.16. MUBUF Instructions",
+    "level": 1,
+    "page_start": 547,
+    "page_end": 562,
+    "file": "sections/16-16-mubuf-instructions.md"
+  },
+  {
+    "id": "16-17-mtbuf-instructions",
+    "title": "16.17. MTBUF Instructions",
+    "level": 1,
+    "page_start": 563,
+    "page_end": 566,
+    "file": "sections/16-17-mtbuf-instructions.md"
+  },
+  {
+    "id": "16-18-mimg-instructions",
+    "title": "16.18. MIMG Instructions",
+    "level": 1,
+    "page_start": 567,
+    "page_end": 580,
+    "file": "sections/16-18-mimg-instructions.md"
+  },
+  {
+    "id": "16-19-export-instructions",
+    "title": "16.19. EXPORT Instructions",
+    "level": 1,
+    "page_start": 581,
+    "page_end": 581,
+    "file": "sections/16-19-export-instructions.md"
+  },
+  {
+    "id": "16-20-flat-scratch-and-global-instructions",
+    "title": "16.20. FLAT, Scratch and Global Instructions",
+    "level": 1,
+    "page_start": 582,
+    "page_end": 592,
+    "file": "sections/16-20-flat-scratch-and-global-instructions.md"
+  },
+  {
+    "id": "16-20-1-flat-instructions",
+    "title": "16.20.1. Flat Instructions",
+    "level": 2,
+    "page_start": 582,
+    "page_end": 592,
+    "file": "sections/16-20-1-flat-instructions.md"
+  },
+  {
+    "id": "16-20-2-scratch-instructions",
+    "title": "16.20.2. Scratch Instructions",
+    "level": 2,
+    "page_start": 593,
+    "page_end": 597,
+    "file": "sections/16-20-2-scratch-instructions.md"
+  },
+  {
+    "id": "16-20-3-global-instructions",
+    "title": "16.20.3. Global Instructions",
+    "level": 2,
+    "page_start": 598,
+    "page_end": 609,
+    "file": "sections/16-20-3-global-instructions.md"
+  }
+]

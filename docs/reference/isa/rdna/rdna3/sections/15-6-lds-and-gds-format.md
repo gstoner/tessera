@@ -1,0 +1,89 @@
+# 15.6. LDS and GDS Format
+
+> RDNA3 ISA — pages 184–185
+
+15.6. LDS and GDS Format
+
+15.6.1. DS
+
+    Description       Local and Global Data Sharing instructions
+
+                                                    Table 99. DS Fields
+Field Name                 Bits        Format or Description
+OFFSET0                    [7:0]       First address offset
+OFFSET1                    [15:8]      Second address offset. For some opcodes this is concatenated with OFFSET0.
+GDS                        [17]        1=GDS, 0=LDS operation.
+OP                         [25:18]     See Opcode table below.
+ENCODING                   [31:26]     'b110110
+ADDR                       [39:32]     VGPR that supplies the address.
+DATA0                      [47:40]     First data VGPR.
+DATA1                      [55:48]     Second data VGPR.
+VDST                       [63:56]     Destination VGPR when results returned to VGPRs.
+
+                                                  Table 100. DS Opcodes
+Opcode # Name                                                  Opcode # Name
+0          DS_ADD_U32                                          65         DS_SUB_U64
+1          DS_SUB_U32                                          66         DS_RSUB_U64
+2          DS_RSUB_U32                                         67         DS_INC_U64
+3          DS_INC_U32                                          68         DS_DEC_U64
+4          DS_DEC_U32                                          69         DS_MIN_I64
+5          DS_MIN_I32                                          70         DS_MAX_I64
+6          DS_MAX_I32                                          71         DS_MIN_U64
+7          DS_MIN_U32                                          72         DS_MAX_U64
+8          DS_MAX_U32                                          73         DS_AND_B64
+9          DS_AND_B32                                          74         DS_OR_B64
+10         DS_OR_B32                                           75         DS_XOR_B64
+11         DS_XOR_B32                                          76         DS_MSKOR_B64
+12         DS_MSKOR_B32                                        77         DS_STORE_B64
+13         DS_STORE_B32                                        78         DS_STORE_2ADDR_B64
+14         DS_STORE_2ADDR_B32                                  79         DS_STORE_2ADDR_STRIDE64_B64
+15         DS_STORE_2ADDR_STRIDE64_B32                         80         DS_CMPSTORE_B64
+16         DS_CMPSTORE_B32                                     81         DS_CMPSTORE_F64
+17         DS_CMPSTORE_F32                                     82         DS_MIN_F64
+18         DS_MIN_F32                                          83         DS_MAX_F64
+19         DS_MAX_F32                                          96         DS_ADD_RTN_U64
+20         DS_NOP                                              97         DS_SUB_RTN_U64
+21         DS_ADD_F32                                          98         DS_RSUB_RTN_U64
+24         Reserved                                            99         DS_INC_RTN_U64
+
+Opcode # Name                                    Opcode # Name
+25         Reserved                              100     DS_DEC_RTN_U64
+26         Reserved                              101     DS_MIN_RTN_I64
+27         Reserved                              102     DS_MAX_RTN_I64
+28         Reserved                              103     DS_MIN_RTN_U64
+29         Reserved                              104     DS_MAX_RTN_U64
+30         DS_STORE_B8                           105     DS_AND_RTN_B64
+31         DS_STORE_B16                          106     DS_OR_RTN_B64
+32         DS_ADD_RTN_U32                        107     DS_XOR_RTN_B64
+33         DS_SUB_RTN_U32                        108     DS_MSKOR_RTN_B64
+34         DS_RSUB_RTN_U32                       109     DS_STOREXCHG_RTN_B64
+35         DS_INC_RTN_U32                        110     DS_STOREXCHG_2ADDR_RTN_B64
+36         DS_DEC_RTN_U32                        111     DS_STOREXCHG_2ADDR_STRIDE64_RTN_B64
+37         DS_MIN_RTN_I32                        112     DS_CMPSTORE_RTN_B64
+38         DS_MAX_RTN_I32                        113     DS_CMPSTORE_RTN_F64
+39         DS_MIN_RTN_U32                        114     DS_MIN_RTN_F64
+40         DS_MAX_RTN_U32                        115     DS_MAX_RTN_F64
+41         DS_AND_RTN_B32                        118     DS_LOAD_B64
+42         DS_OR_RTN_B32                         119     DS_LOAD_2ADDR_B64
+43         DS_XOR_RTN_B32                        120     DS_LOAD_2ADDR_STRIDE64_B64
+44         DS_MSKOR_RTN_B32                      121     DS_ADD_RTN_F32
+45         DS_STOREXCHG_RTN_B32                  122     DS_ADD_GS_REG_RTN
+46         DS_STOREXCHG_2ADDR_RTN_B32            123     DS_SUB_GS_REG_RTN
+47         DS_STOREXCHG_2ADDR_STRIDE64_RTN_B32   126     DS_CONDXCHG32_RTN_B64
+48         DS_CMPSTORE_RTN_B32                   160     DS_STORE_B8_D16_HI
+49         DS_CMPSTORE_RTN_F32                   161     DS_STORE_B16_D16_HI
+50         DS_MIN_RTN_F32                        162     DS_LOAD_U8_D16
+51         DS_MAX_RTN_F32                        163     DS_LOAD_U8_D16_HI
+52         DS_WRAP_RTN_B32                       164     DS_LOAD_I8_D16
+53         DS_SWIZZLE_B32                        165     DS_LOAD_I8_D16_HI
+54         DS_LOAD_B32                           166     DS_LOAD_U16_D16
+55         DS_LOAD_2ADDR_B32                     167     DS_LOAD_U16_D16_HI
+56         DS_LOAD_2ADDR_STRIDE64_B32            173     DS_BVH_STACK_RTN_B32
+57         DS_LOAD_I8                            176     DS_STORE_ADDTID_B32
+58         DS_LOAD_U8                            177     DS_LOAD_ADDTID_B32
+59         DS_LOAD_I16                           178     DS_PERMUTE_B32
+60         DS_LOAD_U16                           179     DS_BPERMUTE_B32
+61         DS_CONSUME                            222     DS_STORE_B96
+62         DS_APPEND                             223     DS_STORE_B128
+63         DS_ORDERED_COUNT                      254     DS_LOAD_B96
+64         DS_ADD_U64                            255     DS_LOAD_B128

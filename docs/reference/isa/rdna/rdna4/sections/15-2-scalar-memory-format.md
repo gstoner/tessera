@@ -1,0 +1,37 @@
+# 15.2. Scalar Memory Format
+
+> RDNA4 ISA — pages 181–181
+
+15.2. Scalar Memory Format
+
+15.2.1. SMEM
+
+    Description     Scalar Memory data load
+
+                                                 Table 84. SMEM Fields
+Field Name          Bits          Format or Description
+SBASE               [5:0]         SGPR-pair that provides base address or SGPR-quad that provides V#. (LSB of SGPR
+                                  address is omitted).
+SDATA               [12:6]        SGPR that provides write data or accepts return data.
+OP                  [18:13]       See Opcode table below.
+SCOPE               [22:21]       Memory Scope
+TH                  [24:23]       Memory Temporal Hint
+ENCODING            [31:26]       'b111101
+IOFFSET             [55:32]       An immediate signed byte offset. Ignored for cache invalidations.
+SOFFSET             [63:57]       SGPR that supplies an unsigned byte offset. Disabled if set to NULL.
+
+                              Table 85. SMEM Opcodes
+Opcode # Name                          Opcode # Name
+0          S_LOAD_B32                  19          S_BUFFER_LOAD_B256
+1          S_LOAD_B64                  20          S_BUFFER_LOAD_B512
+2          S_LOAD_B128                 21          S_BUFFER_LOAD_B96
+3          S_LOAD_B256                 24          S_BUFFER_LOAD_I8
+4          S_LOAD_B512                 25          S_BUFFER_LOAD_U8
+5          S_LOAD_B96                  26          S_BUFFER_LOAD_I16
+8          S_LOAD_I8                   27          S_BUFFER_LOAD_U16
+9          S_LOAD_U8                   33          S_DCACHE_INV
+10         S_LOAD_I16                  36          S_PREFETCH_INST
+11         S_LOAD_U16                  37          S_PREFETCH_INST_PC_REL
+16         S_BUFFER_LOAD_B32           38          S_PREFETCH_DATA
+17         S_BUFFER_LOAD_B64           39          S_BUFFER_PREFETCH_DATA
+18         S_BUFFER_LOAD_B128          40          S_PREFETCH_DATA_PC_REL

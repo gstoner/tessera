@@ -14,6 +14,13 @@ This document consolidates ROCm-specific audit material.
 > AMD Gluon GEMM tutorial, with ranked, Tessera-mapped patterns (hardware-free IR/dispatch
 > wins to adopt now, the GEMM perf ladder for Strix Halo bring-up, and the GPU-initiated
 > comm track).
+>
+> **RDNA ISA data archive:** see [`docs/reference/isa/rdna/`](../../../reference/isa/rdna/README.md)
+> — a structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides:
+> per-version instruction DB (opcodes, pseudocode), microcode encoding bit-fields, and a
+> cross-version opcode matrix. The fast "does this op exist on my target" check before
+> emitting — e.g. gfx1151 is RDNA3.5 (WMMA F16/BF16/IU8/IU4, **no** FP8/BF8 WMMA, which
+> are RDNA4-only along with sparse SWMMAC). Regenerate via its `tools/build_archive.py`.
 
 ## Finished
 
@@ -89,6 +96,12 @@ apple / nvidia / cpu rows are not `hardware_verified`. Only the **rocm target
 row** is hardware-verified ("complete for this target", not the universal flip).
 
 ## runtime.launch() lane wired + kernel generalized (2026-06-22)
+
+> **Scheduler context:** how the on-GPU work scheduler (MES) maps queues onto HW
+> queues and enforces priority — the layer the launch bridge ultimately submits
+> into — is written up in
+> [`docs/reference/isa/rdna/mes/SCHEDULER_OVERVIEW.md`](../../../reference/isa/rdna/mes/SCHEDULER_OVERVIEW.md)
+> (command surface in `mes/api.json`).
 
 - **`runtime.launch()` now dispatches `target="rocm"` matmul to the GPU.** Added
   the `rocm_wmma` executor (`runtime._execute_rocm_wmma_artifact` + a cached lib

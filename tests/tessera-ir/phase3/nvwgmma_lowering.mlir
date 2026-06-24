@@ -7,10 +7,13 @@
 // tessera.nvgpu.wgmma.* dialect ops; the tile-shape (m64n64k16) is driven by
 // the tile.mma op's own sm attr, so both pass invocations emit the same call.
 //
-// RUN: tessera-opt --tessera-nvwgmma-lowering='sm=90' %s \
+// tile.mma is a registered Tile op (Phase A0), so this fixture needs no
+// --allow-unregistered-dialect — it runs through the strict driver.
+//
+// RUN: %tessera_strict_opt --tessera-nvwgmma-lowering='sm=90' %s \
 // RUN:   | FileCheck %s --check-prefix=SM90
 //
-// RUN: tessera-opt --tessera-nvwgmma-lowering='sm=80' %s \
+// RUN: %tessera_strict_opt --tessera-nvwgmma-lowering='sm=80' %s \
 // RUN:   | FileCheck %s --check-prefix=SM80
 
 // SM90-LABEL:  func.func @wgmma_kernel

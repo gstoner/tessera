@@ -1214,6 +1214,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §op-layer convergence", sprint="Phase C-NV",
     ),
     DiagnosticCode(
+        code="WARPSPEC_MMA_TOKEN_NOT_RETIRED", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A tile.mma holds a tile.async_copy/tma.copy_async completion token that no prior tile.wait_async retired — the copy is still in flight when the matrix op runs (held-but-unwaited race).",
+        fix_hint="Add a tile.wait_async on the token before the mma. Converges with the ROCm legality, which also requires retirement, not just token presence.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §op-layer convergence", sprint="Phase C-NV",
+    ),
+    DiagnosticCode(
         code="ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH", pass_origin="AsyncCopyLowering",
         severity="error",
         summary="A tile.async_copy carries a !tile.async_token but the SM<90 cp.async fallback has no SSA completion-token path.",

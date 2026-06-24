@@ -68,7 +68,15 @@ namespace {
 struct WmmaTypes {
   Type store, load, frag, acc, accElem;
   bool isInt;
+  // `pack` is the in-kernel codegen ABI mode (0 = fp passthrough, 1 = int8
+  // bitcast->v4i32, 2 = int4 nibble-pack->v2i32) — an emission detail, NOT the
+  // storage-pack contract. `packFactor` is the contract: logical values per
+  // byte container (f16/bf16/int8 -> 1, int4 -> 2), exactly the `factor`
+  // StoragePackConsume computes (container_bits / storage_bits). Keep them
+  // separate so a future int ABI mode (a new `pack` at the same logical factor)
+  // cannot silently break the contract check — verify against `packFactor`.
   int pack;
+  int packFactor;
 };
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
@@ -454,20 +462,20 @@ struct GenerateWMMAGemmKernelPass
       auto v16i8 = VectorType::get({16}, i8Ty);
       if (dt == "f16" || dt == "float16") {
         T = {f16Ty, VectorType::get({16}, f16Ty), VectorType::get({16}, f16Ty),
-             v8f32, f32Ty, /*isInt=*/false, /*pack=*/0};
+             v8f32, f32Ty, /*isInt=*/false, /*pack=*/0, /*packFactor=*/1};
       } else if (dt == "bf16" || dt == "bfloat16") {
         T = {bf16Ty, VectorType::get({16}, bf16Ty),
              VectorType::get({16}, bf16Ty), v8f32, f32Ty, /*isInt=*/false,
-             /*pack=*/0};
+             /*pack=*/0, /*packFactor=*/1};
       } else if (dt == "int8" || dt == "i8") {
         T = {i8Ty, v16i8, VectorType::get({4}, i32Ty), v8i32, i32Ty,
-             /*isInt=*/true, /*pack=*/1};
+             /*isInt=*/true, /*pack=*/1, /*packFactor=*/1};
       } else if (dt == "int4" || dt == "i4") {
         // int4 values supplied in int8 containers (range [-8,7]); the low nibble
         // is the int4 two's-complement. Nibble-packed in-kernel to the iu4 ABI
         // vector<2xi32>; i32 accumulate. (correctness-first — no coalesced load.)
         T = {i8Ty, v16i8, VectorType::get({2}, i32Ty), v8i32, i32Ty,
-             /*isInt=*/true, /*pack=*/2};
+             /*isInt=*/true, /*pack=*/2, /*packFactor=*/2};
       } else {
         op->emitError("generate-wmma-gemm-kernel: dtype must be f16, bf16, "
                       "int8, or int4 (got '")
@@ -475,18 +483,19 @@ struct GenerateWMMAGemmKernelPass
         return signalPassFailure();
       }
 
-      // C4 reconciliation: the storage-pack `factor` (logical sub-byte values per
-      // byte container) IS the WMMA integer pack mode (int8 -> 1, int4 -> 2), so
-      // they must agree — a mismatch means the dtype contract and the WMMA ABI
-      // have drifted.
+      // C4 reconciliation: the storage-pack `factor` (logical values per byte
+      // container) must equal this dtype's `packFactor` — the single packing
+      // contract. (Verify against `packFactor`, the logical contract, NOT
+      // `pack`, the codegen ABI mode: today int8/int4 happen to share the value,
+      // but a new int ABI mode at the same logical factor must still pass.)
       if (packDesc && T.isInt) {
         if (auto fAttr = packDesc.getAs<IntegerAttr>("factor")) {
           int64_t factor = fAttr.getInt();
-          if (factor != T.pack) {
+          if (factor != T.packFactor) {
             op->emitError("DTYPE_PACK_FACTOR_MISMATCH: tessera.storage_pack "
                           "factor ")
-                << factor << " disagrees with the WMMA int pack mode " << T.pack
-                << " for dtype '" << dt << "'.";
+                << factor << " disagrees with the dtype packing factor "
+                << T.packFactor << " for dtype '" << dt << "'.";
             return signalPassFailure();
           }
         }

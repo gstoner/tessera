@@ -324,6 +324,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |
 | Apple GPU architecture + kernel inventory | `docs/apple_gpu_overview.md`, `docs/apple_gpu_kernel_inventory.md` |
 | NVIDIA / ROCm / Metalium kernel inventories | `docs/nvidia_cuda13_kernel_inventory.md`, `docs/rocm_mfma_kernel_inventory.md`, `docs/metalium_kernel_inventory.md` |
+| **RDNA ISA data archive** (does-this-op-exist-on-my-target truth before emitting) | `docs/reference/isa/rdna/` — structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides + Micro Engine Scheduler. Per-version instruction DB (`<ver>/instructions.json`: opcodes, pseudocode), microcode encoding bit-fields (`encodings.json`), and a cross-version opcode matrix (`cross_version/instruction_matrix.{json,md}`). **gfx1151 = RDNA3.5: WMMA F16/BF16/IU8/IU4, NO FP8/BF8 WMMA (those + sparse SWMMAC are RDNA4-only).** JSON = machine truth, MD = mirror; regenerate via `tools/build_archive.py` (no network). MES scheduler write-up at `mes/SCHEDULER_OVERVIEW.md`. |
 | Graph IR ops / canonicalizations | `src/compiler/ir/TesseraOps.td`, `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | Schedule IR / FA-4 Tile IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`, `src/compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/` |
 | Runtime C ABI header | `src/runtime/include/tessera/tessera_runtime.h` |

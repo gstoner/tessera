@@ -162,7 +162,8 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
     # review (C1/C3/C5) with first-class attributes: #tile.layout / #tile.swizzle
     # / #tile.barrier / #tile.pipeline_state / #tile.pipeline_depths. Built into
     # core TesseraIR and registered unconditionally in tessera-opt.cpp (no
-    # cmake_flag). Holds AttrDefs but no TypeDefs today.
+    # cmake_flag). Holds both AttrDefs (#tile.layout etc.) and a TypeDef —
+    # !tile.async_token, the Phase B async-copy completion token.
     DialectSpec(
         name="tile",
         target="TesseraTileDialect",
@@ -171,7 +172,7 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         register_fn="tessera::tile::registerTileDialect",
         cmake_flag=None,
         eager_load_parent="tessera",
-        has_typedefs=False,
+        has_typedefs=True,
         standalone_lit_parseable=True,
         sprint="Sprint 9 / C1 (TIRx)",
     ),

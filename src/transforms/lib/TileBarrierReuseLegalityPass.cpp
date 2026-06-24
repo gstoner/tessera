@@ -21,9 +21,13 @@
 // unregistered husks alike):
 //   write op   : `tile.buf = #tile.buffer_ref<name, space, access="write">`,
 //                `tile.layout = #tile.layout<...>`
-//   barrier op : op name contains "mbarrier" / "wait_async" / "barrier", OR
-//                carries a `tile.barrier` unit attribute. A barrier releases the
-//                pending-write hazard for every buffer (conservative v1 scope).
+//   barrier op : a typed `#tile.barrier` of a completion kind (s_barrier /
+//                mbarrier / tma / tcgen05 — not the "waitcnt" counter marker on
+//                an async_copy), OR an explicit sync op by exact name
+//                (tile.wait_async / tile.s_barrier / tile.barrier / mbarrier
+//                *wait*). tile.async_copy is the hazard source, never a release.
+//                A barrier releases the pending-write hazard for every buffer
+//                (conservative v1 scope). See isBarrierOp for the full rule.
 //
 // Diagnostic code (stable):
 //   TILE_BARRIER_REUSE_MISSING_BARRIER
@@ -86,13 +90,30 @@ static bool overlaps(const std::pair<int64_t, int64_t> &a,
   return a.first < b.second && b.first < a.second;
 }
 
-// A barrier op releases the pending-write hazard.
+// A barrier op releases the pending-write hazard. Precise detection (NOT a
+// `name.contains("barrier")` substring sniff — that was removed from the ROCm
+// path in f32479c8 because it let a non-completing poll like `mbarrier.try_wait`
+// wrongly clear a hazard; the same anti-pattern is avoided here):
+//   * `tile.async_copy` is the hazard SOURCE, never a release — exclude it first
+//     even though it carries a `#tile.barrier` attr (kind="waitcnt") to name its
+//     counter.
+//   * a typed `#tile.barrier` attr whose kind is a real completion barrier
+//     (s_barrier / mbarrier / tma / tcgen05 — anything but the "waitcnt" counter
+//     marker that rides the copy).
+//   * the explicit synchronization ops by EXACT name (registered or husk):
+//     tile.wait_async / tile.s_barrier / tile.barrier, and the mbarrier *wait*
+//     forms. An arrive / alloc / non-completing try_wait is deliberately NOT a
+//     release.
 static bool isBarrierOp(Operation *op) {
-  if (op->hasAttr("tile.barrier"))
-    return true;
   StringRef name = op->getName().getStringRef();
-  return name.contains("mbarrier") || name.contains("wait_async") ||
-         name.contains("barrier");
+  if (name == "tile.async_copy")
+    return false;
+  if (auto b =
+          op->getAttrOfType<tessera::tile::TileBarrierAttr>("tile.barrier"))
+    return b.getKind() != "waitcnt";
+  return name == "tile.wait_async" || name == "tile.s_barrier" ||
+         name == "tile.barrier" || name == "tile.mbarrier_wait" ||
+         name == "tile.mbarrier.wait";
 }
 
 struct PendingWrite {

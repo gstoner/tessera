@@ -10,6 +10,7 @@
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/Math/IR/Math.h"  // flash_attn softmax exp
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Conversion/Passes.h"  // Phase 4 GPU emission: per-pass register decls
 // Phase 4 GPU emission: BufferizableOpInterface external models — without these,
@@ -93,6 +94,7 @@
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
+#include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
@@ -421,6 +423,7 @@ int main(int argc, char **argv) {
                   mlir::linalg::LinalgDialect,
                   mlir::memref::MemRefDialect,
                   mlir::scf::SCFDialect,
+                  mlir::math::MathDialect,
                   mlir::tensor::TensorDialect,
                   mlir::ub::UBDialect,
                   mlir::vector::VectorDialect,
@@ -494,6 +497,7 @@ int main(int argc, char **argv) {
   mlir::vector::registerConvertVectorToLLVMInterface(registry);
   mlir::index::registerConvertIndexToLLVMInterface(registry);
   mlir::ub::registerConvertUBToLLVMInterface(registry);
+  mlir::registerConvertMathToLLVMInterface(registry);  // flash_attn softmax exp
 #endif
 #endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND

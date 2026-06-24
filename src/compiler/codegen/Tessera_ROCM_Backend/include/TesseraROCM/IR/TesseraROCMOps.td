@@ -78,6 +78,28 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
+  let summary = "An FA-2 forward attention op to realize as a WMMA kernel";
+  let description = [{
+    The attention analog of `tessera_rocm.wmma_gemm`: the directive the
+    `generate-wmma-flash-attn-kernel` pass expands into a real, fragment-
+    materialized RDNA WMMA **flash-attention forward** kernel. One wave per
+    (16-query tile, b*h): stage Q in LDS, then for each 16-key tile compute
+    `S = scale * Q@K^T` (WMMA over head-dim chunks), apply the causal/ragged
+    mask, do an online softmax (running max/sum, rescale), and accumulate
+    `O += P@V` (WMMA). Scores are staged in LDS so the QK^T accumulator layout
+    is reread in the P@V A-fragment layout. Mirrors the hardware_verified
+    hand-written kernel (`tessera_rocm_wmma_flash_attn_*`).
+
+    `head_dim` (a multiple of 16) is the compile-time D; B/H/Sq/Sk/scale/causal
+    are runtime kernel arguments. `dtype` is the f16/bf16 storage (f32 softmax +
+    accumulate). Q/K/V are `[b,h,s,d]` row-major; O is f32.
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{

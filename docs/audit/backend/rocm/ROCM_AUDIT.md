@@ -128,10 +128,24 @@ matmul** to run on a non-Apple backend, taking ROCm from "one op executes" to
   Skip-clean with no AMD GPU / HIPRTC.
 - Honest scope (Decision #25): WMMA `{fp16, bf16}` forward only — **no backward,
   no perf ladder** (this is the correctness-first "rung 0" of attention, the
-  analog of the naive GEMM tile). It does **not** earn a `runtime.launch()` lane
-  yet: that needs flash_attn artifact plumbing (how a JIT'd attention artifact
-  carries Q/K/V + dispatches), a separate piece — so no `runtime_execution_matrix`
-  row is claimed (adding one with no producer would be over-claiming).
+  analog of the naive GEMM tile).
+
+✅ **flash_attn is now ALSO compiler-generated (2026-06-23) — the second
+compiler-generated op (after matmul Stage K/L).** A `tessera_rocm.flash_attn`
+directive (`head_dim`, `dtype`) is expanded by the new
+`generate-wmma-flash-attn-kernel` pass into a fragment-materialized FA-2 forward
+`gpu.func` — LDS-staged Q (gpu.func workgroup attributions), `QK^T` on WMMA
+(`tessera_rocm.wmma`), online softmax (`math.exp` → LLVM exp via the math
+ConvertToLLVM interface now registered in tessera-opt), `P@V` on WMMA, scores
+staged in LDS to bridge the QK^T-accumulator → P@V-A-fragment layout — a faithful
+MLIR re-emission of the hand-written kernel. It lowers through Stage J + Stage I
+**entirely in-process (no mlir-opt)** and **executes on gfx1151 matching a numpy
+attention reference** (maxerr < 2e-2 across head_dim 16/64, causal/non-causal,
+ragged Sq/Sk) — `tests/unit/test_rocm_flash_attn_compiled.py`. The remaining glue
+for a `runtime.launch()` executor-table lane (a flash_attn op-metadata contract +
+executor + matrix row, the same additive step matmul took at L4) is not yet
+wired, so no `runtime_execution_matrix` row is claimed (adding one with no
+producer would be over-claiming).
 
 **No audit inflation:** the per-primitive `backend_kernel` axis stays open —
 `primitive_is_complete(flash_attn)` is still `False` (x86/apple/nvidia/cpu rows

@@ -188,7 +188,16 @@ struct LowerTileToROCMPass
           signalPassFailure();
           return;
         }
-        if (op->getNumOperands() < 3 || op->getNumResults() != 1) {
+        // The planner may append a !tile.async_token result (the SSA completion
+        // edge). It is the trailing result; the leading result is the staged
+        // tile the rocm op produces. Require exactly one data result.
+        unsigned numResults = op->getNumResults();
+        bool hasTileToken =
+            numResults >= 1 &&
+            isa<tessera::tile::AsyncTokenType>(
+                op->getResult(numResults - 1).getType());
+        unsigned numData = hasTileToken ? numResults - 1 : numResults;
+        if (op->getNumOperands() < 3 || numData != 1) {
           op->emitError("ROCm lowering requires tile.async_copy(dst, src, bytes) -> token");
           signalPassFailure();
           return;
@@ -197,7 +206,7 @@ struct LowerTileToROCMPass
         OperationState state(op->getLoc(), "tessera_rocm.async_copy");
         state.addOperands({op->getOperand(0), op->getOperand(1),
                            op->getOperand(2)});
-        state.addTypes(op->getResultTypes());
+        state.addTypes(op->getResult(0).getType());
         state.addAttribute("src_space", builder.getStringAttr("global"));
         state.addAttribute("dst_space", builder.getStringAttr("lds"));
         state.addAttribute("arch", builder.getStringAttr(arch));
@@ -238,7 +247,9 @@ struct LowerTileToROCMPass
         copyAttrIfPresent(state, op, "tessera.storage_pack");
         copyAttrIfPresent(state, op, "tile.pipeline_depths");
         Operation *rocmOp = builder.create(state);
-        // Record this copy in the FIFO keyed by its stamped barrier id.
+        // Record this copy in the FIFO keyed by its stamped barrier id and its
+        // SSA token (the rocm result). A wait retires it by SSA value when its
+        // operand names the token, else by id/order.
         std::string id;
         if (auto a = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
                 "tile.buf"))
@@ -246,7 +257,12 @@ struct LowerTileToROCMPass
         if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
           id = a.getValue().str();
         outstanding.push_back({id, rocmOp->getResult(0)});
-        op->replaceAllUsesWith(rocmOp->getResults());
+        // Redirect the data result and, if present, the planner's
+        // !tile.async_token result to the rocm token — so a consuming wait/mma's
+        // token operand resolves to this copy's SSA value after lowering.
+        op->getResult(0).replaceAllUsesWith(rocmOp->getResult(0));
+        if (hasTileToken)
+          op->getResult(numResults - 1).replaceAllUsesWith(rocmOp->getResult(0));
         op->erase();
         continue;
       }
@@ -258,17 +274,31 @@ struct LowerTileToROCMPass
           return;
         }
 
-        // Retire the copy this wait names (its stamped tile.barrier_id), or the
-        // oldest outstanding copy if idless — never "the last token".
+        // Retire the copy this wait consumes. Prefer the SSA token operand (the
+        // planner threaded it, post-lowering it resolves to the copy's rocm
+        // token) — a precise def-use retirement. Else fall back to the stamped
+        // tile.barrier_id, else the oldest outstanding — never "the last token".
         Value token;
-        if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
-          StringRef want = a.getValue();
+        for (Value operand : op->getOperands()) {
           auto it = llvm::find_if(outstanding, [&](const auto &e) {
-            return e.first == want;
+            return e.second == operand;
           });
           if (it != outstanding.end()) {
             token = it->second;
             outstanding.erase(it);
+            break;
+          }
+        }
+        if (!token) {
+          if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
+            StringRef want = a.getValue();
+            auto it = llvm::find_if(outstanding, [&](const auto &e) {
+              return e.first == want;
+            });
+            if (it != outstanding.end()) {
+              token = it->second;
+              outstanding.erase(it);
+            }
           }
         }
         if (!token) {

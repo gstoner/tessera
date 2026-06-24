@@ -6,17 +6,22 @@
 // and per-wait waitcnt thresholds (oldest-retired-first, so vmcnt(1) then
 // vmcnt(0)); the lowering retires the matching token per wait, NOT "the last".
 
-// PLAN: tile.async_copy
+// Each copy mints a !tile.async_token result (the SSA completion edge); each
+// wait consumes the token of the copy it retires (oldest first), not "the last".
+// PLAN: %[[C0:.*]]:2 = tile.async_copy
 // PLAN-SAME: tile.barrier = #tile.barrier<kind = "waitcnt", expect = 0>
 // PLAN-SAME: tile.barrier_id = "rocm.waitcnt.0"
-// PLAN: tile.async_copy
+// PLAN-SAME: -> (i32, !tile.async_token)
+// PLAN: %[[C1:.*]]:2 = tile.async_copy
 // PLAN-SAME: tile.barrier_id = "rocm.waitcnt.1"
-// The first wait retires the OLDEST id (rocm.waitcnt.0) with one still
-// outstanding (threshold 1); the second retires rocm.waitcnt.1 (threshold 0).
-// PLAN: tile.wait_async
+// PLAN-SAME: -> (i32, !tile.async_token)
+// The first wait consumes C0's token + retires the OLDEST id (rocm.waitcnt.0)
+// with one still outstanding (threshold 1); the second consumes C1's token
+// (threshold 0).
+// PLAN: tile.wait_async %[[C0]]#1
 // PLAN-SAME: tile.barrier_id = "rocm.waitcnt.0"
 // PLAN-SAME: tile.waitcnt_threshold = 1
-// PLAN: tile.wait_async
+// PLAN: tile.wait_async %[[C1]]#1
 // PLAN-SAME: tile.barrier_id = "rocm.waitcnt.1"
 // PLAN-SAME: tile.waitcnt_threshold = 0
 

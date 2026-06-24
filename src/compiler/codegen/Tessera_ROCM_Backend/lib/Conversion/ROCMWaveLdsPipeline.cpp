@@ -13,7 +13,9 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 
 #include <optional>
@@ -74,6 +76,34 @@ static void collectSsaCopyDeps(Operation *mma,
     for (Value o : def->getOperands())
       worklist.push_back(o);
   }
+}
+
+// Give an async copy a !tile.async_token result — the SSA value its waits/mmas
+// consume. If one already exists, return it. Otherwise rewrite the op in place
+// (results are immutable, so recreate with the token appended, RAUW the original
+// results, and erase the old op). `copy` is updated to the new op. This is the
+// single place the ROCm path mints async tokens; threading them into the
+// consuming wait_async / mma operands turns the copy→consumer dependency into a
+// def-use edge the legality pass can check by SSA instead of program order.
+static Value materializeAsyncToken(OpBuilder &builder, Operation *&copy) {
+  auto tokTy = tessera::tile::AsyncTokenType::get(builder.getContext());
+  for (Value r : copy->getResults())
+    if (r.getType() == tokTy)
+      return r;
+  builder.setInsertionPoint(copy);
+  SmallVector<Type> resultTypes(copy->getResultTypes().begin(),
+                               copy->getResultTypes().end());
+  resultTypes.push_back(tokTy);
+  OperationState state(copy->getLoc(), copy->getName().getStringRef());
+  state.addOperands(copy->getOperands());
+  state.addTypes(resultTypes);
+  state.addAttributes(copy->getAttrs());
+  Operation *grown = builder.create(state);
+  for (unsigned i = 0, e = copy->getNumResults(); i < e; ++i)
+    copy->getResult(i).replaceAllUsesWith(grown->getResult(i));
+  copy->erase();
+  copy = grown;
+  return grown->getResult(grown->getNumResults() - 1);
 }
 
 static bool hasLdsAxis(tessera::tile::TileLayoutAttr layout) {
@@ -180,38 +210,43 @@ struct ROCMWaveLdsPipelinePass
   void runOnOperation() override {
     OpBuilder builder(&getContext());
 
-    // Per-function, program-order FIFO of outstanding async barrier ids. A wait
-    // retires the *oldest* (vmcnt drains in issue order); an s_barrier drains
-    // all. This is the single place async ids are assigned — the lowering reads
-    // the stamps, so it cannot regress to a "last token" model.
+    // The planner is the single place that resolves async dependencies — and it
+    // records them as SSA token edges, not program order. During an ordered walk
+    // it decides, per consumer, which copy it depends on (explicit tile.depends_on
+    // > SSA value link > most-recently-retired stage, the prefetch->wait->compute
+    // idiom); afterwards it mints a !tile.async_token on each copy and threads it
+    // into the operands of the wait_async that retires it and the mmas that
+    // consume it. The legality pass then verifies the def-use edge instead of
+    // re-deriving program order (which is what made a count-based guess able to
+    // wrongly reject valid double buffering).
     getOperation().walk([&](func::FuncOp func) {
       unsigned ordinal = 0;
       SmallVector<std::string> outstanding;   // oldest first
-      // The stage(s) retired by the most recent wait_async, or an empty vector
-      // after an s_barrier drain. nullopt means "nothing has been waited yet on
-      // this path". An mma consumes the most-recently-retired stage (the
-      // prefetch->wait->compute idiom), NOT whatever is still outstanding — so
-      // a live prefetch never gets mistaken for the mma's dependency.
       std::optional<SmallVector<std::string>> retiredCtx;
 
-      // Stamp a precise tile.depends_on on an mma from the best available
-      // signal: SSA value link first, else the just-retired stage.
-      auto stampMmaDeps = [&](Operation *mma) {
-        if (mma->hasAttr("tile.depends_on"))
-          return;
-        SmallVector<std::string> deps;
-        collectSsaCopyDeps(mma, deps);
-        bool haveContext = !deps.empty();
-        if (deps.empty() && retiredCtx.has_value()) {
-          deps.assign(retiredCtx->begin(), retiredCtx->end());
-          haveContext = true; // includes the empty (post-s_barrier) case.
+      // Recorded during the walk, applied after (mid-walk op recreation would
+      // invalidate the walk). copies: (barrier id, the async copy that mints its
+      // token). waitRetire / mmaConsumes: the id(s) each wait / mma consumes.
+      SmallVector<std::pair<std::string, Operation *>> copies;
+      SmallVector<std::pair<Operation *, std::string>> waitRetire;
+      SmallVector<std::pair<Operation *, SmallVector<std::string>>> mmaConsumes;
+
+      auto inferMmaDeps = [&](Operation *mma) -> SmallVector<std::string> {
+        if (auto arr = mma->getAttrOfType<ArrayAttr>("tile.depends_on")) {
+          SmallVector<std::string> ids;
+          for (Attribute a : arr)
+            if (auto s = dyn_cast<StringAttr>(a))
+              ids.push_back(s.getValue().str());
+          return ids;
         }
-        if (!haveContext)
-          return; // no wait/SSA evidence — legality flags if copies are live.
-        SmallVector<Attribute> attrs;
-        for (const std::string &id : deps)
-          attrs.push_back(builder.getStringAttr(id));
-        mma->setAttr("tile.depends_on", builder.getArrayAttr(attrs));
+        SmallVector<std::string> ssa;
+        collectSsaCopyDeps(mma, ssa);
+        if (!ssa.empty())
+          return ssa;
+        if (retiredCtx.has_value())
+          return SmallVector<std::string>(retiredCtx->begin(),
+                                          retiredCtx->end());
+        return {};
       };
 
       func.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -235,6 +270,7 @@ struct ROCMWaveLdsPipelinePass
             op->setAttr("tile.pipeline", builder.getStringAttr(
                                              "rocm.wave_lds." +
                                              std::to_string(ordinal)));
+          copies.push_back({id, op});
           outstanding.push_back(id);
           ++ordinal;
           return;
@@ -254,8 +290,10 @@ struct ROCMWaveLdsPipelinePass
             op->setAttr("tile.barrier_id", builder.getStringAttr(retired));
             outstanding.erase(outstanding.begin());
           }
-          if (!retired.empty())
+          if (!retired.empty()) {
             retiredCtx = SmallVector<std::string>{retired};
+            waitRetire.push_back({op, retired});
+          }
           // Threshold = ids still outstanding for this counter after retiring.
           op->setAttr("tile.waitcnt_threshold",
                       builder.getI64IntegerAttr(
@@ -276,9 +314,44 @@ struct ROCMWaveLdsPipelinePass
           if (!op->hasAttr("tile.rocm_matrix_path"))
             op->setAttr("tile.rocm_matrix_path",
                         builder.getStringAttr("wmma_or_mfma_by_arch"));
-          stampMmaDeps(op);
+          SmallVector<std::string> deps = inferMmaDeps(op);
+          if (!deps.empty()) {
+            if (!op->hasAttr("tile.depends_on")) {
+              SmallVector<Attribute> attrs;
+              for (const std::string &id : deps)
+                attrs.push_back(builder.getStringAttr(id));
+              op->setAttr("tile.depends_on", builder.getArrayAttr(attrs));
+            }
+            mmaConsumes.push_back({op, deps});
+          }
+          return;
         }
       });
+
+      // Materialize the SSA token edges. Mint a token on each async copy, then
+      // thread it into the wait_async that retires it and the mmas that consume
+      // it. The token rides the ops' Variadic<AnyType> operand slots, so no op
+      // signature changes; downstream lowering keys retirement on the SSA value.
+      llvm::StringMap<Value> tokenById;
+      for (auto &entry : copies) {
+        Operation *copy = entry.second;
+        tokenById[entry.first] = materializeAsyncToken(builder, copy);
+      }
+      for (auto &wr : waitRetire) {
+        auto it = tokenById.find(wr.second);
+        if (it != tokenById.end())
+          wr.first->insertOperands(wr.first->getNumOperands(), {it->second});
+      }
+      for (auto &mc : mmaConsumes) {
+        SmallVector<Value> toks;
+        for (const std::string &id : mc.second) {
+          auto it = tokenById.find(id);
+          if (it != tokenById.end())
+            toks.push_back(it->second);
+        }
+        if (!toks.empty())
+          mc.first->insertOperands(mc.first->getNumOperands(), toks);
+      }
     });
   }
 };
@@ -336,19 +409,25 @@ struct ROCMWaveLdsLegalityPass
     });
 
     getOperation().walk([&](func::FuncOp func) {
-      // Per-id outstanding async work (issued, not yet retired), ordered oldest
-      // first. A wait retires the id it names (or the oldest); an s_barrier
-      // drains all. Replaces the function-global pendingAsync bool, so an mma
-      // may run while *unrelated* prefetch ids remain outstanding (double
-      // buffering).
-      SmallVector<std::string> outstanding;
-      // Same retired-stage model as the planner, so legality is precise even on
-      // hand-written IR the planner never stamped: an mma depends on the stage
-      // most recently *retired*, never on a live prefetch.
-      std::optional<SmallVector<std::string>> retiredCtx;
+      // SSA token model: an async copy mints a !tile.async_token result; a
+      // wait_async / s_barrier retires it; an mma's token operands name exactly
+      // the stages it consumes. Legality is then a pure def-use check — every
+      // token an mma consumes must already be retired — with NO program-order
+      // re-derivation. The planner encoded the dependency as SSA, so a live
+      // prefetch can never be mistaken for a dependency (the over-rejection the
+      // old count-based guess produced is structurally impossible here). The
+      // string `outstanding` set + pendingLdsWrites remain for the C2 LDS
+      // write/write check and a conservative fallback on token-less IR.
+      llvm::SmallPtrSet<Value, 8> outstandingTokens; // minted, not retired
+      llvm::SmallPtrSet<Value, 8> retiredTokens;     // waited or drained
+      SmallVector<std::string> outstanding;          // barrier ids (fallback)
+      bool sawAnyWait = false;
       unsigned synth = 0;
       llvm::DenseMap<StringRef, PendingWrite> pendingLdsWrites;
 
+      auto isToken = [](Value v) {
+        return isa<tessera::tile::AsyncTokenType>(v.getType());
+      };
       auto asyncIdOf = [&](Operation *op) -> std::string {
         if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
           return a.getValue().str();
@@ -361,82 +440,85 @@ struct ROCMWaveLdsLegalityPass
         StringRef name = op->getName().getStringRef();
 
         if (name == "tile.wait_async") {
-          std::string retired;
+          sawAnyWait = true;
+          // Retire by SSA token (precise) and keep the string set consistent.
+          for (Value operand : op->getOperands())
+            if (isToken(operand)) {
+              outstandingTokens.erase(operand);
+              retiredTokens.insert(operand);
+            }
           if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
-            retired = a.getValue().str();
-            auto it = llvm::find(outstanding, retired);
+            auto it = llvm::find(outstanding, a.getValue().str());
             if (it != outstanding.end())
               outstanding.erase(it);
           } else if (!outstanding.empty()) {
-            retired = outstanding.front();
             outstanding.erase(outstanding.begin());
           }
-          if (!retired.empty())
-            retiredCtx = SmallVector<std::string>{retired};
           pendingLdsWrites.clear(); // a retired copy makes its LDS write safe.
           return;
         }
         if (isSBarrier(op)) {
-          outstanding.clear(); // workgroup barrier drains all.
-          retiredCtx = SmallVector<std::string>{}; // empty == drained, no deps.
+          for (Value t : outstandingTokens) // workgroup barrier drains all.
+            retiredTokens.insert(t);
+          outstandingTokens.clear();
+          outstanding.clear();
           pendingLdsWrites.clear();
           return;
         }
 
         if (name == "tile.mma") {
-          // Resolve the LDS stage(s) this mma consumes, in precedence order:
-          //   1. explicit tile.depends_on  (frontend/planner-stated, exact)
-          //   2. SSA value link to a tile.async_copy  (exact when present)
-          //   3. the most-recently-retired stage  (prefetch->wait->compute)
-          // A live prefetch that the mma does NOT consume is intentionally not
-          // a dependency, so software-pipelined double buffering is legal.
-          SmallVector<std::string> deps;
-          bool haveContext = false;
+          // Precise path: the mma's token operands are exactly the stages it
+          // consumes; each must already be retired. No program-order guess.
+          bool hasTokenOperand = false;
+          for (Value operand : op->getOperands())
+            if (isToken(operand)) {
+              hasTokenOperand = true;
+              if (!retiredTokens.count(operand)) {
+                op->emitOpError(
+                    "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma consumes an async "
+                    "copy token with no intervening tile.wait_async / "
+                    "waitcnt(vmcnt) — the LDS stage it reads is not resident.");
+                anyError = true;
+              }
+            }
+          if (hasTokenOperand)
+            return;
+
+          // Fallback for hand-written, token-less IR: trust an explicit
+          // tile.depends_on; else flag only if copies are in flight and nothing
+          // has been waited at all (never over-reject a waited double buffer).
           if (auto arr = op->getAttrOfType<ArrayAttr>("tile.depends_on")) {
-            haveContext = true;
             for (Attribute a : arr)
               if (auto s = dyn_cast<StringAttr>(a))
-                deps.push_back(s.getValue().str());
-          } else {
-            collectSsaCopyDeps(op, deps);
-            if (!deps.empty()) {
-              haveContext = true;
-            } else if (retiredCtx.has_value()) {
-              deps.assign(retiredCtx->begin(), retiredCtx->end());
-              haveContext = true; // includes the empty post-s_barrier case.
-            }
-          }
-
-          if (!haveContext) {
-            // Nothing waited yet and no value link: if copies are in flight the
-            // mma would read unfilled LDS — a genuine waitcnt hazard.
-            if (!outstanding.empty()) {
-              op->emitOpError(
-                  "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma runs with "
-                  "outstanding global-to-LDS async copies and no completed "
-                  "tile.wait_async / waitcnt(vmcnt) — the LDS stage it consumes "
-                  "is not yet resident.");
-              anyError = true;
-            }
+                if (llvm::is_contained(outstanding, s.getValue().str())) {
+                  op->emitOpError(
+                      "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma depends on "
+                      "barrier id '")
+                      << s.getValue()
+                      << "' from an outstanding global-to-LDS async copy with "
+                         "no intervening tile.wait_async / waitcnt(vmcnt).";
+                  anyError = true;
+                }
             return;
           }
-          for (const std::string &d : deps)
-            if (llvm::is_contained(outstanding, d)) {
-              op->emitOpError("ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma depends "
-                              "on barrier id '")
-                  << d
-                  << "' from an outstanding global-to-LDS async copy with no "
-                     "intervening tile.wait_async / waitcnt(vmcnt).";
-              anyError = true;
-            }
+          if (!outstanding.empty() && !sawAnyWait) {
+            op->emitOpError(
+                "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma runs with outstanding "
+                "global-to-LDS async copies and no completed tile.wait_async / "
+                "waitcnt(vmcnt) — the LDS stage it consumes is not resident.");
+            anyError = true;
+          }
           return;
         }
 
         if (name != "tile.async_copy")
           return;
 
-        // Record the async copy as outstanding + run the C2-style LDS
-        // write/write reuse check.
+        // Record the async copy: its token (precise) + barrier id (fallback) +
+        // run the C2-style LDS write/write reuse check.
+        for (Value r : op->getResults())
+          if (isToken(r))
+            outstandingTokens.insert(r);
         outstanding.push_back(asyncIdOf(op));
 
         auto buf =

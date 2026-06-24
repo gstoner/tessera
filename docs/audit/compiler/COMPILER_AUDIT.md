@@ -1099,12 +1099,27 @@ stage named by explicit `tile.depends_on`, else an SSA value link to its
 `tile.async_copy`, else the most-recently-*retired* stage (the
 prefetch→wait→compute idiom) — a live prefetch is never mistaken for the mma's
 dependency, so software-pipelined double buffering is accepted even without an
-explicit `tile.depends_on` (the planner stamps one from the same model). Genuine
-hazards still fail `ROCM_WAVE_LDS_MISSING_WAITCNT` (an mma over an unretired
-stage, or with copies in flight and nothing waited); `s_barrier` drains all.
-This removed the prior `AMBIGUOUS_DEPENDENCY` over-rejection that blocked valid
-multi-stage ROCm kernels. Verified on the ROCm-backend build: ROCm lit 21/21,
-shared-Tile/NVIDIA fixtures + registry/tiling pytest green.
+explicit `tile.depends_on`. This removed the prior `AMBIGUOUS_DEPENDENCY`
+over-rejection that blocked valid multi-stage ROCm kernels.
+
+**Op-layer convergence — SSA token edge LANDED (Phase A0→C-ROCm, 2026-06-23).**
+The four Tile sync ops (`tile.async_copy`/`wait_async`/`mma`/`s_barrier`) are now
+registered ODS ops (non-`Pure`, so a wait/barrier is never DCE'd nor an mma
+CSE-merged or hoisted past its wait), and the Tile dialect owns a payload-free
+`!tile.async_token` type. The ROCm planner mints a token on each copy and threads
+it into the operands of the wait that retires it and the mmas that consume it,
+turning the copy→consumer dependency into an SSA def-use edge. Legality is now a
+pure token def-use check — every token an mma consumes must already be retired —
+with the program-order/`retiredCtx` re-derivation **deleted**: the over-rejection
+the count-based guess produced is structurally impossible because the planner
+encodes the dependency as SSA, not order. Lowering retires by SSA Value (the
+wait's token operand), falling back to `tile.barrier_id`/oldest only for
+token-less IR. Backend-neutral: the token carries no count (NV expect-bytes stays
+in `#tile.barrier`; ROCm vmcnt stays in legality arithmetic). NV stays on its
+proven string+order model (the token is additive), so the tree is consistent;
+NV C6 migration to token edges is a separable follow-up. Verified on both build
+trees: ROCm lit 22/22 (incl. token def-use legality + planner token-threading
+pins), tessera-ir phase2/3/6/8 + apple-value + registry/tiling pytest green.
 
 ## Next Work
 

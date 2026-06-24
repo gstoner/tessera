@@ -2,19 +2,25 @@
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 int main(int argc, char **argv){
   mlir::DialectRegistry registry;
   // scf is registered so the wave/LDS pipeline + legality can be exercised on
   // software-pipelined loop bodies (scf.for) — that is the transform's real
-  // setting; without it scf.for cannot even be parsed in custom form.
+  // setting; without it scf.for cannot even be parsed in custom form. gpu +
+  // memref let the runnable async_copy lowering (-lower-rocm-async-copy) parse
+  // gpu.func kernels with workgroup (LDS) attributions + memref copy loops.
   registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+                  mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect,
-                  mlir::scf::SCFDialect,
+                  mlir::scf::SCFDialect, mlir::vector::VectorDialect,
                   tessera::tile::TesseraTileDialect>();
   mlir::tessera_rocm::registerTesseraROCMDialects(registry);
   mlir::tessera_rocm::registerTesseraROCMPasses();

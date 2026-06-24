@@ -28,6 +28,8 @@
 // Registration: --tessera-warp-specialization
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
@@ -38,6 +40,9 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
+
+#include <string>
 
 using namespace mlir;
 
@@ -70,6 +75,65 @@ static bool isConsumerOp(Operation *op) {
   return name.starts_with("tessera.attn.") || name == "tile.mma";
 }
 
+// C3 join (2026-06-23): stamp the typed PipelineState + warp-role markers that
+// TilePipelineLegalityPass (C3) and WarpSpecLegalityPass (C6) verify. The
+// producer ring starts at phase 1, the consumer at phase 0 — the asymmetry that
+// makes the first wait fall through (the off-by-one ring-deadlock fix). depth=2
+// is the default double-buffer; stage 0 is the initial ring slot.
+static void stampPipelineMarkers(OpBuilder &b, Operation *warpOp,
+                                 StringRef pipelineId, StringRef role,
+                                 int64_t phase) {
+  warpOp->setAttr("tile.warp_role", b.getStringAttr(role));
+  warpOp->setAttr("tile.pipeline", b.getStringAttr(pipelineId));
+  warpOp->setAttr("tile.pipeline_state",
+                  tile::TilePipelineStateAttr::get(b.getContext(), /*depth=*/2,
+                                                   /*stage=*/0, phase, role));
+}
+
+// The staged-tile extents — from the op's tile_rows/tile_cols attrs (async_copy)
+// or its rank-2 static result shape (mma accumulator). Empty if unknown.
+static SmallVector<int64_t> tileExtents(Operation *op) {
+  auto rows = op->getAttrOfType<IntegerAttr>("tile_rows");
+  auto cols = op->getAttrOfType<IntegerAttr>("tile_cols");
+  if (rows && cols)
+    return {rows.getInt(), cols.getInt()};
+  if (op->getNumResults() == 1)
+    if (auto t = dyn_cast<RankedTensorType>(op->getResult(0).getType()))
+      if (t.hasStaticShape() && t.getRank() == 2)
+        return {t.getShape()[0], t.getShape()[1]};
+  return {};
+}
+
+// C1/C2 join: stamp a buffer write (tile.access="write" + tile.buffer + a
+// row-major #tile.layout on the given storage axes) so TileBarrierReuseLegality
+// (C2) runs on real lowering output and C1's layout vocabulary appears on the
+// staged shared-memory / TMEM tiles. axisNames must match the tile rank (2).
+static void stampBufferWrite(OpBuilder &b, Operation *op, const Twine &buffer,
+                             ArrayRef<int64_t> extents,
+                             ArrayRef<StringRef> axisNames) {
+  op->setAttr("tile.access", b.getStringAttr("write"));
+  op->setAttr("tile.buffer", b.getStringAttr(buffer.str()));
+  if (extents.empty() || extents.size() != axisNames.size())
+    return; // buffer/access stamped; no layout when the shape is unknown.
+  // Dynamic / placeholder dims (kDynamic, -1) can't form a legal layout — stamp
+  // buffer identity only rather than crash the #tile.layout verifier.
+  for (int64_t e : extents)
+    if (e <= 0)
+      return;
+  SmallVector<int64_t> strides(extents.size(), 1);
+  for (int i = static_cast<int>(extents.size()) - 2; i >= 0; --i)
+    strides[i] = strides[i + 1] * extents[i + 1]; // row-major
+  SmallVector<StringAttr> axes;
+  for (StringRef a : axisNames)
+    axes.push_back(b.getStringAttr(a));
+  op->setAttr("tile.layout",
+              tile::TileLayoutAttr::get(b.getContext(), extents, strides, axes,
+                                        /*replicaCounts=*/{},
+                                        /*replicaStrides=*/{},
+                                        /*replicaAxes=*/{}, /*offset=*/0,
+                                        /*swizzle=*/tile::TileSwizzleAttr()));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +148,11 @@ struct WarpSpecializationPass
   StringRef getDescription() const override {
     return "Assign producer/consumer warp roles; insert tessera.queue barriers";
   }
+  // C3 join: the pass now constructs #tile.pipeline_state, so the Tile dialect
+  // must be loaded.
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<tessera::tile::TesseraTileDialect>();
+  }
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
@@ -95,6 +164,7 @@ struct WarpSpecializationPass
         regionOps.push_back(op);
     });
 
+    unsigned regionIndex = 0;
     for (Operation *regionOp : regionOps) {
       Region &body = regionOp->getRegion(0);
       if (body.empty())
@@ -115,6 +185,10 @@ struct WarpSpecializationPass
       }
       if (producerOps.empty() || consumerOps.empty())
         continue;
+
+      // One pipeline id per specialized region, shared by its producer +
+      // consumer so C3 pairs them.
+      std::string pipelineId = ("warpspec." + Twine(regionIndex++)).str();
 
       DenseSet<Operation *> prodSet(producerOps.begin(), producerOps.end());
       DenseSet<Operation *> consSet(consumerOps.begin(), consumerOps.end());
@@ -149,6 +223,7 @@ struct WarpSpecializationPass
       for (Value v : prodCross)
         prodSt.addTypes(v.getType());
       Operation *prodWarp = b.create(prodSt);
+      stampPipelineMarkers(b, prodWarp, pipelineId, "producer", /*phase=*/1);
 
       // Hoist the consumer-needed "other" ops (e.g. constants) above the warp
       // regions so they dominate both — they only depend on region-external
@@ -162,10 +237,23 @@ struct WarpSpecializationPass
           o->moveBefore(prodWarp);
       }
 
+      // Buffers allocated this region (freed in the epilogue below).
+      SmallVector<std::string> regionBuffers;
+
       Block *prodBody = b.createBlock(&prodWarp->getRegion(0));
       b.setInsertionPointToEnd(prodBody);
-      for (Operation *p : producerOps)
+      // Each tile.async_copy stages into its own shared-memory tile (linear `m`
+      // axis); distinct buffers, so C2 sees no aliasing on well-formed lowering.
+      unsigned smemIdx = 0;
+      for (Operation *p : producerOps) {
+        if (p->getName().getStringRef() == "tile.async_copy") {
+          std::string name = (pipelineId + ".smem." + Twine(smemIdx++)).str();
+          stampBufferWrite(b, p, name, tileExtents(p),
+                           {StringRef("m"), StringRef("m")});
+          regionBuffers.push_back(name);
+        }
         p->moveBefore(prodBody, prodBody->end());
+      }
       OperationState prodYield(loc, "schedule.yield");
       prodYield.addOperands(prodCross);
       b.create(prodYield);
@@ -184,11 +272,22 @@ struct WarpSpecializationPass
       for (Value v : consCross)
         consSt.addTypes(v.getType());
       Operation *consWarp = b.create(consSt);
+      stampPipelineMarkers(b, consWarp, pipelineId, "consumer", /*phase=*/0);
 
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);
-      for (Operation *c : consumerOps)
+      // Each tile.mma writes its accumulator to a TMEM tile (tlane/tcol axes).
+      unsigned accIdx = 0;
+      for (Operation *c : consumerOps) {
+        if (c->getName().getStringRef() == "tile.mma") {
+          std::string name =
+              (pipelineId + ".tmem.acc." + Twine(accIdx++)).str();
+          stampBufferWrite(b, c, name, tileExtents(c),
+                           {StringRef("tlane"), StringRef("tcol")});
+          regionBuffers.push_back(name);
+        }
         c->moveBefore(consBody, consBody->end());
+      }
       OperationState consYield(loc, "schedule.yield");
       consYield.addOperands(consCross);
       b.create(consYield);
@@ -199,6 +298,22 @@ struct WarpSpecializationPass
           Operation *owner = use.getOwner();
           return !consSet.contains(owner) && owner != consWarp;
         });
+
+      // ── Writeback-dealloc epilogue ────────────────────────────────────────
+      // After the consumer warpgroup drains its accumulators, the region's
+      // staged buffers are freed. A `tile.cta_sync` must precede the frees so
+      // every warp has finished reading them (WARPSPEC_USE_AFTER_FREE, the C6
+      // use-after-free invariant). Emitted before the region terminator.
+      if (Operation *term = entryBlock.getTerminator()) {
+        b.setInsertionPoint(term);
+        b.create(OperationState(loc, "tile.cta_sync"));
+        for (const std::string &name : regionBuffers) {
+          OperationState freeSt(loc, "tile.buffer_free");
+          freeSt.addAttribute("tile.buffer", b.getStringAttr(name));
+          freeSt.addAttribute("tile.access", b.getStringAttr("free"));
+          b.create(freeSt);
+        }
+      }
     }
   }
 };

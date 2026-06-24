@@ -53,6 +53,14 @@ add_library(TesseraPasses
   LayoutAssignmentPass.cpp
   # 2026-06-19 — dtype / aliasing / buffer-binding contracts (Decision #15a).
   IRContractLegalityPass.cpp
+  # 2026-06-23 — C2: barriers as a layout-reuse correctness property (TIRx review).
+  TileBarrierReuseLegalityPass.cpp
+  # 2026-06-23 — C3: typed barriers + PipelineState cross-op legality (TIRx review).
+  TilePipelineLegalityPass.cpp
+  # 2026-06-23 — C4: compute/storage dtype legalize split (Decision #15a, TIRx review).
+  DtypeLegalizePass.cpp
+  # 2026-06-23 — C6: warp-spec structural diagnostics (TIRx debugging appendix).
+  WarpSpecLegalityPass.cpp
 
   # Sprint V5 (2026-05-22) — symbolic dim equality verifier (SHAPE_SYSTEM §11.2 closure).
   SymbolicDimEqualityPass.cpp

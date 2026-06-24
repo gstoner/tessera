@@ -775,6 +775,21 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   string enum as the coarse producer/consumer contract, and lower the string →
   structured attr at the Schedule→Tile boundary. Extends **Still Open → "Layout
   and binding contracts are uneven"**.
+  **v1 LANDED (2026-06-23).** Added first-class `#tile.layout` / `#tile.swizzle`
+  attributes to the canonical Tile dialect (`src/compiler/ir/.../TileOps.td` +
+  `TileDialect.cpp`): `#tile.layout<shard = [extents] : [strides] on [axes],
+  replica = [..] : [..] on [..], offset = N (, swizzle = #tile.swizzle<..>)>` —
+  the book's `S ⊕ R ⊕ O` with swizzle held as a *separate* attribute (never
+  folded into the affine map). Hand-written parser/printer (the default
+  ArrayRefParameter parser rejects the empty `replica = []` common case);
+  `genVerifyDecl` enforces parallel-array lengths, positive extents, and a known
+  hardware-axis accept-set (`m/tlane/tcol/laneid/warpid/reg/…/gpuid_x/y`) with
+  stable codes `TILE_LAYOUT_{RANK_MISMATCH,NONPOSITIVE_EXTENT,UNKNOWN_AXIS}`.
+  Lit: `tests/tessera-ir/phase2/tile_layout_attr.mlir` (round-trip incl. a
+  TMEM replicated-scale `R[..]` + swizzle case + 3 verifier negatives). *Still
+  open:* attaching the attr to the buffer/fragment ops, the string-enum →
+  structured-attr lowering at Schedule→Tile, a `.apply()` forward-mapping, and
+  WGMMA/TMA consumers reading it.
 
 - **C2 — Barriers as a layout-reuse correctness property, not scheduling (HF→HG).**
   TIRx's central inversion: in FA-4 one `128×512` TMEM allocation is aliased as
@@ -786,6 +801,22 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   slots a function of buffer-reuse decisions. Targets `WarpSpecializationPass` +
   the Queue dialect (currently "WarpSpec emits no queues/mbarriers" per the
   scorecard).
+  **v1 LANDED (2026-06-23) as a legality pass.** `TileBarrierReuseLegalityPass`
+  (`--tessera-tile-barrier-reuse-legality`, `src/transforms/lib/`, sibling to
+  `LayoutLegalityPass`): for a buffer (keyed by `tile.buffer`), two `tile.access
+  = "write"` ops whose `#tile.layout` storage-axis (`m/tlane/tcol`) footprints
+  *overlap* with no intervening barrier op (name contains `mbarrier`/`wait_async`
+  /`barrier`, or a `tile.barrier` attr) emit `TILE_BARRIER_REUSE_MISSING_BARRIER`
+  + a note at the prior write. Footprint = `[offset, offset + Σ(extent-1)|stride|]`
+  over storage-axis shard dims; a pure register/lane fragment has no storage
+  footprint and never aliases. Lit: `tile_barrier_reuse_legality.mlir` — the
+  canonical FA-4 fp32/fp16 TMEM-aliasing race (flagged), the same pair with a
+  barrier between (clean), disjoint double-buffer offsets (clean), and a
+  register-only fragment (clean). This is the **acceptance gate** for C3: once
+  WarpSpec emits real typed barriers + buffer reuse, this pass going green on the
+  FA-4 fixture is the correctness check. *Still open:* it consumes a convention
+  today (`tile.buffer`/`tile.access`); wiring it to real `alloc_shared`/`tmem.alloc`
+  SSA buffers + WarpSpec output is the C2↔C3 join.
 
 - **C3 — Typed barrier domains + a `PipelineState` SSA value (HF→HG).** Three
   barrier primitives with distinct completion semantics — `TMABar`
@@ -794,6 +825,20 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   with producer initialized `phase=1` / consumer `phase=0` (the packaged fix for
   the classic off-by-one ring deadlock). Our mbarriers are currently generic.
   Targets the `AsyncCopy`/pipeline lowering + Queue dialect; pairs with C5.
+  **v1 LANDED (2026-06-23).** Two Tile-dialect attributes —
+  `#tile.barrier<kind = tma|tcgen05|mbarrier, expect = N>` (the three completion
+  semantics) and `#tile.pipeline_state<depth, stage, phase, role>` — with
+  `genVerifyDecl` bounds (`TILE_BARRIER_{UNKNOWN_KIND,NEGATIVE_EXPECT}`,
+  `TILE_PIPELINE_{BAD_DEPTH,STAGE_OOB,BAD_PHASE,BAD_ROLE}`). Plus the cross-op
+  `TilePipelineLegalityPass` (`--tessera-tile-pipeline-legality`): the initial
+  producer-role op of a pipeline (keyed by `tile.pipeline`) must carry `phase=1`
+  and the initial consumer `phase=0` (`TILE_PIPELINE_PHASE_ASYMMETRY` — the
+  off-by-one deadlock fix), and all ops on one `tile.barrier_id` must agree on
+  `kind` (`TILE_PIPELINE_BARRIER_KIND_MISMATCH` + note). Lit:
+  `tile_pipeline_attrs.mlir` (round-trip + 6 verifier negatives),
+  `tile_pipeline_legality.mlir` (well-formed pipeline clean; producer-phase-0 and
+  mixed-kind flagged). *Still open:* `PipelineState` as a threaded SSA value (not
+  just an annotation) and WarpSpec emitting these — the C3↔C6 join.
 
 - **C4 — Separate *compute*-legalize from *storage*-legalize (HF).** TIRx runs
   `BF16/FP8 ComputeLegalize` (rewrite math to f32-upcast form) early and
@@ -803,6 +848,19 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   accum=fp32` becomes a compute-legalize rewrite, low-precision storage packing a
   terminal pass. Gives the `numeric_policy` contract a concrete lowering home on
   the executed lane. Lowest-risk item; closest to landing.
+  **v1 LANDED (2026-06-23).** Two ordered rewrite passes (`DtypeLegalizePass.cpp`):
+  `--tessera-compute-legalize` (early) stamps `numeric_policy.accum` on any op
+  whose `storage` is reduced-precision and lacks an accumulator — `fp32` for
+  float storages, `int32` for `int4`/`int8`; `--tessera-storage-legalize`
+  (terminal) stamps `tessera.storage_packed` + `tessera.storage_container` on
+  sub-byte / block-scaled storage (`fp4`/`nvfp4`/`fp6`/`int4`). Both idempotent,
+  additive, and reusing `IRContractLegalityPass`'s dtype sets. Lit:
+  `dtype_legalize_split.mlir` — bf16→accum=fp32, int8→accum=int32, fp4→accum
+  +packed-int8-container, fp32 untouched, already-has-accum idempotent; the
+  3rd RUN composes `--tessera-ir-contracts` after the split to prove the
+  legalized IR is contract-legal (the assign-then-verify pairing). *Still open:*
+  wiring the two passes into the named lowering pipelines (early / terminal
+  slots) once a low-precision backend consumes the packing marker.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global
@@ -811,6 +869,20 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   separately. Also: persistent kernel + **L2-aware tile scheduler** ordering and
   **cluster cross-CTA SMEM views** (`map_shared_rank`/`remote_view`/`cta_mask`) —
   both GPU-only-tier, model when SM90/SM100 execution ungates (Phase G/H).
+  **HF scaffold LANDED (2026-06-23).** The hardware-free half — the IR vocabulary
+  + the autotuner sweep surface: (1) `#tile.pipeline_depths<q, kv, tmem>`
+  Tile-dialect attribute (verifier `TILE_PIPELINE_DEPTHS_NONPOSITIVE`, each ring
+  >= 1; lit round-trip + negative in `tile_pipeline_attrs.mlir`); (2)
+  `FlashAttnLoweringConfig` gains `q_depth`/`kv_depth`/`tmem_depth` (book defaults
+  2/3/2, validated), emitted as `tessera.q_depth/kv_depth/tmem_depth` i32 attrs
+  alongside the legacy `pipeline_stages` (which still drives `lds_bytes`, so the
+  executing path is byte-identical), plus a `ring_depth_search_space()` that
+  enumerates the per-ring sweep candidates (default first). Guard:
+  `tests/unit/test_attn_ring_depths.py` (8). **Execution stays gated:** *scoring*
+  a candidate needs on-device SM_90/SM_100 latency (Phase G/H) — the surface
+  enumerates, it does not measure; persistent/L2/cluster scheduling are likewise
+  HG. *Still open (HG):* the measured per-ring sweep, WarpSpec stamping
+  `#tile.pipeline_depths` from the config, and the kernel consuming per-ring depths.
 
 - **C6 — A warp-spec diagnostics pass (HF, tooling).** The book's "Debugging
   Warp-Specialized Kernels" appendix is a ready-made spec for a `tessera-opt`
@@ -824,12 +896,128 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `IRContractLegalityPass`/`LayoutLegalityPass`. Depends on C2/C3 landing the
   typed barriers + reuse model first. Detailed mapping in the 2026-06-23 review
   notes (this session).
+  **v1 LANDED (2026-06-23).** `WarpSpecLegalityPass` (`--tessera-warpspec-legality`,
+  `src/transforms/lib/`) checks the four *structural* invariants that complement
+  C3's phase asymmetry: `WARPSPEC_INIT_UNDER_GUARD` (a barrier init must run at
+  CTA top level, not inside a `tile.warp_role` region), `WARPSPEC_COLLECTIVE_IN_
+  DIVERGENT_BRANCH` (cta_sync / cluster_sync / next_tile not inside a warp-role
+  region), `WARPSPEC_LOOP_COUNT_DISAGREE` (ops sharing a `tile.pipeline` must
+  agree on `tile.trip_count` — the "MMA does K_TILES-1" signature, + note), and
+  `WARPSPEC_MISSING_VISIBILITY_FENCE` (a TMA store needs a prior
+  fence.proxy_async / commit_group in its block). Convention-driven (warp-role
+  region = any ancestor carrying `tile.warp_role`/`tile.warp_guard`/`tile.wg_id`;
+  op classes by marker attr or name substring), so it runs on the value lane and
+  unregistered husks alike. Lit: `tile_warpspec_legality.mlir` (well-formed
+  kernel clean + one negative per invariant). *Still open* (need lifetime
+  modeling — the C2↔C6 join): `arrival-count == init-count` and
+  cta_sync-before-writeback-dealloc (use-after-free).
 
 **Suggested order:** C4 (cheapest, validates #15a) → C1 (`TileLayoutAttr`,
 foundational) → C2+C3 (reuse model + typed barriers/`PipelineState`, mutually
 enabling) → C6 (diagnostics, needs C2/C3) → C5 (HG perf). Not to port: TIRx's
 TVM plumbing passes (`FlattenBuffer`/`MakePackedAPI`/`LowerWarpMemory`) — MLIR
 handles those differently.
+
+**Status (2026-06-23): C1–C4 + C6 v1 LANDED** — the structured `#tile.layout`/
+`#tile.swizzle` algebra (C1), the `TileBarrierReuseLegalityPass` reuse-as-
+correctness rule (C2), the typed `#tile.barrier` + `#tile.pipeline_state`
+attributes and `TilePipelineLegalityPass` (C3), the compute/storage legalize
+split (C4), and the `WarpSpecLegalityPass` structural diagnostics (C6) all build
+into `tessera-opt` and are lit-green (full `tests/tessera-ir/` sweep 160 passed /
+19 unsupported / 0 failed). All five are hardware-free and attribute/convention-
+driven (and now wired into the named GPU pipelines + fed by real WarpSpec
+markers — see the "Join + pipeline wiring" block below). Together C2 (reuse),
+C3 (typed barriers + phase asymmetry), and C6
+(structural invariants) are the **deadlock-freedom gate** for the FA-4 warp-spec
+lowering.
+
+**Join + pipeline wiring LANDED (2026-06-23).** Two follow-ons closed the gap
+between "standalone convention-checkers" and "live lowering gates":
+1. **WarpSpec emits the markers.** `WarpSpecializationPass`
+   (`src/compiler/tile_opt_fa4/lib/`) now stamps `tile.warp_role` +
+   `tile.pipeline` + the typed `#tile.pipeline_state` (producer `phase=1`,
+   consumer `phase=0`, `depth=2`) on the producer/consumer `schedule.warp` ops
+   it creates — one `warpspec.N` pipeline id per region. So C3/C6 verify *real
+   lowering output*, not a hand-written convention. Guard:
+   `tests/tessera-ir/phase3/warpspec_emits_markers.mlir` (markers emitted +
+   output flows clean through C3+C6).
+2. **Wired into the named pipelines.** `tessera-lower-to-gpu` and the four
+   `tessera-nvidia-pipeline*` aliases now run `TilePipelineLegality` (C3) +
+   `WarpSpecLegality` (C6) + `TileBarrierReuseLegality` (C2) **always-on**
+   immediately after `WarpSpecialization` (verified by `--mlir-print-ir-after-all`
+   showing the four passes in sequence; full `tests/tessera-ir/` sweep
+   **158 passed / 19 unsupported / 0 failed** — the gates pass on every existing
+   GPU-pipeline fixture incl. `flash_attn_full`). C4's compute-legalize (before
+   `IRContractLegality`) + storage-legalize (terminal) are wired into all three
+   pipelines (x86/gpu/CUDA13) behind a new **opt-in `legalize-dtypes` option**
+   (default off → byte-identical executing path, mirroring `assign-layouts`;
+   confirmed scheduled only when on).
+
+**Buffer-marker emission LANDED (2026-06-23) — C1/C2 markers now on real output.**
+`WarpSpecializationPass` also stamps the staged-buffer writes it moves into the
+warp regions: each `tile.async_copy` gets `tile.access="write"` +
+`tile.buffer="warpspec.N.smem.K"` + a row-major `#tile.layout` on the linear `m`
+axis (distinct buffer per copy), and each `tile.mma` gets a TMEM accumulator
+buffer (`warpspec.N.tmem.acc.K`) with a `#tile.layout` on the `tlane`/`tcol`
+axes. So **C2 (`TileBarrierReuseLegality`) now runs live on real lowering output**
+— clean on well-formed lowering (distinct buffers don't alias), and it still
+fires `TILE_BARRIER_REUSE_MISSING_BARRIER` on a genuine same-buffer overlap.
+Guard: `tests/tessera-ir/phase3/warpspec_buffer_markers.mlir` (markers on
+async_copy + mma; C2 clean) + `flash_attn_full` lowers clean through the gate.
+*Robustness fix surfaced here:* `TileLayoutAttr::get` runs the `genVerifyDecl`
+verifier and **fatal-errors** on an invalid layout, so the stamper skips the
+`#tile.layout` (buffer identity only) when a tile has dynamic / placeholder
+(`kDynamic`/-1) extents — caught via the flash-attn dynamic-shape path.
+
+**`#tile.barrier` emission + C6 arrival-count LANDED (2026-06-23).**
+`NVTMADescriptorPass` now stamps a typed `#tile.barrier<kind="tma", expect=
+expect_tx>` + a per-slot `tile.barrier_id="mbar.N"` on **both** the
+`tile.tma.setup_descriptor` (init site — declares the expected transaction byte
+count) and the `tile.tma.copy_async` (arrive site) for each mbarrier slot, so the
+init and arrive of one slot carry the same `(kind, expect, id)`. New C6 rule
+`WARPSPEC_ARRIVAL_COUNT_MISMATCH` (`WarpSpecLegalityPass`): per `tile.barrier_id`,
+all `#tile.barrier` `expect` values must agree (init count == arrival count) —
+else the wait never releases. C3's existing per-id kind-consistency check now
+also runs live on these. **The barrier checks need to run *after*
+NVTMADescriptor**, so the GPU + CUDA13 pipelines run a *second*
+`TilePipelineLegality (C3) + WarpSpecLegality (C6)` placement right after
+NVTMADescriptor (the first placement, after WarpSpecialization, still gates the
+warp-structure + buffer markers). Verified end-to-end: `flash_attn_full` lowers
+through the full `tessera-lower-to-gpu` reaching **both** gate placements, emits
+6 consistent `#tile.barrier` markers, exits clean. Guards:
+`tests/tessera-ir/phase3/nvtma_barrier_emission.mlir` (emission on setup +
+copy_async; output passes C3+C6) + the `arrival_count_mismatch` negative in
+`tile_warpspec_legality.mlir`.
+
+**C6 use-after-free LANDED (2026-06-23) — C6 now fully closed (all 7 invariants).**
+`WarpSpecializationPass` emits a **writeback-dealloc epilogue** before each
+specialized region's terminator: a `tile.cta_sync` followed by a
+`tile.buffer_free {tile.buffer=…, tile.access="free"}` for every buffer the
+region allocated (the `smem.K` + `tmem.acc.K` it stamped). New C6 rule
+`WARPSPEC_USE_AFTER_FREE` (`WarpSpecLegalityPass`, block-local like the fence
+check): a buffer free needs a prior `cta_sync` in its block, else a warp may
+still be reading the buffer during writeback. Correct lowering is clean (the
+epilogue's `cta_sync` precedes the frees); the negative fires on a free with no
+preceding sync. Verified: `flash_attn_full` still lowers clean through the full
+`tessera-lower-to-gpu` with the epilogue ops flowing downstream. Guards: the
+dealloc-epilogue CHECK in `warpspec_buffer_markers.mlir` + the `use_after_free`
+negative in `tile_warpspec_legality.mlir`. **All seven appendix invariants
+(init-placement, collective-in-branch, loop-count, visibility-fence,
+phase-asymmetry [C3], arrival-count, use-after-free) are now checked, and the
+full C1–C3/C6 marker vocabulary — `#tile.layout`, `tile.buffer`/`access`,
+`#tile.pipeline_state`, `#tile.barrier`, and buffer-free lifetimes — is emitted
+by real lowering passes and gated in-pipeline.**
+
+**C5 HF scaffold LANDED (2026-06-23).** The hardware-free half of C5 — the
+`#tile.pipeline_depths<q, kv, tmem>` IR attribute + `FlashAttnLoweringConfig`'s
+per-ring depths/emission/`ring_depth_search_space()` sweep surface — is in
+(`test_attn_ring_depths.py`). **Every TIRx-review item (C1–C6) now has its
+hardware-free portion landed, lit/unit-green, and (for C1–C4/C6) wired into the
+named GPU pipelines fed by real lowering markers.** What remains is strictly
+**hardware-gated** (Phase G/H, SM90/SM100 silicon): the measured per-ring depth
+sweep, persistent/L2-aware tile scheduling + cluster cross-CTA SMEM views (C5),
+WarpSpec stamping `#tile.pipeline_depths`, and the kernels that consume the
+per-ring depths. There is no remaining hardware-free TIRx-review work.
 
 ## Next Work
 

@@ -12,6 +12,7 @@
 #define TESSERA_TILE_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Tessera_Tile_Dialect : Dialect {
@@ -27,6 +28,10 @@ def Tessera_Tile_Dialect : Dialect {
   // Plain attributes (no op-properties storage) — keeps the dialect header-only
   // and matches the Tessera / Apple dialects.
   let usePropertiesForAttributes = 0;
+  // C1 (2026-06-23) — the dialect now owns first-class layout attributes
+  // (#tile.layout / #tile.swizzle), so it needs the generated attribute
+  // printer/parser hooks.
+  let useDefaultAttributePrinterParser = 1;
 }
 
 class Tile_Op<string mnemonic, list<Trait> traits = []> :
@@ -162,5 +167,136 @@ def Tile_CholeskySolveOp : Tile_LinalgOp<"cholesky_solve">;
 def Tile_LUOp            : Tile_LinalgOp<"lu">;
 def Tile_QROp            : Tile_LinalgOp<"qr">;
 def Tile_SVDOp           : Tile_LinalgOp<"svd">;
+
+//===----------------------------------------------------------------------===//
+// C1 (2026-06-23) — TileLayout algebra (TIRx review, COMPILER_AUDIT item C1)
+//
+// Replaces the flat `tessera.layout` *string* enum (row_major/bhsd/…) with a
+// structured logical→physical placement object, faithful to the book's
+// `S[(extents):(strides@axis)] (+ R[count:stride@axis]) + offset` and the
+// separate, non-affine `ComposeLayout(swizzle, tile)`:
+//
+//   shard   (S) — partitions logical indices across named hardware axes;
+//   replica (R) — one-to-many copies (broadcast / multicast) at extra offsets;
+//   offset  (O) — a constant placement shift;
+//   swizzle     — an XOR bank-conflict permutation applied AFTER the affine
+//                 stride map (kept a *separate* attribute, never folded in).
+//
+// Named hardware axes (the verifier's accept-set) make placement unambiguous:
+//   memory/TMEM  : m, tlane, tcol           (storage axes — what aliases)
+//   thread       : laneid, warpid, reg, tid_in_wg, wid_in_wg
+//   grid/cluster : bx, by, bz, cbx, cby, cbz
+//   device       : gpuid_x, gpuid_y         (same algebra as ShardSpec, #3)
+//===----------------------------------------------------------------------===//
+
+class Tile_Attr<string name, string attrMnemonic, list<Trait> traits = []>
+    : AttrDef<Tessera_Tile_Dialect, name, traits> {
+  let mnemonic = attrMnemonic;
+}
+
+def Tile_SwizzleAttr : Tile_Attr<"TileSwizzle", "swizzle"> {
+  let summary = "XOR swizzle composed atop a TileLayout (non-affine)";
+  let description = [{
+    `addr = (x2 << per_element) | low, x2 = x ^ ((x >> ...) & mask)` — the
+    standard shared-memory bank-conflict permutation, parameterized by
+    `per_element` / `len` / `atom`. Derived from dtype + descriptor mode, not
+    hand-tuned. Held separately from the affine `#tile.layout` so the layout
+    stays analyzable.
+  }];
+  let parameters = (ins "int64_t":$perElement,
+                        "int64_t":$swizzleLen,
+                        "int64_t":$atomLen);
+  let assemblyFormat =
+      "`<` `per_element` `=` $perElement `,` `len` `=` $swizzleLen `,` "
+      "`atom` `=` $atomLen `>`";
+}
+
+def Tile_LayoutAttr : Tile_Attr<"TileLayout", "layout"> {
+  let summary = "Logical→physical tile layout: shard ⊕ replica ⊕ offset (+swizzle)";
+  let description = [{
+    `L(x) = { D(x) + r + offset | r in replica }` where `D` walks the shard
+    extents in row-major order and accumulates `stride` onto the named hardware
+    `axis`. Example — a tensor-core fragment across lanes/registers:
+    `#tile.layout<shard = [8, 4, 2] : [4, 1, 1] @ ["laneid", "laneid", "reg"],
+                  replica = [] : [] @ [], offset = 0>`.
+  }];
+  let parameters = (ins
+      ArrayRefParameter<"int64_t">:$shardExtents,
+      ArrayRefParameter<"int64_t">:$shardStrides,
+      ArrayRefParameter<"::mlir::StringAttr">:$shardAxes,
+      ArrayRefParameter<"int64_t">:$replicaCounts,
+      ArrayRefParameter<"int64_t">:$replicaStrides,
+      ArrayRefParameter<"::mlir::StringAttr">:$replicaAxes,
+      "int64_t":$offset,
+      OptionalParameter<"::tessera::tile::TileSwizzleAttr">:$swizzle);
+  let genVerifyDecl = 1;
+  // Hand-written parse/print (TileDialect.cpp): the default ArrayRefParameter
+  // parser rejects empty `[]` lists, but a layout with no replica term
+  // (replica = []) is the common case.
+  let hasCustomAssemblyFormat = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// C3 (2026-06-23) — typed barrier domains + PipelineState (TIRx review, item C3)
+//
+// Three barrier primitives with distinct completion semantics, plus the
+// ring-buffer PipelineState the pipeline lowering threads through async loops.
+// The key invariant — producer initial phase = 1, consumer initial phase = 0 —
+// is the packaged fix for the classic off-by-one ring deadlock; it is checked
+// across ops by TilePipelineLegalityPass (the attribute verifier only checks the
+// per-attribute structural bounds).
+//===----------------------------------------------------------------------===//
+
+def Tile_BarrierAttr : Tile_Attr<"TileBarrier", "barrier"> {
+  let summary = "A typed pipeline barrier — completion semantics by kind";
+  let description = [{
+    Barrier domains (TIRx FA-4):
+      `tma`      — byte-count / async-transaction signaled (TMABar);
+      `tcgen05`  — MMA-completion signaled (TCGen05Bar);
+      `mbarrier` — thread-arrival signaled (MBarrier).
+    `expect` is the arrival / byte count the barrier waits on.
+  }];
+  let parameters = (ins StringRefParameter<"">:$kind, "int64_t":$expect);
+  let assemblyFormat = "`<` `kind` `=` $kind `,` `expect` `=` $expect `>`";
+  let genVerifyDecl = 1;
+}
+
+def Tile_PipelineStateAttr
+    : Tile_Attr<"TilePipelineState", "pipeline_state"> {
+  let summary = "Ring-buffer pipeline state: (depth, stage, phase, role)";
+  let description = [{
+    `role` is `producer` | `consumer`. The producer's initial `phase` must be 1
+    and the consumer's 0 so the first wait falls through (the off-by-one deadlock
+    fix). `stage` indexes the ring (`< depth`); `phase` is the parity bit (0|1).
+  }];
+  let parameters = (ins "int64_t":$depth, "int64_t":$stage, "int64_t":$phase,
+                        StringRefParameter<"">:$role);
+  let assemblyFormat = "`<` `depth` `=` $depth `,` `stage` `=` $stage `,` "
+                       "`phase` `=` $phase `,` `role` `=` $role `>`";
+  let genVerifyDecl = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// C5 scaffold (2026-06-23) — independent per-ring pipeline depths (TIRx item C5)
+//
+// The book's insight: FA-4 runs three *independent* rings (Q depth 2, KV depth
+// 3, TMEM depth 2), not one global `pipeline_stages`. This attribute is the
+// first-class IR vocabulary for that — the hardware-free half of C5 (the IR
+// surface + the Python autotuner sweep). The measured per-ring sweep + the
+// kernel that consumes these depths stay hardware-gated (Phase G/H).
+//===----------------------------------------------------------------------===//
+
+def Tile_PipelineDepthsAttr
+    : Tile_Attr<"TilePipelineDepths", "pipeline_depths"> {
+  let summary = "Independent per-ring pipeline depths (FA-4: Q / KV / TMEM)";
+  let description = [{
+    `q` / `kv` / `tmem` are the three independent ring depths a warp-specialized
+    attention kernel double-buffers separately (vs. one global `pipeline_stages`
+    knob). Each must be >= 1. Book defaults: q=2, kv=3, tmem=2.
+  }];
+  let parameters = (ins "int64_t":$q, "int64_t":$kv, "int64_t":$tmem);
+  let assemblyFormat = "`<` `q` `=` $q `,` `kv` `=` $kv `,` `tmem` `=` $tmem `>`";
+  let genVerifyDecl = 1;
+}
 
 #endif // TESSERA_TILE_OPS

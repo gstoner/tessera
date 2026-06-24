@@ -71,6 +71,16 @@ class FlashAttnLoweringConfig:
     causal: bool = False
     dropout_p: float = 0.0
     seed: Optional[int] = None
+    # C5 scaffold (2026-06-23) — independent per-ring pipeline depths. The TIRx
+    # review's FA-4 insight is that the Q / KV / TMEM rings are double-buffered
+    # *independently* (book defaults 2 / 3 / 2), not by one global
+    # ``pipeline_stages``. These are the hardware-free autotuner sweep surface;
+    # ``pipeline_stages`` stays the legacy single knob that drives ``lds_bytes``
+    # so the executing path is unchanged until the per-ring sweep lands (the
+    # measured sweep + the kernel consuming these depths are hardware-gated).
+    q_depth: int = 2
+    kv_depth: int = 3
+    tmem_depth: int = 2
 
     def __post_init__(self) -> None:
         if self.tile_q <= 0 or (self.tile_q & (self.tile_q - 1)) != 0:
@@ -94,6 +104,13 @@ class FlashAttnLoweringConfig:
             raise TesseraAttnConfigError(
                 f"pipeline_stages must be >= 1, got {self.pipeline_stages}"
             )
+        for name, val in (("q_depth", self.q_depth),
+                          ("kv_depth", self.kv_depth),
+                          ("tmem_depth", self.tmem_depth)):
+            if val < 1:
+                raise TesseraAttnConfigError(
+                    f"{name} must be >= 1, got {val}"
+                )
 
     @property
     def has_dropout(self) -> bool:
@@ -169,11 +186,56 @@ class FlashAttnLoweringConfig:
             f"tessera.tile_q = {self.tile_q} : i32",
             f"tessera.tile_kv = {self.tile_kv} : i32",
             f"tessera.pipeline_stages = {self.pipeline_stages} : i32",
+            # C5: per-ring depths ride alongside the legacy pipeline_stages so
+            # the autotuner can modify them without re-emitting Graph IR (same
+            # contract as tile_q/tile_kv). The structured IR mirror is
+            # `#tile.pipeline_depths<q, kv, tmem>`.
+            f"tessera.q_depth = {self.q_depth} : i32",
+            f"tessera.kv_depth = {self.kv_depth} : i32",
+            f"tessera.tmem_depth = {self.tmem_depth} : i32",
             f'causal = {"true" if self.causal else "false"}',
         ]
         if self.has_dropout:
             parts.append(f"dropout_p = {self.dropout_p:.6f} : f32")
         return "{" + ", ".join(parts) + "}"
+
+    def ring_depths(self) -> "tuple[int, int, int]":
+        """The (q, kv, tmem) ring depths — the structured-attr payload."""
+        return (self.q_depth, self.kv_depth, self.tmem_depth)
+
+    @staticmethod
+    def ring_depth_search_space(
+        *,
+        q_choices: "tuple[int, ...]" = (1, 2),
+        kv_choices: "tuple[int, ...]" = (2, 3, 4),
+        tmem_choices: "tuple[int, ...]" = (1, 2),
+    ) -> "list[tuple[int, int, int]]":
+        """The hardware-free autotuner sweep surface for the three rings.
+
+        Returns the candidate ``(q_depth, kv_depth, tmem_depth)`` combinations a
+        per-ring autotuner would explore — the C5 insight that the rings are
+        tuned *independently* rather than via one global ``pipeline_stages``.
+        Every candidate has each depth >= 1, so it is a legal
+        ``FlashAttnLoweringConfig`` / ``#tile.pipeline_depths``.
+
+        **Execution is hardware-gated.** This enumerates the search space only;
+        *scoring* a candidate needs on-device latency measurement on SM_90 /
+        SM_100 silicon (Phase G/H). Until then the default (2, 3, 2) is used and
+        no candidate is measured — callers must not infer a "best" from this
+        list. The default appears first.
+        """
+        from itertools import product
+
+        space = [
+            (q, kv, tmem)
+            for q, kv, tmem in product(q_choices, kv_choices, tmem_choices)
+            if q >= 1 and kv >= 1 and tmem >= 1
+        ]
+        default = (2, 3, 2)
+        if default in space:
+            space.remove(default)
+            space.insert(0, default)
+        return space
 
     def __repr__(self) -> str:
         return (

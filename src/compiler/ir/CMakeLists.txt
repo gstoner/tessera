@@ -39,6 +39,9 @@ mlir_tablegen(Tessera/Dialect/Tile/TileOps.h.inc -gen-op-decls)
 mlir_tablegen(Tessera/Dialect/Tile/TileOps.cpp.inc -gen-op-defs)
 mlir_tablegen(Tessera/Dialect/Tile/TileOpsDialect.h.inc -gen-dialect-decls -dialect=tile)
 mlir_tablegen(Tessera/Dialect/Tile/TileOpsDialect.cpp.inc -gen-dialect-defs -dialect=tile)
+# C1 (2026-06-23) — first-class layout attributes (#tile.layout / #tile.swizzle).
+mlir_tablegen(Tessera/Dialect/Tile/TileAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=tile)
+mlir_tablegen(Tessera/Dialect/Tile/TileAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=tile)
 add_public_tablegen_target(TesseraTileIRTableGen)
 
 add_mlir_dialect_library(TesseraIR

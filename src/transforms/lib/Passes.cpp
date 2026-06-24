@@ -29,6 +29,17 @@ struct TesseraLoweringPipelineOptions
                      "(default false; no backend consumes the cast{layout} "
                      "markers yet, so the default lowering path is unchanged)."),
       llvm::cl::init(false)};
+  // C4 (2026-06-23): the compute/storage dtype legalize split. Opt-in (default
+  // false) so the executing path stays byte-identical until a low-precision
+  // backend consumes the storage_packed marker; compute-legalize runs before
+  // IRContractLegality (so reduced-precision ops gain a wide accum and pass the
+  // contract), storage-legalize runs terminally.
+  Option<bool> legalizeDtypes{
+      *this, "legalize-dtypes",
+      llvm::cl::desc("Run compute-legalize (early) + storage-legalize "
+                     "(terminal) — Decision #15a as pass ordering (default "
+                     "false; additive annotations, executing path unchanged)."),
+      llvm::cl::init(false)};
 };
 
 // Shared Graph IR pre-lowering stage (audit 2026-06-10). Previously this
@@ -98,6 +109,10 @@ void registerTesseraPasses() {
         // scale-without-layout violations surface with the other structural
         // diagnostics before lowering.
         pm.addPass(createLayoutLegalityPass());
+        // C4 (2026-06-23): compute-legalize before the contract check so
+        // reduced-precision storage gains a wide accum and passes #15a (gated).
+        if (opts.legalizeDtypes)
+          pm.addPass(createComputeLegalizePass());
         // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
         // #15a) alongside layout legality — same early placement.
         pm.addPass(createIRContractLegalityPass());
@@ -109,6 +124,9 @@ void registerTesseraPasses() {
         pm.addPass(createSymbolicDimEqualityPass());
         pm.addPass(createTilingPass());
         pm.addPass(createTileToX86Pass());
+        // C4 terminal storage-legalize — pack sub-byte storage last (gated).
+        if (opts.legalizeDtypes)
+          pm.addPass(createStorageLegalizePass());
       });
 
   // ── Phase 3 passes ────────────────────────────────────────────────────────
@@ -176,6 +194,21 @@ void registerTesseraPasses() {
   // LayoutLegalityPass's sibling for the remaining contract families;
   // registered standalone as --tessera-ir-contracts.
   ::mlir::registerPass([]() { return createIRContractLegalityPass(); });
+  // 2026-06-23: C2 — barriers as a layout-reuse correctness property (TIRx
+  // review). Standalone as --tessera-tile-barrier-reuse-legality.
+  ::mlir::registerPass([]() { return createTileBarrierReuseLegalityPass(); });
+  // 2026-06-23: C3 — typed-barrier + pipeline-state cross-op legality (phase
+  // asymmetry + barrier-kind consistency). --tessera-tile-pipeline-legality.
+  ::mlir::registerPass([]() { return createTilePipelineLegalityPass(); });
+  // 2026-06-23: C4 — compute/storage dtype legalize split (Decision #15a as
+  // pass ordering). --tessera-compute-legalize (early) / --tessera-storage-
+  // legalize (terminal).
+  ::mlir::registerPass([]() { return createComputeLegalizePass(); });
+  ::mlir::registerPass([]() { return createStorageLegalizePass(); });
+  // 2026-06-23: C6 — warp-spec structural diagnostics (init placement,
+  // collective-in-branch, loop-count agreement, TMA visibility fence).
+  // --tessera-warpspec-legality.
+  ::mlir::registerPass([]() { return createWarpSpecLegalityPass(); });
 
   // ── Sprint V5 (2026-05-22) — Symbolic dim equality verifier ───────────
   // Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
@@ -224,6 +257,9 @@ void registerTesseraPasses() {
           pm.addPass(createLayoutAssignmentPass());
         // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
         pm.addPass(createLayoutLegalityPass());
+        // C4 (2026-06-23): compute-legalize before the contract check (gated).
+        if (opts.legalizeDtypes)
+          pm.addPass(createComputeLegalizePass());
         // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision
         // #15a) alongside layout legality — matches lowerToX86 / CUDA13.
         pm.addPass(createIRContractLegalityPass());
@@ -232,10 +268,23 @@ void registerTesseraPasses() {
         pm.addPass(createSymbolicDimEqualityPass());
         pm.addPass(createTileIRLoweringPass());
         pm.addPass(createWarpSpecializationPass());
+        // C2/C3/C6 (2026-06-23): warp-spec legality gates run on the markers
+        // WarpSpecialization now emits — phase asymmetry + barrier-kind (C3),
+        // reuse hazards (C2), and structural invariants (C6). Pure checks.
+        pm.addPass(createTilePipelineLegalityPass());
+        pm.addPass(createWarpSpecLegalityPass());
+        pm.addPass(createTileBarrierReuseLegalityPass());
         pm.addPass(createAsyncCopyLoweringPass());
         pm.addPass(createNVWGMMALoweringPass());
         pm.addPass(createNVTMADescriptorPass());
+        // C3/C6 again — now over the typed #tile.barrier markers
+        // NVTMADescriptor emits (kind consistency + arrival-count == init-count).
+        pm.addPass(createTilePipelineLegalityPass());
+        pm.addPass(createWarpSpecLegalityPass());
         pm.addPass(createNVFlashAttnKernelEmitterPass());
+        // C4 terminal storage-legalize (gated).
+        if (opts.legalizeDtypes)
+          pm.addPass(createStorageLegalizePass());
       });
 
   // ── Sprint G-5 (2026-05-11) — NVIDIATargetPipeline ─────────────────────
@@ -274,16 +323,29 @@ void registerTesseraPasses() {
       pm.addPass(createLayoutAssignmentPass());
     // 2026-06-17: layout legality in the named pipeline (see lowerToX86).
     pm.addPass(createLayoutLegalityPass());
+    // C4 (2026-06-23): compute-legalize before the contract check (gated).
+    if (opts.legalizeDtypes)
+      pm.addPass(createComputeLegalizePass());
     // 2026-06-19: dtype / aliasing / buffer-binding contracts (Decision #15a).
     pm.addPass(createIRContractLegalityPass());
     // Sprint V6b (2026-05-22): symbolic-dim equality recheck.
     pm.addPass(createSymbolicDimEqualityPass());
     pm.addPass(createTileIRLoweringPass());
     pm.addPass(createWarpSpecializationPass());
+    // C2/C3/C6 (2026-06-23): warp-spec legality gates on the WarpSpec markers.
+    pm.addPass(createTilePipelineLegalityPass());
+    pm.addPass(createWarpSpecLegalityPass());
+    pm.addPass(createTileBarrierReuseLegalityPass());
     pm.addPass(createAsyncCopyLoweringPass());
     pm.addPass(createNVWGMMALoweringPass());
     pm.addPass(createNVTMADescriptorPass());
+    // C3/C6 again — over the typed #tile.barrier markers (kind + arrival-count).
+    pm.addPass(createTilePipelineLegalityPass());
+    pm.addPass(createWarpSpecLegalityPass());
     pm.addPass(createNVFlashAttnKernelEmitterPass());
+    // C4 terminal storage-legalize (gated).
+    if (opts.legalizeDtypes)
+      pm.addPass(createStorageLegalizePass());
   };
 
   ::mlir::PassPipelineRegistration<TesseraLoweringPipelineOptions>

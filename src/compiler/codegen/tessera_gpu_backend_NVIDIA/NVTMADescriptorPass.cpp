@@ -30,6 +30,8 @@
 // Registration: --tessera-nvtma-descriptor
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
@@ -38,12 +40,29 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 
 using namespace mlir;
 
 namespace tessera {
 
 namespace {
+
+// C6 join (2026-06-23): stamp a typed #tile.barrier (kind = tma, transaction
+// byte-count `expect`) + a per-slot tile.barrier_id on a TMA barrier site. The
+// setup_descriptor (init) and copy_async (arrive) for one slot carry the SAME
+// (kind, expect, id), so TilePipelineLegality (C3) verifies kind consistency and
+// WarpSpecLegality (C6) verifies arrival-count == init-count, both live on real
+// lowering output.
+static void stampTmaBarrier(OpBuilder &b, Operation *op, int64_t slot,
+                            int64_t expectTx) {
+  if (expectTx < 0)
+    return; // #tile.barrier verifier requires expect >= 0.
+  op->setAttr("tile.barrier_id",
+              b.getStringAttr(("mbar." + Twine(slot)).str()));
+  op->setAttr("tile.barrier",
+              tile::TileBarrierAttr::get(b.getContext(), "tma", expectTx));
+}
 
 // Key for descriptor deduplication: (source SSA value, tile_rows, tile_cols).
 struct DescriptorKey {
@@ -87,6 +106,11 @@ struct NVTMADescriptorPass
   StringRef getArgument() const override { return "tessera-nvtma-descriptor"; }
   StringRef getDescription() const override {
     return "Hoist TMA descriptors to kernel preamble; assign mbarrier slots";
+  }
+  // C6 join: the pass now constructs #tile.barrier, so the Tile dialect must be
+  // loaded.
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -150,6 +174,10 @@ struct NVTMADescriptorPass
         st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
         st.addTypes(b.getIntegerType(64));
         Operation *setup = b.create(st);
+        // C6: the per-slot setup is this barrier's init site (declares the
+        // expected transaction count).
+        if (tileRows > 0 && tileCols > 0)
+          stampTmaBarrier(b, setup, nextSlot, expectTx);
         canonMap[key] = setup->getResult(0);
         slotMap[key] = nextSlot++;
         descriptorSlotMap[setup->getResult(0)] = slotMap[key];
@@ -181,8 +209,12 @@ struct NVTMADescriptorPass
           return;
         op->setAttr("mbarrier_slot", b.getI64IntegerAttr(slotIt->second));
         if (auto setup = descriptor.getDefiningOp()) {
-          if (auto expectTx = setup->getAttrOfType<IntegerAttr>("expect_tx"))
+          if (auto expectTx = setup->getAttrOfType<IntegerAttr>("expect_tx")) {
             op->setAttr("expect_tx", expectTx);
+            // C6: the copy_async is this barrier's arrive site — same (kind,
+            // expect, id) as the init, so arrival-count == init-count.
+            stampTmaBarrier(b, op, slotIt->second, expectTx.getInt());
+          }
         }
       }
     });

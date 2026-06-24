@@ -19,6 +19,11 @@
 // Generated dialect declarations (cppNamespace = ::tessera::tile).
 #include "Tessera/Dialect/Tile/TileOpsDialect.h.inc"
 
+// C1 (2026-06-23) — generated attribute declarations (#tile.layout/#tile.swizzle).
+// Must precede the op classes; some ops carry these attributes.
+#define GET_ATTRDEF_CLASSES
+#include "Tessera/Dialect/Tile/TileAttrs.h.inc"
+
 #define GET_OP_CLASSES
 #include "Tessera/Dialect/Tile/TileOps.h.inc"
 

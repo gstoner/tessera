@@ -265,6 +265,40 @@ std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 // tessera.binding). Registered standalone as `--tessera-ir-contracts`.
 std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
 
+// ── 2026-06-23 — TileBarrierReuseLegalityPass (C2, TIRx review) ──────────
+// "Barriers are a layout-reuse correctness property." For a buffer carrying the
+// C1 #tile.layout attribute, two writes to overlapping storage-axis (m/tlane/
+// tcol) footprints with no intervening barrier op emit
+// TILE_BARRIER_REUSE_MISSING_BARRIER. Registered standalone as
+// `--tessera-tile-barrier-reuse-legality`; the acceptance gate for the typed-
+// barrier + warp-spec reuse work (C3).
+std::unique_ptr<mlir::Pass> createTileBarrierReuseLegalityPass();
+
+// ── 2026-06-23 — TilePipelineLegalityPass (C3, TIRx review) ──────────────
+// Cross-op companion to the #tile.pipeline_state / #tile.barrier verifiers:
+// producer phase=1 / consumer phase=0 asymmetry (TILE_PIPELINE_PHASE_ASYMMETRY)
+// + per-barrier-id kind consistency (TILE_PIPELINE_BARRIER_KIND_MISMATCH).
+// Registered standalone as `--tessera-tile-pipeline-legality`.
+std::unique_ptr<mlir::Pass> createTilePipelineLegalityPass();
+
+// ── 2026-06-23 — C4: compute/storage dtype legalize split (TIRx review) ──
+// Operationalizes Decision #15a as pass ordering. compute-legalize (early):
+// reduced-precision storage without an accumulator gets numeric_policy.accum
+// (fp32, or int32 for int4/int8). storage-legalize (terminal): sub-byte /
+// block-scaled storage gets tessera.storage_packed + tessera.storage_container.
+// Registered as --tessera-compute-legalize / --tessera-storage-legalize.
+std::unique_ptr<mlir::Pass> createComputeLegalizePass();
+std::unique_ptr<mlir::Pass> createStorageLegalizePass();
+
+// ── 2026-06-23 — C6: warp-spec diagnostics (TIRx review) ─────────────────
+// Structural warp-specialization invariants from the "Debugging Warp-Specialized
+// Kernels" appendix, complementing C3's phase asymmetry: barrier-init placement
+// (WARPSPEC_INIT_UNDER_GUARD), collectives outside divergent branches
+// (WARPSPEC_COLLECTIVE_IN_DIVERGENT_BRANCH), producer/consumer loop-count
+// agreement (WARPSPEC_LOOP_COUNT_DISAGREE), and TMA-store visibility fences
+// (WARPSPEC_MISSING_VISIBILITY_FENCE). --tessera-warpspec-legality.
+std::unique_ptr<mlir::Pass> createWarpSpecLegalityPass();
+
 // ── Sprint V5 (2026-05-22) — SymbolicDimEqualityPass ─────────────────────
 //
 // Closes the 4th and final MLIR-verifier gap in SHAPE_SYSTEM.md §11.2:

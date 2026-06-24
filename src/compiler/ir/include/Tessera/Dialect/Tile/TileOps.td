@@ -169,6 +169,63 @@ def Tile_QROp            : Tile_LinalgOp<"qr">;
 def Tile_SVDOp           : Tile_LinalgOp<"svd">;
 
 //===----------------------------------------------------------------------===//
+// Tile synchronization ops (TIRx op-layer convergence, 2026-06-23, Phase A0).
+//
+// The copy/wait/mma/barrier seam was previously emitted as opaque generic ops
+// (`"tile.async_copy"(...)`), legal only because TesseraTileDialect calls
+// allowUnknownOperations(true). Registering them makes the seam a first-class op
+// — a precondition for giving tile.async_copy a typed completion result (the
+// !tile.async_token SSA edge added in Phase B), which replaces the transitional
+// `tile.barrier_id` / `tile.depends_on` string markers + program-order reasoning.
+//
+// DELIBERATELY NOT `[Pure]`, unlike the matmul/gemm value carriers above. These
+// ops carry synchronization/ordering semantics; `[Pure]` (= NoMemoryEffect +
+// AlwaysSpeculatable) would let DCE delete a wait/barrier, CSE merge two mmas, or
+// LICM hoist an mma past its wait. Carrying no effect interface keeps them
+// conservatively side-effecting (isMemoryEffectFree == false) — identical to the
+// opaque behavior they had as unregistered ops, so registration changes nothing
+// the optimizer is allowed to do.
+//
+// Permissive `Variadic<AnyType>` envelope + no verifier: every existing
+// generic-form fixture stays valid across the value lane (tensors), the ROCm
+// lowering (memref/ptr/index/token), and the NV path. The contract tightens when
+// the typed async-token operand/result lands (Phase B/C).
+//===----------------------------------------------------------------------===//
+
+// Asynchronous global→shared/LDS tile copy (cp.async / TMA / buffer_load). Lands
+// the staged tile as its result; a typed completion token is threaded in Phase B.
+def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
+  let summary = "Asynchronous global→shared/LDS tile copy";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+}
+
+// Wait on outstanding async copies (waitcnt(vmcnt) / mbarrier / cp.async.wait).
+def Tile_WaitAsyncOp : Tile_Op<"wait_async"> {
+  let summary = "Wait on outstanding asynchronous tile copies";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+}
+
+// Tile-level tensor-core MMA (WGMMA / MFMA / WMMA / tcgen05).
+def Tile_MMAOp : Tile_Op<"mma"> {
+  let summary = "Tile-level matrix multiply-accumulate (tensor-core)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+}
+
+// Workgroup / wave barrier (s_barrier / bar.sync) — drains all outstanding work.
+def Tile_SBarrierOp : Tile_Op<"s_barrier"> {
+  let summary = "Workgroup/wave barrier (drains outstanding async work)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+}
+
+//===----------------------------------------------------------------------===//
 // C1 (2026-06-23) — TileLayout algebra (TIRx review, COMPILER_AUDIT item C1)
 //
 // Replaces the flat `tessera.layout` *string* enum (row_major/bhsd/…) with a

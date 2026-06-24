@@ -61,6 +61,9 @@ add_library(TesseraPasses
   DtypeLegalizePass.cpp
   # 2026-06-23 — C6: warp-spec structural diagnostics (TIRx debugging appendix).
   WarpSpecLegalityPass.cpp
+  # 2026-06-23 — pipeline-parallel: real stage partitioning + 1F1B schedule proof.
+  PipelineStagePartitionPass.cpp
+  PipelineScheduleLegalityPass.cpp
 
   # Sprint V5 (2026-05-22) — symbolic dim equality verifier (SHAPE_SYSTEM §11.2 closure).
   SymbolicDimEqualityPass.cpp

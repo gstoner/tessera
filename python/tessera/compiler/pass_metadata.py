@@ -163,6 +163,61 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="V2 + V4a",
     ),
     PassMetadata(
+        name="tessera-pipeline-partition",
+        cpp_class="PipelineStagePartitionPass",
+        summary=(
+            "Cost-balanced, program-order-monotonic partition of each function "
+            "into num_stages pipeline stages (emits tessera.pp_stage) — the real "
+            "stage partitioning the insertion pass previously required an "
+            "external tagger for."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.pipeline_plan", "tessera.pp_stage"),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="Pipeline-PP",
+    ),
+    PassMetadata(
+        name="tessera-pipeline-schedule-legality",
+        cpp_class="PipelineScheduleLegalityPass",
+        summary=(
+            "The 1F1B schedule proof — micro-batch fill (Decision #17), no empty "
+            "stage, forward-adjacent send/recv pairing, and value-rewrite "
+            "completeness (no direct cross-stage SSA edge)."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.pp_num_stages", "tessera.pp_num_micro_batches",
+                        "tessera.pp_stage"),
+        diagnostic_codes=(
+            "PP_EMPTY_STAGE",
+            "PP_MICRO_BATCHES_TOO_FEW",
+            "PP_RECV_WITHOUT_SEND",
+            "PP_SEND_WITHOUT_RECV",
+            "PP_UNROUTED_CROSS_STAGE_VALUE",
+        ),
+        pass_kind="verifier",
+        sprint="Pipeline-PP",
+    ),
+    PassMetadata(
+        name="tessera-pipeline-stage-insertion",
+        cpp_class="PipelineStageInsertionPass",
+        summary=(
+            "Inserts tessera.pipeline.send/recv at cross-stage boundaries and "
+            "rewires the boundary uses to the recv (the real send/recv SSA "
+            "rewrite), driven by the tessera.pp_stage partition."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.pp_stage", "tessera.layer"),
+        preserved_attrs=("tessera.pp_stage",),
+        diagnostic_codes=(),
+        must_run_after=("tessera-pipeline-partition",),
+        pass_kind="transform",
+        sprint="Phase 5",
+    ),
+    PassMetadata(
         name="tessera-storage-legalize",
         cpp_class="StorageLegalize",
         summary=(

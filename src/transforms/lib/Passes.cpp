@@ -140,6 +140,22 @@ void registerTesseraPasses() {
   // ── Phase 4 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createGPUCollectiveInsertionPass(); });
   ::mlir::registerPass([]() { return createPipelineStageInsertionPass(); });
+  // 2026-06-23: real pipeline-stage partitioning + 1F1B schedule proof.
+  ::mlir::registerPass([]() { return createPipelineStagePartitionPass(); });
+  ::mlir::registerPass([]() { return createPipelineScheduleLegalityPass(); });
+
+  // Pipeline-parallel lowering: partition into stages → insert send/recv SSA
+  // rewrites → prove the 1F1B schedule. The single alias that drives the layer
+  // from an unpartitioned function to a verified 1F1B pipeline.
+  ::mlir::PassPipelineRegistration<>
+    pipelinePP("tessera-pipeline",
+               "Pipeline-parallel: stage partition -> send/recv insertion -> "
+               "1F1B schedule legality",
+      [](OpPassManager &pm) {
+        pm.addPass(createPipelineStagePartitionPass());
+        pm.addPass(createPipelineStageInsertionPass());
+        pm.addPass(createPipelineScheduleLegalityPass());
+      });
 
   // ── Phase F4 autodiff (reverse-mode via AdjointInterface) ──────────────────
   // ODS scaffold: src/compiler/ir/include/Tessera/AdjointInterface.td

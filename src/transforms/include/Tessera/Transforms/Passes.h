@@ -299,6 +299,18 @@ std::unique_ptr<mlir::Pass> createStorageLegalizePass();
 // (WARPSPEC_MISSING_VISIBILITY_FENCE). --tessera-warpspec-legality.
 std::unique_ptr<mlir::Pass> createWarpSpecLegalityPass();
 
+// ── 2026-06-23 — pipeline-parallel layer: real stage partitioning + 1F1B proof ──
+// PipelineStagePartition: cost-balanced, program-order-monotonic partition of
+// each function into num_stages (emits tessera.pp_stage) — the "true stage
+// partitioning" the insertion pass previously required an external tagger for.
+// PipelineScheduleLegality: the 1F1B schedule proof — micro-batch fill
+// (Decision #17), no empty stage, forward-adjacent send/recv pairing
+// (PP_MICRO_BATCHES_TOO_FEW / PP_EMPTY_STAGE / PP_SEND_WITHOUT_RECV /
+// PP_RECV_WITHOUT_SEND). Registered standalone; chained in the `tessera-pipeline`
+// pipeline (partition → stage-insertion → schedule-legality).
+std::unique_ptr<mlir::Pass> createPipelineStagePartitionPass();
+std::unique_ptr<mlir::Pass> createPipelineScheduleLegalityPass();
+
 // ── Sprint V5 (2026-05-22) — SymbolicDimEqualityPass ─────────────────────
 //
 // Closes the 4th and final MLIR-verifier gap in SHAPE_SYSTEM.md §11.2:

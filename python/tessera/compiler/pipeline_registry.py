@@ -434,6 +434,24 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         status="lit_verified",
         sprint="G-5",
     ),
+    # Pipeline-parallel layer (2026-06-23): partition into stages → insert
+    # send/recv SSA rewrites → prove the 1F1B schedule. Drives a function from
+    # unpartitioned IR to a verified 1F1B pipeline.
+    PipelineSpec(
+        name="tessera-pipeline",
+        passes=(
+            "tessera-pipeline-partition",
+            "tessera-pipeline-stage-insertion",
+            "tessera-pipeline-schedule-legality",
+        ),
+        required_dialects=("tessera", "func"),
+        targets=("nvidia_sm90", "nvidia_sm100", "nvidia_sm120"),
+        verifier_passes=("tessera-pipeline-schedule-legality",),
+        lit_fixtures=("tests/tessera-ir/phase4/pipeline_schedule_legality.mlir",),
+        phase="lowering",
+        status="lit_verified",
+        sprint="Pipeline-PP",
+    ),
 )
 
 

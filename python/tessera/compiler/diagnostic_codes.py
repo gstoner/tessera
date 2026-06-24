@@ -1220,6 +1220,46 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Emit a cta_sync before deallocating the buffer (the writeback-dealloc epilogue).",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
     ),
+
+    # ───────────────────────────────────────────────────────────────────────
+    # Pipeline-parallel layer (2026-06-23) — the 1F1B schedule proof
+    # (PipelineScheduleLegality), paired with the real PipelineStagePartition.
+    # ───────────────────────────────────────────────────────────────────────
+    DiagnosticCode(
+        code="PP_MICRO_BATCHES_TOO_FEW", pass_origin="PipelineScheduleLegality",
+        severity="error",
+        summary="Fewer micro-batches than the 1F1B pipeline needs to fill (num_stages, or 2*num_stages interleaved; Decision #17).",
+        fix_hint="Raise num_micro_batches to >= num_stages (>= 2*num_stages for interleaved).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
+    ),
+    DiagnosticCode(
+        code="PP_EMPTY_STAGE", pass_origin="PipelineScheduleLegality",
+        severity="error",
+        summary="A declared pipeline stage owns no op — the partition produced fewer real stages than declared.",
+        fix_hint="Reduce num_stages or give every stage work; an empty stage holes the send/recv chain.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
+    ),
+    DiagnosticCode(
+        code="PP_SEND_WITHOUT_RECV", pass_origin="PipelineScheduleLegality",
+        severity="error",
+        summary="A pipeline send from stage k has no matching recv at stage k+1 — a dropped activation / deadlock.",
+        fix_hint="Ensure the forward-adjacent send/recv chain is complete (one recv at k+1 per send at k).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
+    ),
+    DiagnosticCode(
+        code="PP_RECV_WITHOUT_SEND", pass_origin="PipelineScheduleLegality",
+        severity="error",
+        summary="A pipeline recv at stage j has no matching send from stage j-1 — an unpaired / stage-skipping comm.",
+        fix_hint="Ensure every recv at j is fed by a send from j-1 (forward-adjacent chain only).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
+    ),
+    DiagnosticCode(
+        code="PP_UNROUTED_CROSS_STAGE_VALUE", pass_origin="PipelineScheduleLegality",
+        severity="error",
+        summary="A value flows directly from one stage to another without a send/recv — the boundary rewrite missed it (e.g. a stage-skipping edge).",
+        fix_hint="Route every cross-stage activation through send/recv; avoid stage-skipping SSA edges (or partition them adjacently).",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
+    ),
 )
 
 

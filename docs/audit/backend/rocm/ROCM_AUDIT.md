@@ -557,7 +557,8 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       `generate-wmma-flash-attn-bwd-kernel` pass expands one
       `tessera_rocm.flash_attn_bwd` directive into the textbook FA-2 backward
       as THREE fragment-materialized WMMA kernels (no stored attention matrix —
-      S/P recomputed per tile): `_pre` (scalar logsumexp `L` + `D=rowsum(O·dO)`),
+      S/P recomputed per tile): `_pre` (WMMA QK^T + online-softmax logsumexp `L`
+      + `D=rowsum(O·dO)`),
       `_dkdv` (per key-tile: recompute S/P, `dP=dO@Vᵀ`, `dS=P·(dP−D)`, accumulate
       `dV+=Pᵀ@dO` and `dK+=scale·dSᵀ@Q` — P/dS staged in LDS, reread transposed),
       `_dq` (per query-tile: `dQ+=scale·dS@K`). All three use the same RDNA WMMA
@@ -567,13 +568,29 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       accumulate) across head_dim 16/64, causal + non-causal, ragged —
       `tests/unit/test_rocm_flash_attn_bwd_compiled.py`. flash_attn (fwd+bwd) is
       now the third compiler-generated op on ROCm after matmul.
-    - ✅ **backward perf ladder, measured (2026-06-23)** —
-      `benchmarks/rocm/benchmark_rocm_flash_attn_bwd_compiled.py` on gfx1151:
-      **~1.1–1.3 TFLOP/s at head_dim 64, ~0.67 at 128** (~10·B·H·Sq·Sk·D FLOPs).
-      Lower than the forward by design — five matmuls plus a *scalar* logsumexp
-      pre-pass (no WMMA in `_pre`), recompute-per-tile, no causal loop-bound /
-      double-buffering. Perf optimizations (WMMA logsumexp, causal tile-skip,
-      pipelining) are the obvious next rung; correctness-first landed first.
+    - ✅ **backward perf ladder, measured** —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_bwd_compiled.py` on gfx1151
+      (~10·B·H·Sq·Sk·D FLOPs).
+      - rung 0 (2026-06-23, correctness-first): ~1.1–1.3 TFLOP/s @ D=64, ~0.67 @
+        128. The `_pre` logsumexp was a per-lane **scalar** dot-product loop
+        (O(Sq·Sk·D), zero WMMA) — the measured long pole.
+      - **rung 1 (2026-06-24): `_pre`→WMMA.** Rewrote `_pre` to compute `L` with
+        the forward's WMMA QK^T + online-softmax-stats path (same matrix rate as
+        the forward, not serial VALU). **~3.4× faster: ~4.1–4.4 TFLOP/s @ D=64,
+        ~2.1 @ 128** — now WMMA-bound like the forward (correctness unchanged:
+        dQ/dK/dV rel-err ~2–4e-4, `test_rocm_flash_attn_bwd_compiled.py` 5/5).
+      - **rung 2 (2026-06-24): causal tile-skip** in `_dkdv` (query loop starts
+        at the key tile) and `_dq` (key loop bounded at the query tile) — the
+        diagonal tile is still per-element masked, so only provably-zero tiles
+        are dropped. **~1.7× for causal** (measured causal-vs-non-causal at S=
+        1024/2048: 1.64–1.71×; theoretical max 2×, gap = diagonal tiles + the
+        fixed `_pre`/accumulator overhead). Correctness unchanged (5/5, incl. the
+        causal cases). The forward already had this bound.
+      Remaining next rungs (shared with the forward): occupancy (1 wave/block →
+      multi-wave) and fewer LDS round-trips/barriers — the larger non-causal
+      lever, a real kernel restructure. Memory double-buffering is NOT a lever
+      here — the kernels are WMMA/occupancy-bound, not staging-bound (measured:
+      GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128 on LDS footprint).
     - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
       contract + executor + matrix row) — the same additive step matmul took at
       L4; the compiled kernel + in-process execution already exist.

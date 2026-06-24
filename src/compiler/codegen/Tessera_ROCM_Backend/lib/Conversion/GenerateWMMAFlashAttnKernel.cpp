@@ -27,6 +27,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -44,7 +45,7 @@ using namespace mlir;
 namespace {
 
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-                       Type storeTy) {
+                       Type storeTy, bool viaTile = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -148,8 +149,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       fr = bb.create<vector::InsertOp>(l, elt(i), fr, ArrayRef<int64_t>{i});
     return fr;
   };
+  // Fork A (via-tile): emit tile.mma at the Tile-IR seam so the QK^T / P@V
+  // matrix ops route through rocm-wave-lds-pipeline + lower-tile-to-rocm (which
+  // lowers them back to tessera_rocm.wmma with the same operands). Default emits
+  // tessera_rocm.wmma directly. Same operands/types — only the op name differs.
   auto wmma = [&](OpBuilder &bb, Location l, Value a, Value bb2, Value acc) {
-    OperationState st(l, "tessera_rocm.wmma");
+    OperationState st(l, viaTile ? "tile.mma" : "tessera_rocm.wmma");
     st.addOperands({a, bb2, acc});
     st.addTypes({accTy});
     return bb.create(st)->getResult(0);
@@ -312,6 +317,18 @@ struct GenerateWMMAFlashAttnKernelPass
     : PassWrapper<GenerateWMMAFlashAttnKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateWMMAFlashAttnKernelPass)
 
+  // The Option<bool> member is non-copyable; provide the ctors PassWrapper's
+  // clonePass() needs (option VALUES are copied separately by MLIR).
+  GenerateWMMAFlashAttnKernelPass() = default;
+  GenerateWMMAFlashAttnKernelPass(const GenerateWMMAFlashAttnKernelPass &other)
+      : PassWrapper(other) {}
+
+  // Fork A: emit tile.mma so the FA matmuls route through the wave/LDS pipeline.
+  Option<bool> viaTile{*this, "via-tile",
+                       llvm::cl::desc("emit tile.mma (route through the wave/LDS "
+                                      "pipeline) instead of tessera_rocm.wmma"),
+                       llvm::cl::init(false)};
+
   StringRef getArgument() const final {
     return "generate-wmma-flash-attn-kernel";
   }
@@ -322,7 +339,7 @@ struct GenerateWMMAFlashAttnKernelPass
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
                     arith::ArithDialect, memref::MemRefDialect,
-                    math::MathDialect>();
+                    math::MathDialect, tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -378,7 +395,7 @@ struct GenerateWMMAFlashAttnKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy);
+      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile);
       op->erase();
     }
   }

@@ -11,6 +11,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
@@ -219,7 +220,10 @@ struct ROCMWaveLdsPipelinePass
     // consume it. The legality pass then verifies the def-use edge instead of
     // re-deriving program order (which is what made a count-based guess able to
     // wrongly reject valid double buffering).
-    getOperation().walk([&](func::FuncOp func) {
+    // Walk every function body — func.func AND gpu.func — so the compiler-
+    // generated ROCm kernels (emitted as gpu.func) route through the same
+    // wave/LDS planning as hand-tiled func.func IR (Fork A).
+    getOperation().walk([&](FunctionOpInterface func) {
       unsigned ordinal = 0;
       SmallVector<std::string> outstanding;   // oldest first
       std::optional<SmallVector<std::string>> retiredCtx;
@@ -407,7 +411,7 @@ struct ROCMWaveLdsLegalityPass
       }
     });
 
-    getOperation().walk([&](func::FuncOp func) {
+    getOperation().walk([&](FunctionOpInterface func) {
       // SSA token model: an async copy mints a !tile.async_token result; a
       // wait_async / s_barrier retires it; an mma's token operands name exactly
       // the stages it consumes. Legality is then a pure def-use check — every

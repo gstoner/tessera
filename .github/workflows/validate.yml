@@ -12,9 +12,14 @@ name: Validate
 permissions:
   contents: read
 
+# PRs are the gate (pull_request runs the merge-result commit once). push runs
+# only on main as a post-merge safety net — this avoids the double run a PR'd
+# branch otherwise pays (push and pull_request fire on different refs, so the
+# concurrency group below cannot dedupe them). Pre-PR CI on a branch: open a
+# draft PR.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_dispatch:

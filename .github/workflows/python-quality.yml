@@ -3,9 +3,12 @@ name: Python Quality
 permissions:
   contents: read
 
+# PRs are the gate; push runs only on main as a post-merge safety net. Avoids
+# the double run a PR'd branch pays when push + pull_request both fire (they use
+# different refs, so concurrency cannot dedupe them). Pre-PR CI: open a draft PR.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_dispatch:

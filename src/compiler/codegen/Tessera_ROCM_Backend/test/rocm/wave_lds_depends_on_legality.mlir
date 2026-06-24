@@ -27,11 +27,27 @@ func.func @missing_wait(%x: tensor<16x16xf16>) {
 
 // -----
 
-// Multi-stage with no explicit tile.depends_on: the consumed stage is ambiguous.
-func.func @ambiguous(%x: tensor<16x16xf16>) {
+// Two copies in flight with nothing waited: the mma would read unfilled LDS.
+// This is a genuine waitcnt hazard, diagnosed precisely as MISSING (not a
+// spurious "ambiguous" — there is no legal stage for it to consume yet).
+func.func @no_wait_multi(%x: tensor<16x16xf16>) {
   "tile.async_copy"() {tile.barrier_id = "b0"} : () -> ()
   "tile.async_copy"() {tile.barrier_id = "b1"} : () -> ()
-  // expected-error @+1 {{ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY}}
+  // expected-error @+1 {{ROCM_WAVE_LDS_MISSING_WAITCNT}}
+  %c = "tile.mma"(%x, %x) : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf16>
+  return
+}
+
+// -----
+
+// Software-pipelined double buffer WITHOUT an explicit tile.depends_on: the mma
+// consumes the just-waited stage b0 while b1 prefetches the next iteration.
+// Legality must accept this on its own (the live prefetch b1 is not a
+// dependency) — the prior count-based rule wrongly rejected it as missing-wait.
+func.func @double_buffer_inferred(%x: tensor<16x16xf16>) {
+  "tile.async_copy"() {tile.barrier_id = "b0"} : () -> ()
+  "tile.wait_async"() {tile.barrier_id = "b0"} : () -> ()
+  "tile.async_copy"() {tile.barrier_id = "b1"} : () -> ()
   %c = "tile.mma"(%x, %x) : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf16>
   return
 }

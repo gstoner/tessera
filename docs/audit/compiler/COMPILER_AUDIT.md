@@ -1093,10 +1093,17 @@ contract**: (1) sync discrimination is typed — `tile.mbarrier.*`/`tile.tma.*`/
 retires the oldest id with a `tile.waitcnt_threshold` (vmcnt watermark, op-count
 not byte-count — hardware-correct), and lowering keys a per-id FIFO so each wait
 gates the right copy (no "last token"); (3) legality tracks outstanding ids per
-id (not one bool) — an mma runs while *unrelated* prefetch ids are outstanding,
-`tile.depends_on` proves stage-specific deps (inferred for single-stage,
-required for multi-stage else `ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY`), and
-`s_barrier` drains all. Verified on the ROCm-backend build: ROCm lit 21/21,
+id (not one bool) — an mma runs while *unrelated* prefetch ids are outstanding.
+Dependency resolution is **precise, never count-based**: an mma consumes the
+stage named by explicit `tile.depends_on`, else an SSA value link to its
+`tile.async_copy`, else the most-recently-*retired* stage (the
+prefetch→wait→compute idiom) — a live prefetch is never mistaken for the mma's
+dependency, so software-pipelined double buffering is accepted even without an
+explicit `tile.depends_on` (the planner stamps one from the same model). Genuine
+hazards still fail `ROCM_WAVE_LDS_MISSING_WAITCNT` (an mma over an unretired
+stage, or with copies in flight and nothing waited); `s_barrier` drains all.
+This removed the prior `AMBIGUOUS_DEPENDENCY` over-rejection that blocked valid
+multi-stage ROCm kernels. Verified on the ROCm-backend build: ROCm lit 21/21,
 shared-Tile/NVIDIA fixtures + registry/tiling pytest green.
 
 ## Next Work

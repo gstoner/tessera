@@ -13,6 +13,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 
 #include <optional>
@@ -35,18 +36,6 @@ static bool isNvidiaOnlyTileOp(StringRef name) {
          name.starts_with("tile.tma_") || name.starts_with("tile.tmem.");
 }
 
-// Real ROCm synchronization — what legitimately retires outstanding async work.
-// Deliberately NOT a name.contains("barrier") sniff: that wrongly accepted
-// NVIDIA `tile.mbarrier.*` ops and let them clear the waitcnt hazard.
-static bool isROCMBarrierOp(Operation *op) {
-  StringRef name = op->getName().getStringRef();
-  if (name == "tile.wait_async" || name == "tessera_rocm.wait")
-    return true;
-  auto barrier =
-      op->getAttrOfType<tessera::tile::TileBarrierAttr>("tile.barrier");
-  return barrier && barrier.getKind() == "s_barrier";
-}
-
 // A workgroup barrier — it drains *all* outstanding async work (vs. a targeted
 // wait that retires one barrier id down to a threshold).
 static bool isSBarrier(Operation *op) {
@@ -55,6 +44,36 @@ static bool isSBarrier(Operation *op) {
   auto barrier =
       op->getAttrOfType<tessera::tile::TileBarrierAttr>("tile.barrier");
   return barrier && barrier.getKind() == "s_barrier";
+}
+
+// Trace an mma's operands back through SSA def-use to any reachable
+// tile.async_copy, collecting their barrier ids. This is the *most precise*
+// stage dependency: it names the exact copies whose results the mma consumes,
+// independent of which unrelated stages are still being prefetched. Bounded
+// walk; returns empty when the copy->mma link is carried by an LDS buffer
+// (memref) rather than an SSA value — the common ROCm shape today, where the
+// caller falls back to the most-recently-retired stage.
+static void collectSsaCopyDeps(Operation *mma,
+                               SmallVectorImpl<std::string> &ids) {
+  SmallVector<Value, 8> worklist(mma->getOperands().begin(),
+                                 mma->getOperands().end());
+  llvm::SmallPtrSet<Operation *, 16> seen;
+  llvm::SmallPtrSet<StringAttr, 8> emitted;
+  unsigned guard = 0;
+  while (!worklist.empty() && guard++ < 256) {
+    Value v = worklist.pop_back_val();
+    Operation *def = v.getDefiningOp();
+    if (!def || !seen.insert(def).second)
+      continue;
+    if (def->getName().getStringRef() == "tile.async_copy") {
+      if (auto a = def->getAttrOfType<StringAttr>("tile.barrier_id"))
+        if (emitted.insert(a).second)
+          ids.push_back(a.getValue().str());
+      continue; // stop at the copy boundary — do not walk its source operands.
+    }
+    for (Value o : def->getOperands())
+      worklist.push_back(o);
+  }
 }
 
 static bool hasLdsAxis(tessera::tile::TileLayoutAttr layout) {
@@ -168,9 +187,32 @@ struct ROCMWaveLdsPipelinePass
     getOperation().walk([&](func::FuncOp func) {
       unsigned ordinal = 0;
       SmallVector<std::string> outstanding;   // oldest first
-      size_t maxOutstanding = 0;
-      // (mma, outstanding-snapshot) for single-stage depends_on inference.
-      SmallVector<std::pair<Operation *, SmallVector<std::string>>> mmaSnaps;
+      // The stage(s) retired by the most recent wait_async, or an empty vector
+      // after an s_barrier drain. nullopt means "nothing has been waited yet on
+      // this path". An mma consumes the most-recently-retired stage (the
+      // prefetch->wait->compute idiom), NOT whatever is still outstanding — so
+      // a live prefetch never gets mistaken for the mma's dependency.
+      std::optional<SmallVector<std::string>> retiredCtx;
+
+      // Stamp a precise tile.depends_on on an mma from the best available
+      // signal: SSA value link first, else the just-retired stage.
+      auto stampMmaDeps = [&](Operation *mma) {
+        if (mma->hasAttr("tile.depends_on"))
+          return;
+        SmallVector<std::string> deps;
+        collectSsaCopyDeps(mma, deps);
+        bool haveContext = !deps.empty();
+        if (deps.empty() && retiredCtx.has_value()) {
+          deps.assign(retiredCtx->begin(), retiredCtx->end());
+          haveContext = true; // includes the empty (post-s_barrier) case.
+        }
+        if (!haveContext)
+          return; // no wait/SSA evidence — legality flags if copies are live.
+        SmallVector<Attribute> attrs;
+        for (const std::string &id : deps)
+          attrs.push_back(builder.getStringAttr(id));
+        mma->setAttr("tile.depends_on", builder.getArrayAttr(attrs));
+      };
 
       func.walk<WalkOrder::PreOrder>([&](Operation *op) {
         StringRef name = op->getName().getStringRef();
@@ -194,22 +236,26 @@ struct ROCMWaveLdsPipelinePass
                                              "rocm.wave_lds." +
                                              std::to_string(ordinal)));
           outstanding.push_back(id);
-          maxOutstanding = std::max(maxOutstanding, outstanding.size());
           ++ordinal;
           return;
         }
 
         if (name == "tile.wait_async") {
-          // Retire a stamped id if present, else the oldest outstanding.
+          // Retire a stamped id if present, else the oldest outstanding, and
+          // record it as the stage subsequent mmas depend on.
+          std::string retired;
           if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
-            auto it = llvm::find(outstanding, a.getValue().str());
+            retired = a.getValue().str();
+            auto it = llvm::find(outstanding, retired);
             if (it != outstanding.end())
               outstanding.erase(it);
           } else if (!outstanding.empty()) {
-            op->setAttr("tile.barrier_id",
-                        builder.getStringAttr(outstanding.front()));
+            retired = outstanding.front();
+            op->setAttr("tile.barrier_id", builder.getStringAttr(retired));
             outstanding.erase(outstanding.begin());
           }
+          if (!retired.empty())
+            retiredCtx = SmallVector<std::string>{retired};
           // Threshold = ids still outstanding for this counter after retiring.
           op->setAttr("tile.waitcnt_threshold",
                       builder.getI64IntegerAttr(
@@ -221,6 +267,7 @@ struct ROCMWaveLdsPipelinePass
 
         if (isSBarrier(op)) {
           outstanding.clear(); // workgroup barrier drains all.
+          retiredCtx = SmallVector<std::string>{}; // empty == drained, no deps.
           return;
         }
 
@@ -229,24 +276,9 @@ struct ROCMWaveLdsPipelinePass
           if (!op->hasAttr("tile.rocm_matrix_path"))
             op->setAttr("tile.rocm_matrix_path",
                         builder.getStringAttr("wmma_or_mfma_by_arch"));
-          mmaSnaps.push_back(
-              {op, SmallVector<std::string>(outstanding.begin(),
-                                            outstanding.end())});
+          stampMmaDeps(op);
         }
       });
-
-      // depends_on inference: only for unambiguous single-stage IR (never more
-      // than one async copy in flight). Multi-stage IR is left unstamped — the
-      // legality pass requires an explicit tile.depends_on and fails otherwise.
-      bool singleStage = maxOutstanding <= 1;
-      for (auto &[mma, snap] : mmaSnaps) {
-        if (mma->hasAttr("tile.depends_on") || !singleStage)
-          continue;
-        SmallVector<Attribute> ids;
-        for (const std::string &id : snap)
-          ids.push_back(builder.getStringAttr(id));
-        mma->setAttr("tile.depends_on", builder.getArrayAttr(ids));
-      }
     });
   }
 };
@@ -310,6 +342,10 @@ struct ROCMWaveLdsLegalityPass
       // may run while *unrelated* prefetch ids remain outstanding (double
       // buffering).
       SmallVector<std::string> outstanding;
+      // Same retired-stage model as the planner, so legality is precise even on
+      // hand-written IR the planner never stamped: an mma depends on the stage
+      // most recently *retired*, never on a live prefetch.
+      std::optional<SmallVector<std::string>> retiredCtx;
       unsigned synth = 0;
       llvm::DenseMap<StringRef, PendingWrite> pendingLdsWrites;
 
@@ -325,37 +361,63 @@ struct ROCMWaveLdsLegalityPass
         StringRef name = op->getName().getStringRef();
 
         if (name == "tile.wait_async") {
+          std::string retired;
           if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
-            auto it = llvm::find(outstanding, a.getValue().str());
+            retired = a.getValue().str();
+            auto it = llvm::find(outstanding, retired);
             if (it != outstanding.end())
               outstanding.erase(it);
           } else if (!outstanding.empty()) {
+            retired = outstanding.front();
             outstanding.erase(outstanding.begin());
           }
+          if (!retired.empty())
+            retiredCtx = SmallVector<std::string>{retired};
           pendingLdsWrites.clear(); // a retired copy makes its LDS write safe.
           return;
         }
         if (isSBarrier(op)) {
           outstanding.clear(); // workgroup barrier drains all.
+          retiredCtx = SmallVector<std::string>{}; // empty == drained, no deps.
           pendingLdsWrites.clear();
           return;
         }
 
         if (name == "tile.mma") {
+          // Resolve the LDS stage(s) this mma consumes, in precedence order:
+          //   1. explicit tile.depends_on  (frontend/planner-stated, exact)
+          //   2. SSA value link to a tile.async_copy  (exact when present)
+          //   3. the most-recently-retired stage  (prefetch->wait->compute)
+          // A live prefetch that the mma does NOT consume is intentionally not
+          // a dependency, so software-pipelined double buffering is legal.
           SmallVector<std::string> deps;
+          bool haveContext = false;
           if (auto arr = op->getAttrOfType<ArrayAttr>("tile.depends_on")) {
+            haveContext = true;
             for (Attribute a : arr)
               if (auto s = dyn_cast<StringAttr>(a))
                 deps.push_back(s.getValue().str());
-          } else if (outstanding.size() == 1) {
-            deps.push_back(outstanding.front()); // unambiguous single stage.
-          } else if (outstanding.size() > 1) {
-            op->emitOpError(
-                "ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY: tile.mma has multiple "
-                "outstanding async copies and no explicit tile.depends_on; the "
-                "LDS stage it consumes is ambiguous (multi-stage IR must carry "
-                "tile.depends_on).");
-            anyError = true;
+          } else {
+            collectSsaCopyDeps(op, deps);
+            if (!deps.empty()) {
+              haveContext = true;
+            } else if (retiredCtx.has_value()) {
+              deps.assign(retiredCtx->begin(), retiredCtx->end());
+              haveContext = true; // includes the empty post-s_barrier case.
+            }
+          }
+
+          if (!haveContext) {
+            // Nothing waited yet and no value link: if copies are in flight the
+            // mma would read unfilled LDS — a genuine waitcnt hazard.
+            if (!outstanding.empty()) {
+              op->emitOpError(
+                  "ROCM_WAVE_LDS_MISSING_WAITCNT: tile.mma runs with "
+                  "outstanding global-to-LDS async copies and no completed "
+                  "tile.wait_async / waitcnt(vmcnt) — the LDS stage it consumes "
+                  "is not yet resident.");
+              anyError = true;
+            }
             return;
           }
           for (const std::string &d : deps)

@@ -1277,13 +1277,6 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
     ),
     DiagnosticCode(
-        code="ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY", pass_origin="ROCMWaveLdsLegalityPass",
-        severity="error",
-        summary="A tile.mma has multiple outstanding async copies and no explicit tile.depends_on, so the LDS stage it consumes is ambiguous.",
-        fix_hint="Carry tile.depends_on=[barrier ids] on the matrix op in multi-stage (double-buffered) IR; single-stage IR is inferred.",
-        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
-    ),
-    DiagnosticCode(
         code="ROCM_WAVE_LDS_UNSUPPORTED_NV_CONSTRUCT", pass_origin="ROCMWaveLdsLegalityPass",
         severity="error",
         summary="An NVIDIA-only Tile op (tile.mbarrier.* / tile.tma.* / tile.tmem.*) appears on the ROCm path.",

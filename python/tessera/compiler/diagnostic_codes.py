@@ -1207,6 +1207,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
     ),
     DiagnosticCode(
+        code="ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH", pass_origin="AsyncCopyLowering",
+        severity="error",
+        summary="A tile.async_copy carries a !tile.async_token but the SM<90 cp.async fallback has no SSA completion-token path.",
+        fix_hint="Thread async tokens only on the SM>=90 TMA path; drop the !tile.async_token result before the cp.async fallback.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §op-layer convergence", sprint="Phase C-NV",
+    ),
+    DiagnosticCode(
         code="WARPSPEC_ARRIVAL_COUNT_MISMATCH", pass_origin="WarpSpecLegality",
         severity="error",
         summary="#tile.barrier sites on one tile.barrier_id disagree on expect (arrival count != init count).",

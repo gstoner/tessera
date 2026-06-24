@@ -1115,11 +1115,32 @@ the count-based guess produced is structurally impossible because the planner
 encodes the dependency as SSA, not order. Lowering retires by SSA Value (the
 wait's token operand), falling back to `tile.barrier_id`/oldest only for
 token-less IR. Backend-neutral: the token carries no count (NV expect-bytes stays
-in `#tile.barrier`; ROCm vmcnt stays in legality arithmetic). NV stays on its
-proven string+order model (the token is additive), so the tree is consistent;
-NV C6 migration to token edges is a separable follow-up. Verified on both build
-trees: ROCm lit 22/22 (incl. token def-use legality + planner token-threading
-pins), tessera-ir phase2/3/6/8 + apple-value + registry/tiling pytest green.
+in `#tile.barrier`; ROCm vmcnt stays in legality arithmetic). Verified on both
+build trees: ROCm lit 22/22 (incl. token def-use legality + planner
+token-threading pins), tessera-ir phase2/3/6/8 + apple-value + registry/tiling
+pytest green.
+
+**Op-layer convergence — NV token edge threads + survives lowering (Phase C-NV,
+2026-06-23).** The same `!tile.async_token` converges on the NVIDIA path. The
+generic producer→consumer SSA threading in `WarpSpecialization` carries the token
+across the `schedule.warp` boundary with no pass change: a producer
+`tile.async_copy` mints it, and a consumer `tile.mma` consuming it has its operand
+rewired to the producer warp's token *result* (`schedule.warp`/`schedule.yield`
+tolerate the type). `AsyncCopyLowering` now carries the token through SM≥90 TMA
+lowering (`tile.tma.copy_async -> (tile, !tile.async_token)`) so the consuming
+wait/mma/yield operands stay valid SSA after the copy is lowered; the SM<90
+cp.async fallback, which has no completion-token path, refuses a token result with
+`ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH` rather than silently dropping the edge.
+`NVWGMMALowering` ignores the token operand (reads operands 0/1), and
+`NVTMADescriptor` keeps `expect=bytes` on `#tile.barrier`. So the NV path is
+token-*ready* and pinned (`warpspec_async_token.mlir` proves both the crossing and
+TMA survival). Remaining (separable): flip `WarpSpecialization` to auto-mint the
+token from each consumer mma's data-operand defining copies by default (currently
+the token is threaded when present, not synthesized), and migrate the C6
+`arrival==init` check to consume the token edge. Verified: tessera-ir
+phase2/3/6/8 lit + the new C-NV fixture, ROCm 22/22 unaffected, diagnostic
+registry (new code) + apple-value + rocm-tiling pytest (198) green, generated-doc
+drift clean.
 
 ## Next Work
 

@@ -23,6 +23,8 @@
 //     --sm   target SM version (int). Defaults to 90.
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -54,7 +56,7 @@ static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
 
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
                                     Value descriptor, int64_t mbarrierSlot,
-                                    Type resultType) {
+                                    Type resultType, Type tokenType = Type()) {
   OperationState st(loc, "tile.tma.copy_async");
   st.addOperands({descriptor});
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
@@ -63,6 +65,12 @@ static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
   // the replaceOp below would be a result-count mismatch that corrupts the IR.
   if (resultType)
     st.addTypes(resultType);
+  // Carry the planner/warpspec !tile.async_token completion edge through TMA
+  // lowering so a consuming wait/mma operand (and any warp-region yield of it)
+  // stays a valid SSA def-use after the copy is lowered — the NV analogue of the
+  // ROCm token edge (Phase C-NV). The mbarrier still carries the byte count.
+  if (tokenType)
+    st.addTypes(tokenType);
   return b.create(st);
 }
 
@@ -108,21 +116,45 @@ struct LowerAsyncCopyTMA : public RewritePattern {
       if (v > 0) tileCols = v;
     }
 
+    // A trailing !tile.async_token result is the planner/warpspec completion
+    // edge (Phase C-NV). It is the last result; the leading result (if any) is
+    // the staged tile. Carry the token through lowering so the replacement is
+    // 1:1 and the consuming wait/mma/yield operands stay valid SSA.
+    unsigned numResults = op->getNumResults();
+    bool hasToken =
+        numResults >= 1 &&
+        isa<tessera::tile::AsyncTokenType>(
+            op->getResult(numResults - 1).getType());
+
     if (smVersion >= 90) {
       // SM_90+ → TMA path
       Operation *desc = emitTMADescriptor(rewriter, loc, src, tileRows, tileCols);
       // mbarrier_slot is 0 for the first async copy; NVTMADescriptorPass
       // will hoist the descriptor and assign unique slot indices.  The copy
       // carries the original tile result type so the replacement is 1:1.
-      Type tileTy = op->getNumResults() ? op->getResult(0).getType() : Type();
-      Operation *copyOp = emitTMACopyAsync(rewriter, loc,
-                                           desc->getResult(0), /*slot=*/0, tileTy);
+      Type tokenTy = hasToken ? op->getResult(numResults - 1).getType() : Type();
+      Type tileTy;
+      if (hasToken && numResults >= 2)
+        tileTy = op->getResult(0).getType();
+      else if (!hasToken && numResults >= 1)
+        tileTy = op->getResult(0).getType();
+      Operation *copyOp = emitTMACopyAsync(rewriter, loc, desc->getResult(0),
+                                           /*slot=*/0, tileTy, tokenTy);
       if (op->getNumResults())
         rewriter.replaceOp(op, copyOp->getResults());
       else
         rewriter.eraseOp(op);
     } else {
-      // SM < 90 → cp.async fallback
+      // SM < 90 → cp.async fallback. The cp.async path has no SSA completion
+      // token; carrying one here would silently drop the dependency edge, so
+      // refuse it with a clear diagnostic rather than corrupt the IR.
+      if (hasToken) {
+        op->emitError(
+            "ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH: tile.async_copy carries a "
+            "!tile.async_token but the SM<90 cp.async fallback has no token "
+            "completion path; thread async tokens only on the SM>=90 TMA path.");
+        return failure();
+      }
       emitCpAsyncFallback(rewriter, loc, src, tileRows, tileCols);
       // No results — consumers will use src directly.
       if (!op->getResults().empty()) {

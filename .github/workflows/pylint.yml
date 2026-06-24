@@ -1,6 +1,18 @@
 name: Pylint
 
-on: [push]
+# PRs are the gate; push runs only on main as a post-merge safety net (was
+# `on: [push]` on every branch with no concurrency — so PR'd branches ran twice
+# and rapid pushes piled up uncancelled). Pre-PR CI: open a draft PR.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: pylint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # Least-privilege default token: this job only reads the repo to lint it.
 permissions:

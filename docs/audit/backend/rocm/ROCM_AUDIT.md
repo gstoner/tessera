@@ -547,12 +547,21 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
 10. flash_attn follow-ups:
     - ✅ **compiler-generated forward** (2026-06-23) — the `generate-wmma-flash-
       attn-kernel` pass; executes on gfx1151 vs numpy (see the flash_attn section).
-    - ✅ **forward perf ladder, measured** (2026-06-23) —
-      `benchmarks/rocm/benchmark_rocm_flash_attn_compiled.py` on gfx1151:
-      **~4.0 TFLOP/s at head_dim 64, ~2.4 at 128** (FA-2 fwd FLOPs). Modest by
-      design — the kernel is correctness-first (one wave per query tile, LDS
-      round-trips, online-softmax barriers, no KV-tile pipelining / double
-      buffering / multi-wave query tiles). The ladder quantifies the headroom.
+    - ✅ **forward perf ladder, measured** —
+      `benchmarks/rocm/benchmark_rocm_flash_attn_compiled.py` on gfx1151.
+      - rung 0 (2026-06-23): ~4.0 TFLOP/s @ D=64, ~2.4 @ 128. Occupancy is
+        **LDS-limited** (decoded from the hsaco kernel descriptor: 8 waves/CU @
+        D=64, 4 @ 128 — 25%/12% of the 32-wave cap; VGPRs not the limit at D=64).
+      - **rung 1 (2026-06-24): drop `sQ` LDS staging** — read Q from global for
+        the QK^T A-fragment instead of staging it (sQ was the 2nd-largest LDS
+        buffer). LDS 7360→5312 B @ D=64 → **8→12 waves/CU (+50%)**, and **~4.0→
+        ~5.3 TFLOP/s @ D=64 (~1.3×)**, correctness unchanged (5/5). D=128
+        unchanged (~2.40): VGPRs are maxed there (256/lane), so it is no longer
+        LDS-bound — the next D=128 lever is register pressure (the `sAcc` f32
+        accumulator), a bigger restructure with spill risk.
+      The win confirms occupancy was a real (latency-hiding) lever, not just a
+      ceiling. Remaining: multi-wave query tiles / fewer barriers for the deeper
+      non-causal headroom.
     - ✅ **backward pass — compiler-generated (2026-06-23).** The
       `generate-wmma-flash-attn-bwd-kernel` pass expands one
       `tessera_rocm.flash_attn_bwd` directive into the textbook FA-2 backward

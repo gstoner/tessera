@@ -28,6 +28,7 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -58,6 +59,21 @@ static StringRef packedContainerFor(StringRef storage) {
 
 static DictionaryAttr policyOf(Operation *op) {
   return op->getAttrOfType<DictionaryAttr>("numeric_policy");
+}
+
+// Storage-element bit widths, for computing the pack factor.
+static int dtypeBits(StringRef d) {
+  if (d == "fp4_e2m1" || d == "nvfp4" || d == "int4")
+    return 4;
+  if (d == "fp6_e2m3" || d == "fp6_e3m2")
+    return 6;
+  if (d == "fp8_e4m3" || d == "fp8_e5m2" || d == "int8")
+    return 8;
+  if (d == "int16")
+    return 16;
+  if (d == "int32")
+    return 32;
+  return 0; // unknown
 }
 
 //===----------------------------------------------------------------------===//
@@ -136,6 +152,73 @@ struct StorageLegalize
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Storage-pack consume (Target-IR consumer of the C4 packing markers)
+//===----------------------------------------------------------------------===//
+
+// The first real *consumer* of tessera.storage_packed / tessera.storage_container
+// — without it those markers are inert annotations. This is the hardware-free
+// Target-IR step (Decision #19: HF Target IR before hardware lowering): it reads
+// the logical sub-byte storage + the byte container, computes how many logical
+// elements pack into one container element (factor = container_bits /
+// storage_bits), and emits `tessera.storage_pack = {logical, container, factor}`
+// — the concrete descriptor a backend's packed load/store reads. Once a backend
+// consumes this, `legalize-dtypes` can flip from opt-in to default on that
+// target (the real packed memory codegen + the flip are the hardware-gated tail).
+struct StoragePackConsume
+    : public PassWrapper<StoragePackConsume, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(StoragePackConsume)
+
+  StringRef getArgument() const override {
+    return "tessera-storage-pack-consume";
+  }
+  StringRef getDescription() const override {
+    return "C4 storage-pack consumer — turn tessera.storage_packed/"
+           "storage_container into a concrete tessera.storage_pack descriptor "
+           "{logical, container, factor} for a backend's packed load/store.";
+  }
+
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
+    MLIRContext *ctx = &getContext();
+    bool anyError = false;
+    module.walk([&](Operation *op) {
+      if (!op->hasAttr("tessera.storage_packed"))
+        return;
+      if (op->hasAttr("tessera.storage_pack"))
+        return; // idempotent.
+      auto container = op->getAttrOfType<StringAttr>("tessera.storage_container");
+      DictionaryAttr policy = policyOf(op);
+      if (!container || !policy)
+        return;
+      auto storageAttr = policy.getAs<StringAttr>("storage");
+      if (!storageAttr)
+        return;
+      StringRef storage = storageAttr.getValue();
+
+      int sb = dtypeBits(storage);
+      int cb = dtypeBits(container.getValue());
+      if (sb <= 0 || cb <= 0 || sb > cb) {
+        op->emitOpError("DTYPE_PACK_BAD_WIDTHS: cannot pack storage \"")
+            << storage << "\" (" << sb << " bits) into container \""
+            << container.getValue() << "\" (" << cb
+            << " bits) — storage must be a known sub-byte dtype no wider than "
+               "the container.";
+        anyError = true;
+        return;
+      }
+      int factor = cb / sb;
+      NamedAttrList pack;
+      pack.set("logical", storageAttr);
+      pack.set("container", container);
+      pack.set("factor", IntegerAttr::get(IntegerType::get(ctx, 64), factor));
+      op->setAttr("tessera.storage_pack", DictionaryAttr::get(ctx, pack));
+    });
+    if (anyError)
+      signalPassFailure();
+  }
+};
+
 } // namespace
 
 namespace tessera {
@@ -144,5 +227,8 @@ std::unique_ptr<Pass> createComputeLegalizePass() {
 }
 std::unique_ptr<Pass> createStorageLegalizePass() {
   return std::make_unique<StorageLegalize>();
+}
+std::unique_ptr<Pass> createStoragePackConsumePass() {
+  return std::make_unique<StoragePackConsume>();
 }
 } // namespace tessera

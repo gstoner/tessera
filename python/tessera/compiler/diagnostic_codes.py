@@ -1221,6 +1221,15 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
     ),
 
+    # C4 part 1 (2026-06-23) — the storage-pack consumer (StoragePackConsume).
+    DiagnosticCode(
+        code="DTYPE_PACK_BAD_WIDTHS", pass_origin="StoragePackConsume",
+        severity="error",
+        summary="A storage_packed op's logical storage cannot pack into its container (unknown dtype, or storage wider than the container).",
+        fix_hint="Mark sub-byte storage (fp4/nvfp4/fp6/int4) with a wider byte container (int8); storage bits must be <= container bits.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
+    ),
+
     # ───────────────────────────────────────────────────────────────────────
     # Pipeline-parallel layer (2026-06-23) — the 1F1B schedule proof
     # (PipelineScheduleLegality), paired with the real PipelineStagePartition.

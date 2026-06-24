@@ -232,6 +232,24 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="C4 (TIRx)",
     ),
     PassMetadata(
+        name="tessera-storage-pack-consume",
+        cpp_class="StoragePackConsume",
+        summary=(
+            "C4 part 1 (TIRx): the first real consumer of the packing markers — "
+            "reads tessera.storage_packed / storage_container + "
+            "numeric_policy.storage and emits tessera.storage_pack = {logical, "
+            "container, factor} (factor = container_bits / storage_bits) for a "
+            "backend's packed load/store."
+        ),
+        input_dialects=("tessera",),
+        output_dialects=("tessera",),
+        required_attrs=("tessera.storage_packed", "tessera.storage_container"),
+        diagnostic_codes=("DTYPE_PACK_BAD_WIDTHS",),
+        must_run_after=("tessera-storage-legalize",),
+        pass_kind="transform",
+        sprint="C4 (TIRx)",
+    ),
+    PassMetadata(
         name="tessera-symdim-equality",
         cpp_class="SymbolicDimEquality",
         summary=(

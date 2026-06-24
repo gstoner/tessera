@@ -858,9 +858,20 @@ row "Tile IR (FA-4)") can pull from it. Cross-refs noted; reference memory
   `dtype_legalize_split.mlir` — bf16→accum=fp32, int8→accum=int32, fp4→accum
   +packed-int8-container, fp32 untouched, already-has-accum idempotent; the
   3rd RUN composes `--tessera-ir-contracts` after the split to prove the
-  legalized IR is contract-legal (the assign-then-verify pairing). *Still open:*
-  wiring the two passes into the named lowering pipelines (early / terminal
-  slots) once a low-precision backend consumes the packing marker.
+  legalized IR is contract-legal (the assign-then-verify pairing).
+  **Part 1 — real consumer LANDED (2026-06-23).** `StoragePackConsume`
+  (`--tessera-storage-pack-consume`) is the first real consumer of the packing
+  markers (previously inert): it reads `tessera.storage_packed` /
+  `storage_container` + `numeric_policy.storage` and emits a concrete
+  `tessera.storage_pack = {logical, container, factor}` descriptor —
+  `factor = container_bits / storage_bits` (fp4/nvfp4/int4 → 2 per int8, fp6 →
+  1) — the form a backend's packed load/store reads; bad widths emit
+  `DTYPE_PACK_BAD_WIDTHS`. HF Target-IR step (Decision #19). Lit:
+  `storage_pack_consume.mlir`. *Still open (HG):* the real packed memory codegen
+  in the NVIDIA sub-byte emitter that consumes `tessera.storage_pack`, and then
+  flipping `legalize-dtypes` from opt-in to default on that target (safe once the
+  marker is consumed). Also still pending: wiring `legalize-dtypes` ON by default
+  in the named pipelines.
 
 - **C5 — Independent per-stream pipeline depths (HF plan / HG perf).** FA-4 runs
   three *independent* rings (Q depth 2, KV depth 3, TMEM depth 2), not one global

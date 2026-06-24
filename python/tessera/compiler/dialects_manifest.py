@@ -146,6 +146,18 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         standalone_lit_parseable=False,
         sprint="V8",
     ),
+    DialectSpec(
+        name="tessera_rocm",
+        target="TesseraROCMDialect",
+        header="src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMDialect.td",
+        cpp_dir="src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion",
+        register_fn="mlir::tessera_rocm::registerTesseraROCMDialects",
+        cmake_flag=None,
+        eager_load_parent=None,
+        has_typedefs=True,
+        standalone_lit_parseable=True,
+        sprint="ROCm Tile-IR convergence",
+    ),
     # Sprint 9 value-lane Tile IR dialect (src/compiler/ir), grown in the TIRx
     # review (C1/C3/C5) with first-class attributes: #tile.layout / #tile.swizzle
     # / #tile.barrier / #tile.pipeline_state / #tile.pipeline_depths. Built into

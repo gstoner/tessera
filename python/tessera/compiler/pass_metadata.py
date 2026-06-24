@@ -96,6 +96,41 @@ class PassMetadata:
 
 REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
+        name="rocm-wave-lds-legality",
+        cpp_class="ROCMWaveLdsLegalityPass",
+        summary=(
+            "ROCm Tile-IR legality gate: rejects NVIDIA-only TMA/TMEM/mbarrier "
+            "semantics, missing waitcnt(vmcnt) before LDS-dependent matrix ops, "
+            "and overlapping LDS writes without an intervening wait/barrier."
+        ),
+        input_dialects=("tile", "tessera_rocm", "func"),
+        output_dialects=("tile", "tessera_rocm", "func"),
+        required_attrs=("tile.buf", "tile.layout", "tile.barrier"),
+        diagnostic_codes=(
+            "ROCM_WAVE_LDS_MISSING_WAITCNT",
+            "ROCM_WAVE_LDS_OVERLAPPING_WRITE",
+            "ROCM_WAVE_LDS_UNSUPPORTED_BARRIER_KIND",
+            "ROCM_WAVE_LDS_UNSUPPORTED_TMEM",
+        ),
+        must_run_after=("rocm-wave-lds-pipeline",),
+        pass_kind="verifier",
+        sprint="ROCm Tile-IR convergence",
+    ),
+    PassMetadata(
+        name="rocm-wave-lds-pipeline",
+        cpp_class="ROCMWaveLdsPipelinePass",
+        summary=(
+            "ROCm planner marker pass: annotates shared Tile IR with AMD-native "
+            "LDS buffer refs, lds/wave layouts, waitcnt intent, and candidate "
+            "pipeline-depth metadata before lower-tile-to-rocm."
+        ),
+        input_dialects=("tile", "func"),
+        output_dialects=("tile", "func"),
+        preserved_attrs=("numeric_policy", "tessera.storage_pack"),
+        pass_kind="transform",
+        sprint="ROCm Tile-IR convergence",
+    ),
+    PassMetadata(
         name="tessera-compute-legalize",
         cpp_class="ComputeLegalize",
         summary=(

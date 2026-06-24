@@ -19,12 +19,16 @@ std::unique_ptr<Pass> createLowerTesseraTargetToROCDLPass() {
 }
 
 void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
+  pm.addPass(createROCMWaveLdsPipelinePass());
+  pm.addPass(createROCMWaveLdsLegalityPass());
   pm.addPass(createLowerTileToROCMPass());
   pm.addPass(createLowerKernelABIPass());
   pm.addPass(createLowerTesseraTargetToROCDLPass());
 }
 
 void registerTesseraROCMPasses() {
+  registerPass([]() { return createROCMWaveLdsPipelinePass(); });
+  registerPass([]() { return createROCMWaveLdsLegalityPass(); });
   registerPass([]() { return createLowerTileToROCMPass(); });
   registerPass([]() { return createLowerKernelABIPass(); });
   registerPass([]() { return createLowerTesseraTargetToROCDLPass(); });

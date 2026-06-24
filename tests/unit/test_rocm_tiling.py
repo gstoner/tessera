@@ -17,13 +17,17 @@ from tessera.compiler.rocm_target import (
 )
 from tessera.compiler.rocm_tiling import (
     PruneResult,
+    RankedTileCandidate,
     TileCandidate,
     TileShape,
+    estimate_lds_footprint_bytes,
     estimate_vgpr_usage,
     fits_budget,
     n_slice,
     prune_candidates,
     quad_slice,
+    rank_candidates,
+    requires_lds_bank_padding,
 )
 
 CDNA = ROCmTargetProfile(arch=AMDArch.GFX_942)   # wave64, 256 VGPR + 256 AGPR
@@ -201,6 +205,60 @@ def test_prune_empty() -> None:
     result = prune_candidates([], CDNA)
     assert result.n_kept == 0
     assert result.n_dropped == 0
+
+
+# ── autotune ranking metadata ───────────────────────────────────────────────
+
+
+def test_estimate_lds_footprint_accounts_for_pipeline_depth() -> None:
+    cand = TileCandidate(TileShape(64, 64, 16), "fp16")
+    one = estimate_lds_footprint_bytes(cand, CDNA, pipeline_depth=1)
+    two = estimate_lds_footprint_bytes(cand, CDNA, pipeline_depth=2)
+    assert two == one * 2
+
+
+def test_double_buffer_enforces_two_stage_lds_minimum() -> None:
+    single = TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=False)
+    doubled = TileCandidate(TileShape(64, 64, 16), "fp16", double_buffer=True)
+    assert estimate_lds_footprint_bytes(single, CDNA, pipeline_depth=1) * 2 == (
+        estimate_lds_footprint_bytes(doubled, CDNA, pipeline_depth=1)
+    )
+
+
+def test_bank_padding_requirement_is_visible() -> None:
+    conflict = TileCandidate(TileShape(64, 64, 16), "fp16")
+    padded_away = TileCandidate(TileShape(64, 48, 16), "fp16")
+    assert requires_lds_bank_padding(conflict)
+    assert not requires_lds_bank_padding(padded_away)
+
+
+def test_rank_candidates_keeps_non_measured_metadata() -> None:
+    cand = TileCandidate(TileShape(64, 64, 16), "fp16")
+    ranked = rank_candidates([cand], CDNA, pipeline_depth=2)
+    assert len(ranked) == 1
+    entry = ranked[0]
+    assert isinstance(entry, RankedTileCandidate)
+    md = entry.as_metadata_dict()
+    assert md["measured"] is False
+    assert md["pipeline_depth"] == 2
+    assert md["register_macro_tile"] == (4, 4)
+    assert "register_fit" in md["reasons"]
+
+
+def test_rank_candidates_prefers_fit_over_register_spill() -> None:
+    good = TileCandidate(TileShape(64, 64, 16), "fp16")
+    spilling = TileCandidate(TileShape(256, 256, 64), "fp16")
+    ranked = rank_candidates([spilling, good], CDNA)
+    assert ranked[0].candidate is good
+    assert ranked[-1].candidate is spilling
+    assert "register_over_budget" in ranked[-1].reasons
+
+
+def test_rank_candidates_marks_split_k_need() -> None:
+    deep_k = TileCandidate(TileShape(64, 64, 8192), "fp16")
+    ranked = rank_candidates([deep_k], CDNA)
+    assert ranked[0].split_k_required
+    assert "split_k_required" in ranked[0].reasons
 
 
 # ── quad_slice / n_slice transforms ─────────────────────────────────────────

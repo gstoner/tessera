@@ -1239,6 +1239,79 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="C4 (TIRx)",
     ),
 
+    # ROCm shared Tile-IR convergence (2026-06-23) — AMD consumes the shared
+    # Tile contract but keeps LDS / waitcnt legality target-specific.
+    DiagnosticCode(
+        code="ROCM_LOWERING_LAYOUT_NOT_LDS", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="ROCm lowering saw a #tile.layout on tile.async_copy that does not place storage on the lds axis.",
+        fix_hint="Use #tile.layout with an lds shard axis for ROCm global-to-LDS movement, or omit layout when unknown.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_LOWERING_NON_LDS_BUFFER", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="ROCm lowering saw tile.async_copy with a #tile.buffer_ref that is not space=lds.",
+        fix_hint="Use #tile.buffer_ref<space = \"lds\", access = \"write\"> for ROCm async global-to-LDS staging.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_LOWERING_NON_WRITE_BUFFER", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="ROCm lowering saw tile.async_copy with an LDS buffer_ref whose access is not write.",
+        fix_hint="Mark the destination staging reference access = \"write\".",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_LOWERING_UNCONSUMED_STORAGE_PACK", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="Packed low-precision storage reached ROCm lowering without a backend storage-pack consumer descriptor.",
+        fix_hint="Run tessera-storage-pack-consume, or add an explicit ROCm packed-load/store consumer before lower-tile-to-rocm.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §C4", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_MISSING_WAITCNT", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="A tile.mma reads from an outstanding global-to-LDS async copy without an intervening tile.wait_async / waitcnt.",
+        fix_hint="Insert tile.wait_async so ROCm lowering emits tessera_rocm.wait counter=vmcnt before the LDS-dependent matrix op.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="A tile.mma has multiple outstanding async copies and no explicit tile.depends_on, so the LDS stage it consumes is ambiguous.",
+        fix_hint="Carry tile.depends_on=[barrier ids] on the matrix op in multi-stage (double-buffered) IR; single-stage IR is inferred.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_UNSUPPORTED_NV_CONSTRUCT", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="An NVIDIA-only Tile op (tile.mbarrier.* / tile.tma.* / tile.tmem.*) appears on the ROCm path.",
+        fix_hint="Use LDS / waitcnt / s_barrier contracts on ROCm; NVIDIA TMA/TMEM/mbarrier constructs have no AMD lowering.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_OVERLAPPING_WRITE", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="An LDS buffer is written over an overlapping layout region with no intervening waitcnt or barrier.",
+        fix_hint="Use a different LDS stage/buffer or insert the necessary wait/barrier before reusing the region.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_UNSUPPORTED_BARRIER_KIND", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="ROCm Tile-IR legality saw NVIDIA-only TMA/TCGen05/mbarrier completion semantics.",
+        fix_hint="Use AMD waitcnt for counter waits or s_barrier for true workgroup synchronization.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_UNSUPPORTED_TMEM", pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary="ROCm Tile-IR legality saw TMEM-only operations or buffer spaces.",
+        fix_hint="Use ROCm LDS/register contracts; TMEM is not available on the ROCm path.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+
     # ───────────────────────────────────────────────────────────────────────
     # Pipeline-parallel layer (2026-06-23) — the 1F1B schedule proof
     # (PipelineScheduleLegality), paired with the real PipelineStagePartition.

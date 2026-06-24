@@ -49,6 +49,18 @@ _ACC_WORDS_BY_DTYPE: dict[str, int] = {
     "int32": 1,
 }
 
+_STORAGE_BITS_BY_DTYPE: dict[str, int] = {
+    "fp64": 64,
+    "fp32": 32,
+    "bf16": 16,
+    "fp16": 16,
+    "fp8_e4m3": 8,
+    "fp8_e5m2": 8,
+    "fp4_e2m1": 4,
+    "int8": 8,
+    "int32": 32,
+}
+
 
 def _acc_words(dtype: str) -> int:
     """Accumulator register words for an input ``dtype``.
@@ -61,6 +73,16 @@ def _acc_words(dtype: str) -> int:
         raise TesseraROCmTargetError(
             f"no accumulator-word model for dtype {dtype!r} "
             f"(known: {sorted(_ACC_WORDS_BY_DTYPE)})"
+        ) from e
+
+
+def _storage_bits(dtype: str) -> int:
+    try:
+        return _STORAGE_BITS_BY_DTYPE[dtype]
+    except KeyError as e:
+        raise TesseraROCmTargetError(
+            f"no storage-bit model for dtype {dtype!r} "
+            f"(known: {sorted(_STORAGE_BITS_BY_DTYPE)})"
         ) from e
 
 
@@ -152,6 +174,52 @@ class PruneResult:
         }
 
 
+@dataclass(frozen=True)
+class RankedTileCandidate:
+    """A hardware-free ROCm autotune ranking record.
+
+    ``score`` is an ordering heuristic, not measured performance.  Lower is
+    better.  The fields expose the reasons so a later hardware sweep can replace
+    the weights without changing the Tile-IR contract or hiding rejected risks.
+    """
+
+    candidate: TileCandidate
+    vgpr_usage: int
+    register_margin: int
+    lds_bytes: int
+    lds_margin: int
+    bank_padding_required: bool
+    register_macro_tile: tuple[int, int]
+    split_k_required: bool
+    pipeline_depth: int
+    score: float
+    reasons: tuple[str, ...]
+
+    @property
+    def fits_register_budget(self) -> bool:
+        return self.register_margin >= 0
+
+    @property
+    def fits_lds_budget(self) -> bool:
+        return self.lds_margin >= 0
+
+    def as_metadata_dict(self) -> dict[str, object]:
+        return {
+            "candidate": self.candidate.as_metadata_dict(),
+            "vgpr_usage": self.vgpr_usage,
+            "register_margin": self.register_margin,
+            "lds_bytes": self.lds_bytes,
+            "lds_margin": self.lds_margin,
+            "bank_padding_required": self.bank_padding_required,
+            "register_macro_tile": self.register_macro_tile,
+            "split_k_required": self.split_k_required,
+            "pipeline_depth": self.pipeline_depth,
+            "score": self.score,
+            "reasons": list(self.reasons),
+            "measured": False,
+        }
+
+
 def estimate_vgpr_usage(candidate: TileCandidate, profile: ROCmTargetProfile) -> int:
     """Estimate per-lane register usage for ``candidate`` on ``profile``.
 
@@ -195,6 +263,145 @@ def estimate_vgpr_usage(candidate: TileCandidate, profile: ROCmTargetProfile) ->
     stage_regs = stage_per_lane * (2 if candidate.double_buffer else 1)
 
     return acc_regs + stage_regs
+
+
+def estimate_lds_footprint_bytes(
+    candidate: TileCandidate,
+    profile: ROCmTargetProfile,
+    *,
+    pipeline_depth: int | None = None,
+) -> int:
+    """Estimate the LDS bytes needed for one candidate.
+
+    This is intentionally a planning estimate: A and B panels for one
+    ``M/N-slice`` by ``K`` step, multiplied by the requested pipeline depth
+    (or by the double-buffer minimum of 2).  Sub-byte storage is charged at its
+    byte container because ROCm lowering only accepts it after an explicit
+    storage-pack consumer has materialized the packing descriptor.
+    """
+    depth = profile.pipeline_stages if pipeline_depth is None else pipeline_depth
+    if depth < 1:
+        raise ValueError(f"pipeline_depth must be >= 1, got {depth}")
+    if candidate.double_buffer:
+        depth = max(depth, 2)
+    tile = candidate.tile
+    bytes_per_element = max(1, _ceil_div(_storage_bits(candidate.dtype), 8))
+    live_n = _ceil_div(tile.n, candidate.n_slice)
+    panels = (tile.m * tile.k) + (tile.k * live_n)
+    return panels * bytes_per_element * depth
+
+
+def requires_lds_bank_padding(candidate: TileCandidate) -> bool:
+    """Heuristic bank-padding signal for row-strided LDS panels.
+
+    A row stride that lands exactly on a 128-byte bank period is a classic
+    conflict shape.  The planner records this as a penalty/metadata bit, but
+    does not rewrite the layout; the future LDS bank-padding pass owns that.
+    """
+    bytes_per_element = max(1, _ceil_div(_storage_bits(candidate.dtype), 8))
+    live_n = _ceil_div(candidate.tile.n, candidate.n_slice)
+    row_bytes = live_n * bytes_per_element
+    return row_bytes % 128 == 0
+
+
+def _estimated_bank_padding_bytes(candidate: TileCandidate) -> int:
+    if not requires_lds_bank_padding(candidate):
+        return 0
+    bytes_per_element = max(1, _ceil_div(_storage_bits(candidate.dtype), 8))
+    # One extra element per row in both panels is enough metadata for the V1
+    # cost model; exact padding policy is backend-lowering work.
+    return (candidate.tile.m + _ceil_div(candidate.tile.n, candidate.n_slice)) * bytes_per_element
+
+
+def _register_macro_tile(candidate: TileCandidate) -> tuple[int, int]:
+    return (
+        max(1, _ceil_div(candidate.tile.m, 16)),
+        max(1, _ceil_div(_ceil_div(candidate.tile.n, candidate.n_slice), 16)),
+    )
+
+
+def rank_candidates(
+    candidates: list[TileCandidate],
+    profile: ROCmTargetProfile,
+    *,
+    pipeline_depth: int | None = None,
+    split_k_threshold: int = 4096,
+) -> tuple[RankedTileCandidate, ...]:
+    """Rank ROCm tiling candidates without claiming measured performance.
+
+    The ranking feeds autotune/planner plumbing with the dimensions the plan
+    cares about: register fit, LDS footprint, bank-padding requirement,
+    register macro-tile size, split-K need, and pipeline depth.  It is a
+    deterministic pre-silicon ordering; hardware timing must still pick the
+    measured winner.
+    """
+    depth = profile.pipeline_stages if pipeline_depth is None else pipeline_depth
+    if depth < 1:
+        raise ValueError(f"pipeline_depth must be >= 1, got {depth}")
+
+    ranked: list[RankedTileCandidate] = []
+    for cand in candidates:
+        vgpr = estimate_vgpr_usage(cand, profile)
+        register_margin = profile.total_reg_budget - vgpr
+        lds = estimate_lds_footprint_bytes(cand, profile, pipeline_depth=depth)
+        padding = _estimated_bank_padding_bytes(cand)
+        lds_with_padding = lds + padding
+        lds_margin = profile.lds_capacity_bytes - lds_with_padding
+        macro_tile = _register_macro_tile(cand)
+        split_k_required = cand.tile.k > split_k_threshold or lds_margin < 0
+        bank_padding = padding > 0
+
+        reasons: list[str] = []
+        score = float(vgpr)
+        if register_margin < 0:
+            score += 1_000_000 + abs(register_margin) * 100
+            reasons.append("register_over_budget")
+        else:
+            reasons.append("register_fit")
+        if lds_margin < 0:
+            score += 500_000 + abs(lds_margin) / 16
+            reasons.append("lds_over_budget")
+        else:
+            reasons.append("lds_fit")
+        score += lds_with_padding / 256
+        if bank_padding:
+            score += 64
+            reasons.append("bank_padding_required")
+        if split_k_required:
+            score += 256
+            reasons.append("split_k_required")
+        score += depth * 8
+        score += cand.n_slice * 4
+        score -= min(macro_tile[0] * macro_tile[1], 16) * 4
+
+        ranked.append(
+            RankedTileCandidate(
+                candidate=cand,
+                vgpr_usage=vgpr,
+                register_margin=register_margin,
+                lds_bytes=lds_with_padding,
+                lds_margin=lds_margin,
+                bank_padding_required=bank_padding,
+                register_macro_tile=macro_tile,
+                split_k_required=split_k_required,
+                pipeline_depth=depth,
+                score=score,
+                reasons=tuple(reasons),
+            )
+        )
+
+    return tuple(
+        sorted(
+            ranked,
+            key=lambda r: (
+                r.score,
+                r.vgpr_usage,
+                r.lds_bytes,
+                -r.register_macro_tile[0] * r.register_macro_tile[1],
+                repr(r.candidate.as_metadata_dict()),
+            ),
+        )
+    )
 
 
 def _ceil_div(a: int, b: int) -> int:
@@ -269,9 +476,13 @@ __all__ = [
     "TileShape",
     "TileCandidate",
     "PruneResult",
+    "RankedTileCandidate",
     "estimate_vgpr_usage",
+    "estimate_lds_footprint_bytes",
     "fits_budget",
+    "rank_candidates",
     "prune_candidates",
+    "requires_lds_bank_padding",
     "quad_slice",
     "n_slice",
 ]

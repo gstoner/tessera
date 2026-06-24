@@ -1,5 +1,6 @@
 #include "TesseraROCM/Passes.h"
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -53,6 +54,32 @@ static llvm::StringRef fp8SemanticsForArch(llvm::StringRef arch) {
   return "none";  // gfx90a, gfx1100, gfx1151 — no FP8 matrix path
 }
 
+static LogicalResult rejectUnconsumedStoragePack(Operation *op) {
+  if (!op->hasAttr("tessera.storage_packed"))
+    return success();
+  if (op->hasAttr("tessera.storage_pack"))
+    return success();
+  op->emitOpError(
+      "ROCM_LOWERING_UNCONSUMED_STORAGE_PACK: packed low-precision storage "
+      "reached ROCm lowering without a tessera.storage_pack consumer "
+      "descriptor; run tessera-storage-pack-consume or add an explicit ROCm "
+      "consumer before lowering.");
+  return failure();
+}
+
+static void copyAttrIfPresent(OperationState &state, Operation *op,
+                              StringRef name) {
+  if (Attribute attr = op->getAttr(name))
+    state.addAttribute(name, attr);
+}
+
+static bool layoutHasLdsAxis(tessera::tile::TileLayoutAttr layout) {
+  for (StringAttr axis : layout.getShardAxes())
+    if (axis.getValue() == "lds")
+      return true;
+  return false;
+}
+
 struct LowerTileToROCMPass
     : PassWrapper<LowerTileToROCMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToROCMPass)
@@ -67,6 +94,9 @@ struct LowerTileToROCMPass
   StringRef getArgument() const final { return "lower-tile-to-rocm"; }
   StringRef getDescription() const final {
     return "Lower Tessera Tile IR matmul movement contracts to ROCm Target IR";
+  }
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<tessera::tile::TesseraTileDialect>();
   }
 
   // Target gfx arch — drives the emitted `arch` attribute and the arch-keyed
@@ -88,12 +118,20 @@ struct LowerTileToROCMPass
     });
 
     StringRef arch = archOpt;
-    Value lastAsyncToken;
+    // FIFO of outstanding async copies (oldest first), keyed by the stamped
+    // tile.barrier_id from rocm-wave-lds-pipeline. A wait retires the id it
+    // names (or the oldest if idless) — NOT "the last token", so each wait
+    // gates the right copy and double-buffering is correct.
+    SmallVector<std::pair<std::string, Value>> outstanding;
     for (Operation *op : worklist) {
       OpBuilder builder(op);
       StringRef name = op->getName().getStringRef();
 
       if (name == "tile.mma") {
+        if (failed(rejectUnconsumedStoragePack(op))) {
+          signalPassFailure();
+          return;
+        }
         if (op->getNumOperands() < 2 || op->getNumResults() != 1) {
           op->emitError("ROCm lowering requires tile.mma(lhs, rhs) -> result");
           signalPassFailure();
@@ -135,6 +173,10 @@ struct LowerTileToROCMPass
         state.addAttribute("ordinal", builder.getI64IntegerAttr(0));
         if (!fp8Flavor.empty())
           state.addAttribute("fp8_flavor", builder.getStringAttr(fp8Flavor));
+        copyAttrIfPresent(state, op, "numeric_policy");
+        copyAttrIfPresent(state, op, "tessera.storage_pack");
+        copyAttrIfPresent(state, op, "tile.pipeline_depths");
+        copyAttrIfPresent(state, op, "tile.rocm_matrix_path");
         Operation *rocmOp = builder.create(state);
         op->replaceAllUsesWith(rocmOp->getResults());
         op->erase();
@@ -142,6 +184,10 @@ struct LowerTileToROCMPass
       }
 
       if (name == "tile.async_copy") {
+        if (failed(rejectUnconsumedStoragePack(op))) {
+          signalPassFailure();
+          return;
+        }
         if (op->getNumOperands() < 3 || op->getNumResults() != 1) {
           op->emitError("ROCm lowering requires tile.async_copy(dst, src, bytes) -> token");
           signalPassFailure();
@@ -155,28 +201,98 @@ struct LowerTileToROCMPass
         state.addAttribute("src_space", builder.getStringAttr("global"));
         state.addAttribute("dst_space", builder.getStringAttr("lds"));
         state.addAttribute("arch", builder.getStringAttr(arch));
+        if (auto buf = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
+                "tile.buf")) {
+          if (buf.getSpace() != "lds") {
+            op->emitOpError(
+                "ROCM_LOWERING_NON_LDS_BUFFER: tile.async_copy expected "
+                "#tile.buffer_ref<space = \"lds\"> for ROCm global-to-LDS "
+                "movement.");
+            signalPassFailure();
+            return;
+          }
+          if (buf.getAccess() != "write") {
+            op->emitOpError(
+                "ROCM_LOWERING_NON_WRITE_BUFFER: tile.async_copy expected "
+                "#tile.buffer_ref access = \"write\" for the LDS destination.");
+            signalPassFailure();
+            return;
+          }
+          state.addAttribute("buffer", builder.getStringAttr(buf.getName()));
+        }
+        if (auto layout =
+                op->getAttrOfType<tessera::tile::TileLayoutAttr>(
+                    "tile.layout")) {
+          if (!layoutHasLdsAxis(layout)) {
+            op->emitOpError(
+                "ROCM_LOWERING_LAYOUT_NOT_LDS: ROCm async copy can only "
+                "consume #tile.layout placements that include the lds axis.");
+            signalPassFailure();
+            return;
+          }
+          state.addAttribute("uses_tile_layout", builder.getBoolAttr(true));
+          state.addAttribute("layout_storage", builder.getStringAttr("lds"));
+          copyAttrIfPresent(state, op, "tile.layout");
+        }
+        copyAttrIfPresent(state, op, "numeric_policy");
+        copyAttrIfPresent(state, op, "tessera.storage_pack");
+        copyAttrIfPresent(state, op, "tile.pipeline_depths");
         Operation *rocmOp = builder.create(state);
-        lastAsyncToken = rocmOp->getResult(0);
+        // Record this copy in the FIFO keyed by its stamped barrier id.
+        std::string id;
+        if (auto a = op->getAttrOfType<tessera::tile::TileBufferRefAttr>(
+                "tile.buf"))
+          id = a.getName().str();
+        if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
+          id = a.getValue().str();
+        outstanding.push_back({id, rocmOp->getResult(0)});
         op->replaceAllUsesWith(rocmOp->getResults());
         op->erase();
         continue;
       }
 
       if (name == "tile.wait_async") {
-        if (!lastAsyncToken) {
+        if (outstanding.empty()) {
           op->emitError("ROCm lowering requires tile.wait_async after tile.async_copy");
           signalPassFailure();
           return;
         }
 
+        // Retire the copy this wait names (its stamped tile.barrier_id), or the
+        // oldest outstanding copy if idless — never "the last token".
+        Value token;
+        if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id")) {
+          StringRef want = a.getValue();
+          auto it = llvm::find_if(outstanding, [&](const auto &e) {
+            return e.first == want;
+          });
+          if (it != outstanding.end()) {
+            token = it->second;
+            outstanding.erase(it);
+          }
+        }
+        if (!token) {
+          token = outstanding.front().second; // oldest
+          outstanding.erase(outstanding.begin());
+        }
+
         OperationState state(op->getLoc(), "tessera_rocm.wait");
-        state.addOperands(lastAsyncToken);
-        // The async copy is global→LDS (see the async_copy lowering above),
-        // which retires on the vector-memory counter — so gate on vmcnt rather
-        // than draining the wavefront with a full barrier.  This is the
-        // decoupled-wait lever from the CDNA3 attention writeup: the matrix
-        // core keeps issuing while the copy is still in flight.
-        state.addAttribute("counter", builder.getStringAttr("vmcnt"));
+        state.addOperands(token);
+        // The async copy is global→LDS, which retires on the vector-memory
+        // counter — gate on vmcnt rather than draining the wavefront with a full
+        // barrier (the decoupled-wait lever: the matrix core keeps issuing while
+        // the copy is still in flight).
+        StringRef counter = "vmcnt";
+        if (auto counterAttr =
+                op->getAttrOfType<StringAttr>("tile.wait_counter"))
+          counter = counterAttr.getValue();
+        state.addAttribute("counter", builder.getStringAttr(counter));
+        // Preserve the barrier-id + waitcnt threshold for ROCDL contract
+        // lowering (vmcnt(threshold) metadata), so targeted waits stay targeted.
+        if (auto a = op->getAttrOfType<StringAttr>("tile.barrier_id"))
+          state.addAttribute("barrier_id", a);
+        if (auto a = op->getAttrOfType<IntegerAttr>("tile.waitcnt_threshold"))
+          state.addAttribute("threshold", a);
         builder.create(state);
         op->erase();
         continue;

@@ -1079,6 +1079,26 @@ architecture the backend team actively owns; the gates apply there only once/if
 ROCm grows a warp-specialized Tile-IR path, and wiring them is a coordinated
 change, not a unilateral one.
 
+**ROCm Tile-IR convergence — barrier-id rewrite LANDED (2026-06-23).** The ROCm
+backend now consumes the shared Tile contracts (`#tile.layout`,
+`#tile.buffer_ref<space="lds">`, `numeric_policy`, `tessera.storage_pack`,
+`#tile.pipeline_depths`) via `rocm-wave-lds-pipeline` (planner/stamper) +
+`rocm-wave-lds-legality`, wired before `lower-tile-to-rocm`; RDNA→`tessera_rocm.wmma`,
+CDNA→`tessera_rocm.mfma` preserved. A review found the first slice modeled async
+deps as scalar global state; **rewritten (not patched) onto the typed barrier-id
+contract**: (1) sync discrimination is typed — `tile.mbarrier.*`/`tile.tma.*`/
+`tile.tmem.*` are rejected (`ROCM_WAVE_LDS_UNSUPPORTED_NV_CONSTRUCT`), no
+`name.contains("barrier")` sniff; (2) each `tile.async_copy` carries a
+`tile.barrier_id` + `#tile.barrier<kind="waitcnt">`, each `tile.wait_async`
+retires the oldest id with a `tile.waitcnt_threshold` (vmcnt watermark, op-count
+not byte-count — hardware-correct), and lowering keys a per-id FIFO so each wait
+gates the right copy (no "last token"); (3) legality tracks outstanding ids per
+id (not one bool) — an mma runs while *unrelated* prefetch ids are outstanding,
+`tile.depends_on` proves stage-specific deps (inferred for single-stage,
+required for multi-stage else `ROCM_WAVE_LDS_AMBIGUOUS_DEPENDENCY`), and
+`s_barrier` drains all. Verified on the ROCm-backend build: ROCm lit 21/21,
+shared-Tile/NVIDIA fixtures + registry/tiling pytest green.
+
 ## Next Work
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go

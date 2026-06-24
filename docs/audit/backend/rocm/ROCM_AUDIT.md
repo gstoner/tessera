@@ -494,14 +494,24 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       `rocdl.wmma.i32.16x16x16.iu8` (signed, clamp=0 = wrap).
     - **int4** (`dtype="int4"`, opt-in via `metadata["wmma_dtype"]`): int4 values
       in int8 containers (range [-8,7]); nibble-packed in-kernel to the iu4 ABI
-      `vector<2xi32>` → `rocdl.wmma.i32.16x16x16.iu4`. Correctness-first (no
-      coalesced load); packed-memory int4 + perf is future work.
+      `vector<2xi32>` → `rocdl.wmma.i32.16x16x16.iu4`.
     Both execute on gfx1151 **bit-EXACT vs numpy int32 matmul** (integer is exact,
     so numpy is the oracle) across aligned / ragged-M/N / ragged-K shapes —
     `test_rocm_compiled_launch_execute.py`. The codegen generalized via a
     `WmmaTypes` bundle (store/load/frag/acc/accElem + pack-kind) so f16/bf16/int8/
     int4 share the one 3-path kernel. The hand-written `runtime_symbol` (f16/bf16)
     is unchanged; int8/int4 are compiled-lane-only capabilities.
+  - ✅ **int dtype perf sweep — measured (2026-06-23).** `benchmarks/rocm/
+    benchmark_rocm_compiled_gemm_dtype.py` (kernel-only, best macro-tile) on
+    gfx1151 at 2048³: **f16 ≈ 23.2 TFLOP/s, bf16 ≈ 23.1, int8 ≈ 21.0 TOP/s,
+    int4 ≈ 23.8 TOP/s** — all within ~10%. The finding: **RDNA 3.5 WMMA runs
+    iu8/iu4 at the same matrix-op rate as f16** (no low-precision FLOP-rate
+    multiplier), so the compiled int paths are already compute-competitive and the
+    int4 nibble-pack overhead is amortized. **Consequence:** packed-memory int4
+    (2 int4/byte) would buy *memory footprint* (½) + bandwidth, **not compute**
+    on this arch — so it is deliberately deferred (its large, sub-byte-strided-B
+    layout is unjustified by a compute speedup that doesn't exist here). Measured,
+    not assumed (Decision #25).
   - ✅ **Front-end glue wired (2026-06-23).** The Graph `tessera.matmul` → Tile →
     Target-IR lowering (`_lower_rocm_op` on `tile.mma` in `target_ir.py`) now
     EMITS the executable `tessera_rocm.wmma_gemm` directive (m=n=k=16 WMMA tile +

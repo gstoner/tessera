@@ -1594,6 +1594,163 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     return d
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED flash_attn lane (2026-06-24) — the matmul-L4 analog for
+# attention. ``runtime.launch()`` of an artifact stamped
+# ``compiler_path = "rocm_flash_attn_compiled"`` builds the COMPILER-GENERATED
+# FA-2 forward kernel in-process (the ``generate-wmma-flash-attn-kernel``
+# pipeline → hsaco, same Stage-L3 spine as the GEMM) and launches it via HIP.
+# f16/bf16 storage, f32 softmax + accumulate. ONE hsaco per (head_dim, chip,
+# dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
+# ─────────────────────────────────────────────────────────────────────────────
+#: hsaco bytes keyed by (head_dim, chip, dtype).
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str], bytes] = {}
+
+
+def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16") -> bytes:
+    """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
+    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype)."""
+    chip = _rocm_chip()
+    key = (head_dim, chip, dtype)
+    cached = _rocm_fa_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm flash_attn lane")
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.flash_attn"() {name = "fa", '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-wmma-flash-attn-kernel,"
+        "lower-tessera-target-to-rocdl,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled flash_attn in-process "
+            f"(rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm flash_attn lane: gpu.binary was not an ELF hsaco")
+    _rocm_fa_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` flash_attn lane: run the COMPILER-GENERATED FA-2
+    forward WMMA kernel. Raises ``_RocmCompiledUnavailable`` when the lane can't
+    run here (no tessera-opt / serialization / GPU) — ``launch()`` maps that to
+    ``invalid_artifact``; ``ValueError`` on a bad op/dtype/shape; ``RuntimeError``
+    on a real kernel failure. Q/K/V are ``[..., S, D]`` (leading dims = B*H)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.flash_attn":
+        raise ValueError(
+            "rocm_flash_attn_compiled executor handles exactly one "
+            f"tessera.flash_attn op; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("flash_attn requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    q = _as_numpy(values[operand_names[0]])
+    k = _as_numpy(values[operand_names[1]])
+    v = _as_numpy(values[operand_names[2]])
+    if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
+        raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
+    head_dim = int(q.shape[-1])
+    if head_dim <= 0 or head_dim % 16 != 0:
+        raise ValueError(
+            f"rocm flash_attn lane needs head_dim a positive multiple of 16; "
+            f"got {head_dim}")
+    sq = int(q.shape[-2])
+    sk = int(k.shape[-2])
+    bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+
+    if q.dtype == np.float16:
+        dtype_tag, store = "f16", np.float16
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and q.dtype == bf16:
+            dtype_tag, store = "bf16", bf16
+        else:
+            raise ValueError(
+                "rocm flash_attn lane handles f16/bf16 storage (f32 softmax + "
+                f"accumulate); got {q.dtype}")
+
+    kwargs = op.get("kwargs") or {}
+    causal = 1 if bool(kwargs.get("causal", False)) else 0
+    scale = kwargs.get("scale")
+    scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
+
+    hsaco = _build_compiled_flash_attn_hsaco(head_dim, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm flash_attn: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm flash_attn: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"fa") != 0:
+        raise RuntimeError("rocm flash_attn: kernel symbol 'fa' not found")
+
+    qc = np.ascontiguousarray(q, dtype=store)
+    kc = np.ascontiguousarray(k, dtype=store)
+    vc = np.ascontiguousarray(v, dtype=store)
+    o = np.zeros((bh, sq, head_dim), dtype=np.float32)
+    nq, nkv = bh * sq * head_dim, bh * sk * head_dim
+    dq, dk, dv, do = (ctypes.c_void_p(), ctypes.c_void_p(),
+                      ctypes.c_void_p(), ctypes.c_void_p())
+    for dev, size in ((dq, 2 * nq), (dk, 2 * nkv), (dv, 2 * nkv), (do, 4 * nq)):
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm flash_attn: hipMalloc failed")
+    hip.hipMemcpy(dq, qc.ctypes.data_as(ctypes.c_void_p), 2 * nq, 1)
+    hip.hipMemcpy(dk, kc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
+    hip.hipMemcpy(dv, vc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dq, nq) + _mr(dk, nkv) + _mr(dv, nkv) + _mr(do, nq)
+                   + [ctypes.c_int64(sq), ctypes.c_int64(sk),
+                      ctypes.c_float(scale), ctypes.c_int64(causal)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx, gy = (sq + 15) // 16, bh
+    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (dq, dk, dv, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm flash_attn: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
+    for dev in (dq, dk, dv, do):
+        hip.hipFree(dev)
+    return o.reshape(q.shape)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -1605,6 +1762,7 @@ def _executor_table():
         "jit_cpu_numpy":        _execute_jit_cpu_artifact,
         "rocm_wmma":            _execute_rocm_wmma_artifact,
         "rocm_compiled":        _execute_rocm_compiled_gemm,
+        "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
     }
 
 

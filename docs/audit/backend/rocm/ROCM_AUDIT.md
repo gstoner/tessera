@@ -614,9 +614,15 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
       lever, a real kernel restructure. Memory double-buffering is NOT a lever
       here — the kernels are WMMA/occupancy-bound, not staging-bound (measured:
       GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128 on LDS footprint).
-    - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
-      contract + executor + matrix row) — the same additive step matmul took at
-      L4; the compiled kernel + in-process execution already exist.
+    - ✅ **`runtime.launch()` executor-table lane (2026-06-24)** — flash_attn now
+      reaches the runtime executor table like matmul. Artifact stamped
+      `compiler_path="rocm_flash_attn_compiled"` → `execution_matrix` row →
+      `_execute_rocm_compiled_flash_attn` (builds the FA-2 forward hsaco
+      in-process via tessera-opt, HIP loads + launches `fa`). f16/bf16 storage,
+      f32 softmax+accumulate; Q/K/V `[...,S,D]`, causal/scale from op kwargs.
+      Executes vs a numpy attention reference through `launch()`
+      (`tests/unit/test_rocm_flash_attn_launch_execute.py`, maxerr <2e-2,
+      skip-clean). The matmul-L4 analog for attention.
 11. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated

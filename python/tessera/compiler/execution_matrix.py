@@ -80,6 +80,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kernel to hsaco in-process (no mlir-opt), then HIP "
                             "loads + launches it. Opt-in; f16 storage, f32 accum; "
                             "the rocm_wmma lane stays the default + oracle",
+    "rocm_flash_attn_compiled": "AMD GPU RDNA WMMA FA-2 forward the Tessera "
+                            "compiler GENERATES (generate-wmma-flash-attn-kernel "
+                            "-> ROCDL -> hsaco, in-process via tessera-opt), then "
+                            "HIP loads + launches it. f16/bf16 storage, f32 "
+                            "softmax + accumulate; the attention analog of "
+                            "rocm_compiled",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -178,6 +184,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "in-process (no mlir-opt), then HIP loads + launches it. The "
                "DEFAULT rocm matmul lane; degrades to the hand-written rocm_wmma "
                "oracle when the compiled lane is unavailable on the host.",
+        execution_mode="hip_runtime"),
+    # --- AMD ROCm GPU (COMPILED flash_attn lane — the matmul-L4 analog) ---
+    # The compiler-GENERATED FA-2 forward (generate-wmma-flash-attn-kernel ->
+    # ROCDL -> hsaco, in-process via tessera-opt) loaded + launched through HIP.
+    # Reaches runtime.launch() exactly like the compiled GEMM; f16/bf16 storage,
+    # f32 softmax + accumulate; validated vs a numpy attention reference.
+    ("rocm", "rocm_flash_attn_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_flash_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_flash_attn_compiled", runtime_status="success",
+        reason="ROCm flash_attn artifact runs the COMPILER-GENERATED RDNA WMMA "
+               "FA-2 forward: tessera-opt generates + serializes the kernel to "
+               "hsaco in-process, then HIP loads + launches it. The attention "
+               "analog of the compiled GEMM lane (rocm_compiled).",
         execution_mode="hip_runtime"),
 }
 

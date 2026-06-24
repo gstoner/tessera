@@ -39,6 +39,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "Tessera/Dialect/Tile/TileDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -82,7 +83,8 @@ struct WmmaTypes {
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
 void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
-                     int64_t mt, int64_t nt, const WmmaTypes &T) {
+                     int64_t mt, int64_t nt, const WmmaTypes &T,
+                     bool viaTile = false) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -206,7 +208,13 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     SmallVector<Value> next(mt * nt);
     for (int64_t mi = 0; mi < mt; ++mi)
       for (int64_t ni = 0; ni < nt; ++ni) {
-        OperationState wmma(l, "tessera_rocm.wmma");
+        // Fork A (via-tile): emit the matrix op at the Tile-IR seam
+        // (tile.mma %a, %b, %acc) so it flows through rocm-wave-lds-pipeline +
+        // lower-tile-to-rocm, which lowers it back to tessera_rocm.wmma with the
+        // SAME (a, b, acc) operands. Default path emits tessera_rocm.wmma
+        // directly (the established executable lane). Same operands/types either
+        // way — only the op name differs, so the lowered kernel is identical.
+        OperationState wmma(l, viaTile ? "tile.mma" : "tessera_rocm.wmma");
         wmma.addOperands({af[mi], bf[ni], acc[mi * nt + ni]});
         wmma.addTypes({accTy});
         next[mi * nt + ni] = bb.create(wmma)->getResult(0);
@@ -377,6 +385,13 @@ struct GenerateWMMAGemmKernelPass
     : PassWrapper<GenerateWMMAGemmKernelPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GenerateWMMAGemmKernelPass)
 
+  // Explicit ctors: the Option<bool> member is non-copyable, so the compiler-
+  // deleted copy ctor would break PassWrapper's clonePass(). Re-base on the
+  // PassWrapper copy ctor (MLIR copies option VALUES separately).
+  GenerateWMMAGemmKernelPass() = default;
+  GenerateWMMAGemmKernelPass(const GenerateWMMAGemmKernelPass &other)
+      : PassWrapper(other) {}
+
   StringRef getArgument() const final { return "generate-wmma-gemm-kernel"; }
   StringRef getDescription() const final {
     return "Stage K/L: expand a tessera_rocm.wmma_gemm directive into a "
@@ -384,9 +399,18 @@ struct GenerateWMMAGemmKernelPass
            "materialized RDNA WMMA GEMM gpu kernel (compiler-generated)";
   }
 
+  // Fork A (pilot): emit the matrix op as tile.mma so the generated GEMM flows
+  // through rocm-wave-lds-pipeline + lower-tile-to-rocm instead of emitting
+  // tessera_rocm.wmma directly. Default false keeps the established direct lane.
+  Option<bool> viaTile{*this, "via-tile",
+                       llvm::cl::desc("emit tile.mma (route through the wave/LDS "
+                                      "pipeline) instead of tessera_rocm.wmma"),
+                       llvm::cl::init(false)};
+
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
-                    arith::ArithDialect, memref::MemRefDialect>();
+                    arith::ArithDialect, memref::MemRefDialect,
+                    tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -514,7 +538,7 @@ struct GenerateWMMAGemmKernelPass
                        b.getUnitAttr());
 
       OpBuilder bodyB(gpuFunc.getContext());
-      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T);
+      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, viaTile);
 
       op->erase();
     }

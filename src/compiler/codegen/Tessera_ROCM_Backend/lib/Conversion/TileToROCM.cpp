@@ -161,10 +161,15 @@ struct LowerTileToROCMPass
         StringRef matrixOp =
             isWmmaArch(arch) ? "tessera_rocm.wmma" : "tessera_rocm.mfma";
         OperationState state(op->getLoc(), matrixOp);
-        // The v1 contract carries a scalar accumulator operand. Until Tile IR
-        // models explicit accumulator SSA, use lhs as the artifact accumulator.
-        state.addOperands({op->getOperand(0), op->getOperand(1),
-                           op->getOperand(0)});
+        // Accumulator: a 3-operand tile.mma(lhs, rhs, acc) carries the real
+        // accumulator SSA value (the executable Fork-A form the GEMM generator
+        // emits in --via-tile mode) — thread it straight through so the lowered
+        // tessera_rocm.wmma is bit-identical to the direct generator's. The
+        // legacy 2-operand artifact form has no accumulator SSA yet, so it falls
+        // back to lhs as a typed placeholder (IR-contract lowering, not run).
+        Value acc = op->getNumOperands() >= 3 ? op->getOperand(2)
+                                              : op->getOperand(0);
+        state.addOperands({op->getOperand(0), op->getOperand(1), acc});
         state.addTypes(op->getResultTypes());
         state.addAttribute("arch", builder.getStringAttr(arch));
         state.addAttribute("shape", builder.getStringAttr("m16n16k16"));

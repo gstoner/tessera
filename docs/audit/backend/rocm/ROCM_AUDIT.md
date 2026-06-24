@@ -502,8 +502,19 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
     `WmmaTypes` bundle (store/load/frag/acc/accElem + pack-kind) so f16/bf16/int8/
     int4 share the one 3-path kernel. The hand-written `runtime_symbol` (f16/bf16)
     is unchanged; int8/int4 are compiled-lane-only capabilities.
-  Front-end glue (Graph `tessera.matmul` → Tile → the `wmma_gemm` directive) feeds
-  L1. The hand-written kernel stays the production default + oracle until the
+  - ✅ **Front-end glue wired (2026-06-23).** The Graph `tessera.matmul` → Tile →
+    Target-IR lowering (`_lower_rocm_op` on `tile.mma` in `target_ir.py`) now
+    EMITS the executable `tessera_rocm.wmma_gemm` directive (m=n=k=16 WMMA tile +
+    dtype) alongside the abstract `tessera_rocm.mfma` marker. So a
+    `@jit(target="rocm")` matmul's `target_ir` contains the directive the
+    `generate-wmma-gemm-kernel` pass consumes — the directive is now produced by
+    the IR stack (Decision #19), not only synthesized by the runtime. Verified
+    GPU-free in `test_rocm_matmul_front_end_glue.py`: the directive appears with
+    the right attrs AND the extracted directive feeds the generate pass into a
+    `gpu.func` + WMMA op. (The runtime lane still synthesizes a clean directive at
+    launch for the per-shape `mt`/`nt` perf choice; the canonical *lowering* now
+    owns directive production.)
+  The hand-written kernel stays the production default + oracle until the
   compiled lane reaches ragged-shape perf parity.
 
 10. flash_attn follow-ups: backward pass; a perf ladder (the forward is rung-0

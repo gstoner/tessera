@@ -1204,8 +1204,20 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op, target="rocm")
     if op.op_name == "tile.mma":
+        # `tessera_rocm.mfma` is the hardware-free abstract matrix-core marker
+        # (Decision #19, lit-testable). `tessera_rocm.wmma_gemm` is the CONCRETE
+        # RDNA executable directive the `generate-wmma-gemm-kernel` pass expands
+        # into a real WMMA GEMM kernel — so the Graph -> Tile -> Target-IR path
+        # PRODUCES the executable directive (the front-end glue), not just the
+        # runtime synthesizing it. m/n/k are the WMMA instruction tile (16);
+        # the problem size is a runtime kernel arg.
+        dtype = str(op.attrs.get("dtype", "f16"))
+        if dtype not in ("f16", "bf16", "int8", "i8", "int4", "i4"):
+            dtype = "f16"
         return [
             TargetOp("tessera_rocm.mfma", {**base, "arch": "gfx90a", "shape": "m16n16k16", "accum": "f32"}),
+            TargetOp("tessera_rocm.wmma_gemm", {**base, "name": "gemm",
+                     "m": 16, "n": 16, "k": 16, "dtype": dtype}),
             TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
             TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
         ]

@@ -68,8 +68,9 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     A-tiles (output-tile register blocking — the occupancy/VGPR-budgeted knob
     the hand-written oracle sweeps; measured-best is 3x4 for large problems).
     The grid shrinks accordingly (one wave per `mt`x`nt` macro-tile). This is
-    the Target-IR matmul-tile node; wiring Graph `tessera.matmul` → Tile → this
-    op is the remaining front-end glue.
+    the Target-IR matmul-tile node: the Graph `tessera.matmul` → Tile → Target-IR
+    lowering (`_lower_rocm_op` on `tile.mma`) now EMITS this directive, so it is
+    produced by the IR stack (not only synthesized by the runtime).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,

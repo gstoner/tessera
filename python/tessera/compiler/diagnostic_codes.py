@@ -1207,6 +1207,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/COMPILER_AUDIT.md §C6", sprint="C6 (TIRx)",
     ),
     DiagnosticCode(
+        code="WARPSPEC_MMA_NOT_TOKEN_SYNCED", pass_origin="WarpSpecLegality",
+        severity="error",
+        summary="A consumer tile.mma reads a producer's async-staged tile but has no !tile.async_token completion edge to it — the matrix op is not gated on copy completion.",
+        fix_hint="Thread the producer copy's !tile.async_token into the mma (WarpSpecialization auto-mints it from the mma's data operands); this is the SSA ordering half of the arrival==init check.",
+        spec="docs/audit/compiler/COMPILER_AUDIT.md §op-layer convergence", sprint="Phase C-NV",
+    ),
+    DiagnosticCode(
         code="ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH", pass_origin="AsyncCopyLowering",
         severity="error",
         summary="A tile.async_copy carries a !tile.async_token but the SM<90 cp.async fallback has no SSA completion-token path.",

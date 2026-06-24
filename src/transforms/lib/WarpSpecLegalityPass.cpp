@@ -116,6 +116,20 @@ static bool isBufferFree(Operation *op) {
   return n.contains("buffer_free") || n.contains("dealloc");
 }
 
+// A producer of async-staged data for a consumer mma: either a tile.async_copy /
+// tile.tma.copy_async directly (pre-warpspec / standalone), or a producer-role
+// schedule.warp region whose results carry the staged tiles + tokens across the
+// boundary (post-warpspec). The mma's completion-token edge must point at one.
+static bool isAsyncDataProducer(Operation *op) {
+  StringRef n = op->getName().getStringRef();
+  if (n == "tile.async_copy" || n == "tile.tma.copy_async")
+    return true;
+  if (n == "schedule.warp")
+    if (auto role = op->getAttrOfType<StringAttr>("role"))
+      return role.getValue() == "producer";
+  return false;
+}
+
 struct WarpSpecLegality
     : public PassWrapper<WarpSpecLegality, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(WarpSpecLegality)
@@ -224,6 +238,40 @@ struct WarpSpecLegality
                 "WARPSPEC_USE_AFTER_FREE: buffer free has no prior cta_sync in "
                 "its block — a warp may still be reading the buffer during "
                 "writeback while it is deallocated.");
+            anyError = true;
+          }
+        }
+      });
+
+      // Token synchronization (Phase C-NV) — the SSA half of arrival==init.
+      // arrival==init (above) checks the mbarrier *byte count* via #tile.barrier.
+      // This checks the *ordering* edge via the !tile.async_token: a consumer
+      // tile.mma that reads a producer's async-staged tile must also read a
+      // completion token from that same producer (the copy/warp it depends on),
+      // so the matrix op is gated on copy completion by SSA, not program order.
+      // WarpSpecialization auto-mints this edge; a missing one is a race.
+      func.walk([&](Operation *mma) {
+        if (mma->getName().getStringRef() != "tile.mma")
+          return;
+        // Per producer the mma reads from: did it read data, and a token?
+        llvm::DenseMap<Operation *, std::pair<bool, bool>> fromProducer;
+        for (Value operand : mma->getOperands()) {
+          Operation *def = operand.getDefiningOp();
+          if (!def || !isAsyncDataProducer(def))
+            continue;
+          bool isToken =
+              isa<tessera::tile::AsyncTokenType>(operand.getType());
+          auto &flags = fromProducer[def];
+          (isToken ? flags.second : flags.first) = true;
+        }
+        for (auto &entry : fromProducer) {
+          if (entry.second.first && !entry.second.second) {
+            mma->emitOpError(
+                "WARPSPEC_MMA_NOT_TOKEN_SYNCED: tile.mma reads an async-staged "
+                "tile from a producer but has no !tile.async_token completion "
+                "edge to it — the matrix op is not gated on copy completion "
+                "(WarpSpecialization mints this edge from the mma's data "
+                "operands).");
             anyError = true;
           }
         }

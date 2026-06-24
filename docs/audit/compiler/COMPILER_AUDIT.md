@@ -1132,15 +1132,26 @@ wait/mma/yield operands stay valid SSA after the copy is lowered; the SM<90
 cp.async fallback, which has no completion-token path, refuses a token result with
 `ASYNC_COPY_TOKEN_NO_CP_ASYNC_PATH` rather than silently dropping the edge.
 `NVWGMMALowering` ignores the token operand (reads operands 0/1), and
-`NVTMADescriptor` keeps `expect=bytes` on `#tile.barrier`. So the NV path is
-token-*ready* and pinned (`warpspec_async_token.mlir` proves both the crossing and
-TMA survival). Remaining (separable): flip `WarpSpecialization` to auto-mint the
-token from each consumer mma's data-operand defining copies by default (currently
-the token is threaded when present, not synthesized), and migrate the C6
-`arrival==init` check to consume the token edge. Verified: tessera-ir
-phase2/3/6/8 lit + the new C-NV fixture, ROCm 22/22 unaffected, diagnostic
-registry (new code) + apple-value + rocm-tiling pytest (198) green, generated-doc
-drift clean.
+`NVTMADescriptor` keeps `expect=bytes` on `#tile.barrier`.
+
+`WarpSpecialization` now **auto-mints** the edge by default: from a token-less
+input it reads each consumer `tile.mma`'s data operands, mints a
+`!tile.async_token` on every producer `tile.async_copy` the mma consumes, and
+threads it as an explicit mma operand — the dependency is derived straight from
+the dataflow (no program-order guess), and the existing producer→consumer SSA
+threading carries it across the boundary. C6 legality **consumes** the edge: the
+new `WARPSPEC_MMA_NOT_TOKEN_SYNCED` invariant is the SSA *ordering* half of
+`arrival==init` — a consumer mma reading a producer's async-staged tile must also
+read a completion token from that producer (gated on copy completion by SSA), per
+producer (precise per-copy pre-warpspec, per-warp post-warpspec); `arrival==init`
+keeps the mbarrier *byte-count* half on `#tile.barrier` (the token is countless by
+design). So the NV path now both carries and verifies the edge — convergence with
+the ROCm token model is complete (NV via warpspec + mbarrier, ROCm via the
+planner + waitcnt). Verified: tessera-ir phase2/3/6/8 lit (incl.
+`warpspec_async_token.mlir` auto-mint+crossing+TMA, `warpspec_token_sync_legality.mlir`
+synced/unsynced/no-async cases), ROCm 22/22 unaffected, diagnostic registry (two
+new codes) + apple-value + rocm-tiling pytest (198) green, generated-doc drift
+clean.
 
 ## Next Work
 

@@ -62,6 +62,33 @@ static Operation *createWarpRegion(OpBuilder &b, Location loc,
   return b.create(st);
 }
 
+// Give a producer async copy a !tile.async_token result — the SSA completion
+// edge a consumer mma reads. Idempotent (returns an existing token result).
+// Results are immutable, so recreate the op with the token appended, RAUW the
+// original results, and erase the old; `copy` is updated to the new op so the
+// caller can keep its producer bookkeeping consistent. The new op is inserted at
+// the old op's position, preserving program order (and dominance over the mma).
+static Value mintAsyncToken(OpBuilder &b, Operation *&copy) {
+  auto tokTy = tile::AsyncTokenType::get(b.getContext());
+  for (Value r : copy->getResults())
+    if (r.getType() == tokTy)
+      return r;
+  b.setInsertionPoint(copy);
+  SmallVector<Type> resultTypes(copy->getResultTypes().begin(),
+                               copy->getResultTypes().end());
+  resultTypes.push_back(tokTy);
+  OperationState st(copy->getLoc(), copy->getName().getStringRef());
+  st.addOperands(copy->getOperands());
+  st.addTypes(resultTypes);
+  st.addAttributes(copy->getAttrs());
+  Operation *grown = b.create(st);
+  for (unsigned i = 0, e = copy->getNumResults(); i < e; ++i)
+    copy->getResult(i).replaceAllUsesWith(grown->getResult(i));
+  copy->erase();
+  copy = grown;
+  return grown->getResult(grown->getNumResults() - 1);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Classify ops into producer (async copy) vs consumer (compute) buckets.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,6 +221,52 @@ struct WarpSpecializationPass
 
       DenseSet<Operation *> prodSet(producerOps.begin(), producerOps.end());
       DenseSet<Operation *> consSet(consumerOps.begin(), consumerOps.end());
+
+      // ── Auto-mint the async-completion token (Phase C-NV) ─────────────────
+      // For each consumer mma, thread the !tile.async_token of every producer
+      // async_copy whose result it reads as an explicit operand. This makes the
+      // cross-region copy→mma *synchronization* dependency a first-class SSA
+      // def-use edge (the prodCross threading below then carries it across the
+      // warp boundary), not merely the data edge — the NV analogue of the ROCm
+      // token edge. The dependency is read straight off the mma's data operands
+      // (no program-order guess). Recreating a copy to add the token result is
+      // reflected back into producerOps/prodSet so later region surgery is sound.
+      for (Operation *c : consumerOps) {
+        if (c->getName().getStringRef() != "tile.mma")
+          continue;
+        // Producer copies this mma reads via a *data* operand, and the tokens it
+        // already consumes (so a pre-threaded edge is not duplicated).
+        SmallVector<Operation *> dataDeps;
+        DenseSet<Operation *> seen;
+        DenseSet<Value> haveTokens;
+        for (Value operand : c->getOperands()) {
+          Operation *def = operand.getDefiningOp();
+          if (!def || !prodSet.contains(def))
+            continue;
+          if (isa<tile::AsyncTokenType>(operand.getType())) {
+            haveTokens.insert(operand);
+          } else if (def->getName().getStringRef() == "tile.async_copy" &&
+                     seen.insert(def).second) {
+            dataDeps.push_back(def);
+          }
+        }
+        SmallVector<Value> tokens;
+        for (Operation *def : dataDeps) {
+          Operation *grown = def;
+          Value tok = mintAsyncToken(b, grown);
+          if (grown != def) {
+            prodSet.erase(def);
+            prodSet.insert(grown);
+            for (Operation *&p : producerOps)
+              if (p == def)
+                p = grown;
+          }
+          if (!haveTokens.contains(tok))
+            tokens.push_back(tok);
+        }
+        if (!tokens.empty())
+          c->insertOperands(c->getNumOperands(), tokens);
+      }
 
       // ── Cross-boundary value flow ─────────────────────────────────────────
       // producer→consumer: producer results that consumer ops read.  These must

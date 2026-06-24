@@ -79,6 +79,21 @@ def is_archive_path(path: Path) -> bool:
     return "archive" in path.parts
 
 
+# Machine-generated data archives that live under the doc tree but are extracted
+# wholesale from source (not authored prose).  Markdown-link and inline-path
+# linting produce false positives on their content — e.g. ISA pseudocode like
+# ``vgpr[4](data)`` parses as a markdown link, and archive-relative pointers like
+# ``tools/build_archive.py`` are resolved against the repo root.  Skip them
+# entirely, mirroring the ``archive`` and planning-subtree exemptions; provenance
+# is tracked via per-doc ``meta.json`` sha256 instead.
+GENERATED_DATA_SUBTREES = ("docs/reference/isa",)
+
+
+def is_generated_data_path(rel: Path) -> bool:
+    posix = rel.as_posix()
+    return any(posix == s or posix.startswith(s + "/") for s in GENERATED_DATA_SUBTREES)
+
+
 def is_planning_doc(rel: Path) -> bool:
     """True for roadmap/audit/status docs that intentionally reference paths
     which do not exist yet — these are exempt from inline-path existence linting."""
@@ -101,12 +116,14 @@ def iter_files(root: Path, scan_paths: tuple[str, ...]):
         if not path.exists():
             continue
         if path.is_file():
-            if not is_archive_path(path.relative_to(root)) and is_text_file(path):
+            rel = path.relative_to(root)
+            if not is_archive_path(rel) and not is_generated_data_path(rel) and is_text_file(path):
                 yield path
             continue
         for candidate in path.rglob("*"):
             rel = candidate.relative_to(root)
-            if candidate.is_file() and not is_archive_path(rel) and is_text_file(candidate):
+            if (candidate.is_file() and not is_archive_path(rel)
+                    and not is_generated_data_path(rel) and is_text_file(candidate)):
                 yield candidate
 
 

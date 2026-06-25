@@ -2053,17 +2053,19 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
 # Stage-L3 spine) and launches it via HIP. f16/bf16 storage, f32 accumulate;
 # square head dim. ONE hsaco per (head_dim, chip, dtype, feature_map) — cached.
 # ─────────────────────────────────────────────────────────────────────────────
-#: hsaco bytes keyed by (head_dim, chip, dtype, feature_map).
-_rocm_la_hsaco_cache: dict[tuple[int, str, str, str], bytes] = {}
+#: hsaco bytes keyed by (head_dim, chip, dtype, feature_map, decay).
+_rocm_la_hsaco_cache: dict[tuple[int, str, str, str, bool], bytes] = {}
 
 
 def _build_compiled_linear_attn_hsaco(head_dim: int, dtype: str = "f16",
-                                      feature_map: str = "identity") -> bytes:
+                                      feature_map: str = "identity",
+                                      decay: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA linear-attention forward kernel
     to hsaco, in-process via tessera-opt. Cached per (head_dim, chip, dtype,
-    feature_map)."""
+    feature_map, decay). decay=True emits the decay-masked variant (trailing
+    f32 log λ arg; lightning_attention / retention)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, feature_map)
+    key = (head_dim, chip, dtype, feature_map, decay)
     cached = _rocm_la_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -2071,11 +2073,13 @@ def _build_compiled_linear_attn_hsaco(head_dim: int, dtype: str = "f16",
     if opt is None:
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm linear_attn lane")
-    fm_attr = f', feature_map = "{feature_map}"' if feature_map != "identity" else ""
+    fm_attr = (f', feature_map = "{feature_map}"'
+               if feature_map != "identity" else "")
+    decay_attr = ", decay = true" if decay else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.linear_attn"() {name = "la", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{fm_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{fm_attr}{decay_attr}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -2168,12 +2172,24 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
     kwargs = op.get("kwargs") or {}
     causal = 1 if bool(kwargs.get("causal", True)) else 0
     feature_map = str(kwargs.get("feature_map") or "identity")
-    if feature_map not in ("identity", "relu"):
+    if feature_map not in ("identity", "relu", "polynomial_2"):
         raise ValueError(
-            "rocm linear_attn feature_map must be identity or relu; got "
-            f"{feature_map!r}")
+            "rocm linear_attn feature_map must be identity, relu, or "
+            f"polynomial_2; got {feature_map!r}")
+    # Decay-masked variants (lightning_attention / retention): per-head λ as a
+    # scalar `decay` (λ) or `log_decay` (log λ). A[i,j] *= λ^(i-j) over the band.
+    log_g = kwargs.get("log_decay")
+    if log_g is None and kwargs.get("decay") is not None:
+        lam = float(kwargs["decay"])
+        if lam <= 0.0:
+            raise ValueError(
+                f"rocm linear_attn decay (λ) must be > 0; got {lam}")
+        log_g = float(np.log(lam))
+    has_decay = log_g is not None
+    log_decay = float(log_g) if log_g is not None else 0.0
 
-    hsaco = _build_compiled_linear_attn_hsaco(head_dim, dtype_tag, feature_map)
+    hsaco = _build_compiled_linear_attn_hsaco(
+        head_dim, dtype_tag, feature_map, decay=has_decay)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -2209,6 +2225,8 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
     launch_args = (_mr(dq, nq) + _mr(dk, nkv) + _mr(dv, nkv) + _mr(do, nq)
                    + [ctypes.c_int64(sq), ctypes.c_int64(sk),
                       ctypes.c_int64(causal)])
+    if has_decay:  # decay kernel's trailing f32 log λ arg
+        launch_args += [ctypes.c_float(log_decay)]
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)

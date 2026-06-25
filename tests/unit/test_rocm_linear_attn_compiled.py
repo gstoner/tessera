@@ -31,15 +31,16 @@ def _la_or_skip():
     return rt
 
 
-def _artifact(rt, causal, feature_map):
+def _artifact(rt, causal, feature_map, log_decay=None):
+    kwargs = {"causal": bool(causal), "feature_map": feature_map}
+    if log_decay is not None:
+        kwargs["log_decay"] = float(log_decay)
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_linear_attn_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": ["q", "k", "v"], "output_name": "o",
         "ops": [{"op_name": "tessera.linear_attn", "result": "o",
-                 "operands": ["q", "k", "v"],
-                 "kwargs": {"causal": bool(causal),
-                            "feature_map": feature_map}}],
+                 "operands": ["q", "k", "v"], "kwargs": kwargs}],
     })
 
 
@@ -48,32 +49,38 @@ def _fmap(x, name):
         return x
     if name == "relu":
         return np.maximum(x, 0.0)
+    if name == "polynomial_2":
+        return x * x
     raise AssertionError(name)
 
 
-def _linear_attn_ref(q, k, v, causal, feature_map):
-    """Canonical reference: O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V, Q/K/V [B,H,S,D]."""
+def _linear_attn_ref(q, k, v, causal, feature_map, log_decay=None):
+    """Canonical reference: O = (φ(Q)φ(K)ᵀ ⊙ tril [⊙ λ^(i-j)]) @ V, [B,H,S,D].
+    With log_decay set, the decay mask λ^(i-j) is applied over the causal band
+    (the per-head-constant case of the reference's dc[i]/dc[j] ratio)."""
     B, H, Sq, D = q.shape
     Sk = k.shape[2]
     phiQ = _fmap(q.astype(np.float64), feature_map)
     phiK = _fmap(k.astype(np.float64), feature_map)
+    i = np.arange(Sq)[:, None]
+    j = np.arange(Sk)[None, :]
     o = np.zeros((B, H, Sq, D), np.float64)
     for b in range(B):
         for h in range(H):
             A = phiQ[b, h] @ phiK[b, h].T               # [Sq, Sk]
+            if log_decay is not None:
+                A = A * np.exp((i - j) * float(log_decay))   # λ^(i-j)
             if causal:
-                i = np.arange(Sq)[:, None]
-                j = np.arange(Sk)[None, :]
                 A = np.where(j > i, 0.0, A)              # multiplicative tril
             o[b, h] = A @ v[b, h].astype(np.float64)
     return o.astype(np.float32)
 
 
-@pytest.mark.parametrize("feature_map", ["identity", "relu"])
+@pytest.mark.parametrize("feature_map", ["identity", "relu", "polynomial_2"])
 @pytest.mark.parametrize("causal", [True, False])
 @pytest.mark.parametrize("D,B,H,S", [
     (16, 1, 2, 32),
-    (16, 1, 1, 48),    # ragged (48 not a multiple of... is; use 40 below too)
+    (16, 1, 1, 48),
     (64, 2, 2, 32),
     (16, 1, 1, 40),    # ragged S (not a multiple of 16)
 ])
@@ -96,6 +103,33 @@ def test_launch_linear_attn_matches_numpy(feature_map, causal, D, B, H, S):
     assert maxerr < 3e-2, (
         f"linear_attn fmap={feature_map} causal={causal} {B}x{H}x{S}x{D} "
         f"maxerr={maxerr}")
+
+
+@pytest.mark.parametrize("feature_map,lam", [
+    ("identity", 0.9),       # lightning_attention
+    ("identity", 0.95),
+    ("polynomial_2", 0.9),   # (degree-2) retention
+])
+@pytest.mark.parametrize("D,S", [(16, 32), (64, 48), (16, 40)])
+def test_launch_decay_matches_numpy(feature_map, lam, D, S):
+    """Decay-masked variants: A[i,j] *= λ^(i-j) over the causal band — matches
+    the reference's per-head-constant dc[i]/dc[j] ratio."""
+    rt = _la_or_skip()
+    B, H = 1, 2
+    log_decay = float(np.log(lam))
+    rng = np.random.default_rng(31 + D + S + int(lam * 100))
+    q = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+
+    res = rt.launch(_artifact(rt, True, feature_map, log_decay), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    out = res["output"].reshape(B, H, S, D)
+
+    ref = _linear_attn_ref(q, k, v, True, feature_map, log_decay)
+    maxerr = float(np.max(np.abs(out - ref)))
+    assert maxerr < 3e-2, (
+        f"decay fmap={feature_map} λ={lam} {S}x{D} maxerr={maxerr}")
 
 
 def test_causal_differs_from_full():

@@ -5,9 +5,10 @@ gfx1151): here we only run ``generate-wmma-linear-attn-kernel`` (+ ROCDL
 lowering) via tessera-opt and check structure, so CI without a GPU still gates
 the codegen:
 
-  * the kernel takes 7 args (Q,K,V,O,Sq,Sk,causal) — no scale, no softmax stats;
-  * it emits NO ``math.exp`` (the linear form has no softmax);
-  * ``feature_map="relu"`` emits ``arith.maximumf`` (φ on the loaded fragments);
+  * the base kernel takes 7 args (Q,K,V,O,Sq,Sk,causal) — no scale/softmax;
+  * the base form emits NO ``math.exp`` (no softmax);
+  * ``feature_map="relu"`` emits ``arith.maximumf`` (φ on the loaded frags);
+  * ``decay=true`` appends a trailing f32 (log λ) arg + emits ``math.exp``;
   * an unknown feature_map is a named error;
   * the kernel lowers cleanly to ROCDL (``rocdl.wmma``).
 """
@@ -24,11 +25,13 @@ REPO = Path(__file__).resolve().parents[2]
 TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
-def _directive(feature_map="identity", dtype="f16"):
-    fm = f', feature_map = "{feature_map}"' if feature_map != "identity" else ""
+def _directive(feature_map="identity", dtype="f16", decay=False):
+    fm = (f', feature_map = "{feature_map}"'
+          if feature_map != "identity" else "")
+    dc = ", decay = true" if decay else ""
     return (
         'module {\n  "tessera_rocm.linear_attn"() {name = "la", '
-        f'head_dim = 64 : i64, dtype = "{dtype}"{fm}}} : () -> ()\n}}\n')
+        f'head_dim = 64 : i64, dtype = "{dtype}"{fm}{dc}}} : () -> ()\n}}\n')
 
 
 def _opt(directive, *passes):
@@ -57,6 +60,28 @@ def test_signature_is_seven_args_no_softmax():
 def test_relu_feature_map_emits_maximumf():
     assert "arith.maximumf" not in _gen(_directive("identity"))
     assert "arith.maximumf" in _gen(_directive("relu"))
+
+
+def test_polynomial_2_is_accepted():
+    # poly2 (x²) is a valid feature map (retention); just must not error.
+    r = _opt(_directive("polynomial_2"), "--generate-wmma-linear-attn-kernel")
+    assert r.returncode == 0, r.stderr
+
+
+def _sig_args(ir):
+    m = re.search(r"gpu\.func @la\(([^)]*)\)", ir)
+    assert m, "no gpu.func @la signature"
+    return [a.strip() for a in m.group(1).split(",") if a.strip()]
+
+
+def test_decay_appends_f32_arg_and_emits_exp():
+    base = _gen(_directive())
+    dec = _gen(_directive(decay=True))
+    assert len(_sig_args(base)) == 7
+    da = _sig_args(dec)
+    assert len(da) == 8 and da[-1].endswith("f32"), da
+    assert "math.exp" not in base       # base linear form has no softmax/decay
+    assert "math.exp" in dec            # decay = exp((i-j)·log λ)
 
 
 def test_unknown_feature_map_is_named_error():

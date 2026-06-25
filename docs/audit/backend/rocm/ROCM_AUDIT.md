@@ -217,17 +217,28 @@ become the on-silicon **oracle** the compiled path validates against.
 
 ## Still Open
 
-- **Other GEMM-family / attention ops on RDNA remain artifact_only** beyond
-  matmul + flash_attn (CDNA MFMA shape, HIP execution gated): `multi_head_
-  attention`, `gqa/mqa`, the fused chains, etc. The named ROCm sub-arches
-  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
-  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the box's
-  own arch) is listed there too so the classification is total (no silent
-  `lookup() -> None`).
+- **Compiler-generated attention family on gfx1151:** matmul, flash_attn
+  (fwd+bwd), and now **GQA/MQA** (2026-06-24) all execute. GQA = flash_attn with
+  the `gqa = true` directive attr: H query heads share G<H KV heads (query head h
+  reads KV head h/kv_ratio, kv_ratio=H/G; =1 MHA, =H MQA), via two trailing
+  runtime args + a grouped K/V base. Same FA-2 WMMA body; validated vs a numpy
+  GQA reference across MQA / GQA / MHA-equivalence, causal+non-causal
+  (`tests/unit/test_rocm_gqa_compiled.py`). `multi_head_attention` is the
+  flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
+- **Other ops on RDNA remain artifact_only** beyond matmul + the attention
+  family (CDNA MFMA shape, HIP execution gated): the fused chains, etc. The named
+  ROCm sub-arches (gfx90a/942/950/1100/1151/1200) stay in
+  `_UNIMPLEMENTED_TARGETS` — the generic `rocm` lane covers execution via HIPRTC
+  for the live device; gfx1151 (the box's own arch) is listed there too so the
+  classification is total (no silent `lookup() -> None`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
-  with measured perf ladders (item 10). Still open: a `runtime.launch()`
-  executor-table lane, and the backward perf optimizations (WMMA logsumexp
-  pre-pass, causal tile-skip, pipelining).
+  with measured perf ladders, reachable through `runtime.launch()` (the
+  `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×
+  bwd), causal tile-skip (~1.7× causal bwd), forward sQ-drop + rescale-fusion
+  (~1.7× fwd). Remaining (measured low-value): KV-tile pipelining — the kernels
+  are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
+  runnable `async_copy` that would enable it now exists (#101) for when a
+  staging-bound kernel appears.
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder

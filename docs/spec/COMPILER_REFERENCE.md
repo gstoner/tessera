@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-16
+last_updated: 2026-06-25
 ---
 
 # Tessera Compiler Reference
@@ -31,7 +31,7 @@ Schedule IR (schedule.mesh.*, pipeline regions, stages, tiling structure)
      v  [python/tessera/compiler/tile_ir.py, tile lowering, backend lowering]
 Tile IR     (tile.*, tessera.attn.* FA-4 ops, tessera.queue.* barriers)
      |
-     v  [python/tessera/compiler/target_ir.py for CPU/NVIDIA/Apple/ROCm artifact paths]
+     v  [python/tessera/compiler/target_ir.py — per-backend lowering: CPU/NVIDIA/Apple/ROCm]
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 ```
 
@@ -40,7 +40,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 | Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; Matmul TilingInterface conservative path implemented, Conv2D interface scaffolded |
 | Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / lit-testable |
 | Tile IR | `python/tessera/compiler/tile_ir.py`, `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
-| Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | CPU/NVIDIA/Apple/ROCm artifact paths implemented / lit-testable |
+| Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | implemented / lit-testable for CPU/NVIDIA/Apple/ROCm; hardware-runtime lanes exist for CPU (JIT), Apple CPU/GPU, ROCm gfx1151 (RDNA3.5 WMMA), and NVIDIA sm_120 (consumer Blackwell mma.sync) |
 
 ---
 
@@ -49,8 +49,9 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 | Pipeline or target path | Source | Coverage | Status |
 |-------------------------|--------|----------|--------|
 | `tessera-lower-to-x86` | `src/transforms/lib/Passes.cpp`, `src/transforms/lib/TileToX86Pass.cpp` | `tests/tessera-ir/phase2/`, `tests/unit/test_lowering_chain.py` | implemented |
-| `tessera-lower-to-gpu` | `src/transforms/lib/TileIRLoweringPass.cpp`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` | `tests/tessera-ir/phase3/`, GPU target unit tests | implemented / lit-testable |
-| `tessera-lower-to-rocm` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | ROCm backend tests and target-contract tests | implemented / lit-testable / artifact-only |
+| `tessera-lower-to-gpu` (NVIDIA SM90 WGMMA/TMA) | `src/transforms/lib/TileIRLoweringPass.cpp`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` | `tests/tessera-ir/phase3/`, GPU target unit tests | implemented / lit-testable (SM90 WGMMA has no hardware-execution proof yet — distinct from the sm_120 mma.sync lane below) |
+| NVIDIA sm_120 `mma.sync` GEMM (consumer Blackwell) | `python/tessera/compiler/ptx_emit.py`, `src/runtime/` (`libtessera_nvidia_gemm.so`), `python/tessera/runtime.py` (`nvidia_mma` executor) | `runtime_execution_matrix` `nvidia_sm120` row; NVIDIA execute-compare tests | implemented / hardware-runtime on capable sm_120 hosts via the warp-level `mma.sync` GEMM (NVRTC-compiled; f16/bf16/tf32-math, f32 accum) — first hardware-verified NVIDIA `backend_kernel` |
+| `tessera-lower-to-rocm` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `python/tessera/compiler/matmul_pipeline.py` | ROCm backend tests + target-contract tests + execute-compare tests (`tests/unit/test_rocm_*_compiled.py`) | implemented / lit-testable / hardware-runtime on capable gfx1151 (RDNA3.5) hosts via HIP — WMMA matmul (incl. fused bias/relu/gelu/silu epilogue) + the attention family (flash_attn fwd/bwd, GQA/MQA, sliding-window, logit-softcap, linear_attn incl. lightning/retention) |
 | `tessera-lower-to-apple_cpu` / `tessera-lower-to-apple_cpu-runtime` | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_cpu_lowering.mlir`, Apple CPU runtime tests | implemented / lit-testable / hardware-runtime via Accelerate + BNNS |
 | `tessera-lower-to-apple_gpu` / `tessera-lower-to-apple_gpu-runtime` | `python/tessera/compiler/target_ir.py`, `python/tessera/apple_mlpkg.py`, `python/tessera/compiler/apple_packaged_manifest.py`, `src/compiler/codegen/Tessera_Apple_Backend/` | `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/apple_gpu_lowering.mlir`, Apple GPU runtime and packaged-ML tests | implemented / lit-testable / hardware-runtime on capable Darwin hosts |
 | Solver and resilience pipelines | `src/solvers/` | `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` | implemented / lit-testable |
@@ -146,12 +147,12 @@ complete interface coverage.
 |-------|----------------|-------------------------|
 | Phase 1 | implemented | Python frontend, Graph IR, constraints, effects, distributed shape APIs; `tests/unit/test_constraints.py`, `test_effects.py`, `test_graph_ir.py` |
 | Phase 2 | implemented | x86/CPU lowering spine; `src/transforms/`, `tests/tessera-ir/phase2/` |
-| Phase 3 | implemented / lit-testable | NVIDIA SM90+ target artifacts, FA-4 and queue dialects; `tests/tessera-ir/phase3/` |
+| Phase 3 | implemented / lit-testable; sm_120 hardware-runtime | NVIDIA SM90+ target artifacts (lit-testable), FA-4 and queue dialects; the sm_120 `mma.sync` GEMM additionally executes on consumer Blackwell hardware; `tests/tessera-ir/phase3/` |
 | Phase 4 | implemented / scaffolded / lit-testable | collectives, cyclic distribution, distributed planners; `tests/tessera-ir/phase4/`, distributed unit tests |
 | Phase 5 | implemented / lit-testable | checkpointing, optimizer shard, Bayesian/autotune foundations, sparse/RNG/solver passes; `src/solvers/`, `tests/tessera-ir/phase5/` |
 | Phase 6 | mock-runtime / hardware-runtime where C runtime is built | runtime C ABI, Python runtime wrapper, diagnostics, benchmark smoke; `src/runtime/`, `python/tessera/runtime.py`, `tests/tessera-ir/phase6/` |
 | Phase 7 | implemented / lit-testable | neighbors dialect and halo/stencil passes; `src/compiler/tessera_neighbors/`, `tests/tessera-ir/phase7/` |
-| Phase 8 | implemented / lit-testable for Apple and ROCm artifacts | hardware-free Target IR and Apple/ROCm contracts; `python/tessera/compiler/target_ir.py`, `tests/unit/test_target_ir.py`, `tests/tessera-ir/phase8/`, `src/compiler/codegen/` |
+| Phase 8 | implemented / lit-testable; Apple + ROCm gfx1151 hardware-runtime | hardware-free Target IR and Apple/ROCm contracts; Apple CPU/GPU and ROCm gfx1151 (WMMA matmul + attention family) additionally execute on hardware; `python/tessera/compiler/target_ir.py`, `tests/unit/test_target_ir.py`, `tests/unit/test_rocm_*_compiled.py`, `tests/tessera-ir/phase8/`, `src/compiler/codegen/` |
 
 ---
 
@@ -167,7 +168,8 @@ aliases handled by `python/tessera/compiler/matmul_pipeline.py`.
 | `GPUTargetProfile(ISA.SM_80)` | `nvidia_sm80` | artifact target |
 | `GPUTargetProfile(ISA.SM_90)` | `nvidia_sm90` | implemented / lit-testable |
 | `GPUTargetProfile(ISA.SM_100)` | `nvidia_sm100` | artifact target |
-| `"rocm"`, `"amd"`, `"hip"` | `rocm` | implemented / lit-testable / artifact-only |
+| `GPUTargetProfile(ISA.SM_120)` | `nvidia_sm120` | implemented / hardware-runtime on capable sm_120 (consumer Blackwell, RTX 50-series) hosts via the warp-level `mma.sync` GEMM (also reachable by stamping `compiler_path="nvidia_mma"`) |
+| `"rocm"`, `"amd"`, `"hip"` | `rocm` | implemented / lit-testable / hardware-runtime on capable gfx1151 (RDNA3.5) hosts via HIP — WMMA matmul + attention family |
 | `"apple_cpu"`, `"macos_cpu"`, `"m_series_cpu"` | `apple_cpu` | implemented / lit-testable / hardware-runtime via Accelerate + BNNS where available |
 | `"apple_gpu"` | `apple_gpu` | implemented / lit-testable / hardware-runtime on capable Darwin hosts; packaged `.mtlpackage` execution is capability-gated |
 

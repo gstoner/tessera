@@ -57,6 +57,15 @@ _REFERENCE_STATUS = "reference"
 _ARTIFACT_STATUS = "artifact_only"
 _COMPILEABLE_STATUS = "compileable"   # Sprint G/H follow-up: passes ptxas/hipcc
 _PLANNED_STATUS = "planned"
+# 2026-06-25 — a rung BELOW ``hardware_verified`` for kernels that EXECUTE on
+# real hardware via ``runtime.launch()`` but ship as a COMPILER-GENERATED hsaco
+# (tessera-opt → ROCDL → hsaco, loaded + launched in-process), NOT as a standalone
+# C-ABI ``runtime_symbol`` in a shipped ``.so``. It still requires a checked-in
+# ``execute_compare_fixture`` (the numerical proof) — only the C-symbol half of
+# the ``hardware_verified`` contract is absent. This is the honest status for the
+# ROCm compiled-lane attention/epilogue family (rocm_*_compiled executors): the
+# kernel is real and verified on gfx1151, but there is no shipped C entry point.
+_COMPILED_STATUS = "compiled"
 # PK5 (2026-05-31) — Apple Metal `.mtlpackage` packaged kernel. The
 # kernel ships as a pre-compiled Metal package (output of Core ML
 # Tools / Xcode); Tessera loads it at runtime via PK1's
@@ -84,6 +93,7 @@ _VALID_STATUSES = frozenset({
     _ARTIFACT_STATUS,
     _COMPILEABLE_STATUS,
     _PLANNED_STATUS,
+    _COMPILED_STATUS,
     _HARDWARE_VERIFIED_STATUS,
     _PACKAGED_STATUS,
 })
@@ -408,6 +418,20 @@ class BackendKernelEntry:
                     f"target={self.target!r}, runtime_symbol="
                     f"{self.runtime_symbol!r}"
                 )
+
+        # 2026-06-25 — ``compiled`` contract. The kernel executes on hardware via
+        # runtime.launch() as a compiler-generated hsaco (no shipped C-ABI
+        # symbol), so unlike ``hardware_verified`` it does NOT require a
+        # ``runtime_symbol`` — but it MUST still carry the numerical-proof
+        # ``execute_compare_fixture`` (the kernel really runs + matches a
+        # reference), else it's no better than ``compileable``.
+        if self.status == _COMPILED_STATUS and not self.execute_compare_fixture:
+            raise ValueError(
+                f"status='compiled' requires execute_compare_fixture to point "
+                f"at a Python test that numerically validates the "
+                f"compiler-generated kernel on hardware; got "
+                f"target={self.target!r}"
+            )
 
         # PK5 (2026-05-31) — packaged-kernel contract. Status
         # ``packaged`` means "this kernel ships as an `.mtlpackage`
@@ -816,6 +840,70 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Compiler-generated executing lane (2026-06-25) — ROCm ops promoted to
+# ``compiled``. These execute on gfx1151 via ``runtime.launch()`` as a
+# COMPILER-GENERATED hsaco (tessera-opt → ROCDL → hsaco, loaded + launched
+# in-process), each with a checked-in ``execute_compare_fixture`` — but NO
+# shipped C-ABI ``runtime_symbol``, so they are a rung below ``hardware_verified``
+# (which matmul/flash_attn earn via their shipped libtessera_rocm_*.so symbols).
+#
+# Honesty (Decision #25): these are the compiled-lane CAPABILITIES proven on the
+# box. The flash_attn-family rows (gqa/mqa/mha/sliding-window) are realized by the
+# flash_attn kernel with directive attrs (+ the runtime detects/forwards them);
+# fused_epilogue is the matmul kernel + a fused bias/activation epilogue; the
+# linear-attn family (linear_attn/lightning_attention/retention) is the dedicated
+# linear-attn kernel dispatched by op name. Soft-capping is a flash_attn attr with
+# no standalone op row, so it is covered by the flash_attn row, not listed here.
+# ─────────────────────────────────────────────────────────────────────────────
+_ROCM_COMPILED: dict[str, dict[str, Any]] = {
+    "gqa_attention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "GQA/MQA via the flash_attn WMMA kernel (gqa directive attr; "
+                 "fwd+bwd, grouped K/V; runtime detects from operand shapes). "
+                 "Executes on gfx1151 via runtime.launch() (rocm_flash_attn_"
+                 "compiled); no shipped C-ABI symbol.",
+    },
+    "mqa_attention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Multi-query attention = the GQA flash_attn kernel at "
+                 "kv_ratio=H (one shared KV head). Executes via runtime.launch().",
+    },
+    "multi_head_attention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Full multi-head = the flash_attn WMMA kernel itself. Executes "
+                 "via runtime.launch() (rocm_flash_attn_compiled).",
+    },
+    "attn_sliding_window": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Mistral sliding-window via the flash_attn WMMA kernel "
+                 "(sliding_window attr, causal band of width W; KV-tile skip). "
+                 "Executes via runtime.launch() (window kwarg).",
+    },
+    "linear_attn": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Quadratic-parallel linear attention O=(φ(Q)φ(K)ᵀ⊙causal)@V, no "
+                 "softmax (dedicated generate-wmma-linear-attn-kernel). φ ∈ "
+                 "{identity,relu,polynomial_2}. Executes via runtime.launch() "
+                 "(rocm_linear_attn_compiled).",
+    },
+    "lightning_attention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Decay-masked linear attention (φ=identity, A[i,j]*=λ^(i-j)) via "
+                 "the linear-attn kernel, dispatched by op name. Executes via "
+                 "runtime.launch(). (Degree-2 retention — φ=x² + decay — shares "
+                 "this kernel via op-name dispatch but has no separate rocm op "
+                 "row.)",
+    },
+    "fused_epilogue": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Matmul + fused bias/relu/gelu/silu epilogue on the f32 "
+                 "accumulator (generate-wmma-gemm-kernel). Executes via "
+                 "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Consumer-Blackwell bring-up (2026-06-25) — NVIDIA ops promoted to
 # ``hardware_verified`` on sm_120 (RTX 5070 Ti, CC 12.0, CUDA 13.3).
 #
@@ -897,6 +985,19 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
     # `hardware_verified` row — the second op after matmul to execute on ROCm.
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
+    # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
+    # via runtime.launch(), each compared to a numpy reference on gfx1151. These
+    # back the ``compiled`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
+    ("gqa_attention", "rocm"): "tests/unit/test_rocm_gqa_compiled.py",
+    ("mqa_attention", "rocm"): "tests/unit/test_rocm_gqa_compiled.py",
+    ("multi_head_attention", "rocm"): "tests/unit/test_rocm_flash_attn_compiled.py",
+    ("attn_sliding_window", "rocm"):
+        "tests/unit/test_rocm_sliding_window_compiled.py",
+    ("linear_attn", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
+    ("lightning_attention", "rocm"):
+        "tests/unit/test_rocm_linear_attn_compiled.py",
+    ("fused_epilogue", "rocm"):
+        "tests/unit/test_rocm_fused_epilogue_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a
@@ -2352,6 +2453,21 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             runtime_symbol=rocm_hv["runtime_symbol"],
             execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
             shape_envelope=rocm_hv.get("shape_envelope"),
+            hipcc_version_min="7.2.4",
+            expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+        ))
+    elif (rocm_c := _ROCM_COMPILED.get(op_name)) is not None:
+        # Compiler-generated executing lane: runs on gfx1151 via runtime.launch()
+        # as an hsaco (no C-ABI symbol), with a checked-in execute_compare_fixture
+        # — status ``compiled`` (a rung below the C-symbol hardware_verified).
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_COMPILED_STATUS,
+            dtypes=tuple(rocm_c["dtypes"]),
+            feature_flags=tuple(rocm_c.get("feature_flags", ("wmma",))),
+            notes=str(rocm_c.get("notes", "")),
+            execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
+            shape_envelope=rocm_c.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
         ))

@@ -114,10 +114,23 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     (kv_ratio = H/G; 1 = MHA, H = MQA). In gqa mode the kernel gains two trailing
     runtime args (`heads` = H, `kv_ratio`) and reads K/V as `[b,G,s,d]` from the
     grouped head index `b*G + h/kv_ratio`. Same FA-2 WMMA body otherwise.
+
+    `sliding_window` (default false) selects Mistral-style sliding-window
+    attention: query position p attends only to keys in `(p - W, p]` — a causal
+    band of width W (the trailing runtime arg, after the gqa args when both are
+    set). A windowed kernel is implicitly causal; it skips KV tiles entirely
+    below the window's lower edge and the per-element mask trims the boundary.
+
+    `logit_softcap` (default false) selects Gemma-2-style attention logit
+    soft-capping: each scaled score is passed through `cap * tanh(S / cap)`
+    before masking + softmax, bounding the logits to `(-cap, cap)`. `cap` is the
+    trailing runtime arg (after the gqa and window args when those are set).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
-                       DefaultValuedAttr<BoolAttr, "false">:$gqa);
+                       DefaultValuedAttr<BoolAttr, "false">:$gqa,
+                       DefaultValuedAttr<BoolAttr, "false">:$sliding_window,
+                       DefaultValuedAttr<BoolAttr, "false">:$logit_softcap);
   let assemblyFormat = "attr-dict";
 }
 
@@ -160,6 +173,46 @@ def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$gqa);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
+  let summary = "Linear-attention forward (quadratic-parallel form) as a WMMA kernel";
+  let description = [{
+    The directive the `generate-wmma-linear-attn-kernel` pass expands into a
+    fragment-materialized RDNA WMMA **linear-attention forward** kernel — the
+    quadratic-parallel form `O = (φ(Q) φ(K)ᵀ ⊙ causal) @ V`. Unlike flash
+    attention there is **no softmax** (no running max / exp / normalization): the
+    score matrix `A = φ(Q)φ(K)ᵀ` is masked **multiplicatively** (masked entries
+    → 0, not −∞) and `O += A @ V` accumulates directly. One wave per (16-query
+    tile, b*h): for each 16-key tile up to the causal/ragged limit, compute
+    `A = φ(Q)@φ(K)ᵀ` (WMMA over head-dim chunks), apply the causal/ragged mask,
+    stage `A` in LDS, then accumulate `O += A@V` (WMMA, the same LDS layout
+    bridge flash attention uses). No final divide.
+
+    `feature_map` (default `"identity"`) is the elementwise φ applied to Q and K
+    before the QKᵀ, on the loaded fragment: `"identity"` (no-op), `"relu"`
+    (max(x,0)), or `"polynomial_2"` (x²). This matches the canonical reference
+    `O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V` (`_apple_gpu_dispatch_linear_attn`).
+
+    `decay` (default false) selects the **decay-masked** variants
+    (lightning_attention / retention): the score `A[i,j]` is additionally scaled
+    by `λ^(i-j)` over the causal band (RetNet/lightning per-head exponential
+    decay). `λ` is supplied as its log — a trailing f32 runtime arg `log_decay` —
+    and the kernel applies `A[i,j] *= exp((i-j)·log_decay)` for kept entries.
+    With `feature_map="identity"` this is lightning_attention; with
+    `"polynomial_2"` it is (degree-2) retention. Matches the reference's
+    `ratio[i,j] = dc[i]/dc[j]` decay mask for a per-head-constant decay.
+
+    `head_dim` (a multiple of 16) is the compile-time D — query/key and value
+    head dim are assumed equal (square). B/H/S/causal are runtime kernel args;
+    `dtype` is the f16/bf16 storage (f32 accumulate). Q/K/V are `[b,h,s,d]`
+    row-major; O is f32.
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<StrAttr, "\"identity\"">:$feature_map,
+                       DefaultValuedAttr<BoolAttr, "false">:$decay);
   let assemblyFormat = "attr-dict";
 }
 

@@ -26,7 +26,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `AUTODIFF_SPEC.md` | - | 2026-05-09 | 47 | ✓ |
 | `CITL_ROCM_TRACE_PROFILER_SPEC.md` | Draft | 2026-05-01 | 55 | ✓ |
 | `CLIFFORD_SPEC.md` | - | 2026-05-17 | 39 | ✓ |
-| `COMPILER_REFERENCE.md` | Normative | 2026-06-16 | 9 | ✓ |
+| `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 0 | ✓ |
 | `CONFORMANCE.md` | Normative | 2026-06-11 | 14 | ✓ |
 | `EBM_SPEC.md` | - | 2026-05-16 | 40 | ✓ |
 | `GA_EBM_EXECUTION_STATUS.md` | - | 2026-05-17 | 39 | ✓ |

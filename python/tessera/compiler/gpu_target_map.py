@@ -302,15 +302,18 @@ def render_markdown(target: str) -> str:
         f"(``docs/audit/generated/apple_target_map.md``); pulled from "
         f"``capabilities[{target!r}]`` + ``backend_manifest._{family.upper()}_ARTIFACT``.",
         "",
-        f"**Status story today:** every {family} row is at "
+        f"**Status story today:** most {family} rows are at "
         f"``artifact_only`` or ``planned`` — IR/PTX artifact emission "
-        f"is in tree, but hardware execution is gated on the next "
-        f"hardware bring-up sprint (Phase G for NVIDIA, Phase H for "
-        f"ROCm).  When a row moves to ``compileable`` / ``executable`` "
-        f"/ ``fused``, ``release_gate.py --target={target}`` gains the "
-        f"target-specific gates (canonical native dispatch, "
-        f"per-target benchmarks, hardware-marked tests) the same way "
-        f"``--target=apple_gpu`` does today.",
+        f"is in tree, but hardware execution is gated on the bring-up "
+        f"sprint (Phase G for NVIDIA, Phase H for ROCm).  The rows that "
+        f"have been proven on real hardware carry an execution rung: "
+        f"``hardware_verified`` (a shipped C-ABI ``runtime_symbol`` + a "
+        f"numerical fixture) or ``compiled`` (a compiler-generated hsaco "
+        f"that executes via ``runtime.launch()`` + a numerical fixture, "
+        f"but no shipped C symbol).  ``release_gate.py --target={target}`` "
+        f"gains the target-specific gates (canonical native dispatch, "
+        f"per-target benchmarks, hardware-marked tests) for those rows the "
+        f"same way ``--target=apple_gpu`` does today.",
         "",
         "## Status counts",
         "",
@@ -320,8 +323,8 @@ def render_markdown(target: str) -> str:
     counts: dict[str, int] = {}
     for r in rows:
         counts[r.status] = counts.get(r.status, 0) + 1
-    for status in ("fused", "compileable", "executable", "artifact_only",
-                   "reference", "planned"):
+    for status in ("hardware_verified", "compiled", "fused", "compileable",
+                   "executable", "artifact_only", "reference", "planned"):
         n = counts.get(status, 0)
         if n:
             lines.append(f"| ``{status}`` | {n} |")
@@ -353,7 +356,11 @@ def render_markdown(target: str) -> str:
     lines.append(
         "* **status** uses the same vocabulary as ``apple_target_map.md`` "
         "(``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` "
-        "/ ``planned``)."
+        "/ ``planned``), plus two execution rungs: ``hardware_verified`` (executes "
+        "on real hardware via a shipped C-ABI ``runtime_symbol`` + numerical "
+        "fixture) and ``compiled`` (executes via ``runtime.launch()`` as a "
+        "compiler-generated hsaco + numerical fixture, but NO shipped C symbol — "
+        "one rung below ``hardware_verified``)."
     )
     lines.append(
         "* **dtypes** is the per-op kernel dtype matrix — same "

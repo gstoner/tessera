@@ -1696,11 +1696,14 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
+    # `fused_epilogue` is matmul + a fused bias/activation epilogue — the same
+    # rocm_compiled GEMM kernel with the bias operand / activation kwarg — so
+    # accept that op name too (it's a `compiled` row in rocm_target_map).
     if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
-            "tessera.matmul", "tessera.gemm"):
+            "tessera.matmul", "tessera.gemm", "tessera.fused_epilogue"):
         raise ValueError(
-            "rocm_compiled executor handles exactly one matmul/gemm op; got "
-            f"{[o.get('op_name') for o in ops]!r}")
+            "rocm_compiled executor handles exactly one matmul/gemm/"
+            f"fused_epilogue op; got {[o.get('op_name') for o in ops]!r}")
     values = _bind_launch_args(args, arg_names)
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
@@ -1838,17 +1841,22 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by (head_dim, chip, dtype).
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool], bytes] = {}
 
 
 def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
-                                     gqa: bool = False) -> bytes:
+                                     gqa: bool = False,
+                                     sliding_window: bool = False,
+                                     logit_softcap: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
-    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa).
-    gqa=True emits the grouped-query variant (kernel gains heads + kv_ratio
-    runtime args, reads K/V from the grouped head)."""
+    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa,
+    sliding_window, logit_softcap). gqa=True emits the grouped-query variant
+    (kernel gains heads + kv_ratio runtime args, reads K/V from the grouped
+    head); sliding_window=True emits the windowed variant (trailing W arg, a
+    causal band of width W); logit_softcap=True emits the Gemma-2 soft-cap
+    variant (trailing f32 `cap` arg, scores → cap·tanh(S/cap) before softmax)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa)
+    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap)
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1857,10 +1865,13 @@ def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm flash_attn lane")
     gqa_attr = ", gqa = true" if gqa else ""
+    win_attr = ", sliding_window = true" if sliding_window else ""
+    cap_attr = ", logit_softcap = true" if logit_softcap else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
+        f'{gqa_attr}{win_attr}{cap_attr}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -1899,10 +1910,19 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.flash_attn":
+    # The flash-attn WMMA kernel realizes the whole multi-head family; accept the
+    # registry op names that map onto it (so a caller stamping e.g.
+    # tessera.gqa_attention actually launches, matching the `compiled` rows in
+    # rocm_target_map). GQA/MQA come from the operand shapes; the window/softcap
+    # come from kwargs. `attn_sliding_window` additionally requires a window.
+    _FA_OPS = ("tessera.flash_attn", "tessera.multi_head_attention",
+               "tessera.gqa_attention", "tessera.mqa_attention",
+               "tessera.attn_sliding_window")
+    fa_op = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or fa_op not in _FA_OPS:
         raise ValueError(
-            "rocm_flash_attn_compiled executor handles exactly one "
-            f"tessera.flash_attn op; got {[o.get('op_name') for o in ops]!r}")
+            "rocm_flash_attn_compiled executor handles exactly one of "
+            f"{_FA_OPS}; got {[o.get('op_name') for o in ops]!r}")
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 3:
@@ -1922,6 +1942,15 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     sk = int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
     bh_kv = int(np.prod(k.shape[:-2])) if k.ndim > 2 else 1
+    # V is paired with K: it must match K's batch/head, sequence length, and
+    # head dim. `sk` / `bh_kv` (from K) drive the V device allocation + copy
+    # (nkv), so a smaller V would read past the host buffer — reject, not read
+    # OOB. (Q's head dim must also equal V's, since O is shaped like Q.)
+    if (v.shape[:-2] != k.shape[:-2] or int(v.shape[-2]) != sk
+            or int(v.shape[-1]) != head_dim):
+        raise ValueError(
+            "rocm flash_attn lane requires V to match K's batch/head + sequence "
+            f"length and Q's head dim; got Q{q.shape} K{k.shape} V{v.shape}")
     # GQA/MQA: H query heads vs G<H key/value heads (the head axis is -3:
     # [...,H,S,D] / [...,G,S,D]). G != H -> grouped lane (heads + kv_ratio args);
     # G == H is plain MHA (the original 8-arg kernel).
@@ -1949,8 +1978,30 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     causal = 1 if bool(kwargs.get("causal", False)) else 0
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
+    # Sliding-window attention: a positive `window` selects a causal band of
+    # width W (query p attends to keys in (p-W, p]). The windowed kernel is
+    # implicitly causal and takes W as a trailing runtime arg.
+    window = int(kwargs.get("window") or 0)
+    if window < 0:
+        raise ValueError(
+            f"rocm flash_attn window must be a non-negative width; got {window}")
+    if fa_op == "tessera.attn_sliding_window" and window <= 0:
+        raise ValueError(
+            "tessera.attn_sliding_window requires a positive `window` width "
+            f"kwarg; got {window}")
+    sliding = window > 0
+    # Gemma-2 logit soft-capping: a positive `logit_softcap` is the cap value
+    # (scores → cap·tanh(S/cap) before softmax). 0/None disables it.
+    softcap = kwargs.get("logit_softcap")
+    softcap = float(softcap) if softcap else 0.0
+    if softcap < 0:
+        raise ValueError(
+            f"rocm flash_attn logit_softcap must be non-negative; got {softcap}")
+    has_softcap = softcap > 0
 
-    hsaco = _build_compiled_flash_attn_hsaco(head_dim, dtype_tag, gqa)
+    hsaco = _build_compiled_flash_attn_hsaco(
+        head_dim, dtype_tag, gqa, sliding_window=sliding,
+        logit_softcap=has_softcap)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -1989,6 +2040,10 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
                       ctypes.c_float(scale), ctypes.c_int64(causal)])
     if gqa:  # grouped kernel's two trailing runtime args
         launch_args += [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)]
+    if sliding:  # windowed kernel's trailing W arg (after the gqa args)
+        launch_args += [ctypes.c_int64(window)]
+    if has_softcap:  # soft-cap kernel's trailing f32 cap arg (last)
+        launch_args += [ctypes.c_float(softcap)]
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
@@ -1998,6 +2053,236 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
         for dev in (dq, dk, dv, do):
             hip.hipFree(dev)
         raise RuntimeError(f"rocm flash_attn: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
+    for dev in (dq, dk, dv, do):
+        hip.hipFree(dev)
+    return o.reshape(q.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED linear_attn lane (2026-06-25) — the quadratic-parallel form
+# O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V, NO softmax (a distinct algorithm from
+# flash_attn). ``runtime.launch()`` of an artifact stamped
+# ``compiler_path = "rocm_linear_attn_compiled"`` builds the COMPILER-GENERATED
+# kernel via the ``generate-wmma-linear-attn-kernel`` pipeline → hsaco (same
+# Stage-L3 spine) and launches it via HIP. f16/bf16 storage, f32 accumulate;
+# square head dim. ONE hsaco per (head_dim, chip, dtype, feature_map) — cached.
+# ─────────────────────────────────────────────────────────────────────────────
+#: hsaco bytes keyed by (head_dim, chip, dtype, feature_map, decay).
+_rocm_la_hsaco_cache: dict[tuple[int, str, str, str, bool], bytes] = {}
+
+
+def _build_compiled_linear_attn_hsaco(head_dim: int, dtype: str = "f16",
+                                      feature_map: str = "identity",
+                                      decay: bool = False) -> bytes:
+    """Generate + serialize the compiler's WMMA linear-attention forward kernel
+    to hsaco, in-process via tessera-opt. Cached per (head_dim, chip, dtype,
+    feature_map, decay). decay=True emits the decay-masked variant (trailing
+    f32 log λ arg; lightning_attention / retention)."""
+    chip = _rocm_chip()
+    key = (head_dim, chip, dtype, feature_map, decay)
+    cached = _rocm_la_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm linear_attn lane")
+    fm_attr = (f', feature_map = "{feature_map}"'
+               if feature_map != "identity" else "")
+    decay_attr = ", decay = true" if decay else ""
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.linear_attn"() {name = "la", '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{fm_attr}{decay_attr}}} '
+        ': () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-wmma-linear-attn-kernel,"
+        "lower-tessera-target-to-rocdl,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled linear_attn in-process "
+            f"(rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm linear_attn lane: gpu.binary was not an ELF hsaco")
+    _rocm_la_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` linear-attention family lane: run the COMPILER-
+    GENERATED WMMA kernel for the quadratic-parallel form
+    O = (φ(Q)φ(K)ᵀ ⊙ causal [⊙ λ^(i-j)]) @ V — no softmax, no normalization (a
+    distinct algorithm from flash_attn). Handles ``tessera.linear_attn`` plus its
+    decay-masked siblings ``tessera.lightning_attention`` (φ = identity + decay)
+    and ``tessera.retention`` (φ = x², degree-2, + decay), dispatched by op name
+    to a (feature_map, decay) config — all three run the same kernel. Q/K/V are
+    ``[..., S, D]`` (leading dims = B*H), square head dim. ``causal`` defaults
+    True; ``feature_map`` ∈ {identity, relu, polynomial_2}; decay via
+    ``log_decay`` / ``log_g`` (log λ) or ``decay`` (λ)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    # The lane handles linear_attn plus its decay-masked siblings, which the
+    # canonical reference (`_apple_gpu_dispatch_linear_attn`) dispatches by op
+    # name to a (feature_map, decay) config: lightning_attention = identity +
+    # decay; retention (deg 2) = polynomial_2 + decay. linear_attn takes its
+    # feature_map from the kwargs. All three run the SAME WMMA kernel.
+    _LA_OPS = ("tessera.linear_attn", "tessera.lightning_attention",
+               "tessera.retention")
+    op_short = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_short not in _LA_OPS:
+        raise ValueError(
+            "rocm_linear_attn_compiled executor handles exactly one of "
+            f"{_LA_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("linear_attn requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    q = _as_numpy(values[operand_names[0]])
+    k = _as_numpy(values[operand_names[1]])
+    v = _as_numpy(values[operand_names[2]])
+    if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
+        raise ValueError("linear_attn Q/K/V must be at least rank 2 ([...,S,D])")
+    head_dim = int(q.shape[-1])
+    if head_dim <= 0 or head_dim % 16 != 0:
+        raise ValueError(
+            "rocm linear_attn lane needs head_dim a positive multiple of 16; "
+            f"got {head_dim}")
+    # v1: square head dim (Dq == Dv) and equal Q/K/V head counts (no grouping).
+    if int(k.shape[-1]) != head_dim or int(v.shape[-1]) != head_dim:
+        raise ValueError(
+            "rocm linear_attn lane requires square head dim (Dq == Dv); got "
+            f"Q{q.shape} K{k.shape} V{v.shape}")
+    if q.shape[:-2] != k.shape[:-2] or q.shape[:-2] != v.shape[:-2]:
+        raise ValueError(
+            "rocm linear_attn lane requires equal Q/K/V batch/head dims; got "
+            f"Q{q.shape} K{k.shape} V{v.shape}")
+    # K and V are a paired key/value sequence — they MUST share the key length.
+    # `sk` (from K) drives the V device allocation + copy size (nkv), so a
+    # shorter V would otherwise read past the host buffer; reject, never read OOB.
+    if int(k.shape[-2]) != int(v.shape[-2]):
+        raise ValueError(
+            "rocm linear_attn lane requires K and V to share the sequence "
+            f"length; got K{k.shape} V{v.shape}")
+    sq = int(q.shape[-2])
+    sk = int(k.shape[-2])
+    bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+
+    if q.dtype == np.float16:
+        dtype_tag, store = "f16", np.float16
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and q.dtype == bf16:
+            dtype_tag, store = "bf16", bf16
+        else:
+            raise ValueError(
+                "rocm linear_attn lane handles f16/bf16 storage (f32 accumulate)"
+                f"; got {q.dtype}")
+
+    kwargs = op.get("kwargs") or {}
+    causal = 1 if bool(kwargs.get("causal", True)) else 0
+    # Feature map: the decay-masked siblings pin it (matching the reference);
+    # plain linear_attn takes it from the kwargs.
+    if op_short == "tessera.lightning_attention":
+        feature_map = "identity"
+    elif op_short == "tessera.retention":
+        # The kernel realizes degree-2 retention (φ = x²). The reference's
+        # deg != 2 path pre-powers Q/K, which this kernel does not do — reject
+        # rather than silently compute the wrong thing.
+        deg = int(kwargs.get("deg", 2))
+        if deg != 2:
+            raise ValueError(
+                "rocm retention lane supports degree 2 only (φ = x²); got "
+                f"deg={deg}")
+        feature_map = "polynomial_2"
+    else:  # tessera.linear_attn
+        feature_map = str(kwargs.get("feature_map") or "identity")
+    if feature_map not in ("identity", "relu", "polynomial_2"):
+        raise ValueError(
+            "rocm linear_attn feature_map must be identity, relu, or "
+            f"polynomial_2; got {feature_map!r}")
+    # Decay: per-head λ as `log_decay` / `log_g` (log λ) or `decay` (λ). The
+    # kernel applies A[i,j] *= λ^(i-j) over the causal band. Optional for all
+    # three ops (the reference applies the decay mask only when supplied).
+    log_g = kwargs.get("log_decay")
+    if log_g is None:
+        log_g = kwargs.get("log_g")          # retention's canonical decay kwarg
+    if log_g is None and kwargs.get("decay") is not None:
+        lam = float(kwargs["decay"])
+        if lam <= 0.0:
+            raise ValueError(
+                f"rocm linear_attn decay (λ) must be > 0; got {lam}")
+        log_g = float(np.log(lam))
+    has_decay = log_g is not None
+    log_decay = float(log_g) if log_g is not None else 0.0
+
+    hsaco = _build_compiled_linear_attn_hsaco(
+        head_dim, dtype_tag, feature_map, decay=has_decay)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm linear_attn: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm linear_attn: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"la") != 0:
+        raise RuntimeError("rocm linear_attn: kernel symbol 'la' not found")
+
+    qc = np.ascontiguousarray(q, dtype=store)
+    kc = np.ascontiguousarray(k, dtype=store)
+    vc = np.ascontiguousarray(v, dtype=store)
+    o = np.zeros((bh, sq, head_dim), dtype=np.float32)
+    nq, nkv = bh * sq * head_dim, bh * sk * head_dim
+    dq, dk, dv, do = (ctypes.c_void_p(), ctypes.c_void_p(),
+                      ctypes.c_void_p(), ctypes.c_void_p())
+    for dev, size in ((dq, 2 * nq), (dk, 2 * nkv), (dv, 2 * nkv), (do, 4 * nq)):
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm linear_attn: hipMalloc failed")
+    hip.hipMemcpy(dq, qc.ctypes.data_as(ctypes.c_void_p), 2 * nq, 1)
+    hip.hipMemcpy(dk, kc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
+    hip.hipMemcpy(dv, vc.ctypes.data_as(ctypes.c_void_p), 2 * nkv, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dq, nq) + _mr(dk, nkv) + _mr(dv, nkv) + _mr(do, nq)
+                   + [ctypes.c_int64(sq), ctypes.c_int64(sk),
+                      ctypes.c_int64(causal)])
+    if has_decay:  # decay kernel's trailing f32 log λ arg
+        launch_args += [ctypes.c_float(log_decay)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx, gy = (sq + 15) // 16, bh
+    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (dq, dk, dv, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm linear_attn: kernel launch failed rc={rc}")
     hip.hipDeviceSynchronize()
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * nq, 2)
     for dev in (dq, dk, dv, do):
@@ -2017,6 +2302,7 @@ def _executor_table():
         "rocm_wmma":            _execute_rocm_wmma_artifact,
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
+        "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }
 

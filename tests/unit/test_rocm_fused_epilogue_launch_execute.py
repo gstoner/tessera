@@ -26,16 +26,36 @@ def _compiled_or_skip():
     return rt
 
 
-def _artifact(rt, with_bias, activation):
+def _artifact(rt, with_bias, activation, op_name="tessera.matmul"):
     operands = ["a", "b"] + (["bias"] if with_bias else [])
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": operands, "output_name": "c",
-        "ops": [{"op_name": "tessera.matmul", "result": "c",
+        "ops": [{"op_name": op_name, "result": "c",
                  "operands": operands,
                  "kwargs": {"activation": activation}}],
     })
+
+
+def test_fused_epilogue_op_name_accepted():
+    """The `fused_epilogue` op name (a `compiled` rocm_target_map row) must be
+    accepted by the rocm_compiled executor — else the dashboard overstates
+    runtime.launch() support. GPU-free: rank-1 operands trip the rank-2 check,
+    which is AFTER the op-name gate, so reaching it proves acceptance."""
+    from tessera import runtime as rt
+    bad = np.zeros((4,), np.float16)
+    art = _artifact(rt, False, "relu", op_name="tessera.fused_epilogue")
+    with pytest.raises(ValueError, match="rank-2 operands"):
+        rt._execute_rocm_compiled_gemm(art, (bad, bad))
+
+
+def test_unknown_op_name_rejected_by_gemm_lane():
+    from tessera import runtime as rt
+    z = np.zeros((16, 16), np.float16)
+    art = _artifact(rt, False, "none", op_name="tessera.flash_attn")
+    with pytest.raises(ValueError, match="handles exactly one"):
+        rt._execute_rocm_compiled_gemm(art, (z, z))
 
 
 def _act_ref(x, activation):

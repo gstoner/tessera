@@ -33,6 +33,21 @@ def test_rocm_flash_attn_executor_registered():
     assert "rocm_flash_attn_compiled" in rt._executor_table()
 
 
+def test_mismatched_v_is_rejected_not_oob():
+    """V is paired with K: `sk`/`bh_kv` (from K) drive the V device copy size, so
+    a V with a shorter sequence length (or wrong head dim / head count) would
+    read past the host buffer. The lane must reject it with a clean ValueError,
+    never read OOB. Pure shape validation — runs before any GPU/tessera-opt
+    call, so it needs no device."""
+    from tessera import runtime as rt
+    q = np.zeros((1, 1, 32, 16), np.float16)
+    k = np.zeros((1, 1, 64, 16), np.float16)   # K: 64 keys
+    v = np.zeros((1, 1, 32, 16), np.float16)   # V: only 32 — would OOB at sk=64
+    art = _artifact(rt, q, k, v, causal=False, scale=0.25)
+    with pytest.raises(ValueError, match="V to match K"):
+        rt._execute_rocm_compiled_flash_attn(art, (q, k, v))
+
+
 def _fa_or_skip():
     from tessera import runtime as rt
     if rt._tessera_opt_path() is None:
@@ -42,15 +57,58 @@ def _fa_or_skip():
     return rt
 
 
-def _artifact(rt, q, k, v, causal, scale):
+def _artifact(rt, q, k, v, causal, scale, op_name="tessera.flash_attn",
+              extra_kwargs=None):
+    kwargs = {"causal": bool(causal), "scale": scale}
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_flash_attn_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": ["q", "k", "v"], "output_name": "o",
-        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
-                 "operands": ["q", "k", "v"],
-                 "kwargs": {"causal": bool(causal), "scale": scale}}],
+        "ops": [{"op_name": op_name, "result": "o",
+                 "operands": ["q", "k", "v"], "kwargs": kwargs}],
     })
+
+
+# ── op-name acceptance (the `compiled` rocm_target_map rows must launch) ───────
+# The flash-attn WMMA kernel realizes the whole multi-head family; the executor
+# must accept the registry op names marked `compiled` in rocm_target_map, else
+# the dashboard overstates runtime.launch() support. These are GPU-free: they
+# assert the op-name gate is passed (a downstream validation fires), not the
+# "handles exactly one" rejection.
+
+@pytest.mark.parametrize("op_name", [
+    "tessera.multi_head_attention", "tessera.gqa_attention",
+    "tessera.mqa_attention", "tessera.attn_sliding_window",
+])
+def test_flash_attn_family_op_names_accepted(op_name):
+    from tessera import runtime as rt
+    # head_dim=15 (not a multiple of 16) trips the head_dim check, which is AFTER
+    # the op-name gate — so reaching it proves the op name was accepted.
+    bad = np.zeros((1, 1, 16, 15), np.float16)
+    art = _artifact(rt, bad, bad, bad, causal=False, scale=0.25,
+                    op_name=op_name, extra_kwargs={"window": 8})
+    with pytest.raises(ValueError, match="head_dim a positive multiple of 16"):
+        rt._execute_rocm_compiled_flash_attn(art, (bad, bad, bad))
+
+
+def test_unknown_op_name_still_rejected():
+    from tessera import runtime as rt
+    z = np.zeros((1, 1, 16, 16), np.float16)
+    art = _artifact(rt, z, z, z, causal=False, scale=0.25,
+                    op_name="tessera.linear_attn")
+    with pytest.raises(ValueError, match="handles exactly one"):
+        rt._execute_rocm_compiled_flash_attn(art, (z, z, z))
+
+
+def test_attn_sliding_window_op_name_requires_window():
+    from tessera import runtime as rt
+    z = np.zeros((1, 1, 16, 16), np.float16)
+    art = _artifact(rt, z, z, z, causal=True, scale=0.25,
+                    op_name="tessera.attn_sliding_window")  # no window kwarg
+    with pytest.raises(ValueError, match="requires a positive `window`"):
+        rt._execute_rocm_compiled_flash_attn(art, (z, z, z))
 
 
 def _ref(q, k, v, scale, causal):
@@ -90,3 +148,21 @@ def test_launch_rocm_flash_attn_matches_numpy(D, B, H, Sq, Sk, causal):
     maxerr = float(np.max(np.abs(out - ref)))
     assert maxerr < 2e-2, f"flash_attn launch maxerr={maxerr} " \
         f"D={D} {B}x{H}x{Sq}x{Sk} causal={causal}"
+
+
+def test_launch_multi_head_attention_op_name_on_gpu():
+    """End-to-end on gfx1151: the `multi_head_attention` op name launches via the
+    flash_attn kernel (proves the `compiled` row, not just op-name acceptance)."""
+    rt = _fa_or_skip()
+    D, B, H, S = 16, 1, 2, 32
+    rng = np.random.default_rng(123)
+    q = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    scale = 1.0 / float(np.sqrt(D))
+    res = rt.launch(_artifact(rt, q, k, v, False, scale,
+                              op_name="tessera.multi_head_attention"), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    out = res["output"]
+    maxerr = float(np.max(np.abs(out - _ref(q, k, v, scale, False))))
+    assert maxerr < 2e-2, f"multi_head_attention op-name launch maxerr={maxerr}"

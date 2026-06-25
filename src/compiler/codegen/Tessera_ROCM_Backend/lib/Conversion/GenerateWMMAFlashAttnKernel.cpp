@@ -45,7 +45,8 @@ using namespace mlir;
 namespace {
 
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-                       Type storeTy, bool viaTile = false, bool gqa = false) {
+                       Type storeTy, bool viaTile = false, bool gqa = false,
+                       bool window = false, bool softcap = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -142,15 +143,47 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   }
   b.create<gpu::BarrierOp>(loc);
 
+  // Sliding-window attention (Mistral-style): query position p attends only to
+  // keys in (p - W, p] — a causal band of width W. W is the trailing runtime arg
+  // (index `gqa ? 10 : 8`). A windowed kernel is implicitly causal (upper
+  // bound), and additionally skips KV tiles entirely below the window's lower
+  // edge; the per-element mask trims the boundary tiles.
+  Value W;
+  if (window)
+    W = f.getArgument(gqa ? 10 : 8);
+  Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
+
+  // Gemma-2 logit soft-capping: cap * tanh(S / cap), applied to each scaled
+  // score before masking. `cap` is the trailing runtime arg, after the gqa
+  // (heads, kv_ratio) and window (W) args when those are present.
+  Value cap;
+  if (softcap)
+    cap = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0));
+
   // nKV = (Sk+15)/16 ; lastKt = min(causal ? (q0+15)/16 : nKV-1, nKV-1)
   Value nKV = b.create<arith::DivUIOp>(loc, add(Sk, c15), c16);
   Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
   Value isCausal = b.create<arith::CmpIOp>(loc, ne, causal, c0);
+  // A windowed kernel is causal for the upper bound regardless of the flag.
+  Value useCausal = window ? trueI1 : isCausal;
   Value ckt = b.create<arith::DivUIOp>(loc, add(q0, c15), c16);
-  Value lastKt = b.create<arith::SelectOp>(loc, isCausal, ckt, nKVm1);
+  Value lastKt = b.create<arith::SelectOp>(loc, useCausal, ckt, nKVm1);
   Value over = b.create<arith::CmpIOp>(loc, slt, nKVm1, lastKt);
   lastKt = b.create<arith::SelectOp>(loc, over, nKVm1, lastKt);
   Value upper = add(lastKt, c1);
+
+  // Lower KV-tile bound: skip tiles below the window. The oldest key any query
+  // in this tile (smallest qpos = q0) attends to is q0 - W + 1; tiles entirely
+  // below that contribute only masked (-inf) scores, so we never enter them.
+  Value firstKt = c0;
+  if (window) {
+    Value q0p1 = add(q0, c1);
+    Value above = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
+                                          q0p1, W);
+    Value minKey = b.create<arith::SelectOp>(
+        loc, above, b.create<arith::SubIOp>(loc, q0p1, W), c0);
+    firstKt = b.create<arith::DivUIOp>(loc, minKey, c16);
+  }
 
   // Build a vector<16xstore> fragment from a per-element value lambda.
   auto buildFrag = [&](OpBuilder &bb, Location l,
@@ -171,8 +204,8 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     return bb.create(st)->getResult(0);
   };
 
-  // --- the KV loop ---
-  auto kloop = b.create<scf::ForOp>(loc, c0, upper, c1);
+  // --- the KV loop (firstKt = window lower bound, else 0) ---
+  auto kloop = b.create<scf::ForOp>(loc, firstKt, upper, c1);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(kloop.getBody());
@@ -208,11 +241,25 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value gk = add(k0, l15);
       Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
+      // Gemma-2 logit soft-cap: cap * tanh(v0 / cap), before masking.
+      if (softcap) {
+        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
+        Value t = b.create<math::TanhOp>(loc, scaled);
+        v0 = b.create<arith::MulFOp>(loc, cap, t);
+      }
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
+      // Causal (future-key) mask — active when causal or windowed.
       Value cmask = b.create<arith::AndIOp>(
-          loc, isCausal, b.create<arith::CmpIOp>(loc, slt, qpos, gk));
+          loc, useCausal, b.create<arith::CmpIOp>(loc, slt, qpos, gk));
       Value masked = b.create<arith::OrIOp>(loc, gkOOB, cmask);
+      // Window lower edge: mask keys older than W (qpos - gk >= W). Only the
+      // valid (gk <= qpos) side matters; future keys are already cmask-masked.
+      if (window) {
+        Value age = b.create<arith::SubIOp>(loc, qpos, gk);
+        Value tooOld = b.create<arith::CmpIOp>(loc, sge, age, W);
+        masked = b.create<arith::OrIOp>(loc, masked, tooOld);
+      }
       Value v = b.create<arith::SelectOp>(loc, masked, negInf, v0);
       Value sIdx = add(mul(qi, c16), l15);
       b.create<memref::StoreOp>(loc, v, sS, ValueRange{sIdx});
@@ -396,6 +443,15 @@ struct GenerateWMMAFlashAttnKernelPass
       bool gqa = false;
       if (auto a = op->getAttrOfType<BoolAttr>("gqa"))
         gqa = a.getValue();
+      // Sliding-window attention: a causal band of width W (the trailing runtime
+      // arg). Composes with gqa (window arg follows heads/kv_ratio).
+      bool window = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("sliding_window"))
+        window = a.getValue();
+      // Gemma-2 logit soft-capping: a trailing f32 `cap` runtime arg.
+      bool softcap = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("logit_softcap"))
+        softcap = a.getValue();
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -404,18 +460,24 @@ struct GenerateWMMAFlashAttnKernelPass
       auto abv = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto of = MemRefType::get({ShapedType::kDynamic}, f32);
       // (Q, K, V : memref<?xstore>, O : memref<?xf32>, Sq, Sk : index,
-      //  scale : f32, causal : index [, heads : index, kv_ratio : index])
+      //  scale : f32, causal : index [, heads : index, kv_ratio : index]
+      //  [, window : index])
       SmallVector<Type> argTys{abv, abv, abv, of, idxTy, idxTy, f32, idxTy};
       if (gqa) {
         argTys.push_back(idxTy);  // heads (H)
         argTys.push_back(idxTy);  // kv_ratio (H/G)
       }
+      if (window)
+        argTys.push_back(idxTy);  // W (sliding-window width)
+      if (softcap)
+        argTys.push_back(f32);    // cap (Gemma-2 logit soft-cap)
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa);
+      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
+                        softcap);
       op->erase();
     }
   }

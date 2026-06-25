@@ -215,7 +215,12 @@ become the on-silicon **oracle** the compiled path validates against.
 > FA/GEMM shape is staging-bound, so this is infrastructure — the pipeline-routed
 > double-buffer perf payoff lands only when a staging-bound kernel uses it.
 
-## Still Open
+## Landed — compiler-generated execution on gfx1151
+
+> These bullets describe **executing, execute-compare-tested, `runtime.launch()`-
+> reachable** kernels on the live gfx1151 box — they are *done*, not open. (They
+> previously sat under a `## Still Open` heading that had become a changelog; the
+> genuinely-open work is the `## Still Open` section that now follows.)
 
 - **Compiler-generated attention family on gfx1151:** matmul, flash_attn
   (fwd+bwd), and now **GQA/MQA** (2026-06-24) all execute. GQA = flash_attn with
@@ -232,13 +237,6 @@ become the on-silicon **oracle** the compiled path validates against.
   each KV head (host pre-zeros; B*H grid) — rel-err <5e-3 vs the numpy GQA
   backward (`test_rocm_gqa_bwd_compiled.py`). `multi_head_attention` is the
   flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
-- **Other ops on RDNA remain artifact_only** beyond matmul + the attention
-  family + the fused GEMM epilogue (CDNA MFMA shape, HIP execution gated): the
-  remaining fused chains, etc. The named ROCm sub-arches
-  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
-  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the
-  box's own arch) is listed there too so the classification is total (no silent
-  `lookup() -> None`).
 - **Fused GEMM epilogue** (2026-06-24): the `tessera_rocm.wmma_gemm` directive
   gained `bias` (per-output-column add, a trailing length-N memref operand) and
   `activation` (`relu`/`gelu`/`silu`) knobs that `generate-wmma-gemm-kernel`
@@ -256,6 +254,57 @@ become the on-silicon **oracle** the compiled path validates against.
   optional third bias operand + an `activation` op-kwarg (no new executor /
   matrix row); float-only, integer dtype → structured `invalid_artifact`
   (`test_rocm_fused_epilogue_launch_execute.py`).
+- **Sliding-window attention** (`attn_sliding_window`, 2026-06-24): the
+  `tessera_rocm.flash_attn` directive gained a `sliding_window` attr (Mistral
+  causal band of width W). Query position p attends only to keys in `(p - W, p]`:
+  the generated kernel takes W as a trailing runtime arg, is implicitly causal,
+  **skips KV tiles entirely below the window's lower edge** (reusing the causal
+  tile-skip), and the per-element mask trims the boundary. Composes with `gqa`
+  (W arg follows heads/kv_ratio). Reaches `runtime.launch()` via a `window`
+  kwarg on the flash_attn op (no new executor / matrix row); builder lane
+  `_build_compiled_flash_attn_hsaco(..., sliding_window)`. Validated on gfx1151
+  vs a numpy windowed-attention oracle across varied W / S / D incl. W≥S
+  (= plain causal) and a window-differs-from-full guard
+  (`test_rocm_sliding_window_compiled.py`, 6 GPU cases) + a GPU-free codegen
+  gate (`test_rocm_sliding_window_codegen.py`).
+- **Logit soft-capping** (Gemma-2, 2026-06-24): the `tessera_rocm.flash_attn`
+  directive gained a `logit_softcap` attr. Each scaled score is passed through
+  `cap·tanh(S/cap)` before masking + softmax (bounding logits to `(-cap, cap)`),
+  applied in the same step that scales the score and reusing the `tanh` →
+  `__ocml_tanh_f32` lowering. `cap` is a trailing f32 runtime arg; composes with
+  `gqa` + `sliding_window` (cap is last). Reaches `runtime.launch()` via a
+  `logit_softcap` kwarg on the flash_attn op (no new executor / matrix row);
+  builder lane `_build_compiled_flash_attn_hsaco(..., logit_softcap)`. Validated
+  on gfx1151 vs a numpy soft-capped-attention oracle (varied cap / S / D, causal
+  + non-causal) + a softcap-differs-from-uncapped guard
+  (`test_rocm_logit_softcap_compiled.py`, 4 GPU cases) + a GPU-free codegen gate
+  (`test_rocm_logit_softcap_codegen.py`).
+- **Linear attention** (`linear_attn`, 2026-06-25): the **first non-softmax**
+  attention algorithm on RDNA — a new `tessera_rocm.linear_attn` directive +
+  `generate-wmma-linear-attn-kernel` pass emitting the quadratic-parallel form
+  `O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V`. Structurally flash_attn forward **minus the
+  online softmax**: it computes `A = φ(Q)φ(K)ᵀ` (WMMA), masks **multiplicatively**
+  (masked → 0, not −∞), stages `A` in LDS, and accumulates `O += A@V` (WMMA, the
+  same layout bridge), with **no final divide** (unnormalized). Feature map φ ∈
+  {identity, relu, polynomial_2 (x²)} applied on the loaded Q/K fragments; square
+  head dim; causal + non-causal. **Decay-masked variants** (lightning_attention =
+  identity + decay; (degree-2) retention = poly2 + decay): a `decay` mode scales
+  each score by `λ^(i-j)` over the causal band (per-head λ as a trailing f32
+  `log_decay` arg, via `exp((i-j)·log_decay)`), matching the reference's
+  `dc[i]/dc[j]` ratio for a per-head-constant decay. New `runtime.launch()` lane
+  `rocm_linear_attn_compiled` (own executor + execution-matrix row, since it is a
+  distinct op, unlike the flash_attn-family flags); builder
+  `_build_compiled_linear_attn_hsaco(..., feature_map, decay)`. The executor
+  **dispatches by op name** — `tessera.linear_attn` (feature_map from kwargs) plus
+  the decay siblings `tessera.lightning_attention` (pins identity + decay) and
+  `tessera.retention` (pins degree-2 x² + decay; deg≠2 is a named error) — so
+  those named ops actually launch, not just `linear_attn`-with-kwargs. Validated on
+  gfx1151 vs the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril [⊙ λ^(i-j)]) @ V`
+  (`_apple_gpu_dispatch_linear_attn` math) across identity/relu/poly2 ×
+  causal/non-causal × ragged + lightning/retention decay, + a
+  causal-differs-from-full guard + a K/V-mismatch rejection
+  (`test_rocm_linear_attn_compiled.py`)
+  and a GPU-free codegen gate (`test_rocm_linear_attn_codegen.py`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the
   `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×
@@ -264,6 +313,32 @@ become the on-silicon **oracle** the compiled path validates against.
   are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
   runnable `async_copy` that would enable it now exists (#101) for when a
   staging-bound kernel appears.
+
+## Still Open
+
+- **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
+  emits; not yet a compiler-generated executing kernel). The not-yet-executing
+  groups (see `../../generated/rocm_target_map.md` for the live list):
+  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `softmax(_safe)`,
+    `gelu`, `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute
+    *fused* into the GEMM epilogue, just not as standalone kernels);
+  - **positional:** `rope`, `alibi`;
+  - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
+    `linear_general`, `qkv_projection`;
+  - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,
+    `gated_deltanet`, `hybrid_attention`, `kimi_delta_attention`,
+    `mla_decode(_fused)`, `modified_delta_attention`.
+- **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
+  table + FP4/FP6; no device available. The named ROCm sub-arches
+  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic
+  `rocm` lane covers execution via HIPRTC for the live device, and gfx1151 (the
+  box's own arch) is listed there too so the classification is total (no silent
+  `lookup() -> None`).
+- **flash_attn KV-tile pipelining — parked (measured low-value).** The FA
+  kernels are occupancy/LDS-bound, not staging-bound, so double-buffered KV
+  staging is unlikely to pay on this APU; the runnable `async_copy` that would
+  enable it exists (#101) for when a staging-bound kernel appears.
+
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder

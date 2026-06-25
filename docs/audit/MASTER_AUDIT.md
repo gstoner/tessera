@@ -1,6 +1,15 @@
 # Tessera Audit Master
 
-**Last updated:** 2026-06-22
+**Last updated:** 2026-06-24
+
+> **Reconciled 2026-06-24 (hardware bring-up):** the Runtime/backend + NVIDIA +
+> ROCm rows were refreshed against merged reality — they had drifted badly behind
+> the bring-up. ROCm gfx1151 now executes a compiler-generated matmul + flash-attn
+> family (fwd+bwd matmul/flash_attn/GQA, fused epilogue) via `runtime.launch()`,
+> not "two ops / forward-only"; NVIDIA sm_120 has its first hardware-verified
+> `mma.sync` matmul on a real RTX 5070 Ti (#106), so Phase G is no longer "no
+> execution." Phase H is split RDNA-live / CDNA-gated. Counts stay in the
+> generated dashboards (Decision #26).
 
 > **Reconciled 2026-06-22:** the multi-op compiler-metadata P1 is **closed** —
 > component-aware metadata (`component_ops`, `program_executable`,
@@ -23,10 +32,10 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Area | Current state | Still open |
 |---|---|---|
 | Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). (COMPILER_AUDIT Phase 1 closed 2026-06-22 — effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm has executable runtime rows (gfx1151 WMMA GEMM + FA-2), and NVIDIA now has its first executable row (`nvidia_sm120`→`nvidia_mma`, sm_120 `mma.sync` GEMM, `hardware_verified` on RTX 5070 Ti, 2026-06-25). | NVIDIA execution is one arch × matmul only (sm_80/90/100 stay artifact_only; no compiler-generated lane / NVFP4 / flash_attn yet); ROCm execution is one arch × {matmul, flash_attn}; MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. |
+| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm gfx1151 executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()` (see ROCm row below); NVIDIA has its first executable lane — sm_120 `mma.sync` matmul hardware-verified on an RTX 5070 Ti (#106). | NVIDIA execution is one op × one arch (sm_120) so far; ROCm is RDNA-only (CDNA/MI300 unproven); MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. Row authority: `generated/runtime_execution_matrix.md`. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
-| NVIDIA | sm_120 (Blackwell consumer / RTX 5070 Ti) `matmul` is `hardware_verified` — `mma.sync` GEMM with execute-and-compare proof (max abs err 4.8e-7), shipped `libtessera_nvidia_gemm.so`, executable `(nvidia_sm120, nvidia_mma)` matrix row, and a CUDA launcher on the G7 `tsrRegisterGpuLauncher` bridge (2026-06-25). | Compiler-generated lane (the `rocm_compiled` analog), NVFP4 block-scale, sm_120 flash_attn, and sm_80/90/100 hardware proof remain. See [backend/nvidia/NVIDIA_AUDIT.md](backend/nvidia/NVIDIA_AUDIT.md). |
-| ROCm | gfx1151 (RDNA 3.5 / Strix Halo) executes **two** ops on real hardware — `matmul` (WMMA GEMM, perf ladder, `runtime.launch()` lane) and `flash_attn` (WMMA FA-2 forward), both `hardware_verified` with execute-compare fixtures. | flash_attn is forward-only / no perf ladder / no launch lane; the rest of the kernel surface stays artifact_only; CDNA (MI300-class) and NVIDIA hardware proof remain; the per-primitive `backend_kernel` axis still needs all targets. |
+| NVIDIA (Phase G) | CUDA 13.3 pinned; **sm_120 `mma.sync` matmul is hardware-verified end-to-end on a real RTX 5070 Ti (consumer Blackwell)** — `emit_mma_sync_matmul_ptx` → PTX → assemble → CUDA launch bridge (`tsrRegisterGpuLauncher`) → execute-and-compare (#106). | One op (matmul) × one arch (sm_120). Hopper sm_90 / datacenter sm_100 unproven (sm_90a WGMMA emit won't run on sm_120 and vice-versa); the rest of the op surface is artifact_only; broaden coverage + add the flash-attn family. |
+| ROCm (Phase H) | **RDNA gfx1151 (Strix Halo)**: a compiler-generated matmul + flash-attention family executes on real hardware via `runtime.launch()` — `matmul` (perf ladder + fused bias/relu/gelu/silu epilogue), `flash_attn` **forward + backward**, and `GQA/MQA` **forward + backward**. Sliding-window + Gemma-2 logit-softcap forward land via #109/#110. | **CDNA (MI300X/MI325X)** unproven — distinct MFMA shape table + FP4/FP6, hardware-gated. RDNA op surface beyond matmul + attention stays artifact_only; the per-primitive `backend_kernel` axis still needs all targets. Row/count authority: `generated/runtime_execution_matrix.md`, `generated/rocm_target_map.md`. |
 | Coverage | Partial-op uplift is closed; direct-test debt is not ordinary missing tests. | Backend-kernel axis is still open across all S-series primitives; batching/transpose/sharding have smaller long-tail gaps. |
 | Domain tracks | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff plans have been reduced to clearer scope locks and implementation history. | Domain claims must stay tied to generated coverage and backend proof, not old roadmap prose. |
 
@@ -126,19 +135,26 @@ Finished:
 - Target maps exist for NVIDIA SM90 and ROCm.
 - CUDA/ROCm toolchain plans and execute-and-compare backlog are documented.
 - The repo distinguishes artifact generation from hardware execution.
-- **ROCm gfx1151 (RDNA 3.5 / Strix Halo) executes two ops, both hardware-verified**:
-  `matmul` (WMMA GEMM — launch bridge + `runtime.launch()` row + measured perf
-  ladder) and `flash_attn` (WMMA FA-2 forward — online softmax, causal, ragged).
-  Both with execute-compare fixtures on the box. First non-Apple backend kernels
-  through the C-ABI launch bridge.
+- **ROCm gfx1151 (RDNA 3.5 / Strix Halo) executes a compiler-generated matmul +
+  flash-attention family on real hardware**, all reachable through
+  `runtime.launch()`: `matmul` (WMMA GEMM — perf ladder + fused bias/relu/gelu/
+  silu epilogue), `flash_attn` **forward and backward**, and `GQA/MQA` **forward
+  and backward**. Sliding-window and Gemma-2 logit-softcap forward are landing via
+  #109/#110. All with execute-compare fixtures on the box; first non-Apple
+  backend kernels through the C-ABI launch bridge. (Counts: see
+  `generated/runtime_execution_matrix.md` — never copied here.)
+- **NVIDIA sm_120 (consumer Blackwell, RTX 5070 Ti) executes its first kernel**:
+  `mma.sync` bf16 matmul, hardware-verified end-to-end (emit → assemble → CUDA
+  launch bridge → execute-and-compare, #106), under CUDA 13.3.
 
 Still needs work:
 
-- Real execute-and-compare on NVIDIA sm_120 ✅ done (2026-06-25, RTX 5070 Ti).
-  Still needed: CDNA (MI300-class) ROCm, and NVIDIA breadth beyond sm_120 matmul
-  (compiler-generated lane, NVFP4 block-scale, flash_attn, sm_80/90/100).
-- Extend ROCm execution beyond matmul + flash_attn (the rest stay artifact_only);
-  flash_attn backward / perf ladder / `runtime.launch()` lane.
+- **NVIDIA**: broaden sm_120 beyond matmul (add the flash-attn family); prove
+  Hopper sm_90 + datacenter sm_100 (separate emit paths — WGMMA ≠ `mma.sync`).
+- **ROCm CDNA (MI300X/MI325X)**: hardware-gated execute-and-compare (distinct
+  MFMA table + FP4/FP6); no device yet.
+- Extend the RDNA op surface beyond matmul + the attention family (the rest stay
+  artifact_only).
 - Promote backend manifest rows with toolchain, runtime ABI, smoke, and numerical proof.
 
 Primary detail:

@@ -252,6 +252,51 @@ def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
 
+def ROCM_ActivationKernelOp : TesseraROCM_Op<"activation"> {
+  let summary = "Elementwise pointwise activation (gelu / silu / relu) kernel";
+  let description = [{
+    The directive `generate-rocm-activation-kernel` expands into a flat
+    elementwise gpu kernel applying a pointwise activation over N elements
+    (one thread per element, strided grid):
+
+      * `kind = "gelu"` — tanh approximation
+        `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` (matches
+        `gelu(approximate='tanh')`).
+      * `kind = "silu"` — `x·σ(x) = x / (1 + exp(−x))`.
+      * `kind = "relu"` — `max(x, 0)`.
+
+    These are the **standalone** ops (the same activations the GEMM fused
+    epilogue applies in-register); they compute in f32 regardless of storage
+    dtype, and the transcendentals lower through the `math` → ROCDL path. `N` is
+    a runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"gelu\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_RopeKernelOp : TesseraROCM_Op<"rope"> {
+  let summary = "Rotary position embedding (interleaved-pair) kernel";
+  let description = [{
+    The directive `generate-rocm-rope-kernel` expands into an elementwise-per-pair
+    gpu kernel applying rotary position embedding over a rank-2 `[M, D]` input
+    (D even). One workgroup per row; the lanes stride the `D/2` pairs. For pair p
+    (with `e = X[m,2p]`, `o = X[m,2p+1]`, angle `a = Theta[m,2p]`):
+
+      O[m,2p]   = e·cos(a) − o·sin(a)
+      O[m,2p+1] = e·sin(a) + o·cos(a)
+
+    Matches the reference `_runtime_rope` (interleaved pairs, the even-indexed
+    `theta` entry is the pair angle). `X` and `Theta` are both `[M, D]`; cos/sin
+    run in f32 and lower through the `math` → ROCDL path. `M`/`D` are runtime
+    `index` args; `dtype` is the f16/bf16/f32 storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

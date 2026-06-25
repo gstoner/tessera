@@ -36,6 +36,8 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateWMMAFlashAttnKernelPass(); });
   registerPass([]() { return createGenerateWMMAFlashAttnBwdKernelPass(); });
   registerPass([]() { return createGenerateWMMALinearAttnKernelPass(); });
+  registerPass([]() { return createGenerateROCMActivationKernelPass(); });
+  registerPass([]() { return createGenerateROCMRopeKernelPass(); });
   registerPass([]() { return createGenerateROCMSoftmaxKernelPass(); });
   registerPass([]() { return createLowerROCMAsyncCopyToLoopPass(); });
   PassPipelineRegistration<> pipeline(

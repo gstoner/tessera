@@ -253,11 +253,19 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
    - Build fix: `src/runtime/CMakeLists.txt` + the NVIDIA backend wire CUDA includes/links so
      `TESSERA_ENABLE_CUDA=ON` builds (was enabled-but-unbuildable).
 
-   **Still open (the @jit default lane):** `@jit(target="nvidia_sm120")` matmul does not yet dispatch to
-   the shipped symbol — no `execution_matrix` executable row / runtime.launch wiring (cf. ROCm's
-   `rocm_wmma` symbol vs the `rocm_compiled` lane). Then NVFP4 block-scale (#9; the warp instruction is
-   already confirmed to assemble+execute on sm_120a — see `spikes/sm120_mma_sync/` — pending the PTX ISA
-   scale-distribution spec for numerics).
+   **@jit execution lane — LANDED 2026-06-25.** `@jit(target="nvidia_sm120")` matmul now dispatches
+   through the shipped symbol on a capable host: `execution_matrix` has an executable
+   `("nvidia_sm120","nvidia_mma")` row (sm_120 removed from `_UNIMPLEMENTED_TARGETS`); `runtime.py`
+   adds the `nvidia_mma` executor (loads libtessera_nvidia_gemm.so, picks the dtype symbol, runs +
+   returns); `jit.py` stamps `executable=True, compiler_path="nvidia_mma", native_gpu` when the runtime
+   probe passes (off-device it stays artifact_only — no behavior change). f16/bf16/fp32(tf32-math)
+   storage. `test_nvidia_launch_execute.py` covers the matrix row + execute-and-compare + the @jit
+   default. This mirrors ROCm's `rocm_wmma` lane; a compiler-GENERATED nvidia lane (the `rocm_compiled`
+   analog, via a tessera-opt NVIDIA pipeline) remains a follow-up.
+
+   **Still open:** the compiler-generated nvidia lane (above); NVFP4 block-scale (#9; the warp
+   instruction is already confirmed to assemble+execute on sm_120a — see `spikes/sm120_mma_sync/` —
+   pending the PTX ISA scale-distribution spec for numerics).
 
 ## The two-box frontier
 

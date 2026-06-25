@@ -80,6 +80,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kernel to hsaco in-process (no mlir-opt), then HIP "
                             "loads + launches it. Opt-in; f16 storage, f32 accum; "
                             "the rocm_wmma lane stays the default + oracle",
+    "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
+                            "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
+                            "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
+                            "(NVRTC-compiled for the device arch; f16/bf16/"
+                            "fp32(tf32-math) storage, f32 accumulate)",
     # Note: pure-numpy `reference_cpu` is reached only as an internal *fallback*
     # inside `launch()`'s native_cpu branch (when `_execute_native_cpu_artifact`
     # raises and `_execute_jit_cpu_artifact` succeeds). It's not a directly
@@ -179,6 +184,25 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "DEFAULT rocm matmul lane; degrades to the hand-written rocm_wmma "
                "oracle when the compiled lane is unavailable on the host.",
         execution_mode="hip_runtime"),
+    # --- NVIDIA GPU (consumer Blackwell, sm_120 warp-level mma.sync GEMM) ---
+    # sm_120 bring-up (2026-06-25): the shipped libtessera_nvidia_gemm.so runs a
+    # real mma.sync GEMM on the RTX 5070 Ti. Like the rocm_wmma row, this is
+    # host-independent in the dashboard; the jit path stamps executable=True only
+    # on a host passing the runtime probe (lib loads + a live CUDA device). The
+    # analog of rocm_wmma (shipped symbol); a compiler-generated nvidia lane (the
+    # rocm_compiled analog) is a later follow-up. The row targets the proven arch
+    # nvidia_sm120 — the NVRTC symbol auto-detects compute_XX, but only sm_120 is
+    # hardware-proven, so the other arches stay unimplemented.
+    ("nvidia_sm120", "nvidia_mma"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_mma",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_mma", runtime_status="success",
+        reason="NVIDIA sm_120 matmul via the shipped warp-level mma.sync GEMM "
+               "(tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol in "
+               "libtessera_nvidia_gemm.so, NVRTC-compiled for the device arch; "
+               "f16/bf16/fp32(tf32-math) storage, f32 accumulate). Directly "
+               "selectable by stamping compiler_path=\"nvidia_mma\".",
+        execution_mode="cuda_runtime"),
 }
 
 
@@ -196,8 +220,13 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
 # dispatch. Listing every registered ROCm sub-arch here (not just some) keeps the
 # classification total — every capability is either executable or explicitly
 # unimplemented, no silent ``lookup() -> None`` gaps.
+#
+# Note: ``nvidia_sm120`` is NO LONGER here — it has an executable ``nvidia_mma``
+# row above (consumer-Blackwell mma.sync GEMM, proven on the RTX 5070 Ti). The
+# other NVIDIA arches (sm_80/90/100) stay listed: the shipped NVRTC symbol
+# auto-detects the device arch, but only sm_120 is hardware-proven today.
 _UNIMPLEMENTED_TARGETS: tuple[str, ...] = (
-    "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
+    "nvidia_sm80", "nvidia_sm90", "nvidia_sm100",
     "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
     "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200",
 )

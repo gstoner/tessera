@@ -937,6 +937,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-activation-kernel). Executes via runtime.launch()"
                  " (rocm_activation_compiled).",
     },
+    "silu_mul": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise "
+                 "kernel (generate-rocm-silu-mul-kernel). The standalone analog "
+                 "of the fused SwiGLU gate-multiply. Executes via "
+                 "runtime.launch() (rocm_silu_mul_compiled).",
+    },
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -944,6 +952,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "elementwise-per-pair kernel (generate-rocm-rope-kernel: one "
                  "workgroup per row, f32 cos/sin). Executes via runtime.launch() "
                  "(rocm_rope_compiled).",
+    },
+    "alibi": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "ALiBi positional-bias generator bias[h,i,j]=slope[h]·(j−i) over "
+                 "[H, S, S] — flat elementwise kernel (generate-rocm-alibi-"
+                 "kernel). Slopes default to the 2^(-8(k+1)/H) ramp. Executes via "
+                 "runtime.launch() (rocm_alibi_compiled).",
     },
 }
 
@@ -1048,7 +1064,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
+    ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
+    ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

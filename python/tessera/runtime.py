@@ -2740,6 +2740,235 @@ def _execute_rocm_compiled_activation(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED silu_mul lane (2026-06-25) — SwiGLU gate-multiply
+# silu_mul(a, b) = silu(a)·b, a flat 2-operand elementwise kernel (sibling of the
+# activation lane). ``compiler_path = "rocm_silu_mul_compiled"``. f32/f16/bf16,
+# f32 compute. ONE hsaco per (chip, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_silu_mul_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _build_compiled_silu_mul_hsaco(dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.silu_mul"() {{name = "sm", dtype = "{dtype}"}} '
+        ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-silu-mul-kernel", directive,
+        _rocm_silu_mul_hsaco_cache, (chip, dtype))
+
+
+def _execute_rocm_compiled_silu_mul(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` silu_mul lane: run the COMPILER-GENERATED flat
+    2-operand elementwise SwiGLU gate-multiply silu(a)·b over any-shape inputs
+    (one thread per element). f32/f16/bf16 storage, f32 compute."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.silu_mul":
+        raise ValueError(
+            "rocm_silu_mul_compiled executor handles exactly one "
+            f"tessera.silu_mul op; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("silu_mul requires two operands (a, b)")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.shape != b.shape:
+        raise ValueError(
+            f"silu_mul requires matching operand shapes; got a{a.shape} "
+            f"b{b.shape}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    store: Any
+    if a.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif a.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and a.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                f"rocm silu_mul lane handles f32/f16/bf16; got {a.dtype}")
+
+    hsaco = _build_compiled_silu_mul_hsaco(dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm silu_mul: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm silu_mul: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sm") != 0:
+        raise RuntimeError("rocm silu_mul: kernel symbol 'sm' not found")
+
+    ac = np.ascontiguousarray(a, dtype=store).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=store).reshape(-1)
+    o = np.zeros(n, dtype=store)
+    da, db, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (da, db, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm silu_mul: hipMalloc failed")
+    hip.hipMemcpy(da, ac.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+    hip.hipMemcpy(db, bc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = _mr(da, n) + _mr(db, n) + _mr(do, n) + [ctypes.c_int64(n)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (da, db, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm silu_mul: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (da, db, do):
+        hip.hipFree(dev)
+    return o.reshape(a.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
+# bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
+# (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
+# default to the 2^(-8(k+1)/H) ramp; f32/f16/bf16 output. ONE hsaco per
+# (chip, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_alibi_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _build_compiled_alibi_hsaco(dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.alibi"() {{name = "ab", dtype = "{dtype}"}} '
+        ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-alibi-kernel", directive,
+        _rocm_alibi_hsaco_cache, (chip, dtype))
+
+
+def _execute_rocm_compiled_alibi(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` alibi lane: run the COMPILER-GENERATED ALiBi
+    positional-bias generator — bias[h,i,j] = slope[h]·(j−i), shape [H, S, S]
+    (one thread per element). ``num_heads`` / ``seq_len`` from kwargs; the
+    optional ``slopes`` operand overrides the default 2^(-8(k+1)/H) ramp.
+    f32/f16/bf16 output."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.alibi":
+        raise ValueError(
+            "rocm_alibi_compiled executor handles exactly one tessera.alibi op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    operand_names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names) if arg_names else {}
+
+    h_val = kwargs.get("num_heads")
+    s_val = kwargs.get("seq_len")
+    if h_val is None or s_val is None:
+        raise ValueError("alibi requires num_heads and seq_len")
+    hh = int(h_val)
+    ss = int(s_val)
+    if hh <= 0 or ss <= 0:
+        raise ValueError(f"alibi needs positive num_heads/seq_len; got {hh}/{ss}")
+
+    if operand_names:
+        slopes = np.ascontiguousarray(
+            _as_numpy(values[operand_names[0]]), dtype=np.float32).reshape(-1)
+        if slopes.size != hh:
+            raise ValueError(
+                f"alibi slopes must have length num_heads={hh}; got {slopes.size}")
+    else:
+        k = np.arange(1, hh + 1, dtype=np.float32)
+        slopes = (2.0 ** (-8.0 * k / hh)).astype(np.float32)
+
+    dtype_tag = str(kwargs.get("dtype", "f32"))
+    store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
+    if dtype_tag in ("f32", "float32"):
+        store, esz = np.float32, 4
+        dtype_tag = "f32"
+    elif dtype_tag in ("f16", "float16"):
+        store, esz = np.float16, 2
+        dtype_tag = "f16"
+    elif dtype_tag in ("bf16", "bfloat16"):
+        bf16 = _bfloat16_dtype()
+        if bf16 is None:
+            raise ValueError("alibi bf16 output needs ml_dtypes")
+        store, esz = bf16, 2
+        dtype_tag = "bf16"
+    else:
+        raise ValueError(f"alibi dtype must be f32/f16/bf16; got {dtype_tag}")
+
+    hsaco = _build_compiled_alibi_hsaco(dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm alibi: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm alibi: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"ab") != 0:
+        raise RuntimeError("rocm alibi: kernel symbol 'ab' not found")
+
+    n = hh * ss * ss
+    o = np.zeros(n, dtype=store)
+    dslopes, do = ctypes.c_void_p(), ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(dslopes), 4 * hh) != 0:
+        raise RuntimeError("rocm alibi: hipMalloc failed")
+    if hip.hipMalloc(ctypes.byref(do), esz * n) != 0:
+        raise RuntimeError("rocm alibi: hipMalloc failed")
+    hip.hipMemcpy(dslopes, slopes.ctypes.data_as(ctypes.c_void_p), 4 * hh, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dslopes, hh) + _mr(do, n)
+                   + [ctypes.c_int64(hh), ctypes.c_int64(ss)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dslopes, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm alibi: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dslopes, do):
+        hip.hipFree(dev)
+    return o.reshape(hh, ss, ss)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED rope lane (2026-06-25) — rotary position embedding (interleaved
 # pairs). ``compiler_path = "rocm_rope_compiled"``. One workgroup per row; X and
 # Theta are both [M, D] (D even). f32/f16/bf16, f32 cos/sin.
@@ -2870,6 +3099,8 @@ def _executor_table():
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
+        "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
+        "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }

@@ -961,6 +961,37 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel). Slopes default to the 2^(-8(k+1)/H) ramp. Executes via "
                  "runtime.launch() (rocm_alibi_compiled).",
     },
+    "batched_gemm": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Batched matmul A[...,M,K]@B[...,K,N] — the WMMA GEMM kernel "
+                 "looped over leading batch dims. Executes via runtime.launch() "
+                 "(rocm_matmul_family_compiled).",
+    },
+    "linear_general": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Axis-flexible linear projection x[...,K]@W[K,N] (+bias), "
+                 "axis=-1 — reshape + WMMA GEMM. Executes via runtime.launch() "
+                 "(rocm_matmul_family_compiled).",
+    },
+    "qkv_projection": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Fused QKV projection x[...,D]@W_qkv[D,3N] (the 3-way split is a "
+                 "trivial host view) — reshape + WMMA GEMM. Executes via "
+                 "runtime.launch() (rocm_matmul_family_compiled).",
+    },
+    "factorized_matmul": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Low-rank A@B with rank-r truncation — the WMMA GEMM on GPU + an "
+                 "exact host SVD-truncate epilogue. Executes via runtime.launch() "
+                 "(rocm_matmul_family_compiled).",
+    },
+    "einsum": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Single-contraction two-operand einsum mapped to a (batched) "
+                 "WMMA GEMM (canonicalize + transpose); other specs emit a stable "
+                 "unsupported diagnostic. Executes via runtime.launch() "
+                 "(rocm_matmul_family_compiled).",
+    },
 }
 
 
@@ -1067,6 +1098,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
+    ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("linear_general", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("qkv_projection", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("factorized_matmul", "rocm"):
+        "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("einsum", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

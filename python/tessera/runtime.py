@@ -1832,6 +1832,238 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED matmul-family lane (2026-06-25) — batched_gemm / linear_general /
+# qkv_projection / factorized_matmul / einsum, all built on the same
+# COMPILER-GENERATED WMMA GEMM kernel (the rocm_compiled spine) via reshaping /
+# batching / splitting in the runtime — the matmul analog of how flash_attn
+# GQA/MQA reuse the FA kernel. ``compiler_path = "rocm_matmul_family_compiled"``.
+# f16/bf16 storage, f32 accumulate. (factorized_matmul's rank-r SVD truncation
+# is an exact host epilogue on the GPU matmul; einsum supports single-contraction
+# specs that map to a (batched) matmul, else a stable "unsupported" diagnostic.)
+# ─────────────────────────────────────────────────────────────────────────────
+def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
+    """Run ONE 2-D WMMA GEMM (a[M,K] @ b[K,N]) on the COMPILER-GENERATED kernel
+    and return the [M,N] f32 (int8→i32) result. Reuses the rocm_compiled spine
+    (_build_compiled_gemm_hsaco). Raises _RocmCompiledUnavailable when the lane
+    can't run here, RuntimeError on a real kernel failure."""
+    import numpy as np
+
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"_rocm_wmma_gemm_2d needs rank-2 operands with matching K; got "
+            f"{a.shape} @ {b.shape}")
+    dtype_tag, store, out_dt = _rocm_compiled_dtype(a, b)
+    if dtype_tag is None:
+        raise ValueError(
+            "rocm matmul-family lane handles f16/bf16 (f32 acc) or int8 (i32 "
+            f"acc) storage; got {a.dtype} @ {b.dtype}")
+    m, k = a.shape
+    n = b.shape[1]
+    mt, nt = _rocm_prod_tile(m, n, k)
+    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag)
+
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm matmul-family: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm matmul-family: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
+        raise RuntimeError("rocm matmul-family: kernel symbol 'gemm' not found")
+
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
+    d = np.zeros((m, n), dtype=out_dt)
+    ab = a_c.itemsize
+    nb = (ab * m * k, ab * k * n, 4 * m * n)
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm matmul-family: hipMalloc failed")
+    hip.hipMemcpy(da, a_c.ctypes.data_as(ctypes.c_void_p), nb[0], 1)
+    hip.hipMemcpy(db, b_c.ctypes.data_as(ctypes.c_void_p), nb[1], 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(da, m * k) + _mr(db, k * n) + _mr(dd, m * n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + 16 * nt - 1) // (16 * nt)
+    gy = (m + 16 * mt - 1) // (16 * mt)
+    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (da, db, dd):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm matmul-family: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
+    for dev in (da, db, dd):
+        hip.hipFree(dev)
+    return d
+
+
+def _rocm_batched_gemm(a: Any, b: Any) -> Any:
+    """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the WMMA
+    kernel. ``b`` may be rank-2 (shared across the batch) or batched to match."""
+    import numpy as np
+    if a.ndim < 2 or b.ndim < 2:
+        raise ValueError("batched_gemm needs rank>=2 operands")
+    m, k = a.shape[-2], a.shape[-1]
+    if b.shape[-2] != k:
+        raise ValueError(
+            f"batched_gemm inner dims must match; got {a.shape} @ {b.shape}")
+    n = b.shape[-1]
+    a_batch = a.reshape(-1, m, k)
+    nb_a = a_batch.shape[0]
+    if b.ndim == 2:
+        b_batch = np.broadcast_to(b, (nb_a, k, n))
+    else:
+        b_batch = b.reshape(-1, k, n)
+        if b_batch.shape[0] != nb_a:
+            raise ValueError(
+                f"batched_gemm batch mismatch; got {a.shape} @ {b.shape}")
+    out = np.stack([_rocm_wmma_gemm_2d(a_batch[i], b_batch[i])
+                    for i in range(nb_a)], axis=0)
+    return out.reshape(*a.shape[:-2], m, n)
+
+
+def _rocm_einsum_via_gemm(spec: str, lhs: Any, rhs: Any) -> Any:
+    """Single-contraction two-operand einsum mapped to a (batched) WMMA gemm.
+    Canonicalizes to [batch..., M, K] @ [batch..., K, N] then transposes the
+    result into the requested output order. Raises a stable diagnostic when the
+    spec is not a single-contraction two-tensor matmul (Decision #21)."""
+    import numpy as np
+    if "->" not in spec:
+        raise ValueError(f"rocm einsum needs an explicit '->' spec; got {spec!r}")
+    ins, out = spec.split("->")
+    terms = [t.strip() for t in ins.split(",")]
+    if len(terms) != 2:
+        raise ValueError(
+            "rocm einsum lane handles exactly two operands; got "
+            f"{len(terms)} in {spec!r}")
+    lt, rt = terms
+    out = out.strip()
+    contracted = (set(lt) & set(rt)) - set(out)
+    if len(contracted) != 1:
+        raise ValueError(
+            "rocm einsum lane handles a single contraction index that maps to a "
+            f"(batched) matmul; spec {spec!r} has {len(contracted)} — unsupported")
+    c = next(iter(contracted))
+    batch = [x for x in lt if x in rt and x in out]
+    free_l = [x for x in lt if x not in rt]
+    free_r = [x for x in rt if x not in lt]
+    if set(out) != set(batch) | set(free_l) | set(free_r):
+        raise ValueError(f"rocm einsum: output indices in {spec!r} are unsupported")
+    # Canonical layouts: lhs -> [batch, free_l, c]; rhs -> [batch, c, free_r].
+    lhs_t = np.transpose(lhs, [lt.index(x) for x in batch + free_l + [c]])
+    rhs_t = np.transpose(rhs, [rt.index(x) for x in batch + [c] + free_r])
+    bsh = [lhs.shape[lt.index(x)] for x in batch]
+    msh = [lhs.shape[lt.index(x)] for x in free_l]
+    nsh = [rhs.shape[rt.index(x)] for x in free_r]
+    kdim = lhs.shape[lt.index(c)]
+    a2 = lhs_t.reshape(int(np.prod(bsh or [1])), int(np.prod(msh or [1])), kdim)
+    b2 = rhs_t.reshape(int(np.prod(bsh or [1])), kdim, int(np.prod(nsh or [1])))
+    prod = _rocm_batched_gemm(a2, b2)            # [B, M, N]
+    canon = prod.reshape(*(bsh + msh + nsh))     # batch + free_l + free_r
+    canon_order = batch + free_l + free_r
+    return np.transpose(canon, [canon_order.index(x) for x in out])
+
+
+def _execute_rocm_compiled_matmul_family(artifact: RuntimeArtifact,
+                                         args: Any) -> Any:
+    """The ``target="rocm"`` matmul-family lane: batched_gemm / linear_general /
+    qkv_projection / factorized_matmul / einsum, all on the COMPILER-GENERATED
+    WMMA GEMM kernel. f16/bf16 (f32 acc). Each op reshapes/batches/splits around
+    the gemm; einsum maps single-contraction specs to a (batched) matmul."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    handled = ("tessera.batched_gemm", "tessera.linear_general",
+               "tessera.qkv_projection", "tessera.factorized_matmul",
+               "tessera.einsum")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"rocm_matmul_family_compiled executor handles one of {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+
+    if op_name == "tessera.einsum":
+        spec = kwargs.get("spec") or kwargs.get("equation")
+        if spec is None or len(operands) != 2:
+            raise ValueError(
+                "rocm einsum lane needs a 'spec' kwarg and exactly two tensors")
+        return _rocm_einsum_via_gemm(str(spec), operands[0], operands[1])
+
+    if op_name == "tessera.batched_gemm":
+        if len(operands) != 2:
+            raise ValueError("batched_gemm takes two operands (A, B)")
+        return _rocm_batched_gemm(operands[0], operands[1])
+
+    if op_name == "tessera.qkv_projection":
+        if len(operands) != 2:
+            raise ValueError("qkv_projection takes two operands (x, W_qkv)")
+        x, w = operands
+        if w.ndim != 2:
+            raise ValueError(f"qkv_projection W_qkv must be rank-2; got {w.shape}")
+        k, n3 = w.shape
+        x2 = x.reshape(-1, k)
+        y = _rocm_wmma_gemm_2d(x2, w).reshape(*x.shape[:-1], n3)
+        # The op returns (Q, K, V); the runtime returns the packed projection and
+        # the 3-way last-axis split is a trivial host view.
+        return y
+
+    if op_name == "tessera.factorized_matmul":
+        if len(operands) != 2:
+            raise ValueError("factorized_matmul takes two operands (A, B)")
+        a, b = operands
+        if a.ndim != 2 or b.ndim != 2:
+            raise ValueError("rocm factorized_matmul handles rank-2 A, B")
+        rank = int(kwargs.get("rank", min(a.shape[0], b.shape[1])))
+        out = _rocm_wmma_gemm_2d(a, b).astype(np.float32)  # GPU matmul
+        # rank-r SVD truncation — an exact host epilogue on the GPU product.
+        u, s, vh = np.linalg.svd(out, full_matrices=False)
+        r = max(1, min(rank, s.shape[-1]))
+        return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
+
+    # tessera.linear_general — default axis=-1, rank-2 weight [K, N] (+ bias).
+    if len(operands) not in (2, 3):
+        raise ValueError("linear_general takes (x, W) plus an optional bias")
+    axis = kwargs.get("axis", -1)
+    if axis not in (-1, None):
+        raise ValueError(
+            f"rocm linear_general lane handles axis=-1 only; got axis={axis}")
+    x, w = operands[0], operands[1]
+    if w.ndim != 2:
+        raise ValueError(
+            f"rocm linear_general lane handles a rank-2 weight [K, N]; got "
+            f"{w.shape}")
+    k, n = w.shape
+    if x.shape[-1] != k:
+        raise ValueError(
+            f"linear_general contracted dim mismatch: x{x.shape} @ W{w.shape}")
+    y = _rocm_wmma_gemm_2d(x.reshape(-1, k), w).reshape(*x.shape[:-1], n)
+    if len(operands) == 3:
+        y = y + _as_numpy(values[operand_names[2]]).astype(np.float32)
+    return y
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED flash_attn lane (2026-06-24) — the matmul-L4 analog for
 # attention. ``runtime.launch()`` of an artifact stamped
 # ``compiler_path = "rocm_flash_attn_compiled"`` builds the COMPILER-GENERATED
@@ -3100,6 +3332,7 @@ def _executor_table():
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
+        "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }

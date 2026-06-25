@@ -1661,17 +1661,20 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by (head_dim, chip, dtype).
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool], bytes] = {}
 
 
 def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
-                                     gqa: bool = False) -> bytes:
+                                     gqa: bool = False,
+                                     sliding_window: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
-    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa).
-    gqa=True emits the grouped-query variant (kernel gains heads + kv_ratio
-    runtime args, reads K/V from the grouped head)."""
+    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa,
+    sliding_window). gqa=True emits the grouped-query variant (kernel gains
+    heads + kv_ratio runtime args, reads K/V from the grouped head);
+    sliding_window=True emits the windowed variant (kernel gains a trailing W
+    arg, a causal band of width W)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa)
+    key = (head_dim, chip, dtype, gqa, sliding_window)
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1680,10 +1683,11 @@ def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm flash_attn lane")
     gqa_attr = ", gqa = true" if gqa else ""
+    win_attr = ", sliding_window = true" if sliding_window else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}{win_attr}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -1772,8 +1776,17 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     causal = 1 if bool(kwargs.get("causal", False)) else 0
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
+    # Sliding-window attention: a positive `window` selects a causal band of
+    # width W (query p attends to keys in (p-W, p]). The windowed kernel is
+    # implicitly causal and takes W as a trailing runtime arg.
+    window = int(kwargs.get("window") or 0)
+    if window < 0:
+        raise ValueError(
+            f"rocm flash_attn window must be a non-negative width; got {window}")
+    sliding = window > 0
 
-    hsaco = _build_compiled_flash_attn_hsaco(head_dim, dtype_tag, gqa)
+    hsaco = _build_compiled_flash_attn_hsaco(
+        head_dim, dtype_tag, gqa, sliding_window=sliding)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -1812,6 +1825,8 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
                       ctypes.c_float(scale), ctypes.c_int64(causal)])
     if gqa:  # grouped kernel's two trailing runtime args
         launch_args += [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)]
+    if sliding:  # windowed kernel's trailing W arg (after the gqa args)
+        launch_args += [ctypes.c_int64(window)]
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)

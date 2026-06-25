@@ -25,9 +25,13 @@ vocabulary.
 
 Target work exists for x86 AMX/AVX512, Apple Silicon CPU/GPU, NVIDIA CUDA, and
 AMD ROCm. Backend maturity varies by target: x86 AMX and Apple Silicon
-(CPU + GPU) execute natively today; NVIDIA and ROCm have toolchain-pinned
-Target IR + lit fixtures with native execution gated on real hardware
-(Phase G/H — see
+(CPU + GPU) execute natively today; **the first non-Apple GPU lanes are now
+hardware-verified on real silicon** — AMD **gfx1151** (Strix Halo, RDNA 3.5)
+executes a compiler-generated matmul + flash-attention family via
+`runtime.launch()`, and NVIDIA **sm_120** (RTX 5070 Ti, consumer Blackwell)
+runs a hardware-verified `mma.sync` matmul. The rest of each backend's op
+surface (and Hopper/CDNA arches) stays toolchain-pinned Target IR + lit
+fixtures, hardware-gated (Phase G/H — see
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md));
 see
 [`docs/README.md`](docs/README.md) for the status labels used across docs.
@@ -90,7 +94,7 @@ Use these status words consistently:
 | scaffolded | Directory, API shape, or design skeleton exists, but behavior is incomplete or artifact-only. |
 | planned | Design direction only. |
 
-Current high-level status (as of June 16, 2026):
+Current high-level status (as of June 25, 2026):
 
 | Area | Status |
 |------|--------|
@@ -100,8 +104,8 @@ Current high-level status (as of June 16, 2026):
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
 | **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 284 Apple C ABI symbols across 126 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | **Distributed MoE / MegaMoE** — single-device `nn.functional.moe_layer`, fused `ops.moe_swiglu_block` (Graph-IR op + GPU kernel), expert-parallel `megamoe_forward` (GShard 2× all-to-all dispatch/combine), FP8×FP4 mixed precision, and **real wall-clock comm/compute overlap** (async GPU command buffer ∥ CPU comm) | implemented / hardware-runtime (Apple GPU expert FFN); multi-rank via in-process mock collectives — see [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) |
-| NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
-| ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.4 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
+| NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.3 toolchain pin** | implemented / lit-testable; **first executable lane landed — sm_120 `mma.sync` matmul is hardware-verified on a real RTX 5070 Ti (consumer Blackwell): `emit_mma_sync_matmul_ptx` → PTX → assemble → CUDA launch bridge (`tsrRegisterGpuLauncher`) → execute-and-compare (#106).** One op × one arch; Hopper sm_90 WGMMA + datacenter sm_100 stay artifact-only (Phase G). |
+| ROCm MFMA / RDNA WMMA gfx90a / gfx94x / gfx950 / gfx1100 / **gfx1151**; **ROCm 7.2.4 toolchain pin** | implemented / lit-testable; **RDNA gfx1151 (Strix Halo) executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()`** — `matmul` (perf ladder + fused bias/relu/gelu/silu epilogue (#105), fp16/bf16 WMMA), `flash_attn` **fwd+bwd**, `GQA/MQA` **fwd+bwd** (#103/#104), plus sliding-window (#109) + Gemma-2 logit-softcap (#112) forward. CDNA (MI300X/MI325X) hardware-gated (Phase H); RDNA op surface beyond matmul + attention stays artifact_only. |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
 | **Tier 2 autodiff** — Python tape (`tessera.autodiff.{tape, reverse, custom_rule, rematerialize}`) + 270+ built-in VJPs/JVPs covering matmul, depthwise conv 1d/2d, RNN cells (LSTM), Mamba2 `selective_ssm`, distributed collectives | implemented / hardware-runtime (numpy-reference tape); end-to-end BPTT through multi-step LSTM, depthwise conv chains, and selective SSMs verified vs. central-difference numerical Jacobian at fp64 |

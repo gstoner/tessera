@@ -120,11 +120,17 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     band of width W (the trailing runtime arg, after the gqa args when both are
     set). A windowed kernel is implicitly causal; it skips KV tiles entirely
     below the window's lower edge and the per-element mask trims the boundary.
+
+    `logit_softcap` (default false) selects Gemma-2-style attention logit
+    soft-capping: each scaled score is passed through `cap * tanh(S / cap)`
+    before masking + softmax, bounding the logits to `(-cap, cap)`. `cap` is the
+    trailing runtime arg (after the gqa and window args when those are set).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$gqa,
-                       DefaultValuedAttr<BoolAttr, "false">:$sliding_window);
+                       DefaultValuedAttr<BoolAttr, "false">:$sliding_window,
+                       DefaultValuedAttr<BoolAttr, "false">:$logit_softcap);
   let assemblyFormat = "attr-dict";
 }
 

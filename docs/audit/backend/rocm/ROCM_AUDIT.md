@@ -269,6 +269,18 @@ become the on-silicon **oracle** the compiled path validates against.
   (= plain causal) and a window-differs-from-full guard
   (`test_rocm_sliding_window_compiled.py`, 6 GPU cases) + a GPU-free codegen
   gate (`test_rocm_sliding_window_codegen.py`).
+- **Logit soft-capping** (Gemma-2, 2026-06-24): the `tessera_rocm.flash_attn`
+  directive gained a `logit_softcap` attr. Each scaled score is passed through
+  `cap·tanh(S/cap)` before masking + softmax (bounding logits to `(-cap, cap)`),
+  applied in the same step that scales the score and reusing the `tanh` →
+  `__ocml_tanh_f32` lowering. `cap` is a trailing f32 runtime arg; composes with
+  `gqa` + `sliding_window` (cap is last). Reaches `runtime.launch()` via a
+  `logit_softcap` kwarg on the flash_attn op (no new executor / matrix row);
+  builder lane `_build_compiled_flash_attn_hsaco(..., logit_softcap)`. Validated
+  on gfx1151 vs a numpy soft-capped-attention oracle (varied cap / S / D, causal
+  + non-causal) + a softcap-differs-from-uncapped guard
+  (`test_rocm_logit_softcap_compiled.py`, 4 GPU cases) + a GPU-free codegen gate
+  (`test_rocm_logit_softcap_codegen.py`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the
   `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×

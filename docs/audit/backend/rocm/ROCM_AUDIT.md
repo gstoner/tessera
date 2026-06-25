@@ -251,7 +251,11 @@ become the on-silicon **oracle** the compiled path validates against.
   numpy gemm+bias+activation oracle across {relu,gelu,silu}×{bias,no-bias}×
   {aligned, ragged} (`test_rocm_fused_epilogue_compiled.py`, 21 GPU cases) plus
   a GPU-free codegen/lowering gate for CI (`test_rocm_fused_epilogue_codegen.py`).
-  The builder lane is `_build_compiled_gemm_hsaco(..., bias, activation)`.
+  The builder lane is `_build_compiled_gemm_hsaco(..., bias, activation)`. **Also
+  reaches `runtime.launch()`** — the `rocm_compiled` matmul executor takes an
+  optional third bias operand + an `activation` op-kwarg (no new executor /
+  matrix row); float-only, integer dtype → structured `invalid_artifact`
+  (`test_rocm_fused_epilogue_launch_execute.py`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the
   `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×

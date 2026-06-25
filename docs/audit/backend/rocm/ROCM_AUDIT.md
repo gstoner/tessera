@@ -288,14 +288,20 @@ become the on-silicon **oracle** the compiled path validates against.
   online softmax**: it computes `A = φ(Q)φ(K)ᵀ` (WMMA), masks **multiplicatively**
   (masked → 0, not −∞), stages `A` in LDS, and accumulates `O += A@V` (WMMA, the
   same layout bridge), with **no final divide** (unnormalized). Feature map φ ∈
-  {identity, relu} applied on the loaded Q/K fragments (elu/poly2 are follow-ups);
-  square head dim; causal + non-causal. New `runtime.launch()` lane
+  {identity, relu, polynomial_2 (x²)} applied on the loaded Q/K fragments; square
+  head dim; causal + non-causal. **Decay-masked variants** (lightning_attention =
+  identity + decay; (degree-2) retention = poly2 + decay): a `decay` mode scales
+  each score by `λ^(i-j)` over the causal band (per-head λ as a trailing f32
+  `log_decay` arg, via `exp((i-j)·log_decay)`), matching the reference's
+  `dc[i]/dc[j]` ratio for a per-head-constant decay. New `runtime.launch()` lane
   `rocm_linear_attn_compiled` (own executor + execution-matrix row, since it is a
   distinct op, unlike the flash_attn-family flags); builder
-  `_build_compiled_linear_attn_hsaco(..., feature_map)`. Validated on gfx1151 vs
-  the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V`
-  (`_apple_gpu_dispatch_linear_attn` math) across identity/relu × causal/non-causal
-  × ragged, + a causal-differs-from-full guard (`test_rocm_linear_attn_compiled.py`)
+  `_build_compiled_linear_attn_hsaco(..., feature_map, decay)`. Validated on
+  gfx1151 vs the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril [⊙ λ^(i-j)]) @ V`
+  (`_apple_gpu_dispatch_linear_attn` math) across identity/relu/poly2 ×
+  causal/non-causal × ragged + lightning/retention decay, + a
+  causal-differs-from-full guard + a K/V-mismatch rejection
+  (`test_rocm_linear_attn_compiled.py`)
   and a GPU-free codegen gate (`test_rocm_linear_attn_codegen.py`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the

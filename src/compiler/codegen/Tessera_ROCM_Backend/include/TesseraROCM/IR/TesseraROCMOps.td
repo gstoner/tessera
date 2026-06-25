@@ -191,10 +191,18 @@ def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
     bridge flash attention uses). No final divide.
 
     `feature_map` (default `"identity"`) is the elementwise φ applied to Q and K
-    before the QKᵀ: `"identity"` (no-op), `"relu"` (max(x,0)) — both applied on
-    the loaded fragment. (elu / polynomial_2 are planned follow-ups.) This
-    matches the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V`
-    (`_apple_gpu_dispatch_linear_attn`).
+    before the QKᵀ, on the loaded fragment: `"identity"` (no-op), `"relu"`
+    (max(x,0)), or `"polynomial_2"` (x²). This matches the canonical reference
+    `O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V` (`_apple_gpu_dispatch_linear_attn`).
+
+    `decay` (default false) selects the **decay-masked** variants
+    (lightning_attention / retention): the score `A[i,j]` is additionally scaled
+    by `λ^(i-j)` over the causal band (RetNet/lightning per-head exponential
+    decay). `λ` is supplied as its log — a trailing f32 runtime arg `log_decay` —
+    and the kernel applies `A[i,j] *= exp((i-j)·log_decay)` for kept entries.
+    With `feature_map="identity"` this is lightning_attention; with
+    `"polynomial_2"` it is (degree-2) retention. Matches the reference's
+    `ratio[i,j] = dc[i]/dc[j]` decay mask for a per-head-constant decay.
 
     `head_dim` (a multiple of 16) is the compile-time D — query/key and value
     head dim are assumed equal (square). B/H/S/causal are runtime kernel args;
@@ -203,7 +211,8 @@ def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
-                       DefaultValuedAttr<StrAttr, "\"identity\"">:$feature_map);
+                       DefaultValuedAttr<StrAttr, "\"identity\"">:$feature_map,
+                       DefaultValuedAttr<BoolAttr, "false">:$decay);
   let assemblyFormat = "attr-dict";
 }
 

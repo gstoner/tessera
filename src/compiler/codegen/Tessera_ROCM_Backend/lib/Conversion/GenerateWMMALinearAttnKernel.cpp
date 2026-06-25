@@ -31,6 +31,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -44,7 +45,8 @@ using namespace mlir;
 namespace {
 
 void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-                        Type storeTy, StringRef featureMap, bool viaTile) {
+                        Type storeTy, StringRef featureMap, bool decay,
+                        bool viaTile) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -54,6 +56,7 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   auto sge = arith::CmpIPredicate::sge;
   auto ne = arith::CmpIPredicate::ne;
   bool isRelu = (featureMap == "relu");
+  bool isPoly2 = (featureMap == "polynomial_2");
 
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
   auto ldsT = [&](int64_t n, Type e) {
@@ -67,6 +70,11 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value Q = f.getArgument(0), Kk = f.getArgument(1), V = f.getArgument(2);
   Value O = f.getArgument(3);
   Value Sq = f.getArgument(4), Sk = f.getArgument(5), causal = f.getArgument(6);
+  // Decay-masked variants (lightning_attention / retention): per-head log λ is
+  // the trailing f32 arg; A[i,j] *= exp((i-j)·log_decay) over the causal band.
+  Value logDecay;
+  if (decay)
+    logDecay = f.getArgument(7);
 
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
   Value c0 = ci(0), c1 = ci(1), c4 = ci(4), c15 = ci(15), c16 = ci(16),
@@ -99,6 +107,8 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   auto phi = [&](Value v) -> Value {
     if (isRelu)
       return b.create<arith::MaximumFOp>(loc, v, storeZero);
+    if (isPoly2)
+      return b.create<arith::MulFOp>(loc, v, v); // x²
     return v; // identity
   };
 
@@ -177,6 +187,17 @@ void emitLinearAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
+      // Decay scale: csv *= exp((qpos - gk)·log_decay) = λ^(i-j). Applied before
+      // masking; masked entries are zeroed below regardless. (qpos-gk via index
+      // sub is only used on the kept side; future keys are masked out.)
+      if (decay) {
+        Value age = b.create<arith::SubIOp>(loc, qpos, gk);
+        Value agef = b.create<arith::IndexCastOp>(loc, b.getI64Type(), age);
+        agef = b.create<arith::SIToFPOp>(loc, f32, agef);
+        Value ex = b.create<math::ExpOp>(
+            loc, b.create<arith::MulFOp>(loc, agef, logDecay));
+        csv = b.create<arith::MulFOp>(loc, csv, ex);
+      }
       Value cmask = b.create<arith::AndIOp>(
           loc, isCausal, b.create<arith::CmpIOp>(loc, slt, qpos, gk));
       Value masked = b.create<arith::OrIOp>(loc, gkOOB, cmask);
@@ -262,8 +283,8 @@ struct GenerateWMMALinearAttnKernelPass
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
-                    arith::ArithDialect, memref::MemRefDialect,
-                    tessera::tile::TesseraTileDialect>();
+                    arith::ArithDialect, math::MathDialect,
+                    memref::MemRefDialect, tessera::tile::TesseraTileDialect>();
   }
 
   void runOnOperation() override {
@@ -308,12 +329,16 @@ struct GenerateWMMALinearAttnKernelPass
       StringRef featureMap = "identity";
       if (auto a = op->getAttrOfType<StringAttr>("feature_map"))
         featureMap = a.getValue();
-      if (featureMap != "identity" && featureMap != "relu") {
+      if (featureMap != "identity" && featureMap != "relu" &&
+          featureMap != "polynomial_2") {
         op->emitError("generate-wmma-linear-attn-kernel: feature_map must be "
-                      "identity or relu (got '")
+                      "identity, relu, or polynomial_2 (got '")
             << featureMap << "')";
         return signalPassFailure();
       }
+      bool decay = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("decay"))
+        decay = a.getValue();
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -321,14 +346,18 @@ struct GenerateWMMALinearAttnKernelPass
       Type idxTy = b.getIndexType();
       auto abv = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto of = MemRefType::get({ShapedType::kDynamic}, f32);
-      // (Q, K, V : memref<?xstore>, O : memref<?xf32>, Sq, Sk, causal : index)
-      auto fnTy = b.getFunctionType(
-          {abv, abv, abv, of, idxTy, idxTy, idxTy}, {});
+      // (Q, K, V : memref<?xstore>, O : memref<?xf32>, Sq, Sk, causal : index
+      //  [, log_decay : f32])
+      SmallVector<Type> argTys{abv, abv, abv, of, idxTy, idxTy, idxTy};
+      if (decay)
+        argTys.push_back(f32); // per-head log λ (RetNet/lightning decay)
+      auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitLinearAttnBody(body, loc, gpuFunc, D, storeTy, featureMap, viaTile);
+      emitLinearAttnBody(body, loc, gpuFunc, D, storeTy, featureMap, decay,
+                         viaTile);
       op->erase();
     }
   }

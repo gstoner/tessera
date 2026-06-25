@@ -1604,14 +1604,17 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by (head_dim, chip, dtype).
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str], bytes] = {}
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool], bytes] = {}
 
 
-def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16") -> bytes:
+def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
+                                     gqa: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
-    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype)."""
+    fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa).
+    gqa=True emits the grouped-query variant (kernel gains heads + kv_ratio
+    runtime args, reads K/V from the grouped head)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype)
+    key = (head_dim, chip, dtype, gqa)
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1619,10 +1622,12 @@ def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16") -> bytes
     if opt is None:
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm flash_attn lane")
+    gqa_attr = ", gqa = true" if gqa else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}}} '
+        ': () -> ()\n'
         '}\n'
     )
     pipeline = (
@@ -1682,6 +1687,18 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     sq = int(q.shape[-2])
     sk = int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+    bh_kv = int(np.prod(k.shape[:-2])) if k.ndim > 2 else 1
+    # GQA/MQA: H query heads vs G<H key/value heads (the head axis is -3:
+    # [...,H,S,D] / [...,G,S,D]). G != H -> grouped lane (heads + kv_ratio args);
+    # G == H is plain MHA (the original 8-arg kernel).
+    n_qh = int(q.shape[-3]) if q.ndim >= 3 else 1
+    n_kvh = int(k.shape[-3]) if k.ndim >= 3 else 1
+    gqa = n_kvh != n_qh
+    if gqa and (n_kvh <= 0 or n_qh % n_kvh != 0):
+        raise ValueError(
+            f"rocm GQA lane needs query-heads ({n_qh}) divisible by kv-heads "
+            f"({n_kvh})")
+    kv_ratio = n_qh // n_kvh if gqa else 1
 
     if q.dtype == np.float16:
         dtype_tag, store = "f16", np.float16
@@ -1699,7 +1716,7 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(head_dim))
 
-    hsaco = _build_compiled_flash_attn_hsaco(head_dim, dtype_tag)
+    hsaco = _build_compiled_flash_attn_hsaco(head_dim, dtype_tag, gqa)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -1718,7 +1735,8 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     kc = np.ascontiguousarray(k, dtype=store)
     vc = np.ascontiguousarray(v, dtype=store)
     o = np.zeros((bh, sq, head_dim), dtype=np.float32)
-    nq, nkv = bh * sq * head_dim, bh * sk * head_dim
+    # K/V are sized by the KV-head count (bh_kv), which differs from bh under GQA.
+    nq, nkv = bh * sq * head_dim, bh_kv * sk * head_dim
     dq, dk, dv, do = (ctypes.c_void_p(), ctypes.c_void_p(),
                       ctypes.c_void_p(), ctypes.c_void_p())
     for dev, size in ((dq, 2 * nq), (dk, 2 * nkv), (dv, 2 * nkv), (do, 4 * nq)):
@@ -1735,6 +1753,8 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     launch_args = (_mr(dq, nq) + _mr(dk, nkv) + _mr(dv, nkv) + _mr(do, nq)
                    + [ctypes.c_int64(sq), ctypes.c_int64(sk),
                       ctypes.c_float(scale), ctypes.c_int64(causal)])
+    if gqa:  # grouped kernel's two trailing runtime args
+        launch_args += [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)]
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)

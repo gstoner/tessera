@@ -188,7 +188,7 @@ floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,directly_tested,4 direct test references
 fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
 fused_epilogue,3,6,1,9,0,,directly_tested,9 direct test references
-gated_attention,6,0,0,6,0,,directly_tested,6 direct test references
+gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
 gated_deltanet,21,4,0,25,0,fp64,directly_tested,25 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
 ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
@@ -279,8 +279,8 @@ memory_write,4,0,0,4,0,,directly_tested,4 direct test references
 min,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,6,0,0,6,0,,directly_tested,6 direct test references
-mla_decode,3,2,0,5,0,,directly_tested,5 direct test references
-mla_decode_fused,4,9,0,13,0,,directly_tested,13 direct test references
+mla_decode,4,2,0,6,0,,directly_tested,6 direct test references
+mla_decode_fused,5,9,1,14,0,,directly_tested,14 direct test references
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 mod,2,0,0,2,0,,directly_tested,2 direct test references

@@ -3314,6 +3314,123 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
     return o.reshape(x.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED exotic-attention compositions (2026-06-25) — gated_attention,
+# mla_decode, mla_decode_fused, all built by COMPOSING already-compiled lanes:
+# the WMMA flash_attn kernel + the WMMA GEMM kernel (for MLA's latent
+# projections) + an elementwise gate. ``compiler_path = "rocm_exotic_attn_compiled"``.
+# This is the attention analog of the matmul-family lane — no new MLIR pass; the
+# recurrent DeltaNet variants (gated_deltanet / kimi / modified) and block-sparse
+# deepseek_sparse_attention need a sequential-scan / sparse-gather kernel and
+# stay artifact_only (see ROCM_AUDIT "Still Open").
+# ─────────────────────────────────────────────────────────────────────────────
+def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
+                     causal: bool = True) -> Any:
+    """Run the COMPILER-GENERATED WMMA flash_attn forward on Q/K/V via the
+    flash_attn executor (constructs a minimal sub-artifact). Returns the f32
+    attention output shaped like Q."""
+    kw: dict[str, Any] = {"causal": bool(causal)}
+    if scale is not None:
+        kw["scale"] = float(scale)
+    sub = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["q", "k", "v"], "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": ["q", "k", "v"], "kwargs": kw}],
+    })
+    return _execute_rocm_compiled_flash_attn(sub, (q, k, v))
+
+
+def _rocm_project_last(x: Any, w: Any, store: Any) -> Any:
+    """y = x[...,Dl] @ w[Dl, D] on the WMMA GEMM kernel, returned in `store`
+    dtype (so the flash lane can consume it). Used for MLA latent projections."""
+    import numpy as np
+    dl, d = w.shape
+    y = _rocm_wmma_gemm_2d(x.reshape(-1, dl), w).reshape(*x.shape[:-1], d)
+    return np.ascontiguousarray(y, dtype=store)
+
+
+def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
+                                            args: Any) -> Any:
+    """The ``target="rocm"`` exotic-attention composition lane: gated_attention
+    (flash × sigmoid-gate), mla_decode (latent K/V projections + flash), and
+    mla_decode_fused (down/up projections + flash). All on the COMPILER-GENERATED
+    WMMA flash_attn + GEMM kernels. f16/bf16 storage, f32 softmax+accumulate."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    handled = ("tessera.gated_attention", "tessera.mla_decode",
+               "tessera.mla_decode_fused")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"rocm_exotic_attn_compiled executor handles one of {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    scale = kwargs.get("scale")
+    causal = bool(kwargs.get("causal", True))
+
+    def _store_of(x):
+        if x.dtype == np.float16:
+            return np.float16
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            return bf16
+        raise ValueError(
+            f"rocm exotic-attention lane needs f16/bf16 Q/K/V; got {x.dtype}")
+
+    if op_name == "tessera.gated_attention":
+        if len(operands) != 4:
+            raise ValueError("gated_attention takes (Q, K, V, gate)")
+        q, k, v, gate = operands
+        attn = _rocm_flash_attn(q, k, v, scale=scale, causal=causal)
+        g = np.asarray(gate).astype(np.float32)
+        act = str(kwargs.get("gate_activation", "sigmoid"))
+        if act == "sigmoid":
+            g = 1.0 / (1.0 + np.exp(-g))
+        elif act not in ("identity", "none"):
+            raise ValueError(
+                "gate_activation must be 'sigmoid', 'identity', or 'none'")
+        return attn * np.broadcast_to(g, attn.shape)
+
+    if op_name == "tessera.mla_decode":
+        if len(operands) not in (3, 5):
+            raise ValueError(
+                "mla_decode takes (Q, K_latent, V_latent[, W_k, W_v])")
+        q = operands[0]
+        store = _store_of(q)
+        k = operands[1]
+        v = operands[2]
+        if len(operands) == 5:
+            w_k, w_v = operands[3], operands[4]
+            if w_k.ndim != 2 or w_v.ndim != 2:
+                raise ValueError("mla_decode W_k/W_v must be rank-2")
+            k = _rocm_project_last(k, w_k, store)
+            v = _rocm_project_last(v, w_v, store)
+        return _rocm_flash_attn(q, k, v, scale=scale, causal=causal)
+
+    # tessera.mla_decode_fused — (x, w_dkv, w_uk, w_uv, q): c=x@w_dkv; K=c@w_uk;
+    # V=c@w_uv; flash_attn(q, K, V). All four matmuls on the WMMA GEMM kernel.
+    if len(operands) != 5:
+        raise ValueError("mla_decode_fused takes (x, w_dkv, w_uk, w_uv, q)")
+    x, w_dkv, w_uk, w_uv, q = operands
+    store = _store_of(q)
+    for w in (w_dkv, w_uk, w_uv):
+        if w.ndim != 2:
+            raise ValueError("mla_decode_fused weights must be rank-2")
+    c = _rocm_project_last(x, w_dkv, store)            # x @ w_dkv
+    k = _rocm_project_last(c, w_uk, store)             # c @ w_uk
+    v = _rocm_project_last(c, w_uv, store)             # c @ w_uv
+    return _rocm_flash_attn(q, k, v, scale=scale, causal=causal)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -3333,6 +3450,7 @@ def _executor_table():
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
+        "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }

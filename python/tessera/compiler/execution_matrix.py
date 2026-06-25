@@ -118,6 +118,20 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "launches it. Standalone gelu / silu / relu (one "
                             "thread per element), dispatched by op name; "
                             "f32/f16/bf16 storage, f32 compute",
+    "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
+                            "compiler GENERATES (generate-rocm-silu-mul-kernel "
+                            "-> ROCDL -> hsaco, in-process via tessera-opt), then "
+                            "HIP loads + launches it. Flat 2-operand elementwise "
+                            "silu(a)·b (one thread per element); the standalone "
+                            "analog of the fused SwiGLU gate-multiply; "
+                            "f32/f16/bf16 storage, f32 compute",
+    "rocm_alibi_compiled":  "AMD GPU RDNA ALiBi positional-bias generator the "
+                            "Tessera compiler GENERATES (generate-rocm-alibi-"
+                            "kernel -> ROCDL -> hsaco, in-process via "
+                            "tessera-opt), then HIP loads + launches it. "
+                            "bias[h,i,j] = slope[h]·(j−i) over [H, S, S] (one "
+                            "thread per element); slopes default to the "
+                            "2^(-8(k+1)/H) ramp; f32/f16/bf16 output",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -291,6 +305,27 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "elementwise kernel (standalone gelu/silu/relu, one thread per "
                "element): tessera-opt generates + serializes the kernel to hsaco "
                "in-process, then HIP loads + launches it. Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_silu_mul_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_silu_mul_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_silu_mul_compiled", runtime_status="success",
+        reason="ROCm silu_mul artifact runs the COMPILER-GENERATED flat 2-operand "
+               "elementwise SwiGLU gate-multiply silu(a)·b (one thread per "
+               "element): tessera-opt generates + serializes the kernel to hsaco "
+               "in-process, then HIP loads + launches it.",
+        execution_mode="hip_runtime"),
+    # ALiBi positional-bias generator — bias[h,i,j]=slope[h]·(j−i). vs numpy.
+    ("rocm", "rocm_alibi_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_alibi_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_alibi_compiled", runtime_status="success",
+        reason="ROCm alibi artifact runs the COMPILER-GENERATED ALiBi positional-"
+               "bias generator (bias[h,i,j]=slope[h]·(j−i) over [H,S,S], one "
+               "thread per element): tessera-opt generates + serializes the "
+               "kernel to hsaco in-process, then HIP loads + launches it. Slopes "
+               "default to the 2^(-8(k+1)/H) ramp.",
         execution_mode="hip_runtime"),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(

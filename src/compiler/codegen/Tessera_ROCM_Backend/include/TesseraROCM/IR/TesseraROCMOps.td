@@ -276,6 +276,45 @@ def ROCM_ActivationKernelOp : TesseraROCM_Op<"activation"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SiluMulKernelOp : TesseraROCM_Op<"silu_mul"> {
+  let summary = "SwiGLU gate-multiply (2-operand elementwise) kernel";
+  let description = [{
+    The directive `generate-rocm-silu-mul-kernel` expands into a flat 2-operand
+    elementwise gpu kernel computing the SwiGLU gate-multiply over N elements
+    (one thread per element, strided grid):
+
+      O[i] = silu(A[i]) * B[i] = (A[i] / (1 + exp(-A[i]))) * B[i]
+
+    The **standalone** analog of the gate-multiply the fused SwiGLU MLP applies
+    in-register (`silu(x@Wg) * (x@Wu)`); it computes in f32 regardless of storage
+    dtype and the transcendental lowers through the `math` → ROCDL path. `N` is a
+    runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
+  let summary = "ALiBi positional-bias generator kernel";
+  let description = [{
+    The directive `generate-rocm-alibi-kernel` expands into a flat elementwise gpu
+    kernel generating the ALiBi positional-bias tensor of shape `[H, S, S]` (one
+    thread per element, strided grid):
+
+      bias[h, i, j] = slope[h] * (j - i)
+
+    `slope` is a per-head scalar supplied as a length-H f32 buffer (the runtime
+    fills the default `2^(-8(k+1)/H)` ramp when the caller passes none). Matches
+    the `nn.functional.alibi` reference (distance = positions[j] - positions[i]).
+    Computes in f32 and stores f16/bf16/f32. `H`/`S` are runtime `index` args;
+    `dtype` is the output storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_RopeKernelOp : TesseraROCM_Op<"rope"> {
   let summary = "Rotary position embedding (interleaved-pair) kernel";
   let description = [{

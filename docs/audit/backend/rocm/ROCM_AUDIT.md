@@ -361,17 +361,39 @@ become the on-silicon **oracle** the compiled path validates against.
   `test_rocm_rope_compiled.py`) + a GPU-free codegen gate
   (`test_rocm_activation_rope_codegen.py`). (`relu` executes via the activation
   lane by op name but has no separate rocm target-map row.)
+- **silu_mul (SwiGLU gate-multiply)** (2026-06-25): a flat 2-operand elementwise
+  kernel `silu_mul(a,b) = silu(a)·b = (a/(1+exp(−a)))·b` — a direct sibling of
+  the activation lane (`tessera_rocm.silu_mul` + `generate-rocm-silu-mul-kernel`,
+  one thread per element). The **standalone** analog of the gate-multiply the
+  fused SwiGLU MLP applies in-register. f32 compute regardless of storage. New
+  `runtime.launch()` lane `rocm_silu_mul_compiled` (own executor + matrix row);
+  op name `tessera.silu_mul`; f32/f16/bf16, status `compiled`. Validated on
+  gfx1151 vs the numpy reference across dtype × shape incl. >1 block, multi-D
+  (`test_rocm_silu_mul_compiled.py`) + a GPU-free codegen gate (in
+  `test_rocm_activation_rope_codegen.py`). **Closes the norms/activations group.**
+- **alibi (ALiBi positional bias)** (2026-06-25): a flat elementwise generator
+  for the positional-bias tensor `bias[h,i,j] = slope[h]·(j−i)` of shape
+  `[H, S, S]` — the positional sibling of the rope lane (`tessera_rocm.alibi` +
+  `generate-rocm-alibi-kernel`, one thread per element, gid→(h,i,j) decode). The
+  per-head `slope` comes from a length-H f32 buffer; the runtime fills the
+  default `2^(-8(k+1)/H)` ramp when the caller passes none (an explicit `slopes`
+  operand overrides it). f32 compute, f16/bf16/f32 output. New `runtime.launch()`
+  lane `rocm_alibi_compiled` (own executor + matrix row); op name `tessera.alibi`
+  with `num_heads`/`seq_len` kwargs; status `compiled`. Validated on gfx1151 vs
+  the `nn.functional.alibi` numpy reference across H×S incl. >1 block, default +
+  explicit slopes (`test_rocm_alibi_compiled.py`) + a GPU-free codegen gate (in
+  `test_rocm_activation_rope_codegen.py`). **Closes the positional group.**
 
 ## Still Open
 
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `silu_mul` (SwiGLU, 2-operand — a follow-up).
-    (`softmax`/`softmax_safe`, `rmsnorm(_safe)`, `layer_norm`, `gelu`, `silu`
-    now execute as compiled kernels — see Landed above.)
-  - **positional:** `alibi`. (`rope` now executes as a compiled kernel — see
-    Landed above.)
+  - **norms / activations:** *(group closed)* — `softmax`/`softmax_safe`,
+    `rmsnorm(_safe)`, `layer_norm`, `gelu`, `silu`, and `silu_mul` (SwiGLU) all
+    execute as compiled kernels (see Landed above).
+  - **positional:** *(group closed)* — `rope` and `alibi` both execute as
+    compiled kernels (see Landed above).
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
     `linear_general`, `qkv_projection`;
   - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,

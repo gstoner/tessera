@@ -12,8 +12,8 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 13 |
-| ``artifact_only`` | 17 |
+| ``compiled`` | 15 |
+| ``artifact_only`` | 15 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -38,7 +38,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 |---|---|---|---|---|---|---|
 | gelu | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | silu | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
-| silu_mul | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| silu_mul | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | softmax | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | softmax_safe | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
 
@@ -74,7 +74,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| alibi | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| alibi | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | rope | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 
 ## tensor (7)

@@ -33,6 +33,16 @@ def _rope(dtype="f32"):
             f'dtype = "{dtype}"}} : () -> ()\n}}\n')
 
 
+def _silu_mul(dtype="f32"):
+    return ('module {\n  "tessera_rocm.silu_mul"() {name = "sm", '
+            f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+
+
+def _alibi(dtype="f32"):
+    return ('module {\n  "tessera_rocm.alibi"() {name = "ab", '
+            f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+
+
 def _gen(directive, pass_name):
     r = _opt(directive, f"--{pass_name}")
     assert r.returncode == 0, r.stderr
@@ -62,9 +72,28 @@ def test_rope_signature_and_trig():
     assert "math.cos" in ir and "math.sin" in ir
 
 
+def test_silu_mul_signature_and_exp():
+    ir = _gen(_silu_mul(), "generate-rocm-silu-mul-kernel")
+    m = re.search(r"gpu\.func @sm\(([^)]*)\)", ir)
+    # (A, B, O : memref, N : index) -> 4 args
+    assert m and len([a for a in m.group(1).split(",") if a.strip()]) == 4
+    assert "math.exp" in ir and "arith.mulf" in ir
+
+
+def test_alibi_signature_and_distance():
+    ir = _gen(_alibi(), "generate-rocm-alibi-kernel")
+    m = re.search(r"gpu\.func @ab\(([^)]*)\)", ir)
+    # (Slopes, O : memref, H, S : index) -> 4 args
+    assert m and len([a for a in m.group(1).split(",") if a.strip()]) == 4
+    # distance (j - i) via index->float subtract, scaled by the slope
+    assert "arith.subf" in ir and "arith.sitofp" in ir and "arith.mulf" in ir
+
+
 @pytest.mark.parametrize("directive,pass_name", [
     (_act("gelu", "f16"), "generate-rocm-activation-kernel"),
     (_rope("f16"), "generate-rocm-rope-kernel"),
+    (_silu_mul("f16"), "generate-rocm-silu-mul-kernel"),
+    (_alibi("f16"), "generate-rocm-alibi-kernel"),
 ])
 def test_lowers_to_rocdl(directive, pass_name):
     r = _opt(directive,

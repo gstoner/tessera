@@ -17,6 +17,8 @@ std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnBwdKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMALinearAttnKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMActivationKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMSiluMulKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMAlibiKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMRopeKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMSoftmaxKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMNormKernelPass();

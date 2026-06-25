@@ -900,6 +900,20 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "accumulator (generate-wmma-gemm-kernel). Executes via "
                  "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
     },
+    "rmsnorm": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Unweighted row rmsnorm over the last axis (row-reduction "
+                 "kernel, generate-rocm-norm-kernel): x / sqrt(mean(x²) + eps). "
+                 "Executes via runtime.launch() (rocm_norm_compiled).",
+    },
+    "layer_norm": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Unweighted row layer_norm over the last axis (row-reduction "
+                 "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
+                 "Executes via runtime.launch() (rocm_norm_compiled).",
+    },
 }
 
 
@@ -998,6 +1012,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_rocm_linear_attn_compiled.py",
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
+    ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

@@ -96,6 +96,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tessera.linear_attn + the decay-masked siblings "
                             "tessera.lightning_attention (identity+decay) and "
                             "tessera.retention (x²+decay) by op name",
+    "rocm_norm_compiled":   "AMD GPU RDNA row-reduction rmsnorm / layer_norm the "
+                            "Tessera compiler GENERATES (generate-rocm-norm-kernel "
+                            "-> ROCDL -> hsaco, in-process via tessera-opt), then "
+                            "HIP loads + launches it. Unweighted row normalize "
+                            "over the last axis (one workgroup per row, LDS "
+                            "tree-reduce of Σx and Σx²); handles "
+                            "tessera.rmsnorm(_safe) + tessera.layer_norm by op "
+                            "name. f32/f16/bf16 storage, f32 reduce",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
@@ -228,6 +236,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "in-process, then HIP loads + launches it. Handles linear_attn + "
                "lightning_attention (identity+decay) + retention (x²+decay) by "
                "op name.",
+        execution_mode="hip_runtime"),
+    # Row-reduction rmsnorm / layer_norm — siblings of the softmax kernel.
+    # Unweighted row normalize over the last axis; f32/f16/bf16; vs numpy.
+    ("rocm", "rocm_norm_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_norm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_norm_compiled", runtime_status="success",
+        reason="ROCm norm artifact runs the COMPILER-GENERATED RDNA row-reduction "
+               "kernel (unweighted rmsnorm / layer_norm over the last axis, one "
+               "workgroup per row, LDS tree-reduce of Σx and Σx²): tessera-opt "
+               "generates + serializes the kernel to hsaco in-process, then HIP "
+               "loads + launches it. Handles tessera.rmsnorm(_safe) + "
+               "tessera.layer_norm by op name.",
         execution_mode="hip_runtime"),
     # --- NVIDIA GPU (consumer Blackwell, sm_120 warp-level mma.sync GEMM) ---
     # sm_120 bring-up (2026-06-25): the shipped libtessera_nvidia_gemm.so runs a

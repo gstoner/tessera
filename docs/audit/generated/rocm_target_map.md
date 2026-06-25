@@ -12,8 +12,8 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 7 |
-| ``artifact_only`` | 23 |
+| ``compiled`` | 9 |
+| ``artifact_only`` | 21 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -66,8 +66,8 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| layer_norm | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
-| rmsnorm | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| layer_norm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
+| rmsnorm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | rmsnorm_safe | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
 
 ## position_encoding (2)

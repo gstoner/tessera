@@ -19,8 +19,8 @@ mla_decode_fused,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,
 modified_delta_attention,attention,artifact_only,fp32,hipcc≥7.2.4,"(16, 16, 16, 1)",,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 mqa_attention,attention,compiled,"fp16,bf16",hipcc≥7.2.4,,,,Multi-query attention = the GQA flash_attn kernel at kv_ratio=H (one shared KV head). Executes via runtime.launch().
 multi_head_attention,attention,compiled,"fp16,bf16",hipcc≥7.2.4,,,,Full multi-head = the flash_attn WMMA kernel itself. Executes via runtime.launch() (rocm_flash_attn_compiled).
-layer_norm,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
-rmsnorm,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
+layer_norm,norm,compiled,"fp32,fp16,bf16",hipcc≥7.2.4,,,,"Unweighted row layer_norm over the last axis (row-reduction kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). Executes via runtime.launch() (rocm_norm_compiled)."
+rmsnorm,norm,compiled,"fp32,fp16,bf16",hipcc≥7.2.4,,,,"Unweighted row rmsnorm over the last axis (row-reduction kernel, generate-rocm-norm-kernel): x / sqrt(mean(x²) + eps). Executes via runtime.launch() (rocm_norm_compiled)."
 rmsnorm_safe,norm,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 alibi,position_encoding,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H
 rope,position_encoding,artifact_only,fp32,hipcc≥7.2.4,,,,ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H

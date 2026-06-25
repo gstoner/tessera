@@ -313,15 +313,30 @@ become the on-silicon **oracle** the compiled path validates against.
   are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
   runnable `async_copy` that would enable it now exists (#101) for when a
   staging-bound kernel appears.
+- **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
+  softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
+  pass (one workgroup per row; a single X-pass tree-reduces Σx and Σx² through
+  LDS, then a write pass normalizes). **Unweighted** over the last axis (the
+  bare ops; the affine is a separate mul/add): rmsnorm `x / sqrt(mean(x²)+eps)`,
+  layer_norm `(x − μ) / sqrt(var + eps)`. Reductions in f32 regardless of
+  storage; `eps` is a trailing f32 runtime arg. New `runtime.launch()` lane
+  `rocm_norm_compiled` (own executor + matrix row); accepts `tessera.rmsnorm`,
+  `tessera.rmsnorm_safe` (tighter default eps), `tessera.layer_norm` by op name;
+  f32/f16/bf16. Status `compiled`. Validated on gfx1151 vs the unweighted numpy
+  reference (`_apple_gpu_rowop_numpy`) across all three ops × f32/f16/bf16 ×
+  varied M/K incl. K>256, ragged, rank-3 (`test_rocm_norm_compiled.py`) + a
+  GPU-free codegen gate (`test_rocm_norm_codegen.py`).
 
 ## Still Open
 
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `softmax(_safe)`,
-    `gelu`, `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute
-    *fused* into the GEMM epilogue, just not as standalone kernels);
+  - **norms / activations:** `softmax(_safe)`, `gelu`, `silu(_mul)` (the
+    standalone ops — `gelu`/`silu` already execute *fused* into the GEMM
+    epilogue, just not as standalone kernels; `softmax` lands via #122).
+    (`rmsnorm(_safe)` / `layer_norm` now execute as compiled row-reduction
+    kernels — see Landed above.)
   - **positional:** `rope`, `alibi`;
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
     `linear_general`, `qkv_projection`;

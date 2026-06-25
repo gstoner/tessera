@@ -180,7 +180,7 @@ factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
 fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
-flash_attn,98,57,6,155,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,155 direct test references
+flash_attn,99,57,7,156,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,156 direct test references
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,directly_tested,3 direct test references
@@ -238,7 +238,7 @@ latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
 layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,27 direct test references
 le,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-lightning_attention,12,2,0,14,0,,directly_tested,14 direct test references
+lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
 linear_attn,32,8,1,40,0,,directly_tested,40 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
 linear_general,13,0,0,13,0,,directly_tested,13 direct test references
@@ -352,7 +352,7 @@ relu,103,20,9,123,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,123 dire
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,7,15,0,22,0,,directly_tested,22 direct test references
-retention,6,0,1,6,0,,directly_tested,6 direct test references
+retention,8,0,2,8,0,,directly_tested,8 direct test references
 rfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,directly_tested,79 direct test references
 rmsnorm_safe,5,5,0,10,0,bf16 f16 f32,directly_tested,10 direct test references

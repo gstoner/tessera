@@ -69,6 +69,30 @@ if(TESSERA_ENABLE_HIP)
     endif()
 endif()
 
+# Mirror of the HIP block for CUDA: when cuda_backend.cpp is compiled
+# (TESSERA_ENABLE_CUDA), it needs cuda_runtime.h (and cudart to link). Prefer the
+# CUDAToolkit imported target (carries include dirs + the runtime lib); fall back
+# to a CUDA-prefix include so a bare -DTESSERA_ENABLE_CUDA=ON without the package
+# still finds cuda_runtime.h.
+if(TESSERA_ENABLE_CUDA)
+    if(NOT TARGET CUDA::cudart)
+        find_package(CUDAToolkit QUIET)
+    endif()
+    if(TARGET CUDA::cudart)
+        target_link_libraries(tessera_runtime PUBLIC CUDA::cudart)
+    else()
+        if(DEFINED ENV{CUDA_PATH})
+            set(_tessera_cuda_prefix "$ENV{CUDA_PATH}")
+        elseif(DEFINED CUDAToolkit_ROOT)
+            set(_tessera_cuda_prefix "${CUDAToolkit_ROOT}")
+        else()
+            set(_tessera_cuda_prefix "/usr/local/cuda")
+        endif()
+        target_include_directories(tessera_runtime PUBLIC "${_tessera_cuda_prefix}/include")
+        message(STATUS "tessera_runtime: CUDA enabled, using include ${_tessera_cuda_prefix}/include (CUDA::cudart target not found)")
+    endif()
+endif()
+
 # ------------------------------------------------------------------
 # Unit tests (standalone build or if explicitly requested)
 # ------------------------------------------------------------------

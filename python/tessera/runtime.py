@@ -1696,11 +1696,14 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
+    # `fused_epilogue` is matmul + a fused bias/activation epilogue — the same
+    # rocm_compiled GEMM kernel with the bias operand / activation kwarg — so
+    # accept that op name too (it's a `compiled` row in rocm_target_map).
     if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
-            "tessera.matmul", "tessera.gemm"):
+            "tessera.matmul", "tessera.gemm", "tessera.fused_epilogue"):
         raise ValueError(
-            "rocm_compiled executor handles exactly one matmul/gemm op; got "
-            f"{[o.get('op_name') for o in ops]!r}")
+            "rocm_compiled executor handles exactly one matmul/gemm/"
+            f"fused_epilogue op; got {[o.get('op_name') for o in ops]!r}")
     values = _bind_launch_args(args, arg_names)
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
@@ -1907,10 +1910,19 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.flash_attn":
+    # The flash-attn WMMA kernel realizes the whole multi-head family; accept the
+    # registry op names that map onto it (so a caller stamping e.g.
+    # tessera.gqa_attention actually launches, matching the `compiled` rows in
+    # rocm_target_map). GQA/MQA come from the operand shapes; the window/softcap
+    # come from kwargs. `attn_sliding_window` additionally requires a window.
+    _FA_OPS = ("tessera.flash_attn", "tessera.multi_head_attention",
+               "tessera.gqa_attention", "tessera.mqa_attention",
+               "tessera.attn_sliding_window")
+    fa_op = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or fa_op not in _FA_OPS:
         raise ValueError(
-            "rocm_flash_attn_compiled executor handles exactly one "
-            f"tessera.flash_attn op; got {[o.get('op_name') for o in ops]!r}")
+            "rocm_flash_attn_compiled executor handles exactly one of "
+            f"{_FA_OPS}; got {[o.get('op_name') for o in ops]!r}")
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 3:
@@ -1973,6 +1985,10 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     if window < 0:
         raise ValueError(
             f"rocm flash_attn window must be a non-negative width; got {window}")
+    if fa_op == "tessera.attn_sliding_window" and window <= 0:
+        raise ValueError(
+            "tessera.attn_sliding_window requires a positive `window` width "
+            f"kwarg; got {window}")
     sliding = window > 0
     # Gemma-2 logit soft-capping: a positive `logit_softcap` is the cap value
     # (scores → cap·tanh(S/cap) before softmax). 0/None disables it.

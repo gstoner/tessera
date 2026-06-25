@@ -27,7 +27,7 @@ atan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 atan2,2,0,0,2,0,,directly_tested,2 direct test references
 attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
 attn_local_window_2d,34,25,1,59,0,fp32,directly_tested,59 direct test references
-attn_sliding_window,13,2,1,15,0,,directly_tested,15 direct test references
+attn_sliding_window,15,2,2,17,0,,directly_tested,17 direct test references
 attn_top_k_blocks,7,2,1,9,0,,directly_tested,9 direct test references
 autocast,0,0,0,0,1,,structural_only,category default for 'transform'
 avg_pool,2,0,0,2,0,,directly_tested,2 direct test references
@@ -180,14 +180,14 @@ factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
 fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
-flash_attn,99,57,7,156,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,156 direct test references
+flash_attn,100,57,8,157,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,157 direct test references
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,directly_tested,3 direct test references
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,directly_tested,4 direct test references
 fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
-fused_epilogue,2,6,0,8,0,,directly_tested,8 direct test references
+fused_epilogue,3,6,1,9,0,,directly_tested,9 direct test references
 gated_attention,6,0,0,6,0,,directly_tested,6 direct test references
 gated_deltanet,21,4,0,25,0,fp64,directly_tested,25 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
@@ -195,7 +195,7 @@ ge,1,0,0,1,1,,covered_by_family,category default for 'comparison'
 gelu,44,19,1,63,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,63 direct test references
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
-gqa_attention,5,0,0,5,0,,directly_tested,5 direct test references
+gqa_attention,6,0,1,6,0,,directly_tested,6 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
 group_norm,6,0,0,6,0,,directly_tested,6 direct test references
 grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
@@ -239,7 +239,7 @@ layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,d
 le,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
-linear_attn,32,8,1,40,0,,directly_tested,40 direct test references
+linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
 linear_general,13,0,0,13,0,,directly_tested,13 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
@@ -265,7 +265,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
 masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
-matmul,390,203,15,593,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,593 direct test references
+matmul,390,203,16,593,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,593 direct test references
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,4,0,0,4,0,,directly_tested,4 direct test references
@@ -294,14 +294,14 @@ momentum,3,0,0,3,0,,directly_tested,3 direct test references
 mor_partition,3,2,1,5,0,,directly_tested,5 direct test references
 mor_router,5,3,1,8,0,,directly_tested,8 direct test references
 mor_scatter,3,2,1,5,0,,directly_tested,5 direct test references
-mqa_attention,3,0,0,3,0,,directly_tested,3 direct test references
+mqa_attention,4,0,1,4,0,,directly_tested,4 direct test references
 mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
 msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,5,0,0,5,0,,directly_tested,5 direct test references
 mul,85,4,7,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
-multi_head_attention,5,0,0,5,0,,directly_tested,5 direct test references
+multi_head_attention,7,0,1,7,0,,directly_tested,7 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,0,0,0,0,1,,covered_by_family,category default for 'comparison'

@@ -75,9 +75,13 @@ def test_apple_and_gpu_dashboards_share_status_vocabulary() -> None:
     # (Project 3, 2026-06-01) — fused + a checked-in numerical-proof
     # fixture. It surfaces on the Apple dashboard for the promoted
     # encode-session ops (softmax/rmsnorm/.../conv2d).
+    # ``compiled`` (2026-06-25) is the rung just below it: executes on
+    # hardware via runtime.launch() as a compiler-generated hsaco + a
+    # numerical fixture, but with no shipped C-ABI runtime_symbol
+    # (the ROCm compiler-generated attention/epilogue family).
     allowed = {"fused", "compileable", "executable", "artifact_only",
                "reference", "planned", "absent", "unknown", "ready",
-               "hardware_verified"}
+               "hardware_verified", "compiled"}
     assert apple_statuses <= allowed, (
         f"Apple dashboard uses unknown status(es): "
         f"{apple_statuses - allowed!r}"

@@ -2290,6 +2290,157 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
     return o.reshape(q.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED softmax lane (2026-06-25) — the first non-matmul/non-WMMA
+# compiler-generated ROCm kernel. ``runtime.launch()`` of an artifact stamped
+# ``compiler_path = "rocm_softmax_compiled"`` builds the COMPILER-GENERATED
+# row-reduction kernel (the ``generate-rocm-softmax-kernel`` pipeline → hsaco;
+# no WMMA / no lower-tessera-target-to-rocdl) and launches it via HIP. Stable
+# softmax over the last axis; f32/f16/bf16 storage, f32-reduce. ONE hsaco per
+# (chip, dtype) — the kernel is (M,K)-generic — cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_SOFTMAX_BLOCKDIM = 256  # must match BD in GenerateROCMSoftmaxKernel.cpp
+#: hsaco bytes keyed by (chip, dtype).
+_rocm_softmax_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
+    """Generate + serialize the compiler's row-reduction softmax kernel to
+    hsaco, in-process via tessera-opt. Cached per (chip, dtype). No WMMA → the
+    pipeline is the plain gpu→ROCDL chain (no lower-tessera-target-to-rocdl)."""
+    chip = _rocm_chip()
+    key = (chip, dtype)
+    cached = _rocm_softmax_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm softmax lane")
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.softmax"() {{name = "sm", dtype = "{dtype}"}} '
+        ': () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-rocm-softmax-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled softmax in-process "
+            f"(rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm softmax lane: gpu.binary was not an ELF hsaco")
+    _rocm_softmax_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` softmax lane: run the COMPILER-GENERATED row-
+    reduction kernel — stable softmax over the last axis (one workgroup per
+    row). Handles ``tessera.softmax`` / ``tessera.softmax_safe`` (both the
+    numerically-stable formula). f32/f16/bf16 storage, f32 reduce. Raises
+    ``_RocmCompiledUnavailable`` when the lane can't run here; ``ValueError`` on
+    a bad op/dtype."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe")
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in _SM_OPS:
+        raise ValueError(
+            "rocm_softmax_compiled executor handles exactly one of "
+            f"{_SM_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("softmax requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    if axis not in (-1,):
+        raise ValueError(
+            f"rocm softmax lane only supports axis=-1 (last); got {axis}")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.ndim < 1:
+        raise ValueError("softmax operand must have rank >= 1")
+    k = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    if k <= 0:
+        raise ValueError(f"softmax last dim must be positive; got {k}")
+
+    store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                "rocm softmax lane handles f32/f16/bf16 storage; got "
+                f"{x.dtype}")
+
+    hsaco = _build_compiled_softmax_hsaco(dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm softmax: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm softmax: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sm") != 0:
+        raise RuntimeError("rocm softmax: kernel symbol 'sm' not found")
+
+    xc = np.ascontiguousarray(x, dtype=store)
+    o = np.zeros((m, k), dtype=store)
+    n = m * k
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (dx, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm softmax: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, n) + _mr(do, n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(k)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _SOFTMAX_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm softmax: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    return o.reshape(x.shape)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -2303,6 +2454,7 @@ def _executor_table():
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
+        "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }
 

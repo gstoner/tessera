@@ -900,6 +900,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "accumulator (generate-wmma-gemm-kernel). Executes via "
                  "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
     },
+    "softmax": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Row-wise stable softmax over the last axis — the first "
+                 "non-matmul/non-WMMA compiled ROCm kernel "
+                 "(generate-rocm-softmax-kernel: one workgroup per row, LDS "
+                 "tree-reduce, f32 reduce). Executes via runtime.launch() "
+                 "(rocm_softmax_compiled).",
+    },
 }
 
 
@@ -998,6 +1007,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_rocm_linear_attn_compiled.py",
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
+    ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

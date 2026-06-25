@@ -192,11 +192,18 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
 - The "RTX 5070 Ti not supported" noise is about **framework wheels** (PyTorch/TF prebuilt binaries
   lagging sm_120), **not** the CUDA toolkit — `nvcc`/`ptxas` 13.x assemble `sm_120a` cleanly, which is
   all Tessera needs.
-- **Shared-memory discrepancy to resolve on-silicon:** the compute-capabilities appendix (Table 31)
-  says CC 12.0 max shared memory/SM = **100 KB** (99 KB/block); the 13.3 release-note summary says
-  **128 KB**. Likely the 128 KB is the *unified data cache* (Table 32) and 100 KB is the shared-memory
-  carve-out. `gpu_target.py` keeps 100 KB (Table 31); confirm with
-  `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)` on the box.
+- **Shared-memory discrepancy — RESOLVED on-silicon (2026-06-25, RTX 5070 Ti, driver 610.62 / CUDA
+  UMD 13.3, nvcc 13.3.33, `-arch=sm_120`).** The 100 KB figure wins; the release-note 128 KB is the
+  *unified data cache* (Table 32), not the shared-memory carve-out. Measured via
+  `cudaDeviceGetAttribute` / `cudaGetDeviceProperties` on the box:
+  - `sharedMemPerMultiprocessor` = **102400 B (100 KiB)** — exact match for `_SMEM_BYTES[SM_120] = 102400`.
+  - `cudaDevAttrMaxSharedMemoryPerBlockOptin` = **101376 B (99 KiB)** — matches Table 31's "99 KB/block".
+  - `cudaDevAttrMaxSharedMemoryPerBlock` (static, no opt-in) = **49152 B (48 KiB)**; SM count = 70.
+  Conclusion: `gpu_target.py`'s 100 KB/SM pin is correct. **Lowering nuance:** a single block can opt
+  into at most **99 KiB (101376 B)**, not the full 100 KiB/SM — any per-block dynamic-smem budget
+  (and the `cudaFuncAttributeMaxDynamicSharedMemorySize` set-attr) must cap at 101376 on sm_120, not
+  102400. (Same per-SM-vs-per-block-optin 1 KiB reservation pattern exists on Hopper; `_SMEM_BYTES`
+  records the per-SM capacity by convention.)
 - **`sm_120a` vs `sm_120f` — grounded from the 13.3 Programming Guide §5.1.2 + Table 28.** There are
   three compiler-target tiers: **baseline** (`compute_120`, no arch-specific features, runs CC 12.0+);
   **family-specific** (`compute_120f`, the arch-specific subset *common to the consumer-Blackwell
@@ -213,7 +220,7 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
 
 ## Sequencing when the box lands
 
-1. **Toolkit/driver:** install CUDA ≥ 12.8 (13.2 U1 preferred) + R570+; confirm `nvidia-smi` and
+1. **Toolkit/driver:** install CUDA ≥ 12.8 (13.3 preferred, ≥610.43.02 driver) + R570+; confirm `nvidia-smi` and
    `nvcc --list-gpu-arch | grep sm_120`.
 2. **Stage A spike (host-free, can begin now):** emit + structurally validate an sm_120 bf16
    `mma.sync` GEMM PTX (new path; do not reuse the sm_90a wgmma emitter).

@@ -49,7 +49,7 @@ Tessera's NVIDIA backend pins these in
 
 ## 2. Per-SM feature matrix
 
-The full matrix lives in `_CUDA_13_2_FEATURES` (`gpu_target.py`). Summary:
+The full matrix lives in `_CUDA_13_3_FEATURES` (`gpu_target.py`). Summary:
 
 | Feature | SM_80 | SM_86 | SM_89 | SM_90 | SM_100 | SM_120 |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|

@@ -2,7 +2,7 @@
 
 Locks the per-target hardware-free pre-work landed 2026-05-11:
 
-  G-1: NVIDIA backend pinned to CUDA 13.2 Update 1 — per-SM feature
+  G-1: NVIDIA backend pinned to CUDA 13.3 — per-SM feature
        matrix (wgmma_sparse / tcgen05_pair / cluster_launch /
        tma_swizzle_128b / mbarrier_arrive_tx / cp_async_bulk /
        async_proxy_fence / block_scaled_mma) + arch strings
@@ -23,7 +23,7 @@ from tessera.compiler.capabilities import TARGET_CAPABILITIES, get_target_capabi
 
 
 # ──────────────────────────────────────────────────────────────────────────
-#               G-1: NVIDIA CUDA 13.2 U1 capability matrix
+#               G-1: NVIDIA CUDA 13.3 capability matrix
 # ──────────────────────────────────────────────────────────────────────────
 
 class TestCUDA13ToolchainPin:
@@ -49,7 +49,7 @@ class TestCUDA13ToolchainPin:
 
 
 class TestCUDA13FeatureMatrix:
-    """Per-SM feature flags under CUDA 13.2 U1."""
+    """Per-SM feature flags under CUDA 13.3."""
 
     def test_sm80_baseline_features(self):
         from tessera.compiler.gpu_target import GPUTargetProfile, ISA
@@ -110,14 +110,14 @@ class TestCUDA13FeatureMatrix:
 
 
 class TestNVIDIACapabilityRegistry:
-    """capabilities.py entries pinned to CUDA 13.2 U1."""
+    """capabilities.py entries pinned to CUDA 13.3."""
 
     @pytest.mark.parametrize("name", [
         "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
     ])
-    def test_cuda_13_2_marker_present(self, name):
+    def test_cuda_13_3_marker_present(self, name):
         cap = TARGET_CAPABILITIES[name]
-        assert "cuda_13_2_u1" in cap.features
+        assert "cuda_13_3" in cap.features
 
     def test_sm90_has_wgmma_features(self):
         cap = TARGET_CAPABILITIES["nvidia_sm90"]

@@ -180,7 +180,7 @@ class BackendKernelEntry:
           * ``compileable`` → dtypes the lowering pipeline emits IR for.
             Compilation works; execution may not.
           * ``artifact_only`` → dtypes the Target IR artifact compiles
-            for under the pinned toolchain (CUDA 13.2 U1 / ROCm 7.2.4).
+            for under the pinned toolchain (CUDA 13.3 / ROCm 7.2.4).
             No host execution.
           * ``planned`` → **target kernel dtypes for the unbuilt
             kernel** — the matrix the future native kernel will
@@ -1016,7 +1016,7 @@ def _attach_numerical_fixtures(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint G-3 (2026-05-11) — Per-kernel WGMMA tile shape + cluster + MFU
-# targets for NVIDIA SM_90+ (CUDA 13.2 U1).
+# targets for NVIDIA SM_90+ (CUDA 13.3).
 #
 # The canonical bf16/fp16 Hopper tile is (M=64, N=256, K=16) — this is
 # what cuBLAS uses for its WGMMA-based GEMM kernels. FP8 lowers to
@@ -2250,7 +2250,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 dtypes=dtypes,
                 feature_flags=flags,
                 notes=(
-                    "Target IR artifact ships under CUDA 13.2 U1; "
+                    "Target IR artifact ships under CUDA 13.3; "
                     "execution gated on Phase G"
                     if mapped == _ARTIFACT_STATUS
                     else ""

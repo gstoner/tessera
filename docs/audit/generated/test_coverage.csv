@@ -265,7 +265,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
 masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
-matmul,390,203,16,593,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,593 direct test references
+matmul,391,203,17,594,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,594 direct test references
 max,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,4,0,0,4,0,,directly_tested,4 direct test references
@@ -410,8 +410,8 @@ sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,93,37,6,130,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,130 direct test references
-softmax_safe,3,4,0,7,0,,directly_tested,7 direct test references
+softmax,94,37,6,131,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,131 direct test references
+softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,2,0,0,2,0,,directly_tested,2 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references
 spectral_conv,5,0,0,5,0,fp32,directly_tested,5 direct test references

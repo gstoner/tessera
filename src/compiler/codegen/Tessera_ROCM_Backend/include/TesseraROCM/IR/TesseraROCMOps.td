@@ -216,6 +216,28 @@ def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SoftmaxOp : TesseraROCM_Op<"softmax"> {
+  let summary = "Row-wise numerically-stable softmax as a reduction kernel";
+  let description = [{
+    The directive `generate-rocm-softmax-kernel` expands into a real
+    **row-reduction** gpu kernel — the first non-matmul/non-WMMA compiler-
+    generated ROCm kernel. For a rank-2 input `[M, K]` it computes the
+    numerically-stable softmax over the last axis:
+    `O[m,:] = exp(X[m,:] - max_k X[m,k]) / Σ_k exp(...)` (matching the reference
+    `_apple_gpu_dispatch_softmax`).
+
+    One workgroup per row (`blockIdx.x = m`, `blockDim = 256`); the lanes stride
+    over K and tree-reduce the row max then the row sum through LDS (two passes,
+    exp values staged into O between them, then divided in place). Reductions run
+    in **f32** for stability regardless of storage dtype; `exp` lowers through the
+    same `math` → ROCDL path the flash_attn softmax uses. `M`/`K` are runtime
+    `index` args (problem-generic). `dtype` is the f16/bf16/f32 storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{

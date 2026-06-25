@@ -26,11 +26,11 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 | Overall (weakest column wins) | Count |
 |---|---:|
-| ✅ `complete` | 8 |
-| ⚙️ `partial` | 14 |
+| ✅ `complete` | 9 |
+| ⚙️ `partial` | 15 |
 | ⚠️ `artifact_only` | 0 |
 | 📋 `planned` | 0 |
-| ❌ `missing` | 13 |
+| ❌ `missing` | 11 |
 | **total cells** | **35** |
 
 ## `matmul`
@@ -65,7 +65,7 @@ _composes from primitives; no fused single-kernel today_
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
-| `rocm` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
+| `rocm` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
 
 ## `matmul_softmax`
 
@@ -79,7 +79,7 @@ _fused MSL kernel on apple_gpu (single-kernel scores); compose elsewhere_
 | `apple_cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ⚙️ | ⚙️ | `hardware_smoke` — Apple silicon required for native execution | composes from per-op kernels (no fusion pass on this target) |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution | fused single-kernel on this target |
 | `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) | composes from per-op kernels (no fusion pass on this target) |
-| `rocm` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
+| `rocm` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | ⚙️ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) | composes from per-op kernels (no fusion pass on this target) |
 
 ## `conv2d`
 

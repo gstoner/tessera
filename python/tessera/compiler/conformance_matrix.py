@@ -518,8 +518,12 @@ def _proof_status_from_backend_compile(statuses: list[str]) -> str:
     if any(s == "planned" for s in statuses):
         return PROOF_PLANNED
     # All entries report a non-planned status. The weakest one wins.
+    # ``compiled`` (2026-06-25) is a real compile+execute path — a
+    # compiler-generated hsaco that runs via runtime.launch() (one rung below
+    # ``hardware_verified``: no shipped C symbol) — so it counts here.
     if all(s in ("fused", "reference", "compileable",
-                  "hardware_verified", "packaged") for s in statuses):
+                  "hardware_verified", "compiled", "packaged")
+           for s in statuses):
         return PROOF_COMPLETE
     if any(s == "artifact_only" for s in statuses):
         return PROOF_ARTIFACT_ONLY
@@ -547,6 +551,20 @@ def _proof_status_from_runtime(target: str, components: tuple[str, ...]) -> str:
         # CPU has native + jit_cpu_numpy in execution_matrix; for the
         # in-scope op set, every component has a reference path.
         return PROOF_PARTIAL
+    if target == "rocm":
+        # An op executes on ROCm (gfx1151) iff every component ships a real
+        # executing kernel: ``hardware_verified`` (a shipped C-ABI runtime_symbol,
+        # e.g. matmul / flash_attn) or ``compiled`` (a compiler-generated hsaco
+        # launched via runtime.launch()). Both carry an execute_compare fixture.
+        # Otherwise there is no rocm runtime path (artifact_only MFMA emit only).
+        # Capability-based, matching apple_gpu (the committed dashboard does not
+        # depend on the regen host having a GPU).
+        executes = {"hardware_verified", "compiled"}
+        for c in components:
+            statuses = {e.status for e in _manifest_for_target(c, "rocm")}
+            if not (statuses & executes):
+                return PROOF_MISSING
+        return PROOF_COMPLETE
     return PROOF_MISSING
 
 

@@ -8,7 +8,7 @@ flash_attn,apple_cpu,partial,complete,complete,complete,complete,complete,partia
 flash_attn,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 flash_attn,cpu,partial,complete,complete,complete,complete,complete,partial,partial,
 flash_attn,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,partial,toolchain
-flash_attn,rocm,missing,complete,complete,complete,complete,complete,missing,complete,toolchain
+flash_attn,rocm,complete,complete,complete,complete,complete,complete,complete,complete,toolchain
 kv_cache_read,apple_cpu,partial,complete,complete,complete,complete,complete,partial,partial,hardware_smoke
 kv_cache_read,apple_gpu,missing,complete,complete,complete,complete,complete,missing,partial,hardware_smoke
 kv_cache_read,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
@@ -18,7 +18,7 @@ matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,
 matmul,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 matmul,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 matmul,nvidia,missing,complete,complete,complete,complete,artifact_only,missing,complete,toolchain
-matmul,rocm,missing,complete,complete,complete,complete,complete,missing,complete,toolchain
+matmul,rocm,complete,complete,complete,complete,complete,complete,complete,complete,toolchain
 matmul_relu,apple_cpu,partial,complete,complete,complete,complete,partial,partial,partial,hardware_smoke
 matmul_relu,apple_gpu,partial,complete,complete,complete,complete,partial,complete,partial,hardware_smoke
 matmul_relu,cpu,partial,complete,complete,complete,complete,partial,partial,partial,

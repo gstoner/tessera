@@ -12,8 +12,8 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 8 |
-| ``artifact_only`` | 22 |
+| ``compiled`` | 10 |
+| ``artifact_only`` | 20 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)

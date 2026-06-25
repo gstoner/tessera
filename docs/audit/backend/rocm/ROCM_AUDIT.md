@@ -327,16 +327,31 @@ become the on-silicon **oracle** the compiled path validates against.
   K>256, ragged, and rank-3 (`test_rocm_softmax_compiled.py`) + a GPU-free
   codegen gate (`test_rocm_softmax_codegen.py`). Status `compiled`; it also
   flips the curated `softmax`×`rocm` cell to ✅ in `op_target_conformance.md`.
+- **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
+  softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
+  pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm
+  uses a **stable two-pass squared-deviation** reduction (μ = Σx/K, then
+  var = Σ(x−μ)²/K — never the cancellation-prone E[x²]−E[x]²). **Unweighted**
+  over the last axis (the bare ops; the affine is a separate mul/add): rmsnorm
+  `x / sqrt(mean(x²)+eps)`, layer_norm `(x − μ) / sqrt(var + eps)`. Reductions in
+  f32 regardless of storage; `eps` is a trailing f32 runtime arg. New
+  `runtime.launch()` lane `rocm_norm_compiled` (own executor + matrix row);
+  accepts `tessera.rmsnorm`, `tessera.rmsnorm_safe` (tighter default eps),
+  `tessera.layer_norm` by op name; f32/f16/bf16. Status `compiled`. Validated on
+  gfx1151 vs the unweighted numpy reference across all three ops × f32/f16/bf16 ×
+  varied M/K incl. K>256, ragged, rank-3, and a large-offset/small-variance
+  layer_norm row (`test_rocm_norm_compiled.py`) + a GPU-free codegen gate
+  (`test_rocm_norm_codegen.py`).
 
 ## Still Open
 
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `gelu`,
-    `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute *fused* into
-    the GEMM epilogue, just not as standalone kernels; `softmax`/`softmax_safe`
-    now execute as a compiled row-reduction kernel — see Landed above);
+  - **norms / activations:** `gelu`, `silu(_mul)` (the standalone ops —
+    `gelu`/`silu` already execute *fused* into the GEMM epilogue, just not as
+    standalone kernels; `softmax`/`softmax_safe` and `rmsnorm(_safe)`/`layer_norm`
+    now execute as compiled row-reduction kernels — see Landed above);
   - **positional:** `rope`, `alibi`;
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
     `linear_general`, `qkv_projection`;

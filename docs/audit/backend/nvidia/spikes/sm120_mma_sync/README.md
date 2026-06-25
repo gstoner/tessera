@@ -22,6 +22,27 @@ bf16 (col-major)` with f32 accumulation, using
 | `mma_m16n8k16.cu` | 3–5 | CUDA inline-asm oracle: nails the m16n8k16 fragment layout, executes, matches CPU ref. Also the source for the reference PTX (`nvcc -ptx`). |
 | `tessera_mma_m16n8k16.ptx` | 2.5 | **Hand-emitted, Tessera-style raw PTX** (`.version 9.3`, `.target sm_120a`) — what `ptx_emit.py`'s sm_120 path should produce. |
 | `run_ptx.cpp` | 3+5 | Driver-API harness: `cuModuleLoadDataEx` (JIT ptxas) + `cuLaunchKernel`, execute-and-compare vs a bf16-rounded CPU reference. Proves the *emitted PTX itself* runs. |
+| `nvgemm_proto.cpp` | 3-5 | **General** tiled/K-looped mma.sync GEMM (arbitrary M/N/K, ragged zero-padded) via NVRTC, for bf16 + f16. The basis for the shipped `libtessera_nvidia_gemm.so`. |
+| `nvgemm_dtypes.cpp` | 3-5 | Multi-dtype sweep via NVRTC — **bf16, f16, tf32, fp8 e4m3, fp8 e5m2** — each with its own MMA shape + fragment layout, across 7 shapes. Execute-and-compare vs a host reference that quantizes inputs to the same dtype the hardware consumes. |
+
+## Multi-dtype GEMM sweep (nvgemm_dtypes.cpp)
+
+All five Tensor-Core input dtypes the CC 12.0 matrix advertises were validated
+end-to-end on the RTX 5070 Ti (NVRTC-compiled `compute_120`, execute-and-compare
+across 7 shapes incl. ragged 17x9x31 / 100x50x200):
+
+| dtype | MMA instruction | worst-shape max abs err |
+|-------|-----------------|-------------------------|
+| bf16  | `mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32` | 9.5e-6 |
+| f16   | `mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32`   | 1.7e-5 |
+| tf32  | `mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32`  | 2.5e-5 |
+| fp8 e4m3 | `mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32` | 0 (bit-exact) |
+| fp8 e5m2 | `mma.sync.aligned.m16n8k32.row.col.f32.e5m2.e5m2.f32` | 0 (bit-exact) |
+
+Fragment layouts differ per K (16-bit: m16n8k16, packs 2/reg; tf32: m16n8k8, one
+tf32/reg; fp8: m16n8k32, packs 4 bytes/reg). The fp8 paths are bit-exact because
+the host reference dequantizes with the same OCP fp8 decode the hardware uses and
+the f32 accumulation of those coarse values stays exactly representable.
 
 ## Result
 

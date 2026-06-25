@@ -244,7 +244,10 @@ Primary detail: [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md).
   15 declared fixtures pass `conformance_matrix --verify-fixtures`. Two
   mis-declared fixtures (`matmul`/`rope` on apple_gpu pointed at the buffer-pool
   RAII test) were corrected to genuine numerical compares.
-- Backend-kernel hardware proof on real NVIDIA/ROCm hardware.
+- Backend-kernel hardware proof on real NVIDIA/ROCm hardware — **first NVIDIA
+  proof landed** (sm_120 matmul, RTX 5070 Ti, 2026-06-25; ROCm gfx1151 matmul +
+  flash_attn already proven). Open: CDNA (MI300-class), and NVIDIA breadth
+  (compiler-generated lane, NVFP4, flash_attn, sm_80/90/100).
 - Runtime execution rows only for genuinely executable backends.
 
 ### P1

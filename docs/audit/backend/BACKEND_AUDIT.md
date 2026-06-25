@@ -70,10 +70,17 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 
 ## Still Open
 
-- **NVIDIA runtime execution:** no execution-matrix rows yet (the G7 launch-
-  bridge hook exists; remaining is a registered CUDA launcher + real silicon).
-- **ROCm runtime execution:** no execution-matrix rows yet (same — a registered
-  HIP launcher + real silicon).
+- **NVIDIA runtime execution:** ✅ first executable row landed (2026-06-25,
+  RTX 5070 Ti / sm_120) — `(nvidia_sm120, nvidia_mma)` matmul is
+  `hardware_verified` with an execute-compare fixture and the shipped
+  `libtessera_nvidia_gemm.so` symbol; a CUDA launcher is registered into the G7
+  `tsrRegisterGpuLauncher` bridge. Remaining NVIDIA breadth: a
+  compiler-generated lane (the `rocm_compiled` analog), NVFP4 block-scale,
+  sm_120 flash_attn, and sm_80/90/100 (still `artifact_only`, need their own
+  silicon). See [nvidia/NVIDIA_AUDIT.md](nvidia/NVIDIA_AUDIT.md).
+- **ROCm runtime execution:** ✅ executable rows exist (gfx1151 / Strix Halo
+  matmul + flash_attn). Remaining: CDNA (MI300-class) silicon + a registered
+  HIP launch lane for flash_attn.
 
 > **ISA reference data:** structured RDNA3 / RDNA3.5 / RDNA4 instruction +
 > encoding archive (opcodes, pseudocode, microcode bit-fields, cross-version

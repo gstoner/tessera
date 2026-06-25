@@ -235,7 +235,7 @@ laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
 latent_kv_compress,6,19,0,25,0,fp16 fp32,directly_tested,25 direct test references
 latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test references
 latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
-layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,27 direct test references
+layer_norm,24,7,3,31,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,31 direct test references
 le,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
@@ -354,8 +354,8 @@ repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,7,15,0,22,0,,directly_tested,22 direct test references
 retention,8,0,2,8,0,,directly_tested,8 direct test references
 rfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
-rmsnorm,69,10,2,79,0,bf16 f16 f32 f64 fp32,directly_tested,79 direct test references
-rmsnorm_safe,5,5,0,10,0,bf16 f16 f32,directly_tested,10 direct test references
+rmsnorm,72,10,2,82,0,bf16 f16 f32 f64 fp32,directly_tested,82 direct test references
+rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_categorical,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -410,7 +410,7 @@ sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,95,37,7,132,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,132 direct test references
+softmax,96,37,8,133,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,133 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,2,0,0,2,0,,directly_tested,2 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

@@ -103,6 +103,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "axis (one workgroup per row, LDS tree-reduce); the "
                             "first non-matmul/non-WMMA compiled ROCm kernel. "
                             "f32/f16/bf16 storage, f32 reduce",
+    "rocm_norm_compiled":   "AMD GPU RDNA row-reduction rmsnorm / layer_norm the "
+                            "Tessera compiler GENERATES (generate-rocm-norm-kernel "
+                            "-> ROCDL -> hsaco, in-process via tessera-opt), then "
+                            "HIP loads + launches it. Unweighted row normalize "
+                            "over the last axis (one workgroup per row, LDS "
+                            "tree-reduce of Σx and Σx²); handles "
+                            "tessera.rmsnorm(_safe) + tessera.layer_norm by op "
+                            "name. f32/f16/bf16 storage, f32 reduce",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -259,6 +267,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "workgroup per row, LDS tree-reduce): tessera-opt generates + "
                "serializes the kernel to hsaco in-process, then HIP loads + "
                "launches it. The first non-matmul/non-WMMA compiled ROCm kernel.",
+        execution_mode="hip_runtime"),
+    # Row-reduction rmsnorm / layer_norm — siblings of the softmax kernel.
+    # Unweighted row normalize over the last axis; f32/f16/bf16; vs numpy.
+    ("rocm", "rocm_norm_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_norm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_norm_compiled", runtime_status="success",
+        reason="ROCm norm artifact runs the COMPILER-GENERATED RDNA row-reduction "
+               "kernel (unweighted rmsnorm / layer_norm over the last axis, one "
+               "workgroup per row, LDS tree-reduce of Σx and Σx²): tessera-opt "
+               "generates + serializes the kernel to hsaco in-process, then HIP "
+               "loads + launches it. Handles tessera.rmsnorm(_safe) + "
+               "tessera.layer_norm by op name.",
         execution_mode="hip_runtime"),
     # Standalone elementwise activations (gelu/silu/relu) — flat per-element
     # kernel; the standalone analog of the GEMM fused epilogue. vs numpy.

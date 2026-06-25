@@ -327,6 +327,21 @@ become the on-silicon **oracle** the compiled path validates against.
   K>256, ragged, and rank-3 (`test_rocm_softmax_compiled.py`) + a GPU-free
   codegen gate (`test_rocm_softmax_codegen.py`). Status `compiled`; it also
   flips the curated `softmax`×`rocm` cell to ✅ in `op_target_conformance.md`.
+- **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
+  softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
+  pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm
+  uses a **stable two-pass squared-deviation** reduction (μ = Σx/K, then
+  var = Σ(x−μ)²/K — never the cancellation-prone E[x²]−E[x]²). **Unweighted**
+  over the last axis (the bare ops; the affine is a separate mul/add): rmsnorm
+  `x / sqrt(mean(x²)+eps)`, layer_norm `(x − μ) / sqrt(var + eps)`. Reductions in
+  f32 regardless of storage; `eps` is a trailing f32 runtime arg. New
+  `runtime.launch()` lane `rocm_norm_compiled` (own executor + matrix row);
+  accepts `tessera.rmsnorm`, `tessera.rmsnorm_safe` (tighter default eps),
+  `tessera.layer_norm` by op name; f32/f16/bf16. Status `compiled`. Validated on
+  gfx1151 vs the unweighted numpy reference across all three ops × f32/f16/bf16 ×
+  varied M/K incl. K>256, ragged, rank-3, and a large-offset/small-variance
+  layer_norm row (`test_rocm_norm_compiled.py`) + a GPU-free codegen gate
+  (`test_rocm_norm_codegen.py`).
 - **Standalone activations + RoPE** (`gelu`/`silu`/`relu`, `rope`, 2026-06-25):
   two pointwise compiler-generated kernels closing the activations + positional
   groups. (1) `tessera_rocm.activation` + `generate-rocm-activation-kernel` — a
@@ -352,10 +367,9 @@ become the on-silicon **oracle** the compiled path validates against.
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)` (compiled row-
-    reduction kernels land via #123), `silu_mul` (SwiGLU, 2-operand — a
-    follow-up). (`softmax`/`softmax_safe`, `gelu`, `silu` now execute as compiled
-    kernels — see Landed above.)
+  - **norms / activations:** `silu_mul` (SwiGLU, 2-operand — a follow-up).
+    (`softmax`/`softmax_safe`, `rmsnorm(_safe)`, `layer_norm`, `gelu`, `silu`
+    now execute as compiled kernels — see Landed above.)
   - **positional:** `alibi`. (`rope` now executes as a compiled kernel — see
     Landed above.)
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,

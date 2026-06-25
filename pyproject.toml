@@ -27,10 +27,12 @@ keywords = [
     "compiler"
 ]
 requires-python = ">=3.10"
+# Tessera is a standalone, torch-/transformers-free compiler (Decision #23):
+# nothing in the shipped runtime imports them, so they are NOT install_requires.
+# They live in the opt-in `reference` extra below — used only as numerical
+# oracles in the test/benchmark suites and as a soft GPU-smoke import.
 dependencies = [
     "numpy>=1.21.0",
-    "torch>=2.0.0",
-    "transformers>=4.30.0",
     "scipy>=1.9.0",
     "matplotlib>=3.5.0",
     "pyyaml>=6.0.0",
@@ -53,6 +55,14 @@ dev = [
 ]
 gpu = [
     "nvidia-ml-py3>=7.352.0"
+]
+# Reference vocabularies (Decision #23) — torch / transformers are NOT runtime
+# dependencies; they are only numerical oracles for the test + benchmark suites
+# (e.g. flash-attention-vs-torch parity) and the optional NVIDIA GPU smoke. Install
+# with `pip install tessera[reference]` when running those comparison tests.
+reference = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0"
 ]
 # bf16 dtype support for the apple_cpu BNNS path (Phase 8.2 follow-up).
 # Soft dependency: if missing, the bf16 fast path is unavailable but the

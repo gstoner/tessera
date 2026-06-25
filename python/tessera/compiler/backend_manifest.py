@@ -909,6 +909,20 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
     },
+    "rmsnorm": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Unweighted row rmsnorm over the last axis (row-reduction "
+                 "kernel, generate-rocm-norm-kernel): x / sqrt(mean(x²) + eps). "
+                 "Executes via runtime.launch() (rocm_norm_compiled).",
+    },
+    "layer_norm": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Unweighted row layer_norm over the last axis (row-reduction "
+                 "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
+                 "Executes via runtime.launch() (rocm_norm_compiled).",
+    },
     "gelu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1030,6 +1044,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
+    ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",

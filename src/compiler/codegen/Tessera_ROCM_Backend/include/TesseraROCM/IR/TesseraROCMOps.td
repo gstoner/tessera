@@ -239,11 +239,12 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
 
       * `kind = "rmsnorm"`    — `O[m,:] = X[m,:] / sqrt(mean_k X[m,k]² + eps)`.
       * `kind = "layer_norm"` — `O[m,:] = (X[m,:] − μ) / sqrt(var + eps)`, with
-        `μ = mean_k X`, `var = mean_k X² − μ²`.
+        `μ = mean_k X`, `var = mean_k (X − μ)²` (the stable squared-deviation
+        reduction — not `E[x²] − E[x]²`, which cancels for large-offset rows).
 
     Matches the unweighted reference (`_apple_gpu_rowop_numpy`; the per-channel
-    affine, when present, is a separate mul/add). A single X-pass reduces both
-    the row sum and the row sum-of-squares; reductions run in **f32** regardless
+    affine, when present, is a separate mul/add). rmsnorm is one row reduction;
+    layer_norm is two (mean, then variance). Reductions run in **f32** regardless
     of storage dtype. `eps` is a trailing f32 runtime arg; `M`/`K` are runtime
     `index` args. `dtype` is the f16/bf16/f32 storage.
   }];

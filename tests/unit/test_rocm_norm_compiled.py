@@ -90,6 +90,21 @@ def test_explicit_eps_is_honored():
                                atol=2e-4, rtol=0)
 
 
+@pytest.mark.parametrize("offset,scale", [(1e4, 1.0), (1e3, 0.1), (-5e3, 2.0)])
+def test_layer_norm_large_offset_small_variance(offset, scale):
+    """PR#123 review: a large common offset with small variance (e.g. ~1e4 ± 1)
+    cancels catastrophically under E[x²]−E[x]² but is exact under the two-pass
+    squared-deviation variance. The near-zero random tests don't exercise this."""
+    rt = _norm_or_skip()
+    rng = np.random.default_rng(2024)
+    x = (offset + scale * rng.standard_normal((4, 128))).astype(np.float32)
+    out = rt.launch(_artifact(rt, "tessera.layer_norm"), (x,))["output"]
+    ref = _ref(x, "tessera.layer_norm", 1e-5)
+    # Output is O(1) (unit variance); demand a tight absolute match + finiteness.
+    assert np.all(np.isfinite(out)), "layer_norm produced non-finite output"
+    np.testing.assert_allclose(out, ref, atol=2e-3, rtol=0)
+
+
 def test_unknown_op_name_rejected():
     """A non-norm op routed here is a clean error (GPU-free validation)."""
     from tessera import runtime as rt

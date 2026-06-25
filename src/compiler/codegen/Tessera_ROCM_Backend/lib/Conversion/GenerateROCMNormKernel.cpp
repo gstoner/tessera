@@ -6,11 +6,13 @@
 //
 //   kind = "rmsnorm"    : O[m,:] = X[m,:] / sqrt(mean_k X[m,k]² + eps)
 //   kind = "layer_norm" : O[m,:] = (X[m,:] − μ) / sqrt(var + eps),
-//                         μ = mean_k X,  var = mean_k X² − μ²
+//                         μ = mean_k X,  var = mean_k (X − μ)²
 //
-//   One workgroup per row (blockIdx.x = m), blockDim = 256. A single X-pass
-//   accumulates the row sum and the row sum-of-squares; both are tree-reduced
-//   through LDS (redA, redB). Then a write pass applies the per-row normalize.
+//   One workgroup per row (blockIdx.x = m), blockDim = 256, LDS tree-reduce.
+//   rmsnorm is one reduction (Σx²). layer_norm is TWO reductions — Σx for the
+//   mean, then Σ(x−μ)² for the variance (the stable squared-deviation form,
+//   NOT E[x²]−E[x]², which cancels for large-offset/small-variance rows). Then
+//   a write pass applies the per-row normalize.
 //   Reductions run in f32 regardless of storage dtype; `sqrt` lowers through
 //   convert-math-to-rocdl. eps is a trailing f32 runtime arg; M/K are runtime
 //   index args. Validated vs the numpy reference (`_apple_gpu_rowop_numpy`).
@@ -43,8 +45,7 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
 
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
   auto ldsT = MemRefType::get({BD}, f32, MemRefLayoutAttrInterface(), ws);
-  Value redA = f.addWorkgroupAttribution(ldsT, loc);  // row sum
-  Value redB = f.addWorkgroupAttribution(ldsT, loc);  // row sum-of-squares
+  Value red = f.addWorkgroupAttribution(ldsT, loc);  // reused per reduction pass
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1);
@@ -91,43 +92,52 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     }
   };
 
-  // pass 1 — local Σx and Σx² over strided cols (one X-pass).
-  {
-    auto lp = b.create<scf::ForOp>(loc, tid, K, cBD,
-                                   ValueRange{zerof, zerof});
-    OpBuilder::InsertionGuard g(b);
-    b.setInsertionPointToStart(lp.getBody());
-    Value c = lp.getInductionVar();
-    Value accS = lp.getRegionIterArgs()[0];
-    Value accSq = lp.getRegionIterArgs()[1];
-    Value v = loadF32(b.create<arith::AddIOp>(loc, base, c));
-    Value ns = b.create<arith::AddFOp>(loc, accS, v);
-    Value nsq =
-        b.create<arith::AddFOp>(loc, accSq, b.create<arith::MulFOp>(loc, v, v));
-    b.create<scf::YieldOp>(loc, ValueRange{ns, nsq});
-    b.setInsertionPointAfter(lp);
-    b.create<memref::StoreOp>(loc, lp.getResult(0), redA, ValueRange{tid});
-    b.create<memref::StoreOp>(loc, lp.getResult(1), redB, ValueRange{tid});
+  // One full row reduction: accumulate a per-element f32 value over the strided
+  // cols, stage to red[tid], tree-reduce, and return the row total (red[0]).
+  // `red` is reused across passes, so a barrier brackets the read of red[0].
+  auto reduceRow =
+      [&](function_ref<Value(Value /*idx*/)> localOf) -> Value {
+    auto lp = b.create<scf::ForOp>(loc, tid, K, cBD, ValueRange{zerof});
+    {
+      OpBuilder::InsertionGuard g(b);
+      b.setInsertionPointToStart(lp.getBody());
+      Value c = lp.getInductionVar();
+      Value acc = lp.getRegionIterArgs()[0];
+      Value v = localOf(b.create<arith::AddIOp>(loc, base, c));
+      b.create<scf::YieldOp>(loc,
+                             ValueRange{b.create<arith::AddFOp>(loc, acc, v)});
+    }
+    b.create<memref::StoreOp>(loc, lp.getResult(0), red, ValueRange{tid});
+    b.create<gpu::BarrierOp>(loc);
+    treeReduceSum(red);
+    Value total = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
+    b.create<gpu::BarrierOp>(loc);  // all read red[0] before the next pass reuses red
+    return total;
+  };
+
+  // denom = sqrt(stat + eps), matching numpy's x / √(...). For layer_norm the
+  // variance is computed as a SECOND reduction of the squared deviations
+  // (mean((x−μ)²)) rather than E[x²]−E[x]² — the latter cancels catastrophically
+  // for rows with a large common offset and small variance (PR#123 review).
+  Value mean, denom;
+  if (isLayerNorm) {
+    mean = b.create<arith::DivFOp>(loc, reduceRow(loadF32), Kf);
+    Value vsum = reduceRow([&](Value idx) {
+      Value d = b.create<arith::SubFOp>(loc, loadF32(idx), mean);
+      return b.create<arith::MulFOp>(loc, d, d).getResult();
+    });
+    Value var = b.create<arith::DivFOp>(loc, vsum, Kf);
+    denom = b.create<math::SqrtOp>(loc, b.create<arith::AddFOp>(loc, var, eps));
+  } else {  // rmsnorm: denom = sqrt(mean(x²) + eps)
+    Value sumsq = reduceRow([&](Value idx) {
+      Value v = loadF32(idx);
+      return b.create<arith::MulFOp>(loc, v, v).getResult();
+    });
+    Value ms = b.create<arith::DivFOp>(loc, sumsq, Kf);
+    denom = b.create<math::SqrtOp>(loc, b.create<arith::AddFOp>(loc, ms, eps));
   }
-  b.create<gpu::BarrierOp>(loc);
-  treeReduceSum(redA);
-  treeReduceSum(redB);
-  Value rsum = b.create<memref::LoadOp>(loc, redA, ValueRange{c0});
-  Value rsumsq = b.create<memref::LoadOp>(loc, redB, ValueRange{c0});
-  b.create<gpu::BarrierOp>(loc);
 
-  // Per-row scale (and shift). denom = sqrt(stat + eps); match numpy's x/√(...).
-  Value mean = b.create<arith::DivFOp>(loc, rsum, Kf);
-  Value msq = b.create<arith::DivFOp>(loc, rsumsq, Kf);
-  Value stat;
-  if (isLayerNorm)  // var = mean(x²) − μ²
-    stat = b.create<arith::SubFOp>(loc, msq,
-                                   b.create<arith::MulFOp>(loc, mean, mean));
-  else              // rmsnorm uses mean(x²) directly
-    stat = msq;
-  Value denom = b.create<math::SqrtOp>(loc, b.create<arith::AddFOp>(loc, stat, eps));
-
-  // pass 2 — write the normalized row.
+  // write pass — O = (x [− μ]) / denom.
   {
     auto lp = b.create<scf::ForOp>(loc, tid, K, cBD);
     OpBuilder::InsertionGuard g(b);

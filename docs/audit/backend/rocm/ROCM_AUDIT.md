@@ -215,7 +215,12 @@ become the on-silicon **oracle** the compiled path validates against.
 > FA/GEMM shape is staging-bound, so this is infrastructure — the pipeline-routed
 > double-buffer perf payoff lands only when a staging-bound kernel uses it.
 
-## Still Open
+## Landed — compiler-generated execution on gfx1151
+
+> These bullets describe **executing, execute-compare-tested, `runtime.launch()`-
+> reachable** kernels on the live gfx1151 box — they are *done*, not open. (They
+> previously sat under a `## Still Open` heading that had become a changelog; the
+> genuinely-open work is the `## Still Open` section that now follows.)
 
 - **Compiler-generated attention family on gfx1151:** matmul, flash_attn
   (fwd+bwd), and now **GQA/MQA** (2026-06-24) all execute. GQA = flash_attn with
@@ -232,13 +237,6 @@ become the on-silicon **oracle** the compiled path validates against.
   each KV head (host pre-zeros; B*H grid) — rel-err <5e-3 vs the numpy GQA
   backward (`test_rocm_gqa_bwd_compiled.py`). `multi_head_attention` is the
   flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
-- **Other ops on RDNA remain artifact_only** beyond matmul + the attention
-  family + the fused GEMM epilogue (CDNA MFMA shape, HIP execution gated): the
-  remaining fused chains, etc. The named ROCm sub-arches
-  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
-  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the
-  box's own arch) is listed there too so the classification is total (no silent
-  `lookup() -> None`).
 - **Fused GEMM epilogue** (2026-06-24): the `tessera_rocm.wmma_gemm` directive
   gained `bias` (per-output-column add, a trailing length-N memref operand) and
   `activation` (`relu`/`gelu`/`silu`) knobs that `generate-wmma-gemm-kernel`
@@ -315,6 +313,32 @@ become the on-silicon **oracle** the compiled path validates against.
   are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
   runnable `async_copy` that would enable it now exists (#101) for when a
   staging-bound kernel appears.
+
+## Still Open
+
+- **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
+  emits; not yet a compiler-generated executing kernel). The not-yet-executing
+  groups (see `../../generated/rocm_target_map.md` for the live list):
+  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `softmax(_safe)`,
+    `gelu`, `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute
+    *fused* into the GEMM epilogue, just not as standalone kernels);
+  - **positional:** `rope`, `alibi`;
+  - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
+    `linear_general`, `qkv_projection`;
+  - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,
+    `gated_deltanet`, `hybrid_attention`, `kimi_delta_attention`,
+    `mla_decode(_fused)`, `modified_delta_attention`.
+- **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
+  table + FP4/FP6; no device available. The named ROCm sub-arches
+  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic
+  `rocm` lane covers execution via HIPRTC for the live device, and gfx1151 (the
+  box's own arch) is listed there too so the classification is total (no silent
+  `lookup() -> None`).
+- **flash_attn KV-tile pipelining — parked (measured low-value).** The FA
+  kernels are occupancy/LDS-bound, not staging-bound, so double-buffered KV
+  staging is unlikely to pay on this APU; the runnable `async_copy` that would
+  enable it exists (#101) for when a staging-bound kernel appears.
+
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder

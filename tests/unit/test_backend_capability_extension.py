@@ -9,12 +9,12 @@ Pins the new schema fields + hardware_verified contract:
     execute_compare_fixture (validator catches under-evidenced claims).
   * primitive_is_complete() computes registry's backend_kernel="complete"
     from the full target row set.
-  * Only the Apple GPU encode-session ops claim hardware_verified
-    (Project 3 / Sprint A, 2026-06-01) — each runs a real Metal /
-    MPSGraph kernel on this Mac's GPU with a checked-in numerical
-    fixture. Discrete NVIDIA / ROCm accelerators still may
-    not claim it (that hardware is unavailable here); a Phase G/H
-    sprint lighting up the first such proof updates that expectation.
+  * hardware_verified is earned per (op, target) once a real on-silicon
+    kernel + checked-in numerical fixture land: Apple GPU encode-session
+    ops (Project 3 / Sprint A, 2026-06-01), Strix Halo ROCm WMMA ops
+    (2026-06-22), and sm_120 NVIDIA mma.sync ops on the RTX 5070 Ti
+    (2026-06-24). Each new on-silicon proof updates this guard; any other
+    target/op claiming it is under-evidenced and fails.
 """
 
 from __future__ import annotations
@@ -196,16 +196,30 @@ _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
 #     second op after matmul to execute natively on a non-Apple backend.
 _ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "flash_attn"})
 
+# NVIDIA sm_120 bring-up — the consumer-Blackwell ops whose ``hardware_verified``
+# claim is honestly earned, mirroring the ROCm block: each ships a real C-ABI
+# ``runtime_symbol`` that NVRTC-compiles a warp-level mma.sync kernel and runs it
+# on the RTX 5070 Ti (sm_120, CC 12.0, CUDA 13.3) AND a checked-in
+# ``execute_compare_fixture`` that numerically validates it (and skips clean — no
+# false pass — on a host without an NVIDIA GPU / NVRTC). The fixture only
+# *executes* on the sm_120 box; the manifest claim rests on that on-silicon run.
+#   - matmul (2026-06-24): libtessera_nvidia_gemm.so warp-level mma.sync GEMM
+#     (tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}) — the first NVIDIA op to
+#     execute natively on silicon here.
+_NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({"matmul"})
+
 
 def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:
     """A hardware_verified row is honest only with both evidence fields AND on a
-    target whose proof has actually landed: Apple GPU encode-session ops, or the
-    Strix Halo ROCm WMMA ops. Anything else (other targets, unexpected ops) is
-    under-evidenced and must fail the guard."""
+    target whose proof has actually landed: Apple GPU encode-session ops, the
+    Strix Halo ROCm WMMA ops, or the sm_120 NVIDIA mma.sync ops. Anything else
+    (other targets, unexpected ops) is under-evidenced and must fail the guard."""
     if not e.runtime_symbol or not e.execute_compare_fixture:
         return False
     if e.target == "apple_gpu":
         return op in _APPLE_GPU_HARDWARE_VERIFIED_OPS
+    if e.target == "nvidia_sm120":
+        return op in _NVIDIA_HARDWARE_VERIFIED_OPS
     if e.target == "rocm":
         return op in _ROCM_HARDWARE_VERIFIED_OPS
     return False
@@ -219,9 +233,12 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
       GPU + checked-in execute_compare_fixture (Project 3 / Sprint A, 2026-06-01).
     * ROCm WMMA ops — real RDNA WMMA kernel on an AMD GPU (Strix Halo bring-up,
       2026-06-22) + skip-clean execute_compare_fixture.
+    * NVIDIA sm_120 mma.sync ops — real warp-level mma.sync kernel on an RTX
+      5070 Ti (consumer Blackwell, CC 12.0, CUDA 13.3; 2026-06-24) + skip-clean
+      execute_compare_fixture.
 
-    NVIDIA is still NOT allowed (no on-silicon proof has landed); any such claim
-    would be under-evidenced. The Phase G/H frontier audit tracks that gap."""
+    Any other target/op is under-evidenced and must fail this guard — the
+    Phase G/H frontier audit tracks the remaining gaps."""
     by_op = all_manifests()
     hw_verified: list[tuple[str, BackendKernelEntry]] = [
         (op, entry)
@@ -235,9 +252,9 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
     ]
     assert not offenders, (
         "Unexpected hardware_verified claim — only Apple GPU encode-session ops "
-        "(real Metal kernel) and Strix Halo ROCm WMMA ops (real AMD-GPU kernel), "
-        "each with a checked-in execute_compare_fixture, may claim it; NVIDIA "
-        "proof has not landed. Offenders: "
+        "(real Metal kernel), Strix Halo ROCm WMMA ops (real AMD-GPU kernel), and "
+        "sm_120 NVIDIA mma.sync ops (real RTX 5070 Ti kernel), each with a "
+        "checked-in execute_compare_fixture, may claim it. Offenders: "
         + ", ".join(
             f"{op}/{e.target} via {e.runtime_symbol}"
             for op, e in offenders

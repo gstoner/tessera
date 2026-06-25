@@ -71,11 +71,24 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     the Target-IR matmul-tile node: the Graph `tessera.matmul` → Tile → Target-IR
     lowering (`_lower_rocm_op` on `tile.mma`) now EMITS this directive, so it is
     produced by the IR stack (not only synthesized by the runtime).
+
+    **Fused epilogue.** `bias` (default false) appends a per-output-column bias
+    operand (a `memref<?>` of length N, accumulator dtype) that is added to each
+    accumulator element before the activation. `activation` (default `"none"`)
+    selects a pointwise activation fused on the f32 accumulator *before the
+    store* — `"relu"` (max(x,0)), `"gelu"` (tanh approximation, matching the
+    common `gelu(approximate='tanh')`), or `"silu"` (x·sigmoid(x)). The activation
+    runs as VALU ops on the in-register accumulator (no extra global traffic);
+    transcendentals lower through the same `math` → ROCDL path the flash_attn
+    softmax uses. This is the `fused_epilogue` Target-IR node — matmul + bias +
+    activation in one kernel, no intermediate D round-trip.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,
                        DefaultValuedAttr<I64Attr, "1">:$nt,
-                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<BoolAttr, "false">:$bias,
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$activation);
   let assemblyFormat = "attr-dict";
 }
 

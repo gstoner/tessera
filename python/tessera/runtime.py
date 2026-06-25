@@ -1348,7 +1348,8 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
-_rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str], bytes] = {}
+_rocm_compiled_hsaco_cache: dict[
+    tuple[int, int, str, str, bool, str], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -1399,11 +1400,16 @@ def _extract_hsaco_blob(text: str) -> bytes:
     return bytes(out)
 
 
-def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
+def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
+                               bias: bool = False,
+                               activation: str = "none") -> bytes:
     """Generate + serialize the compiler's WMMA GEMM kernel to hsaco, fully
-    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype)."""
+    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype,
+    bias, activation). ``bias``/``activation`` select the fused epilogue — when
+    set, the kernel adds a per-column bias and/or applies relu/gelu/silu on the
+    f32 accumulator before the store (float dtypes only)."""
     chip = _rocm_chip()
-    key = (mt, nt, chip, dtype)
+    key = (mt, nt, chip, dtype, bias, activation)
     cached = _rocm_compiled_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1412,11 +1418,16 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm lane (build: "
             "ninja -C build tessera-opt)")
+    epi = ""
+    if bias:
+        epi += ", bias = true"
+    if activation and activation != "none":
+        epi += f', activation = "{activation}"'
     directive = (
         'module {\n'
         '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
         'n = 16 : i64, k = 16 : i64, '
-        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"{epi}}} : () -> ()\n'
         '}\n'
     )
     pipeline = (

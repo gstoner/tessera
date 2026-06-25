@@ -233,11 +233,25 @@ become the on-silicon **oracle** the compiled path validates against.
   backward (`test_rocm_gqa_bwd_compiled.py`). `multi_head_attention` is the
   flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
 - **Other ops on RDNA remain artifact_only** beyond matmul + the attention
-  family (CDNA MFMA shape, HIP execution gated): the fused chains, etc. The named
-  ROCm sub-arches (gfx90a/942/950/1100/1151/1200) stay in
-  `_UNIMPLEMENTED_TARGETS` — the generic `rocm` lane covers execution via HIPRTC
-  for the live device; gfx1151 (the box's own arch) is listed there too so the
-  classification is total (no silent `lookup() -> None`).
+  family + the fused GEMM epilogue (CDNA MFMA shape, HIP execution gated): the
+  remaining fused chains, etc. The named ROCm sub-arches
+  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
+  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the
+  box's own arch) is listed there too so the classification is total (no silent
+  `lookup() -> None`).
+- **Fused GEMM epilogue** (2026-06-24): the `tessera_rocm.wmma_gemm` directive
+  gained `bias` (per-output-column add, a trailing length-N memref operand) and
+  `activation` (`relu`/`gelu`/`silu`) knobs that `generate-wmma-gemm-kernel`
+  fuses onto the f32 accumulator **before the store** — no intermediate D
+  round-trip. `gelu` is the tanh approximation; `silu` = x·σ(x). The
+  transcendentals lower through the same `math` → ROCDL path the flash_attn
+  softmax uses (`gelu` tanh → `__ocml_tanh_f32`, `silu` exp → `llvm.intr.exp`),
+  so they execute natively. Float-only — an int8/int4 directive carrying the
+  epilogue is a named error, never a silent no-op. Validated on gfx1151 vs a
+  numpy gemm+bias+activation oracle across {relu,gelu,silu}×{bias,no-bias}×
+  {aligned, ragged} (`test_rocm_fused_epilogue_compiled.py`, 21 GPU cases) plus
+  a GPU-free codegen/lowering gate for CI (`test_rocm_fused_epilogue_codegen.py`).
+  The builder lane is `_build_compiled_gemm_hsaco(..., bias, activation)`.
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the
   `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×

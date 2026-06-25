@@ -2576,6 +2576,12 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope=rocm_c.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+            # GEMM-family compiled ops keep the unified MMA descriptor the old
+            # artifact entry carried (None for non-GEMM ops like softmax/norm/
+            # activation/rope) — promoting batched_gemm etc. to `compiled` must
+            # not drop it (test_backend_manifest_rocm_gemm_carries_mma_descriptor).
+            mma_descriptor=_rocm_mma_descriptor_for(
+                op_name, tuple(rocm_c["dtypes"])),
         ))
     else:
         cap = _capability_status("rocm", op_name)

@@ -3,11 +3,15 @@
 This document consolidates NVIDIA-specific audit material.
 
 > **Real-hardware bring-up:** see [`BLACKWELL_SM120_EXECUTION_PLAN.md`](BLACKWELL_SM120_EXECUTION_PLAN.md)
-> — the sm_120 target model is now correctly grounded as **Blackwell consumer** (RTX 5070 Ti),
-> not the old "Rubin placeholder" (no wgmma/tcgen05/TMEM; FP4 via `mma.sync.block_scale`). The doc
-> lays out the rung ladder to the first real NVIDIA `backend_kernel` proof. **Key gap it surfaces:**
-> the existing `ptx_emit.py` emits sm_90a WGMMA, which won't run on sm_120 — executing on this card
-> needs a new sm_120 `mma.sync` emit path. This is the unblock for the "Still Open" items below.
+> — the sm_120 target model is correctly grounded as **Blackwell consumer** (RTX 5070 Ti),
+> not the old "Rubin placeholder" (no wgmma/tcgen05/TMEM; FP4 via `mma.sync.block_scale`).
+> **Status (2026-06-24, #106):** the first real NVIDIA `backend_kernel` is **proven on
+> silicon** — a sm_120 `mma.sync` bf16 matmul executes end-to-end on the RTX 5070 Ti
+> (`emit_mma_sync_matmul_ptx` → PTX → assemble → CUDA launch bridge `tsrRegisterGpuLauncher`
+> → execute-and-compare), under CUDA 13.3. The `mma.sync` emit path the old "Key gap" called
+> for now exists. **Still open:** broaden sm_120 beyond matmul (flash-attn family), and the
+> separate Hopper sm_90 (WGMMA) / datacenter sm_100 (tcgen05) emit paths — `mma.sync` ≠ WGMMA,
+> so each arch needs its own proof.
 
 ## Finished
 

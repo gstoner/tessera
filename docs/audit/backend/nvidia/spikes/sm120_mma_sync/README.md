@@ -44,6 +44,34 @@ tf32/reg; fp8: m16n8k32, packs 4 bytes/reg). The fp8 paths are bit-exact because
 the host reference dequantizes with the same OCP fp8 decode the hardware uses and
 the f32 accumulation of those coarse values stays exactly representable.
 
+## NVFP4 block-scaled MMA (m16n8k64) — partial, grounded (action item #9)
+
+The consumer-Blackwell headline: warp-level **block-scaled** NVFP4 (e2m1 data +
+ue4m3 per-16-block scale). Files: `nvfp4_probe.cu` (assemble probe),
+`nvfp4_gemm.cu` (per-lane fragment harness + scale sweep).
+
+**Grounded on-silicon (ptxas/runtime are the source of truth):**
+- The warp instruction
+  `mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale.scale_vec::4X.f32.e2m1.e2m1.f32.ue4m3`
+  **assembles and executes on sm_120a** (RTX 5070 Ti). The operand grammar that
+  ptxas accepts: `{d4}, {a4}, {b2}, {c4}, {sfa}, {byteid_a, tid_a}, {sfb}, {byteid_b, tid_b}`
+  (scale data = one .b32 per thread; byte/thread ids are immediates).
+- It is **arch-specific**: only the `sm_120a` SASS target accepts it. The base
+  `compute_120`/`sm_120` PTX target rejects `.kind::mxf4nvf4` / `.block_scale` /
+  `.scale_vec::4X` — so build with `-gencode arch=compute_120a,code=sm_120a`
+  (an `-arch=sm_120a` build that also emits base PTX fails at the PTX stage).
+
+**NOT yet verified (needs the PTX ISA block-scale spec, absent from the on-box
+CUDA 13.3 headers — only the datacenter `tcgen05` block-scale variant ships
+there):** the numerics. A scale-byte sweep shows the scale is multiplicative
+(`0x00` → result ≈ 0) but the `ue4m3` scale **encoding** and the
+`{byte-id, thread-id}` **scale-distribution** semantics are non-standard (the
+e4m3 code for 1.0, `0x38`, yields ~3e9 not unit), so a guessed layout does not
+reproduce a reference. Per the grounding rule we do **not** claim a working
+NVFP4 GEMM. Next step: obtain the PTX ISA §"mma with block scaling" operand/scale
+mapping, then finish `nvfp4_gemm.cu`'s reference match (the e2m1 data fragment
+layout + selector semantics).
+
 ## Result
 
 ```

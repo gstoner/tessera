@@ -43,6 +43,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -84,7 +85,8 @@ struct WmmaTypes {
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
 void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      int64_t mt, int64_t nt, const WmmaTypes &T,
-                     bool viaTile = false) {
+                     bool viaTile = false, bool hasBias = false,
+                     StringRef activation = "none") {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -92,6 +94,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value M = gpuFunc.getArgument(3);
   Value N = gpuFunc.getArgument(4);
   Value K = gpuFunc.getArgument(5);
+  // Fused-epilogue bias is the trailing memref arg (length N), present only when
+  // `hasBias`. Only float dtypes reach the epilogue (gated at the pass level).
+  Value bias = hasBias ? gpuFunc.getArgument(6) : Value();
 
   Type loadTy = T.load;
   Type fragTy = T.frag;
@@ -301,6 +306,53 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     return wmmaAll(bb, l, aFrag, bFrag, acc);
   };
 
+  // Fused epilogue, applied per accumulator element on the in-register f32
+  // value before the store (no intermediate D round-trip): optional per-column
+  // bias add, then an optional pointwise activation. `colS` is the clamped
+  // (OOB-safe) column for the bias load; the actual masked store still guards
+  // the write. Activation transcendentals (exp/tanh) lower through the same
+  // `math` → ROCDL path the flash_attn softmax uses.
+  auto applyEpilogue = [&](OpBuilder &sb, Value dv, Value colS) -> Value {
+    if (bias) {
+      Value bv = sb.create<memref::LoadOp>(loc, bias, ValueRange{colS});
+      dv = sb.create<arith::AddFOp>(loc, dv, bv);
+    }
+    if (activation == "relu") {
+      Value z = sb.create<arith::ConstantOp>(loc, T.accElem,
+                                             sb.getF32FloatAttr(0.0f));
+      dv = sb.create<arith::MaximumFOp>(loc, dv, z);
+    } else if (activation == "silu") {
+      // silu(x) = x * sigmoid(x) = x / (1 + exp(-x)).
+      Value one = sb.create<arith::ConstantOp>(loc, T.accElem,
+                                               sb.getF32FloatAttr(1.0f));
+      Value negx = sb.create<arith::NegFOp>(loc, dv);
+      Value e = sb.create<math::ExpOp>(loc, negx);
+      Value den = sb.create<arith::AddFOp>(loc, one, e);
+      dv = sb.create<arith::DivFOp>(loc, dv, den);
+    } else if (activation == "gelu") {
+      // gelu tanh approximation (matches gelu(approximate='tanh')):
+      //   0.5*x*(1 + tanh( sqrt(2/pi) * (x + 0.044715 x^3) )).
+      Value half = sb.create<arith::ConstantOp>(loc, T.accElem,
+                                                sb.getF32FloatAttr(0.5f));
+      Value one = sb.create<arith::ConstantOp>(loc, T.accElem,
+                                               sb.getF32FloatAttr(1.0f));
+      Value c0p044 = sb.create<arith::ConstantOp>(
+          loc, T.accElem, sb.getF32FloatAttr(0.044715f));
+      Value cSqrt = sb.create<arith::ConstantOp>(
+          loc, T.accElem, sb.getF32FloatAttr(0.7978845608028654f));
+      Value x2 = sb.create<arith::MulFOp>(loc, dv, dv);
+      Value x3 = sb.create<arith::MulFOp>(loc, x2, dv);
+      Value inner = sb.create<arith::AddFOp>(
+          loc, dv, sb.create<arith::MulFOp>(loc, c0p044, x3));
+      inner = sb.create<arith::MulFOp>(loc, cSqrt, inner);
+      Value t = sb.create<math::TanhOp>(loc, inner);
+      Value oneP = sb.create<arith::AddFOp>(loc, one, t);
+      dv = sb.create<arith::MulFOp>(
+          loc, sb.create<arith::MulFOp>(loc, half, dv), oneP);
+    }
+    return dv;
+  };
+
   // Shared store. When `masked`, each store is scf.if-guarded against the ragged
   // M/N edge (stores run once, so the guard cost is negligible).
   auto emitStore = [&](OpBuilder &sb, ValueRange accs, bool masked) {
@@ -313,6 +365,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           Value r = sb.create<arith::AddIOp>(loc, rowOrigin[mi], rowOff);
           Value dv =
               sb.create<vector::ExtractOp>(loc, accF, ArrayRef<int64_t>{e});
+          dv = applyEpilogue(sb, dv, colSafe[ni]);
           Value didx = sb.create<arith::AddIOp>(
               loc, sb.create<arith::MulIOp>(loc, r, N), colN[ni]);
           if (!masked) {
@@ -409,7 +462,8 @@ struct GenerateWMMAGemmKernelPass
 
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, vector::VectorDialect,
-                    arith::ArithDialect, memref::MemRefDialect,
+                    arith::ArithDialect, math::MathDialect,
+                    memref::MemRefDialect,
                     tessera::tile::TesseraTileDialect>();
   }
 
@@ -525,20 +579,48 @@ struct GenerateWMMAGemmKernelPass
         }
       }
 
-      // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K) kernel { ... } }
+      // Fused epilogue: optional per-column bias add + pointwise activation,
+      // applied on the in-register f32 accumulator before the store. The
+      // epilogue is float-only (gelu/silu are transcendentals; bias is an fadd):
+      // an int8/int4 directive carrying it is a named error, not a silent no-op.
+      bool hasBias = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("bias"))
+        hasBias = a.getValue();
+      StringRef activation = "none";
+      if (auto a = op->getAttrOfType<StringAttr>("activation"))
+        activation = a.getValue();
+      if (activation != "none" && activation != "relu" &&
+          activation != "gelu" && activation != "silu") {
+        op->emitError("generate-wmma-gemm-kernel: activation must be one of "
+                      "none/relu/gelu/silu (got '")
+            << activation << "')";
+        return signalPassFailure();
+      }
+      if (T.isInt && (hasBias || activation != "none")) {
+        op->emitError("generate-wmma-gemm-kernel: the fused epilogue "
+                      "(bias/activation) is float-only; dtype '")
+            << dt << "' is integer";
+        return signalPassFailure();
+      }
+
+      // gpu.module @<name>_mod { gpu.func @<name>(A,B,D,M,N,K[,bias]) kernel }
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
 
       Type idxTy = b.getIndexType();
       auto abTy = MemRefType::get({ShapedType::kDynamic}, T.store);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
-      auto fnTy = b.getFunctionType({abTy, abTy, dTy, idxTy, idxTy, idxTy}, {});
+      SmallVector<Type> argTys{abTy, abTy, dTy, idxTy, idxTy, idxTy};
+      if (hasBias)
+        argTys.push_back(dTy); // per-column bias, accumulator dtype, length N
+      auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
 
       OpBuilder bodyB(gpuFunc.getContext());
-      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, viaTile);
+      emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, viaTile, hasBias,
+                      activation);
 
       op->erase();
     }

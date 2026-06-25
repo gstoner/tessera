@@ -1348,7 +1348,8 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_hip_launch_lib: ctypes.CDLL | None = None
 #: hsaco bytes keyed by (mt, nt, chip, dtype) — the kernel is shape-generic.
-_rocm_compiled_hsaco_cache: dict[tuple[int, int, str, str], bytes] = {}
+_rocm_compiled_hsaco_cache: dict[
+    tuple[int, int, str, str, bool, str], bytes] = {}
 
 
 class _RocmCompiledUnavailable(RuntimeError):
@@ -1399,11 +1400,16 @@ def _extract_hsaco_blob(text: str) -> bytes:
     return bytes(out)
 
 
-def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
+def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16",
+                               bias: bool = False,
+                               activation: str = "none") -> bytes:
     """Generate + serialize the compiler's WMMA GEMM kernel to hsaco, fully
-    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype)."""
+    in-process via tessera-opt (Stage L3). Cached per (mt, nt, chip, dtype,
+    bias, activation). ``bias``/``activation`` select the fused epilogue — when
+    set, the kernel adds a per-column bias and/or applies relu/gelu/silu on the
+    f32 accumulator before the store (float dtypes only)."""
     chip = _rocm_chip()
-    key = (mt, nt, chip, dtype)
+    key = (mt, nt, chip, dtype, bias, activation)
     cached = _rocm_compiled_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1412,11 +1418,16 @@ def _build_compiled_gemm_hsaco(mt: int, nt: int, dtype: str = "f16") -> bytes:
         raise _RocmCompiledUnavailable(
             "tessera-opt not built — no compiled ROCm lane (build: "
             "ninja -C build tessera-opt)")
+    epi = ""
+    if bias:
+        epi += ", bias = true"
+    if activation and activation != "none":
+        epi += f', activation = "{activation}"'
     directive = (
         'module {\n'
         '  "tessera_rocm.wmma_gemm"() {name = "gemm", m = 16 : i64, '
         'n = 16 : i64, k = 16 : i64, '
-        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"}} : () -> ()\n'
+        f'mt = {mt} : i64, nt = {nt} : i64, dtype = "{dtype}"{epi}}} : () -> ()\n'
         '}\n'
     )
     pipeline = (
@@ -1516,8 +1527,20 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     values = _bind_launch_args(args, arg_names)
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
-    if len(operand_names) != 2:
-        raise ValueError("matmul requires exactly two operands")
+    # A fused epilogue is opt-in via the op kwargs: an optional third operand is
+    # the per-output-column bias (shape [N]), and `activation` selects an
+    # in-kernel pointwise activation (relu/gelu/silu). 2 operands = plain GEMM.
+    kwargs = op.get("kwargs") or {}
+    activation = str(kwargs.get("activation") or "none")
+    if activation not in ("none", "relu", "gelu", "silu"):
+        raise ValueError(
+            "rocm_compiled epilogue activation must be one of "
+            f"none/relu/gelu/silu; got {activation!r}")
+    if len(operand_names) not in (2, 3):
+        raise ValueError(
+            "rocm_compiled matmul takes two operands (a, b) plus an optional "
+            f"third bias operand; got {len(operand_names)}")
+    has_bias = len(operand_names) == 3
     a = _as_numpy(values[operand_names[0]])
     b = _as_numpy(values[operand_names[1]])
     if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
@@ -1540,10 +1563,27 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
                 f"[-8,7]); got {a.dtype} @ {b.dtype}")
         dtype_tag, store, out_dt = "int4", np.int8, np.int32
 
+    # The fused epilogue is float-only (gelu/silu are transcendentals; bias is an
+    # fadd) — surface a clean error rather than emit an int directive the kernel
+    # generator will reject.
+    if dtype_tag in ("int8", "int4") and (has_bias or activation != "none"):
+        raise ValueError(
+            "rocm_compiled fused epilogue (bias/activation) is float-only; "
+            f"got integer dtype {dtype_tag}")
+
     m, k = a.shape
     n = b.shape[1]
+    bias_arr = None
+    if has_bias:
+        bias_arr = np.ascontiguousarray(
+            _as_numpy(values[operand_names[2]]), dtype=np.float32)
+        if bias_arr.shape != (n,):
+            raise ValueError(
+                f"rocm_compiled bias must have shape ({n},) (one per output "
+                f"column); got {bias_arr.shape}")
     mt, nt = _rocm_prod_tile(m, n, k)
-    hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag)
+    hsaco = _build_compiled_gemm_hsaco(
+        mt, nt, dtype_tag, bias=has_bias, activation=activation)
 
     hip = _load_hip_for_launch()
     if hip is None:
@@ -1571,12 +1611,29 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     hip.hipMemcpy(da, a_c.ctypes.data_as(ctypes.c_void_p), nb[0], 1)
     hip.hipMemcpy(db, b_c.ctypes.data_as(ctypes.c_void_p), nb[1], 1)
 
+    # Fused-epilogue bias: the trailing length-N memref the generated kernel
+    # reads (accumulator dtype, f32). Tracked in `devs` so it is always freed.
+    devs = [da, db, dd]
+    dbias = None
+    if has_bias:
+        dbias = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dbias), 4 * n) != 0:
+            for dev in devs:
+                hip.hipFree(dev)
+            raise RuntimeError("rocm_compiled: hipMalloc (bias) failed")
+        devs.append(dbias)
+        assert bias_arr is not None  # set above whenever has_bias
+        hip.hipMemcpy(dbias, bias_arr.ctypes.data_as(ctypes.c_void_p),
+                      4 * n, 1)
+
     def _mr(p, size):
         return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
                 ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
 
     launch_args = (_mr(da, m * k) + _mr(db, k * n) + _mr(dd, m * n)
                    + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
+    if has_bias:
+        launch_args += _mr(dbias, n)
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
@@ -1584,12 +1641,12 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
     gy = (m + 16 * mt - 1) // (16 * mt)
     rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
     if rc != 0:
-        for dev in (da, db, dd):
+        for dev in devs:
             hip.hipFree(dev)
         raise RuntimeError(f"rocm_compiled: kernel launch failed rc={rc}")
     hip.hipDeviceSynchronize()
     hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
-    for dev in (da, db, dd):
+    for dev in devs:
         hip.hipFree(dev)
     return d
 

@@ -1,0 +1,66 @@
+//
+// Tessera-emit-style sm_120 mma.sync PTX (spike #6) --- complete, assemblable, launchable.
+// One warp: D[16x8] f32 = A[16x16] bf16 (row-major) * B[16x8] bf16 (col-major), f32 accumulate.
+// Packed fragments load as single contiguous b32 loads (col/col+1 adjacent in A row-major,
+// row/row+1 adjacent in B col-major).
+//
+.version 9.3
+.target sm_120a
+.address_size 64
+
+.visible .entry tessera_mma_m16n8k16_bf16(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_D
+)
+{
+    .reg .b32  %r<32>;
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b64  %A,%B,%D,%off,%addr;
+
+    ld.param.u64 %A, [p_A];
+    ld.param.u64 %B, [p_B];
+    ld.param.u64 %D, [p_D];
+    cvta.to.global.u64 %A, %A;
+    cvta.to.global.u64 %B, %B;
+    cvta.to.global.u64 %D, %D;
+
+    mov.u32 %r1, %tid.x;          // lane 0..31
+    shr.u32 %r2, %r1, 2;          // gid  = lane>>2
+    and.b32 %r3, %r1, 3;          // tig  = lane&3
+    shl.b32 %r4, %r3, 1;          // 2*tig
+    mul.lo.s32 %r5, %r2, 16;      // gid*16
+    add.s32 %r6, %r5, %r4;        // a0 elem idx = gid*16 + 2tig
+
+    // ---- A fragment (elem size 2 bytes) ----
+    mul.wide.s32 %off, %r6, 2;          add.s64 %addr, %A, %off; ld.global.b32 %a0, [%addr];   // a0
+    add.s32 %r7, %r6, 128; mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a1, [%addr]; // +128
+    add.s32 %r7, %r6, 8;   mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a2, [%addr]; // +8
+    add.s32 %r7, %r6, 136; mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a3, [%addr]; // +136
+
+    // ---- B fragment (col-major, elem size 2 bytes): b0 idx = 2tig + gid*16 ----
+    add.s32 %r8, %r4, %r5;              // b0 elem idx
+    mul.wide.s32 %off, %r8, 2;          add.s64 %addr, %B, %off; ld.global.b32 %b0, [%addr];   // b0
+    add.s32 %r9, %r8, 8;   mul.wide.s32 %off, %r9, 2; add.s64 %addr, %B, %off; ld.global.b32 %b1, [%addr]; // +8
+
+    // ---- zero accumulator (C input) ----
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    // ---- warp-level MMA ----
+    mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32
+        {%d0,%d1,%d2,%d3}, {%a0,%a1,%a2,%a3}, {%b0,%b1}, {%d0,%d1,%d2,%d3};
+
+    // ---- D store (row-major, elem size 4 bytes): d0 idx = gid*8 + 2tig ----
+    mul.lo.s32 %r10, %r2, 8;
+    add.s32 %r11, %r10, %r4;            // d0 elem idx
+    mul.wide.s32 %off, %r11, 4;         add.s64 %addr, %D, %off; st.global.f32 [%addr], %d0;
+    add.s32 %r12, %r11, 1;  mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d1;
+    add.s32 %r12, %r11, 64; mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d2;
+    add.s32 %r12, %r11, 65; mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d3;
+
+    ret;
+}

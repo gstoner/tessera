@@ -222,10 +222,25 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
 
 1. **Toolkit/driver:** install CUDA ≥ 12.8 (13.3 preferred, ≥610.43.02 driver) + R570+; confirm `nvidia-smi` and
    `nvcc --list-gpu-arch | grep sm_120`.
-2. **Stage A spike (host-free, can begin now):** emit + structurally validate an sm_120 bf16
-   `mma.sync` GEMM PTX (new path; do not reuse the sm_90a wgmma emitter).
-3. **Stages B→D:** ptxas-assemble `sm_120a` → NVRTC/cuLaunch via `tsrRegisterGpuLauncher` →
-   execute-and-compare → first real NVIDIA `backend_kernel` proof. Then NVFP4 block-scale.
+2. **Stage A spike — PROVEN on-silicon (2026-06-25, RTX 5070 Ti / CC 12.0, CUDA 13.3, nvcc 13.3.33).**
+   A hand-emitted, Tessera-style sm_120 bf16 `mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32`
+   single-tile GEMM (D[16x8] = A[16x16]·B[16x8], f32 accumulate; new path, NOT the sm_90a wgmma
+   emitter) cleared the full rung ladder end-to-end:
+   - **Rung 2.5 (emit):** raw PTX `.version 9.3` / `.target sm_120a` — byte-matches the pin; nvcc emits
+     the identical mnemonic for the inline-asm oracle.
+   - **Rung 3 (assemble):** `ptxas --gpu-name=sm_120a` → 6168-byte cubin, clean.
+   - **Rung 5 (execute-and-compare):** loaded via Driver API `cuModuleLoadDataEx` + `cuLaunchKernel`,
+     output matches a bf16-rounded CPU reference to **max abs err 4.8e-7 (f32 epsilon), 0/128 off**.
+   Spike artifacts (kernel + driver harness + smem device-query + reproduce steps) are committed at
+   `spikes/sm120_mma_sync/`.
+   Gotchas found: (a) PTX comments must be ASCII — the driver JIT ptxas rejects non-ASCII (em-dash)
+   that standalone ptxas tolerates; (b) the f32 accumulator regs must be explicitly zero-initialized
+   before the `mma` (they are the C operand); (c) CUDA 13.3 `cuCtxCreate` is v4 — use
+   `cuDevicePrimaryCtxRetain` in host harnesses.
+3. **Stages B→D (productization):** the assemble + execute-and-compare mechanics are now proven; what
+   remains is wiring — add an `emit_mma_sync_matmul_ptx` sm_120 path to `ptx_emit.py`, register the
+   CUDA launcher through `tsrRegisterGpuLauncher`, and land an `mma.sync` hardware-smoke +
+   execute-compare oracle test → first real NVIDIA `backend_kernel` proof. Then NVFP4 block-scale.
 
 ## The two-box frontier
 

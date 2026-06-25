@@ -332,7 +332,7 @@ reference.
 | `scripts/validate_hipcc_compile.py` | new (H-6)                                 | Compile-check AMDGCN intrinsics against installed hipcc |
 | `scripts/probe_collective_libs.py` | new (G-9/H-8)                              | ctypes-probe NCCL/RCCL ≥ 2.22 symbols |
 | `scripts/run_sanitizers.sh`  | new                                              | ASan/TSan/UBSan sweep driver |
-| `cmake/TesseraToolchainPins.cmake` | new (G-6/H-6)                              | CMake helpers pinning CUDA 13.2 U1 / ROCm 7.2.4 toolchains |
+| `cmake/TesseraToolchainPins.cmake` | new (G-6/H-6)                              | CMake helpers pinning CUDA 13.3 / ROCm 7.2.4 toolchains |
 | `.github/workflows/validate.yml` | renamed from `cpu-validation.yml`            | CI workflow for the CPU validation spine |
 | `.github/workflows/codeql.yml` / `codacy.yml` / `pylint.yml` / `python-quality.yml` | new | Security + Python-quality CI lanes |
 
@@ -401,7 +401,7 @@ and S-series surfaces. Current active validation entry points:
   versions on one project version value.
 - `scripts/release_gate.py` (`--target=<accel>`) is the per-target release gate
   — `--target=apple_gpu` is the canonical Apple release blocker.
-- `cmake/TesseraToolchainPins.cmake` pins NVIDIA → CUDA 13.2 U1 and AMD →
+- `cmake/TesseraToolchainPins.cmake` pins NVIDIA → CUDA 13.3 and AMD →
   ROCm 7.2.4; `scripts/validate_{nvcc,hipcc}_compile.py` and
   `scripts/probe_collective_libs.py` enforce the pins.
 - Standalone runtime tests are split into separate CTest executables so each

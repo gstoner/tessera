@@ -312,6 +312,19 @@ def _rocm_compiled_lane_available() -> bool:
         return False
 
 
+def _nvidia_mma_lane_available() -> bool:
+    """True iff the shipped NVIDIA mma.sync matmul lane can run on THIS host:
+    libtessera_nvidia_gemm.so loads AND a usable NVIDIA GPU answers the runtime
+    probe. Host-gated, so an nvidia_sm120 matmul artifact is stamped
+    ``executable`` only where the lane actually runs; elsewhere (CI with no GPU)
+    it stays ``artifact_only`` — no behavior change off-device."""
+    try:
+        from .. import runtime as _rt
+        return _rt._nvidia_mma_runtime_available()
+    except Exception:
+        return False
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -1012,9 +1025,26 @@ class JitFn:
             and _rocm_compiled_lane_available()
         )
 
+    def _uses_nvidia_mma_default(self) -> bool:
+        """sm_120 bring-up — True iff this is an ``nvidia_sm120`` single
+        matmul/gemm AND the shipped mma.sync lane can run on THIS host
+        (libtessera_nvidia_gemm.so + a usable NVIDIA GPU). Host-gated, so
+        off-device it is False and the artifact stays artifact_only. Shared by
+        ``execution_kind`` and the ``runtime_artifact`` stamping so the two never
+        diverge."""
+        return (
+            self.cpu_plan is not None
+            and str(self.cpu_plan.target_kind) == "nvidia_sm120"
+            and len(self.cpu_plan.ops) == 1
+            and self.cpu_plan.ops[0].op_name in {"tessera.matmul", "tessera.gemm"}
+            and _nvidia_mma_lane_available()
+        )
+
     @property
     def execution_kind(self) -> str:
         if self._uses_rocm_compiled_default():
+            return "native_gpu"
+        if self._uses_nvidia_mma_default():
             return "native_gpu"
         if self.compile_bundle is not None:
             return self.compile_bundle.execution_kind
@@ -1285,6 +1315,33 @@ class JitFn:
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
                 "rocm_fallback_lane": "rocm_wmma",
+            })
+        elif self._uses_nvidia_mma_default():
+            # sm_120 bring-up — @jit(target="nvidia_sm120") matmul dispatches to
+            # the shipped warp-level mma.sync GEMM (libtessera_nvidia_gemm.so) on
+            # a capable host. Off-device this branch is skipped and the artifact
+            # stays artifact_only (the generic branch below) — no behavior change.
+            assert self.cpu_plan is not None  # narrowed by the guard above
+            ops_payload = [
+                {
+                    "op_name": op.op_name,
+                    "result": op.result,
+                    "operands": [o[1:] if o.startswith("%") else o
+                                 for o in op.operands],
+                    "kwargs": dict(op.kwargs),
+                }
+                for op in self.cpu_plan.ops
+            ]
+            metadata.update({
+                "executable": True,
+                "compiler_path": "nvidia_mma",
+                "execution_kind": "native_gpu",
+                "runtime_status": "ready",
+                "execution_mode": "cuda_runtime",
+                "arg_names": list(self.arg_names),
+                "output_name": self.cpu_plan.output_name,
+                "ops": ops_payload,
+                "cpu_tile": list(self.cpu_plan.tile),
             })
         elif self.cpu_plan is not None:
             metadata.update({

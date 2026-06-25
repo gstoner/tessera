@@ -238,7 +238,7 @@ def test_sprint_v3_per_sm_head_dim_table_present() -> None:
         "FlashAttnOp::verify() must consult maxHeadDimForTargetSm() — "
         "Sprint V3 closure regressed"
     )
-    # The 6 SM variants from Sprint G-1's CUDA 13.2 U1 matrix.
+    # The 6 SM variants from Sprint G-1's CUDA 13.3 matrix.
     for sm in ("sm_80", "sm_90", "sm_90a", "sm_100", "sm_120", "sm_120a"):
         assert f'"{sm}"' in cpp, (
             f"head_dim table is missing SM variant {sm!r} — keep "

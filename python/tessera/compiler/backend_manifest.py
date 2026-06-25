@@ -180,7 +180,7 @@ class BackendKernelEntry:
           * ``compileable`` → dtypes the lowering pipeline emits IR for.
             Compilation works; execution may not.
           * ``artifact_only`` → dtypes the Target IR artifact compiles
-            for under the pinned toolchain (CUDA 13.2 U1 / ROCm 7.2.4).
+            for under the pinned toolchain (CUDA 13.3 / ROCm 7.2.4).
             No host execution.
           * ``planned`` → **target kernel dtypes for the unbuilt
             kernel** — the matrix the future native kernel will
@@ -816,6 +816,52 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Consumer-Blackwell bring-up (2026-06-25) — NVIDIA ops promoted to
+# ``hardware_verified`` on sm_120 (RTX 5070 Ti, CC 12.0, CUDA 13.3).
+#
+# Mirror of ``_ROCM_HARDWARE_VERIFIED``: an op lands here once it ships BOTH a
+# real C-ABI ``runtime_symbol`` (the auto-built ``libtessera_nvidia_gemm.so``,
+# CMake target ``tessera_nvidia_gemm``, which NVRTC-compiles the warp-level
+# mma.sync kernel for the device arch and runs it on the GPU) AND a checked-in
+# ``execute_compare_fixture`` (see ``_NUMERICAL_FIXTURES``). When present, the
+# generic nvidia_sm120 artifact_only row is REPLACED by this hardware_verified
+# row (the other sm_80/90/100 rows stay artifact_only — proven only on sm_120).
+#
+# Honesty (Decision #25): the shape_envelope/dtypes describe ONLY what the shipped
+# symbols prove. matmul is a general tiled/K-looped warp-level **mma.sync** GEMM
+# (NOT tcgen05/TMEM — consumer Blackwell lacks those), f32 accumulate, ragged
+# M/N/K zero-padded. TF32 is fp32-storage + tf32-math (Decision #15a), so it is
+# listed as ``fp32``; fp8 e4m3/e5m2 are first-class storage dtypes here.
+# ─────────────────────────────────────────────────────────────────────────────
+_NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
+    "matmul": {
+        "runtime_symbol": "tessera_nvidia_mma_gemm_bf16",
+        "dtypes": ("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2"),
+        "feature_flags": ("mma_sync",),
+        "shape_envelope": (
+            "general tiled/K-looped warp-level mma.sync GEMM, f32 accumulate, any "
+            "positive M/N/K (ragged edges zero-padded), one warp per 16x8 output "
+            "tile. Per-dtype MMA shape: bf16/fp16 m16n8k16, fp32(tf32-math) "
+            "m16n8k8, fp8 e4m3/e5m2 m16n8k32 (sm_120 consumer Blackwell, "
+            "RTX 5070 Ti)"
+        ),
+        "notes": (
+            "Warp-level mma.sync GEMM on consumer Blackwell (sm_120, CC 12.0), "
+            "CUDA 13.3. Ships five C-ABI symbols in libtessera_nvidia_gemm.so "
+            "(CMake target tessera_nvidia_gemm): tessera_nvidia_mma_gemm_"
+            "{bf16,f16,tf32,e4m3,e5m2}, each NVRTC-compiled (compute_XX from "
+            "cuDeviceGetAttribute) at first call and launched via the CUDA driver "
+            "API. fp32 storage runs tf32-math (mma.sync m16n8k8.tf32). Numerically "
+            "validated vs numpy/ml_dtypes references by the execute_compare_fixture "
+            "across aligned + ragged shapes. NOT the @jit default lane yet — the "
+            "runtime dispatch / execution_matrix row is the follow-up (cf. ROCm's "
+            "rocm_wmma symbol vs the rocm_compiled lane)."
+        ),
+    },
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Audit follow-up A.3 (2026-05-31) — Per-(op, target) test fixtures that
 # exercise the numerical-correctness path end-to-end. Replaces the
 # conformance matrix's filename/content heuristic with first-class
@@ -851,6 +897,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
     # `hardware_verified` row — the second op after matmul to execute on ROCm.
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
+    # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
+    # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
+    # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a
+    # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
+    # numerical-proof half of the nvidia_sm120 matmul `hardware_verified` row.
+    ("matmul", "nvidia_sm120"): "tests/unit/test_nvidia_mma_runtime_symbol.py",
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
     # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).
@@ -1016,7 +1068,7 @@ def _attach_numerical_fixtures(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sprint G-3 (2026-05-11) — Per-kernel WGMMA tile shape + cluster + MFU
-# targets for NVIDIA SM_90+ (CUDA 13.2 U1).
+# targets for NVIDIA SM_90+ (CUDA 13.3).
 #
 # The canonical bf16/fp16 Hopper tile is (M=64, N=256, K=16) — this is
 # what cuBLAS uses for its WGMMA-based GEMM kernels. FP8 lowers to
@@ -2226,6 +2278,26 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         ("nvidia_sm100", ("tcgen05", "tmem"),        "sm_100a"),
         ("nvidia_sm120", ("tcgen05", "tmem"),        "sm_120a"),
     ):
+        # Consumer-Blackwell bring-up (2026-06-25): a shipped runtime symbol +
+        # execute-compare fixture promotes the sm_120 row to hardware_verified
+        # (warp-level mma.sync). Replaces the artifact_only row for this arch
+        # only; sm_80/90/100 stay artifact_only (proven only on sm_120).
+        nv_hv = _NVIDIA_HARDWARE_VERIFIED.get(op_name) if target_name == "nvidia_sm120" else None
+        if nv_hv is not None:
+            entries.append(BackendKernelEntry(
+                target="nvidia_sm120",
+                status=_HARDWARE_VERIFIED_STATUS,
+                dtypes=tuple(nv_hv["dtypes"]),
+                feature_flags=tuple(nv_hv.get("feature_flags", ("mma_sync",))),
+                notes=str(nv_hv.get("notes", "")),
+                runtime_symbol=nv_hv["runtime_symbol"],
+                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
+                shape_envelope=nv_hv.get("shape_envelope"),
+                cuda_arch_min="sm_120a",
+                nvcc_version_min="13.3",
+                expected_mfu=_NVIDIA_KERNEL_MFU.get((op_name, "nvidia_sm120")),
+            ))
+            continue
         cap = _capability_status(target_name, op_name)
         if cap is not None:
             status, dtypes = cap
@@ -2250,7 +2322,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 dtypes=dtypes,
                 feature_flags=flags,
                 notes=(
-                    "Target IR artifact ships under CUDA 13.2 U1; "
+                    "Target IR artifact ships under CUDA 13.3; "
                     "execution gated on Phase G"
                     if mapped == _ARTIFACT_STATUS
                     else ""

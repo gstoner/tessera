@@ -192,11 +192,18 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
 - The "RTX 5070 Ti not supported" noise is about **framework wheels** (PyTorch/TF prebuilt binaries
   lagging sm_120), **not** the CUDA toolkit — `nvcc`/`ptxas` 13.x assemble `sm_120a` cleanly, which is
   all Tessera needs.
-- **Shared-memory discrepancy to resolve on-silicon:** the compute-capabilities appendix (Table 31)
-  says CC 12.0 max shared memory/SM = **100 KB** (99 KB/block); the 13.3 release-note summary says
-  **128 KB**. Likely the 128 KB is the *unified data cache* (Table 32) and 100 KB is the shared-memory
-  carve-out. `gpu_target.py` keeps 100 KB (Table 31); confirm with
-  `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)` on the box.
+- **Shared-memory discrepancy — RESOLVED on-silicon (2026-06-25, RTX 5070 Ti, driver 610.62 / CUDA
+  UMD 13.3, nvcc 13.3.33, `-arch=sm_120`).** The 100 KB figure wins; the release-note 128 KB is the
+  *unified data cache* (Table 32), not the shared-memory carve-out. Measured via
+  `cudaDeviceGetAttribute` / `cudaGetDeviceProperties` on the box:
+  - `sharedMemPerMultiprocessor` = **102400 B (100 KiB)** — exact match for `_SMEM_BYTES[SM_120] = 102400`.
+  - `cudaDevAttrMaxSharedMemoryPerBlockOptin` = **101376 B (99 KiB)** — matches Table 31's "99 KB/block".
+  - `cudaDevAttrMaxSharedMemoryPerBlock` (static, no opt-in) = **49152 B (48 KiB)**; SM count = 70.
+  Conclusion: `gpu_target.py`'s 100 KB/SM pin is correct. **Lowering nuance:** a single block can opt
+  into at most **99 KiB (101376 B)**, not the full 100 KiB/SM — any per-block dynamic-smem budget
+  (and the `cudaFuncAttributeMaxDynamicSharedMemorySize` set-attr) must cap at 101376 on sm_120, not
+  102400. (Same per-SM-vs-per-block-optin 1 KiB reservation pattern exists on Hopper; `_SMEM_BYTES`
+  records the per-SM capacity by convention.)
 - **`sm_120a` vs `sm_120f` — grounded from the 13.3 Programming Guide §5.1.2 + Table 28.** There are
   three compiler-target tiers: **baseline** (`compute_120`, no arch-specific features, runs CC 12.0+);
   **family-specific** (`compute_120f`, the arch-specific subset *common to the consumer-Blackwell
@@ -213,12 +220,52 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
 
 ## Sequencing when the box lands
 
-1. **Toolkit/driver:** install CUDA ≥ 12.8 (13.2 U1 preferred) + R570+; confirm `nvidia-smi` and
+1. **Toolkit/driver:** install CUDA ≥ 12.8 (13.3 preferred, ≥610.43.02 driver) + R570+; confirm `nvidia-smi` and
    `nvcc --list-gpu-arch | grep sm_120`.
-2. **Stage A spike (host-free, can begin now):** emit + structurally validate an sm_120 bf16
-   `mma.sync` GEMM PTX (new path; do not reuse the sm_90a wgmma emitter).
-3. **Stages B→D:** ptxas-assemble `sm_120a` → NVRTC/cuLaunch via `tsrRegisterGpuLauncher` →
-   execute-and-compare → first real NVIDIA `backend_kernel` proof. Then NVFP4 block-scale.
+2. **Stage A spike — PROVEN on-silicon (2026-06-25, RTX 5070 Ti / CC 12.0, CUDA 13.3, nvcc 13.3.33).**
+   A hand-emitted, Tessera-style sm_120 bf16 `mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32`
+   single-tile GEMM (D[16x8] = A[16x16]·B[16x8], f32 accumulate; new path, NOT the sm_90a wgmma
+   emitter) cleared the full rung ladder end-to-end:
+   - **Rung 2.5 (emit):** raw PTX `.version 9.3` / `.target sm_120a` — byte-matches the pin; nvcc emits
+     the identical mnemonic for the inline-asm oracle.
+   - **Rung 3 (assemble):** `ptxas --gpu-name=sm_120a` → 6168-byte cubin, clean.
+   - **Rung 5 (execute-and-compare):** loaded via Driver API `cuModuleLoadDataEx` + `cuLaunchKernel`,
+     output matches a bf16-rounded CPU reference to **max abs err 4.8e-7 (f32 epsilon), 0/128 off**.
+   Spike artifacts (kernel + driver harness + smem device-query + reproduce steps) are committed at
+   `spikes/sm120_mma_sync/`.
+   Gotchas found: (a) PTX comments must be ASCII — the driver JIT ptxas rejects non-ASCII (em-dash)
+   that standalone ptxas tolerates; (b) the f32 accumulator regs must be explicitly zero-initialized
+   before the `mma` (they are the C operand); (c) CUDA 13.3 `cuCtxCreate` is v4 — use
+   `cuDevicePrimaryCtxRetain` in host harnesses.
+3. **Stages B→D (productization) — LANDED 2026-06-25.** The full chain is in-tree and green on the box:
+   - `ptx_emit.emit_mma_sync_matmul_ptx` (+ validators) emits the complete sm_120 mma.sync kernel;
+     `test_ptx_emit.py` includes a ptxas-gated rung-3 assemble.
+   - C-ABI launch bridge: `test_conformance_execute_compare_nvidia.py` registers a CUDA launcher via
+     `tsrRegisterGpuLauncher` that loads the **emitted PTX** through the Driver API and runs it via
+     `tsrLaunchKernel` (execute-and-compare vs CPU ref).
+   - **Shipped runtime symbol:** `libtessera_nvidia_gemm.so` (CMake `tessera_nvidia_gemm`) exports
+     `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` — a general tiled/K-looped mma.sync GEMM
+     NVRTC-compiled for the device arch. `test_nvidia_mma_runtime_symbol.py` dlopens it and numerically
+     validates all 5 dtypes vs numpy/ml_dtypes.
+   - **Manifest:** `nvidia_sm120` matmul flipped `artifact_only → hardware_verified` (runtime_symbol +
+     execute_compare_fixture) — the **first NVIDIA `backend_kernel` hardware-verified row** (mirrors the
+     ROCm Strix Halo pattern). sm_80/90/100 stay artifact_only (proven only on sm_120).
+   - Build fix: `src/runtime/CMakeLists.txt` + the NVIDIA backend wire CUDA includes/links so
+     `TESSERA_ENABLE_CUDA=ON` builds (was enabled-but-unbuildable).
+
+   **@jit execution lane — LANDED 2026-06-25.** `@jit(target="nvidia_sm120")` matmul now dispatches
+   through the shipped symbol on a capable host: `execution_matrix` has an executable
+   `("nvidia_sm120","nvidia_mma")` row (sm_120 removed from `_UNIMPLEMENTED_TARGETS`); `runtime.py`
+   adds the `nvidia_mma` executor (loads libtessera_nvidia_gemm.so, picks the dtype symbol, runs +
+   returns); `jit.py` stamps `executable=True, compiler_path="nvidia_mma", native_gpu` when the runtime
+   probe passes (off-device it stays artifact_only — no behavior change). f16/bf16/fp32(tf32-math)
+   storage. `test_nvidia_launch_execute.py` covers the matrix row + execute-and-compare + the @jit
+   default. This mirrors ROCm's `rocm_wmma` lane; a compiler-GENERATED nvidia lane (the `rocm_compiled`
+   analog, via a tessera-opt NVIDIA pipeline) remains a follow-up.
+
+   **Still open:** the compiler-generated nvidia lane (above); NVFP4 block-scale (#9; the warp
+   instruction is already confirmed to assemble+execute on sm_120a — see `spikes/sm120_mma_sync/` —
+   pending the PTX ISA scale-distribution spec for numerics).
 
 ## The two-box frontier
 

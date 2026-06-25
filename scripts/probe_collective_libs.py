@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sprint G-9 + H-8 (2026-05-11) — NCCL / RCCL symbol resolution probe.
 
-Hardware-free check: dlopens libnccl.so (CUDA 13.2 U1) and librccl.so
+Hardware-free check: dlopens libnccl.so (CUDA 13.3) and librccl.so
 (ROCm 7.2.4) and resolves the symbol surface Tessera's adapters link
 against (`ncclAllReduce`, `ncclReduceScatter`, `ncclAllGather`,
 `ncclSend`, `ncclRecv`, `ncclCommInitRank`, `ncclGetVersion`).  No GPU
@@ -99,7 +99,7 @@ def main() -> int:
     print("Sprint G-9 + H-8 — NCCL / RCCL symbol resolution probe")
     print("======================================================")
 
-    # NCCL — CUDA 13.2 U1 bundles NCCL 2.22+.
+    # NCCL — CUDA 13.3 bundles NCCL 2.30.7 (Tessera floor stays 2.22+).
     nccl = _try_load("libnccl.so.2", "libnccl.so")
     if nccl is None:
         print("  NCCL: not installed (libnccl.so absent) — skipping")

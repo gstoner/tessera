@@ -3,7 +3,7 @@
 Hardware-free guards for the per-target kernel pre-work:
 
   G-2: `docs/nvidia_cuda13_kernel_inventory.md` — enumerates every
-       planned NVIDIA fused kernel under CUDA 13.2 U1.
+       planned NVIDIA fused kernel under CUDA 13.3.
   G-3: `BackendKernelEntry` schema extended with `cuda_arch_min`,
        `nvcc_version_min`, `wgmma_shape`, `cluster_size`, `mfma_shape`,
        `hipcc_version_min`, `expected_mfu`, `roofline_target`.

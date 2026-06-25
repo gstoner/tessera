@@ -560,6 +560,7 @@ nvidia,tessera_gpu_available,gpu_available,,src/compiler/codegen/tessera_gpu_bac
 nvidia,tessera_gpu_available,gpu_available,,src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp
 nvidia,tessera_gpu_imma_int8,gpu_imma,int8,src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp
 nvidia,tessera_gpu_wgmma_bf16,gpu_wgmma,bf16,src/compiler/codegen/tessera_gpu_backend_NVIDIA/src/backend_gpu.cpp
+nvidia,tessera_nvidia_mma_gemm_bf16,nvidia_mma_gemm,bf16,src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_gemm.cpp
 rocm,tessera_rocm_wmma_flash_attn_bf16,rocm_wmma_flash_attn,bf16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp
 rocm,tessera_rocm_wmma_flash_attn_f16,rocm_wmma_flash_attn,f16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp
 rocm,tessera_rocm_wmma_gemm_bf16,rocm_wmma_gemm,bf16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_gemm.cpp

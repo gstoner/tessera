@@ -11,7 +11,7 @@ emits.
 Hardware-free: `nvcc -ptx` produces PTX text without requiring a GPU.
 
 Usage:
-    python scripts/validate_nvcc_compile.py --nvcc /opt/cuda-13.2/bin/nvcc
+    python scripts/validate_nvcc_compile.py --nvcc /opt/cuda-13.3/bin/nvcc
 
 Exit codes:
     0 — every fixture compiles cleanly (or nvcc absent → skipped)
@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Minimum nvcc version the validator accepts (matches the Python pin).
-MIN_NVCC_VERSION = (13, 2, 1)
+MIN_NVCC_VERSION = (13, 3, 0)
 
 
 # PTX patterns the G-4 fixtures lock — each maps to a minimal CUDA C++
@@ -113,7 +113,7 @@ def _check_nvcc_version(nvcc: Path) -> tuple[int, int, int]:
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"ERROR: failed to invoke {nvcc}: {e}", file=sys.stderr)
         return (0, 0, 0)
-    # Example line: "release 13.2, V13.2.123"
+    # Example line: "release 13.3, V13.3.123"
     match = re.search(r"release (\d+)\.(\d+)(?:\.(\d+))?", out)
     if not match:
         return (0, 0, 0)
@@ -173,7 +173,7 @@ def main() -> int:
     if version < MIN_NVCC_VERSION:
         print(
             f"ERROR: nvcc version {version} < required {MIN_NVCC_VERSION}.  "
-            f"Tessera pins CUDA 13.2 Update 1.",
+            f"Tessera pins CUDA 13.3.",
             file=sys.stderr,
         )
         return 1

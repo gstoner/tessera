@@ -1325,6 +1325,183 @@ def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# NVIDIA mma.sync GEMM lane — the consumer-Blackwell analog of rocm_wmma.
+# Dispatches a single matmul to the shipped libtessera_nvidia_gemm.so symbols
+# (NVRTC-compiled warp-level mma.sync for the device arch). Mirror of the ROCm
+# block above; same shipped-symbol contract, CUDA driver instead of HIP.
+# ─────────────────────────────────────────────────────────────────────────────
+_nvidia_gemm_runtime: ctypes.CDLL | None = None
+_nvidia_gemm_probe_ok: bool | None = None
+
+#: C-ABI GEMM symbols shipped by libtessera_nvidia_gemm.so, keyed by storage
+#: dtype. fp32 storage runs tf32-math (mma.sync m16n8k8.tf32).
+_NVIDIA_GEMM_SYMBOLS = {
+    "float16": "tessera_nvidia_mma_gemm_f16",
+    "bfloat16": "tessera_nvidia_mma_gemm_bf16",
+    "float32": "tessera_nvidia_mma_gemm_tf32",
+}
+
+
+def _nvidia_gemm_lib_path() -> Optional[Path]:
+    """Locate the shipped GEMM lib (env override → canonical CMake build dir)."""
+    env = os.environ.get("TESSERA_NVIDIA_GEMM_LIB")
+    candidates: list[Path] = []
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.append(
+        root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda"
+        / "libtessera_nvidia_gemm.so")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _load_nvidia_gemm_runtime() -> ctypes.CDLL | None:
+    """Load libtessera_nvidia_gemm.so once, binding the GEMM symbol signatures.
+    Preloads the CUDA driver + NVRTC globally so the lib resolves them. Returns
+    None (never raises) when the lib / CUDA deps are absent — the caller treats
+    that as "no NVIDIA execution lane on this host"."""
+    global _nvidia_gemm_runtime
+    if _nvidia_gemm_runtime is not None:
+        return _nvidia_gemm_runtime
+    path = _nvidia_gemm_lib_path()
+    if path is None:
+        return None
+    cuda_dirs = ["/usr/lib/wsl/lib",
+                 os.path.join(os.environ.get("CUDA_PATH", "/usr/local/cuda"), "lib64")]
+    for dep in ("libcuda.so.1", "libcuda.so", "libnvrtc.so"):
+        for d in cuda_dirs:
+            p = os.path.join(d, dep)
+            if os.path.isfile(p):
+                try:
+                    ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                except OSError:
+                    pass
+                break
+    try:
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    for sym in _NVIDIA_GEMM_SYMBOLS.values():
+        fn = getattr(lib, sym, None)
+        if fn is None:
+            continue
+        fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                       ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        fn.restype = ctypes.c_int
+    _nvidia_gemm_runtime = lib
+    return lib
+
+
+def _nvidia_mma_runtime_available() -> bool:
+    """Cached host probe: True iff the GEMM lib loads AND a real NVIDIA device
+    runs a tiny mma.sync GEMM (rc == 0). The gate the jit path consults before
+    stamping an nvidia artifact ``executable`` — so ``native_gpu`` is never
+    claimed on a host without an NVIDIA GPU. rc==2 (no device / no NVRTC) ⇒
+    unavailable."""
+    global _nvidia_gemm_probe_ok
+    if _nvidia_gemm_probe_ok is not None:
+        return _nvidia_gemm_probe_ok
+    _nvidia_gemm_probe_ok = False
+    lib = _load_nvidia_gemm_runtime()
+    if lib is None:
+        return False
+    fn = getattr(lib, _NVIDIA_GEMM_SYMBOLS["float16"], None)
+    if fn is None:
+        return False
+    try:
+        import numpy as np
+    except Exception:
+        return False
+    a = np.zeros((16, 16), np.float16)
+    b = np.zeros((16, 16), np.float16)
+    d = np.zeros((16, 16), np.float32)
+    try:
+        rc = fn(a.ctypes.data_as(ctypes.c_void_p),
+                b.ctypes.data_as(ctypes.c_void_p),
+                d.ctypes.data_as(ctypes.c_void_p), 16, 16, 16)
+    except Exception:
+        return False
+    _nvidia_gemm_probe_ok = (rc == 0)
+    return _nvidia_gemm_probe_ok
+
+
+def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute a ``target="nvidia_sm120"`` single-matmul artifact on the NVIDIA
+    GPU through the shipped ``tessera_nvidia_mma_gemm_{f16,bf16,tf32}`` C-ABI
+    symbol (warp-level mma.sync, f32 accumulate). Returns the f32 result matrix.
+    Raises on a missing lib / device, an unsupported op set, or a kernel error —
+    ``launch()`` maps the raise to ``invalid_artifact``."""
+    import numpy as np
+
+    lib = _load_nvidia_gemm_runtime()
+    if lib is None:
+        raise RuntimeError(
+            "libtessera_nvidia_gemm.so not loadable — no NVIDIA execution lane "
+            "on this host (build target: tessera_nvidia_gemm)")
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in (
+            "tessera.matmul", "tessera.gemm"):
+        raise ValueError(
+            "nvidia_mma executor handles exactly one matmul/gemm op; got "
+            f"{[o.get('op_name') for o in ops]!r}")
+
+    values = _bind_launch_args(args, arg_names)
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) != 2:
+        raise ValueError("matmul requires exactly two operands")
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"nvidia_mma matmul needs rank-2 operands with matching K; got "
+            f"{a.shape} @ {b.shape}")
+
+    bf16 = _bfloat16_dtype()
+    store: Any
+    if a.dtype == np.float16 and b.dtype == np.float16:
+        sym, store = _NVIDIA_GEMM_SYMBOLS["float16"], np.float16
+    elif bf16 is not None and a.dtype == bf16 and b.dtype == bf16:
+        sym, store = _NVIDIA_GEMM_SYMBOLS["bfloat16"], bf16
+    elif a.dtype == np.float32 and b.dtype == np.float32:
+        # fp32 storage → tf32-math GEMM (Decision #15a).
+        sym, store = _NVIDIA_GEMM_SYMBOLS["float32"], np.float32
+    else:
+        raise ValueError(
+            "nvidia_mma executor handles f16/bf16/fp32(tf32-math) storage "
+            f"(f32 accumulate); got {a.dtype} @ {b.dtype}")
+    fn = getattr(lib, sym, None)
+    if fn is None:
+        raise RuntimeError(
+            f"libtessera_nvidia_gemm.so lacks {sym} — rebuild the "
+            f"tessera_nvidia_gemm target for {store!r} support")
+
+    m, k = a.shape
+    n = b.shape[1]
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
+    d = np.zeros((m, n), dtype=np.float32)
+    rc = fn(a_c.ctypes.data_as(ctypes.c_void_p),
+            b_c.ctypes.data_as(ctypes.c_void_p),
+            d.ctypes.data_as(ctypes.c_void_p), int(m), int(n), int(k))
+    if rc == 1:
+        raise ValueError(
+            f"nvidia_mma kernel rejected shape ({m}x{n}x{k}) — M/N/K must be "
+            f"positive")
+    if rc == 2:
+        raise RuntimeError("nvidia_mma: no usable NVIDIA GPU / NVRTC at launch")
+    if rc != 0:
+        raise RuntimeError(f"nvidia_mma kernel returned rc={rc}")
+    return d
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Stage L4 — the COMPILED GEMM lane (the default rocm matmul execution path).
 #
 # This lane executes the kernel the *Tessera compiler* generates: it drives the
@@ -1840,6 +2017,7 @@ def _executor_table():
         "rocm_wmma":            _execute_rocm_wmma_artifact,
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
+        "nvidia_mma":           _execute_nvidia_mma_artifact,
     }
 
 

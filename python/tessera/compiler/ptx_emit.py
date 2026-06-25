@@ -150,6 +150,171 @@ def validate_ptx_structure(ptx: str, *, arch: str = "sm_90a") -> list[str]:
     return problems
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Spike #6 productized — sm_120 (consumer Blackwell, CC 12.0) warp-level mma.sync.
+#
+# Unlike Hopper warpgroup WGMMA (above), ``mma.sync`` is a warp-level instruction
+# with register operands, so it lowers to a COMPLETE, assemblable, *launchable*
+# kernel — no shared-memory descriptors / TMA needed. This path is proven
+# end-to-end on real sm_120 silicon (RTX 5070 Ti): emit → ptxas → cuLaunch →
+# execute-and-compare matches a CPU reference to f32 epsilon. The emitted text is
+# byte-for-byte the validated spike kernel
+# (docs/audit/backend/nvidia/spikes/sm120_mma_sync/).
+#
+# The single tile: one warp computes D[16x8] f32 = A[16x16] bf16 (row-major) ·
+# B[16x8] bf16 (col-major), f32 accumulate, via
+# ``mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32``.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The one tile shape this warp-level mma.sync path emits today: m16n8k16 with
+# 16-bit (bf16) A/B and an f32 accumulator. (Other m16n8kK shapes exist but are
+# not yet proven on-silicon; this is deliberately the validated slice.)
+_MMA_SYNC_BF16_TILE: tuple[int, int, int] = (16, 8, 16)
+
+# Canonical Tessera entry name for the sm_120 mma.sync bf16 matmul kernel — this
+# is the runtime_symbol the C-ABI launcher dispatches on.
+MMA_SYNC_BF16_ENTRY = "tessera_mma_m16n8k16_bf16"
+
+
+def is_valid_mma_sync_bf16_shape(m: int, n: int, k: int) -> bool:
+    """The sm_120 warp-level mma.sync bf16 tile this emitter supports: exactly
+    m16n8k16 (the documented 16-bit-operand / f32-accumulator MMA shape). Stricter
+    than the WGMMA predicate on purpose — only the on-silicon-proven tile."""
+    return (m, n, k) == _MMA_SYNC_BF16_TILE
+
+
+def mma_sync_mnemonic(m: int, n: int, k: int, *, acc: str = "f32", ab: str = "bf16") -> str:
+    """The documented warp-level MMA instruction mnemonic for one tile/dtype.
+    A is row-major, B is col-major (``.row.col``) per the m16n8k16 fragment ABI."""
+    return f"mma.sync.aligned.m{m}n{n}k{k}.row.col.{acc}.{ab}.{ab}.{acc}"
+
+
+def emit_mma_sync_matmul_ptx(
+    m: int = 16,
+    n: int = 8,
+    k: int = 16,
+    *,
+    arch: str = "sm_120a",
+    acc: str = "f32",
+    ab: str = "bf16",
+    entry: str = MMA_SYNC_BF16_ENTRY,
+) -> str:
+    """Emit a COMPLETE, assemblable, launchable sm_120 ``mma.sync`` matmul kernel.
+
+    One warp computes ``D[m×n] f32 = A[m×k] bf16 (row-major) · B[k×n] bf16
+    (col-major)`` with f32 accumulation. Unlike :func:`emit_wgmma_matmul_ptx`
+    (a skeleton), this is the full kernel: per-lane fragment loads, the warp MMA,
+    and the store — proven on real sm_120 silicon (see module docstring).
+
+    The fragment layout exploits memory contiguity: with A row-major and B
+    col-major, each packed ``.b32`` register (A: col,col+1 ; B: row,row+1) is a
+    single ``ld.global.b32`` — no explicit packing. Emitted ASCII-only (the
+    driver JIT ``ptxas`` rejects non-ASCII that standalone ptxas tolerates).
+    """
+    if not is_valid_mma_sync_bf16_shape(m, n, k):
+        raise ValueError(
+            f"({m},{n},{k}) is not the supported sm_120 mma.sync bf16 tile "
+            f"(only {_MMA_SYNC_BF16_TILE} is proven on-silicon) -- refusing to emit it"
+        )
+    mma = mma_sync_mnemonic(m, n, k, acc=acc, ab=ab)
+    return f""".version {PTX_ISA_VERSION}
+.target {arch}
+.address_size 64
+
+// Tessera sm_120 mma.sync {ab} matmul -- complete, assemblable, launchable.
+// One warp: D[{m}x{n}] {acc} = A[{m}x{k}] {ab} (row-major) * B[{k}x{n}] {ab} (col-major).
+// Packed fragments load as single contiguous b32 loads (col/col+1 adjacent in A
+// row-major, row/row+1 adjacent in B col-major).
+.visible .entry {entry}(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_D
+)
+{{
+    .reg .b32  %r<32>;
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b64  %A,%B,%D,%off,%addr;
+
+    ld.param.u64 %A, [p_A];
+    ld.param.u64 %B, [p_B];
+    ld.param.u64 %D, [p_D];
+    cvta.to.global.u64 %A, %A;
+    cvta.to.global.u64 %B, %B;
+    cvta.to.global.u64 %D, %D;
+
+    mov.u32 %r1, %tid.x;          // lane 0..31
+    shr.u32 %r2, %r1, 2;          // gid  = lane>>2
+    and.b32 %r3, %r1, 3;          // tig  = lane&3
+    shl.b32 %r4, %r3, 1;          // 2*tig
+    mul.lo.s32 %r5, %r2, 16;      // gid*16
+    add.s32 %r6, %r5, %r4;        // a0 elem idx = gid*16 + 2tig
+
+    // ---- A fragment (elem size 2 bytes) ----
+    mul.wide.s32 %off, %r6, 2;          add.s64 %addr, %A, %off; ld.global.b32 %a0, [%addr];
+    add.s32 %r7, %r6, 128; mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a1, [%addr];
+    add.s32 %r7, %r6, 8;   mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a2, [%addr];
+    add.s32 %r7, %r6, 136; mul.wide.s32 %off, %r7, 2; add.s64 %addr, %A, %off; ld.global.b32 %a3, [%addr];
+
+    // ---- B fragment (col-major, elem size 2 bytes): b0 idx = 2tig + gid*16 ----
+    add.s32 %r8, %r4, %r5;
+    mul.wide.s32 %off, %r8, 2;          add.s64 %addr, %B, %off; ld.global.b32 %b0, [%addr];
+    add.s32 %r9, %r8, 8;   mul.wide.s32 %off, %r9, 2; add.s64 %addr, %B, %off; ld.global.b32 %b1, [%addr];
+
+    // ---- zero accumulator (C input) ----
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    // ---- warp-level MMA ----
+    {mma}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}};
+
+    // ---- D store (row-major, elem size 4 bytes): d0 idx = gid*8 + 2tig ----
+    mul.lo.s32 %r10, %r2, 8;
+    add.s32 %r11, %r10, %r4;
+    mul.wide.s32 %off, %r11, 4;         add.s64 %addr, %D, %off; st.global.f32 [%addr], %d0;
+    add.s32 %r12, %r11, 1;  mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d1;
+    add.s32 %r12, %r11, 64; mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d2;
+    add.s32 %r12, %r11, 65; mul.wide.s32 %off, %r12, 4; add.s64 %addr, %D, %off; st.global.f32 [%addr], %d3;
+
+    ret;
+}}
+"""
+
+
+def validate_mma_sync_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
+    """Structural validation of emitted sm_120 mma.sync PTX (no toolchain).
+    Returns a list of problems — empty means the PTX is well-formed. Unlike the
+    WGMMA skeleton validator, this asserts a *complete* kernel: the mma.sync
+    instruction, the zeroed accumulator, the param loads, and global ld/st."""
+    problems: list[str] = []
+    if f".version {PTX_ISA_VERSION}" not in ptx:
+        problems.append(f"missing `.version {PTX_ISA_VERSION}` directive")
+    if f".target {arch}" not in ptx:
+        problems.append(f"missing `.target {arch}` directive")
+    if ".address_size 64" not in ptx:
+        problems.append("missing `.address_size 64` directive")
+    if ".visible .entry" not in ptx:
+        problems.append("no `.visible .entry` kernel")
+    if "mma.sync.aligned.m16n8k16." not in ptx:
+        problems.append("no mma.sync matmul instruction emitted")
+    if "ld.global.b32" not in ptx:
+        problems.append("no global fragment loads (`ld.global.b32`) emitted")
+    if "st.global.f32" not in ptx:
+        problems.append("no global result stores (`st.global.f32`) emitted")
+    if "mov.f32 %d0, 0f00000000" not in ptx:
+        problems.append("accumulator not zero-initialized before the mma")
+    if not ptx.isascii():
+        problems.append("PTX contains non-ASCII bytes (driver JIT ptxas rejects these)")
+    if ptx.count("{") != ptx.count("}"):
+        problems.append("unbalanced braces")
+    if "ret;" not in ptx:
+        problems.append("kernel does not return (`ret;` missing)")
+    return problems
+
+
 @dataclass(frozen=True)
 class AssembleResult:
     """Outcome of a real ``ptxas`` assembly attempt (rung 3)."""

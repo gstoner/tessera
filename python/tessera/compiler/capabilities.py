@@ -303,7 +303,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     # Sprint G-1 (2026-05-11): NVIDIA capability matrix pinned to
     # CUDA 13.3.  Each entry's `features` tuple records the
     # subset of `cuda_feature_set(isa)` flags that are functional under
-    # 13.2 U1; `supported_dtypes` mirrors `_TENSOR_CORE_DTYPES[isa]`
+    # 13.3; `supported_dtypes` mirrors `_TENSOR_CORE_DTYPES[isa]`
     # filtered to canonical Tessera dtype strings (TF32 is a math_mode,
     # not a storage dtype — see `tessera.dtype.canonicalize_dtype`).
     "nvidia_sm80": TargetCapability(
@@ -314,7 +314,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         default_runtime_status="artifact_only",
         supported_ops=_ops("artifact_only", _NVIDIA_ARTIFACT, reason="NVIDIA Ampere artifact ships under CUDA 13.3; executable smoke is hardware-gated"),
         supported_dtypes=("bf16", "fp16", "fp32", "fp64", "int8"),
-        features=("wmma", "cp_async", "mbarrier", "cuda_13_2_u1"),
+        features=("wmma", "cp_async", "mbarrier", "cuda_13_3"),
     ),
     "nvidia_sm90": TargetCapability(
         name="nvidia_sm90",
@@ -327,7 +327,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         features=(
             "wgmma", "wgmma_sparse", "tma", "tma_swizzle_128b",
             "cluster_launch", "mbarrier_arrive_tx", "cp_async_bulk",
-            "async_proxy_fence", "cuda_13_2_u1",
+            "async_proxy_fence", "cuda_13_3",
         ),
     ),
     "nvidia_sm100": TargetCapability(
@@ -348,7 +348,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "wgmma", "wgmma_sparse", "tma", "tma_swizzle_128b",
             "cluster_launch", "mbarrier_arrive_tx",
             "tcgen05", "tcgen05_pair", "tmem", "block_scaled_mma",
-            "cp_async_bulk", "async_proxy_fence", "cuda_13_2_u1",
+            "cp_async_bulk", "async_proxy_fence", "cuda_13_3",
         ),
     ),
     "nvidia_sm120": TargetCapability(
@@ -369,7 +369,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "wgmma", "wgmma_sparse", "tma", "tma_swizzle_128b",
             "cluster_launch", "mbarrier_arrive_tx",
             "tcgen05", "tcgen05_pair", "tmem", "block_scaled_mma",
-            "cp_async_bulk", "async_proxy_fence", "cuda_13_2_u1",
+            "cp_async_bulk", "async_proxy_fence", "cuda_13_3",
         ),
     ),
     # Sprint H-1 (2026-05-11): ROCm 7.2.4 capability matrix.  Per-arch

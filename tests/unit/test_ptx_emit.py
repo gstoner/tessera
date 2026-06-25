@@ -71,3 +71,52 @@ def test_ptxas_gate_skips_clean_without_toolchain():
     res = P.ptxas_assemble(P.emit_wgmma_matmul_ptx())
     assert res.status == "toolchain_absent"
     assert not res.assembled
+
+
+# ── sm_120 mma.sync (consumer Blackwell) — productized spike #6 ───────────────
+
+
+def test_mma_sync_mnemonic_is_documented_m16n8k16():
+    assert P.mma_sync_mnemonic(16, 8, 16) == (
+        "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32"
+    )
+
+
+def test_emitted_mma_sync_ptx_validates_clean():
+    ptx = P.emit_mma_sync_matmul_ptx()
+    assert P.mma_sync_mnemonic(16, 8, 16) in ptx
+    assert P.validate_mma_sync_ptx_structure(ptx) == []
+
+
+def test_emitted_mma_sync_ptx_is_complete_and_ascii():
+    """Unlike the WGMMA skeleton, the mma.sync path is a COMPLETE kernel: param
+    loads, contiguous fragment loads, a zeroed accumulator, the warp MMA, global
+    stores. It must also be ASCII (the driver JIT ptxas rejects non-ASCII)."""
+    ptx = P.emit_mma_sync_matmul_ptx()
+    assert ptx.isascii()
+    assert ".version 9.3" in ptx
+    assert ".target sm_120a" in ptx
+    assert ".visible .entry " + P.MMA_SYNC_BF16_ENTRY in ptx
+    assert "mov.f32 %d0, 0f00000000" in ptx          # accumulator zeroed
+    assert "ld.global.b32" in ptx and "st.global.f32" in ptx
+
+
+def test_mma_sync_refuses_unproven_shape():
+    with pytest.raises(ValueError, match="proven on-silicon"):
+        P.emit_mma_sync_matmul_ptx(64, 64, 16)
+
+
+def test_mma_sync_validator_catches_breakage():
+    ptx = P.emit_mma_sync_matmul_ptx()
+    no_acc = ptx.replace("mov.f32 %d0, 0f00000000;", "")
+    assert any("accumulator" in p for p in P.validate_mma_sync_ptx_structure(no_acc))
+    non_ascii = ptx.replace("warp-level MMA", "warp-level MMA — fused")
+    assert any("non-ASCII" in p for p in P.validate_mma_sync_ptx_structure(non_ascii))
+
+
+@pytest.mark.skipif(shutil.which("ptxas") is None, reason="ptxas not on PATH")
+def test_mma_sync_ptx_assembles_for_sm120a():
+    """Rung 3 — the COMPLETE mma.sync kernel really assembles (unlike the WGMMA
+    skeleton). Runs only where ptxas is present (the NVIDIA box / CI)."""
+    res = P.ptxas_assemble(P.emit_mma_sync_matmul_ptx(), arch="sm_120a")
+    assert res.assembled, f"ptxas rejected the emitted mma.sync kernel: {res.detail}"

@@ -100,7 +100,7 @@ Current high-level status (as of June 16, 2026):
 | **Apple Silicon CPU** via Accelerate (cblas_sgemm rank-2/rank-3 + BNNS f16/bf16) (Phase 8.2) | **implemented / hardware-runtime** |
 | **Apple Silicon GPU** via MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged `.mtlpackage` loading — 284 Apple C ABI symbols across 126 kernel families (count truth: [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md)), GA/EBM/M7 fused kernels, the fused MoE-SwiGLU expert-FFN kernel, MTL4 `matmul2d` bf16 default routing, MTL4 epilogue/session/archive paths, batched linalg MSL kernels, and PK1–PK7 packaged-kernel ABI validation | **implemented / hardware-runtime (Darwin); non-Darwin stubs are CI fallbacks, not hardware proof** |
 | **Distributed MoE / MegaMoE** — single-device `nn.functional.moe_layer`, fused `ops.moe_swiglu_block` (Graph-IR op + GPU kernel), expert-parallel `megamoe_forward` (GShard 2× all-to-all dispatch/combine), FP8×FP4 mixed precision, and **real wall-clock comm/compute overlap** (async GPU command buffer ∥ CPU comm) | implemented / hardware-runtime (Apple GPU expert FFN); multi-rank via in-process mock collectives — see [`docs/distributed_megamoe.md`](docs/distributed_megamoe.md) |
-| NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.2 Update 1 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
+| NVIDIA SM_90+ FA-4, WGMMA/TMA, Blackwell TCGEN05/TMEM target artifacts; **CUDA 13.3 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase G) |
 | ROCm MFMA gfx90a / gfx94x / gfx950 / gfx1100; **ROCm 7.2.4 toolchain pin** | implemented / lit-testable; execution gated on real hardware (Phase H) |
 | Distributed APIs, cyclic sharding, NCCL/RCCL adapters (≥ 2.22 pin) | implemented / scaffolded |
 | Solver, sparse/RNG, linalg, scaling-resilience, **spectral (all 6 passes shipped)**, TPP | implemented / lit-testable |
@@ -453,7 +453,7 @@ build/tools/tessera-opt/tessera-opt --tessera-autodiff \
 NVIDIA / ROCm toolchain checks (skip cleanly when toolchains absent):
 
 ```bash
-# Validate CUDA 13.2 U1 PTX patterns against installed nvcc
+# Validate CUDA 13.3 PTX patterns against installed nvcc
 python scripts/validate_nvcc_compile.py
 
 # Validate ROCm 7.2.4 AMDGCN intrinsics against installed hipcc

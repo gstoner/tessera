@@ -23,6 +23,10 @@ message(STATUS "TESSERA_CUDA_ARCH = ${TESSERA_CUDA_ARCH}")
 add_subdirectory(lib/IR)
 add_subdirectory(lib/Conversion)
 
+# Shipped NVRTC-compiled mma.sync GEMM runtime symbols (self-gates on
+# TESSERA_ENABLE_CUDA). The hardware_verified backend_kernel proof lib.
+add_subdirectory(runtime/cuda)
+
 if(TESSERA_NVIDIA_BUILD_TOOLS)
   add_subdirectory(tools)
 endif()

@@ -36,7 +36,11 @@ _SMEM_BYTES: dict[ISA, int] = {
     ISA.SM_90:  233472,   # H100: 228 KB
     ISA.SM_100: 262144,   # B100: 256 KB
     # CC 12.0 = 100 KB/SM (99 KB/block), per the CUDA Programming Guide
-    # compute-capabilities appendix Table 31 — NOT the 256 KB datacenter sm_100 SM.
+    # compute-capabilities appendix Table 31 — NOT the 256 KB datacenter sm_100 SM,
+    # and NOT the 128 KB unified data cache (Table 32).  Confirmed on-silicon
+    # 2026-06-25 (RTX 5070 Ti, CUDA 13.3): sharedMemPerMultiprocessor == 102400.
+    # NB: per-block dynamic-smem opt-in maxes at 101376 (99 KiB), so any per-block
+    # budget / cudaFuncAttributeMaxDynamicSharedMemorySize must cap below this value.
     ISA.SM_120: 102400,   # RTX 50-series: 100 KB/SM (consumer Blackwell, CC 12.0)
 }
 

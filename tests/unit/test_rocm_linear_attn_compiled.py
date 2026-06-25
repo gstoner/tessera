@@ -116,3 +116,17 @@ def test_causal_differs_from_full():
     co = causal.reshape(B, H, S, D)[0, 0, 0]
     diff = float(np.max(np.abs(co - full[0, 0, 0])))
     assert diff > 1e-2, "causal linear-attn output indistinguishable from full"
+
+
+def test_mismatched_kv_seqlen_is_rejected_not_oob():
+    """K and V must share the key length. `sk` (from K) drives the V device
+    copy size, so a shorter V would read past the host buffer — the lane must
+    reject it with a clean ValueError, never read OOB. Pure shape validation
+    (runs before any GPU / tessera-opt call), so it needs no device."""
+    from tessera import runtime as rt
+    q = np.zeros((1, 1, 32, 16), np.float16)
+    k = np.zeros((1, 1, 64, 16), np.float16)   # K: 64 keys
+    v = np.zeros((1, 1, 32, 16), np.float16)   # V: only 32 — would OOB at sk=64
+    art = _artifact(rt, True, "identity")
+    with pytest.raises(ValueError, match="share the sequence length"):
+        rt._execute_rocm_compiled_linear_attn(art, (q, k, v))

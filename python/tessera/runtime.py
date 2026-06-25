@@ -1930,6 +1930,15 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
     sk = int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
     bh_kv = int(np.prod(k.shape[:-2])) if k.ndim > 2 else 1
+    # V is paired with K: it must match K's batch/head, sequence length, and
+    # head dim. `sk` / `bh_kv` (from K) drive the V device allocation + copy
+    # (nkv), so a smaller V would read past the host buffer — reject, not read
+    # OOB. (Q's head dim must also equal V's, since O is shaped like Q.)
+    if (v.shape[:-2] != k.shape[:-2] or int(v.shape[-2]) != sk
+            or int(v.shape[-1]) != head_dim):
+        raise ValueError(
+            "rocm flash_attn lane requires V to match K's batch/head + sequence "
+            f"length and Q's head dim; got Q{q.shape} K{k.shape} V{v.shape}")
     # GQA/MQA: H query heads vs G<H key/value heads (the head axis is -3:
     # [...,H,S,D] / [...,G,S,D]). G != H -> grouped lane (heads + kv_ratio args);
     # G == H is plain MHA (the original 8-arg kernel).
@@ -2134,6 +2143,13 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
         raise ValueError(
             "rocm linear_attn lane requires equal Q/K/V batch/head dims; got "
             f"Q{q.shape} K{k.shape} V{v.shape}")
+    # K and V are a paired key/value sequence — they MUST share the key length.
+    # `sk` (from K) drives the V device allocation + copy size (nkv), so a
+    # shorter V would otherwise read past the host buffer; reject, never read OOB.
+    if int(k.shape[-2]) != int(v.shape[-2]):
+        raise ValueError(
+            "rocm linear_attn lane requires K and V to share the sequence "
+            f"length; got K{k.shape} V{v.shape}")
     sq = int(q.shape[-2])
     sk = int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1

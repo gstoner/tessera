@@ -18,7 +18,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
 | `matmul` |  390 |  203 |  593 |  15 | `bf16`, `f16`, `f32`, `f64` … |
-| `flash_attn` |   98 |   57 |  155 |   5 | `bf16`, `f32`, `fp16`, `fp32` … |
+| `flash_attn` |   98 |   57 |  155 |   6 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |   92 |   37 |  129 |   5 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  103 |   20 |  123 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   95 |   13 |  108 |   8 | `bf16`, `f16`, `f32`, `f64` … |

@@ -12,7 +12,37 @@ MLIR-like artifacts.
 
 Primary profiles:
 - Hopper: `SM_90` / `sm_90a` with WGMMA, TMA, and mbarrier contracts.
-- Blackwell: `SM_100` / `sm_100a` and `SM_120` with TCGEN05 and TMEM contracts.
+- Datacenter Blackwell: `SM_100` / `sm_100a` with TCGEN05 and TMEM contracts.
+- Consumer Blackwell: `SM_120` / `sm_120a` with warp-level `mma.sync` and
+  block-scaled NVFP4 (`mma.sync…block_scale`, E2M1 + ue4m3 scale). **Note:**
+  consumer `sm_120` has **no** `wgmma` / `tcgen05` / TMEM (those are Hopper
+  sm_90a / datacenter sm_100a only) — see
+  [`BLACKWELL_SM120_EXECUTION_PLAN.md`](../../../../docs/audit/backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md).
+
+## Hardware execution — sm_120 `mma.sync` matmul is verified on silicon (#106)
+
+The first executable NVIDIA lane is live: a **compiler-generated `mma.sync`
+matmul is hardware-verified end-to-end on a real RTX 5070 Ti** (consumer
+Blackwell, CC 12.0, CUDA 13.3). The full rung ladder clears —
+`emit_mma_sync_matmul_ptx` (`python/tessera/compiler/ptx_emit.py`, sm_120 path)
+→ PTX (`.version 9.3`, `.target sm_120a`) → `ptxas`-assemble → CUDA launch bridge
+(`tsrRegisterGpuLauncher`) → execute-and-compare vs numpy. The shipped
+`libtessera_nvidia_gemm.so` is a general tiled/K-looped `mma.sync` GEMM.
+
+On-silicon multi-dtype sweep (RTX 5070 Ti, NVRTC `compute_120`, execute-and-compare
+across 7 shapes incl. ragged): **bf16, f16, tf32, fp8 e4m3, fp8 e5m2** all match a
+host reference (fp8 bit-exact). NVFP4 block-scaled `mma.sync.m16n8k64` **assembles
+and executes on `sm_120a`** but its numerics are not yet claimed (the PTX ISA
+block-scale operand/scale mapping is absent from the on-box CUDA 13.3 headers).
+See the grounded spike write-up:
+[`docs/audit/backend/nvidia/spikes/sm120_mma_sync/README.md`](../../../../docs/audit/backend/nvidia/spikes/sm120_mma_sync/README.md).
+
+**Honest scope:** one op (matmul) × one arch (sm_120). Hopper `SM_90` WGMMA and
+datacenter `SM_100` are unproven — the sm_90a WGMMA emit won't run on sm_120 and
+vice-versa. The rest of the op surface stays `artifact_only`; broaden coverage +
+add the flash-attn family. Counts/rows are owned by the generated dashboards
+([`runtime_execution_matrix.md`](../../../../docs/audit/generated/runtime_execution_matrix.md));
+see [`NVIDIA_AUDIT.md`](../../../../docs/audit/backend/nvidia/NVIDIA_AUDIT.md).
 
 ## LLVM/MLIR 22 Artifact Build
 

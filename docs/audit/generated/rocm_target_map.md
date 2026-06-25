@@ -5,13 +5,15 @@
 
 Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple target map (``docs/audit/generated/apple_target_map.md``); pulled from ``capabilities['rocm']`` + ``backend_manifest._ROCM_ARTIFACT``.
 
-**Status story today:** every ROCm row is at ``artifact_only`` or ``planned`` — IR/PTX artifact emission is in tree, but hardware execution is gated on the next hardware bring-up sprint (Phase G for NVIDIA, Phase H for ROCm).  When a row moves to ``compileable`` / ``executable`` / ``fused``, ``release_gate.py --target=rocm`` gains the target-specific gates (canonical native dispatch, per-target benchmarks, hardware-marked tests) the same way ``--target=apple_gpu`` does today.
+**Status story today:** most ROCm rows are at ``artifact_only`` or ``planned`` — IR/PTX artifact emission is in tree, but hardware execution is gated on the bring-up sprint (Phase G for NVIDIA, Phase H for ROCm).  The rows that have been proven on real hardware carry an execution rung: ``hardware_verified`` (a shipped C-ABI ``runtime_symbol`` + a numerical fixture) or ``compiled`` (a compiler-generated hsaco that executes via ``runtime.launch()`` + a numerical fixture, but no shipped C symbol).  ``release_gate.py --target=rocm`` gains the target-specific gates (canonical native dispatch, per-target benchmarks, hardware-marked tests) for those rows the same way ``--target=apple_gpu`` does today.
 
 ## Status counts
 
 | Status | Count |
 |---|---:|
-| ``artifact_only`` | 30 |
+| ``hardware_verified`` | 2 |
+| ``compiled`` | 7 |
+| ``artifact_only`` | 23 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -44,21 +46,21 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| attn_sliding_window | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| attn_sliding_window | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | deepseek_sparse_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | flash_attn | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 65% | - |
 | gated_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | gated_deltanet | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| gqa_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| gqa_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | hybrid_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | kimi_delta_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| lightning_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 35% | - |
-| linear_attn | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| lightning_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | 35% | - |
+| linear_attn | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | mla_decode | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | 50% | - |
 | mla_decode_fused | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
 | modified_delta_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| mqa_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| multi_head_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| mqa_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
+| multi_head_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 
 ## norm (3)
 
@@ -82,14 +84,14 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 | batched_gemm | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | 72% | - |
 | einsum | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 | factorized_matmul | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
-| fused_epilogue | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| fused_epilogue | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | linear_general | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 | matmul | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 75% | - |
 | qkv_projection | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
 
 ## How to read this
 
-* **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``).
+* **status** uses the same vocabulary as ``apple_target_map.md`` (``fused`` / ``compileable`` / ``executable`` / ``artifact_only`` / ``planned``), plus two execution rungs: ``hardware_verified`` (executes on real hardware via a shipped C-ABI ``runtime_symbol`` + numerical fixture) and ``compiled`` (executes via ``runtime.launch()`` as a compiler-generated hsaco + numerical fixture, but NO shipped C symbol — one rung below ``hardware_verified``).
 * **dtypes** is the per-op kernel dtype matrix — same interpretation rule as ``BackendKernelEntry.dtypes``: on a ``planned`` row, the dtype tuple is the target kernel dtype matrix, not what runs today.
 * **tile shape** is the WGMMA `(M, N, K)` for NVIDIA Hopper+ or the MFMA `(M, N, K, K_blocks)` for ROCm CDNA.
 * **arch_min** is the minimum target arch the kernel compiles for (``sm_90a`` for Hopper WGMMA, ``hipcc≥7.2.4`` for ROCm).

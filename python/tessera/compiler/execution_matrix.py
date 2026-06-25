@@ -103,6 +103,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "axis (one workgroup per row, LDS tree-reduce); the "
                             "first non-matmul/non-WMMA compiled ROCm kernel. "
                             "f32/f16/bf16 storage, f32 reduce",
+    "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
+                            "Tessera compiler GENERATES "
+                            "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
+                            "in-process via tessera-opt), then HIP loads + "
+                            "launches it. Standalone gelu / silu / relu (one "
+                            "thread per element), dispatched by op name; "
+                            "f32/f16/bf16 storage, f32 compute",
+    "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
+                            "compiler GENERATES (generate-rocm-rope-kernel -> "
+                            "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
+                            "loads + launches it. Interleaved-pair RoPE over "
+                            "[M, D] (one workgroup per row); f32/f16/bf16",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
@@ -247,6 +259,27 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "workgroup per row, LDS tree-reduce): tessera-opt generates + "
                "serializes the kernel to hsaco in-process, then HIP loads + "
                "launches it. The first non-matmul/non-WMMA compiled ROCm kernel.",
+        execution_mode="hip_runtime"),
+    # Standalone elementwise activations (gelu/silu/relu) — flat per-element
+    # kernel; the standalone analog of the GEMM fused epilogue. vs numpy.
+    ("rocm", "rocm_activation_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_activation_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_activation_compiled", runtime_status="success",
+        reason="ROCm activation artifact runs the COMPILER-GENERATED flat "
+               "elementwise kernel (standalone gelu/silu/relu, one thread per "
+               "element): tessera-opt generates + serializes the kernel to hsaco "
+               "in-process, then HIP loads + launches it. Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
+    ("rocm", "rocm_rope_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_rope_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_rope_compiled", runtime_status="success",
+        reason="ROCm rope artifact runs the COMPILER-GENERATED interleaved-pair "
+               "rotary-position-embedding kernel (one workgroup per row): "
+               "tessera-opt generates + serializes the kernel to hsaco "
+               "in-process, then HIP loads + launches it.",
         execution_mode="hip_runtime"),
     # --- NVIDIA GPU (consumer Blackwell, sm_120 warp-level mma.sync GEMM) ---
     # sm_120 bring-up (2026-06-25): the shipped libtessera_nvidia_gemm.so runs a

@@ -2907,6 +2907,7 @@ def _execute_rocm_compiled_alibi(artifact: RuntimeArtifact, args: Any) -> Any:
         slopes = (2.0 ** (-8.0 * k / hh)).astype(np.float32)
 
     dtype_tag = str(kwargs.get("dtype", "f32"))
+    store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
     if dtype_tag in ("f32", "float32"):
         store, esz = np.float32, 4
         dtype_tag = "f32"

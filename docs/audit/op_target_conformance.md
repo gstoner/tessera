@@ -40,7 +40,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 | `cpu` | ⚙️ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙️ | ✅ | — |  |
 | `apple_cpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
 | `apple_gpu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `hardware_smoke` — Apple silicon required for native execution |  |
-| `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ⚙️ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
+| `nvidia` | ❌ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ✅ | `toolchain` — nvcc not on PATH (CUDA Toolkit 13.3 not installed) |  |
 | `rocm` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | `toolchain` — hipcc not on PATH (ROCm 7.2.4 not installed) |  |
 
 ## `matmul_relu`

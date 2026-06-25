@@ -72,18 +72,22 @@ def test_manifest_for_attaches_fixture_to_apple_gpu_matmul():
 
 
 def test_manifest_for_attaches_fixture_only_to_matching_target():
-    """matmul has many manifest rows; the fixture must land on the
-    target the map declares (``cpu``), not on NVIDIA / ROCm / etc."""
+    """matmul has many manifest rows; a fixture must land on exactly the
+    target the map declares — ``cpu`` and (consumer-Blackwell bring-up,
+    2026-06-25) ``nvidia_sm120`` — and not bleed onto sibling arches."""
     rows = bm.manifest_for("matmul")
-    cpu_rows = [r for r in rows if r.target == "cpu"]
-    nvidia_rows = [r for r in rows if r.target.startswith("nvidia_")]
-    assert cpu_rows[0].execute_compare_fixture == (
+    by_target = {r.target: r for r in rows}
+    assert by_target["cpu"].execute_compare_fixture == (
         "tests/unit/test_end_to_end_matmul_cpu_path.py")
-    for r in nvidia_rows:
-        # No fixture declared for NVIDIA today — must not falsely attach.
-        assert r.execute_compare_fixture is None, (
-            f"NVIDIA row should not have a fixture; got "
-            f"{r.execute_compare_fixture!r} on {r.target}")
+    # nvidia_sm120 now ships a shipped runtime symbol + execute-compare fixture.
+    assert by_target["nvidia_sm120"].execute_compare_fixture == (
+        "tests/unit/test_nvidia_mma_runtime_symbol.py")
+    # The other NVIDIA arches are still artifact_only — the fixture must NOT
+    # falsely attach to them.
+    for t in ("nvidia_sm80", "nvidia_sm90", "nvidia_sm100"):
+        assert by_target[t].execute_compare_fixture is None, (
+            f"{t} should not have a fixture; got "
+            f"{by_target[t].execute_compare_fixture!r}")
 
 
 def test_apple_gpu_relu_has_manifest_fixture_after_a1():

@@ -237,10 +237,27 @@ The target system loads **CUDA 13.3** (release notes 27-May-2026). Tessera's pin
    that standalone ptxas tolerates; (b) the f32 accumulator regs must be explicitly zero-initialized
    before the `mma` (they are the C operand); (c) CUDA 13.3 `cuCtxCreate` is v4 — use
    `cuDevicePrimaryCtxRetain` in host harnesses.
-3. **Stages B→D (productization):** the assemble + execute-and-compare mechanics are now proven; what
-   remains is wiring — add an `emit_mma_sync_matmul_ptx` sm_120 path to `ptx_emit.py`, register the
-   CUDA launcher through `tsrRegisterGpuLauncher`, and land an `mma.sync` hardware-smoke +
-   execute-compare oracle test → first real NVIDIA `backend_kernel` proof. Then NVFP4 block-scale.
+3. **Stages B→D (productization) — LANDED 2026-06-25.** The full chain is in-tree and green on the box:
+   - `ptx_emit.emit_mma_sync_matmul_ptx` (+ validators) emits the complete sm_120 mma.sync kernel;
+     `test_ptx_emit.py` includes a ptxas-gated rung-3 assemble.
+   - C-ABI launch bridge: `test_conformance_execute_compare_nvidia.py` registers a CUDA launcher via
+     `tsrRegisterGpuLauncher` that loads the **emitted PTX** through the Driver API and runs it via
+     `tsrLaunchKernel` (execute-and-compare vs CPU ref).
+   - **Shipped runtime symbol:** `libtessera_nvidia_gemm.so` (CMake `tessera_nvidia_gemm`) exports
+     `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` — a general tiled/K-looped mma.sync GEMM
+     NVRTC-compiled for the device arch. `test_nvidia_mma_runtime_symbol.py` dlopens it and numerically
+     validates all 5 dtypes vs numpy/ml_dtypes.
+   - **Manifest:** `nvidia_sm120` matmul flipped `artifact_only → hardware_verified` (runtime_symbol +
+     execute_compare_fixture) — the **first NVIDIA `backend_kernel` hardware-verified row** (mirrors the
+     ROCm Strix Halo pattern). sm_80/90/100 stay artifact_only (proven only on sm_120).
+   - Build fix: `src/runtime/CMakeLists.txt` + the NVIDIA backend wire CUDA includes/links so
+     `TESSERA_ENABLE_CUDA=ON` builds (was enabled-but-unbuildable).
+
+   **Still open (the @jit default lane):** `@jit(target="nvidia_sm120")` matmul does not yet dispatch to
+   the shipped symbol — no `execution_matrix` executable row / runtime.launch wiring (cf. ROCm's
+   `rocm_wmma` symbol vs the `rocm_compiled` lane). Then NVFP4 block-scale (#9; the warp instruction is
+   already confirmed to assemble+execute on sm_120a — see `spikes/sm120_mma_sync/` — pending the PTX ISA
+   scale-distribution spec for numerics).
 
 ## The two-box frontier
 

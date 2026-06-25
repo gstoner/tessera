@@ -86,6 +86,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "HIP loads + launches it. f16/bf16 storage, f32 "
                             "softmax + accumulate; the attention analog of "
                             "rocm_compiled",
+    "rocm_linear_attn_compiled": "AMD GPU RDNA WMMA linear-attention forward the "
+                            "Tessera compiler GENERATES "
+                            "(generate-wmma-linear-attn-kernel -> ROCDL -> hsaco, "
+                            "in-process via tessera-opt), then HIP loads + "
+                            "launches it. Quadratic-parallel form "
+                            "O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V, NO softmax; f16/bf16 "
+                            "storage, f32 accumulate",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
@@ -203,6 +210,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "FA-2 forward: tessera-opt generates + serializes the kernel to "
                "hsaco in-process, then HIP loads + launches it. The attention "
                "analog of the compiled GEMM lane (rocm_compiled).",
+        execution_mode="hip_runtime"),
+    # Linear attention (quadratic-parallel form O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V) —
+    # NO softmax, a distinct algorithm from flash_attn; f16/bf16, f32 accumulate;
+    # validated vs the numpy linear-attention reference.
+    ("rocm", "rocm_linear_attn_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_linear_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_linear_attn_compiled", runtime_status="success",
+        reason="ROCm linear_attn artifact runs the COMPILER-GENERATED RDNA WMMA "
+               "linear-attention forward (quadratic-parallel form, no softmax): "
+               "tessera-opt generates + serializes the kernel to hsaco "
+               "in-process, then HIP loads + launches it.",
         execution_mode="hip_runtime"),
     # --- NVIDIA GPU (consumer Blackwell, sm_120 warp-level mma.sync GEMM) ---
     # sm_120 bring-up (2026-06-25): the shipped libtessera_nvidia_gemm.so runs a

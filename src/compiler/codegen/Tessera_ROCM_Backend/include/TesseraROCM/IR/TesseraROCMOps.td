@@ -176,6 +176,37 @@ def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
+  let summary = "Linear-attention forward (quadratic-parallel form) as a WMMA kernel";
+  let description = [{
+    The directive the `generate-wmma-linear-attn-kernel` pass expands into a
+    fragment-materialized RDNA WMMA **linear-attention forward** kernel — the
+    quadratic-parallel form `O = (φ(Q) φ(K)ᵀ ⊙ causal) @ V`. Unlike flash
+    attention there is **no softmax** (no running max / exp / normalization): the
+    score matrix `A = φ(Q)φ(K)ᵀ` is masked **multiplicatively** (masked entries
+    → 0, not −∞) and `O += A @ V` accumulates directly. One wave per (16-query
+    tile, b*h): for each 16-key tile up to the causal/ragged limit, compute
+    `A = φ(Q)@φ(K)ᵀ` (WMMA over head-dim chunks), apply the causal/ragged mask,
+    stage `A` in LDS, then accumulate `O += A@V` (WMMA, the same LDS layout
+    bridge flash attention uses). No final divide.
+
+    `feature_map` (default `"identity"`) is the elementwise φ applied to Q and K
+    before the QKᵀ: `"identity"` (no-op), `"relu"` (max(x,0)) — both applied on
+    the loaded fragment. (elu / polynomial_2 are planned follow-ups.) This
+    matches the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V`
+    (`_apple_gpu_dispatch_linear_attn`).
+
+    `head_dim` (a multiple of 16) is the compile-time D — query/key and value
+    head dim are assumed equal (square). B/H/S/causal are runtime kernel args;
+    `dtype` is the f16/bf16 storage (f32 accumulate). Q/K/V are `[b,h,s,d]`
+    row-major; O is f32.
+  }];
+  let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<StrAttr, "\"identity\"">:$feature_map);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{

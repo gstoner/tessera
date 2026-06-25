@@ -33,6 +33,21 @@ def test_rocm_flash_attn_executor_registered():
     assert "rocm_flash_attn_compiled" in rt._executor_table()
 
 
+def test_mismatched_v_is_rejected_not_oob():
+    """V is paired with K: `sk`/`bh_kv` (from K) drive the V device copy size, so
+    a V with a shorter sequence length (or wrong head dim / head count) would
+    read past the host buffer. The lane must reject it with a clean ValueError,
+    never read OOB. Pure shape validation — runs before any GPU/tessera-opt
+    call, so it needs no device."""
+    from tessera import runtime as rt
+    q = np.zeros((1, 1, 32, 16), np.float16)
+    k = np.zeros((1, 1, 64, 16), np.float16)   # K: 64 keys
+    v = np.zeros((1, 1, 32, 16), np.float16)   # V: only 32 — would OOB at sk=64
+    art = _artifact(rt, q, k, v, causal=False, scale=0.25)
+    with pytest.raises(ValueError, match="V to match K"):
+        rt._execute_rocm_compiled_flash_attn(art, (q, k, v))
+
+
 def _fa_or_skip():
     from tessera import runtime as rt
     if rt._tessera_opt_path() is None:

@@ -7,6 +7,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateWMMAFlashAttnKernel.cpp
   GenerateWMMAFlashAttnBwdKernel.cpp
   GenerateWMMALinearAttnKernel.cpp
+  GenerateROCMSoftmaxKernel.cpp
   LowerROCMAsyncCopyToLoop.cpp
   Passes.cpp
   LINK_LIBS PUBLIC

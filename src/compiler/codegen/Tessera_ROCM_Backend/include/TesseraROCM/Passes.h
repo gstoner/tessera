@@ -16,6 +16,7 @@ std::unique_ptr<mlir::Pass> createGenerateWMMAGemmKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMAFlashAttnBwdKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateWMMALinearAttnKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMSoftmaxKernelPass();
 std::unique_ptr<mlir::Pass> createLowerROCMAsyncCopyToLoopPass();
 void buildTesseraROCMBackendPipeline(mlir::OpPassManager &pm);
 void registerTesseraROCMPasses();

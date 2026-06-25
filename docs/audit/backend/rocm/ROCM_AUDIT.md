@@ -313,15 +313,30 @@ become the on-silicon **oracle** the compiled path validates against.
   are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
   runnable `async_copy` that would enable it now exists (#101) for when a
   staging-bound kernel appears.
+- **Softmax** (`softmax`, 2026-06-25): the **first non-matmul / non-WMMA**
+  compiler-generated ROCm kernel — a new `tessera_rocm.softmax` directive +
+  `generate-rocm-softmax-kernel` pass emitting a **row-reduction** kernel (one
+  workgroup per row, lanes stride the last axis and tree-reduce the row max then
+  the row sum through LDS, two passes + an in-place divide). Numerically-stable
+  `O[m,:] = exp(X[m,:] − max) / Σ exp(...)`, reductions in f32 regardless of
+  storage dtype; `exp` rides the same `math` → ROCDL path the flash_attn softmax
+  uses. New `runtime.launch()` lane `rocm_softmax_compiled` (own executor +
+  execution-matrix row); accepts `tessera.softmax` + `tessera.softmax_safe`,
+  axis=-1, f32/f16/bf16. Validated on gfx1151 vs the numpy softmax reference
+  (`_apple_gpu_dispatch_softmax` math) across f32/f16/bf16 × varied M/K incl.
+  K>256, ragged, and rank-3 (`test_rocm_softmax_compiled.py`) + a GPU-free
+  codegen gate (`test_rocm_softmax_codegen.py`). Status `compiled`; it also
+  flips the curated `softmax`×`rocm` cell to ✅ in `op_target_conformance.md`.
 
 ## Still Open
 
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `softmax(_safe)`,
-    `gelu`, `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute
-    *fused* into the GEMM epilogue, just not as standalone kernels);
+  - **norms / activations:** `layer_norm`, `rmsnorm(_safe)`, `gelu`,
+    `silu(_mul)` (the standalone ops — `gelu`/`silu` already execute *fused* into
+    the GEMM epilogue, just not as standalone kernels; `softmax`/`softmax_safe`
+    now execute as a compiled row-reduction kernel — see Landed above);
   - **positional:** `rope`, `alibi`;
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
     `linear_general`, `qkv_projection`;

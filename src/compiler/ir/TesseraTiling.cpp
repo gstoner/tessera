@@ -1,13 +1,13 @@
 //===- TesseraTiling.cpp — TilingInterface impls for tessera ops -*- C++ -*-===//
 //
-// MLIR 21-compatible TilingInterface implementations for
+// MLIR 22-compatible TilingInterface implementations for
 // ``tessera.matmul`` and ``tessera.conv2d_nhwc``.  ODS declares the
 // interface methods via an explicit method list on
 // ``DeclareOpInterfaceMethods<TilingInterface, [...]>`` (see
 // ``TesseraOps.td``); this file supplies the definitions.
 //
 // Status (2026-05-20, B3 v2):
-//   * MatmulOp: full v1 implementation against MLIR 21 signatures.
+//   * MatmulOp: full v1 implementation against MLIR 22 signatures.
 //     ``getTiledImplementation`` clones the op with annotation attrs
 //     so a tile driver can verify the tiling decision flowed
 //     through.  Operand-tile extraction (``tensor.extract_slice`` on

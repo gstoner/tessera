@@ -14,13 +14,13 @@ Primary profiles:
 - Hopper: `SM_90` / `sm_90a` with WGMMA, TMA, and mbarrier contracts.
 - Blackwell: `SM_100` / `sm_100a` and `SM_120` with TCGEN05 and TMEM contracts.
 
-## LLVM/MLIR 21 Artifact Build
+## LLVM/MLIR 22 Artifact Build
 
 ```bash
 cmake -S . -B build-nvidia \
-  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm@21 \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/mlir \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/llvm \
+  -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/opt/llvm/lib/cmake/mlir \
   -DTESSERA_BUILD_NVIDIA_BACKEND=ON \
   -DTESSERA_ENABLE_CUDA=OFF \
   -DTESSERA_BUILD_EXAMPLES=OFF

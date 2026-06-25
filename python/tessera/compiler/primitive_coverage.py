@@ -1587,7 +1587,7 @@ _LOWERING_RULE_BY_CATEGORY: dict[str, str] = {
 
     # — GA + EBM (Decision #25, 2026-05-17): the Clifford dialect
     #   (`tessera_clifford`) + EBM annotation passes (`tessera_ebm`)
-    #   ship as MLIR 21 dialects with GA8 ExpandProductTable and EBM6
+    #   ship as MLIR 22 dialects with GA8 ExpandProductTable and EBM6
     #   inner-loop fusion already implemented.  Apple-GPU runtime
     #   dispatch is wired through `jit_bridge.dispatch_via_manifest`
     #   for every fused primitive — lowering coverage is complete on

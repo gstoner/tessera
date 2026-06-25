@@ -19,7 +19,7 @@ This Python module surfaces the **pass-pipeline alias names** and the
 **dialect metadata** so Python tooling (audit dashboards, JIT routing,
 support tables) can reason about TPP without linking against
 ``tessera-opt``.  Actual lowering / execution requires
-``tessera-opt`` built against MLIR 21.
+``tessera-opt`` built against MLIR 22.
 
 Status: **dispatch wired via `tessera-opt` (2026-05-18).** TPP now
 registers its dialect + all 7 individual passes + the

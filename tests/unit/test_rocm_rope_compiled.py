@@ -86,6 +86,37 @@ def test_launch_rope_matches_numpy(dtype, tol, shape):
     np.testing.assert_allclose(out, _ref(x, theta), atol=tol, rtol=0)
 
 
+@pytest.mark.parametrize("dtype,tol", [(np.float16, 4e-3), ("bf16", 3e-2)])
+def test_fp32_theta_with_half_precision_x(dtype, tol):
+    """A common setup: x is f16/bf16 but the angle table stays fp32 (e.g.
+    nn.RotaryEmbedding defaults theta to fp32). The lane must accept the mixed
+    storage — theta is cast to x's dtype on the device copy — rather than reject
+    it as invalid_artifact."""
+    rt = _rope_or_skip()
+    if dtype == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(73)
+    shape = (8, 64)
+    x = (rng.standard_normal(shape) * 0.5).astype(dtype)
+    theta = _make_theta(shape, 10000.0, np).astype(np.float32)  # fp32 angle table
+
+    res = rt.launch(_artifact(rt), (x, theta))
+    assert res["ok"] is True, res.get("reason")
+    assert res["compiler_path"] == "rocm_rope_compiled"
+    out = res["output"].astype(np.float32).reshape(shape)
+    np.testing.assert_allclose(out, _ref(x, theta), atol=tol, rtol=0)
+
+
+def test_non_float_theta_rejected():
+    """A non-floating angle table would silently produce wrong angles after the
+    storage cast — reject it with a clear message instead."""
+    from tessera import runtime as rt
+    x = np.zeros((4, 16), np.float32)
+    th = np.zeros((4, 16), np.int32)
+    with pytest.raises(ValueError, match="theta must be a floating dtype"):
+        rt._execute_rocm_compiled_rope(_artifact(rt), (x, th))
+
+
 def test_rope_norm_preserved_zero_angle():
     """At angle 0 RoPE is the identity — a sanity anchor independent of cos/sin."""
     rt = _rope_or_skip()

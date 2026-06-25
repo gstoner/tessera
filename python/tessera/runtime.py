@@ -2642,10 +2642,17 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
             dtype_tag, store, esz = "bf16", bf16, 2
         else:
             raise ValueError(f"rocm rope lane handles f32/f16/bf16; got {x.dtype}")
-    if theta.dtype != x.dtype:
+    # The angle table may be kept in fp32 even when x is half precision — a common
+    # setup (nn.RotaryEmbedding defaults its theta table to fp32) the reference
+    # path already handles. The device copy below casts theta to x's storage dtype
+    # (np.ascontiguousarray(theta, dtype=store)), so mixed float storage is fine;
+    # only reject a non-floating theta, which would silently produce wrong angles.
+    _bf16 = _bfloat16_dtype()
+    _theta_floats = (np.float32, np.float16) + ((_bf16,) if _bf16 is not None else ())
+    if theta.dtype not in _theta_floats:
         raise ValueError(
-            f"rope requires x and theta the same dtype; got {x.dtype} / "
-            f"{theta.dtype}")
+            "rope theta must be a floating dtype (f32/f16/bf16); got "
+            f"{theta.dtype} (the angle table is cast to x's storage dtype)")
 
     hsaco = _build_compiled_rope_hsaco(dtype_tag)
     hip = _load_hip_for_launch()

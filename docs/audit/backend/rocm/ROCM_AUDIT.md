@@ -337,7 +337,10 @@ become the on-silicon **oracle** the compiled path validates against.
   `generate-rocm-rope-kernel` — interleaved-pair rotary position embedding over
   `[M,D]` (`O[2p]=e·cos−o·sin`, `O[2p+1]=e·sin+o·cos`, angle from the even-indexed
   `theta`), one workgroup per row, f32 cos/sin. Lane `rocm_rope_compiled`. Both
-  f32/f16/bf16, status `compiled`. Validated on gfx1151 vs the numpy references
+  f32/f16/bf16, status `compiled`; a half-precision `x` may carry an **fp32 angle
+  table** (the common `nn.RotaryEmbedding` default) — theta is cast to `x`'s
+  storage on the device copy, so mixed float storage is accepted (only a
+  non-floating theta is rejected). Validated on gfx1151 vs the numpy references
   (`_apple_gpu_dispatch_gelu`, `_runtime_rope`) across dtype × shape incl. >1
   block, ragged, rank-3 (`test_rocm_activation_compiled.py`,
   `test_rocm_rope_compiled.py`) + a GPU-free codegen gate

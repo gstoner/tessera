@@ -12,8 +12,8 @@
 ### ODS — `TesseraOps.td`
 
 Both ops declare `TilingInterface` via the **explicit method-list**
-form (required by MLIR 21's ODS generator — see "Why explicit method
-list" below):
+form (required by the MLIR 22 ODS generator — see "Why explicit method
+list" below for the MLIR 21 transition that introduced this):
 
 ```tablegen
 DeclareOpInterfaceMethods<TilingInterface, [
@@ -29,7 +29,7 @@ The generated `TesseraOps.h.inc` now declares all four methods on the
 
 ### C++ impl — `TesseraTiling.cpp`
 
-The four MLIR 21 method signatures the impl satisfies are:
+The four MLIR 22 method signatures the impl satisfies are:
 
 ```cpp
 SmallVector<utils::IteratorType> getLoopIteratorTypes();
@@ -45,7 +45,7 @@ LogicalResult                     getResultTilePosition(
     SmallVector<OpFoldResult> &resultSizes);
 ```
 
-* **MatmulOp** — full v1 implementation against MLIR 21 signatures:
+* **MatmulOp** — full v1 implementation against MLIR 22 signatures:
   - `getLoopIteratorTypes()` → `{parallel, parallel}` (M, N).  The
     K-axis reduction lives inside the cloned op, not in the iteration
     domain.

@@ -10,8 +10,8 @@ needing to export ``PATH`` first.  We probe (in order):
      canonical local build location used by
      ``cmake --build build --target tessera-opt``),
   3. plain ``tessera-opt`` resolved against the caller's PATH,
-  4. common LLVM 21 bin directories such as Homebrew and
-     ``/usr/lib/llvm-21/bin``,
+  4. common LLVM 22 bin directories such as Homebrew and
+     ``/usr/lib/llvm-22/bin``,
   5. plain ``tessera-opt`` as the literal substitution (leaves any
      resolution failure to the test process).
 
@@ -25,14 +25,13 @@ import lit.formats
 
 
 # Common Homebrew / system LLVM install locations to probe when
-# the binary isn't on PATH.  Pinned to MLIR 21 — see CLAUDE.md
-# build-pin note.
+# the binary isn't on PATH.  Pinned to LLVM/MLIR 22.1.6 — see CLAUDE.md
+# build-pin note.  The unversioned Homebrew ``llvm`` keg is the canonical
+# 22.x install; an older ``llvm@21`` keg may coexist and must NOT win.
 _LLVM_BIN_HINTS = (
-    "/opt/homebrew/opt/llvm@21/bin",
     "/opt/homebrew/opt/llvm/bin",
-    "/usr/local/opt/llvm@21/bin",
     "/usr/local/opt/llvm/bin",
-    "/usr/lib/llvm-21/bin",
+    "/usr/lib/llvm-22/bin",
 )
 
 

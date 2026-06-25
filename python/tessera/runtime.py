@@ -2109,20 +2109,33 @@ def _build_compiled_linear_attn_hsaco(head_dim: int, dtype: str = "f16",
 
 def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
-    """The ``target="rocm"`` linear_attn lane: run the COMPILER-GENERATED WMMA
-    kernel for the quadratic-parallel form O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V — no
-    softmax, no normalization (a distinct algorithm from flash_attn). Q/K/V are
+    """The ``target="rocm"`` linear-attention family lane: run the COMPILER-
+    GENERATED WMMA kernel for the quadratic-parallel form
+    O = (φ(Q)φ(K)ᵀ ⊙ causal [⊙ λ^(i-j)]) @ V — no softmax, no normalization (a
+    distinct algorithm from flash_attn). Handles ``tessera.linear_attn`` plus its
+    decay-masked siblings ``tessera.lightning_attention`` (φ = identity + decay)
+    and ``tessera.retention`` (φ = x², degree-2, + decay), dispatched by op name
+    to a (feature_map, decay) config — all three run the same kernel. Q/K/V are
     ``[..., S, D]`` (leading dims = B*H), square head dim. ``causal`` defaults
-    True (matching the reference); ``feature_map`` ∈ {identity, relu}."""
+    True; ``feature_map`` ∈ {identity, relu, polynomial_2}; decay via
+    ``log_decay`` / ``log_g`` (log λ) or ``decay`` (λ)."""
     import numpy as np
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.linear_attn":
+    # The lane handles linear_attn plus its decay-masked siblings, which the
+    # canonical reference (`_apple_gpu_dispatch_linear_attn`) dispatches by op
+    # name to a (feature_map, decay) config: lightning_attention = identity +
+    # decay; retention (deg 2) = polynomial_2 + decay. linear_attn takes its
+    # feature_map from the kwargs. All three run the SAME WMMA kernel.
+    _LA_OPS = ("tessera.linear_attn", "tessera.lightning_attention",
+               "tessera.retention")
+    op_short = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_short not in _LA_OPS:
         raise ValueError(
-            "rocm_linear_attn_compiled executor handles exactly one "
-            f"tessera.linear_attn op; got {[o.get('op_name') for o in ops]!r}")
+            "rocm_linear_attn_compiled executor handles exactly one of "
+            f"{_LA_OPS}; got {[o.get('op_name') for o in ops]!r}")
     op = ops[0]
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 3:
@@ -2171,14 +2184,32 @@ def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact,
 
     kwargs = op.get("kwargs") or {}
     causal = 1 if bool(kwargs.get("causal", True)) else 0
-    feature_map = str(kwargs.get("feature_map") or "identity")
+    # Feature map: the decay-masked siblings pin it (matching the reference);
+    # plain linear_attn takes it from the kwargs.
+    if op_short == "tessera.lightning_attention":
+        feature_map = "identity"
+    elif op_short == "tessera.retention":
+        # The kernel realizes degree-2 retention (φ = x²). The reference's
+        # deg != 2 path pre-powers Q/K, which this kernel does not do — reject
+        # rather than silently compute the wrong thing.
+        deg = int(kwargs.get("deg", 2))
+        if deg != 2:
+            raise ValueError(
+                "rocm retention lane supports degree 2 only (φ = x²); got "
+                f"deg={deg}")
+        feature_map = "polynomial_2"
+    else:  # tessera.linear_attn
+        feature_map = str(kwargs.get("feature_map") or "identity")
     if feature_map not in ("identity", "relu", "polynomial_2"):
         raise ValueError(
             "rocm linear_attn feature_map must be identity, relu, or "
             f"polynomial_2; got {feature_map!r}")
-    # Decay-masked variants (lightning_attention / retention): per-head λ as a
-    # scalar `decay` (λ) or `log_decay` (log λ). A[i,j] *= λ^(i-j) over the band.
+    # Decay: per-head λ as `log_decay` / `log_g` (log λ) or `decay` (λ). The
+    # kernel applies A[i,j] *= λ^(i-j) over the causal band. Optional for all
+    # three ops (the reference applies the decay mask only when supplied).
     log_g = kwargs.get("log_decay")
+    if log_g is None:
+        log_g = kwargs.get("log_g")          # retention's canonical decay kwarg
     if log_g is None and kwargs.get("decay") is not None:
         lam = float(kwargs["decay"])
         if lam <= 0.0:

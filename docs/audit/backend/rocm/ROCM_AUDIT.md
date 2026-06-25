@@ -296,7 +296,11 @@ become the on-silicon **oracle** the compiled path validates against.
   `dc[i]/dc[j]` ratio for a per-head-constant decay. New `runtime.launch()` lane
   `rocm_linear_attn_compiled` (own executor + execution-matrix row, since it is a
   distinct op, unlike the flash_attn-family flags); builder
-  `_build_compiled_linear_attn_hsaco(..., feature_map, decay)`. Validated on
+  `_build_compiled_linear_attn_hsaco(..., feature_map, decay)`. The executor
+  **dispatches by op name** — `tessera.linear_attn` (feature_map from kwargs) plus
+  the decay siblings `tessera.lightning_attention` (pins identity + decay) and
+  `tessera.retention` (pins degree-2 x² + decay; deg≠2 is a named error) — so
+  those named ops actually launch, not just `linear_attn`-with-kwargs. Validated on
   gfx1151 vs the canonical reference `O = (φ(Q)φ(K)ᵀ ⊙ tril [⊙ λ^(i-j)]) @ V`
   (`_apple_gpu_dispatch_linear_attn` math) across identity/relu/poly2 ×
   causal/non-causal × ragged + lightning/retention decay, + a

@@ -31,15 +31,20 @@ def _la_or_skip():
     return rt
 
 
-def _artifact(rt, causal, feature_map, log_decay=None):
-    kwargs = {"causal": bool(causal), "feature_map": feature_map}
+def _artifact(rt, causal, feature_map=None, log_decay=None,
+              op_name="tessera.linear_attn", extra_kwargs=None):
+    kwargs = {"causal": bool(causal)}
+    if feature_map is not None:
+        kwargs["feature_map"] = feature_map
     if log_decay is not None:
         kwargs["log_decay"] = float(log_decay)
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_linear_attn_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": ["q", "k", "v"], "output_name": "o",
-        "ops": [{"op_name": "tessera.linear_attn", "result": "o",
+        "ops": [{"op_name": op_name, "result": "o",
                  "operands": ["q", "k", "v"], "kwargs": kwargs}],
     })
 
@@ -130,6 +135,59 @@ def test_launch_decay_matches_numpy(feature_map, lam, D, S):
     maxerr = float(np.max(np.abs(out - ref)))
     assert maxerr < 3e-2, (
         f"decay fmap={feature_map} λ={lam} {S}x{D} maxerr={maxerr}")
+
+
+# ── named-op dispatch: lightning_attention / retention by OP NAME ─────────────
+# The lane must accept these op names (not just tessera.linear_attn) and map
+# each to its canonical (feature_map, decay) config, so a caller stamping
+# `tessera.lightning_attention` / `tessera.retention` actually executes — this is
+# what the normative COMPILER_REFERENCE table advertises as ROCm hardware-runtime.
+
+@pytest.mark.parametrize("op_name,fmap,lam", [
+    ("tessera.lightning_attention", "identity", 0.9),
+    ("tessera.lightning_attention", "identity", None),   # decay optional
+    ("tessera.retention", "polynomial_2", 0.9),          # degree-2 retention
+])
+@pytest.mark.parametrize("D,S", [(16, 32), (64, 48)])
+def test_launch_named_decay_ops_match_numpy(op_name, fmap, lam, D, S):
+    rt = _la_or_skip()
+    B, H = 1, 2
+    log_decay = float(np.log(lam)) if lam is not None else None
+    rng = np.random.default_rng(53 + D + S + (int(lam * 100) if lam else 0))
+    q = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+
+    # No feature_map kwarg — the op NAME must pin it (identity for lightning,
+    # x² for retention).
+    res = rt.launch(_artifact(rt, True, feature_map=None, log_decay=log_decay,
+                              op_name=op_name), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    out = res["output"].reshape(B, H, S, D)
+    ref = _linear_attn_ref(q, k, v, True, fmap, log_decay)
+    maxerr = float(np.max(np.abs(out - ref)))
+    assert maxerr < 3e-2, f"{op_name} λ={lam} {S}x{D} maxerr={maxerr}"
+
+
+def test_retention_degree_not_2_is_rejected():
+    """The kernel realizes only degree-2 retention (φ = x²); deg != 2 (which the
+    reference handles by pre-powering Q/K) is a named error, not a silent wrong
+    answer. Pure validation — needs no device."""
+    from tessera import runtime as rt
+    q = np.zeros((1, 1, 32, 16), np.float16)
+    art = _artifact(rt, True, op_name="tessera.retention",
+                    extra_kwargs={"deg": 3})
+    with pytest.raises(ValueError, match="degree 2 only"):
+        rt._execute_rocm_compiled_linear_attn(art, (q, q, q))
+
+
+def test_unknown_op_name_is_rejected():
+    """A non-family op name routed here is a clean error, never a silent run."""
+    from tessera import runtime as rt
+    q = np.zeros((1, 1, 16, 16), np.float16)
+    art = _artifact(rt, True, op_name="tessera.flash_attn")
+    with pytest.raises(ValueError, match="handles exactly one"):
+        rt._execute_rocm_compiled_linear_attn(art, (q, q, q))
 
 
 def test_causal_differs_from_full():

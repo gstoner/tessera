@@ -1838,20 +1838,22 @@ def _rocm_compiled_gemm_impl(artifact: RuntimeArtifact, args: Any) -> Any:
 # dtype) — the kernel is (B,H,Sq,Sk)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
 #: hsaco bytes keyed by (head_dim, chip, dtype).
-_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool], bytes] = {}
+_rocm_fa_hsaco_cache: dict[tuple[int, str, str, bool, bool, bool], bytes] = {}
 
 
 def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
                                      gqa: bool = False,
-                                     sliding_window: bool = False) -> bytes:
+                                     sliding_window: bool = False,
+                                     logit_softcap: bool = False) -> bytes:
     """Generate + serialize the compiler's WMMA FA-2 forward kernel to hsaco,
     fully in-process via tessera-opt. Cached per (head_dim, chip, dtype, gqa,
-    sliding_window). gqa=True emits the grouped-query variant (kernel gains
-    heads + kv_ratio runtime args, reads K/V from the grouped head);
-    sliding_window=True emits the windowed variant (kernel gains a trailing W
-    arg, a causal band of width W)."""
+    sliding_window, logit_softcap). gqa=True emits the grouped-query variant
+    (kernel gains heads + kv_ratio runtime args, reads K/V from the grouped
+    head); sliding_window=True emits the windowed variant (trailing W arg, a
+    causal band of width W); logit_softcap=True emits the Gemma-2 soft-cap
+    variant (trailing f32 `cap` arg, scores → cap·tanh(S/cap) before softmax)."""
     chip = _rocm_chip()
-    key = (head_dim, chip, dtype, gqa, sliding_window)
+    key = (head_dim, chip, dtype, gqa, sliding_window, logit_softcap)
     cached = _rocm_fa_hsaco_cache.get(key)
     if cached is not None:
         return cached
@@ -1861,10 +1863,12 @@ def _build_compiled_flash_attn_hsaco(head_dim: int, dtype: str = "f16",
             "tessera-opt not built — no compiled ROCm flash_attn lane")
     gqa_attr = ", gqa = true" if gqa else ""
     win_attr = ", sliding_window = true" if sliding_window else ""
+    cap_attr = ", logit_softcap = true" if logit_softcap else ""
     directive = (
         'module {\n'
         '  "tessera_rocm.flash_attn"() {name = "fa", '
-        f'head_dim = {head_dim} : i64, dtype = "{dtype}"{gqa_attr}{win_attr}}} '
+        f'head_dim = {head_dim} : i64, dtype = "{dtype}"'
+        f'{gqa_attr}{win_attr}{cap_attr}}} '
         ': () -> ()\n'
         '}\n'
     )
@@ -1961,9 +1965,18 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
         raise ValueError(
             f"rocm flash_attn window must be a non-negative width; got {window}")
     sliding = window > 0
+    # Gemma-2 logit soft-capping: a positive `logit_softcap` is the cap value
+    # (scores → cap·tanh(S/cap) before softmax). 0/None disables it.
+    softcap = kwargs.get("logit_softcap")
+    softcap = float(softcap) if softcap else 0.0
+    if softcap < 0:
+        raise ValueError(
+            f"rocm flash_attn logit_softcap must be non-negative; got {softcap}")
+    has_softcap = softcap > 0
 
     hsaco = _build_compiled_flash_attn_hsaco(
-        head_dim, dtype_tag, gqa, sliding_window=sliding)
+        head_dim, dtype_tag, gqa, sliding_window=sliding,
+        logit_softcap=has_softcap)
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable(
@@ -2004,6 +2017,8 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
         launch_args += [ctypes.c_int64(n_qh), ctypes.c_int64(kv_ratio)]
     if sliding:  # windowed kernel's trailing W arg (after the gqa args)
         launch_args += [ctypes.c_int64(window)]
+    if has_softcap:  # soft-cap kernel's trailing f32 cap arg (last)
+        launch_args += [ctypes.c_float(softcap)]
     arr = (ctypes.c_void_p * len(launch_args))()
     for i, val in enumerate(launch_args):
         arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)

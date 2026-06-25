@@ -46,7 +46,7 @@ namespace {
 
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                        Type storeTy, bool viaTile = false, bool gqa = false,
-                       bool window = false) {
+                       bool window = false, bool softcap = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -153,6 +153,13 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     W = f.getArgument(gqa ? 10 : 8);
   Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, /*width=*/1);
 
+  // Gemma-2 logit soft-capping: cap * tanh(S / cap), applied to each scaled
+  // score before masking. `cap` is the trailing runtime arg, after the gqa
+  // (heads, kv_ratio) and window (W) args when those are present.
+  Value cap;
+  if (softcap)
+    cap = f.getArgument(8 + (gqa ? 2 : 0) + (window ? 1 : 0));
+
   // nKV = (Sk+15)/16 ; lastKt = min(causal ? (q0+15)/16 : nKV-1, nKV-1)
   Value nKV = b.create<arith::DivUIOp>(loc, add(Sk, c15), c16);
   Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
@@ -234,6 +241,12 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       Value gk = add(k0, l15);
       Value csv = b.create<vector::ExtractOp>(loc, cs, ArrayRef<int64_t>{e});
       Value v0 = b.create<arith::MulFOp>(loc, csv, scale);
+      // Gemma-2 logit soft-cap: cap * tanh(v0 / cap), before masking.
+      if (softcap) {
+        Value scaled = b.create<arith::DivFOp>(loc, v0, cap);
+        Value t = b.create<math::TanhOp>(loc, scaled);
+        v0 = b.create<arith::MulFOp>(loc, cap, t);
+      }
       Value gkOOB = b.create<arith::CmpIOp>(loc, sge, gk, Sk);
       Value qpos = add(q0, qi);
       // Causal (future-key) mask — active when causal or windowed.
@@ -435,6 +448,10 @@ struct GenerateWMMAFlashAttnKernelPass
       bool window = false;
       if (auto a = op->getAttrOfType<BoolAttr>("sliding_window"))
         window = a.getValue();
+      // Gemma-2 logit soft-capping: a trailing f32 `cap` runtime arg.
+      bool softcap = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("logit_softcap"))
+        softcap = a.getValue();
 
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
@@ -452,12 +469,15 @@ struct GenerateWMMAFlashAttnKernelPass
       }
       if (window)
         argTys.push_back(idxTy);  // W (sliding-window width)
+      if (softcap)
+        argTys.push_back(f32);    // cap (Gemma-2 logit soft-cap)
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window);
+      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa, window,
+                        softcap);
       op->erase();
     }
   }

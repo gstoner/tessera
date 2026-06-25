@@ -114,10 +114,17 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     (kv_ratio = H/G; 1 = MHA, H = MQA). In gqa mode the kernel gains two trailing
     runtime args (`heads` = H, `kv_ratio`) and reads K/V as `[b,G,s,d]` from the
     grouped head index `b*G + h/kv_ratio`. Same FA-2 WMMA body otherwise.
+
+    `sliding_window` (default false) selects Mistral-style sliding-window
+    attention: query position p attends only to keys in `(p - W, p]` — a causal
+    band of width W (the trailing runtime arg, after the gqa args when both are
+    set). A windowed kernel is implicitly causal; it skips KV tiles entirely
+    below the window's lower edge and the per-element mask trims the boundary.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
                        DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
-                       DefaultValuedAttr<BoolAttr, "false">:$gqa);
+                       DefaultValuedAttr<BoolAttr, "false">:$gqa,
+                       DefaultValuedAttr<BoolAttr, "false">:$sliding_window);
   let assemblyFormat = "attr-dict";
 }
 

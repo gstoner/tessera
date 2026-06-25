@@ -256,6 +256,19 @@ become the on-silicon **oracle** the compiled path validates against.
   optional third bias operand + an `activation` op-kwarg (no new executor /
   matrix row); float-only, integer dtype → structured `invalid_artifact`
   (`test_rocm_fused_epilogue_launch_execute.py`).
+- **Sliding-window attention** (`attn_sliding_window`, 2026-06-24): the
+  `tessera_rocm.flash_attn` directive gained a `sliding_window` attr (Mistral
+  causal band of width W). Query position p attends only to keys in `(p - W, p]`:
+  the generated kernel takes W as a trailing runtime arg, is implicitly causal,
+  **skips KV tiles entirely below the window's lower edge** (reusing the causal
+  tile-skip), and the per-element mask trims the boundary. Composes with `gqa`
+  (W arg follows heads/kv_ratio). Reaches `runtime.launch()` via a `window`
+  kwarg on the flash_attn op (no new executor / matrix row); builder lane
+  `_build_compiled_flash_attn_hsaco(..., sliding_window)`. Validated on gfx1151
+  vs a numpy windowed-attention oracle across varied W / S / D incl. W≥S
+  (= plain causal) and a window-differs-from-full guard
+  (`test_rocm_sliding_window_compiled.py`, 6 GPU cases) + a GPU-free codegen
+  gate (`test_rocm_sliding_window_codegen.py`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
   with measured perf ladders, reachable through `runtime.launch()` (the
   `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×

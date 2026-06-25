@@ -252,6 +252,30 @@ def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let assemblyFormat = "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
 
+def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
+  let summary = "Row-wise normalization (rmsnorm / layer_norm) as a reduction kernel";
+  let description = [{
+    The directive `generate-rocm-norm-kernel` expands into a row-reduction gpu
+    kernel realizing the **unweighted** row normalizations over the last axis
+    (one workgroup per row, the lanes stride K and tree-reduce through LDS):
+
+      * `kind = "rmsnorm"`    — `O[m,:] = X[m,:] / sqrt(mean_k X[m,k]² + eps)`.
+      * `kind = "layer_norm"` — `O[m,:] = (X[m,:] − μ) / sqrt(var + eps)`, with
+        `μ = mean_k X`, `var = mean_k (X − μ)²` (the stable squared-deviation
+        reduction — not `E[x²] − E[x]²`, which cancels for large-offset rows).
+
+    Matches the unweighted reference (`_apple_gpu_rowop_numpy`; the per-channel
+    affine, when present, is a separate mul/add). rmsnorm is one row reduction;
+    layer_norm is two (mean, then variance). Reductions run in **f32** regardless
+    of storage dtype. `eps` is a trailing f32 runtime arg; `M`/`K` are runtime
+    `index` args. `dtype` is the f16/bf16/f32 storage.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"rmsnorm\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

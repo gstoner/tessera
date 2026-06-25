@@ -2441,6 +2441,160 @@ def _execute_rocm_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     return o.reshape(x.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED norm lane (2026-06-25) — rmsnorm / layer_norm as row-reduction
+# kernels (siblings of the softmax kernel). ``compiler_path = "rocm_norm_compiled"``
+# builds the COMPILER-GENERATED kernel (the ``generate-rocm-norm-kernel`` pipeline
+# → hsaco; no WMMA) and launches it via HIP. Unweighted row normalize over the
+# last axis; f32/f16/bf16 storage, f32 reduce. ONE hsaco per (chip, kind, dtype),
+# cached. (Re-added after a main-merge conflict dropped it; see PR#123.)
+# ─────────────────────────────────────────────────────────────────────────────
+_NORM_BLOCKDIM = 256  # must match BD in GenerateROCMNormKernel.cpp
+#: hsaco bytes keyed by (chip, kind, dtype).
+_rocm_norm_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+
+
+def _build_compiled_norm_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    """Generate + serialize the compiler's row-reduction norm kernel to hsaco,
+    in-process via tessera-opt. Cached per (chip, kind, dtype). No WMMA → plain
+    gpu→ROCDL pipeline."""
+    chip = _rocm_chip()
+    key = (chip, kind, dtype)
+    cached = _rocm_norm_hsaco_cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt not built — no compiled ROCm norm lane")
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.norm"() {{name = "nm", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n'
+        '}\n'
+    )
+    pipeline = (
+        "builtin.module("
+        "generate-rocm-norm-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            "tessera-opt did not serialize the compiled norm in-process "
+            f"(rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(
+            "compiled ROCm norm lane: gpu.binary was not an ELF hsaco")
+    _rocm_norm_hsaco_cache[key] = hsaco
+    return hsaco
+
+
+#: op_name → (norm kind, default eps). rmsnorm_safe uses a tighter eps default.
+_ROCM_NORM_OPS: dict[str, tuple[str, float]] = {
+    "tessera.rmsnorm": ("rmsnorm", 1e-5),
+    "tessera.rmsnorm_safe": ("rmsnorm", 1e-6),
+    "tessera.layer_norm": ("layer_norm", 1e-5),
+}
+
+
+def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` norm lane: run the COMPILER-GENERATED row-reduction
+    kernel — unweighted rmsnorm / layer_norm over the last axis (one workgroup
+    per row). Handles ``tessera.rmsnorm`` / ``tessera.rmsnorm_safe`` /
+    ``tessera.layer_norm``; ``eps`` from kwargs (per-op default). f32/f16/bf16
+    storage, f32 reduce."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_NORM_OPS:
+        raise ValueError(
+            "rocm_norm_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind, eps_default = _ROCM_NORM_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("norm requires one operand")
+    kwargs = op.get("kwargs") or {}
+    eps = float(kwargs.get("eps", eps_default))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.ndim < 1:
+        raise ValueError("norm operand must have rank >= 1")
+    k = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    if k <= 0:
+        raise ValueError(f"norm last dim must be positive; got {k}")
+
+    store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                f"rocm norm lane handles f32/f16/bf16 storage; got {x.dtype}")
+
+    hsaco = _build_compiled_norm_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm norm: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm norm: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"nm") != 0:
+        raise RuntimeError("rocm norm: kernel symbol 'nm' not found")
+
+    xc = np.ascontiguousarray(x, dtype=store)
+    o = np.zeros((m, k), dtype=store)
+    n = m * k
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (dx, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm norm: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, n) + _mr(do, n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(k), ctypes.c_float(eps)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _NORM_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm norm: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    return o.reshape(x.shape)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -2455,6 +2609,7 @@ def _executor_table():
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
+        "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }
 

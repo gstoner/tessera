@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **2810** total Python-test references, **825** total lit-fixture references.
+- **2811** total Python-test references, **825** total lit-fixture references.
 - **107** ops have **zero** references in either test surface.
 - **200** ops have ≤1 reference ("thinly tested").
 - **62** ops have ≥10 references ("well tested").
@@ -35,7 +35,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `msa_sparse_attention` |   39 |   11 |   50 |   1 |  |
 | `transpose` |   23 |   27 |   50 |   0 | `bf16`, `f16`, `fp32` |
 | `cholesky` |   15 |   30 |   45 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
-| `linear_attn` |   31 |    8 |   39 |   1 |  |
+| `linear_attn` |   32 |    8 |   40 |   1 |  |
 | `moe_swiglu_block` |   14 |   19 |   33 |   1 | `fp8_e4m3`, `nvfp4` |
 
 ## Thinly-tested ops (≤1 reference)

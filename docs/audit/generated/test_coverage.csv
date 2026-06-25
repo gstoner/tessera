@@ -239,7 +239,7 @@ layer_norm,20,7,2,27,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,d
 le,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 lightning_attention,12,2,0,14,0,,directly_tested,14 direct test references
-linear_attn,31,8,1,39,0,,directly_tested,39 direct test references
+linear_attn,32,8,1,40,0,,directly_tested,40 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
 linear_general,13,0,0,13,0,,directly_tested,13 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'

@@ -1,0 +1,118 @@
+"""Compiler-generated linear attention (quadratic-parallel form) on gfx1151.
+
+Linear attention replaces softmax(QKᵀ)V with the feature-map factorization
+`O = (φ(Q) φ(K)ᵀ ⊙ causal) @ V` — NO softmax, no normalization (a distinct
+algorithm from flash attention). The `tessera_rocm.linear_attn` directive
+expands (via `generate-wmma-linear-attn-kernel`) into a WMMA kernel: compute
+`A = φ(Q)φ(K)ᵀ` (WMMA over head-dim chunks), mask it **multiplicatively**
+(masked → 0), and accumulate `O += A @ V` (WMMA), no final divide. Reaches
+`runtime.launch()` via `compiler_path="rocm_linear_attn_compiled"` — feature
+map ∈ {identity, relu}, causal + non-causal.
+
+Validated vs the canonical reference (`_apple_gpu_dispatch_linear_attn` math):
+`O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V`.
+
+Skip-clean: tessera-opt not built, or no usable AMD GPU.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+np = pytest.importorskip("numpy")
+
+
+def _la_or_skip():
+    from tessera import runtime as rt
+    if rt._tessera_opt_path() is None:
+        pytest.skip("tessera-opt not built (ninja -C build tessera-opt)")
+    if not rt._rocm_wmma_runtime_available():
+        pytest.skip("no usable AMD GPU")
+    return rt
+
+
+def _artifact(rt, causal, feature_map):
+    return rt.RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_linear_attn_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["q", "k", "v"], "output_name": "o",
+        "ops": [{"op_name": "tessera.linear_attn", "result": "o",
+                 "operands": ["q", "k", "v"],
+                 "kwargs": {"causal": bool(causal),
+                            "feature_map": feature_map}}],
+    })
+
+
+def _fmap(x, name):
+    if name == "identity":
+        return x
+    if name == "relu":
+        return np.maximum(x, 0.0)
+    raise AssertionError(name)
+
+
+def _linear_attn_ref(q, k, v, causal, feature_map):
+    """Canonical reference: O = (φ(Q)φ(K)ᵀ ⊙ tril) @ V, Q/K/V [B,H,S,D]."""
+    B, H, Sq, D = q.shape
+    Sk = k.shape[2]
+    phiQ = _fmap(q.astype(np.float64), feature_map)
+    phiK = _fmap(k.astype(np.float64), feature_map)
+    o = np.zeros((B, H, Sq, D), np.float64)
+    for b in range(B):
+        for h in range(H):
+            A = phiQ[b, h] @ phiK[b, h].T               # [Sq, Sk]
+            if causal:
+                i = np.arange(Sq)[:, None]
+                j = np.arange(Sk)[None, :]
+                A = np.where(j > i, 0.0, A)              # multiplicative tril
+            o[b, h] = A @ v[b, h].astype(np.float64)
+    return o.astype(np.float32)
+
+
+@pytest.mark.parametrize("feature_map", ["identity", "relu"])
+@pytest.mark.parametrize("causal", [True, False])
+@pytest.mark.parametrize("D,B,H,S", [
+    (16, 1, 2, 32),
+    (16, 1, 1, 48),    # ragged (48 not a multiple of... is; use 40 below too)
+    (64, 2, 2, 32),
+    (16, 1, 1, 40),    # ragged S (not a multiple of 16)
+])
+def test_launch_linear_attn_matches_numpy(feature_map, causal, D, B, H, S):
+    rt = _la_or_skip()
+    rng = np.random.default_rng(2 + D + H + S + int(causal) + len(feature_map))
+    # Modest magnitude — linear attention is unnormalized, so keep values small
+    # to avoid the f16 score truncation blowing past tolerance.
+    q = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.25).astype(np.float16)
+
+    res = rt.launch(_artifact(rt, causal, feature_map), (q, k, v))
+    assert res["ok"] is True, res.get("reason")
+    assert res["compiler_path"] == "rocm_linear_attn_compiled"
+    out = res["output"].reshape(B, H, S, D)
+
+    ref = _linear_attn_ref(q, k, v, causal, feature_map)
+    maxerr = float(np.max(np.abs(out - ref)))
+    assert maxerr < 3e-2, (
+        f"linear_attn fmap={feature_map} causal={causal} {B}x{H}x{S}x{D} "
+        f"maxerr={maxerr}")
+
+
+def test_causal_differs_from_full():
+    """A causal linear-attn result must differ from the non-causal one — guards
+    against the causal mask being silently ignored."""
+    rt = _la_or_skip()
+    D, B, H, S = 16, 1, 1, 48
+    rng = np.random.default_rng(77)
+    q = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    k = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+    v = (rng.standard_normal((B, H, S, D)) * 0.3).astype(np.float16)
+
+    causal = rt.launch(_artifact(rt, True, "identity"), (q, k, v))["output"]
+    full = _linear_attn_ref(q, k, v, False, "identity")
+    # Compare an EARLY query row (index 0): causal sees only key 0, non-causal
+    # sees all S keys, so they must differ. (The LAST row sees all keys either
+    # way, so it would be identical — not a useful probe.)
+    co = causal.reshape(B, H, S, D)[0, 0, 0]
+    diff = float(np.max(np.abs(co - full[0, 0, 0])))
+    assert diff > 1e-2, "causal linear-attn output indistinguishable from full"

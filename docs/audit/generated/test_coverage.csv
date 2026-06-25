@@ -180,7 +180,7 @@ factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
 fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
-flash_attn,94,57,5,151,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,151 direct test references
+flash_attn,96,57,5,153,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,153 direct test references
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,3,0,1,3,0,fp32,directly_tested,3 direct test references

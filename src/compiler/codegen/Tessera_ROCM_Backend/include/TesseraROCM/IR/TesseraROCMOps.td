@@ -95,9 +95,16 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     `head_dim` (a multiple of 16) is the compile-time D; B/H/Sq/Sk/scale/causal
     are runtime kernel arguments. `dtype` is the f16/bf16 storage (f32 softmax +
     accumulate). Q/K/V are `[b,h,s,d]` row-major; O is f32.
+
+    `gqa` (default false) selects grouped-query / multi-query attention: H query
+    heads share G<H key/value heads — query head h reads KV head h/kv_ratio
+    (kv_ratio = H/G; 1 = MHA, H = MQA). In gqa mode the kernel gains two trailing
+    runtime args (`heads` = H, `kv_ratio`) and reads K/V as `[b,G,s,d]` from the
+    grouped head index `b*G + h/kv_ratio`. Same FA-2 WMMA body otherwise.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
-                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<BoolAttr, "false">:$gqa);
   let assemblyFormat = "attr-dict";
 }
 
@@ -128,9 +135,18 @@ def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
     accumulate). Q/K/V/dO are `[b,h,s,d]` row-major store-type; O is f32; the
     dQ/dK/dV outputs and the L/D scratch are f32. Validated against a numpy
     attention-backward reference (itself checked vs finite differences).
+
+    `gqa` (default false) is grouped-query backward: all three kernels gain two
+    trailing runtime args (`heads` = H, `kv_ratio` = H/G) and read K/V from the
+    grouped KV head. All three keep the B*H query-head grid; `_dkdv` accumulates
+    dK/dV **atomically** — each query-head block adds its contribution into the
+    grouped KV head's rows, so the kv_ratio blocks sharing a KV head sum into the
+    same rows (host pre-zeros dK/dV). MHA (non-gqa) is unchanged (plain stores,
+    no atomics).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
-                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype);
+                       DefaultValuedAttr<StrAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<BoolAttr, "false">:$gqa);
   let assemblyFormat = "attr-dict";
 }
 

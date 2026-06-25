@@ -71,7 +71,7 @@ def collect_profiler_context(
 def load_context_samples_file(path: str | Path, *, target: str) -> dict[str, Any]:
     """Load either a full context artifact or raw sample/list JSON."""
 
-    payload = json.loads(Path(path).read_text())
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(payload, Mapping) and payload.get("schema") == PROFILER_CONTEXT_SCHEMA_VERSION:
         validate_profiler_context_artifact(payload)
         return dict(payload)

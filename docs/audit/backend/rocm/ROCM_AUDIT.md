@@ -202,19 +202,50 @@ not real intrinsics; a real-WMMA GEMM through the full stack is **Stage J/K**
 (below). The hand-written HIPRTC kernels remain the production execution path and
 become the on-silicon **oracle** the compiled path validates against.
 
+> **Update (2026-06-24): the staging seam is now runnable too.** Both halves of
+> the Tile→ROCm seam that were contract-marker-only now have executable
+> lowerings: `tessera_rocm.wmma` (Stage J → real `rocdl.wmma`, the GEMM/FA
+> kernels) and `tessera_rocm.async_copy` (the new `--lower-rocm-async-copy` pass
+> → a cooperative global→LDS copy loop; `tessera_rocm.wait` → `gpu.barrier`).
+> Proven end-to-end on gfx1151: a global→LDS→global round-trip
+> (`test_rocm_async_copy_runnable.py`) AND a real **WMMA GEMM tile with A/B
+> staged through async_copy** that matches `A@B`
+> (`test_rocm_gemm_staged_async_copy.py`). The markers remain for the
+> IR-contract path when these passes are not run. *Measured caveat:* no current
+> FA/GEMM shape is staging-bound, so this is infrastructure — the pipeline-routed
+> double-buffer perf payoff lands only when a staging-bound kernel uses it.
+
 ## Still Open
 
-- **Other GEMM-family / attention ops on RDNA remain artifact_only** beyond
-  matmul + flash_attn (CDNA MFMA shape, HIP execution gated): `multi_head_
-  attention`, `gqa/mqa`, the fused chains, etc. The named ROCm sub-arches
-  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS` — the generic
-  `rocm` lane covers execution via HIPRTC for the live device; gfx1151 (the box's
-  own arch) is listed there too so the classification is total (no silent
-  `lookup() -> None`).
+- **Compiler-generated attention family on gfx1151:** matmul, flash_attn
+  (fwd+bwd), and now **GQA/MQA** (2026-06-24) all execute. GQA = flash_attn with
+  the `gqa = true` directive attr: H query heads share G<H KV heads (query head h
+  reads KV head h/kv_ratio, kv_ratio=H/G; =1 MHA, =H MQA), via two trailing
+  runtime args + a grouped K/V base. Same FA-2 WMMA body; validated vs a numpy
+  GQA reference across MQA / GQA / MHA-equivalence, causal+non-causal
+  (`tests/unit/test_rocm_gqa_compiled.py`). **GQA forward also reaches
+  `runtime.launch()`** — the `rocm_flash_attn_compiled` executor detects GQA from
+  the operand shapes (K/V head count < Q) and builds the gqa kernel
+  (`test_rocm_gqa_launch_execute.py`). **GQA BACKWARD too** (2026-06-24): the
+  `flash_attn_bwd` `gqa = true` directive emits dQ/dK/dV where `_dkdv`
+  accumulates dK/dV **atomically** across the kv_ratio query-head blocks sharing
+  each KV head (host pre-zeros; B*H grid) — rel-err <5e-3 vs the numpy GQA
+  backward (`test_rocm_gqa_bwd_compiled.py`). `multi_head_attention` is the
+  flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
+- **Other ops on RDNA remain artifact_only** beyond matmul + the attention
+  family (CDNA MFMA shape, HIP execution gated): the fused chains, etc. The named
+  ROCm sub-arches (gfx90a/942/950/1100/1151/1200) stay in
+  `_UNIMPLEMENTED_TARGETS` — the generic `rocm` lane covers execution via HIPRTC
+  for the live device; gfx1151 (the box's own arch) is listed there too so the
+  classification is total (no silent `lookup() -> None`).
 - **flash_attn**: compiler-generated forward + backward both execute on gfx1151
-  with measured perf ladders (item 10). Still open: a `runtime.launch()`
-  executor-table lane, and the backward perf optimizations (WMMA logsumexp
-  pre-pass, causal tile-skip, pipelining).
+  with measured perf ladders, reachable through `runtime.launch()` (the
+  `rocm_flash_attn_compiled` lane, #100). Landed perf rungs: `_pre`→WMMA (~3.4×
+  bwd), causal tile-skip (~1.7× causal bwd), forward sQ-drop + rescale-fusion
+  (~1.7× fwd). Remaining (measured low-value): KV-tile pipelining — the kernels
+  are occupancy/LDS-bound, not staging-bound, so it is unlikely to pay; the
+  runnable `async_copy` that would enable it now exists (#101) for when a
+  staging-bound kernel appears.
 ## Perf ladder — rung 1 landed (2026-06-22)
 
 The GEMM kernel moved off correctness-first naive tiling onto a measured ladder
@@ -609,14 +640,29 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
         1024/2048: 1.64–1.71×; theoretical max 2×, gap = diagonal tiles + the
         fixed `_pre`/accumulator overhead). Correctness unchanged (5/5, incl. the
         causal cases). The forward already had this bound.
+      - **LDS-traffic lever investigated, NO clean win (2026-06-24, measured).**
+        The forward's rung-2 (fuse a separate rescale into the accumulate) has no
+        backward analog — the backward has no separate rescale pass. The dominant
+        backward LDS is the `_dkdv` `dKacc`+`dVacc` accumulators (the worst
+        occupancy in the suite: hsaco-decoded **3 waves/CU @ D=128**, 17408 B
+        LDS). Moving them to registers (the only way to cut that LDS) **spills**:
+        `_dkdv` already uses 232 VGPR @ D=64 / 207 @ D=128, and per-lane
+        accumulators add D/2–D VGPRs → over the 256 ceiling. So `_dkdv` is stuck
+        between an LDS-occupancy limit and a VGPR-spill limit — no clean lever
+        without a from-scratch tiling redesign.
       Remaining next rungs (shared with the forward): occupancy (1 wave/block →
-      multi-wave) and fewer LDS round-trips/barriers — the larger non-causal
-      lever, a real kernel restructure. Memory double-buffering is NOT a lever
-      here — the kernels are WMMA/occupancy-bound, not staging-bound (measured:
-      GEMM ~20 vs FA ~4 TFLOP/s, and FA *drops* at D=128 on LDS footprint).
-    - **`runtime.launch()` executor-table lane** for flash_attn (op-metadata
-      contract + executor + matrix row) — the same additive step matmul took at
-      L4; the compiled kernel + in-process execution already exist.
+      multi-wave) — a real kernel restructure. Memory double-buffering is NOT a
+      lever — WMMA/occupancy-bound, not staging-bound (GEMM ~20 vs FA ~4 TFLOP/s,
+      FA drops at D=128 on LDS footprint).
+    - ✅ **`runtime.launch()` executor-table lane (2026-06-24)** — flash_attn now
+      reaches the runtime executor table like matmul. Artifact stamped
+      `compiler_path="rocm_flash_attn_compiled"` → `execution_matrix` row →
+      `_execute_rocm_compiled_flash_attn` (builds the FA-2 forward hsaco
+      in-process via tessera-opt, HIP loads + launches `fa`). f16/bf16 storage,
+      f32 softmax+accumulate; Q/K/V `[...,S,D]`, causal/scale from op kwargs.
+      Executes vs a numpy attention reference through `launch()`
+      (`tests/unit/test_rocm_flash_attn_launch_execute.py`, maxerr <2e-2,
+      skip-clean). The matmul-L4 analog for attention.
 11. Promote manifest rows only after generated dashboards agree.
 
 ## Source Material Consolidated

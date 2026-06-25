@@ -45,7 +45,7 @@ using namespace mlir;
 namespace {
 
 void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-                       Type storeTy, bool viaTile = false) {
+                       Type storeTy, bool viaTile = false, bool gqa = false) {
   MLIRContext *ctx = b.getContext();
   int64_t DC = D / 16;
   Type f32 = b.getF32Type();
@@ -101,8 +101,23 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value qbase = b.create<arith::MulIOp>(
       loc, b.create<arith::MulIOp>(loc, bh, Sq), cD);
+  // K/V base. MHA: bh selects the same head for Q and K/V. GQA/MQA: H query
+  // heads share G<H key/value heads — query head h reads KV head h/kv_ratio
+  // (kv_ratio = H/G; =1 is MHA, =H is MQA). So K/V is [B,G,Sk,D] and the KV
+  // block index is b*G + h/kv_ratio. `heads` (H) and `kv_ratio` are runtime args
+  // 8/9 in gqa mode.
+  Value kvbh = bh;
+  if (gqa) {
+    Value heads = f.getArgument(8), kvRatio = f.getArgument(9);
+    Value bIdx = b.create<arith::DivUIOp>(loc, bh, heads);
+    Value hIdx = b.create<arith::RemUIOp>(loc, bh, heads);
+    Value gHeads = b.create<arith::DivUIOp>(loc, heads, kvRatio);
+    Value kvHead = b.create<arith::DivUIOp>(loc, hIdx, kvRatio);
+    kvbh = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, bIdx, gHeads), kvHead);
+  }
   Value kbase = b.create<arith::MulIOp>(
-      loc, b.create<arith::MulIOp>(loc, bh, Sk), cD);
+      loc, b.create<arith::MulIOp>(loc, kvbh, Sk), cD);
   Value q0 = b.create<arith::MulIOp>(loc, qtile, c16);
 
   auto mul = [&](Value x, Value y) { return b.create<arith::MulIOp>(loc, x, y); };
@@ -375,6 +390,13 @@ struct GenerateWMMAFlashAttnKernelPass
         }
       }
 
+      // GQA/MQA: grouped query attention — query head h reads KV head
+      // h/kv_ratio (kv_ratio = H/G; =1 MHA, =H MQA). The kernel gains two
+      // runtime args (heads H, kv_ratio) and reads K/V from the grouped head.
+      bool gqa = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("gqa"))
+        gqa = a.getValue();
+
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type f32 = b.getF32Type();
@@ -382,14 +404,18 @@ struct GenerateWMMAFlashAttnKernelPass
       auto abv = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto of = MemRefType::get({ShapedType::kDynamic}, f32);
       // (Q, K, V : memref<?xstore>, O : memref<?xf32>, Sq, Sk : index,
-      //  scale : f32, causal : index)
-      auto fnTy = b.getFunctionType(
-          {abv, abv, abv, of, idxTy, idxTy, f32, idxTy}, {});
+      //  scale : f32, causal : index [, heads : index, kv_ratio : index])
+      SmallVector<Type> argTys{abv, abv, abv, of, idxTy, idxTy, f32, idxTy};
+      if (gqa) {
+        argTys.push_back(idxTy);  // heads (H)
+        argTys.push_back(idxTy);  // kv_ratio (H/G)
+      }
+      auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile);
+      emitFlashAttnBody(body, loc, gpuFunc, D, storeTy, viaTile, gqa);
       op->erase();
     }
   }

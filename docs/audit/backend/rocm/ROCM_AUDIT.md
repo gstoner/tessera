@@ -223,7 +223,14 @@ become the on-silicon **oracle** the compiled path validates against.
   reads KV head h/kv_ratio, kv_ratio=H/G; =1 MHA, =H MQA), via two trailing
   runtime args + a grouped K/V base. Same FA-2 WMMA body; validated vs a numpy
   GQA reference across MQA / GQA / MHA-equivalence, causal+non-causal
-  (`tests/unit/test_rocm_gqa_compiled.py`). `multi_head_attention` is the
+  (`tests/unit/test_rocm_gqa_compiled.py`). **GQA forward also reaches
+  `runtime.launch()`** — the `rocm_flash_attn_compiled` executor detects GQA from
+  the operand shapes (K/V head count < Q) and builds the gqa kernel
+  (`test_rocm_gqa_launch_execute.py`). **GQA BACKWARD too** (2026-06-24): the
+  `flash_attn_bwd` `gqa = true` directive emits dQ/dK/dV where `_dkdv`
+  accumulates dK/dV **atomically** across the kv_ratio query-head blocks sharing
+  each KV head (host pre-zeros; B*H grid) — rel-err <5e-3 vs the numpy GQA
+  backward (`test_rocm_gqa_bwd_compiled.py`). `multi_head_attention` is the
   flash_attn kernel itself (full multi-head, one wave per (16-q tile, b·h)).
 - **Other ops on RDNA remain artifact_only** beyond matmul + the attention
   family (CDNA MFMA shape, HIP execution gated): the fused chains, etc. The named

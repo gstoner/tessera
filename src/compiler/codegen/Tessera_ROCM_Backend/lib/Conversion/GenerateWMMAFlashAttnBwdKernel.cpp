@@ -115,6 +115,19 @@ static MemRefType ldsT(MLIRContext *ctx, int64_t n, Type e) {
   return MemRefType::get({n}, e, MemRefLayoutAttrInterface(), ws);
 }
 
+// GQA/MQA: the block's `bh` is a QUERY-head index (b*H + h); the K/V it reads is
+// KV head b*G + h/kv_ratio (G = H/kv_ratio). Returns the K/V element base
+// (kvbh*Sk*D) for that grouped head. heads = H, kvRatio = H/G runtime args.
+static Value groupedKvBase(Emit &e, OpBuilder &b, Location loc, Value bh,
+                           Value heads, Value kvRatio, Value Sk, Value cD) {
+  Value bIdx = b.create<arith::DivUIOp>(loc, bh, heads);
+  Value hIdx = b.create<arith::RemUIOp>(loc, bh, heads);
+  Value gHeads = b.create<arith::DivUIOp>(loc, heads, kvRatio);
+  Value kvHead = b.create<arith::DivUIOp>(loc, hIdx, kvRatio);
+  Value kvbh = e.add(e.mul(bIdx, gHeads), kvHead);
+  return e.mul(e.mul(kvbh, Sk), cD);
+}
+
 //===----------------------------------------------------------------------===//
 // <name>_pre : L (logsumexp) + D (rowsum O*dO) per query row.
 //   args: (Q, K, dO : memref<?xstore>, O, L, Dd : memref<?xf32>,
@@ -128,7 +141,7 @@ static MemRefType ldsT(MLIRContext *ctx, int64_t n, Type e) {
 // cheap O(D) per-row elementwise rowsum (not on the hot path).
 //===----------------------------------------------------------------------===//
 void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-             Type storeTy) {
+             Type storeTy, bool gqa = false) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
   Value sQ = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, storeTy), loc);
@@ -152,7 +165,11 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value q0 = e.mul(qtile, c16);
   Value qbase = e.mul(e.mul(bh, Sq), cD);
-  Value kbase = e.mul(e.mul(bh, Sk), cD);
+  // GQA: bh is a query head; read K from the grouped KV head (L/D stay per
+  // query head, indexed by bh).
+  Value kbase = gqa ? groupedKvBase(e, b, loc, bh, f.getArgument(10),
+                                    f.getArgument(11), Sk, cD)
+                    : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
 
@@ -374,7 +391,7 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
 //          Sq, Sk : index, scale : f32, causal : index)
 //===----------------------------------------------------------------------===//
 void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-              Type storeTy) {
+              Type storeTy, bool gqa = false) {
   MLIRContext *ctx = b.getContext();
   Value sP = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
@@ -398,7 +415,12 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value k0 = e.mul(ktile, c16);
   Value qbase = e.mul(e.mul(bh, Sq), cD);
-  Value kbase = e.mul(e.mul(bh, Sk), cD);
+  // GQA: bh is a query head; K/V/dK/dV live at the grouped KV head. The dK/dV
+  // writes below become atomic adds (the kv_ratio query-head blocks sharing this
+  // KV head accumulate into the same global rows; host pre-zeros dK/dV).
+  Value kbase = gqa ? groupedKvBase(e, b, loc, bh, f.getArgument(12),
+                                    f.getArgument(13), Sk, cD)
+                    : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
 
@@ -494,8 +516,19 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     OpBuilder::InsertionGuard g2(b);
     b.setInsertionPointToStart(ifo.thenBlock());
     Value gidx = e.add(e.add(kbase, e.mul(gk, cD)), c);
-    b.create<memref::StoreOp>(loc, e.f32load(dKacc, i), dK, ValueRange{gidx});
-    b.create<memref::StoreOp>(loc, e.f32load(dVacc, i), dV, ValueRange{gidx});
+    Value vK = e.f32load(dKacc, i), vV = e.f32load(dVacc, i);
+    if (gqa) {
+      // kv_ratio query-head blocks share this KV head — accumulate atomically
+      // (host pre-zeros dK/dV). MHA (non-gqa) has one head per KV head: plain
+      // store, no atomic overhead.
+      b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vK, dK,
+                                    ValueRange{gidx});
+      b.create<memref::AtomicRMWOp>(loc, arith::AtomicRMWKind::addf, vV, dV,
+                                    ValueRange{gidx});
+    } else {
+      b.create<memref::StoreOp>(loc, vK, dK, ValueRange{gidx});
+      b.create<memref::StoreOp>(loc, vV, dV, ValueRange{gidx});
+    }
   }
   b.setInsertionPointToEnd(&f.getBody().front());
   b.create<gpu::ReturnOp>(loc);
@@ -507,7 +540,7 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
 //          Sq, Sk : index, scale : f32, causal : index)
 //===----------------------------------------------------------------------===//
 void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
-            Type storeTy) {
+            Type storeTy, bool gqa = false) {
   MLIRContext *ctx = b.getContext();
   Value sDS = f.addWorkgroupAttribution(ldsT(ctx, 16 * 16, storeTy), loc);
   Value dQacc = f.addWorkgroupAttribution(ldsT(ctx, 16 * D, b.getF32Type()), loc);
@@ -529,7 +562,10 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value q0 = e.mul(qtile, c16);
   Value qbase = e.mul(e.mul(bh, Sq), cD);
-  Value kbase = e.mul(e.mul(bh, Sk), cD);
+  // GQA: bh is a query head; read K/V from the grouped KV head.
+  Value kbase = gqa ? groupedKvBase(e, b, loc, bh, f.getArgument(11),
+                                    f.getArgument(12), Sk, cD)
+                    : e.mul(e.mul(bh, Sk), cD);
   Value isCausal = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
                                            causal, c0);
 
@@ -677,6 +713,16 @@ struct GenerateWMMAFlashAttnBwdKernelPass
       auto sv = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto fv = MemRefType::get({ShapedType::kDynamic}, f32);
 
+      // GQA/MQA: each kernel gains two trailing index args (heads H, kv_ratio
+      // = H/G) and reads K/V from the grouped KV head. _pre/_dq grids are by
+      // query head (B*H); _dkdv's grid is by KV head (B*G) and accumulates dK/dV
+      // atomically from the kv_ratio query-head blocks sharing each KV head.
+      bool gqa = false;
+      if (auto a = op->getAttrOfType<BoolAttr>("gqa"))
+        gqa = a.getValue();
+      SmallVector<Type> gqaExtra;
+      if (gqa) gqaExtra = {idxTy, idxTy};
+
       auto mk = [&](StringRef suffix, ArrayRef<Type> args,
                     function_ref<void(OpBuilder &, Location, gpu::GPUFuncOp)> body) {
         auto fnTy = b.getFunctionType(args, {});
@@ -685,21 +731,26 @@ struct GenerateWMMAFlashAttnBwdKernelPass
         OpBuilder bb(fn.getContext());
         body(bb, loc, fn);
       };
+      auto withGqa = [&](ArrayRef<Type> base) {
+        SmallVector<Type> a(base.begin(), base.end());
+        a.append(gqaExtra.begin(), gqaExtra.end());
+        return a;
+      };
 
-      // _pre : (Q,K,dO:store, O,L,Dd:f32, Sq,Sk:idx, scale:f32, causal:idx)
-      mk("_pre", {sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy},
+      // _pre : (Q,K,dO:store, O,L,Dd:f32, Sq,Sk:idx, scale:f32, causal:idx [+gqa])
+      mk("_pre", withGqa({sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitPre(bb, l, fn, D, storeTy);
+           emitPre(bb, l, fn, D, storeTy, gqa);
          });
-      // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal)
-      mk("_dkdv", {sv, sv, sv, sv, fv, fv, fv, fv, idxTy, idxTy, f32, idxTy},
+      // _dkdv : (Q,K,V,dO:store, L,Dd:f32, dK,dV:f32, Sq,Sk:idx, scale, causal [+gqa])
+      mk("_dkdv", withGqa({sv, sv, sv, sv, fv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDkDv(bb, l, fn, D, storeTy);
+           emitDkDv(bb, l, fn, D, storeTy, gqa);
          });
-      // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal)
-      mk("_dq", {sv, sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy},
+      // _dq : (Q,K,V,dO:store, L,Dd:f32, dQ:f32, Sq,Sk:idx, scale, causal [+gqa])
+      mk("_dq", withGqa({sv, sv, sv, sv, fv, fv, fv, idxTy, idxTy, f32, idxTy}),
          [&](OpBuilder &bb, Location l, gpu::GPUFuncOp fn) {
-           emitDq(bb, l, fn, D, storeTy);
+           emitDq(bb, l, fn, D, storeTy, gqa);
          });
       op->erase();
     }

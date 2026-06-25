@@ -342,17 +342,36 @@ become the on-silicon **oracle** the compiled path validates against.
   varied M/K incl. K>256, ragged, rank-3, and a large-offset/small-variance
   layer_norm row (`test_rocm_norm_compiled.py`) + a GPU-free codegen gate
   (`test_rocm_norm_codegen.py`).
+- **Standalone activations + RoPE** (`gelu`/`silu`/`relu`, `rope`, 2026-06-25):
+  two pointwise compiler-generated kernels closing the activations + positional
+  groups. (1) `tessera_rocm.activation` + `generate-rocm-activation-kernel` — a
+  flat per-element kernel for **standalone** gelu (tanh approx) / silu (x·σ(x)) /
+  relu (the same activations the GEMM fused epilogue applies, now as their own
+  ops), f32 compute. Lane `rocm_activation_compiled`, dispatched by op name
+  (`tessera.gelu`/`silu`/`relu`). (2) `tessera_rocm.rope` +
+  `generate-rocm-rope-kernel` — interleaved-pair rotary position embedding over
+  `[M,D]` (`O[2p]=e·cos−o·sin`, `O[2p+1]=e·sin+o·cos`, angle from the even-indexed
+  `theta`), one workgroup per row, f32 cos/sin. Lane `rocm_rope_compiled`. Both
+  f32/f16/bf16, status `compiled`; a half-precision `x` may carry an **fp32 angle
+  table** (the common `nn.RotaryEmbedding` default) — theta is cast to `x`'s
+  storage on the device copy, so mixed float storage is accepted (only a
+  non-floating theta is rejected). Validated on gfx1151 vs the numpy references
+  (`_apple_gpu_dispatch_gelu`, `_runtime_rope`) across dtype × shape incl. >1
+  block, ragged, rank-3 (`test_rocm_activation_compiled.py`,
+  `test_rocm_rope_compiled.py`) + a GPU-free codegen gate
+  (`test_rocm_activation_rope_codegen.py`). (`relu` executes via the activation
+  lane by op name but has no separate rocm target-map row.)
 
 ## Still Open
 
 - **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
   emits; not yet a compiler-generated executing kernel). The not-yet-executing
   groups (see `../../generated/rocm_target_map.md` for the live list):
-  - **norms / activations:** `gelu`, `silu(_mul)` (the standalone ops —
-    `gelu`/`silu` already execute *fused* into the GEMM epilogue, just not as
-    standalone kernels; `softmax`/`softmax_safe` and `rmsnorm(_safe)`/`layer_norm`
-    now execute as compiled row-reduction kernels — see Landed above);
-  - **positional:** `rope`, `alibi`;
+  - **norms / activations:** `silu_mul` (SwiGLU, 2-operand — a follow-up).
+    (`softmax`/`softmax_safe`, `rmsnorm(_safe)`, `layer_norm`, `gelu`, `silu`
+    now execute as compiled kernels — see Landed above.)
+  - **positional:** `alibi`. (`rope` now executes as a compiled kernel — see
+    Landed above.)
   - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
     `linear_general`, `qkv_projection`;
   - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,

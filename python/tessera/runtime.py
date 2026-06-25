@@ -2595,6 +2595,265 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     return o.reshape(x.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED elementwise activation lane (2026-06-25) — standalone gelu /
+# silu / relu (the same activations the GEMM fused epilogue applies in-register).
+# ``compiler_path = "rocm_activation_compiled"`` builds the COMPILER-GENERATED
+# flat elementwise kernel (generate-rocm-activation-kernel → hsaco; no WMMA) and
+# launches it via HIP. f32/f16/bf16, f32 compute. ONE hsaco per (chip, kind,
+# dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_GRID_BLOCKDIM = 256  # matches BD in the elementwise/rope generators
+_rocm_act_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+_rocm_rope_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+#: op_name → activation kind.
+_ROCM_ACT_OPS: dict[str, str] = {
+    "tessera.gelu": "gelu", "tessera.silu": "silu", "tessera.relu": "relu",
+}
+
+
+def _build_rocm_elementwise_hsaco(pass_name: str, directive: str,
+                                  cache: dict, key: tuple) -> bytes:
+    """Shared in-process build for the plain gpu→ROCDL elementwise/rope kernels
+    (no WMMA, no lower-tessera-target-to-rocdl). Cached by `key`."""
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    opt = _tessera_opt_path()
+    if opt is None:
+        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled lane")
+    chip = _rocm_chip()
+    pipeline = (
+        "builtin.module("
+        f"{pass_name},"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={chip}}},"
+        "gpu-module-to-binary)"
+    )
+    import subprocess
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"],
+                       input=directive, capture_output=True, text=True)
+    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+        raise _RocmCompiledUnavailable(
+            f"tessera-opt did not serialize {pass_name} in-process "
+            f"(rc={r.returncode}): {r.stderr[:400]}")
+    hsaco = _extract_hsaco_blob(r.stdout)
+    if hsaco[:4] != b"\x7fELF":
+        raise _RocmCompiledUnavailable(f"{pass_name}: gpu.binary not an ELF hsaco")
+    cache[key] = hsaco
+    return hsaco
+
+
+def _build_compiled_activation_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.activation"() {{name = "a", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-activation-kernel", directive,
+        _rocm_act_hsaco_cache, (chip, kind, dtype))
+
+
+def _execute_rocm_compiled_activation(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="rocm"`` activation lane: run the COMPILER-GENERATED flat
+    elementwise kernel for a standalone gelu / silu / relu over any-shape input
+    (one thread per element). f32/f16/bf16 storage, f32 compute."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_ACT_OPS:
+        raise ValueError(
+            "rocm_activation_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_ACT_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _ROCM_ACT_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("activation requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.array(x, copy=True)
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                f"rocm activation lane handles f32/f16/bf16; got {x.dtype}")
+
+    hsaco = _build_compiled_activation_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm activation: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm activation: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"a") != 0:
+        raise RuntimeError("rocm activation: kernel symbol 'a' not found")
+
+    xc = np.ascontiguousarray(x, dtype=store).reshape(-1)
+    o = np.zeros(n, dtype=store)
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (dx, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm activation: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = _mr(dx, n) + _mr(do, n) + [ctypes.c_int64(n)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm activation: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    return o.reshape(x.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED rope lane (2026-06-25) — rotary position embedding (interleaved
+# pairs). ``compiler_path = "rocm_rope_compiled"``. One workgroup per row; X and
+# Theta are both [M, D] (D even). f32/f16/bf16, f32 cos/sin.
+# ─────────────────────────────────────────────────────────────────────────────
+def _build_compiled_rope_hsaco(dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.rope"() {{name = "r", dtype = "{dtype}"}} : () -> ()\n'
+        '}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-rope-kernel", directive,
+        _rocm_rope_hsaco_cache, (chip, dtype))
+
+
+def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` rope lane: run the COMPILER-GENERATED interleaved-
+    pair rotary-position-embedding kernel. Operands X, Theta are both ``[..., D]``
+    (D even, same shape); one workgroup per row. f32/f16/bf16."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.rope":
+        raise ValueError(
+            "rocm_rope_compiled executor handles exactly one tessera.rope op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("rope requires two operands (x, theta)")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    theta = _as_numpy(values[operand_names[1]])
+    if x.ndim < 1 or int(x.shape[-1]) % 2 != 0:
+        raise ValueError(
+            f"rope needs an even innermost dim; got x{x.shape}")
+    if theta.shape != x.shape:
+        raise ValueError(
+            f"rope requires theta to match x shape; got x{x.shape} "
+            f"theta{theta.shape}")
+    d = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm rope lane handles f32/f16/bf16; got {x.dtype}")
+    # The angle table may be kept in fp32 even when x is half precision — a common
+    # setup (nn.RotaryEmbedding defaults its theta table to fp32) the reference
+    # path already handles. The device copy below casts theta to x's storage dtype
+    # (np.ascontiguousarray(theta, dtype=store)), so mixed float storage is fine;
+    # only reject a non-floating theta, which would silently produce wrong angles.
+    _bf16 = _bfloat16_dtype()
+    _theta_floats = (np.float32, np.float16) + ((_bf16,) if _bf16 is not None else ())
+    if theta.dtype not in _theta_floats:
+        raise ValueError(
+            "rope theta must be a floating dtype (f32/f16/bf16); got "
+            f"{theta.dtype} (the angle table is cast to x's storage dtype)")
+
+    hsaco = _build_compiled_rope_hsaco(dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm rope: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm rope: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"r") != 0:
+        raise RuntimeError("rocm rope: kernel symbol 'r' not found")
+
+    xc = np.ascontiguousarray(x, dtype=store).reshape(-1)
+    tc = np.ascontiguousarray(theta, dtype=store).reshape(-1)
+    n = m * d
+    o = np.zeros(n, dtype=store)
+    dx, dt, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (dx, dt, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm rope: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+    hip.hipMemcpy(dt, tc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, n) + _mr(dt, n) + _mr(do, n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(d)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, m, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, dt, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm rope: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dx, dt, do):
+        hip.hipFree(dev)
+    return o.reshape(x.shape)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -2610,6 +2869,8 @@ def _executor_table():
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
+        "rocm_activation_compiled": _execute_rocm_compiled_activation,
+        "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }
 

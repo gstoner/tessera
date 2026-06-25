@@ -923,6 +923,28 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
                  "Executes via runtime.launch() (rocm_norm_compiled).",
     },
+    "gelu": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise gelu (tanh approximation) — flat "
+                 "per-element kernel (generate-rocm-activation-kernel). Executes "
+                 "via runtime.launch() (rocm_activation_compiled).",
+    },
+    "silu": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise silu (x·σ(x)) — flat per-element kernel "
+                 "(generate-rocm-activation-kernel). Executes via runtime.launch()"
+                 " (rocm_activation_compiled).",
+    },
+    "rope": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "Rotary position embedding (interleaved pairs) over [M, D] — "
+                 "elementwise-per-pair kernel (generate-rocm-rope-kernel: one "
+                 "workgroup per row, f32 cos/sin). Executes via runtime.launch() "
+                 "(rocm_rope_compiled).",
+    },
 }
 
 
@@ -1024,6 +1046,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
+    ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
+    ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

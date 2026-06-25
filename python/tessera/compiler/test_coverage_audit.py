@@ -41,6 +41,7 @@ ground than 5 trivial happy-path tests.  Refining the audit toward
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -222,17 +223,11 @@ def _scan_python_for_op(op_name: str) -> tuple[int, int, set[str], set[str]]:
         for ln in lines:
             line_offsets.append(line_offsets[-1] + len(ln) + 1)
 
-        def _line_of(offset: int) -> int:
-            # Binary search would be cleaner; linear is fine for the
-            # audit's scale (a few thousand lines per file).
-            for i, off in enumerate(line_offsets):
-                if off > offset:
-                    return i - 1
-            return len(lines) - 1
-
-        ref_lines = {_line_of(p) for p in match_positions}
+        # ``line_offsets`` is sorted ascending; the line index for a
+        # character offset is the rightmost slot whose offset is <= it.
+        ref_lines = {bisect.bisect_right(line_offsets, p) - 1 for p in match_positions}
         for m in _PYTEST_RAISES_RE.finditer(text):
-            raises_line = _line_of(m.start())
+            raises_line = bisect.bisect_right(line_offsets, m.start()) - 1
             if any(abs(raises_line - rl) <= 20 for rl in ref_lines):
                 neg += 1
         # Capture dtype literals appearing in the same file.
@@ -348,15 +343,8 @@ def _scan_all_files_vectorized() -> tuple[
         for ln in text.splitlines():
             line_offsets.append(line_offsets[-1] + len(ln) + 1)
 
-        def _line_of(offset: int, los: list[int] = line_offsets) -> int:
-            # Binary search would be cleaner but linear is fine.
-            for i, off in enumerate(los):
-                if off > offset:
-                    return i - 1
-            return len(los) - 1
-
         raises_by_path[path] = [
-            _line_of(m.start())
+            bisect.bisect_right(line_offsets, m.start()) - 1
             for m in _PYTEST_RAISES_RE.finditer(text)
         ]
         # Also pre-compute line numbers of every op-ref match for
@@ -364,7 +352,9 @@ def _scan_all_files_vectorized() -> tuple[
         for name, paths in py_refs_by_op.items():
             if path in paths:
                 # Convert positions to lines once.
-                paths[path] = [_line_of(p) for p in paths[path]]
+                paths[path] = [
+                    bisect.bisect_right(line_offsets, p) - 1 for p in paths[path]
+                ]
 
     # ── Compute negatives and dtypes per (op, path) ─────────────
     negatives: dict[str, set[Path]] = {}

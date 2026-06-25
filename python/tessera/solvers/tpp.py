@@ -156,7 +156,10 @@ def solve(input_mlir: str, *, pipeline: Optional[str] = None) -> str:
     rc = lib.tessera_tpp_run_pipeline(
         input_mlir.encode(), pipe, ctypes.byref(out))
     try:
-        result = out.value.decode() if out.value else ""
+        # ``out`` is a ctypes ``c_char_p``; pylint can't model the descriptor
+        # and so misreads ``out.value`` (which is ``bytes | None``) as a static
+        # class — the ``.decode()`` and the truthiness guard are both valid.
+        result = out.value.decode() if out.value else ""  # pylint: disable=no-member,using-constant-test
     finally:
         if out.value is not None:
             lib.tessera_tpp_free(out)

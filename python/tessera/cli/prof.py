@@ -28,7 +28,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     source = Path(args.model)
     try:
-        text = source.read_text()
+        text = source.read_text(encoding="utf-8")
         symbol_count = _count_symbols(text)
     except OSError as exc:
         parser.error(str(exc))
@@ -85,7 +85,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 metadata={"reason": result.reason, "artifact": artifact},
             )
             if args.artifact:
-                Path(args.artifact).write_text(json.dumps(artifact, indent=2, sort_keys=True))
+                Path(args.artifact).write_text(
+                    json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
         if args.trace:
             sess.timeline(args.trace)
         report = sess.report()
@@ -118,10 +119,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             manifest = model_analyzer_manifest(plan)
             manifest_payload = manifest.to_dict()
         if args.model_analyzer_manifest:
-            Path(args.model_analyzer_manifest).write_text(manifest.to_json() + "\n")
+            Path(args.model_analyzer_manifest).write_text(
+                manifest.to_json() + "\n", encoding="utf-8")
         if args.model_analyzer_result:
+            # ``manifest_payload`` is always bound here: this branch's guard
+            # (model_analyzer_result) implies the assignment guard above
+            # (model_analyzer_manifest OR model_analyzer_result).
             analyzer_result = run_model_analyzer_manifest(
-                manifest_payload,
+                manifest_payload,  # pylint: disable=possibly-used-before-assignment
                 context_artifact=profiler_context_artifact,
             )
             write_model_analyzer_result(analyzer_result, args.model_analyzer_result)
@@ -143,7 +148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         text = report
     if args.output:
-        Path(args.output).write_text(text + "\n")
+        Path(args.output).write_text(text + "\n", encoding="utf-8")
     else:
         sys.stdout.write(text + "\n")
     if args.trace:

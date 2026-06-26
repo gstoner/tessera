@@ -1,6 +1,6 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
-abs,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-absolute,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+abs,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
+absolute,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 acos,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,7,5,0,12,0,fp32 fp64,directly_tested,12 direct test references
@@ -47,7 +47,7 @@ bsmm,2,0,0,2,0,,directly_tested,2 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
 cast,10,40,0,50,0,fp32,directly_tested,50 direct test references
 cat,12,0,0,12,0,,directly_tested,12 direct test references
-ceil,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+ceil,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 center_crop,4,0,1,4,0,,directly_tested,4 direct test references
 centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 chained_schedule,1,0,0,1,1,,structural_only,category default for 'schedule'
@@ -173,7 +173,7 @@ eq,1,0,0,1,1,bf16 f32,covered_by_family,category default for 'comparison'
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 erfc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-exp,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
+exp,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 factorized_matmul,4,0,0,4,0,,directly_tested,4 direct test references
@@ -183,7 +183,7 @@ fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
 flash_attn,100,57,8,157,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,157 direct test references
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-floor,4,0,1,4,0,bf16 f32 fp32,directly_tested,4 direct test references
+floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
 floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 focal_loss,4,0,0,4,0,,directly_tested,4 direct test references
 fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
@@ -345,7 +345,7 @@ quantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
 quantize_nvfp4,11,0,2,11,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,11 direct test references
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,2,0,0,2,0,,directly_tested,2 direct test references
-reciprocal,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 reduce,86,0,7,86,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,105,20,9,125,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,125 direct test references
@@ -380,8 +380,8 @@ roll,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 rope,19,10,0,29,0,bf16,directly_tested,29 direct test references
 rope_merge,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 rope_split,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
-round,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
-rsqrt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
+round,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
+rsqrt,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,6,0,2,6,0,,directly_tested,6 direct test references
@@ -401,7 +401,7 @@ shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,5,0,0,5,0,bf16 f16 f32 fp32,directly_tested,5 direct test references
 sigmoid_safe,4,0,0,4,0,,directly_tested,4 direct test references
-sign,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
+sign,5,0,1,5,0,bf16 f32,directly_tested,5 direct test references
 silu,84,2,5,86,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 silu_mul,14,13,0,27,0,bf16 fp32,directly_tested,27 direct test references
 simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
@@ -420,7 +420,7 @@ spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,3,0,0,3,0,,directly_tested,3 direct test references
 spmm_csr,2,0,0,2,0,,directly_tested,2 direct test references
-sqrt,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
+sqrt,7,0,1,7,0,bf16 f32,directly_tested,7 direct test references
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references
 stack,2,0,0,2,0,,directly_tested,2 direct test references
@@ -458,7 +458,7 @@ tree_transpose,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_unflatten,1,0,0,1,1,,structural_only,category default for 'state_tree'
 tri_solve,5,2,0,7,0,bf16 f16 f32 fp16 fp32,directly_tested,7 direct test references
 triplet_loss,6,0,0,6,0,,directly_tested,6 direct test references
-trunc,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+trunc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 unpack,2,0,0,2,0,,directly_tested,2 direct test references
 unsqueeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 value_and_grad,0,0,0,0,1,,structural_only,category default for 'transform'

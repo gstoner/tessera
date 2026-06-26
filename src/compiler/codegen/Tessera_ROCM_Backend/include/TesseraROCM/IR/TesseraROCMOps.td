@@ -489,6 +489,27 @@ def ROCM_CompareKernelOp : TesseraROCM_Op<"compare"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_LogicalKernelOp : TesseraROCM_Op<"logical"> {
+  let summary = "Elementwise logical kernel (and / or / xor / not) over i8 bool";
+  let description = [{
+    The directive `generate-rocm-logical-kernel` expands into a flat elementwise
+    gpu kernel applying a pointwise logical operation over N elements (one thread
+    per element, strided grid) — the standalone S2 logical family, operating on
+    `i8` booleans:
+
+      * `and` = a && b, `or` = a || b, `xor` = a ^ b  (binary)
+      * `not` = !a                                     (unary)
+
+    Inputs are normalized to a boolean via `a != 0` (matching numpy, where any
+    nonzero value is true). The result is an `i8` mask (0/1). `not` takes one
+    operand; the rest take two. `N` is a runtime `index` arg. Validated vs numpy
+    on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"and\"">:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

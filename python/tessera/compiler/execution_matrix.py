@@ -149,6 +149,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "comparison family (eq/ne/lt/le/gt/ge), one thread per "
                             "element, dispatched by op name; f32/f16/bf16 input "
                             "storage, f32 compare, i8/bool output",
+    "rocm_logical_compiled": "AMD GPU RDNA flat elementwise logical kernel the "
+                            "Tessera compiler GENERATES (generate-rocm-logical-"
+                            "kernel -> ROCDL -> hsaco, in-process via tessera-"
+                            "opt), then HIP loads + launches it — the S2 logical "
+                            "family (and/or/xor binary, not unary) over i8 "
+                            "booleans (inputs normalized via != 0), one thread "
+                            "per element, dispatched by op name; bool in/out",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -409,6 +416,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "element, i8/bool output): tessera-opt generates + serializes the "
                "kernel to hsaco in-process, then HIP loads + launches it. "
                "Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Logical and/or/xor/not — flat elementwise over i8 booleans, bool output.
+    ("rocm", "rocm_logical_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_logical_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_logical_compiled", runtime_status="success",
+        reason="ROCm logical artifact runs the COMPILER-GENERATED flat "
+               "elementwise logical kernel (and/or/xor binary, not unary, over "
+               "i8 booleans, one thread per element): tessera-opt generates + "
+               "serializes the kernel to hsaco in-process, then HIP loads + "
+               "launches it. Dispatched by op name.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
     ("rocm", "rocm_silu_mul_compiled"): ExecutionRow(

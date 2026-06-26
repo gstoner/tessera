@@ -3465,6 +3465,125 @@ def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED logical lane (2026-06-26) — S2 logical family
+# A flat elementwise kernel applying a pointwise logical op (and/or/xor/not) over
+# any-shape i8 bool inputs, producing a bool result. ``compiler_path =
+# "rocm_logical_compiled"``. Inputs normalized to bool via != 0 (numpy
+# semantics). ``not`` is unary; and/or/xor binary. ONE hsaco per (chip, kind).
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_logical_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+#: op_name → (logical kernel kind, operand count).
+_ROCM_LOGICAL_OPS: dict[str, tuple[str, int]] = {
+    "tessera.logical_and": ("and", 2), "tessera.logical_or": ("or", 2),
+    "tessera.logical_xor": ("xor", 2), "tessera.logical_not": ("not", 1),
+}
+
+
+def _build_compiled_logical_hsaco(kind: str) -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.logical"() {{name = "l", kind = "{kind}"}} '
+        ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-logical-kernel", directive, _rocm_logical_hsaco_cache,
+        (chip, kind))
+
+
+def _execute_rocm_compiled_logical(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` logical lane: run the COMPILER-GENERATED flat
+    elementwise logical kernel (and/or/xor/not) over any-shape inputs, producing
+    a numpy ``bool_`` result. Inputs are normalized to bool (``!= 0``); ``not``
+    is unary, the rest binary."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_LOGICAL_OPS:
+        raise ValueError(
+            "rocm_logical_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_LOGICAL_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind, nin = _ROCM_LOGICAL_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < nin:
+        raise ValueError(f"logical {kind} requires {nin} operand(s)")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    inputs = [a]
+    if nin == 2:
+        bb = _as_numpy(values[operand_names[1]])
+        if a.shape != bb.shape:
+            raise ValueError(
+                f"rocm logical lane requires matching operand shapes; got "
+                f"a{a.shape} b{bb.shape}")
+        inputs.append(bb)
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.zeros(a.shape, dtype=np.bool_)
+
+    hsaco = _build_compiled_logical_hsaco(kind)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm logical: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm logical: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"l") != 0:
+        raise RuntimeError("rocm logical: kernel symbol 'l' not found")
+
+    # i8 bool storage (1 byte/element); normalize numpy inputs to 0/1 bytes.
+    devs: list[Any] = []
+    launch_args: list[Any] = []
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    for arr_in in inputs:
+        host = (np.ascontiguousarray(arr_in).reshape(-1) != 0).astype(np.uint8)
+        dev = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dev), n) != 0:
+            for d in devs:
+                hip.hipFree(d)
+            raise RuntimeError("rocm logical: hipMalloc failed")
+        hip.hipMemcpy(dev, host.ctypes.data_as(ctypes.c_void_p), n, 1)
+        devs.append(dev)
+        launch_args += _mr(dev, n)
+
+    o = np.zeros(n, dtype=np.uint8)
+    do = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(do), n) != 0:
+        for d in devs:
+            hip.hipFree(d)
+        raise RuntimeError("rocm logical: hipMalloc failed")
+    devs.append(do)
+    launch_args += _mr(do, n) + [ctypes.c_int64(n)]
+
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in devs:
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm logical: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, n, 2)
+    for d in devs:
+        hip.hipFree(d)
+    return o.reshape(a.shape).astype(np.bool_)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED silu_mul lane (2026-06-25) — SwiGLU gate-multiply
 # silu_mul(a, b) = silu(a)·b, a flat 2-operand elementwise kernel (sibling of the
 # activation lane). ``compiler_path = "rocm_silu_mul_compiled"``. f32/f16/bf16,
@@ -4119,6 +4238,7 @@ def _executor_table():
         "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
+        "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

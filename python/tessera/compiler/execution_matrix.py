@@ -141,6 +141,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "factorized_matmul's rank-r SVD truncation is an "
                             "exact host epilogue; einsum handles single-"
                             "contraction matmul specs",
+    "rocm_exotic_attn_compiled": "AMD GPU RDNA exotic-attention compositions "
+                            "(gated_attention, mla_decode, mla_decode_fused) "
+                            "built by COMPOSING the COMPILER-GENERATED WMMA "
+                            "flash_attn kernel + the WMMA GEMM kernel (MLA latent "
+                            "projections) + an elementwise gate; f16/bf16 storage, "
+                            "f32 softmax+accumulate. The recurrent DeltaNet "
+                            "variants + block-sparse deepseek stay artifact_only",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -347,6 +354,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "runtime — batched_gemm, linear_general, qkv_projection, "
                "factorized_matmul (GPU matmul + exact host SVD-truncate), and "
                "single-contraction einsum. f16/bf16, f32 accumulate.",
+        execution_mode="hip_runtime"),
+    # Exotic-attention compositions — gated_attention / mla_decode /
+    # mla_decode_fused on the WMMA flash_attn + GEMM kernels. vs numpy.
+    ("rocm", "rocm_exotic_attn_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_exotic_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_exotic_attn_compiled", runtime_status="success",
+        reason="ROCm exotic-attention artifact composes the COMPILER-GENERATED "
+               "WMMA flash_attn kernel with the WMMA GEMM kernel (MLA latent "
+               "projections) + an elementwise gate — gated_attention, mla_decode, "
+               "mla_decode_fused. f16/bf16, f32 softmax+accumulate.",
         execution_mode="hip_runtime"),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(

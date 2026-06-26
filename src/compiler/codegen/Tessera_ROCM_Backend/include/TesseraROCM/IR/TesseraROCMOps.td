@@ -445,6 +445,28 @@ def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
+  let summary = "Elementwise binary arithmetic kernel (sub / div / pow / max / min)";
+  let description = [{
+    The directive `generate-rocm-binary-kernel` expands into a flat 2-operand
+    elementwise gpu kernel applying a pointwise binary arithmetic function over
+    N elements (one thread per element, strided grid) — the standalone S2
+    binary-arithmetic family, the binary sibling of the unary-math lane. Both
+    operands and the output share `dtype`; the body computes in **f32**
+    regardless (`pow` lowers through the `math` → ROCDL path):
+
+      * `sub` = a − b,  `div` = a / b,  `pow` = a ** b
+      * `maximum` / `minimum` — IEEE NaN-propagating
+
+    `N` is a runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
+    Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"sub\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

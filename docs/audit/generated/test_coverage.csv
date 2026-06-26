@@ -34,7 +34,7 @@ avg_pool,2,0,0,2,0,,directly_tested,2 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
-batched_gemm,13,4,0,17,0,bf16 f16 f32 fp16 fp32,directly_tested,17 direct test references
+batched_gemm,14,4,0,18,0,bf16 f16 f32 fp16 fp32,directly_tested,18 direct test references
 bidirectional_scan,2,0,0,2,0,,directly_tested,2 direct test references
 binary_cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 bitwise_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -166,7 +166,7 @@ ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs rea
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 edm_loss_weight,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 edm_precondition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-einsum,7,0,0,7,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,7 direct test references
+einsum,9,0,1,9,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,9 direct test references
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
@@ -176,7 +176,7 @@ erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 exp,4,0,0,4,0,,directly_tested,4 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-factorized_matmul,3,0,0,3,0,,directly_tested,3 direct test references
+factorized_matmul,4,0,0,4,0,,directly_tested,4 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
 fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
@@ -241,7 +241,7 @@ lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
 linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
-linear_general,13,0,0,13,0,,directly_tested,13 direct test references
+linear_general,14,0,0,14,0,,directly_tested,14 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 lion,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 load_balance_loss,2,0,0,2,0,,directly_tested,2 direct test references
@@ -335,7 +335,7 @@ power_attn,6,0,1,6,0,,directly_tested,6 direct test references
 ppo_policy_loss,8,11,0,19,0,bf16 f16 f32 fp16 fp32,directly_tested,19 direct test references
 prod,2,0,0,2,0,,directly_tested,2 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
-qkv_projection,7,0,0,7,0,fp32,directly_tested,7 direct test references
+qkv_projection,8,0,0,8,0,fp32,directly_tested,8 direct test references
 qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,directly_tested,8 direct test references
 quantize_fp4,8,0,1,8,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,8 direct test references
 quantize_fp6,7,0,1,7,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,7 direct test references

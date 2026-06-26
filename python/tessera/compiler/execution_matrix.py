@@ -132,6 +132,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "bias[h,i,j] = slope[h]·(j−i) over [H, S, S] (one "
                             "thread per element); slopes default to the "
                             "2^(-8(k+1)/H) ramp; f32/f16/bf16 output",
+    "rocm_matmul_family_compiled": "AMD GPU RDNA matmul-family ops (batched_gemm "
+                            "/ linear_general / qkv_projection / "
+                            "factorized_matmul / einsum) built on the "
+                            "COMPILER-GENERATED WMMA GEMM kernel (the "
+                            "rocm_compiled spine), reshaped/batched/split in the "
+                            "runtime; f16/bf16 storage, f32 accumulate. "
+                            "factorized_matmul's rank-r SVD truncation is an "
+                            "exact host epilogue; einsum handles single-"
+                            "contraction matmul specs",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -326,6 +335,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "thread per element): tessera-opt generates + serializes the "
                "kernel to hsaco in-process, then HIP loads + launches it. Slopes "
                "default to the 2^(-8(k+1)/H) ramp.",
+        execution_mode="hip_runtime"),
+    # matmul-family — batched_gemm / linear_general / qkv_projection /
+    # factorized_matmul / einsum on the WMMA GEMM kernel. vs numpy.
+    ("rocm", "rocm_matmul_family_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_matmul_family_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_matmul_family_compiled", runtime_status="success",
+        reason="ROCm matmul-family artifact runs the COMPILER-GENERATED WMMA GEMM "
+               "kernel (the rocm_compiled spine) reshaped/batched/split in the "
+               "runtime — batched_gemm, linear_general, qkv_projection, "
+               "factorized_matmul (GPU matmul + exact host SVD-truncate), and "
+               "single-contraction einsum. f16/bf16, f32 accumulate.",
         execution_mode="hip_runtime"),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(

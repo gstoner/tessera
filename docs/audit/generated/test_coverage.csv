@@ -251,10 +251,10 @@ log,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 log1p,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 log_softmax,5,5,0,10,0,,directly_tested,10 direct test references
-logical_and,3,0,1,3,0,,directly_tested,3 direct test references
-logical_not,3,0,0,3,0,,directly_tested,3 direct test references
-logical_or,3,0,1,3,0,,directly_tested,3 direct test references
-logical_xor,2,0,0,2,0,,directly_tested,2 direct test references
+logical_and,5,0,2,5,0,,directly_tested,5 direct test references
+logical_not,4,0,1,4,0,,directly_tested,4 direct test references
+logical_or,5,0,2,5,0,,directly_tested,5 direct test references
+logical_xor,3,0,0,3,0,,directly_tested,3 direct test references
 logsumexp,4,3,0,7,0,,directly_tested,7 direct test references
 lookahead_sparse_attention,15,4,1,19,0,,directly_tested,19 direct test references
 lora_linear,5,0,0,5,0,,directly_tested,5 direct test references
@@ -410,7 +410,7 @@ sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,104,37,16,141,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,141 direct test references
+softmax,105,37,17,142,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,142 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

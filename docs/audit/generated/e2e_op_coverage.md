@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 64 |
-| ``runnable_reference`` | 245 |
+| ``complete`` | 68 |
+| ``runnable_reference`` | 241 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (64)
+## complete (68)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -74,6 +74,10 @@ each row into a single E2E tier.
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``logical_and`` | logical | public | public | registered | partial | fused | ready | none |
+| ``logical_not`` | logical | public | public | registered | partial | fused | ready | none |
+| ``logical_or`` | logical | public | public | registered | partial | fused | ready | none |
+| ``logical_xor`` | logical | public | public | registered | partial | fused | ready | none |
 | ``dequant_matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
@@ -100,7 +104,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (245)
+## runnable_reference (241)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -230,10 +234,6 @@ each row into a single E2E tier.
 | ``bitwise_not`` | logical | public | public | registered | partial | reference | ready | none |
 | ``bitwise_or`` | logical | public | public | registered | partial | reference | ready | none |
 | ``bitwise_xor`` | logical | public | public | registered | partial | reference | ready | none |
-| ``logical_and`` | logical | public | public | registered | partial | reference | ready | none |
-| ``logical_not`` | logical | public | public | registered | partial | reference | ready | none |
-| ``logical_or`` | logical | public | public | registered | partial | reference | ready | none |
-| ``logical_xor`` | logical | public | public | registered | partial | reference | ready | none |
 | ``batched_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``factorized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |

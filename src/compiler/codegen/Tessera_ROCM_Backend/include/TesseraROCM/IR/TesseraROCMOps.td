@@ -398,6 +398,30 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
+  let summary = "Row reduction (sum / mean / max / min) over the last axis";
+  let description = [{
+    The directive `generate-rocm-reduce-kernel` expands into a row-reduction gpu
+    kernel — the ROCm analog of the x86 AVX-512 reduction lane. Reduces each row
+    of a `[M, K]` input over the last axis to a single value `O[M]` (the runtime
+    folds an arbitrary reduced axis to `[outer=M, inner=K]` by transposing the
+    reduced axes to the end, matching `_apple_gpu_dispatch_reduce`):
+
+      * `kind = "sum"`  — `O[m] = Σ_k X[m,k]`
+      * `kind = "mean"` — `O[m] = (Σ_k X[m,k]) / K`
+      * `kind = "max"`  — `O[m] = max_k X[m,k]`
+      * `kind = "min"`  — `O[m] = min_k X[m,k]`
+
+    One workgroup per row (one wave per row tree-reduces through LDS); reductions
+    run in **f32** regardless of storage dtype. `M`/`K` are runtime `index` args;
+    `dtype` is the f16/bf16/f32 storage. Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"sum\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

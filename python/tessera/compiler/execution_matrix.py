@@ -111,6 +111,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tree-reduce of Σx and Σx²); handles "
                             "tessera.rmsnorm(_safe) + tessera.layer_norm by op "
                             "name. f32/f16/bf16 storage, f32 reduce",
+    "rocm_reduce_compiled": "AMD GPU RDNA row reduction (sum/mean/max/min) the "
+                            "Tessera compiler GENERATES (generate-rocm-reduce-"
+                            "kernel -> ROCDL -> hsaco, in-process via "
+                            "tessera-opt), then HIP loads + launches it — the "
+                            "ROCm analog of the x86 AVX-512 reduction lane. An "
+                            "arbitrary reduced axis folds to [outer,inner] "
+                            "last-axis (one workgroup per row, LDS tree-reduce); "
+                            "tessera.sum/mean/max/min (amax/amin) by op name. "
+                            "f16/bf16/f32 storage, f32 reduce",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -319,6 +328,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "generates + serializes the kernel to hsaco in-process, then HIP "
                "loads + launches it. Handles tessera.rmsnorm(_safe) + "
                "tessera.layer_norm by op name.",
+        execution_mode="hip_runtime"),
+    # Row reduction (sum/mean/max/min) over the last axis — the ROCm analog of
+    # the x86 AVX-512 reduction lane. vs numpy.
+    ("rocm", "rocm_reduce_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_reduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_reduce_compiled", runtime_status="success",
+        reason="ROCm reduce artifact runs the COMPILER-GENERATED RDNA row-"
+               "reduction kernel (sum/mean/max/min over the last axis, one "
+               "workgroup per row, LDS tree-reduce): tessera-opt generates + "
+               "serializes the kernel to hsaco in-process, then HIP loads + "
+               "launches it. An arbitrary reduced axis folds to [outer,inner]; "
+               "handles tessera.sum/mean/max/min (amax/amin) by op name.",
         execution_mode="hip_runtime"),
     # Standalone elementwise activations (gelu/silu/relu) — flat per-element
     # kernel; the standalone analog of the GEMM fused epilogue. vs numpy.

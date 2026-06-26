@@ -2828,6 +2828,143 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED reduce lane (2026-06-25) — row reduction sum/mean/max/min over
+# the last axis (the ROCm analog of the x86 AVX-512 reduction lane). An arbitrary
+# reduced axis is folded to [outer, inner] by transposing the reduced axes to the
+# end (matching _apple_gpu_dispatch_reduce). ``compiler_path =
+# "rocm_reduce_compiled"``. f16/bf16/f32 storage, f32 reduce.
+# ─────────────────────────────────────────────────────────────────────────────
+_REDUCE_BLOCKDIM = 256  # must match BD in GenerateROCMReduceKernel.cpp
+_rocm_reduce_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+#: op_name -> reduce kind.
+_ROCM_REDUCE_OPS = {
+    "tessera.sum": "sum", "tessera.mean": "mean",
+    "tessera.max": "max", "tessera.amax": "max",
+    "tessera.min": "min", "tessera.amin": "min",
+}
+
+
+def _build_compiled_reduce_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.reduce"() {{name = "rd", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-reduce-kernel", directive, _rocm_reduce_hsaco_cache,
+        (chip, kind, dtype))
+
+
+def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` reduce lane: run the COMPILER-GENERATED row-reduction
+    kernel for sum / mean / max / min. An arbitrary ``axis`` (default: reduce all)
+    is folded to a [outer, inner] last-axis reduction by transposing the reduced
+    axes to the end; ``keepdims`` supported. f16/bf16/f32 storage, f32 reduce."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_REDUCE_OPS:
+        raise ValueError(
+            "rocm_reduce_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_REDUCE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _ROCM_REDUCE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    keepdims = bool(kwargs.get("keepdims", False))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    n = x.ndim
+    if n == 0:
+        return np.array(x, copy=True)
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm reduce lane handles f16/bf16/f32; got {x.dtype}")
+
+    axis = kwargs.get("axis", None)
+    if axis is None:
+        axes = tuple(range(n))
+    elif isinstance(axis, int):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        axes = tuple(a if a >= 0 else n + a for a in axis)
+    kept = [i for i in range(n) if i not in axes]
+    perm = kept + list(axes)
+    xt = np.ascontiguousarray(np.transpose(x, perm), dtype=store)
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    outer = int(xt.size // inner) if inner else 0
+    if inner <= 0:
+        raise ValueError("rocm reduce: empty reduction axis")
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+
+    hsaco = _build_compiled_reduce_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm reduce: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm reduce: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"rd") != 0:
+        raise RuntimeError("rocm reduce: kernel symbol 'rd' not found")
+
+    xc = xt.reshape(-1)
+    o = np.zeros(max(outer, 1), dtype=store)
+    nin = outer * inner
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(dx), esz * nin) != 0:
+        raise RuntimeError("rocm reduce: hipMalloc failed")
+    if hip.hipMalloc(ctypes.byref(do), esz * max(outer, 1)) != 0:
+        raise RuntimeError("rocm reduce: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * nin, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, nin) + _mr(do, max(outer, 1))
+                   + [ctypes.c_int64(outer), ctypes.c_int64(inner)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, max(outer, 1), 1, 1, _REDUCE_BLOCKDIM,
+                                   1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm reduce: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * max(outer, 1), 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+
+    res = o.reshape(kept_shape)
+    if keepdims:
+        full = [1 if i in axes else int(x.shape[i]) for i in range(n)]
+        res = res.reshape(full)
+    return res
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED elementwise activation lane (2026-06-25) — standalone gelu /
 # silu / relu (the same activations the GEMM fused epilogue applies in-register).
 # ``compiler_path = "rocm_activation_compiled"`` builds the COMPILER-GENERATED
@@ -3621,6 +3758,7 @@ def _executor_table():
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
+        "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,

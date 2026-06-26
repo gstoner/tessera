@@ -44,6 +44,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_binary_f32.cpp
   src/kernels/avx512_compare_f32.cpp
   src/kernels/avx512_logical_i8.cpp
+  src/kernels/avx512_bitwise_i32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -73,3 +74,6 @@ target_link_libraries(test_compare PRIVATE tessera_x86_backend)
 
 add_executable(test_logical tests/test_logical.cpp)
 target_link_libraries(test_logical PRIVATE tessera_x86_backend)
+
+add_executable(test_bitwise tests/test_bitwise.cpp)
+target_link_libraries(test_bitwise PRIVATE tessera_x86_backend)

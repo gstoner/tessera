@@ -38,7 +38,13 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   f32 in / bool out, numpy NaN semantics; `test_x86_compare_compiled.py`);
   `x86_logical_compiled` (`tessera_x86_avx512_logical_i8`, logical_and/or/xor
   binary + not unary over i8 booleans, normalized via != 0;
-  `test_x86_logical_compiled.py`).
+  `test_x86_logical_compiled.py`); `x86_bitwise_compiled`
+  (`tessera_x86_avx512_bitwise_i32`, bitwise_and/or/xor binary + not unary over
+  i32 integers, full bit pattern; `test_x86_bitwise_compiled.py`). **All six
+  elementwise families (reduce/unary/binary/compare/logical/bitwise) now execute
+  end-to-end on AVX-512 hardware via this lane and carry honest `x86:fused`
+  manifest slots — the x86 backend reaches `runtime.launch()` for the elementwise
+  set, not just GEMM.**
 - **Non-executable targets are honest:** NVIDIA and ROCm are
   recognized but return unsupported/unimplemented behavior rather than fake
   success.

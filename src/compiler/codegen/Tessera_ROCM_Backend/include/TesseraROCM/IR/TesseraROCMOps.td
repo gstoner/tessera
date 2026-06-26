@@ -315,6 +315,44 @@ def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_DeltaNetKernelOp : TesseraROCM_Op<"deltanet"> {
+  let summary = "Causal gated/delta linear-attention sequential-scan kernel";
+  let description = [{
+    The directive `generate-rocm-deltanet-kernel` expands into a causal
+    sequential-scan gpu kernel for the gated/delta linear-attention recurrence —
+    the compiled lane for `gated_deltanet` / `kimi_delta_attention` /
+    `modified_delta_attention`. One workgroup per `(b, h)`; one thread per
+    value-column `e` (blockDim = `d_v`). Thread `e` owns the state column
+    `Ŝ[:, e]` (length `d_qk`) in LDS, so the per-step matvecs are independent
+    per-thread `d`-loops with no cross-thread state hazard. Per timestep `t`
+    (matching the numpy reference `_delta_attention_impl`, causal path):
+
+      target = V[t]
+      if erase:   target -= α_t · (Ŝᵀ k_t)      // read OLD state
+      if decay:   Ŝ *= α_t
+      delta = outer(k_t, target)  [/ (1 + ‖k_t‖·‖target‖) if modified]
+      Ŝ += β_t · delta
+      O[t] = Q_t @ Ŝ                             // read NEW state
+      if gate: O[t] *= sigmoid(gate[t])
+
+    `d_qk` / `d_v` are compile-time (static loop bounds + LDS sizing). The flags
+    `erase` / `modified` / `has_gate` / `has_beta` / `has_decay` are emitted as
+    straight-line code. Q/K are `[B,H,S,d_qk]`, V/O/gate `[B,H,S,d_v]`,
+    beta/decay `[B,H,S]` (f32); B·H is the grid, S a runtime `index` arg. Compute
+    is f32; `dtype` is the f16/bf16/f32 storage. State starts at zero
+    (state=None); no state output.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       I64Attr:$d_qk, I64Attr:$d_v,
+                       DefaultValuedAttr<BoolAttr, "false">:$erase,
+                       DefaultValuedAttr<BoolAttr, "false">:$modified,
+                       DefaultValuedAttr<BoolAttr, "false">:$has_gate,
+                       DefaultValuedAttr<BoolAttr, "false">:$has_beta,
+                       DefaultValuedAttr<BoolAttr, "false">:$has_decay,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_RopeKernelOp : TesseraROCM_Op<"rope"> {
   let summary = "Rotary position embedding (interleaved-pair) kernel";
   let description = [{

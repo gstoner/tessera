@@ -146,8 +146,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "built by COMPOSING the COMPILER-GENERATED WMMA "
                             "flash_attn kernel + the WMMA GEMM kernel (MLA latent "
                             "projections) + an elementwise gate; f16/bf16 storage, "
-                            "f32 softmax+accumulate. The recurrent DeltaNet "
-                            "variants + block-sparse deepseek stay artifact_only",
+                            "f32 softmax+accumulate. The block-sparse deepseek "
+                            "variant stays artifact_only",
+    "rocm_deltanet_compiled": "AMD GPU RDNA gated/delta linear-attention the "
+                            "Tessera compiler GENERATES as a causal "
+                            "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-"
+                            "kernel -> ROCDL -> hsaco) — the first RECURRENT "
+                            "compiled ROCm kernel: one workgroup per (b,h), one "
+                            "thread per value-column, LDS state. Handles "
+                            "gated_deltanet / kimi_delta_attention / "
+                            "modified_delta_attention (erase/modified/gate/beta/"
+                            "decay flags); f16/bf16/f32 storage, f32 compute",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -365,6 +374,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "WMMA flash_attn kernel with the WMMA GEMM kernel (MLA latent "
                "projections) + an elementwise gate — gated_attention, mla_decode, "
                "mla_decode_fused. f16/bf16, f32 softmax+accumulate.",
+        execution_mode="hip_runtime"),
+    # DeltaNet — causal sequential-scan gated/delta linear attention. vs numpy.
+    ("rocm", "rocm_deltanet_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_deltanet_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_deltanet_compiled", runtime_status="success",
+        reason="ROCm deltanet artifact runs the COMPILER-GENERATED causal "
+               "sequential-scan kernel (one workgroup per (b,h), one thread per "
+               "value-column, LDS state) — the gated/delta linear-attention "
+               "recurrence for gated_deltanet / kimi_delta_attention / "
+               "modified_delta_attention. f16/bf16/f32 storage, f32 compute.",
         execution_mode="hip_runtime"),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(

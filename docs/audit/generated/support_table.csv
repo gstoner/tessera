@@ -238,8 +238,8 @@ quantize_nvfp4,quantize,public,public,registered,complete,partial,reference,read
 dropout,random_mask,public,public,registered,complete,partial,reference,ready,none
 rng_normal,random_source,public,public,registered,complete,partial,reference,ready,none
 rng_uniform,random_source,public,public,registered,complete,partial,reference,ready,none
-amax,reduction,public,public,registered,complete,partial,reference,ready,none
-amin,reduction,public,public,registered,complete,partial,reference,ready,none
+amax,reduction,public,public,registered,complete,partial,fused,ready,none
+amin,reduction,public,public,registered,complete,partial,fused,ready,none
 argmax,reduction,public,public,registered,complete,partial,reference,ready,none
 argmin,reduction,public,public,registered,complete,partial,reference,ready,none
 count_nonzero,reduction,public,public,registered,complete,partial,reference,ready,none
@@ -247,9 +247,9 @@ cummax,reduction,public,public,registered,complete,partial,reference,ready,none
 cummin,reduction,public,public,registered,complete,partial,reference,ready,none
 cumprod,reduction,public,public,registered,complete,partial,reference,ready,none
 cumsum,reduction,public,public,registered,complete,partial,reference,ready,none
-max,reduction,public,public,registered,complete,partial,reference,ready,none
-mean,reduction,public,public,registered,complete,partial,reference,ready,none
-min,reduction,public,public,registered,complete,partial,reference,ready,none
+max,reduction,public,public,registered,complete,partial,fused,ready,none
+mean,reduction,public,public,registered,complete,partial,fused,ready,none
+min,reduction,public,public,registered,complete,partial,fused,ready,none
 prod,reduction,public,public,registered,complete,partial,reference,ready,none
 std,reduction,public,public,registered,complete,partial,reference,ready,none
 var,reduction,public,public,registered,complete,partial,reference,ready,none
@@ -281,7 +281,7 @@ reduce,stable_reduction,public,public,registered,complete,partial,reference,read
 sigmoid_safe,stable_reduction,public,public,registered,complete,partial,reference,ready,none
 softmax,stable_reduction,public,public,registered,complete,partial,reference,ready,benchmarked
 softmax_safe,stable_reduction,public,public,registered,complete,partial,reference,ready,none
-sum,stable_reduction,public,public,registered,complete,partial,reference,ready,none
+sum,stable_reduction,public,public,registered,complete,partial,fused,ready,none
 selective_ssm,state_space,public,public,registered,complete,partial,reference,ready,none
 kv_cache_append,state_update,public,public,registered,complete,partial,reference,ready,none
 kv_cache_prune,state_update,public,public,registered,complete,partial,reference,ready,none

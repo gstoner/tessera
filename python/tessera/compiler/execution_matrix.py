@@ -120,6 +120,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "last-axis (one workgroup per row, LDS tree-reduce); "
                             "tessera.sum/mean/max/min (amax/amin) by op name. "
                             "f16/bf16/f32 storage, f32 reduce",
+    "x86_reduce_compiled": "x86 CPU row reduction (sum/mean/max/min) — the "
+                            "hand-written AVX-512 kernel (tessera_x86_avx512_"
+                            "reduce_f32) the Python runtime ctypes-loads from "
+                            "libtessera_x86_elementwise.so and calls directly; "
+                            "an arbitrary reduced axis folds to [outer,inner] "
+                            "last-axis (16 f32 lanes/__m512, NaN-propagating "
+                            "max/min); tessera.sum/mean/max/min (amax/amin) by "
+                            "op name. f32 only",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -269,6 +277,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_cpu", executable=True,
         executor_id="native_cpu", runtime_status="success",
         reason="CPU artifact runs through the x86 AMX / native CPU runtime."),
+    # --- x86 AVX-512 elementwise compiled lane (runtime-loaded C-ABI kernels) ---
+    ("x86", "x86_reduce_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_reduce_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_reduce_compiled", runtime_status="success",
+        reason="x86 reduce artifact runs the hand-written AVX-512 row-reduction "
+               "kernel (sum/mean/max/min over the last axis, 16 f32 lanes/__m512, "
+               "NaN-propagating max/min): the Python runtime ctypes-loads "
+               "libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_reduce_f32. An arbitrary reduced axis folds to "
+               "[outer,inner]; handles tessera.sum/mean/max/min (amax/amin) by op "
+               "name. f32 only.",
+        execution_mode="cpu_avx512"),
     # --- CPU JIT (numpy reference for non-AMX ops) ---
     ("cpu", "jit_cpu_numpy"): ExecutionRow(
         target="cpu", compiler_path="jit_cpu_numpy",

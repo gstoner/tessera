@@ -2828,6 +2828,159 @@ def _execute_rocm_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# x86 ELEMENTWISE compiled lane (2026-06-26) — runtime-loadable AVX-512 kernels.
+# libtessera_x86_elementwise.so exports the hand-written AVX-512 C-ABI kernels
+# (reduce/unary/binary/compare/logical/bitwise); the Python runtime ctypes-loads
+# it and calls them from runtime.launch() (``compiler_path = "x86_*_compiled"``)
+# — the CPU analog of the ROCm compiled lanes. Host-gated: the lib only builds /
+# loads on an AVX-512 box, so the loader returns None elsewhere and the lane
+# skips. The kernels are f32 (reduce/unary/binary/compare) / i8 (logical) / i32
+# (bitwise); reductions fold an arbitrary axis to [outer, inner] like the ROCm
+# reduce lane.
+# ─────────────────────────────────────────────────────────────────────────────
+_x86_elementwise_runtime: ctypes.CDLL | None = None
+_x86_elementwise_loaded = False
+
+
+def _x86_elementwise_lib_path() -> Optional[Path]:
+    """Locate libtessera_x86_elementwise.so (env override → CMake build dir)."""
+    env = os.environ.get("TESSERA_X86_ELEMENTWISE_LIB")
+    candidates: list[Path] = []
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.append(
+        root / "build/src/compiler/codegen/tessera_x86_backend"
+        / "libtessera_x86_elementwise.so")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _load_x86_elementwise() -> ctypes.CDLL | None:
+    """Load libtessera_x86_elementwise.so once, binding the C-ABI signatures.
+    Returns None (never raises) when the lib is absent — the caller treats that
+    as "no x86 compiled lane on this host" and the executor skips clean."""
+    global _x86_elementwise_runtime, _x86_elementwise_loaded
+    if _x86_elementwise_loaded:
+        return _x86_elementwise_runtime
+    _x86_elementwise_loaded = True
+    path = _x86_elementwise_lib_path()
+    if path is None:
+        return None
+    try:
+        lib = ctypes.CDLL(str(path))
+    except OSError:
+        return None
+    c_f32 = ctypes.POINTER(ctypes.c_float)
+    c_i8 = ctypes.c_void_p
+    c_i32 = ctypes.c_void_p
+    i64 = ctypes.c_int64
+    sigs = {
+        "tessera_x86_avx512_reduce_f32":
+            [c_f32, i64, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_unary_f32":
+            [c_f32, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_binary_f32":
+            [c_f32, c_f32, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_compare_f32":
+            [c_f32, c_f32, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_logical_i8":
+            [c_i8, c_i8, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_bitwise_i32":
+            [c_i32, c_i32, i64, c_i32, ctypes.c_int],
+    }
+    for sym, argtypes in sigs.items():
+        fn = getattr(lib, sym, None)
+        if fn is not None:
+            fn.argtypes = argtypes
+            fn.restype = None
+    _x86_elementwise_runtime = lib
+    return lib
+
+
+def _x86_elementwise_available() -> bool:
+    """True iff the AVX-512 elementwise lib loads on this host."""
+    return _load_x86_elementwise() is not None
+
+
+#: op_name -> reduce kind index (must match avx512_reduce_f32.cpp).
+_X86_REDUCE_OPS = {
+    "tessera.sum": 0, "tessera.mean": 2,
+    "tessera.max": 1, "tessera.amax": 1,
+    "tessera.min": 3, "tessera.amin": 3,
+}
+
+
+def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` reduce lane: run the hand-written AVX-512 row-reduction
+    kernel (sum/mean/max/min) loaded from libtessera_x86_elementwise.so. An
+    arbitrary ``axis`` (default: reduce all) is folded to a [outer, inner]
+    last-axis reduction by transposing the reduced axes to the end; ``keepdims``
+    supported. f32 only (the kernel's dtype)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_REDUCE_OPS:
+        raise ValueError(
+            "x86_reduce_compiled executor handles exactly one of "
+            f"{tuple(_X86_REDUCE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_REDUCE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    keepdims = bool(kwargs.get("keepdims", False))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 reduce lane handles f32 only; got {x.dtype}")
+    n = x.ndim
+    if n == 0:
+        return np.array(x, copy=True)
+
+    axis = kwargs.get("axis", None)
+    if axis is None:
+        axes = tuple(range(n))
+    elif isinstance(axis, int):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        axes = tuple(a if a >= 0 else n + a for a in axis)
+    kept = [i for i in range(n) if i not in axes]
+    perm = kept + list(axes)
+    xt = np.ascontiguousarray(np.transpose(x, perm), dtype=np.float32)
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    outer = int(xt.size // inner) if inner else 0
+    if inner <= 0:
+        raise ValueError("x86 reduce: empty reduction axis")
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(xt, dtype=np.float32).reshape(-1)
+    out = np.zeros(outer, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_reduce_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(outer), ctypes.c_int64(inner),
+        out.ctypes.data_as(cf), ctypes.c_int(kind))
+
+    res = out.reshape(kept_shape) if kept_shape else out.reshape(())
+    if keepdims:
+        shape = [1 if i in axes else int(x.shape[i]) for i in range(n)]
+        res = res.reshape(shape)
+    return res
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED reduce lane (2026-06-25) — row reduction sum/mean/max/min over
 # the last axis (the ROCm analog of the x86 AVX-512 reduction lane). An arbitrary
 # reduced axis is folded to [outer, inner] by transposing the reduced axes to the
@@ -4357,6 +4510,7 @@ def _executor_table():
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
+        "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

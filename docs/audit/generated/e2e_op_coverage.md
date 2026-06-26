@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 39 |
-| ``runnable_reference`` | 270 |
+| ``complete`` | 45 |
+| ``runnable_reference`` | 264 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (39)
+## complete (45)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -69,13 +69,19 @@ each row into a single E2E tier.
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``max`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``mean`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``min`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (270)
+## runnable_reference (264)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -284,8 +290,6 @@ each row into a single E2E tier.
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |
 | ``rng_uniform`` | random_source | public | public | registered | partial | reference | ready | none |
-| ``amax`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``amin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``argmin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``count_nonzero`` | reduction | public | public | registered | partial | reference | ready | none |
@@ -293,9 +297,6 @@ each row into a single E2E tier.
 | ``cummin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumprod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``cumsum`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``max`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``mean`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``min`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``prod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``std`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``var`` | reduction | public | public | registered | partial | reference | ready | none |
@@ -327,7 +328,6 @@ each row into a single E2E tier.
 | ``sigmoid_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | partial | reference | ready | benchmarked |
 | ``softmax_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``sum`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |

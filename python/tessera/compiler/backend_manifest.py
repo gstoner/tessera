@@ -966,6 +966,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
     } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                  "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
                  "softplus")},
+    # S2 binary-arithmetic family — flat 2-operand per-element kernel
+    # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
+    # Executes via runtime.launch() (rocm_binary_compiled). f32/f16/bf16, f32
+    # compute. maximum/minimum are IEEE NaN-propagating; pow lowers via ROCDL.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone elementwise binary {op} — flat 2-operand "
+                 "per-element kernel (generate-rocm-binary-kernel). Executes via "
+                 "runtime.launch() (rocm_binary_compiled).",
+    } for op in ("sub", "div", "pow", "maximum", "minimum")},
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1166,6 +1177,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
                   "softplus")},
+    **{(op, "rocm"): "tests/unit/test_rocm_binary_compiled.py"
+       for op in ("sub", "div", "pow", "maximum", "minimum")},
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",

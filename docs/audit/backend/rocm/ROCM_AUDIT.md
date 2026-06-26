@@ -361,6 +361,21 @@ become the on-silicon **oracle** the compiled path validates against.
   no polynomial approx — `avx512_unary_f32.cpp`, validated standalone); the
   transcendentals stay numpy-reference on CPU (no fused x86 claim). Status
   `compiled`.
+- **Elementwise binary arithmetic** (S2 binary-arithmetic family, 2026-06-26):
+  a `tessera_rocm.binary` directive + `generate-rocm-binary-kernel` pass emitting
+  a flat 2-operand per-element kernel (one thread per element), the binary
+  sibling of the unary-math lane. Covers `sub`/`div`/`pow`/`maximum`/`minimum`;
+  `maximum`/`minimum` are IEEE NaN-propagating (`arith.maximumf`/`minimumf`,
+  matching `numpy.maximum`/`minimum`), `pow` lowers through the `math` → ROCDL
+  path. New `runtime.launch()` lane `rocm_binary_compiled`, dispatched by op
+  name; f16/bf16/f32 storage, f32 compute. Validated on gfx1151 vs numpy across
+  kind × dtype × shape incl. rank-3 + NaN-propagation
+  (`test_rocm_binary_compiled.py`) + a GPU-free codegen gate. The CPU half
+  landed in the x86 backend as an AVX-512 kernel for the **direct-intrinsic
+  subset** (`sub`/`div`/`maximum`/`minimum`, with NaN-propagation handled via an
+  unordered-compare blend — `avx512_binary_f32.cpp`, validated standalone); `pow`
+  is transcendental and stays numpy-reference on CPU (no fused x86 claim). Status
+  `compiled`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

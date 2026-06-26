@@ -135,6 +135,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "reciprocal/abs/sign/erf/tanh/sigmoid/log1p/expm1/"
                             "softplus), one thread per element, dispatched by op "
                             "name; f32/f16/bf16 storage, f32 compute",
+    "rocm_binary_compiled": "AMD GPU RDNA flat 2-operand elementwise binary-"
+                            "arithmetic kernel the Tessera compiler GENERATES "
+                            "(generate-rocm-binary-kernel -> ROCDL -> hsaco, in-"
+                            "process via tessera-opt), then HIP loads + launches "
+                            "it — the S2 binary-arithmetic family (sub/div/pow/"
+                            "maximum/minimum), one thread per element, dispatched "
+                            "by op name; f32/f16/bf16 storage, f32 compute",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -371,6 +378,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "unary-math kernel (S2 scalar-math/stability: exp/log/sqrt/rsqrt/"
                "reciprocal/abs/sign/erf/tanh/sigmoid/log1p/expm1/softplus, one "
                "thread per element): tessera-opt generates + serializes the "
+               "kernel to hsaco in-process, then HIP loads + launches it. "
+               "Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Binary arithmetic sub/div/pow/maximum/minimum — flat 2-operand elementwise.
+    ("rocm", "rocm_binary_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_binary_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_binary_compiled", runtime_status="success",
+        reason="ROCm binary artifact runs the COMPILER-GENERATED flat 2-operand "
+               "elementwise binary-arithmetic kernel (sub/div/pow/maximum/minimum, "
+               "one thread per element): tessera-opt generates + serializes the "
                "kernel to hsaco in-process, then HIP loads + launches it. "
                "Dispatched by op name.",
         execution_mode="hip_runtime"),

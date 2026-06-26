@@ -26,6 +26,10 @@ static double want_unary(double v, int kind) {
     case 3: return std::fabs(v);
     case 4: return -v;
     case 5: return (v > 0) ? 1.0 : (v < 0 ? -1.0 : 0.0);
+    case 6: return std::floor(v);
+    case 7: return std::ceil(v);
+    case 8: return std::trunc(v);
+    case 9: return std::nearbyint(v);  // ties-to-even
     default: return v;
     }
 }
@@ -78,7 +82,7 @@ static void check_sign_zero() {
 }
 
 int main() {
-    for (int kind = 0; kind <= 5; ++kind) {
+    for (int kind = 0; kind <= 9; ++kind) {
         check("aligned", kind, 64);    // multiple of 16
         check("tail", kind, 70);       // n % 16 != 0
         check("small", kind, 5);       // n < 16 (all scalar tail)

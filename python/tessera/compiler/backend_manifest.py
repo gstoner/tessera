@@ -989,6 +989,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "per-element kernel (generate-rocm-compare-kernel), bool output. "
                  "Executes via runtime.launch() (rocm_compare_compiled).",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # S2 logical family — flat elementwise kernel over i8 booleans
+    # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
+    # normalized via != 0 (numpy semantics). Executes via runtime.launch()
+    # (rocm_logical_compiled). bool in/out.
+    **{op: {
+        "dtypes": ("bool",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone elementwise {op} — flat per-element logical kernel "
+                 "(generate-rocm-logical-kernel) over i8 booleans. Executes via "
+                 "runtime.launch() (rocm_logical_compiled).",
+    } for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1194,6 +1205,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sub", "div", "pow", "maximum", "minimum")},
     **{(op, "rocm"): "tests/unit/test_rocm_compare_compiled.py"
        for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{(op, "rocm"): "tests/unit/test_rocm_logical_compiled.py"
+       for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",

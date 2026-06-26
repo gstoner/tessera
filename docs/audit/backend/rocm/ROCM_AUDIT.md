@@ -398,6 +398,22 @@ become the on-silicon **oracle** the compiled path validates against.
   kernel (`_mm512_cmp_ps_mask` + `_mm_maskz_set1_epi8` mask→0/1 bytes;
   `avx512_compare_f32.cpp`, validated standalone — C's native float operators
   already match numpy's NaN rule). Status `compiled`.
+- **Elementwise logical** (S2 logical family, 2026-06-26): a
+  `tessera_rocm.logical` directive + `generate-rocm-logical-kernel` pass emitting
+  a flat elementwise kernel over **i8 booleans** — the mask-composition sibling
+  of the comparison lane. `and`/`or`/`xor` (binary) + `not` (unary); inputs are
+  normalized to bool via `a != 0` (matching numpy, where any nonzero is true) so
+  the kernel is correct for arbitrary i8 inputs, then combined with
+  `arith.{andi,ori,xori}` on `i1` → `extui i8`. The kernel emits a 4-arg
+  signature for binary kinds and a 3-arg signature for `not`. New
+  `runtime.launch()` lane `rocm_logical_compiled`, dispatched by op name; bool
+  in/out. Validated on gfx1151 vs numpy across kind × shape incl. rank-3 +
+  nonzero-normalization (`test_rocm_logical_compiled.py`) + a GPU-free codegen
+  gate. The CPU half landed in the x86 backend as an AVX-512 kernel
+  (`_mm512_cmpneq_epi8_mask` + `_mm512_maskz_set1_epi8` to normalize, then
+  `_mm512_{and,or,xor}_si512`; `avx512_logical_i8.cpp`, validated standalone).
+  Status `compiled`. (Bitwise `and`/`or`/`xor`/`not` over integers is a separate
+  follow-up — distinct int32 input path.)
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

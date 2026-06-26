@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **2918** total Python-test references, **825** total lit-fixture references.
+- **2925** total Python-test references, **825** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **179** ops have ≤1 reference ("thinly tested").
+- **176** ops have ≤1 reference ("thinly tested").
 - **62** ops have ≥10 references ("well tested").
-- **89** ops have at least one associated `pytest.raises` negative test.
+- **91** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -19,7 +19,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 |----|--------:|---------:|------:|----:|--------|
 | `matmul` |  391 |  203 |  594 |  17 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  100 |   57 |  157 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |  100 |   37 |  137 |  12 | `bf16`, `f16`, `f32`, `fp16` … |
+| `softmax` |  101 |   37 |  138 |  13 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  105 |   20 |  125 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   95 |   13 |  108 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   85 |    4 |   89 |   7 | `bf16`, `f16`, `f32`, `f64` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **179** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **176** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **179** ops have at most one test reference across the whole test surface.
 | `denoising_score_matching_loss` |    1 |    0 |    1 |
 | `dynamic_slice` |    1 |    0 |    1 |
 
-_(119 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(116 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**179** ops have ≤1 direct test reference.  They break down as:
+**176** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   62 | Tested via a parent op or family wrapper |
-| `structural_only`        |  111 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |  108 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -186,7 +186,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(32 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 111 ops
+## `structural_only` — 108 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -223,4 +223,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_interleave` | category default for 'data' |
 | `dataset_map` | category default for 'data' |
 
-_(81 additional structural ops omitted.)_
+_(78 additional structural ops omitted.)_

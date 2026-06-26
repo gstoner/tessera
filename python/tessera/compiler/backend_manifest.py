@@ -909,6 +909,14 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "tree-reduce, f32 reduce). Executes via runtime.launch() "
                  "(rocm_softmax_compiled).",
     },
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": f"Row {op} reduction over the last axis (generate-rocm-reduce-"
+                 "kernel: one workgroup per row, LDS tree-reduce, f32 reduce) — "
+                 "the ROCm analog of the x86 AVX-512 reduction lane. Executes "
+                 "via runtime.launch() (rocm_reduce_compiled).",
+    } for op in ("sum", "mean", "max", "min", "amax", "amin")},
     "rmsnorm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
@@ -1134,6 +1142,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
+    **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py"
+       for op in ("sum", "mean", "max", "min", "amax", "amin")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",

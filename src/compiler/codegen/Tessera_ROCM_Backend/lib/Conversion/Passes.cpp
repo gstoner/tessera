@@ -43,6 +43,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMRopeKernelPass(); });
   registerPass([]() { return createGenerateROCMSoftmaxKernelPass(); });
   registerPass([]() { return createGenerateROCMNormKernelPass(); });
+  registerPass([]() { return createGenerateROCMReduceKernelPass(); });
   registerPass([]() { return createLowerROCMAsyncCopyToLoopPass(); });
   PassPipelineRegistration<> pipeline(
       "tessera-rocm-backend",

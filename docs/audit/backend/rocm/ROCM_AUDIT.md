@@ -327,6 +327,20 @@ become the on-silicon **oracle** the compiled path validates against.
   K>256, ragged, and rank-3 (`test_rocm_softmax_compiled.py`) + a GPU-free
   codegen gate (`test_rocm_softmax_codegen.py`). Status `compiled`; it also
   flips the curated `softmax`×`rocm` cell to ✅ in `op_target_conformance.md`.
+- **Row reduction** (`sum`/`mean`/`max`/`min`, 2026-06-25): the ROCm analog of
+  the x86 AVX-512 reduction lane — a `tessera_rocm.reduce` directive +
+  `generate-rocm-reduce-kernel` pass emitting a row-reduction kernel (one
+  workgroup per row, lanes stride the last axis and tree-reduce through LDS;
+  identity-seeded combine = +/max/min, mean divides by K). The runtime folds an
+  arbitrary reduced `axis` to a `[outer, inner]` last-axis reduction by
+  transposing the reduced axes to the end (matching `_apple_gpu_dispatch_reduce`);
+  `keepdims` supported. New `runtime.launch()` lane `rocm_reduce_compiled`;
+  handles `tessera.sum`/`mean`/`max`/`min` (+ `amax`/`amin`) by op name; f16/bf16/
+  f32 storage, f32 reduce. Validated on gfx1151 vs numpy across dtype × shape ×
+  axis incl. rank-3 + reduce-all + keepdims (`test_rocm_reduce_compiled.py`) + a
+  GPU-free codegen gate. The CPU half (AVX-512) landed in the x86 backend
+  (`avx512_reduce_f32.cpp`) — so the reduction family now has a real optimized
+  kernel on both devices we have hardware for. Status `compiled`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

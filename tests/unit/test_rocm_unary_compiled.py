@@ -58,6 +58,24 @@ _CASES = {
     "tessera.log1p": (np.log1p, _DOMAIN_POS),
     "tessera.expm1": (np.expm1, _DOMAIN_ANY),
     "tessera.softplus": (_np_softplus, _DOMAIN_ANY),
+    # tail: trig / special / rounding (2026-06-26)
+    "tessera.cos": (np.cos, _DOMAIN_ANY),
+    # tan: stay inside (-π/2, π/2) to avoid the poles
+    "tessera.tan": (np.tan, lambda rng, shp:
+                    (rng.random(shp) * 2.8 - 1.4).astype(np.float32)),
+    "tessera.sinh": (np.sinh, _DOMAIN_ANY),
+    "tessera.cosh": (np.cosh, _DOMAIN_ANY),
+    # asin/acos need |x| <= 1
+    "tessera.asin": (np.arcsin, lambda rng, shp:
+                     (rng.random(shp) * 1.8 - 0.9).astype(np.float32)),
+    "tessera.acos": (np.arccos, lambda rng, shp:
+                     (rng.random(shp) * 1.8 - 0.9).astype(np.float32)),
+    "tessera.atan": (np.arctan, _DOMAIN_ANY),
+    "tessera.erfc": (None, _DOMAIN_ANY),  # erfc filled below if scipy present
+    "tessera.floor": (np.floor, _DOMAIN_ANY),
+    "tessera.ceil": (np.ceil, _DOMAIN_ANY),
+    "tessera.round": (np.round, _DOMAIN_ANY),   # round-half-to-even
+    "tessera.trunc": (np.trunc, _DOMAIN_ANY),
 }
 
 
@@ -71,6 +89,15 @@ def _erf_ref():
         return np.vectorize(math.erf)
 
 
+def _erfc_ref():
+    try:
+        from scipy.special import erfc  # type: ignore
+        return erfc
+    except Exception:
+        import math
+        return np.vectorize(math.erfc)
+
+
 @pytest.mark.parametrize("op_name", list(_CASES))
 @pytest.mark.parametrize("dtype,tol", [
     (np.float32, 2e-5), (np.float16, 4e-3), ("bf16", 3e-2),
@@ -82,7 +109,7 @@ def test_unary_matches_numpy(op_name, dtype, tol, shape):
         dtype = pytest.importorskip("ml_dtypes").bfloat16
     ref, sampler = _CASES[op_name]
     if ref is None:
-        ref = _erf_ref()
+        ref = _erfc_ref() if op_name == "tessera.erfc" else _erf_ref()
     rng = np.random.default_rng(11 + len(shape) + int(np.prod(shape)))
     x = sampler(rng, shape).astype(dtype)
     res = rt.launch(_artifact(rt, op_name), (x,))
@@ -116,7 +143,9 @@ from pathlib import Path  # noqa: E402
 _OPT = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
 
 _KINDS = ["exp", "log", "sqrt", "rsqrt", "reciprocal", "abs", "neg", "sign",
-          "erf", "tanh", "sigmoid", "log1p", "expm1", "softplus"]
+          "erf", "tanh", "sigmoid", "log1p", "expm1", "softplus",
+          "cos", "tan", "sinh", "cosh", "asin", "acos", "atan", "erfc",
+          "floor", "ceil", "round", "trunc"]
 
 
 def _opt(directive, *passes):

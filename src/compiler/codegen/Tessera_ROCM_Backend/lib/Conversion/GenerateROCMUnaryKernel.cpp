@@ -36,7 +36,10 @@ static constexpr int64_t BD = 256;
 
 enum class Un {
   Exp, Log, Sqrt, Rsqrt, Reciprocal, Abs, Neg, Sign,
-  Erf, Tanh, Sigmoid, Log1p, Expm1, Softplus
+  Erf, Tanh, Sigmoid, Log1p, Expm1, Softplus,
+  // tail: trig / special / rounding (2026-06-26)
+  Cos, Tan, Sinh, Cosh, Asin, Acos, Atan, Erfc,
+  Floor, Ceil, Round, Trunc
 };
 
 static Value cst(OpBuilder &b, Location loc, Type f32, float v) {
@@ -125,6 +128,43 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<arith::AddFOp>(loc, lp, mx);
     break;
   }
+  case Un::Cos:
+    y = b.create<math::CosOp>(loc, x);
+    break;
+  case Un::Tan:
+    y = b.create<math::TanOp>(loc, x);
+    break;
+  case Un::Sinh:
+    y = b.create<math::SinhOp>(loc, x);
+    break;
+  case Un::Cosh:
+    y = b.create<math::CoshOp>(loc, x);
+    break;
+  case Un::Asin:
+    y = b.create<math::AsinOp>(loc, x);
+    break;
+  case Un::Acos:
+    y = b.create<math::AcosOp>(loc, x);
+    break;
+  case Un::Atan:
+    y = b.create<math::AtanOp>(loc, x);
+    break;
+  case Un::Erfc:
+    y = b.create<math::ErfcOp>(loc, x);
+    break;
+  case Un::Floor:
+    y = b.create<math::FloorOp>(loc, x);
+    break;
+  case Un::Ceil:
+    y = b.create<math::CeilOp>(loc, x);
+    break;
+  case Un::Round:
+    // numpy round is round-half-to-even (banker's rounding)
+    y = b.create<math::RoundEvenOp>(loc, x);
+    break;
+  case Un::Trunc:
+    y = b.create<math::TruncOp>(loc, x);
+    break;
   }
   Value sv = isF32 ? y : b.create<arith::TruncFOp>(loc, storeTy, y);
   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
@@ -178,15 +218,29 @@ struct GenerateROCMUnaryKernelPass
                   .Case("log1p", Un::Log1p)
                   .Case("expm1", Un::Expm1)
                   .Case("softplus", Un::Softplus)
+                  .Case("cos", Un::Cos)
+                  .Case("tan", Un::Tan)
+                  .Case("sinh", Un::Sinh)
+                  .Case("cosh", Un::Cosh)
+                  .Case("asin", Un::Asin)
+                  .Case("acos", Un::Acos)
+                  .Case("atan", Un::Atan)
+                  .Case("erfc", Un::Erfc)
+                  .Case("floor", Un::Floor)
+                  .Case("ceil", Un::Ceil)
+                  .Case("round", Un::Round)
+                  .Case("trunc", Un::Trunc)
                   .Default(Un::Exp);
       static const llvm::StringSet<> kValid = {
           "exp",  "log",     "sqrt",  "rsqrt", "reciprocal", "abs",  "neg",
           "sign", "erf",     "tanh",  "sigmoid", "log1p",    "expm1",
-          "softplus"};
+          "softplus", "cos", "tan",   "sinh",  "cosh", "asin", "acos",
+          "atan", "erfc",    "floor", "ceil",  "round", "trunc"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-unary-kernel: unknown kind '")
             << kindStr << "' (exp/log/sqrt/rsqrt/reciprocal/abs/neg/sign/erf/"
-                          "tanh/sigmoid/log1p/expm1/softplus)";
+                          "tanh/sigmoid/log1p/expm1/softplus/cos/tan/sinh/cosh/"
+                          "asin/acos/atan/erfc/floor/ceil/round/trunc)";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());

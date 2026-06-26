@@ -3125,6 +3125,12 @@ _ROCM_UNARY_OPS: dict[str, str] = {
     "tessera.erf": "erf", "tessera.tanh": "tanh", "tessera.sigmoid": "sigmoid",
     "tessera.log1p": "log1p", "tessera.expm1": "expm1",
     "tessera.softplus": "softplus",
+    # tail: trig / special / rounding (2026-06-26)
+    "tessera.cos": "cos", "tessera.tan": "tan", "tessera.sinh": "sinh",
+    "tessera.cosh": "cosh", "tessera.asin": "asin", "tessera.acos": "acos",
+    "tessera.atan": "atan", "tessera.erfc": "erfc",
+    "tessera.floor": "floor", "tessera.ceil": "ceil", "tessera.round": "round",
+    "tessera.trunc": "trunc",
 }
 
 

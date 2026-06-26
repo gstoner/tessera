@@ -33,6 +33,11 @@ constexpr int kRecip = 2;
 constexpr int kAbs = 3;
 constexpr int kNeg = 4;
 constexpr int kSign = 5;
+// rounding tail (2026-06-26) — direct AVX-512 roundscale intrinsics
+constexpr int kFloor = 6;
+constexpr int kCeil = 7;
+constexpr int kTrunc = 8;
+constexpr int kRound = 9;   // round-half-to-even (numpy.round)
 
 inline float scalar_unary(float v, int kind) {
     switch (kind) {
@@ -42,6 +47,10 @@ inline float scalar_unary(float v, int kind) {
     case kAbs:   return std::fabs(v);
     case kNeg:   return -v;
     case kSign:  return (v > 0.0f) ? 1.0f : (v < 0.0f ? -1.0f : 0.0f);
+    case kFloor: return std::floor(v);
+    case kCeil:  return std::ceil(v);
+    case kTrunc: return std::trunc(v);
+    case kRound: return std::nearbyint(v);  // FE_TONEAREST -> ties-to-even
     default:     return v;
     }
 }
@@ -76,6 +85,19 @@ extern "C" void tessera_x86_avx512_unary_f32(const float* X, int64_t n,
                                      one);
             break;
         }
+        case kFloor:
+            y = _mm512_roundscale_ps(v, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+            break;
+        case kCeil:
+            y = _mm512_roundscale_ps(v, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC);
+            break;
+        case kTrunc:
+            y = _mm512_roundscale_ps(v, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);
+            break;
+        case kRound:  // round-half-to-even
+            y = _mm512_roundscale_ps(v,
+                                     _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+            break;
         default: y = v; break;
         }
         _mm512_storeu_ps(out + i, y);

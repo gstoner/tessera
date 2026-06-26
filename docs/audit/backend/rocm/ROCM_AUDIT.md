@@ -361,6 +361,14 @@ become the on-silicon **oracle** the compiled path validates against.
   no polynomial approx — `avx512_unary_f32.cpp`, validated standalone); the
   transcendentals stay numpy-reference on CPU (no fused x86 claim). Status
   `compiled`.
+  - **Tail extension (2026-06-26):** added `cos`/`tan`/`sinh`/`cosh`/`asin`/
+    `acos`/`atan`/`erfc` (trig + special, via `math.{Cos,Tan,Sinh,Cosh,Asin,
+    Acos,Atan,Erfc}` → ocml) and `floor`/`ceil`/`round`/`trunc` (rounding;
+    `round` = `math.RoundEvenOp` to match numpy's round-half-to-even). All 12
+    lower through the same ROCDL path and validated on gfx1151. The x86 lane
+    gained the **rounding subset** (`floor`/`ceil`/`trunc`/`round`) as direct
+    `_mm512_roundscale_ps` intrinsics (round = ties-to-even / `std::nearbyint`);
+    trig/`erfc` are transcendental and stay numpy-reference on CPU.
 - **Elementwise binary arithmetic** (S2 binary-arithmetic family, 2026-06-26):
   a `tessera_rocm.binary` directive + `generate-rocm-binary-kernel` pass emitting
   a flat 2-operand per-element kernel (one thread per element), the binary

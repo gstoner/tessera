@@ -965,7 +965,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_unary_compiled).",
     } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                  "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                 "softplus")},
+                 "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
+                 "atan", "erfc", "floor", "ceil", "round", "trunc")},
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
     # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
     # Executes via runtime.launch() (rocm_binary_compiled). f32/f16/bf16, f32
@@ -1187,7 +1188,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                  "softplus")},
+                  "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
+                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
     **{(op, "rocm"): "tests/unit/test_rocm_binary_compiled.py"
        for op in ("sub", "div", "pow", "maximum", "minimum")},
     **{(op, "rocm"): "tests/unit/test_rocm_compare_compiled.py"

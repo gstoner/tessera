@@ -156,6 +156,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "family (and/or/xor binary, not unary) over i8 "
                             "booleans (inputs normalized via != 0), one thread "
                             "per element, dispatched by op name; bool in/out",
+    "rocm_bitwise_compiled": "AMD GPU RDNA flat elementwise bitwise kernel the "
+                            "Tessera compiler GENERATES (generate-rocm-bitwise-"
+                            "kernel -> ROCDL -> hsaco, in-process via tessera-"
+                            "opt), then HIP loads + launches it — the S2 bitwise "
+                            "family (and/or/xor binary, not unary) over i32 "
+                            "integers (full bit pattern, no normalization), one "
+                            "thread per element, dispatched by op name; i32 in/out",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -425,6 +432,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm logical artifact runs the COMPILER-GENERATED flat "
                "elementwise logical kernel (and/or/xor binary, not unary, over "
                "i8 booleans, one thread per element): tessera-opt generates + "
+               "serializes the kernel to hsaco in-process, then HIP loads + "
+               "launches it. Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Bitwise and/or/xor/not — flat elementwise over i32 integers, i32 output.
+    ("rocm", "rocm_bitwise_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_bitwise_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_bitwise_compiled", runtime_status="success",
+        reason="ROCm bitwise artifact runs the COMPILER-GENERATED flat "
+               "elementwise bitwise kernel (and/or/xor binary, not unary, over "
+               "i32 integers, one thread per element): tessera-opt generates + "
                "serializes the kernel to hsaco in-process, then HIP loads + "
                "launches it. Dispatched by op name.",
         execution_mode="hip_runtime"),

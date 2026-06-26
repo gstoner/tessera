@@ -412,8 +412,20 @@ become the on-silicon **oracle** the compiled path validates against.
   gate. The CPU half landed in the x86 backend as an AVX-512 kernel
   (`_mm512_cmpneq_epi8_mask` + `_mm512_maskz_set1_epi8` to normalize, then
   `_mm512_{and,or,xor}_si512`; `avx512_logical_i8.cpp`, validated standalone).
-  Status `compiled`. (Bitwise `and`/`or`/`xor`/`not` over integers is a separate
-  follow-up — distinct int32 input path.)
+  Status `compiled`.
+- **Elementwise bitwise** (S2 bitwise family, 2026-06-26): a
+  `tessera_rocm.bitwise` directive + `generate-rocm-bitwise-kernel` pass emitting
+  a flat elementwise kernel over **i32 integers** — the integer sibling of the
+  logical lane. `and`/`or`/`xor` (binary) + `not` (unary). Unlike the logical
+  lane, operands are NOT normalized — `arith.{andi,ori,xori}` act on the full
+  bit pattern; `not` = `a ^ -1`. The kernel emits a 4-arg signature for binary
+  kinds and a 3-arg signature for `not`. New `runtime.launch()` lane
+  `rocm_bitwise_compiled`, dispatched by op name; i32 in/out. Validated on
+  gfx1151 vs numpy across kind × shape incl. rank-3 + signed inputs
+  (`test_rocm_bitwise_compiled.py`) + a GPU-free codegen gate. The CPU half
+  landed in the x86 backend as an AVX-512 kernel (`_mm512_{and,or,xor}_si512`,
+  16 i32/vector; `not` = xor all-ones; `avx512_bitwise_i32.cpp`, validated
+  standalone). Status `compiled`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

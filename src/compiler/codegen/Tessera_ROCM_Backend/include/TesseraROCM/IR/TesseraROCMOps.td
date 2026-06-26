@@ -510,6 +510,26 @@ def ROCM_LogicalKernelOp : TesseraROCM_Op<"logical"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_BitwiseKernelOp : TesseraROCM_Op<"bitwise"> {
+  let summary = "Elementwise bitwise kernel (and / or / xor / not) over i32";
+  let description = [{
+    The directive `generate-rocm-bitwise-kernel` expands into a flat elementwise
+    gpu kernel applying a pointwise bitwise operation over N elements (one thread
+    per element, strided grid) — the standalone S2 bitwise family, operating on
+    `i32` integers:
+
+      * `and` = a & b, `or` = a | b, `xor` = a ^ b  (binary)
+      * `not` = ~a (= a ^ -1)                        (unary)
+
+    Unlike the logical lane, operands are NOT normalized — the op acts on the
+    full integer bit pattern. `not` takes one operand; the rest take two. `N` is
+    a runtime `index` arg. Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"and\"">:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

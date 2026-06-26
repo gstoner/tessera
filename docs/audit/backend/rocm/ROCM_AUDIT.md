@@ -406,6 +406,22 @@ become the on-silicon **oracle** the compiled path validates against.
   flash_attn. Shared lane `rocm_exotic_attn_compiled` (one executor + matrix row);
   f16/bf16, f32 softmax+accumulate; status `compiled`. Validated on gfx1151 vs the
   numpy attention reference (`test_rocm_exotic_attn_compiled.py`).
+- **recurrent DeltaNet scan** (`gated_deltanet`, `kimi_delta_attention`,
+  `modified_delta_attention`, 2026-06-25): the **first RECURRENT compiled ROCm
+  kernel** — a dedicated `tessera_rocm.deltanet` directive +
+  `generate-rocm-deltanet-kernel` pass emitting a causal **sequential-scan**
+  kernel (NOT a composition; no existing lane builds it). One workgroup per
+  `(b,h)`, one thread per value-column `e` holding the state column `Ŝ[:,e]` in
+  LDS — the per-step matvecs are independent per-thread `d`-loops, so the only
+  barriers are the cooperative `k`/`q` load and the modified-`‖target‖`
+  reduction. Realizes `_delta_attention_impl` (target = `V − α·Ŝᵀk` on erase;
+  `Ŝ *= α` decay; `Ŝ += β·outer(k,target)` with the optional modified
+  `/(1+‖k‖·‖target‖)` bound; `O = Q@Ŝ`; sigmoid-gate). `erase`/`modified`/gate/
+  beta/decay are compile-time flags (`modified` from the op name); `d_qk`/`d_v`
+  compile-time; f16/bf16/f32 storage, f32 compute; causal-only, state=None. Lane
+  `rocm_deltanet_compiled`; status `compiled`. Validated on gfx1151 vs the f64
+  numpy reference across all three ops × f32/f16/bf16 × flag combos
+  (`test_rocm_deltanet_compiled.py`) + a GPU-free codegen gate.
 
 ## Still Open
 
@@ -420,25 +436,19 @@ become the on-silicon **oracle** the compiled path validates against.
   - **matmul-family chains:** *(group closed)* — `batched_gemm`, `einsum`,
     `factorized_matmul`, `linear_general`, `qkv_projection` all execute on the
     shared WMMA GEMM lane (see Landed above).
-  - **exotic attention:** the **composable** members now execute —
-    `gated_attention`, `mla_decode`, `mla_decode_fused` (see Landed above). The
-    genuinely-open members need a *new substantial kernel*, not a composition of
-    existing compiled lanes, so they stay `artifact_only` by design (not
-    bookkeeping debt):
-    - **recurrent DeltaNet** — `gated_deltanet`, `kimi_delta_attention`,
-      `modified_delta_attention` are a sequential state recurrence
-      (`Ŝ_t = α_t·Ŝ_{t-1} + …`) with no existing compiled lane; a compiled
-      version needs a chunked sequential-scan kernel (the real impls use
-      chunk-parallel recurrence), which the forward-only WMMA kernels don't
-      cover.
+  - **exotic attention:** the **composable** members
+    (`gated_attention`/`mla_decode`/`mla_decode_fused`) and the **recurrent
+    DeltaNet** family (`gated_deltanet`/`kimi_delta_attention`/
+    `modified_delta_attention`, via the sequential-scan kernel) now execute (see
+    Landed above). One genuinely-open member remains:
     - **block-sparse** — `deepseek_sparse_attention` needs a top-k block-select
       index branch + a sparse KV gather; the dense flash kernel only covers the
       `top_k == all blocks` degenerate case, so claiming it "compiled" would be
-      audit inflation (Decision #25).
-    - **`hybrid_attention`** is a policy wrapper that dispatches per layer into
-      the above; it executes only for the all-compiled patterns (the
-      lightning/MLA slots) and inherits the recurrent gap for the Kimi/Delta
-      slots — so it stays `artifact_only` until the recurrent kernels land.
+      audit inflation (Decision #25). (The sliding + compressed branches reduce
+      to the compiled flash/pool lanes; the top-k gather is the open piece.)
+    - **`hybrid_attention`** is a per-layer policy wrapper; its lightning / MLA /
+      Kimi-Delta / gated-DeltaNet slots are now all compiled, so it's composable
+      — a thin dispatch lane is the only remaining work (no new kernel).
 - **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
   table + FP4/FP6; no device available. The named ROCm sub-arches
   (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic

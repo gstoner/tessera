@@ -3432,6 +3432,180 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
     return _rocm_flash_attn(q, k, v, scale=scale, causal=causal)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED DeltaNet scan lane (2026-06-25) — the gated/delta linear-
+# attention recurrence (gated_deltanet / kimi_delta_attention /
+# modified_delta_attention) as a causal sequential-scan kernel. The first
+# RECURRENT compiled ROCm kernel (no existing lane composes it). One workgroup
+# per (b,h), one thread per value-column; LDS state. ``compiler_path =
+# "rocm_deltanet_compiled"``. f16/bf16/f32 storage, f32 compute. ONE hsaco per
+# (chip, d_qk, d_v, flags, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_deltanet_hsaco_cache: dict[tuple, bytes] = {}
+
+
+def _build_compiled_deltanet_hsaco(d_qk: int, d_v: int, erase: bool,
+                                   modified: bool, has_gate: bool,
+                                   has_beta: bool, has_decay: bool,
+                                   dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+
+    def _b(v: bool) -> str:
+        return "true" if v else "false"
+
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.deltanet"() {{name = "dn", d_qk = {d_qk} : i64, '
+        f'd_v = {d_v} : i64, erase = {_b(erase)}, modified = {_b(modified)}, '
+        f'has_gate = {_b(has_gate)}, has_beta = {_b(has_beta)}, '
+        f'has_decay = {_b(has_decay)}, dtype = "{dtype}"}} : () -> ()\n}}\n')
+    key = (chip, d_qk, d_v, erase, modified, has_gate, has_beta, has_decay,
+           dtype)
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-deltanet-kernel", directive, _rocm_deltanet_hsaco_cache,
+        key)
+
+
+#: op_name -> modified flag (only modified_delta_attention bounds the delta).
+_ROCM_DELTANET_OPS = {
+    "tessera.gated_deltanet": False,
+    "tessera.kimi_delta_attention": False,
+    "tessera.modified_delta_attention": True,
+}
+
+
+def _execute_rocm_compiled_deltanet(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` DeltaNet lane: run the COMPILER-GENERATED causal
+    sequential-scan kernel for the gated/delta linear-attention recurrence.
+    Operands [Q, K, V, gate?, beta?, decay?] (optionals in that order, presence
+    via has_gate/has_beta/has_decay kwargs); ``erase`` kwarg; ``modified`` from
+    the op name. Q/K [B,H,S,Dqk], V [B,H,S,Dv]; f16/bf16/f32 storage, f32
+    compute. Causal-only (state=None, no state out)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_DELTANET_OPS:
+        raise ValueError(
+            "rocm_deltanet_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_DELTANET_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    modified = _ROCM_DELTANET_OPS[op_name]
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    if not bool(kwargs.get("causal", True)):
+        raise ValueError("rocm deltanet lane is causal-only")
+    erase = bool(kwargs.get("erase", False))
+    has_gate = bool(kwargs.get("has_gate", False))
+    has_beta = bool(kwargs.get("has_beta", False))
+    has_decay = bool(kwargs.get("has_decay", False))
+    operand_names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    need = 3 + has_gate + has_beta + has_decay
+    if len(operands) != need:
+        raise ValueError(
+            f"deltanet expects {need} operands (Q,K,V + present optionals); "
+            f"got {len(operands)}")
+    q, k, v = operands[0], operands[1], operands[2]
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("deltanet expects rank-4 (B,H,S,D) Q/K/V")
+    ptr = 3
+    gate = operands[ptr] if has_gate else None
+    ptr += 1 if has_gate else 0
+    beta = operands[ptr] if has_beta else None
+    ptr += 1 if has_beta else 0
+    decay = operands[ptr] if has_decay else None
+
+    B, H, S, d_qk = (int(x) for x in q.shape)
+    d_v = int(v.shape[-1])
+    if k.shape != q.shape or v.shape[:3] != q.shape[:3]:
+        raise ValueError(
+            f"deltanet K must match Q and V must share B,H,S; got Q{q.shape} "
+            f"K{k.shape} V{v.shape}")
+    bh = B * H
+
+    store: Any  # numpy dtype varies per branch (f32 / f16 / bf16)
+    if q.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif q.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and q.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm deltanet lane handles f16/bf16/f32; got {q.dtype}")
+
+    hsaco = _build_compiled_deltanet_hsaco(
+        d_qk, d_v, erase, modified, has_gate, has_beta, has_decay, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm deltanet: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm deltanet: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"dn") != 0:
+        raise RuntimeError("rocm deltanet: kernel symbol 'dn' not found")
+
+    qc = np.ascontiguousarray(q, dtype=store).reshape(-1)
+    kc = np.ascontiguousarray(k, dtype=store).reshape(-1)
+    vc = np.ascontiguousarray(v, dtype=store).reshape(-1)
+    n_qk, n_v, n_sc = bh * S * d_qk, bh * S * d_v, bh * S
+    o = np.zeros(n_v, dtype=store)
+    # storage-dtype gate (or len-1 dummy); f32 beta/decay (or len-1 dummy).
+    gate_c = (np.ascontiguousarray(gate, dtype=store).reshape(-1)
+              if has_gate else np.zeros(1, dtype=store))
+    beta_c = (np.ascontiguousarray(beta, dtype=np.float32).reshape(-1)
+              if has_beta else np.zeros(1, np.float32))
+    decay_c = (np.ascontiguousarray(decay, dtype=np.float32).reshape(-1)
+               if has_decay else np.zeros(1, np.float32))
+
+    dQ, dK, dV, dO, dG = (ctypes.c_void_p() for _ in range(5))
+    dBeta, dDecay = ctypes.c_void_p(), ctypes.c_void_p()
+    allocs = [(dQ, esz * n_qk), (dK, esz * n_qk), (dV, esz * n_v),
+              (dO, esz * n_v), (dG, esz * gate_c.size),
+              (dBeta, 4 * beta_c.size), (dDecay, 4 * decay_c.size)]
+    for dev, size in allocs:
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm deltanet: hipMalloc failed")
+    hip.hipMemcpy(dQ, qc.ctypes.data_as(ctypes.c_void_p), esz * n_qk, 1)
+    hip.hipMemcpy(dK, kc.ctypes.data_as(ctypes.c_void_p), esz * n_qk, 1)
+    hip.hipMemcpy(dV, vc.ctypes.data_as(ctypes.c_void_p), esz * n_v, 1)
+    hip.hipMemcpy(dG, gate_c.ctypes.data_as(ctypes.c_void_p),
+                  esz * gate_c.size, 1)
+    hip.hipMemcpy(dBeta, beta_c.ctypes.data_as(ctypes.c_void_p),
+                  4 * beta_c.size, 1)
+    hip.hipMemcpy(dDecay, decay_c.ctypes.data_as(ctypes.c_void_p),
+                  4 * decay_c.size, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dQ, n_qk) + _mr(dK, n_qk) + _mr(dV, n_v) + _mr(dO, n_v)
+                   + _mr(dG, gate_c.size) + _mr(dBeta, beta_c.size)
+                   + _mr(dDecay, decay_c.size) + [ctypes.c_int64(S)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, bh, 1, 1, d_v, 1, 1, 0, None, arr, None)
+    devs = [dQ, dK, dV, dO, dG, dBeta, dDecay]
+    if rc != 0:
+        for dev in devs:
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm deltanet: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), dO, esz * n_v, 2)
+    for dev in devs:
+        hip.hipFree(dev)
+    return o.reshape(B, H, S, d_v)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -3452,6 +3626,7 @@ def _executor_table():
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
+        "rocm_deltanet_compiled": _execute_rocm_compiled_deltanet,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
         "nvidia_mma":           _execute_nvidia_mma_artifact,
     }

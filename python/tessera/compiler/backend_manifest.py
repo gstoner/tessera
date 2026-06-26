@@ -1011,6 +1011,30 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel. Executes via runtime.launch() "
                  "(rocm_exotic_attn_compiled).",
     },
+    "gated_deltanet": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("recurrent",),
+        "notes": "Gated/delta linear-attention recurrence as a causal "
+                 "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-kernel: one "
+                 "workgroup per (b,h), one thread per value-column, LDS state) — "
+                 "the first recurrent compiled ROCm kernel. erase/gate/beta/decay "
+                 "flags. Executes via runtime.launch() (rocm_deltanet_compiled).",
+    },
+    "kimi_delta_attention": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("recurrent",),
+        "notes": "Kimi Delta Attention — the gated/delta scan kernel "
+                 "(generate-rocm-deltanet-kernel), same recurrence as "
+                 "gated_deltanet. Executes via runtime.launch() "
+                 "(rocm_deltanet_compiled).",
+    },
+    "modified_delta_attention": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("recurrent",),
+        "notes": "Modified Delta Attention — the gated/delta scan kernel with a "
+                 "bounded delta update (delta / (1 + ‖k‖·‖target‖)). Executes via "
+                 "runtime.launch() (rocm_deltanet_compiled).",
+    },
 }
 
 
@@ -1128,6 +1152,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("mla_decode", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("mla_decode_fused", "rocm"):
         "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("gated_deltanet", "rocm"): "tests/unit/test_rocm_deltanet_compiled.py",
+    ("kimi_delta_attention", "rocm"):
+        "tests/unit/test_rocm_deltanet_compiled.py",
+    ("modified_delta_attention", "rocm"):
+        "tests/unit/test_rocm_deltanet_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

@@ -18,7 +18,7 @@
 | `transpose_rule` | 0 | 474 |
 | `sharding_rule` | 47 | 427 |
 | `lowering_rule` | 0 | 474 |
-| `backend_kernel` | 474 | 0 |
+| `backend_kernel` | 467 | 7 |
 
 ## Per-category breakdown
 
@@ -28,7 +28,7 @@
 | S2 | `reduction` | 16 | — | — | — | — | 16 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
-| S5 | `control_flow` | 7 | — | — | — | — | 7 |
+| S5 | `control_flow` | 7 | — | — | — | — | — |
 | S7 | `attention` | 28 | — | — | 14 | — | 28 |
 | S7 | `position_encoding` | 3 | — | — | — | — | 3 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
@@ -90,7 +90,7 @@
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 56 |
-| S5 | 7 | 0 | 0 | 0 | 7 |
+| S5 | 7 | 0 | 0 | 0 | 0 |
 | S7 | 58 | 0 | 0 | 14 | 58 |
 | S10 | 18 | 0 | 0 | 0 | 18 |
 | S11 | 33 | 0 | 0 | 0 | 33 |

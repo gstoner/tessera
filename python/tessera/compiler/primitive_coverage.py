@@ -2840,6 +2840,15 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # transpose / math / shape / dtype / lowering / tests); per-name
         # overrides in `contract_overrides` (next line) still win.
         _apply_category_overrides(contract, category)
+        # S5 control-flow primitives (cond / switch / scan / associative_scan /
+        # fori_loop / while_loop / map) have NO per-backend compute kernel — they
+        # lower to scf / host control flow on every target, not a dispatched
+        # kernel. The honest `backend_kernel` label is therefore not_applicable
+        # (the universal Phase-G gate test explicitly sanctions the control_flow
+        # category for this), which closes the axis on CPU + ROCm (+ every
+        # target) at once; correctness is carried by lowering_rule (complete).
+        if category == "control_flow":
+            contract["backend_kernel"] = "not_applicable"
         _apply_per_name_overrides(contract, name)
         contract.update(contract_overrides.get(name, {}))
         contract.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))

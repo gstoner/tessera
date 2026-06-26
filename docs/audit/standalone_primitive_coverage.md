@@ -140,7 +140,7 @@ the high-risk S1 entries and milestone sentinels. Tests compare these rows to
 | `matmul` | loop_nest | partial | yes | registered | partial | backend_kernel | - |
 | `permute` | tensor_algebra | partial | yes | registered | partial | backend_kernel | - |
 | `collective_permute` | collective | partial | yes | registered | reference_only | backend_kernel | all |
-| `scan` | control_flow | partial | yes | not_applicable | reference_only | backend_kernel | all |
+| `scan` | control_flow | partial | yes | not_applicable | reference_only | - | all |
 | `selective_ssm` | state_space | partial | yes | registered | partial | sharding_rule, backend_kernel | Mamba/SSM |
 | `dataset_map` | data | partial | yes | not_applicable | reference_only | backend_kernel | all |
 | `tokenizer_bpe` | tokenizer | partial | yes | not_applicable | reference_only | backend_kernel | all |

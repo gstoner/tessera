@@ -29,14 +29,30 @@ static void check(const char* name, int kind, int64_t rows, int64_t cols) {
     tessera_x86_avx512_reduce_f32(x.data(), rows, cols, avx.data(), kind);
 
     for (int64_t r = 0; r < rows; ++r) {
-        // hand-computed expectation (independent of both kernels)
+        // hand-computed expectation (independent of both kernels). NaN must
+        // propagate (numpy semantics) — for any kind, a NaN in the row => NaN.
+        bool row_nan = false;
         double want = (kind == 1) ? -1e30 : 0.0;
         for (int64_t c = 0; c < cols; ++c) {
             double v = x[(size_t)r * cols + c];
+            if (std::isnan(v)) { row_nan = true; continue; }
             if (kind == 1) want = v > want ? v : want;
             else want += v;
         }
         if (kind == 2 && cols > 0) want /= (double)cols;
+
+        if (row_nan) {
+            // every kind must yield NaN from both kernels
+            if (!std::isnan(avx[r]) || !std::isnan(ref[r])) {
+                std::printf("FAIL %s kind=%d [%lld,%lld] row %lld: NaN not "
+                            "propagated: avx=%g ref=%g\n", name, kind,
+                            (long long)rows, (long long)cols, (long long)r,
+                            avx[r], ref[r]);
+                ++g_fail;
+                return;
+            }
+            continue;
+        }
 
         float tol = 1e-3f * (1.0f + std::fabs((float)want));
         if (std::fabs(avx[r] - ref[r]) > tol ||
@@ -53,6 +69,29 @@ static void check(const char* name, int kind, int64_t rows, int64_t cols) {
                 (long long)cols);
 }
 
+// NaN propagation: a row with a NaN must reduce to NaN for every kind, in both
+// the vector body and the scalar tail (matches numpy np.amax/np.sum semantics).
+static void check_nan(int kind, int64_t cols, int64_t nan_col) {
+    const int64_t rows = 3;
+    std::vector<float> x((size_t)rows * cols, 1.5f);
+    std::vector<float> avx(rows), ref(rows);
+    for (int64_t r = 0; r < rows; ++r)
+        x[(size_t)r * cols + nan_col] = std::nanf("");
+    tessera_x86_avx512_reduce_f32(x.data(), rows, cols, avx.data(), kind);
+    tessera_x86_reference_reduce_f32(x.data(), rows, cols, ref.data(), kind);
+    for (int64_t r = 0; r < rows; ++r) {
+        if (!std::isnan(avx[r]) || !std::isnan(ref[r])) {
+            std::printf("FAIL nan kind=%d cols=%lld nan_col=%lld row %lld: "
+                        "avx=%g ref=%g\n", kind, (long long)cols,
+                        (long long)nan_col, (long long)r, avx[r], ref[r]);
+            ++g_fail;
+            return;
+        }
+    }
+    std::printf("ok   nan kind=%d cols=%lld nan_col=%lld\n", kind,
+                (long long)cols, (long long)nan_col);
+}
+
 int main() {
     for (int kind = 0; kind <= 2; ++kind) {
         check("aligned", kind, 4, 64);     // cols multiple of 16
@@ -60,6 +99,8 @@ int main() {
         check("small", kind, 3, 5);        // cols < 16 (all scalar tail)
         check("wide", kind, 2, 1024);      // many vector steps
         check("onecol", kind, 5, 1);       // degenerate
+        check_nan(kind, 64, 5);            // NaN in the vector body
+        check_nan(kind, 70, 67);           // NaN in the scalar tail
     }
     std::printf(g_fail ? "\n%d FAILED\n" : "\nALL PASSED\n", g_fail);
     return g_fail ? 1 : 0;

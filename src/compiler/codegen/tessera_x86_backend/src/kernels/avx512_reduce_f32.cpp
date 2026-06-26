@@ -19,6 +19,11 @@ namespace {
 constexpr int kSum = 0;
 constexpr int kMax = 1;
 constexpr int kMean = 2;
+// NaN must PROPAGATE in reduce_max to match the reference (numpy `np.amax`):
+// a row containing a NaN reduces to NaN. Plain MAXPS / ordered `>` would drop
+// it. We track NaN explicitly (the f32 self-inequality test) and force NaN out.
+inline bool is_nan_f32(float v) { return v != v; }
+const float kQNaN = std::numeric_limits<float>::quiet_NaN();
 }  // namespace
 
 extern "C" void tessera_x86_reference_reduce_f32(const float* X, int64_t rows,
@@ -28,10 +33,14 @@ extern "C" void tessera_x86_reference_reduce_f32(const float* X, int64_t rows,
         const float* row = X + r * cols;
         if (kind == kMax) {
             float acc = -std::numeric_limits<float>::infinity();
-            for (int64_t c = 0; c < cols; ++c)
-                acc = row[c] > acc ? row[c] : acc;
-            out[r] = acc;
-        } else {  // sum / mean
+            bool nan = false;
+            for (int64_t c = 0; c < cols; ++c) {
+                float v = row[c];
+                if (is_nan_f32(v)) nan = true;
+                else if (v > acc) acc = v;
+            }
+            out[r] = nan ? kQNaN : acc;
+        } else {  // sum / mean — `+` already propagates NaN
             float acc = 0.0f;
             for (int64_t c = 0; c < cols; ++c) acc += row[c];
             out[r] = (kind == kMean && cols > 0) ? acc / (float)cols : acc;
@@ -48,12 +57,21 @@ extern "C" void tessera_x86_avx512_reduce_f32(const float* X, int64_t rows,
         int64_t c = 0;
         if (kind == kMax) {
             __m512 vacc = _mm512_set1_ps(-std::numeric_limits<float>::infinity());
-            for (; c + vstep <= cols; c += vstep)
-                vacc = _mm512_max_ps(vacc, _mm512_loadu_ps(row + c));
+            bool nan = false;
+            for (; c + vstep <= cols; c += vstep) {
+                __m512 v = _mm512_loadu_ps(row + c);
+                // any NaN lane in this chunk? (v != v, unordered with itself)
+                if (_mm512_cmp_ps_mask(v, v, _CMP_UNORD_Q)) nan = true;
+                vacc = _mm512_max_ps(vacc, v);
+            }
             float acc = _mm512_reduce_max_ps(vacc);
-            for (; c < cols; ++c) acc = row[c] > acc ? row[c] : acc;
-            out[r] = acc;
-        } else {  // sum / mean
+            for (; c < cols; ++c) {
+                float v = row[c];
+                if (is_nan_f32(v)) nan = true;
+                else if (v > acc) acc = v;
+            }
+            out[r] = nan ? kQNaN : acc;
+        } else {  // sum / mean — `+` already propagates NaN
             __m512 vacc = _mm512_setzero_ps();
             for (; c + vstep <= cols; c += vstep)
                 vacc = _mm512_add_ps(vacc, _mm512_loadu_ps(row + c));

@@ -42,6 +42,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_reduce_f32.cpp
   src/kernels/avx512_unary_f32.cpp
   src/kernels/avx512_binary_f32.cpp
+  src/kernels/avx512_compare_f32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -65,3 +66,6 @@ target_link_libraries(test_unary PRIVATE tessera_x86_backend)
 
 add_executable(test_binary tests/test_binary.cpp)
 target_link_libraries(test_binary PRIVATE tessera_x86_backend)
+
+add_executable(test_compare tests/test_compare.cpp)
+target_link_libraries(test_compare PRIVATE tessera_x86_backend)

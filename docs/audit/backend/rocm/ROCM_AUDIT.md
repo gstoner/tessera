@@ -376,6 +376,20 @@ become the on-silicon **oracle** the compiled path validates against.
   unordered-compare blend — `avx512_binary_f32.cpp`, validated standalone); `pow`
   is transcendental and stays numpy-reference on CPU (no fused x86 claim). Status
   `compiled`.
+- **Elementwise comparison** (S2 comparison family, 2026-06-26): a
+  `tessera_rocm.compare` directive + `generate-rocm-compare-kernel` pass emitting
+  a flat 2-operand per-element kernel with **boolean (`i8` 0/1) output** — the
+  first compiled lane with a non-float result. Covers `eq`/`ne`/`lt`/`le`/`gt`/
+  `ge` (`arith.cmpf` → `extui i1→i8`). NaN semantics match numpy: every
+  predicate ORDERED (NaN → false) except `ne` (unordered-or-not-equal, NaN →
+  true). New `runtime.launch()` lane `rocm_compare_compiled`, dispatched by op
+  name; f16/bf16/f32 input storage, f32 compare, bool output (asymmetric in/out
+  element sizes in the executor). Validated on gfx1151 vs numpy across kind ×
+  dtype × shape incl. rank-3 + NaN semantics (`test_rocm_compare_compiled.py`) +
+  a GPU-free codegen gate. The CPU half landed in the x86 backend as an AVX-512
+  kernel (`_mm512_cmp_ps_mask` + `_mm_maskz_set1_epi8` mask→0/1 bytes;
+  `avx512_compare_f32.cpp`, validated standalone — C's native float operators
+  already match numpy's NaN rule). Status `compiled`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

@@ -1211,6 +1211,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sub", "div", "maximum", "minimum")},
     **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
        for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{(op, "x86"): "tests/unit/test_x86_logical_compiled.py"
+       for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1629,6 +1631,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
                  "runtime-loaded; x86_compare_compiled lane; bool output)",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # S2 logical family — hand-written AVX-512 kernel
+    # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes
+    # (x86_logical_compiled). i8 bool in/out; inputs normalized via != 0.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("bool",),
+        "notes": f"AVX-512 logical {op} (tessera_x86_avx512_logical_i8, "
+                 "runtime-loaded; x86_logical_compiled lane; bool in/out)",
+    } for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
 }
 
 

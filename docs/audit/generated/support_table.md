@@ -180,10 +180,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `bitwise_not` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `bitwise_or` | logical | public | public | registered | complete | partial | reference | ready | none |
 | `bitwise_xor` | logical | public | public | registered | complete | partial | reference | ready | none |
-| `logical_and` | logical | public | public | registered | complete | partial | reference | ready | none |
-| `logical_not` | logical | public | public | registered | complete | partial | reference | ready | none |
-| `logical_or` | logical | public | public | registered | complete | partial | reference | ready | none |
-| `logical_xor` | logical | public | public | registered | complete | partial | reference | ready | none |
+| `logical_and` | logical | public | public | registered | complete | partial | fused | ready | none |
+| `logical_not` | logical | public | public | registered | complete | partial | fused | ready | none |
+| `logical_or` | logical | public | public | registered | complete | partial | fused | ready | none |
+| `logical_xor` | logical | public | public | registered | complete | partial | fused | ready | none |
 | `batched_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `dequant_grouped_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `dequant_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
@@ -342,7 +342,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
-| logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| logical | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | loop_nest | 12 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
 | loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpRN· |

@@ -142,6 +142,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "it — the S2 binary-arithmetic family (sub/div/pow/"
                             "maximum/minimum), one thread per element, dispatched "
                             "by op name; f32/f16/bf16 storage, f32 compute",
+    "rocm_compare_compiled": "AMD GPU RDNA flat 2-operand elementwise comparison "
+                            "kernel the Tessera compiler GENERATES (generate-rocm-"
+                            "compare-kernel -> ROCDL -> hsaco, in-process via "
+                            "tessera-opt), then HIP loads + launches it — the S2 "
+                            "comparison family (eq/ne/lt/le/gt/ge), one thread per "
+                            "element, dispatched by op name; f32/f16/bf16 input "
+                            "storage, f32 compare, i8/bool output",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -389,6 +396,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm binary artifact runs the COMPILER-GENERATED flat 2-operand "
                "elementwise binary-arithmetic kernel (sub/div/pow/maximum/minimum, "
                "one thread per element): tessera-opt generates + serializes the "
+               "kernel to hsaco in-process, then HIP loads + launches it. "
+               "Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Comparison eq/ne/lt/le/gt/ge — flat 2-operand elementwise, bool output.
+    ("rocm", "rocm_compare_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_compare_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_compare_compiled", runtime_status="success",
+        reason="ROCm compare artifact runs the COMPILER-GENERATED flat 2-operand "
+               "elementwise comparison kernel (eq/ne/lt/le/gt/ge, one thread per "
+               "element, i8/bool output): tessera-opt generates + serializes the "
                "kernel to hsaco in-process, then HIP loads + launches it. "
                "Dispatched by op name.",
         execution_mode="hip_runtime"),

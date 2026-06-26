@@ -467,6 +467,28 @@ def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_CompareKernelOp : TesseraROCM_Op<"compare"> {
+  let summary = "Elementwise comparison kernel (eq / ne / lt / le / gt / ge)";
+  let description = [{
+    The directive `generate-rocm-compare-kernel` expands into a flat 2-operand
+    elementwise gpu kernel applying a pointwise comparison over N elements (one
+    thread per element, strided grid) — the standalone S2 comparison family,
+    producing a boolean (`i8` 0/1) result. The two operands share a float
+    storage `dtype` (f16/bf16/f32); the comparison runs in **f32**:
+
+      * `eq` = a == b, `ne` = a != b, `lt` = a < b
+      * `le` = a <= b, `gt` = a > b, `ge` = a >= b
+
+    NaN semantics follow numpy: every predicate is ORDERED (NaN → false) EXCEPT
+    `ne`, which is unordered-or-not-equal (NaN → true). `N` is a runtime `index`
+    arg. Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"eq\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

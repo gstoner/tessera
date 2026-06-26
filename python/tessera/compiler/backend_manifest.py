@@ -977,6 +977,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "per-element kernel (generate-rocm-binary-kernel). Executes via "
                  "runtime.launch() (rocm_binary_compiled).",
     } for op in ("sub", "div", "pow", "maximum", "minimum")},
+    # S2 comparison family — flat 2-operand per-element kernel
+    # (generate-rocm-compare-kernel) with boolean (i8 0/1) output, NaN semantics
+    # matching numpy. Executes via runtime.launch() (rocm_compare_compiled).
+    # f32/f16/bf16 input storage, f32 compare, bool output.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone elementwise comparison {op} — flat 2-operand "
+                 "per-element kernel (generate-rocm-compare-kernel), bool output. "
+                 "Executes via runtime.launch() (rocm_compare_compiled).",
+    } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1179,6 +1190,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "softplus")},
     **{(op, "rocm"): "tests/unit/test_rocm_binary_compiled.py"
        for op in ("sub", "div", "pow", "maximum", "minimum")},
+    **{(op, "rocm"): "tests/unit/test_rocm_compare_compiled.py"
+       for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",

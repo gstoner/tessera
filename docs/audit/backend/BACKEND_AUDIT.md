@@ -33,7 +33,9 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   subset sqrt/rsqrt/reciprocal/abs/sign/floor/ceil/trunc/round — transcendentals
   stay numpy-reference; `test_x86_unary_compiled.py`); `x86_binary_compiled`
   (`tessera_x86_avx512_binary_f32`, sub/div/maximum/minimum, NaN-propagating
-  max/min — `pow` stays numpy-reference; `test_x86_binary_compiled.py`).
+  max/min — `pow` stays numpy-reference; `test_x86_binary_compiled.py`);
+  `x86_compare_compiled` (`tessera_x86_avx512_compare_f32`, eq/ne/lt/le/gt/ge,
+  f32 in / bool out, numpy NaN semantics; `test_x86_compare_compiled.py`).
 - **Non-executable targets are honest:** NVIDIA and ROCm are
   recognized but return unsupported/unimplemented behavior rather than fake
   success.

@@ -169,7 +169,7 @@ edm_precondition,0,0,0,0,1,,structural_only,unclassified — defaults to structu
 einsum,9,0,1,9,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,9 direct test references
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
-eq,1,0,0,1,1,bf16 f32,covered_by_family,category default for 'comparison'
+eq,3,0,1,3,0,bf16 f32,directly_tested,3 direct test references
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 erfc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
@@ -191,7 +191,7 @@ fused_epilogue,3,6,1,9,0,,directly_tested,9 direct test references
 gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
 gated_deltanet,25,4,1,29,0,f32 fp64,directly_tested,29 direct test references
 gather,16,1,0,17,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,17 direct test references
-ge,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+ge,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 gelu,45,19,1,64,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,64 direct test references
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
@@ -201,7 +201,7 @@ group_norm,6,0,0,6,0,,directly_tested,6 direct test references
 grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
 grpo_policy_loss,6,3,0,9,0,,directly_tested,9 direct test references
 gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
-gt,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 huber_loss,2,0,0,2,0,,directly_tested,2 direct test references
 hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
 ifft,3,0,0,3,0,fp32,directly_tested,3 direct test references
@@ -236,7 +236,7 @@ latent_kv_compress,6,19,0,25,0,fp16 fp32,directly_tested,25 direct test referenc
 latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test references
 latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
 layer_norm,24,7,3,31,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,31 direct test references
-le,1,0,0,1,1,bf16 f32,covered_by_family,category default for 'comparison'
+le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
 linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
@@ -258,7 +258,7 @@ logical_xor,2,0,0,2,0,,directly_tested,2 direct test references
 logsumexp,4,3,0,7,0,,directly_tested,7 direct test references
 lookahead_sparse_attention,15,4,1,19,0,,directly_tested,19 direct test references
 lora_linear,5,0,0,5,0,,directly_tested,5 direct test references
-lt,2,0,1,2,0,bf16 f32,directly_tested,2 direct test references
+lt,4,0,2,4,0,bf16 f32,directly_tested,4 direct test references
 lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
 mae_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
@@ -304,7 +304,7 @@ mul,85,4,7,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,dire
 multi_head_attention,7,0,1,7,0,,directly_tested,7 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
-ne,1,0,0,1,1,bf16 f32,covered_by_family,category default for 'comparison'
+ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,4,0,0,4,0,,directly_tested,4 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 normalize_group_advantages,2,0,0,2,0,,directly_tested,2 direct test references
@@ -410,7 +410,7 @@ sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,103,37,15,140,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,140 direct test references
+softmax,104,37,16,141,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,141 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

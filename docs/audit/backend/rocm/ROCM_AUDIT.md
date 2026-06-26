@@ -383,6 +383,20 @@ become the on-silicon **oracle** the compiled path validates against.
   the `nn.functional.alibi` numpy reference across H×S incl. >1 block, default +
   explicit slopes (`test_rocm_alibi_compiled.py`) + a GPU-free codegen gate (in
   `test_rocm_activation_rope_codegen.py`). **Closes the positional group.**
+- **matmul-family chains** (`batched_gemm`, `linear_general`, `qkv_projection`,
+  `factorized_matmul`, `einsum`, 2026-06-25): all five execute on the **same
+  COMPILER-GENERATED WMMA GEMM kernel** (the `rocm_compiled` spine), reshaped /
+  batched / split in the runtime — the matmul analog of how flash_attn GQA/MQA
+  reuse the FA kernel (no new MLIR pass). `batched_gemm` loops the gemm over
+  leading batch dims; `linear_general` (axis=-1) reshapes [...,K]→[M,K] + gemm +
+  bias; `qkv_projection` is the packed x@W_qkv projection (the 3-way split is a
+  trivial host view); `factorized_matmul` is the GPU matmul + an exact host
+  rank-r SVD-truncate epilogue; `einsum` maps single-contraction two-operand
+  specs to a (batched) gemm (canonicalize + transpose) and emits a stable
+  *unsupported* diagnostic otherwise. Shared lane `rocm_matmul_family_compiled`
+  (one executor + matrix row); f16/bf16, f32 accumulate; status `compiled`.
+  Validated on gfx1151 vs numpy across dtype × shape incl. multi-batch
+  (`test_rocm_matmul_family_compiled.py`). **Closes the matmul-family group.**
 
 ## Still Open
 
@@ -394,8 +408,9 @@ become the on-silicon **oracle** the compiled path validates against.
     execute as compiled kernels (see Landed above).
   - **positional:** *(group closed)* — `rope` and `alibi` both execute as
     compiled kernels (see Landed above).
-  - **matmul-family chains:** `batched_gemm`, `einsum`, `factorized_matmul`,
-    `linear_general`, `qkv_projection`;
+  - **matmul-family chains:** *(group closed)* — `batched_gemm`, `einsum`,
+    `factorized_matmul`, `linear_general`, `qkv_projection` all execute on the
+    shared WMMA GEMM lane (see Landed above).
   - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,
     `gated_deltanet`, `hybrid_attention`, `kimi_delta_attention`,
     `mla_decode(_fused)`, `modified_delta_attention`.

@@ -12,8 +12,8 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 15 |
-| ``artifact_only`` | 15 |
+| ``compiled`` | 20 |
+| ``artifact_only`` | 10 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -81,13 +81,13 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
-| batched_gemm | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | 72% | - |
-| einsum | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
-| factorized_matmul | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| batched_gemm | compiled | fp16,bf16 | hipcc≥7.2.4 | - | 72% | - |
+| einsum | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
+| factorized_matmul | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | fused_epilogue | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
-| linear_general | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| linear_general | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | matmul | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 75% | - |
-| qkv_projection | artifact_only | fp32 | hipcc≥7.2.4 | (32, 32, 8, 1) | - | - |
+| qkv_projection | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 
 ## How to read this
 

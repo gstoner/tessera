@@ -39,6 +39,7 @@ add_library(tessera_x86_backend
   src/kernels/amx_gemm_bf16.cpp
   src/kernels/amx_gemm_int8.cpp
   src/kernels/avx512_vnni_gemm_int8.cpp
+  src/kernels/avx512_reduce_f32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -53,3 +54,6 @@ target_link_libraries(test_gemm PRIVATE tessera_x86_backend)
 
 add_executable(test_gemm_reference_tails tests/test_gemm_reference_tails.cpp)
 target_link_libraries(test_gemm_reference_tails PRIVATE tessera_x86_backend)
+
+add_executable(test_reduce tests/test_reduce.cpp)
+target_link_libraries(test_reduce PRIVATE tessera_x86_backend)

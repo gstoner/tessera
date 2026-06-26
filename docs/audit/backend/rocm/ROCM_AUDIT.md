@@ -341,6 +341,21 @@ become the on-silicon **oracle** the compiled path validates against.
   GPU-free codegen gate. The CPU half (AVX-512) landed in the x86 backend
   (`avx512_reduce_f32.cpp`) — so the reduction family now has a real optimized
   kernel on both devices we have hardware for. Status `compiled`.
+- **Elementwise unary math** (S2 scalar-math / stability family, 2026-06-25):
+  a `tessera_rocm.unary` directive + `generate-rocm-unary-kernel` pass emitting
+  a flat per-element kernel (one thread per element), the unary sibling of the
+  activation lane. Covers `exp`/`log`/`sqrt`/`rsqrt`/`reciprocal`/`abs`
+  (`absolute`)/`sign`/`erf`/`tanh`/`sigmoid`/`log1p`/`expm1`/`softplus`
+  (softplus stable: `log1p(exp(-|x|)) + max(x,0)`); transcendentals lower
+  through the `math` → ROCDL path. New `runtime.launch()` lane
+  `rocm_unary_compiled`, dispatched by op name; f16/bf16/f32 storage, f32
+  compute. Validated on gfx1151 vs numpy across kind × dtype × shape incl.
+  rank-3 (`test_rocm_unary_compiled.py`) + a GPU-free codegen gate. The CPU
+  half landed in the x86 backend as an AVX-512 kernel for the **algebraic
+  subset** (`sqrt`/`rsqrt`/`reciprocal`/`abs`/`neg`/`sign`, direct intrinsics,
+  no polynomial approx — `avx512_unary_f32.cpp`, validated standalone); the
+  transcendentals stay numpy-reference on CPU (no fused x86 claim). Status
+  `compiled`.
 - **rmsnorm / layer_norm** (2026-06-25): the row-reduction siblings of the
   softmax kernel — a `tessera_rocm.norm` directive + `generate-rocm-norm-kernel`
   pass (one workgroup per row). rmsnorm tree-reduces Σx² in one pass; layer_norm

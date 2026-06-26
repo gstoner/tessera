@@ -422,6 +422,29 @@ def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
+  let summary = "Elementwise unary math kernel (exp / log / sqrt / erf / …)";
+  let description = [{
+    The directive `generate-rocm-unary-kernel` expands into a flat elementwise
+    gpu kernel applying a pointwise unary math function over N elements (one
+    thread per element, strided grid) — the standalone S2 scalar-math /
+    stability family, the unary sibling of the activation lane. All kinds
+    compute in **f32** regardless of storage dtype; the transcendentals lower
+    through the `math` → ROCDL path:
+
+      * algebraic:   `sqrt`, `rsqrt`, `reciprocal`, `abs`, `neg`, `sign`
+      * transcend.:  `exp`, `log`, `erf`, `tanh`, `sigmoid`
+      * stability:   `log1p`, `expm1`, `softplus`
+
+    `N` is a runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
+    Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"exp\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

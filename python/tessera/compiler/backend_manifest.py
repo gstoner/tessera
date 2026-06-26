@@ -953,6 +953,19 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "of the fused SwiGLU gate-multiply. Executes via "
                  "runtime.launch() (rocm_silu_mul_compiled).",
     },
+    # S2 scalar-math / stability family — flat per-element unary math kernel
+    # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
+    # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
+    # compute. The transcendentals lower through the math → ROCDL path.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone elementwise {op} — flat per-element unary-math "
+                 "kernel (generate-rocm-unary-kernel). Executes via "
+                 "runtime.launch() (rocm_unary_compiled).",
+    } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
+                 "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
+                 "softplus")},
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1149,6 +1162,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
+    **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
+       for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
+                  "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
+                  "softplus")},
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",

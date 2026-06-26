@@ -397,6 +397,15 @@ become the on-silicon **oracle** the compiled path validates against.
   (one executor + matrix row); f16/bf16, f32 accumulate; status `compiled`.
   Validated on gfx1151 vs numpy across dtype × shape incl. multi-batch
   (`test_rocm_matmul_family_compiled.py`). **Closes the matmul-family group.**
+- **exotic-attention compositions** (`gated_attention`, `mla_decode`,
+  `mla_decode_fused`, 2026-06-25): the attention analog of the matmul-family
+  lane — each is built by COMPOSING already-compiled kernels, no new MLIR pass.
+  `gated_attention` = the WMMA flash_attn kernel × an elementwise sigmoid-gate;
+  `mla_decode` = latent K/V projections (WMMA GEMM) + flash_attn; `mla_decode_fused`
+  = down/up projections (`c=x@w_dkv; K=c@w_uk; V=c@w_uv` on the WMMA GEMM) +
+  flash_attn. Shared lane `rocm_exotic_attn_compiled` (one executor + matrix row);
+  f16/bf16, f32 softmax+accumulate; status `compiled`. Validated on gfx1151 vs the
+  numpy attention reference (`test_rocm_exotic_attn_compiled.py`).
 
 ## Still Open
 
@@ -411,9 +420,25 @@ become the on-silicon **oracle** the compiled path validates against.
   - **matmul-family chains:** *(group closed)* — `batched_gemm`, `einsum`,
     `factorized_matmul`, `linear_general`, `qkv_projection` all execute on the
     shared WMMA GEMM lane (see Landed above).
-  - **exotic attention:** `deepseek_sparse_attention`, `gated_attention`,
-    `gated_deltanet`, `hybrid_attention`, `kimi_delta_attention`,
-    `mla_decode(_fused)`, `modified_delta_attention`.
+  - **exotic attention:** the **composable** members now execute —
+    `gated_attention`, `mla_decode`, `mla_decode_fused` (see Landed above). The
+    genuinely-open members need a *new substantial kernel*, not a composition of
+    existing compiled lanes, so they stay `artifact_only` by design (not
+    bookkeeping debt):
+    - **recurrent DeltaNet** — `gated_deltanet`, `kimi_delta_attention`,
+      `modified_delta_attention` are a sequential state recurrence
+      (`Ŝ_t = α_t·Ŝ_{t-1} + …`) with no existing compiled lane; a compiled
+      version needs a chunked sequential-scan kernel (the real impls use
+      chunk-parallel recurrence), which the forward-only WMMA kernels don't
+      cover.
+    - **block-sparse** — `deepseek_sparse_attention` needs a top-k block-select
+      index branch + a sparse KV gather; the dense flash kernel only covers the
+      `top_k == all blocks` degenerate case, so claiming it "compiled" would be
+      audit inflation (Decision #25).
+    - **`hybrid_attention`** is a policy wrapper that dispatches per layer into
+      the above; it executes only for the all-compiled patterns (the
+      lightning/MLA slots) and inherits the recurrent gap for the Kimi/Delta
+      slots — so it stays `artifact_only` until the recurrent kernels land.
 - **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
   table + FP4/FP6; no device available. The named ROCm sub-arches
   (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic

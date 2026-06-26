@@ -992,6 +992,25 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "unsupported diagnostic. Executes via runtime.launch() "
                  "(rocm_matmul_family_compiled).",
     },
+    "gated_attention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Softmax attention × a learned gate — the WMMA flash_attn kernel "
+                 "+ an elementwise sigmoid-gate multiply. Executes via "
+                 "runtime.launch() (rocm_exotic_attn_compiled).",
+    },
+    "mla_decode": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Multi-head latent attention decode — latent K/V projections "
+                 "(WMMA GEMM) + the WMMA flash_attn kernel. Executes via "
+                 "runtime.launch() (rocm_exotic_attn_compiled).",
+    },
+    "mla_decode_fused": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Fused MLA decode — down/up latent projections (c=x@w_dkv; "
+                 "K=c@w_uk; V=c@w_uv on the WMMA GEMM) + the WMMA flash_attn "
+                 "kernel. Executes via runtime.launch() "
+                 "(rocm_exotic_attn_compiled).",
+    },
 }
 
 
@@ -1104,6 +1123,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("factorized_matmul", "rocm"):
         "tests/unit/test_rocm_matmul_family_compiled.py",
     ("einsum", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("gated_attention", "rocm"):
+        "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("mla_decode", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("mla_decode_fused", "rocm"):
+        "tests/unit/test_rocm_exotic_attn_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a

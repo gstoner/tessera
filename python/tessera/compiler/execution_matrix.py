@@ -136,6 +136,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(sqrt/rsqrt/reciprocal/abs/sign/floor/ceil/trunc/"
                             "round), one __m512 of 16 f32 lanes at a time. "
                             "Transcendentals stay numpy-reference. f32 only",
+    "x86_binary_compiled": "x86 CPU flat 2-operand elementwise arithmetic — the "
+                            "hand-written AVX-512 kernel (tessera_x86_avx512_"
+                            "binary_f32) the Python runtime ctypes-loads from "
+                            "libtessera_x86_elementwise.so and calls directly; the "
+                            "direct-intrinsic subset sub/div/maximum/minimum "
+                            "(NaN-propagating max/min), 16 f32 lanes/__m512. `pow` "
+                            "is transcendental → numpy-reference. f32 only",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -308,6 +315,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "ctypes-loads libtessera_x86_elementwise.so and calls "
                "tessera_x86_avx512_unary_f32. Transcendentals stay numpy-"
                "reference. f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_binary_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_binary_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_binary_compiled", runtime_status="success",
+        reason="x86 binary artifact runs the hand-written AVX-512 2-operand "
+               "elementwise kernel (sub/div/maximum/minimum, NaN-propagating "
+               "max/min, 16 f32 lanes/__m512): the Python runtime ctypes-loads "
+               "libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_binary_f32. `pow` stays numpy-reference. "
+               "f32 only.",
         execution_mode="cpu_avx512"),
     # --- CPU JIT (numpy reference for non-AMX ops) ---
     ("cpu", "jit_cpu_numpy"): ExecutionRow(

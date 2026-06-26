@@ -3031,6 +3031,61 @@ def _execute_x86_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(x.shape)
 
 
+#: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
+#: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
+_X86_BINARY_OPS = {
+    "tessera.sub": 0, "tessera.subtract": 0,
+    "tessera.div": 1, "tessera.divide": 1,
+    "tessera.maximum": 2, "tessera.minimum": 3,
+}
+
+
+def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` binary lane: run the hand-written AVX-512 2-operand
+    elementwise kernel (sub/div/maximum/minimum, NaN-propagating max/min) loaded
+    from libtessera_x86_elementwise.so over any-shape f32 inputs."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_BINARY_OPS:
+        raise ValueError(
+            "x86_binary_compiled executor handles exactly one of "
+            f"{tuple(_X86_BINARY_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_BINARY_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("binary requires two operands (a, b)")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.shape != b.shape:
+        raise ValueError(
+            f"x86 binary lane requires matching operand shapes; got a{a.shape} "
+            f"b{b.shape}")
+    if a.dtype != np.float32:
+        raise ValueError(f"x86 binary lane handles f32 only; got {a.dtype}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    ac = np.ascontiguousarray(a, dtype=np.float32).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_binary_f32(
+        ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
+        out.ctypes.data_as(cf), ctypes.c_int(kind))
+    return out.reshape(a.shape)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED reduce lane (2026-06-25) — row reduction sum/mean/max/min over
 # the last axis (the ROCm analog of the x86 AVX-512 reduction lane). An arbitrary
@@ -4563,6 +4618,7 @@ def _executor_table():
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "x86_unary_compiled": _execute_x86_compiled_unary,
+        "x86_binary_compiled": _execute_x86_compiled_binary,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

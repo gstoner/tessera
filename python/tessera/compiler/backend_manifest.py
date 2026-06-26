@@ -1207,6 +1207,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"
        for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
                   "floor", "ceil", "round", "trunc")},
+    **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py"
+       for op in ("sub", "div", "maximum", "minimum")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1607,6 +1609,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "intrinsic; runtime-loaded; x86_unary_compiled lane)",
     } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
                  "floor", "ceil", "round", "trunc")},
+    # S2 binary-arithmetic direct-intrinsic subset — hand-written AVX-512 kernel
+    # (tessera_x86_avx512_binary_f32) the runtime ctypes-loads and executes
+    # (x86_binary_compiled). f32; `pow` is transcendental → numpy-reference.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
+                 "intrinsic; runtime-loaded; x86_binary_compiled lane)",
+    } for op in ("sub", "div", "maximum", "minimum")},
 }
 
 

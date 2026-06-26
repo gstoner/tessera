@@ -24,20 +24,22 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 54 |
-| ``runnable_reference`` | 255 |
+| ``complete`` | 58 |
+| ``runnable_reference`` | 251 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (54)
+## complete (58)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``relu`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``rsqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``sub`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
@@ -74,6 +76,8 @@ each row into a single E2E tier.
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``maximum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``minimum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``reciprocal`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``round`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``sign`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -90,7 +94,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (255)
+## runnable_reference (251)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -140,7 +144,6 @@ each row into a single E2E tier.
 | ``cos`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``cosh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``div`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``erf`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``erfc`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``exp`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -162,7 +165,6 @@ each row into a single E2E tier.
 | ``sinh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softcap`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softplus`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``sub`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``tan`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``tanh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
@@ -273,8 +275,6 @@ each row into a single E2E tier.
 | ``isfinite`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``maximum`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``minimum`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``where`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |

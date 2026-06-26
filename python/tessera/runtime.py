@@ -2980,6 +2980,57 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     return res
 
 
+#: op_name -> unary kind index (must match avx512_unary_f32.cpp). The x86 lane
+#: covers the DIRECT-intrinsic algebraic + rounding subset; transcendentals
+#: (exp/log/erf/trig/…) stay numpy-reference on CPU.
+_X86_UNARY_OPS = {
+    "tessera.sqrt": 0, "tessera.rsqrt": 1, "tessera.reciprocal": 2,
+    "tessera.absolute": 3, "tessera.abs": 3, "tessera.sign": 5,
+    "tessera.floor": 6, "tessera.ceil": 7, "tessera.trunc": 8,
+    "tessera.round": 9,
+}
+
+
+def _execute_x86_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` unary lane: run the hand-written AVX-512 elementwise
+    kernel (sqrt/rsqrt/reciprocal/abs/sign/floor/ceil/trunc/round) loaded from
+    libtessera_x86_elementwise.so over any-shape f32 input."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_UNARY_OPS:
+        raise ValueError(
+            "x86_unary_compiled executor handles exactly one of "
+            f"{tuple(_X86_UNARY_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_UNARY_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("unary requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 unary lane handles f32 only; got {x.dtype}")
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.array(x, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_unary_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(n), out.ctypes.data_as(cf),
+        ctypes.c_int(kind))
+    return out.reshape(x.shape)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED reduce lane (2026-06-25) — row reduction sum/mean/max/min over
 # the last axis (the ROCm analog of the x86 AVX-512 reduction lane). An arbitrary
@@ -4511,6 +4562,7 @@ def _executor_table():
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
+        "x86_unary_compiled": _execute_x86_compiled_unary,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

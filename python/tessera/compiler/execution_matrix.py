@@ -128,6 +128,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "last-axis (16 f32 lanes/__m512, NaN-propagating "
                             "max/min); tessera.sum/mean/max/min (amax/amin) by "
                             "op name. f32 only",
+    "x86_unary_compiled": "x86 CPU flat elementwise unary math — the hand-written "
+                            "AVX-512 kernel (tessera_x86_avx512_unary_f32) the "
+                            "Python runtime ctypes-loads from "
+                            "libtessera_x86_elementwise.so and calls directly; the "
+                            "direct-intrinsic algebraic + rounding subset "
+                            "(sqrt/rsqrt/reciprocal/abs/sign/floor/ceil/trunc/"
+                            "round), one __m512 of 16 f32 lanes at a time. "
+                            "Transcendentals stay numpy-reference. f32 only",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -289,6 +297,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "tessera_x86_avx512_reduce_f32. An arbitrary reduced axis folds to "
                "[outer,inner]; handles tessera.sum/mean/max/min (amax/amin) by op "
                "name. f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_unary_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_unary_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_unary_compiled", runtime_status="success",
+        reason="x86 unary artifact runs the hand-written AVX-512 elementwise "
+               "kernel (direct-intrinsic subset sqrt/rsqrt/reciprocal/abs/sign/"
+               "floor/ceil/trunc/round, 16 f32 lanes/__m512): the Python runtime "
+               "ctypes-loads libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_unary_f32. Transcendentals stay numpy-"
+               "reference. f32 only.",
         execution_mode="cpu_avx512"),
     # --- CPU JIT (numpy reference for non-AMX ops) ---
     ("cpu", "jit_cpu_numpy"): ExecutionRow(

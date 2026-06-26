@@ -24,18 +24,20 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 45 |
-| ``runnable_reference`` | 264 |
+| ``complete`` | 54 |
+| ``runnable_reference`` | 255 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (45)
+## complete (54)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``relu`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``rsqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``sqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_energy`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
@@ -69,6 +71,13 @@ each row into a single E2E tier.
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``reciprocal`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``round`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``sign`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``trunc`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``max`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -81,7 +90,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (264)
+## runnable_reference (255)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -145,7 +154,6 @@ each row into a single E2E tier.
 | ``mul`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``pow`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``rsqrt`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``sigmoid`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``silu`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -154,7 +162,6 @@ each row into a single E2E tier.
 | ``sinh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softcap`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softplus`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``sqrt`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``sub`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``tan`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``tanh`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -262,19 +269,12 @@ each row into a single E2E tier.
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``abs`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``absolute`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``ceil`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``clamp`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``floor`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isfinite`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``maximum`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``minimum`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``reciprocal`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``round`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``sign`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``trunc`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``where`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |

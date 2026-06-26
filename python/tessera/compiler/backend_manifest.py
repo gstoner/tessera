@@ -1204,6 +1204,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"
+       for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
+                  "floor", "ceil", "round", "trunc")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1594,6 +1597,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 row reduction {op} (tessera_x86_avx512_reduce_f32, "
                  "runtime-loaded; x86_reduce_compiled lane)",
     } for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    # S2 unary-math algebraic + rounding subset — hand-written AVX-512 kernel
+    # (tessera_x86_avx512_unary_f32) the runtime ctypes-loads and executes
+    # (x86_unary_compiled). f32; transcendentals stay numpy-reference on CPU.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 unary {op} (tessera_x86_avx512_unary_f32, direct "
+                 "intrinsic; runtime-loaded; x86_unary_compiled lane)",
+    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
+                 "floor", "ceil", "round", "trunc")},
 }
 
 

@@ -28,6 +28,10 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   their `x86:fused` slots as their runtime lanes land (one PR each). The lane is
   host-gated: the loader returns `None` where the `.so` is absent, so the lane
   skips clean (e.g. in CI's pytest lane, which doesn't build the C++ backend).
+  Landed lanes: `x86_reduce_compiled` (sum/mean/max/min); `x86_unary_compiled`
+  (`tessera_x86_avx512_unary_f32`, the direct-intrinsic algebraic + rounding
+  subset sqrt/rsqrt/reciprocal/abs/sign/floor/ceil/trunc/round — transcendentals
+  stay numpy-reference; `test_x86_unary_compiled.py`).
 - **Non-executable targets are honest:** NVIDIA and ROCm are
   recognized but return unsupported/unimplemented behavior rather than fake
   success.

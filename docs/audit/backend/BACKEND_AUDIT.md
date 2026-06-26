@@ -16,6 +16,18 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   and header counts.
 - **Executable rows:** Apple CPU, Apple GPU, native CPU, and JIT CPU numpy are
   explicit executable rows.
+- **x86 AVX-512 compiled lane (2026-06-26):** `libtessera_x86_elementwise.so`
+  (CMake target `tessera_x86_elementwise`, AVX-512-only so it builds without AMX)
+  exports the hand-written elementwise C-ABI kernels; the runtime ctypes-loads it
+  and executes them via `runtime.launch()` — the CPU analog of the ROCm compiled
+  lanes. First lane wired: `x86_reduce_compiled` (`tessera_x86_avx512_reduce_f32`,
+  sum/mean/max/min, NaN-propagating, arbitrary-axis fold to [outer,inner],
+  keepdims) → honest `x86:fused` for the reduction family, validated on an
+  AVX-512 host (`test_x86_reduce_compiled.py`, `execute_compare_fixture`). The
+  unary/binary/compare/logical/bitwise kernels ship in the same `.so` and earn
+  their `x86:fused` slots as their runtime lanes land (one PR each). The lane is
+  host-gated: the loader returns `None` where the `.so` is absent, so the lane
+  skips clean (e.g. in CI's pytest lane, which doesn't build the C++ backend).
 - **Non-executable targets are honest:** NVIDIA and ROCm are
   recognized but return unsupported/unimplemented behavior rather than fake
   success.

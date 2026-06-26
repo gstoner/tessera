@@ -1202,6 +1202,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
     **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
+       for op in ("sum", "mean", "max", "min", "amax", "amin")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1582,6 +1584,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": ("bf16",),
         "notes": "AMX BF16 GEMM",
     },
+    # S2 reduction family — hand-written AVX-512 row-reduction kernel
+    # (tessera_x86_avx512_reduce_f32) the runtime ctypes-loads from
+    # libtessera_x86_elementwise.so and executes (x86_reduce_compiled). f32,
+    # NaN-propagating max/min; validated on-device (execute_compare_fixture).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 row reduction {op} (tessera_x86_avx512_reduce_f32, "
+                 "runtime-loaded; x86_reduce_compiled lane)",
+    } for op in ("sum", "mean", "max", "min", "amax", "amin")},
 }
 
 

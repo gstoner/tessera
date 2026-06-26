@@ -77,3 +77,19 @@ target_link_libraries(test_logical PRIVATE tessera_x86_backend)
 
 add_executable(test_bitwise tests/test_bitwise.cpp)
 target_link_libraries(test_bitwise PRIVATE tessera_x86_backend)
+
+# ── Runtime-loadable elementwise kernel lane ────────────────────────────────
+# A SHARED library of just the AVX-512 elementwise kernels (reduce / unary /
+# binary / compare / logical / bitwise) — the C-ABI symbols the Python runtime
+# ctypes-loads (`runtime.launch()` → `x86_*_compiled`), the CPU analog of the
+# ROCm compiled lanes. Deliberately EXCLUDES the AMX/GEMM sources so it builds
+# on toolchains without AMX intrinsics (e.g. gcc on this box); these kernels are
+# pure AVX-512 + scalar reference.
+add_library(tessera_x86_elementwise SHARED
+  src/kernels/avx512_reduce_f32.cpp
+  src/kernels/avx512_unary_f32.cpp
+  src/kernels/avx512_binary_f32.cpp
+  src/kernels/avx512_compare_f32.cpp
+  src/kernels/avx512_logical_i8.cpp
+  src/kernels/avx512_bitwise_i32.cpp
+)

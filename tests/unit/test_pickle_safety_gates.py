@@ -12,10 +12,9 @@ The fix:
   * ``aot.load(path, allow_pickle=False)`` — default ``False``;
     refuses to load the ``callable.pkl`` sidecar.  Setting
     ``allow_pickle=True`` is required to materialize the callable.
-  * ``checkpoint.load_state(path, trust_treedef=True)`` — default
-    ``True`` (preserves same-process ergonomics); passing
-    ``trust_treedef=False`` makes the function raise loudly
-    instead of unpickling the treedef.
+  * ``checkpoint.load_state(path, trust_treedef=False)`` — default
+    ``False``; setting ``trust_treedef=True`` is required to
+    materialize the pickled treedef.
 
 Both surfaces also carry prominent docstring warnings about
 the security implications.
@@ -61,6 +60,10 @@ def test_checkpoint_load_state_exposes_trust_treedef() -> None:
         "checkpoint.load_state must expose a `trust_treedef` keyword "
         "so callers loading untrusted checkpoints can opt out"
     )
+    assert sig.parameters["trust_treedef"].default is False, (
+        "default must be False so untrusted checkpoints cannot execute "
+        "pickle payloads through an omitted trust_treedef argument"
+    )
 
 
 def test_checkpoint_load_sharded_forwards_trust_treedef() -> None:
@@ -73,6 +76,9 @@ def test_checkpoint_load_sharded_forwards_trust_treedef() -> None:
         "checkpoint.load_sharded must forward `trust_treedef` to load_state "
         "so sharded checkpoints from untrusted sources can opt out of pickle"
     )
+    assert sig.parameters["trust_treedef"].default is False, (
+        "sharded checkpoint loads must also fail closed by default"
+    )
 
 
 def test_checkpoint_load_state_refuses_untrusted_treedef(tmp_path) -> None:
@@ -80,7 +86,6 @@ def test_checkpoint_load_state_refuses_untrusted_treedef(tmp_path) -> None:
     artifact it refuses to unpickle the treedef."""
     import numpy as np
 
-    import tessera
     from tessera import checkpoint
 
     state = {"params": {"w": np.zeros((2, 2), dtype=np.float32)}}
@@ -96,11 +101,9 @@ def test_checkpoint_load_state_refuses_untrusted_treedef(tmp_path) -> None:
         checkpoint.load_state(ckpt, trust_treedef=False)
 
 
-def test_checkpoint_load_state_implicit_default_warns(tmp_path) -> None:
-    """Calling ``load_state`` without an explicit ``trust_treedef=`` emits a
-    DeprecationWarning (the implicit-trust default is on its way out). Locking it
-    here keeps the contract covered AND keeps the warning from leaking as test
-    noise elsewhere — every other call site passes ``trust_treedef=`` explicitly."""
+def test_checkpoint_load_state_implicit_default_refuses_treedef(tmp_path) -> None:
+    """Calling ``load_state`` without ``trust_treedef=True`` is the same
+    strict path as ``trust_treedef=False``."""
     import numpy as np
 
     from tessera import checkpoint
@@ -109,9 +112,8 @@ def test_checkpoint_load_state_implicit_default_warns(tmp_path) -> None:
     ckpt = tmp_path / "state.npz"
     checkpoint.save_state(state, ckpt)
 
-    with pytest.warns(DeprecationWarning, match="trust_treedef"):
-        loaded = checkpoint.load_state(ckpt)
-    assert "params" in loaded
+    with pytest.raises(checkpoint.CheckpointError, match="trust_treedef=False"):
+        checkpoint.load_state(ckpt)
 
 
 def test_checkpoint_load_state_docstring_warns_about_pickle() -> None:

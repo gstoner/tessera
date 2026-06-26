@@ -9,7 +9,6 @@ import hashlib
 import sys
 import time
 import types
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, cast
@@ -292,7 +291,7 @@ def load_state(
     *,
     target_version: int | None = None,
     collections: tuple[str, ...] | list[str] | set[str] | None = None,
-    trust_treedef: bool | None = None,
+    trust_treedef: bool = False,
 ) -> Any:
     """Load a Tessera state tree saved by :func:`save_state`.
 
@@ -301,46 +300,27 @@ def load_state(
        The ``__treedef__`` blob in a state file is a pickled Python
        object — loading it via :func:`pickle.loads` will execute
        arbitrary code embedded in a malicious checkpoint.  Tessera
-       currently defaults to trusting the treedef for ergonomic
-       same-process save/load.  **Always pass
-       ``trust_treedef=False`` when the source of the file is not
-       under your control** (downloaded checkpoints, shared
-       artifacts, multi-tenant storage, etc.).  When
-       ``trust_treedef=False`` the function returns a checksum-
-       verified leaf bundle and refuses to materialize the treedef.
+       therefore **fails closed**: ``trust_treedef`` defaults to
+       ``False`` and the loader refuses to deserialize the treedef
+       unless you opt in.  Pass ``trust_treedef=True`` **only** for
+       checkpoints from a trusted source (e.g. your own training
+       pipeline); never for downloaded checkpoints, shared
+       artifacts, or multi-tenant storage.
 
        Long-term, treedef persistence should move to a declarative
        format that can be deserialized without code execution;
-       until then, ``trust_treedef`` is the explicit opt-in.
+       until then, ``trust_treedef=True`` is the explicit opt-in.
 
     Parameters
     ----------
     path, target_version, collections
         Standard load-state knobs.
     trust_treedef
-        2026-05-22: the default is now ``None`` (implicit-trust).
-        When left at ``None``, the loader emits a
-        ``DeprecationWarning`` and behaves as ``True`` for backward
-        compatibility.  A future release will flip the implicit
-        default to ``False`` once the declarative treedef format
-        lands.  Pass ``True`` explicitly to silence the warning for
-        same-process trusted pipelines; pass ``False`` to refuse
-        pickle deserialization on untrusted sources.
+        Default ``False`` — fail closed.  When ``False`` (or omitted)
+        the loader raises :class:`CheckpointError` rather than
+        unpickle the ``__treedef__`` blob.  Pass ``True`` to opt into
+        pickle deserialization for a checkpoint you trust.
     """
-    if trust_treedef is None:
-        warnings.warn(
-            "tessera.checkpoint.load_state() was called without an "
-            "explicit trust_treedef= argument.  The default currently "
-            "trusts the pickled __treedef__ blob, which can execute "
-            "arbitrary code from a malicious checkpoint.  Pass "
-            "trust_treedef=True if the source is known-safe (your own "
-            "training pipeline), or trust_treedef=False to refuse "
-            "pickle deserialization.  A future Tessera release will "
-            "flip the implicit default to False.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        trust_treedef = True
     source = Path(path)
     if not source.exists():
         raise CheckpointError(f"state file not found: {source}")
@@ -408,12 +388,13 @@ def load_sharded(
     path: str | os.PathLike,
     mesh: Any | None = None,
     *,
-    trust_treedef: bool | None = None,
+    trust_treedef: bool = False,
 ) -> Any:
     """Load a sharded checkpoint. ``trust_treedef`` is forwarded to
     :func:`load_state` (the sharded path unpickles a ``__treedef__`` blob exactly
-    like the single-file path) — pass ``trust_treedef=False`` for untrusted sources,
-    ``True`` for your own pipeline. See :func:`load_state` for the security note."""
+    like the single-file path) and defaults to ``False`` (fail closed) — pass
+    ``trust_treedef=True`` only for your own pipeline. See :func:`load_state` for
+    the security note."""
     root = Path(path)
     manifest_path = root / "manifest.json"
     if not manifest_path.exists() or not (root / "COMMITTED").exists():

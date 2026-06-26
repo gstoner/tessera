@@ -3,8 +3,8 @@ title: Compiler Code Audit — 2026-06-10 (refactoring · per-IR optimization ·
 last_updated: 2026-06-10
 scope: C++ pass quality (Graph/Schedule/Tile/Target IR) · Python compiler core · runtime dispatch
 status: every HIGH finding verified against source per Decision #27; agent-only leads are marked
+audit_role: snapshot
 ---
-
 # Compiler Code Audit — 2026-06-10
 
 Companion to [DEEP_COMPILER_AUDIT_2026_06_10.md](DEEP_COMPILER_AUDIT_2026_06_10.md)

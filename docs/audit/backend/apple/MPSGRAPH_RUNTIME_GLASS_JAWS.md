@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-04
+audit_role: reference
+---
+
 # Apple MPSGraph Runtime Glass Jaws
 
 Stages 13-15 audit note for Apple GPU value execution. This is a current-truth guardrail, not a control-flow segfault investigation.

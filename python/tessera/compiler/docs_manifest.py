@@ -51,6 +51,12 @@ _DOC_ROOTS: tuple[str, ...] = (
     "docs/operations",
     "docs/architecture",
     "docs/reference",
+    # Authored audit prose (the "what's done / where next" guide surface).
+    # Generated dashboards (docs/audit/generated/), theme-local archives
+    # (**/archive/), and the root drift-gated dashboards are skipped below —
+    # the authored-doc contract for this tree is owned by
+    # tests/unit/test_audit_docs.py.
+    "docs/audit",
 )
 
 
@@ -59,9 +65,12 @@ _DOC_ROOTS: tuple[str, ...] = (
 # frontmatter doesn't belong on them).  Keep this set small; every
 # addition needs a justification comment.
 _EXEMPT_DOCS: frozenset[str] = frozenset({
-    # Auto-generated dashboards live under docs/audit/generated/ and
-    # are excluded from the tree above already.  Listed here as a
-    # placeholder for future exemptions.
+    # Root-level docs/audit/ dashboards that are generated / drift-gated,
+    # not authored prose: they own their own generators + gates and must
+    # not be treated as authored docs by the freshness audit.
+    "docs/audit/op_target_conformance.md",        # generated_docs.py (byte-gated)
+    "docs/audit/standalone_primitive_coverage.md",  # primitive_coverage.py
+    "docs/audit/stub_surface.md",                 # scripts/stub_surface_report.py
 })
 
 
@@ -224,6 +233,9 @@ def collect_doc_manifest() -> tuple[DocEntry, ...]:
         for path in sorted(root_path.rglob("*.md")):
             rel = path.relative_to(_REPO_ROOT).as_posix()
             if rel in _EXEMPT_DOCS or rel.startswith(_EXEMPT_PREFIXES):
+                continue
+            # Theme-local archives are provenance, not the live surface.
+            if "/archive/" in rel:
                 continue
             entries.append(_parse_doc(path))
     return tuple(entries)

@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-26
+audit_role: theme
+---
+
 # Backend Audit
 
 This document consolidates shared backend/runtime audit work. Platform-specific

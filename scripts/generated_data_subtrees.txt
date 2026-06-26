@@ -12,3 +12,8 @@
 # RDNA ISA data archive — extracted from AMD's ISA PDFs by
 # docs/reference/isa/rdna/tools/build_archive.py
 docs/reference/isa
+
+# Generated audit dashboards — count/status truth, owned by
+# python/tessera/compiler/generated_docs.py + scripts/check_generated_docs.sh
+# (Decision #26). Authored audit prose alongside them IS gated.
+docs/audit/generated

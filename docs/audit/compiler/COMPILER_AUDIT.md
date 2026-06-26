@@ -1,15 +1,20 @@
+---
+last_updated: 2026-06-24
+audit_role: theme
+---
+
 # Compiler Audit
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
 
-> **Latest deep pass:** [DEEP_COMPILER_AUDIT_2026_06_10.md](DEEP_COMPILER_AUDIT_2026_06_10.md)
+> **Latest deep pass:** [DEEP_COMPILER_AUDIT_2026_06_10.md](archive/DEEP_COMPILER_AUDIT_2026_06_10.md)
 > — source-backed audit of frontend/IR/manifest/runtime-ABI/Apple-envelope/
 > benchmark coverage. Records the "generated drift clean vs semantic gap open"
 > split, fixes the bench-axis staleness + the grouped_gemm/moe_swiglu_block
 > manifest blind spot, and carries a prioritized gap table for the rest.
 >
-> **Code-level companion:** [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md)
+> **Code-level companion:** [CODE_AUDIT_2026_06_10.md](archive/CODE_AUDIT_2026_06_10.md)
 > — refactoring / per-IR-level optimization correctness / glass jaws. Headline:
 > a verified `TransposeIntoMatmul` flag-composition miscompile (fixed, commit
 > `acb5c6f`), missing fusion use-guards (fixed), NSA gating-semantics hazard
@@ -736,7 +741,7 @@ part). Exposed as `TracedHardMoELM.logits(ids, dispatch="sparse")`. Guards in
   maps are cross-referenced by the per-platform audit docs; the rollups are
   distinct MASTER_AUDIT truth views).
 - **Code-level audit closeout (2026-06-10).** The
-  [CODE_AUDIT_2026_06_10.md](CODE_AUDIT_2026_06_10.md) "Closeout status" section
+  [CODE_AUDIT_2026_06_10.md](archive/CODE_AUDIT_2026_06_10.md) "Closeout status" section
   drove every remaining code-level finding to done / refuted / accepted /
   tracked-deferred. Done: 1e zero-`TRACE_DEFERRED` corpus guard, `_APPLE_GPU_*`
   table-creep enforcer, binary/rowop strict-dispatch funnel coverage, the

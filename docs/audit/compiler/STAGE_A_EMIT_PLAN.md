@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-18
+audit_role: plan
+plan_state: open
+---
+
 # Cross-Vendor Grounding Summary + Stage-A Emit Plan
 
 > Consolidates the 2026-06-17 spec-grounding pass (CUDA 13.3 Programming Guide + Tile IR/Tile C++ +

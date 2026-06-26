@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-25
+audit_role: sub_audit
+---
+
 # ROCm Backend Audit
 
 This document consolidates ROCm-specific audit material.

@@ -3,8 +3,8 @@ title: Deep Compiler Audit — 2026-06-10
 last_updated: 2026-06-10
 scope: frontend/API · Graph IR · Schedule/Tile/Target IR · backend manifest · runtime ABI · Apple envelope · benchmark coverage · generated docs · test gates
 status: source-backed; two headline gaps fixed in this pass, remainder scoped below
+audit_role: snapshot
 ---
-
 # Deep Compiler Audit — 2026-06-10
 
 A full, source-backed pass over the compiler surface. Every claim below was

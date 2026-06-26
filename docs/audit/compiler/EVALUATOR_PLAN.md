@@ -3,8 +3,9 @@ status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
 last_updated: 2026-06-12
+audit_role: plan
+plan_state: landing
 ---
-
 # Tessera Compiler Evaluator — Architecture & Roadmap
 
 > **One-line thesis.** Tessera's compiler is past surface-inventory mode. The
@@ -18,7 +19,7 @@ This document is the ratified architecture for that engine ("the Evaluator")
 and the roadmap that drives Apple, NVIDIA, and AMD ROCm support forward through
 it. It is grounded in the current compiler spine (see
 [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) and
-[`DEEP_COMPILER_AUDIT_2026_06_10.md`](DEEP_COMPILER_AUDIT_2026_06_10.md)) and in
+[`DEEP_COMPILER_AUDIT_2026_06_10.md`](archive/DEEP_COMPILER_AUDIT_2026_06_10.md)) and in
 a 2024–2026 research survey (§9). Counts are not copied here; the drift-gated
 dashboards under `docs/audit/generated/` remain the count authority (Decision
 #26), and every claim is grounded in source (Decision #27).

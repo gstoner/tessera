@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-17
+audit_role: sub_audit
+---
+
 # Apple Backend Audit
 
 This document consolidates Apple backend audit material across Metal runtime,

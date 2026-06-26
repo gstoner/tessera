@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-18
+audit_role: reference
+---
+
 # ROCm Backend — Patterns from the AMD ROCm Ecosystem
 
 > **Purpose.** A source-grounded survey of eight production AMD ROCm projects, read for

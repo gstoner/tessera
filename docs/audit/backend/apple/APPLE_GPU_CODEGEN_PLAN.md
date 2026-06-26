@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-15
+audit_role: plan
+plan_state: landing
+---
+
 # Apple GPU Codegen Plan — Dispatcher → Compiler
 
 Status surface for growing the Apple GPU lane from a **runtime dispatcher**

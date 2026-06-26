@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-24
+audit_role: plan
+plan_state: landing
+---
+
 # RTX 5070 Ti (Blackwell sm_120) — Tessera NVIDIA Execution Plan
 
 > Second real box (with the Strix Halo machine — `../rocm/STRIX_HALO_EXECUTION_PLAN.md`).

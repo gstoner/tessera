@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-20
+audit_role: plan
+plan_state: landing
+---
+
 # Contract-Consuming Pass Plan
 
 > Status: active (started 2026-06-19). Turns the 8-item KV/attention/quant/TP/multimodal

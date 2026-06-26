@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-25
+audit_role: sub_audit
+---
+
 # NVIDIA Backend Audit
 
 This document consolidates NVIDIA-specific audit material.

@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-15
+audit_role: plan
+plan_state: open
+---
+
 # Tessera Optimizing-Compiler Plan — from op-library to world-class
 
 > Status: proposed (2026-06-14).  Companion to `EVALUATOR_PLAN.md` (the scoring

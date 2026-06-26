@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-23
+audit_role: plan
+plan_state: landing
+---
+
 # Strix Halo (Ryzen AI Max+ 395) — Tessera Bring-Up & RDNA 3.5 Execution Plan
 
 > First real **non-Apple** silicon Tessera will own. Authored 2026-06-17 against the

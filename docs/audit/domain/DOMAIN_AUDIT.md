@@ -1,7 +1,22 @@
+---
+last_updated: 2026-06-11
+audit_role: theme
+---
+
 # Domain Audit
 
 This document consolidates GA/EBM, attention, CorrDiff/SciML, sharding, and
 autodiff domain audit material.
+
+> **Count authority.** This audit carries reasoning and scope, not numbers.
+> Domain status traces to the generated dashboards (Decision #26): clifford/EBM
+> op coverage in
+> [../standalone_primitive_coverage.md](../standalone_primitive_coverage.md),
+> op×target cells in [../op_target_conformance.md](../op_target_conformance.md),
+> the native/reference split in
+> [../generated/e2e_op_coverage.md](../generated/e2e_op_coverage.md), and
+> per-axis S-series state in
+> [../generated/s_series_status.md](../generated/s_series_status.md).
 
 ## Finished
 

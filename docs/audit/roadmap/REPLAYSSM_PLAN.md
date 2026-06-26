@@ -1,9 +1,28 @@
+---
+last_updated: 2026-06-15
+audit_role: plan
+plan_state: landing
+---
+
 # ReplaySSM — SSM decode-state ABI plan
 
 > **Status:** Phases 0–6 + 5-bench + block-decode + f16/bf16 + big-GDN +
 > size-heuristic prefill default ✅ (2026-06-15) — Track-R complete on Apple.
 > Sibling to the Track-L delta-rule work (`python/tessera/stdlib/delta_rule.py`).
-> Remaining follow-up: CUDA/ROCm replay kernels (Phase G/H — hardware-gated).
+> **Remaining — now in active backend development (no longer hardware-gated).**
+> Both target boxes are in hand (Strix Halo gfx1151 / RDNA3.5; RTX 5070 Ti
+> sm_120 / Blackwell), so the CUDA/ROCm work is a kernel-enablement task, not a
+> wait on silicon. Kernels to enable, then `execute-and-compare` against the
+> Apple fused-decode reference before closing out each backend:
+>   - **`selective_state_update_replayssm_output_only`** — fused decode,
+>     buffer-replay path (no state writeback).
+>   - **`selective_state_update_replayssm_state_and_output`** — fused decode +
+>     flush path (materialize `S_t` → new `S_0`, clear the ring buffer).
+> Both must keep `S_0` resident across the ring buffer (that residency is the
+> bandwidth win). Lower to ROCm (MFMA/WMMA via the Strix Halo lane) and NVIDIA
+> (sm_120 `mma.sync` via the Blackwell lane). This plan stays `plan_state:
+> landing` until both backends have a green execute-and-compare row; close it
+> out once they do.
 >
 > **Thesis:** ReplaySSM ([Dao AI Lab, 2026](https://tridao.me/blog/2026/replayssm/);
 > [repo](https://github.com/Johnny-Liou/ReplaySSM)) is a *route-selection-over-a-

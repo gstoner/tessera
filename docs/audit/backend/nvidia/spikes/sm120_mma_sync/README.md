@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-24
+audit_role: index
+---
+
 # Spike #6 — sm_120 `mma.sync.aligned.m16n8k16` PTX, proven on silicon
 
 **Status:** PASS, end-to-end on real hardware (2026-06-25).

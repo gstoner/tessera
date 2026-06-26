@@ -1,3 +1,8 @@
+---
+last_updated: 2026-06-21
+audit_role: theme
+---
+
 # Coverage Audit
 
 This document consolidates primitive, op, example, KV-cache, and coverage audit

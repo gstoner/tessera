@@ -45,7 +45,7 @@ clip,elementwise,public,public,registered,complete,partial,reference,ready,none
 cos,elementwise,public,public,registered,complete,partial,reference,ready,none
 cosh,elementwise,public,public,registered,complete,partial,reference,ready,none
 digamma,elementwise,public,public,registered,complete,partial,reference,ready,none
-div,elementwise,public,public,registered,complete,partial,reference,ready,none
+div,elementwise,public,public,registered,complete,partial,fused,ready,none
 erf,elementwise,public,public,registered,complete,partial,reference,ready,none
 erfc,elementwise,public,public,registered,complete,partial,reference,ready,none
 exp,elementwise,public,public,registered,complete,partial,reference,ready,none
@@ -70,7 +70,7 @@ sinh,elementwise,public,public,registered,complete,partial,reference,ready,none
 softcap,elementwise,public,public,registered,complete,partial,reference,ready,none
 softplus,elementwise,public,public,registered,complete,partial,reference,ready,none
 sqrt,elementwise,public,public,registered,complete,partial,fused,ready,none
-sub,elementwise,public,public,registered,complete,partial,reference,ready,none
+sub,elementwise,public,public,registered,complete,partial,fused,ready,none
 tan,elementwise,public,public,registered,complete,partial,reference,ready,none
 tanh,elementwise,public,public,registered,complete,partial,reference,ready,none
 ebm_bivector_langevin,energy_based_models,public,public,not_applicable,not_applicable,fused,fused,fused,benchmarked
@@ -217,8 +217,8 @@ floor,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 isfinite,numeric_helper,public,public,registered,complete,partial,reference,ready,none
 isinf,numeric_helper,public,public,registered,complete,partial,reference,ready,none
 isnan,numeric_helper,public,public,registered,complete,partial,reference,ready,none
-maximum,numeric_helper,public,public,registered,complete,partial,reference,ready,none
-minimum,numeric_helper,public,public,registered,complete,partial,reference,ready,none
+maximum,numeric_helper,public,public,registered,complete,partial,fused,ready,none
+minimum,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 reciprocal,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 round,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 sign,numeric_helper,public,public,registered,complete,partial,fused,ready,none

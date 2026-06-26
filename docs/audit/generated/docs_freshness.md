@@ -6,9 +6,9 @@ Reference date for staleness: **2026-06-26**.
 
 ## Headline
 
-- **67** docs catalogued across the canonical doc tree.
-- **66** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **29** updated within the last 30 days.
+- **89** docs catalogued across the canonical doc tree.
+- **88** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **51** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -115,3 +115,30 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `tessera_migration_guide_part1.md` | Pre-canonical | 2026-05-20 | 37 | ✓ |
 | `tessera_migration_guide_part2.md` | Informative | 2026-05-20 | 37 | ✓ |
 | `tessera_tensor_attributes.md` | Normative | 2026-05-11 | 46 | ✓ |
+
+### `docs/audit/`
+
+| Path | status | last_updated | days stale | frontmatter |
+|------|--------|--------------|-----------:|--|
+| `MASTER_AUDIT.md` | - | 2026-06-25 | 1 | ✓ |
+| `README.md` | - | 2026-06-26 | 0 | ✓ |
+| `backend/BACKEND_AUDIT.md` | - | 2026-06-26 | 0 | ✓ |
+| `backend/apple/APPLE_AUDIT.md` | - | 2026-06-17 | 9 | ✓ |
+| `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-06-15 | 11 | ✓ |
+| `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-06-04 | 22 | ✓ |
+| `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 2 | ✓ |
+| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-06-25 | 1 | ✓ |
+| `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 2 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-06-25 | 1 | ✓ |
+| `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-06-18 | 8 | ✓ |
+| `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 3 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-06-24 | 2 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-06-12 | 14 | ✓ |
+| `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-06-15 | 11 | ✓ |
+| `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-06-18 | 8 | ✓ |
+| `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 5 | ✓ |
+| `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 15 | ✓ |
+| `roadmap/CONTRACT_PASS_PLAN.md` | - | 2026-06-20 | 6 | ✓ |
+| `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-06-26 | 0 | ✓ |
+| `roadmap/REPLAYSSM_PLAN.md` | - | 2026-06-15 | 11 | ✓ |
+| `roadmap/ROADMAP_AUDIT.md` | - | 2026-06-26 | 0 | ✓ |

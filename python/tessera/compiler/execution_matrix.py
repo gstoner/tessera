@@ -143,6 +143,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "direct-intrinsic subset sub/div/maximum/minimum "
                             "(NaN-propagating max/min), 16 f32 lanes/__m512. `pow` "
                             "is transcendental → numpy-reference. f32 only",
+    "x86_compare_compiled": "x86 CPU flat 2-operand elementwise comparison — the "
+                            "hand-written AVX-512 kernel (tessera_x86_avx512_"
+                            "compare_f32) the Python runtime ctypes-loads from "
+                            "libtessera_x86_elementwise.so and calls directly; "
+                            "eq/ne/lt/le/gt/ge via _mm512_cmp_ps_mask + "
+                            "_mm_maskz_set1_epi8, NaN semantics match numpy "
+                            "(ordered except ne). f32 in, bool out",
     "rocm_activation_compiled": "AMD GPU RDNA flat elementwise activation the "
                             "Tessera compiler GENERATES "
                             "(generate-rocm-activation-kernel -> ROCDL -> hsaco, "
@@ -326,6 +333,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so and calls "
                "tessera_x86_avx512_binary_f32. `pow` stays numpy-reference. "
                "f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_compare_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_compare_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_compare_compiled", runtime_status="success",
+        reason="x86 compare artifact runs the hand-written AVX-512 2-operand "
+               "comparison kernel (eq/ne/lt/le/gt/ge via _mm512_cmp_ps_mask + "
+               "_mm_maskz_set1_epi8, NaN semantics matching numpy): the Python "
+               "runtime ctypes-loads libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_compare_f32. f32 in, bool out.",
         execution_mode="cpu_avx512"),
     # --- CPU JIT (numpy reference for non-AMX ops) ---
     ("cpu", "jit_cpu_numpy"): ExecutionRow(

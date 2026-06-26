@@ -45,12 +45,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `reduce_scatter` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
-| `eq` | comparison | public | public | registered | complete | partial | reference | ready | none |
-| `ge` | comparison | public | public | registered | complete | partial | reference | ready | none |
-| `gt` | comparison | public | public | registered | complete | partial | reference | ready | none |
-| `le` | comparison | public | public | registered | complete | partial | reference | ready | none |
-| `lt` | comparison | public | public | registered | complete | partial | reference | ready | none |
-| `ne` | comparison | public | public | registered | complete | partial | reference | ready | none |
+| `eq` | comparison | public | public | registered | complete | partial | fused | ready | none |
+| `ge` | comparison | public | public | registered | complete | partial | fused | ready | none |
+| `gt` | comparison | public | public | registered | complete | partial | fused | ready | none |
+| `le` | comparison | public | public | registered | complete | partial | fused | ready | none |
+| `lt` | comparison | public | public | registered | complete | partial | fused | ready | none |
+| `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `einsum` | contraction | public | public | registered | complete | partial | reference | ready | none |
 | `acos` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `add` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -331,7 +331,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 |--------|------:|------|
 | attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
-| comparison | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpRN· |
 | elementwise | 37 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |

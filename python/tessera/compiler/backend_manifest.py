@@ -1209,6 +1209,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "floor", "ceil", "round", "trunc")},
     **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py"
        for op in ("sub", "div", "maximum", "minimum")},
+    **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
+       for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1618,6 +1620,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
                  "intrinsic; runtime-loaded; x86_binary_compiled lane)",
     } for op in ("sub", "div", "maximum", "minimum")},
+    # S2 comparison family — hand-written AVX-512 kernel
+    # (tessera_x86_avx512_compare_f32) the runtime ctypes-loads and executes
+    # (x86_compare_compiled). f32 in, bool out; NaN semantics match numpy.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
+                 "runtime-loaded; x86_compare_compiled lane; bool output)",
+    } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
 }
 
 

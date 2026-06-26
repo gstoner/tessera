@@ -3086,6 +3086,64 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(a.shape)
 
 
+#: op_name -> compare kind index (must match avx512_compare_f32.cpp).
+_X86_COMPARE_OPS = {
+    "tessera.eq": 0, "tessera.equal": 0,
+    "tessera.ne": 1, "tessera.not_equal": 1,
+    "tessera.lt": 2, "tessera.less": 2,
+    "tessera.le": 3, "tessera.less_equal": 3,
+    "tessera.gt": 4, "tessera.greater": 4,
+    "tessera.ge": 5, "tessera.greater_equal": 5,
+}
+
+
+def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` compare lane: run the hand-written AVX-512 2-operand
+    comparison kernel (eq/ne/lt/le/gt/ge) loaded from
+    libtessera_x86_elementwise.so over any-shape f32 inputs, producing a numpy
+    ``bool_`` result. NaN semantics match numpy (ordered except ne)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_COMPARE_OPS:
+        raise ValueError(
+            "x86_compare_compiled executor handles exactly one of "
+            f"{tuple(_X86_COMPARE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_COMPARE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("compare requires two operands (a, b)")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.shape != b.shape:
+        raise ValueError(
+            f"x86 compare lane requires matching operand shapes; got a{a.shape} "
+            f"b{b.shape}")
+    if a.dtype != np.float32:
+        raise ValueError(f"x86 compare lane handles f32 only; got {a.dtype}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.zeros(a.shape, dtype=np.bool_)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    ac = np.ascontiguousarray(a, dtype=np.float32).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.uint8)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_compare_f32(
+        ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
+        out.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(kind))
+    return out.reshape(a.shape).astype(np.bool_)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED reduce lane (2026-06-25) — row reduction sum/mean/max/min over
 # the last axis (the ROCm analog of the x86 AVX-512 reduction lane). An arbitrary
@@ -4619,6 +4677,7 @@ def _executor_table():
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
+        "x86_compare_compiled": _execute_x86_compiled_compare,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

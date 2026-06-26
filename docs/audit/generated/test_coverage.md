@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **2964** total Python-test references, **825** total lit-fixture references.
+- **2973** total Python-test references, **825** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **173** ops have ≤1 reference ("thinly tested").
+- **170** ops have ≤1 reference ("thinly tested").
 - **63** ops have ≥10 references ("well tested").
-- **98** ops have at least one associated `pytest.raises` negative test.
+- **99** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -19,7 +19,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 |----|--------:|---------:|------:|----:|--------|
 | `matmul` |  391 |  203 |  594 |  17 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  100 |   57 |  157 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
-| `softmax` |  103 |   37 |  140 |  15 | `bf16`, `f16`, `f32`, `fp16` … |
+| `softmax` |  104 |   37 |  141 |  16 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  105 |   20 |  125 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |   95 |   13 |  108 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   85 |    4 |   89 |   7 | `bf16`, `f16`, `f32`, `f64` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **173** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **170** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **173** ops have at most one test reference across the whole test surface.
 | `dz` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_sample` |    0 |    0 |    0 |
 
-_(113 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(110 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**173** ops have ≤1 direct test reference.  They break down as:
+**170** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   62 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   59 | Tested via a parent op or family wrapper |
 | `structural_only`        |  105 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -147,7 +147,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 62 ops
+## `covered_by_family` — 59 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -180,11 +180,11 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `denoising_score_matching_loss` | category default for 'loss' |
 | `dz` | exercised by complex differential tests |
 | `ebm_decode_init` | scaffold for ebm decode tests |
-| `eq` | category default for 'comparison' |
 | `floor_div` | category default for 'elementwise' |
 | `implicit_score_matching_loss` | category default for 'loss' |
+| `is_concyclic` | category default for 'elementwise' |
 
-_(32 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(29 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 105 ops
 

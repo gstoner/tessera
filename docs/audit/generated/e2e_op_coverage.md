@@ -24,17 +24,23 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 58 |
-| ``runnable_reference`` | 251 |
+| ``complete`` | 64 |
+| ``runnable_reference`` | 245 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (58)
+## complete (64)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``eq`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``ge`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``gt`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``le`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``lt`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``ne`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``relu`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``rsqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -94,7 +100,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (251)
+## runnable_reference (245)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -128,12 +134,6 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``eq`` | comparison | public | public | registered | partial | reference | ready | none |
-| ``ge`` | comparison | public | public | registered | partial | reference | ready | none |
-| ``gt`` | comparison | public | public | registered | partial | reference | ready | none |
-| ``le`` | comparison | public | public | registered | partial | reference | ready | none |
-| ``lt`` | comparison | public | public | registered | partial | reference | ready | none |
-| ``ne`` | comparison | public | public | registered | partial | reference | ready | none |
 | ``einsum`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``acos`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``add`` | elementwise | public | public | registered | partial | reference | ready | none |

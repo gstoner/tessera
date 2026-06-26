@@ -134,13 +134,21 @@ def test_hardware_gated_bucket_stable() -> None:
 def test_covered_by_family_bucket_has_substantial_size() -> None:
     """The largest legitimate slice of the thin-op set is
     family-covered (losses, RNG samplers, complex elementwise, GA
-    differentials).  Floor at 60 — going below means a category
-    default was accidentally reclassified into ``needs_direct_test``."""
+    differentials).  The bucket *legitimately shrinks* as primitives gain
+    direct device tests + real backend coverage — exactly like the
+    ``hardware_gated`` bucket (the x86 AVX-512 elementwise lanes,
+    2026-06-26, moved reduce/unary/binary/compare ops out as they earned
+    real `x86:fused` slots with on-device fixtures).  The guard exists to
+    catch an *accidental* default reclassification into
+    ``needs_direct_test`` — so the real signal is ``needs_direct_test``
+    staying small (asserted separately), not this floor.  Floor at 50."""
     summary = classification_summary()
     family = summary[COVERED_BY_FAMILY]
-    assert family >= 60, (
+    assert family >= 50, (
         f"`covered_by_family` bucket shrank to {family} (baseline ~99).  "
-        f"Did a category default get accidentally reclassified?"
+        f"Did a category default get accidentally reclassified? (Check that "
+        f"`needs_direct_test` stayed small — a shrink driven by ops gaining "
+        f"direct device tests is expected.)"
     )
 
 

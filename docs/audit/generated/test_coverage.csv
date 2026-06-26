@@ -1,6 +1,6 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
-abs,2,0,0,2,0,,directly_tested,2 direct test references
-absolute,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+abs,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
+absolute,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 acos,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,7,5,0,12,0,fp32 fp64,directly_tested,12 direct test references
@@ -171,11 +171,11 @@ ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,0,0,0,0,1,,covered_by_family,category default for 'comparison'
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-erf,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+erf,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 erfc,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-exp,4,0,0,4,0,,directly_tested,4 direct test references
+exp,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-expm1,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+expm1,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 factorized_matmul,4,0,0,4,0,,directly_tested,4 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
@@ -247,8 +247,8 @@ lion,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 load_balance_loss,2,0,0,2,0,,directly_tested,2 direct test references
 load_sharded,3,0,1,3,0,,directly_tested,3 direct test references
 load_state,14,0,2,14,0,,directly_tested,14 direct test references
-log,3,0,0,3,0,,directly_tested,3 direct test references
-log1p,2,0,0,2,0,,directly_tested,2 direct test references
+log,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
+log1p,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 log_cosh_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 log_softmax,5,5,0,10,0,,directly_tested,10 direct test references
 logical_and,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -345,7 +345,7 @@ quantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
 quantize_nvfp4,11,0,2,11,0,fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,11 direct test references
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,2,0,0,2,0,,directly_tested,2 direct test references
-reciprocal,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+reciprocal,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 reduce,86,0,7,86,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,105,20,9,125,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,125 direct test references
@@ -381,7 +381,7 @@ rope,19,10,0,29,0,bf16,directly_tested,29 direct test references
 rope_merge,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 rope_split,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
 round,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-rsqrt,2,0,0,2,0,,directly_tested,2 direct test references
+rsqrt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,6,0,2,6,0,,directly_tested,6 direct test references
@@ -399,9 +399,9 @@ seq2seq_loss,3,0,0,3,0,,directly_tested,3 direct test references
 sgd,6,0,0,6,0,,directly_tested,6 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
-sigmoid,4,0,0,4,0,bf16 f16 f32 fp32,directly_tested,4 direct test references
+sigmoid,5,0,0,5,0,bf16 f16 f32 fp32,directly_tested,5 direct test references
 sigmoid_safe,4,0,0,4,0,,directly_tested,4 direct test references
-sign,2,0,0,2,0,,directly_tested,2 direct test references
+sign,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
 silu,84,2,5,86,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 silu_mul,14,13,0,27,0,bf16 fp32,directly_tested,27 direct test references
 simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
@@ -410,9 +410,9 @@ sinh,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,97,37,9,134,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,134 direct test references
+softmax,98,37,10,135,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,135 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
-softplus,2,0,0,2,0,,directly_tested,2 direct test references
+softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references
 spectral_conv,5,0,0,5,0,fp32,directly_tested,5 direct test references
 spectral_filter,3,0,0,3,0,fp32,directly_tested,3 direct test references
@@ -420,7 +420,7 @@ spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,3,0,0,3,0,,directly_tested,3 direct test references
 spmm_csr,2,0,0,2,0,,directly_tested,2 direct test references
-sqrt,4,0,0,4,0,,directly_tested,4 direct test references
+sqrt,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references
 stack,2,0,0,2,0,,directly_tested,2 direct test references
@@ -437,7 +437,7 @@ svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-tanh,4,0,1,4,0,bf16 f16 f32,directly_tested,4 direct test references
+tanh,5,0,1,5,0,bf16 f16 f32,directly_tested,5 direct test references
 tile,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tile_view,2,0,0,2,0,,directly_tested,2 direct test references
 tiny_attention_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'

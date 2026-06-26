@@ -3109,6 +3109,117 @@ def _execute_rocm_compiled_activation(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED unary-math lane (2026-06-25) — S2 scalar-math / stability family
+# A flat per-element kernel applying a pointwise unary math fn (exp/log/sqrt/erf/
+# …), the unary sibling of the activation lane. ``compiler_path =
+# "rocm_unary_compiled"``. f32/f16/bf16 storage, f32 compute. ONE hsaco per
+# (chip, kind, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_unary_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+
+#: op_name → unary kernel kind (the codegen `kind` attr).
+_ROCM_UNARY_OPS: dict[str, str] = {
+    "tessera.exp": "exp", "tessera.log": "log", "tessera.sqrt": "sqrt",
+    "tessera.rsqrt": "rsqrt", "tessera.reciprocal": "reciprocal",
+    "tessera.absolute": "abs", "tessera.abs": "abs", "tessera.sign": "sign",
+    "tessera.erf": "erf", "tessera.tanh": "tanh", "tessera.sigmoid": "sigmoid",
+    "tessera.log1p": "log1p", "tessera.expm1": "expm1",
+    "tessera.softplus": "softplus",
+}
+
+
+def _build_compiled_unary_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.unary"() {{name = "u", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-unary-kernel", directive, _rocm_unary_hsaco_cache,
+        (chip, kind, dtype))
+
+
+def _execute_rocm_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` unary-math lane: run the COMPILER-GENERATED flat
+    elementwise kernel for a standalone unary math fn over any-shape input (one
+    thread per element). f32/f16/bf16 storage, f32 compute."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_UNARY_OPS:
+        raise ValueError(
+            "rocm_unary_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_UNARY_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _ROCM_UNARY_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("unary requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.array(x, copy=True)
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm unary lane handles f32/f16/bf16; got {x.dtype}")
+
+    hsaco = _build_compiled_unary_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm unary: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm unary: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"u") != 0:
+        raise RuntimeError("rocm unary: kernel symbol 'u' not found")
+
+    xc = np.ascontiguousarray(x, dtype=store).reshape(-1)
+    o = np.zeros(n, dtype=store)
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (dx, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm unary: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = _mr(dx, n) + _mr(do, n) + [ctypes.c_int64(n)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm unary: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    return o.reshape(x.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED silu_mul lane (2026-06-25) — SwiGLU gate-multiply
 # silu_mul(a, b) = silu(a)·b, a flat 2-operand elementwise kernel (sibling of the
 # activation lane). ``compiler_path = "rocm_silu_mul_compiled"``. f32/f16/bf16,
@@ -3760,6 +3871,7 @@ def _executor_table():
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
+        "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,

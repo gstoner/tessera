@@ -240,6 +240,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_loss_compiled": "x86 CPU pointwise loss — mse / mae / huber / "
+                            "smooth_l1 / log_cosh over (pred, target): per-element "
+                            "loss on the AVX-512 loss kernel "
+                            "(tessera_x86_avx512_pointwise_loss_f32) + "
+                            "none/mean/sum reduction on the AVX-512 reduce "
+                            "kernel. f32, matches numpy 2e-5",
     "x86_attention_compiled": "x86 CPU softmax-attention — multi_head / gqa / "
                             "mqa / mla_decode, all composed from the AVX-512 f32 "
                             "GEMM (QK^T and probs*V) + the AVX-512 row-softmax "
@@ -438,6 +444,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_loss_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_loss_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_loss_compiled", runtime_status="success",
+        reason="x86 loss artifact runs the pointwise regression losses (mse / "
+               "mae / huber / smooth_l1 / log_cosh) over (pred, target): the "
+               "per-element loss on the AVX-512 loss kernel "
+               "(tessera_x86_avx512_pointwise_loss_f32) + none/mean/sum "
+               "reduction on the AVX-512 reduce kernel. f32, numpy 2e-5.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_attention_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_attention_compiled",

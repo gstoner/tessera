@@ -2914,6 +2914,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_alibi_f32":
             [c_f32, i64, i64, c_f32],
+        "tessera_x86_avx512_pointwise_loss_f32":
+            [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3825,6 +3827,90 @@ def _execute_x86_compiled_attention(artifact: RuntimeArtifact, args: Any) -> Any
     return _x86_sdpa(q, k, v, int(q.shape[1]), int(k.shape[1]), np,
                      scale=scale, causal=causal)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 pointwise-loss lane — mse / mae / huber / smooth_l1 / log_cosh. The
+# per-element loss runs on the AVX-512 loss kernel; the reduction (none / mean /
+# sum) runs on the AVX-512 reduce kernel. ``compiler_path = "x86_loss_compiled"``.
+# ─────────────────────────────────────────────────────────────────────────────
+#: op_name -> (loss kind, param-kwarg name or None). Matches avx512_loss_f32.cpp.
+_X86_LOSS_OPS = {
+    "tessera.mse_loss": (0, None),
+    "tessera.mae_loss": (1, None),
+    "tessera.huber_loss": (2, "delta"),
+    "tessera.smooth_l1_loss": (3, "beta"),
+    "tessera.log_cosh_loss": (4, None),
+}
+
+
+def _x86_reduce_scalar(flat: Any, kind: int, np: Any) -> Any:
+    """Full reduction of a flat f32 array on the AVX-512 reduce kernel
+    (kind 0 = sum, 2 = mean)."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    n = int(flat.size)
+    out = np.zeros(1, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_reduce_f32(
+        np.ascontiguousarray(flat, np.float32).ctypes.data_as(cf),
+        ctypes.c_int64(1), ctypes.c_int64(n), out.ctypes.data_as(cf),
+        ctypes.c_int(kind))
+    return np.float32(out[0])
+
+
+def _execute_x86_compiled_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` pointwise-loss lane: mse / mae / huber / smooth_l1 /
+    log_cosh over (pred, target). The per-element loss runs on the AVX-512 loss
+    kernel; reduction none/mean/sum on the AVX-512 reduce kernel. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_LOSS_OPS:
+        raise ValueError(
+            "x86_loss_compiled executor handles exactly one of "
+            f"{tuple(_X86_LOSS_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind, param_kw = _X86_LOSS_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("loss requires two operands (pred, target)")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    param = float(kwargs.get(param_kw, 1.0)) if param_kw else 0.0
+    values = _bind_launch_args(args, arg_names)
+    pred = _as_numpy(values[operand_names[0]])
+    target = _as_numpy(values[operand_names[1]])
+    if pred.shape != target.shape:
+        raise ValueError(
+            f"loss requires matching shapes; got pred{pred.shape} "
+            f"target{target.shape}")
+    if pred.dtype != np.float32:
+        raise ValueError(f"x86 loss lane handles f32 only; got {pred.dtype}")
+    n = int(np.prod(pred.shape)) if pred.ndim else 1
+    if n <= 0:
+        return np.array(pred, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    pc = np.ascontiguousarray(pred, dtype=np.float32).reshape(-1)
+    tc = np.ascontiguousarray(target, dtype=np.float32).reshape(-1)
+    per = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_pointwise_loss_f32(
+        pc.ctypes.data_as(cf), tc.ctypes.data_as(cf), ctypes.c_int64(n),
+        ctypes.c_int(kind), ctypes.c_float(param), per.ctypes.data_as(cf))
+    if reduction == "none":
+        return per.reshape(pred.shape)
+    return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
 #: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
@@ -6005,6 +6091,7 @@ def _executor_table():
         "x86_rope_compiled": _execute_x86_compiled_rope,
         "x86_alibi_compiled": _execute_x86_compiled_alibi,
         "x86_attention_compiled": _execute_x86_compiled_attention,
+        "x86_loss_compiled": _execute_x86_compiled_loss,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

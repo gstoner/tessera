@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 113 |
-| ``runnable_reference`` | 196 |
+| ``complete`` | 118 |
+| ``runnable_reference`` | 191 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (113)
+## complete (118)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -114,6 +114,11 @@ each row into a single E2E tier.
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``huber_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``log_cosh_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``mae_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``mse_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``smooth_l1_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
@@ -149,7 +154,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (196)
+## runnable_reference (191)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -261,17 +266,12 @@ each row into a single E2E tier.
 | ``cross_entropy_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``ddpm_noise_pred_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``denoising_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``huber_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``implicit_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``js_divergence`` | loss | public | public | registered | partial | reference | ready | none |
 | ``kl_divergence`` | loss | public | public | registered | partial | reference | ready | none |
 | ``load_balance_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``log_cosh_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``mae_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``mse_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``persistent_cd_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``smooth_l1_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``z_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``moe`` | moe | public | public | registered | partial | reference | ready | none |

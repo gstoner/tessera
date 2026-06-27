@@ -1275,6 +1275,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_binary_loss_compiled.py"
+       for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1837,6 +1839,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernel; x86_loss_compiled lane; f32, matches numpy 2e-5)",
     } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                  "log_cosh_loss")},
+    # Binary-cross-entropy losses — per-element on the AVX-512 binary-loss kernel
+    # (stable softplus) + reduce kernel (x86_binary_loss_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 binary-cross-entropy loss {op} "
+                 "(tessera_x86_avx512_binary_loss_f32 per-element + reduce "
+                 "kernel; x86_binary_loss_compiled lane; f32, matches numpy 2e-5)",
+    } for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
 }
 
 

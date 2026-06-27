@@ -145,3 +145,55 @@ extern "C" void tessera_x86_avx512_pointwise_loss_f32(const float* P,
     }
     for (; i < n; ++i) out[i] = scalar_loss(P[i], T[i], kind, param);
 }
+
+// ── binary-cross-entropy-with-logits family (per-element, z=logits, t=target) ──
+//
+//   kind 0 = bce            max(z,0) − z·t + log1p(exp(−|z|))
+//   kind 1 = asymmetric_bce pw·t·softplus(−z) + nw·(1−t)·softplus(z)
+//             softplus(±z) = max(±z,0) + log1p(exp(−|z|));  pw=nw=1 ⇒ bce.
+//
+// The stable softplus form (relu(±z) + log1p(exp(−|z|))) never overflows.
+namespace {
+constexpr int kBce = 0;
+constexpr int kAsymBce = 1;
+
+inline float scalar_binary_loss(float z, float t, int kind, float pw, float nw) {
+    float L = std::log1p(std::exp(-std::fabs(z)));
+    float sp_pos = std::fmax(z, 0.0f) + L;
+    if (kind == kBce) return sp_pos - z * t;
+    float sp_neg = std::fmax(-z, 0.0f) + L;
+    return pw * t * sp_neg + nw * (1.0f - t) * sp_pos;
+}
+}  // namespace
+
+extern "C" void tessera_x86_avx512_binary_loss_f32(const float* Z,
+                                                   const float* T, int64_t n,
+                                                   int kind, float pos_w,
+                                                   float neg_w, float* out) {
+    const __m512 zero = _mm512_setzero_ps();
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 vpw = _mm512_set1_ps(pos_w);
+    const __m512 vnw = _mm512_set1_ps(neg_w);
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m512 z = _mm512_loadu_ps(Z + i);
+        __m512 t = _mm512_loadu_ps(T + i);
+        __m512 az = _mm512_abs_ps(z);
+        __m512 L = log512(_mm512_add_ps(one, exp512(_mm512_sub_ps(zero, az))));
+        __m512 sp_pos = _mm512_add_ps(_mm512_max_ps(z, zero), L);
+        __m512 y;
+        if (kind == kBce) {
+            y = _mm512_sub_ps(sp_pos, _mm512_mul_ps(z, t));   // sp_pos − z·t
+        } else {
+            __m512 sp_neg = _mm512_add_ps(_mm512_max_ps(_mm512_sub_ps(zero, z),
+                                                        zero), L);
+            __m512 term1 = _mm512_mul_ps(_mm512_mul_ps(vpw, t), sp_neg);
+            __m512 term2 = _mm512_mul_ps(
+                _mm512_mul_ps(vnw, _mm512_sub_ps(one, t)), sp_pos);
+            y = _mm512_add_ps(term1, term2);
+        }
+        _mm512_storeu_ps(out + i, y);
+    }
+    for (; i < n; ++i) out[i] = scalar_binary_loss(Z[i], T[i], kind, pos_w,
+                                                   neg_w);
+}

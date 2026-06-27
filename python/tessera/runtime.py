@@ -2916,6 +2916,9 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_pointwise_loss_f32":
             [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_binary_loss_f32":
+            [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, ctypes.c_float,
+             c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3910,6 +3913,71 @@ def _execute_x86_compiled_loss(artifact: RuntimeArtifact, args: Any) -> Any:
         ctypes.c_int(kind), ctypes.c_float(param), per.ctypes.data_as(cf))
     if reduction == "none":
         return per.reshape(pred.shape)
+    return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
+
+
+#: op_name -> (binary-loss kind, (pos_weight kw, neg_weight kw) or None). Matches
+#: avx512_loss_f32.cpp. bce has no weights; asymmetric_bce has pos/neg weights.
+_X86_BINARY_LOSS_OPS = {
+    "tessera.binary_cross_entropy_loss": (0, None),
+    "tessera.asymmetric_bce": (1, ("pos_weight", "neg_weight")),
+}
+
+
+def _execute_x86_compiled_binary_loss(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` binary-cross-entropy loss lane: bce / asymmetric_bce
+    over (logits, targets). Per-element loss on the AVX-512 binary-loss kernel
+    (stable softplus form); reduction none/mean/sum on the reduce kernel. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_BINARY_LOSS_OPS:
+        raise ValueError(
+            "x86_binary_loss_compiled executor handles exactly one of "
+            f"{tuple(_X86_BINARY_LOSS_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    kind, weight_kws = _X86_BINARY_LOSS_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("binary loss requires two operands (logits, targets)")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    pos_w = float(kwargs.get(weight_kws[0], 1.0)) if weight_kws else 1.0
+    neg_w = float(kwargs.get(weight_kws[1], 1.0)) if weight_kws else 1.0
+    values = _bind_launch_args(args, arg_names)
+    z = _as_numpy(values[operand_names[0]])
+    t = _as_numpy(values[operand_names[1]])
+    if z.shape != t.shape:
+        raise ValueError(
+            f"binary loss requires matching shapes; got logits{z.shape} "
+            f"targets{t.shape}")
+    if z.dtype != np.float32:
+        raise ValueError(f"x86 binary-loss lane handles f32 only; got {z.dtype}")
+    n = int(np.prod(z.shape)) if z.ndim else 1
+    if n <= 0:
+        return np.array(z, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    zc = np.ascontiguousarray(z, dtype=np.float32).reshape(-1)
+    tc = np.ascontiguousarray(t, dtype=np.float32).reshape(-1)
+    per = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_binary_loss_f32(
+        zc.ctypes.data_as(cf), tc.ctypes.data_as(cf), ctypes.c_int64(n),
+        ctypes.c_int(kind), ctypes.c_float(pos_w), ctypes.c_float(neg_w),
+        per.ctypes.data_as(cf))
+    if reduction == "none":
+        return per.reshape(z.shape)
     return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -6092,6 +6160,7 @@ def _executor_table():
         "x86_alibi_compiled": _execute_x86_compiled_alibi,
         "x86_attention_compiled": _execute_x86_compiled_attention,
         "x86_loss_compiled": _execute_x86_compiled_loss,
+        "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

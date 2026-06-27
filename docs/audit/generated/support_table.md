@@ -196,8 +196,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `asymmetric_bce` | loss | public | public | registered | complete | partial | reference | ready | none |
-| `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `asymmetric_bce` | loss | public | public | registered | complete | partial | fused | ready | none |
+| `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `cross_entropy_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
@@ -344,7 +344,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
-| loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· |
+| loss | 19 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· |
 | model_layer | 1 | PPGCpFN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |

@@ -240,6 +240,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_attention_compiled": "x86 CPU softmax-attention — multi_head / gqa / "
+                            "mqa / mla_decode, all composed from the AVX-512 f32 "
+                            "GEMM (QK^T and probs*V) + the AVX-512 row-softmax "
+                            "kernel, with reshape/scale/causal-mask/KV-group in "
+                            "Python; the CPU analog of the ROCm WMMA flash-"
+                            "attention family. f32",
     "x86_rope_compiled": "x86 CPU interleaved-pair rotary position embedding "
                             "(rope) — tessera_x86_avx512_rope_f32 from "
                             "libtessera_x86_elementwise.so (AVX-512 deinterleave "
@@ -432,6 +438,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_attention_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_attention_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_attention_compiled", runtime_status="success",
+        reason="x86 attention artifact runs multi_head / gqa / mqa / mla_decode "
+               "as O = softmax(Q·Kᵀ·scale [+causal])·V, composed from the AVX-512 "
+               "f32 GEMM (QKᵀ and probs·V) + the AVX-512 row-softmax kernel; "
+               "reshape/scale/mask/KV-group expansion in Python. The CPU analog "
+               "of the ROCm WMMA flash-attention family. f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_rope_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rope_compiled",

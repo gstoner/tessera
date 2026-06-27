@@ -195,7 +195,7 @@ ge,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 gelu,46,19,1,65,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,65 direct test references
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
-gqa_attention,6,0,1,6,0,,directly_tested,6 direct test references
+gqa_attention,8,0,2,8,0,,directly_tested,8 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
 group_norm,6,0,0,6,0,,directly_tested,6 direct test references
 grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
@@ -279,7 +279,7 @@ memory_write,4,0,0,4,0,,directly_tested,4 direct test references
 min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
-mla_decode,4,2,0,6,0,,directly_tested,6 direct test references
+mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
 mla_decode_fused,5,9,1,14,0,,directly_tested,14 direct test references
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
@@ -294,14 +294,14 @@ momentum,3,0,0,3,0,,directly_tested,3 direct test references
 mor_partition,3,2,1,5,0,,directly_tested,5 direct test references
 mor_router,5,3,1,8,0,,directly_tested,8 direct test references
 mor_scatter,3,2,1,5,0,,directly_tested,5 direct test references
-mqa_attention,4,0,1,4,0,,directly_tested,4 direct test references
+mqa_attention,6,0,2,6,0,,directly_tested,6 direct test references
 mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
 msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,5,0,0,5,0,,directly_tested,5 direct test references
 mul,85,4,7,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
-multi_head_attention,7,0,1,7,0,,directly_tested,7 direct test references
+multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
@@ -410,7 +410,7 @@ sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,118,37,28,155,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,155 direct test references
+softmax,119,37,29,156,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,156 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

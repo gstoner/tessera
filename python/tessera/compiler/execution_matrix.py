@@ -240,6 +240,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_transcendental_compiled": "x86 CPU vectorized transcendental / "
+                            "activation kernel (exp/log/tanh/sigmoid/silu/gelu/"
+                            "erf/softplus/expm1/log1p) — "
+                            "tessera_x86_avx512_transcendental_f32 from "
+                            "libtessera_x86_elementwise.so (Cephes exp/log "
+                            "minimax cores + Abramowitz-Stegun erf; activations "
+                            "compose); reaches ROCm math->ROCDL parity. gelu is "
+                            "the tanh approximation. f32, matches numpy 2e-5",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -387,6 +395,19 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_transcendental_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_transcendental_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_transcendental_compiled", runtime_status="success",
+        reason="x86 transcendental artifact runs the vectorized AVX-512 "
+               "transcendental / activation kernel (exp/log/tanh/sigmoid/silu/"
+               "gelu/erf/softplus/expm1/log1p) from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_transcendental"
+               "_f32): Cephes exp/log minimax cores (~1 ulp) + Abramowitz-Stegun "
+               "erf, activations compose. The CPU analog reaching ROCm math->"
+               "ROCDL parity; gelu = tanh approximation. f32, matches numpy "
+               "2e-5.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_unary_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_unary_compiled",

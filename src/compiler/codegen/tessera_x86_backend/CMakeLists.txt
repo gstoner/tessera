@@ -48,6 +48,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_scan_f32.cpp
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
+  src/kernels/avx512_transcendental_f32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -90,6 +91,9 @@ target_link_libraries(test_argreduce PRIVATE tessera_x86_backend)
 add_executable(test_where tests/test_where.cpp)
 target_link_libraries(test_where PRIVATE tessera_x86_backend)
 
+add_executable(test_transcendental tests/test_transcendental.cpp)
+target_link_libraries(test_transcendental PRIVATE tessera_x86_backend)
+
 # ── Runtime-loadable elementwise kernel lane ────────────────────────────────
 # A SHARED library of just the AVX-512 elementwise kernels (reduce / unary /
 # binary / compare / logical / bitwise) — the C-ABI symbols the Python runtime
@@ -107,4 +111,5 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_scan_f32.cpp
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
+  src/kernels/avx512_transcendental_f32.cpp
 )

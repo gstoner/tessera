@@ -2896,6 +2896,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_i32, ctypes.c_int],
         "tessera_x86_avx512_where_f32":
             [c_i8, c_f32, c_f32, i64, c_f32],
+        "tessera_x86_avx512_transcendental_f32":
+            [c_f32, i64, c_f32, ctypes.c_int],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3163,6 +3165,68 @@ def _execute_x86_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
     out = np.zeros(n, dtype=np.float32)
     cf = ctypes.POINTER(ctypes.c_float)
     lib.tessera_x86_avx512_unary_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(n), out.ctypes.data_as(cf),
+        ctypes.c_int(kind))
+    return out.reshape(x.shape)
+
+
+#: op_name -> transcendental kind index (must match avx512_transcendental_f32.cpp).
+#: The AVX-512 vectorized transcendental / activation lane (Cephes exp/log cores +
+#: Abramowitz-Stegun erf; activations compose), reaching ROCm math->ROCDL parity.
+#: gelu uses the tanh approximation, matching the ROCm activation reference.
+_X86_TRANSCENDENTAL_OPS = {
+    "tessera.exp": 0,
+    "tessera.log": 1,
+    "tessera.tanh": 2,
+    "tessera.sigmoid": 3,
+    "tessera.silu": 4, "tessera.swish": 4,
+    "tessera.gelu": 5,
+    "tessera.erf": 6,
+    "tessera.softplus": 7,
+    "tessera.expm1": 8,
+    "tessera.log1p": 9,
+}
+
+
+def _execute_x86_compiled_transcendental(artifact: RuntimeArtifact,
+                                         args: Any) -> Any:
+    """The ``target="x86"`` transcendental lane: run the hand-written AVX-512
+    vectorized transcendental / activation kernel (exp/log/tanh/sigmoid/silu/
+    gelu/erf/softplus/expm1/log1p) loaded from libtessera_x86_elementwise.so
+    over any-shape f32 input. Cephes exp/log cores (~1 ulp) + A&S erf; matches
+    numpy to atol/rtol 2e-5."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_TRANSCENDENTAL_OPS:
+        raise ValueError(
+            "x86_transcendental_compiled executor handles exactly one of "
+            f"{tuple(_X86_TRANSCENDENTAL_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_TRANSCENDENTAL_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("transcendental requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 transcendental lane handles f32 only; got {x.dtype}")
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.array(x, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_transcendental_f32(
         xc.ctypes.data_as(cf), ctypes.c_int64(n), out.ctypes.data_as(cf),
         ctypes.c_int(kind))
     return out.reshape(x.shape)
@@ -5339,6 +5403,7 @@ def _executor_table():
         "x86_scan_compiled": _execute_x86_compiled_scan,
         "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
         "x86_where_compiled": _execute_x86_compiled_where,
+        "x86_transcendental_compiled": _execute_x86_compiled_transcendental,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

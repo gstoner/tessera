@@ -2898,6 +2898,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_i8, c_f32, c_f32, i64, c_f32],
         "tessera_x86_avx512_transcendental_f32":
             [c_f32, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_pow_f32":
+            [c_f32, c_f32, i64, c_f32],
+        "tessera_x86_avx512_silu_mul_f32":
+            [c_f32, c_f32, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3238,6 +3242,65 @@ def _execute_x86_compiled_transcendental(artifact: RuntimeArtifact,
         xc.ctypes.data_as(cf), ctypes.c_int64(n), out.ctypes.data_as(cf),
         ctypes.c_int(kind))
     return out.reshape(x.shape)
+
+
+#: op_name -> .so symbol for the transcendental-backed BINARY lane. pow(a,b) and
+#: silu_mul(a,b)=silu(a)*b share the exp/log/sigmoid cores of the transcendental
+#: kernel. pow assumes a POSITIVE base (a^b via exp(b*log(a))).
+_X86_BINARY_MATH_OPS = {
+    "tessera.pow": "tessera_x86_avx512_pow_f32",
+    "tessera.power": "tessera_x86_avx512_pow_f32",
+    "tessera.silu_mul": "tessera_x86_avx512_silu_mul_f32",
+    "tessera.swiglu": "tessera_x86_avx512_silu_mul_f32",
+}
+
+
+def _execute_x86_compiled_binary_math(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` transcendental-backed binary lane: pow(a,b) (positive
+    base) and silu_mul(a,b)=silu(a)*b, from libtessera_x86_elementwise.so over
+    any-shape f32 inputs. Matches numpy to atol/rtol 2e-5."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_BINARY_MATH_OPS:
+        raise ValueError(
+            "x86_binary_math_compiled executor handles exactly one of "
+            f"{tuple(_X86_BINARY_MATH_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    sym = _X86_BINARY_MATH_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("binary math requires two operands (a, b)")
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    if a.shape != b.shape:
+        raise ValueError(
+            f"x86 binary-math lane requires matching operand shapes; got "
+            f"a{a.shape} b{b.shape}")
+    if a.dtype != np.float32:
+        raise ValueError(f"x86 binary-math lane handles f32 only; got {a.dtype}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    ac = np.ascontiguousarray(a, dtype=np.float32).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    getattr(lib, sym)(
+        ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
+        out.ctypes.data_as(cf))
+    return out.reshape(a.shape)
 
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -5412,6 +5475,7 @@ def _executor_table():
         "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
         "x86_where_compiled": _execute_x86_compiled_where,
         "x86_transcendental_compiled": _execute_x86_compiled_transcendental,
+        "x86_binary_math_compiled": _execute_x86_compiled_binary_math,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

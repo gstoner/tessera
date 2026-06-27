@@ -74,13 +74,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `mod` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `popcount` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `pow` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `pow` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `rsqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `score_combine` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `silu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `silu_mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `silu_mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sin` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `sinh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `softcap` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -333,7 +333,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |

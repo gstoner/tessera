@@ -58,13 +58,13 @@ log1p,elementwise,public,public,registered,complete,partial,fused,ready,none
 mod,elementwise,public,public,registered,complete,partial,reference,ready,none
 mul,elementwise,public,public,registered,complete,partial,reference,ready,none
 popcount,elementwise,public,public,registered,complete,partial,reference,ready,none
-pow,elementwise,public,public,registered,complete,partial,reference,ready,none
+pow,elementwise,public,public,registered,complete,partial,fused,ready,none
 relu,elementwise,public,public,registered,complete,partial,fused,ready,none
 rsqrt,elementwise,public,public,registered,complete,partial,fused,ready,none
 score_combine,elementwise,public,public,registered,complete,partial,reference,ready,none
 sigmoid,elementwise,public,public,registered,complete,partial,fused,ready,none
 silu,elementwise,public,public,registered,complete,partial,fused,ready,none
-silu_mul,elementwise,public,public,registered,complete,partial,reference,ready,none
+silu_mul,elementwise,public,public,registered,complete,partial,fused,ready,none
 sin,elementwise,public,public,registered,complete,partial,reference,ready,none
 sinh,elementwise,public,public,registered,complete,partial,fused,ready,none
 softcap,elementwise,public,public,registered,complete,partial,reference,ready,none

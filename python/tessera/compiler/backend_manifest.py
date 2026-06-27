@@ -1260,6 +1260,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
                   "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
                   "asin", "acos", "atan", "erfc")},
+    **{(op, "x86"): "tests/unit/test_x86_binary_math_compiled.py"
+       for op in ("pow", "silu_mul")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1737,6 +1739,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
                  "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
                  "asin", "acos", "atan", "erfc")},
+    # Transcendental-backed BINARY ops — pow(a,b) (positive base) and
+    # silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply); share the exp/log/sigmoid
+    # cores. Runtime ctypes-loads them (x86_binary_math_compiled lane).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 transcendental-backed binary {op} "
+                 "(tessera_x86_avx512_{pow,silu_mul}_f32, runtime-loaded; "
+                 "x86_binary_math_compiled lane; f32, matches numpy 2e-5)",
+    } for op in ("pow", "silu_mul")},
 }
 
 

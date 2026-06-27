@@ -1286,6 +1286,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    **{(op, "x86"): "tests/unit/test_x86_nvfp4_compiled.py"
+       for op in ("quantize_nvfp4", "dequantize_nvfp4")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1891,6 +1893,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_fpquant_compiled lane; f32 fake-quant, matches reference)",
     } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    # NVFP4 — block-scaled fp4 (E2M1 codes + per-block fp8-E4M3 scale) on the
+    # AVX-512 fpquant kernel + host block structure (x86_nvfp4_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 NVFP4 block-scaled fp4 {op} (per-block fp8-E4M3 scale "
+                 "+ E2M1 codes on the fpquant kernel; x86_nvfp4_compiled lane; "
+                 "f32 fake-quant, matches the microscaling reference)",
+    } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
 }
 
 

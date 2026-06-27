@@ -927,6 +927,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "i32 output). Executes via runtime.launch() "
                  "(rocm_argreduce_compiled).",
     } for op in ("argmax", "argmin")},
+    # cumsum/cumprod/cummax/cummin — CUB BlockScan (gpu.shuffle up Kogge-Stone +
+    # cross-tile carry); inclusive prefix, same-shape output. Executes via
+    # runtime.launch() (rocm_scan_compiled).
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("scan",),
+        "notes": f"Row inclusive scan {op} (generate-rocm-scan-kernel: block-scan "
+                 "via gpu.shuffle up + cross-tile carry, f32 scan). Executes via "
+                 "runtime.launch() (rocm_scan_compiled).",
+    } for op in ("cumsum", "cumprod", "cummax", "cummin")},
     "rmsnorm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
@@ -1214,6 +1224,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     **{(op, "rocm"): "tests/unit/test_rocm_argreduce_compiled.py"
        for op in ("argmax", "argmin")},
+    **{(op, "rocm"): "tests/unit/test_rocm_scan_compiled.py"
+       for op in ("cumsum", "cumprod", "cummax", "cummin")},
     **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"

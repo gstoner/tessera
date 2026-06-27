@@ -445,6 +445,29 @@ def ROCM_ArgReduceKernelOp : TesseraROCM_Op<"argreduce"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_ScanKernelOp : TesseraROCM_Op<"scan"> {
+  let summary = "Row inclusive prefix scan (cumsum / cumprod / cummax / cummin)";
+  let description = [{
+    The directive `generate-rocm-scan-kernel` expands into a row inclusive-scan
+    gpu kernel — the CUB/rocPRIM `BlockScan` technique. One workgroup per row
+    processes the row in BD-element tiles with a running carry; each tile does a
+    warp inclusive scan via `gpu.shuffle up` (Kogge-Stone) within a 32-lane
+    subgroup, exclusive-scans the per-subgroup totals for the subgroup offset,
+    then combines with the cross-tile carry:
+
+      * `kind = "cumsum"`  — `O[m,k] = Σ_{j<=k} X[m,j]`
+      * `kind = "cumprod"` — `O[m,k] = Π_{j<=k} X[m,j]`
+      * `kind = "cummax"`  — running max; `cummin` — running min
+
+    Scan runs in **f32** regardless of storage dtype; output is `[M,K]` (same
+    shape). `M`/`K` are runtime `index` args. Validated vs numpy on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"cumsum\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
   let summary = "Elementwise unary math kernel (exp / log / sqrt / erf / …)";
   let description = [{

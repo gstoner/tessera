@@ -110,10 +110,10 @@ cross_attention,7,0,0,7,0,,directly_tested,7 direct test references
 cross_entropy_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 ctc_loss,7,0,0,7,0,,directly_tested,7 direct test references
-cummax,4,0,0,4,0,,directly_tested,4 direct test references
-cummin,2,0,0,2,0,,directly_tested,2 direct test references
-cumprod,2,0,0,2,0,,directly_tested,2 direct test references
-cumsum,3,0,0,3,0,,directly_tested,3 direct test references
+cummax,6,0,0,6,0,f32,directly_tested,6 direct test references
+cummin,4,0,0,4,0,f32,directly_tested,4 direct test references
+cumprod,3,0,0,3,0,f32,directly_tested,3 direct test references
+cumsum,5,0,1,5,0,f32,directly_tested,5 direct test references
 custom_batching,0,0,0,0,1,,structural_only,category default for 'extension'
 custom_call,0,0,0,0,1,,structural_only,category default for 'extension'
 custom_jvp,0,0,0,0,1,,structural_only,category default for 'extension'
@@ -410,7 +410,7 @@ sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,107,37,19,144,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,144 direct test references
+softmax,108,37,20,145,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,145 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

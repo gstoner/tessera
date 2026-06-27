@@ -1256,6 +1256,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
     ("where", "x86"): "tests/unit/test_x86_where_compiled.py",
     ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
+       for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
+                  "softplus", "expm1", "log1p")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1718,6 +1721,20 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_where_f32, runtime-loaded; "
                  "x86_where_compiled lane; cond i8 != 0, a/b/out f32)",
     },
+    # S2 transcendental / activation family — hand-written AVX-512 vectorized
+    # kernel (tessera_x86_avx512_transcendental_f32) the runtime ctypes-loads
+    # (x86_transcendental_compiled). Cephes exp/log minimax cores + A&S erf;
+    # activations compose. The CPU analog reaching ROCm math->ROCDL parity.
+    # gelu uses the tanh approximation (matches the ROCm activation reference).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 transcendental/activation {op} "
+                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+                 "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
+                 "erf; f32, matches numpy 2e-5)",
+    } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
+                 "softplus", "expm1", "log1p")},
 }
 
 

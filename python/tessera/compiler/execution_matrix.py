@@ -120,6 +120,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "last-axis (one workgroup per row, LDS tree-reduce); "
                             "tessera.sum/mean/max/min (amax/amin) by op name. "
                             "f16/bf16/f32 storage, f32 reduce",
+    "rocm_argreduce_compiled": "AMD GPU RDNA row arg-reduction (argmax/argmin) "
+                            "the Tessera compiler GENERATES (generate-rocm-"
+                            "argreduce-kernel -> ROCDL -> hsaco, in-process via "
+                            "tessera-opt), then HIP launches it — a CUB ArgMax-"
+                            "style warp-shuffle reduce carrying the (value,index) "
+                            "pair, first-occurrence tie-break, along one axis. "
+                            "f16/bf16/f32 input, i32 index output",
     "x86_reduce_compiled": "x86 CPU row reduction (sum/mean/max/min) — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "reduce_f32) the Python runtime ctypes-loads from "
@@ -486,6 +493,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "serializes the kernel to hsaco in-process, then HIP loads + "
                "launches it. An arbitrary reduced axis folds to [outer,inner]; "
                "handles tessera.sum/mean/max/min (amax/amin) by op name.",
+        execution_mode="hip_runtime"),
+    # argmax/argmin — CUB ArgMax-style warp-shuffle arg-reduce, i32 index output.
+    ("rocm", "rocm_argreduce_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_argreduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_argreduce_compiled", runtime_status="success",
+        reason="ROCm argreduce artifact runs the COMPILER-GENERATED RDNA row "
+               "arg-reduction kernel (argmax/argmin along one axis): each thread "
+               "carries the best (value,index) pair, a gpu.shuffle xor butterfly "
+               "reduces the pair within a 32-lane subgroup (CUB ArgMax pattern), "
+               "first-occurrence tie-break. tessera-opt → hsaco in-process, HIP "
+               "launches it. f16/bf16/f32 input, i32 index output.",
         execution_mode="hip_runtime"),
     # Standalone elementwise activations (gelu/silu/relu) — flat per-element
     # kernel; the standalone analog of the GEMM fused epilogue. vs numpy.

@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 102 |
-| ``runnable_reference`` | 207 |
+| ``complete`` | 107 |
+| ``runnable_reference`` | 202 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (102)
+## complete (107)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -41,6 +41,7 @@ each row into a single E2E tier.
 | ``le`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``lt`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``ne`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``einsum`` | contraction | public | public | registered | partial | fused | ready | none |
 | ``acos`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``asin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``atan`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -102,11 +103,14 @@ each row into a single E2E tier.
 | ``logical_not`` | logical | public | public | registered | partial | fused | ready | none |
 | ``logical_or`` | logical | public | public | registered | partial | fused | ready | none |
 | ``logical_xor`` | logical | public | public | registered | partial | fused | ready | none |
+| ``batched_gemm`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``dequant_matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
+| ``factorized_matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -119,6 +123,7 @@ each row into a single E2E tier.
 | ``sign`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``trunc`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``where`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``qkv_projection`` | projection | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -138,7 +143,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (207)
+## runnable_reference (202)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -172,7 +177,6 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``einsum`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``add`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``atan2`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``clip`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -244,9 +248,7 @@ each row into a single E2E tier.
 | ``svd`` | linalg_decomposition | public | public | registered | partial | reference | ready | none |
 | ``cholesky_solve`` | linalg_solver | public | public | registered | partial | reference | ready | none |
 | ``tri_solve`` | linalg_solver | public | public | registered | partial | reference | ready | none |
-| ``batched_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
-| ``factorized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_compress`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |
@@ -270,7 +272,6 @@ each row into a single E2E tier.
 | ``smooth_l1_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``z_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``linear_general`` | model_layer | public | public | registered | partial | reference | ready | none |
 | ``moe`` | moe | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
@@ -285,7 +286,6 @@ each row into a single E2E tier.
 | ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
-| ``qkv_projection`` | projection | public | public | registered | partial | reference | ready | none |
 | ``dequantize_fp4`` | quantize | public | public | registered | partial | reference | ready | none |
 | ``dequantize_fp6`` | quantize | public | public | registered | partial | reference | ready | none |
 | ``dequantize_fp8`` | quantize | public | public | registered | partial | reference | ready | none |

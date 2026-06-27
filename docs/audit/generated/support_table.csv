@@ -35,7 +35,7 @@ gt,comparison,public,public,registered,complete,partial,fused,ready,none
 le,comparison,public,public,registered,complete,partial,fused,ready,none
 lt,comparison,public,public,registered,complete,partial,fused,ready,none
 ne,comparison,public,public,registered,complete,partial,fused,ready,none
-einsum,contraction,public,public,registered,complete,partial,reference,ready,none
+einsum,contraction,public,public,registered,complete,partial,fused,ready,none
 acos,elementwise,public,public,registered,complete,partial,fused,ready,none
 add,elementwise,public,public,registered,complete,partial,reference,ready,none
 asin,elementwise,public,public,registered,complete,partial,fused,ready,none
@@ -168,10 +168,10 @@ logical_and,logical,public,public,registered,complete,partial,fused,ready,none
 logical_not,logical,public,public,registered,complete,partial,fused,ready,none
 logical_or,logical,public,public,registered,complete,partial,fused,ready,none
 logical_xor,logical,public,public,registered,complete,partial,fused,ready,none
-batched_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
+batched_gemm,loop_nest,public,public,registered,complete,partial,fused,ready,none
 dequant_grouped_gemm,loop_nest,public,public,registered,complete,partial,reference,ready,none
 dequant_matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
-factorized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none
+factorized_matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
 gemm,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 grouped_gemm,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 latent_kv_compress,loop_nest,public,public,registered,complete,partial,reference,ready,none
@@ -199,7 +199,7 @@ score_matching_loss,loss,public,public,registered,complete,partial,reference,rea
 smooth_l1_loss,loss,public,public,registered,complete,partial,reference,ready,none
 vlb_loss,loss,public,public,registered,complete,partial,reference,ready,none
 z_loss,loss,public,public,registered,complete,partial,reference,ready,none
-linear_general,model_layer,public,public,registered,complete,partial,reference,ready,none
+linear_general,model_layer,public,public,registered,complete,partial,fused,ready,none
 moe,moe,public,public,registered,complete,partial,reference,ready,none
 moe_combine,moe_transport,public,public,registered,complete,partial,reference,ready,none
 moe_dispatch,moe_transport,public,public,registered,complete,partial,reference,ready,none
@@ -226,7 +226,7 @@ trunc,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 where,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 alibi,position_encoding,public,public,registered,complete,partial,reference,ready,none
 ntk_rope,position_encoding,public,public,registered,complete,partial,reference,ready,none
-qkv_projection,projection,public,public,registered,complete,partial,reference,ready,none
+qkv_projection,projection,public,public,registered,complete,partial,fused,ready,none
 dequantize_fp4,quantize,public,public,registered,complete,partial,reference,ready,none
 dequantize_fp6,quantize,public,public,registered,complete,partial,reference,ready,none
 dequantize_fp8,quantize,public,public,registered,complete,partial,reference,ready,none

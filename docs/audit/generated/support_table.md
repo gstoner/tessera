@@ -51,7 +51,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `le` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `lt` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `einsum` | contraction | public | public | registered | complete | partial | reference | ready | none |
+| `einsum` | contraction | public | public | registered | complete | partial | fused | ready | none |
 | `acos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `add` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
@@ -184,10 +184,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logical_not` | logical | public | public | registered | complete | partial | fused | ready | none |
 | `logical_or` | logical | public | public | registered | complete | partial | fused | ready | none |
 | `logical_xor` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `batched_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `batched_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `dequant_grouped_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `dequant_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `factorized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `factorized_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
@@ -215,7 +215,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `smooth_l1_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `vlb_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `z_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
-| `linear_general` | model_layer | public | public | registered | complete | partial | reference | ready | none |
+| `linear_general` | model_layer | public | public | registered | complete | partial | fused | ready | none |
 | `moe` | moe | public | public | registered | complete | partial | reference | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
@@ -242,7 +242,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `where` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `alibi` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
 | `ntk_rope` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
-| `qkv_projection` | projection | public | public | registered | complete | partial | reference | ready | none |
+| `qkv_projection` | projection | public | public | registered | complete | partial | fused | ready | none |
 | `dequantize_fp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
 | `dequantize_fp6` | quantize | public | public | registered | complete | partial | reference | ready | none |
 | `dequantize_fp8` | quantize | public | public | registered | complete | partial | reference | ready | none |
@@ -332,7 +332,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| contraction | 1 | PPGCpRN· |
+| contraction | 1 | PPGCpFN· |
 | elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
@@ -343,15 +343,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_solver | 2 | PPGCpRN· PPGCpRN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| loop_nest | 12 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
+| loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
 | loss | 19 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| model_layer | 1 | PPGCpRN· |
+| model_layer | 1 | PPGCpFN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpRN· PPGCpRN· |
-| projection | 1 | PPGCpRN· |
+| projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |

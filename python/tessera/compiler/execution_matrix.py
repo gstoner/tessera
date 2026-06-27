@@ -240,6 +240,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_matmul_family_compiled": "x86 CPU matmul-family kernel — batched_gemm "
+                            "/ linear_general / qkv_projection / "
+                            "factorized_matmul / einsum, all built on the "
+                            "AVX-512 f32 GEMM microkernel "
+                            "(tessera_x86_avx512_gemm_f32) with the "
+                            "reshape/batch/einsum logic in Python; the CPU "
+                            "analog of the ROCm WMMA matmul-family lane. f32",
     "x86_norm_compiled": "x86 CPU row-reduction norm kernel — unweighted "
                             "rmsnorm / layer_norm over the last axis "
                             "(tessera_x86_avx512_{rmsnorm,layernorm}_f32 from "
@@ -413,6 +420,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_matmul_family_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_matmul_family_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_matmul_family_compiled", runtime_status="success",
+        reason="x86 matmul-family artifact runs batched_gemm / linear_general / "
+               "qkv_projection / factorized_matmul / einsum on the AVX-512 f32 "
+               "GEMM microkernel (tessera_x86_avx512_gemm_f32), with the "
+               "reshape/batch/single-contraction-einsum logic in Python. The CPU "
+               "analog of the ROCm WMMA matmul-family lane. f32, K-scaled tol.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_norm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_norm_compiled",

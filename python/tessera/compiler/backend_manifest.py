@@ -1272,6 +1272,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_attention_compiled.py"
        for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
                   "mla_decode")},
+    **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
+       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                  "log_cosh_loss")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1824,6 +1827,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernels; x86_attention_compiled lane; f32)",
     } for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
                  "mla_decode")},
+    # Pointwise regression losses — per-element loss on the AVX-512 loss kernel
+    # + none/mean/sum on the reduce kernel (x86_loss_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 pointwise loss {op} "
+                 "(tessera_x86_avx512_pointwise_loss_f32 per-element + reduce "
+                 "kernel; x86_loss_compiled lane; f32, matches numpy 2e-5)",
+    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                 "log_cosh_loss")},
 }
 
 

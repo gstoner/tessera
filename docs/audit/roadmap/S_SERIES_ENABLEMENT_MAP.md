@@ -179,6 +179,71 @@ ROCm + x86 (the proven dual-device lane), in the model-value order above. The
 IR-Transform / AST-Frontend / Host-Library paths are already structurally enabled
 and need only test-presence confirmation for a handful of thin ops.
 
+## Device-library acceleration: CUB (CCCL) / rocPRIM
+
+For the **data-parallel primitive families** (reduction, scan, sort, select/
+partition, histogram, segmented, run-length, by-key), do NOT hand-roll the GPU
+kernel — route the **Device-lib mechanism** through the canonical tuned
+primitive libraries:
+
+- **NVIDIA → CUB** (part of CCCL — CUDA Core Compute Libraries):
+  <https://github.com/NVIDIA/cub>, <https://nvidia.github.io/cccl/>
+- **AMD ROCm → rocPRIM**:
+  <https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocprim>,
+  <https://rocm.docs.amd.com/projects/rocPRIM/en/latest/reference/reference.html>
+
+Both expose the same three-tier surface (**device / block / warp** primitives) +
+**fancy iterators** + **intrinsics**, with near-identical APIs (rocPRIM mirrors
+CUB), so one Target-IR lowering shape covers both backends.
+
+### S-series family → CUB / rocPRIM primitive
+
+| Family (S-series ops) | CUB (CCCL) | rocPRIM |
+|-----------------------|------------|---------|
+| `reduction` sum/mean/max/min | `DeviceReduce::{Sum,Max,Min,Reduce}` | `rocprim::device_reduce` |
+| `reduction` amax/amin (arg) | `DeviceReduce::{ArgMax,ArgMin}` + `ArgIndexInputIterator` | `device_reduce` + `arg_index_iterator` |
+| `segment_reduce`, segmented norms | `DeviceSegmentedReduce` | `device_segmented_reduce` |
+| `stable_reduction` logsumexp/softmax-denom/var | `DeviceReduce` + **`TransformInputIterator`** (fuse exp/square — no temp buffer) | `device_reduce` + `transform_iterator` |
+| `scan` cumsum/cumprod/`associative_scan` | `DeviceScan::{InclusiveSum,InclusiveScan,ExclusiveScan}` | `device_scan` (inclusive/exclusive) |
+| `sort` / `argsort` / `top_k` | `DeviceRadixSort::{SortKeys,SortPairs}`, `DeviceMergeSort` | `device_radix_sort`, `device_merge_sort` |
+| `indexing` where/nonzero/masked_select/boolean_mask | `DeviceSelect::{Flagged,If,Unique}`, `DevicePartition` | `device_select`, `device_partition` |
+| histogram / bincount | `DeviceHistogram::{Even,Range}` | `device_histogram` |
+| `moe` token dispatch/combine (offsets) | `DeviceScan` + `DeviceSelect` | `device_scan` + `device_select` |
+| run-length / unique | `DeviceRunLengthEncode` | `device_run_length_encode` |
+| segment ops (by key) | `DeviceReduce::ReduceByKey` | `device_reduce_by_key`, `device_scan_by_key` |
+
+### Two optimization levers these give us for free
+
+1. **Iterator fusion (the big one).** `TransformInputIterator` / `transform_iterator`
+   fuses the elementwise pre-map *into* the reduce/scan with **no intermediate
+   buffer** — e.g. variance/L2-norm = reduce over `x²`, logsumexp/softmax-denom =
+   max-reduce then `sum(exp(x−max))`, all as a single pass. `counting_iterator`,
+   `constant_iterator`, `zip_iterator`, `discard_iterator` cover index-gen,
+   multi-input, and drop-output. This collapses several reference-only
+   `stable_reduction` / `normalization` ops into one fused device call.
+2. **Block/warp tiles inside larger kernels.** `BlockReduce`/`BlockScan` /
+   `block_reduce`/`block_scan` and `WarpReduce`/`warp_reduce` replace the
+   hand-rolled LDS tree-reduce inside the existing fused kernels (the current
+   `generate-rocm-reduce-kernel` / norm / softmax lanes hand-roll this) — better
+   perf, less codegen, and they back the row-reduce in rmsnorm/layer_norm/softmax
+   and the online-softmax reduction in flash-attention.
+
+### How this folds into the plan
+
+- The **Device-lib Target IR** for these families should emit a CUB/rocPRIM call
+  (Decision #19: hardware-free Target IR → backend). NVIDIA gets CUB, ROCm gets
+  rocPRIM from the *same* IR shape. This **replaces** hand-rolling
+  `reduce`/`scan`/`sort`/`select`/`histogram` kernels for those backends.
+- **x86 / Apple have no CUB/rocPRIM:** x86 keeps the AVX-512 hand-kernel lane
+  (oneDPL/Thrust-CPU is a possible future device-lib); Apple uses MPS/MPSGraph
+  reduction/scan/sort. So the family stays **dual-mechanism**: CUB/rocPRIM on
+  NV/AMD, hand-kernel/vendor-lib on x86/Apple.
+- **Priority:** retrofit the already-landed ROCm `reduce` lane to `rocprim::
+  device_reduce` + `block_reduce` (validate parity vs the current hand-kernel),
+  then bring `scan`, `sort`, `select`, `histogram`, `segmented` online via
+  rocPRIM/CUB rather than new hand-written passes — this is the fastest path
+  through a large slice of the 175 reference-only Kernel ops.
+
 ## Appendix — full per-op table
 
 | op | category | path | lowering | effect | status | TSOL | tested | exec targets |

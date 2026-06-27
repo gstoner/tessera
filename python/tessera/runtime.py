@@ -3395,6 +3395,128 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED arg-reduce lane (2026-06-27) — argmax/argmin (CUB ArgMax pattern)
+# warp-shuffle reduction carrying the (value,index) pair; first-occurrence
+# tie-break. ``compiler_path = "rocm_argreduce_compiled"``. f16/bf16/f32 input,
+# i32 index output. ONE hsaco per (chip, kind, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_argreduce_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+_ROCM_ARGREDUCE_OPS = {"tessera.argmax": "argmax", "tessera.argmin": "argmin"}
+
+
+def _build_compiled_argreduce_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.argreduce"() {{name = "ar", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-argreduce-kernel", directive, _rocm_argreduce_hsaco_cache,
+        (chip, kind, dtype))
+
+
+def _execute_rocm_compiled_argreduce(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` arg-reduce lane: run the COMPILER-GENERATED
+    warp-shuffle argmax/argmin kernel along a single axis (numpy first-occurrence
+    tie-break). f16/bf16/f32 input, i32 index output."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_ARGREDUCE_OPS:
+        raise ValueError(
+            "rocm_argreduce_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_ARGREDUCE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _ROCM_ARGREDUCE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("argreduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    n = x.ndim
+    if n == 0:
+        return np.array(0, dtype=np.int32)
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(
+                f"rocm argreduce lane handles f16/bf16/f32; got {x.dtype}")
+
+    axis = kwargs.get("axis", None)
+    if axis is None:
+        axes = tuple(range(n))           # flatten → global arg index
+    elif isinstance(axis, int):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        raise ValueError("argreduce supports a single int axis or None")
+    kept = [i for i in range(n) if i not in axes]
+    perm = kept + list(axes)
+    xt = np.ascontiguousarray(np.transpose(x, perm), dtype=store)
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    outer = int(xt.size // inner) if inner else 0
+    if inner <= 0:
+        raise ValueError("rocm argreduce: empty reduction axis")
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+
+    hsaco = _build_compiled_argreduce_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm argreduce: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm argreduce: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"ar") != 0:
+        raise RuntimeError("rocm argreduce: kernel symbol 'ar' not found")
+
+    xc = xt.reshape(-1)
+    o = np.zeros(max(outer, 1), dtype=np.int32)
+    nin = outer * inner
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(dx), esz * nin) != 0 or \
+       hip.hipMalloc(ctypes.byref(do), 4 * max(outer, 1)) != 0:
+        raise RuntimeError("rocm argreduce: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * nin, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, nin) + _mr(do, max(outer, 1))
+                   + [ctypes.c_int64(outer), ctypes.c_int64(inner)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, max(outer, 1), 1, 1, _REDUCE_BLOCKDIM,
+                                   1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm argreduce: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * max(outer, 1), 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    return o.reshape(kept_shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED elementwise activation lane (2026-06-25) — standalone gelu /
 # silu / relu (the same activations the GEMM fused epilogue applies in-register).
 # ``compiler_path = "rocm_activation_compiled"`` builds the COMPILER-GENERATED
@@ -4781,6 +4903,7 @@ def _executor_table():
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,
+        "rocm_argreduce_compiled": _execute_rocm_compiled_argreduce,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,

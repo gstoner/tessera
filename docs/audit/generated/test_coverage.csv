@@ -17,8 +17,8 @@ amin,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
 aot_export,0,0,0,0,1,,structural_only,category default for 'aot'
 aot_load,0,0,0,0,1,,structural_only,category default for 'aot'
 arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
-argmax,2,0,0,2,0,,directly_tested,2 direct test references
-argmin,2,0,0,2,0,,directly_tested,2 direct test references
+argmax,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
+argmin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 argsort,2,0,0,2,0,,directly_tested,2 direct test references
 asin,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
@@ -410,7 +410,7 @@ sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,106,37,18,143,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,143 direct test references
+softmax,107,37,19,144,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,144 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references

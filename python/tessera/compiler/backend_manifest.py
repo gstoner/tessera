@@ -917,6 +917,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "the ROCm analog of the x86 AVX-512 reduction lane. Executes "
                  "via runtime.launch() (rocm_reduce_compiled).",
     } for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    # argmax/argmin — CUB ArgMax-style warp-shuffle arg-reduce (value+index pair),
+    # i32 index output. Executes via runtime.launch() (rocm_argreduce_compiled).
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": f"Row {op} along one axis (generate-rocm-argreduce-kernel: "
+                 "warp-shuffle (value,index) reduce, first-occurrence tie-break, "
+                 "i32 output). Executes via runtime.launch() "
+                 "(rocm_argreduce_compiled).",
+    } for op in ("argmax", "argmin")},
     "rmsnorm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
@@ -1202,6 +1212,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
     **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{(op, "rocm"): "tests/unit/test_rocm_argreduce_compiled.py"
+       for op in ("argmax", "argmin")},
     **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"

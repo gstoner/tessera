@@ -422,6 +422,29 @@ def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_ArgReduceKernelOp : TesseraROCM_Op<"argreduce"> {
+  let summary = "Row arg-reduction (argmax / argmin) over the last axis";
+  let description = [{
+    The directive `generate-rocm-argreduce-kernel` expands into a row
+    arg-reduction gpu kernel — the CUB/rocPRIM `DeviceReduce::ArgMax`/`ArgMin`
+    pattern. Each thread carries the best `(value, index)` pair over its strided
+    columns, then a `gpu.shuffle xor` butterfly reduces the PAIR within a 32-lane
+    subgroup; the 8 per-subgroup partials combine to the row winner:
+
+      * `kind = "argmax"` — `O[m] = argmax_k X[m,k]`
+      * `kind = "argmin"` — `O[m] = argmin_k X[m,k]`
+
+    numpy tie-break: the FIRST occurrence wins (on equal value keep the lower
+    index). Values compare in **f32** regardless of storage dtype; the output is
+    an `i32` index. `M`/`K` are runtime `index` args. Validated vs numpy on
+    gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"argmax\"">:$kind,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
   let summary = "Elementwise unary math kernel (exp / log / sqrt / erf / …)";
   let description = [{

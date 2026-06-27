@@ -15,6 +15,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMSoftmaxKernel.cpp
   GenerateROCMNormKernel.cpp
   GenerateROCMReduceKernel.cpp
+  GenerateROCMArgReduceKernel.cpp
   GenerateROCMUnaryKernel.cpp
   GenerateROCMBinaryKernel.cpp
   GenerateROCMCompareKernel.cpp

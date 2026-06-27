@@ -87,6 +87,33 @@ def test_dequantize_passthrough(dq_op, q_op, fmt):
                                   q)
 
 
+def test_fp8_subnormal_matches_ml_dtypes():
+    """e4m3 with scale=1 and small (subnormal-range) inputs — the AVX-512 grid
+    must follow IEEE gradual underflow like the ml_dtypes reference, not the
+    pure mantissa-snap (the divergence the review flagged)."""
+    rt = _x86_or_skip()
+    x = np.array([1e-3, 2e-3, 5e-3, 1e-2, 1.7e-2, -3e-3, 8e-3, 4.5e-3],
+                 np.float32)
+    res = rt.launch(_artifact(rt, "tessera.quantize_fp8", ("x",),
+                              {"format": "e4m3", "scale": 1.0}), (x,))
+    assert res["ok"] is True, res.get("reason")
+    ref_q, _ = ops.quantize_fp8(x, format="e4m3", scale=1.0)
+    np.testing.assert_array_equal(np.asarray(res["output"]).astype(np.float32),
+                                  np.asarray(ref_q, np.float32))
+
+
+def test_quantize_propagates_nan():
+    rt = _x86_or_skip()
+    x = np.array([1.0, np.nan, -2.0, np.nan, 0.5, 3.0, np.nan, -1.0],
+                 np.float32)
+    res = rt.launch(_artifact(rt, "tessera.quantize_fp6", ("x",),
+                              {"format": "e3m2", "scale": 1.0}), (x,))
+    assert res["ok"] is True, res.get("reason")
+    out = np.asarray(res["output"]).astype(np.float32)
+    assert np.isnan(out[[1, 3, 6]]).all()       # NaN sentinels preserved
+    assert not np.isnan(out[[0, 2, 4, 5, 7]]).any()
+
+
 def test_quantize_bad_format_rejected():
     rt = _x86_or_skip()
     x = np.zeros((8,), np.float32)

@@ -2922,7 +2922,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_policy_loss_f32":
             [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
         "tessera_x86_avx512_fpquant_f32":
-            [c_f32, i64, ctypes.c_float, ctypes.c_int, c_f32],
+            [c_f32, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4270,17 +4270,23 @@ def _execute_x86_compiled_class_loss(artifact: RuntimeArtifact,
 # forward already rescaled). ``compiler_path = "x86_fpquant_compiled"``. f32.
 # (nvfp4's block-scaled microscaling path is a separate lane.)
 # ─────────────────────────────────────────────────────────────────────────────
-#: op_name -> (is_quantize, {format: (max_normal, mantissa_bits)}, default_fmt).
+#: op_name -> (is_quantize, {format: (max_normal, mantissa_bits, min_exp)},
+#: default_fmt). ``min_exp`` clamps the exponent for the flat subnormal grid:
+#: fp8 follows IEEE gradual underflow (e4m3 −6, e5m2 −14) to match ml_dtypes;
+#: fp4/fp6 use a very negative min_exp (no clamp) to match the reference's pure
+#: mantissa-snap.
+_FP_NO_CLAMP = -126
 _X86_FPQUANT_OPS = {
-    "tessera.quantize_fp8": (True, {"e4m3": (448.0, 3), "e5m2": (57344.0, 2)},
-                             "e4m3"),
-    "tessera.dequantize_fp8": (False, {"e4m3": (448.0, 3), "e5m2": (57344.0, 2)},
-                               "e4m3"),
-    "tessera.quantize_fp6": (True, {"e2m3": (7.5, 3), "e3m2": (28.0, 2)}, "e3m2"),
-    "tessera.dequantize_fp6": (False, {"e2m3": (7.5, 3), "e3m2": (28.0, 2)},
-                               "e3m2"),
-    "tessera.quantize_fp4": (True, {"e2m1": (6.0, 1)}, "e2m1"),
-    "tessera.dequantize_fp4": (False, {"e2m1": (6.0, 1)}, "e2m1"),
+    "tessera.quantize_fp8": (True, {"e4m3": (448.0, 3, -6),
+                                    "e5m2": (57344.0, 2, -14)}, "e4m3"),
+    "tessera.dequantize_fp8": (False, {"e4m3": (448.0, 3, -6),
+                                       "e5m2": (57344.0, 2, -14)}, "e4m3"),
+    "tessera.quantize_fp6": (True, {"e2m3": (7.5, 3, _FP_NO_CLAMP),
+                                    "e3m2": (28.0, 2, _FP_NO_CLAMP)}, "e3m2"),
+    "tessera.dequantize_fp6": (False, {"e2m3": (7.5, 3, _FP_NO_CLAMP),
+                                       "e3m2": (28.0, 2, _FP_NO_CLAMP)}, "e3m2"),
+    "tessera.quantize_fp4": (True, {"e2m1": (6.0, 1, _FP_NO_CLAMP)}, "e2m1"),
+    "tessera.dequantize_fp4": (False, {"e2m1": (6.0, 1, _FP_NO_CLAMP)}, "e2m1"),
 }
 
 
@@ -4318,13 +4324,15 @@ def _execute_x86_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
         # dequantize: the forward already rescaled — fp32 passthrough.
         return np.ascontiguousarray(x, np.float32)
 
-    max_normal, mantissa_bits = fmt_map[fmt]
+    max_normal, mantissa_bits, min_exp = fmt_map[fmt]
     scale_kw = kwargs.get("scale")
     if scale_kw is None:
         amax = float(np.max(np.abs(x))) if x.size else 0.0
         scale = max(amax / max_normal, 1e-12)
     else:
         scale = float(scale_kw)
+    # NaNs survive the divide; the clip preserves them (np.clip passes NaN
+    # through), and the kernel propagates them — matching the reference.
     scaled = np.clip(np.ascontiguousarray(x, np.float32) / np.float32(scale),
                      -max_normal, max_normal).astype(np.float32).reshape(-1)
     n = int(scaled.size)
@@ -4339,7 +4347,7 @@ def _execute_x86_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
     lib.tessera_x86_avx512_fpquant_f32(
         scaled.ctypes.data_as(cf), ctypes.c_int64(n),
         ctypes.c_float(max_normal), ctypes.c_int(mantissa_bits),
-        out.ctypes.data_as(cf))
+        ctypes.c_int(min_exp), out.ctypes.data_as(cf))
     return (out.reshape(x.shape) * np.float32(scale)).astype(np.float32)
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane

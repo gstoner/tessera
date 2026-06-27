@@ -22,7 +22,7 @@ argmin,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 argsort,2,0,0,2,0,,directly_tested,2 direct test references
 asin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
-asymmetric_bce,6,0,1,6,0,,directly_tested,6 direct test references
+asymmetric_bce,6,0,0,6,0,,directly_tested,6 direct test references
 atan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 atan2,2,0,0,2,0,,directly_tested,2 direct test references
 attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
@@ -36,7 +36,7 @@ axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
 batched_gemm,18,4,0,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
 bidirectional_scan,2,0,0,2,0,,directly_tested,2 direct test references
-binary_cross_entropy_loss,4,0,1,4,0,,directly_tested,4 direct test references
+binary_cross_entropy_loss,7,0,1,7,0,,directly_tested,7 direct test references
 bitwise_and,3,0,0,3,0,,directly_tested,3 direct test references
 bitwise_not,4,0,2,4,0,,directly_tested,4 direct test references
 bitwise_or,5,0,2,5,0,,directly_tested,5 direct test references
@@ -202,7 +202,7 @@ grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_te
 grpo_policy_loss,6,3,0,9,0,,directly_tested,9 direct test references
 gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
 gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-huber_loss,6,0,1,6,0,,directly_tested,6 direct test references
+huber_loss,6,0,0,6,0,,directly_tested,6 direct test references
 hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
 ifft,3,0,0,3,0,fp32,directly_tested,3 direct test references
 image_normalize,4,0,1,4,0,,directly_tested,4 direct test references
@@ -299,7 +299,7 @@ mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
 msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
-mse_loss,9,0,2,9,0,,directly_tested,9 direct test references
+mse_loss,11,0,2,11,0,,directly_tested,11 direct test references
 mul,85,4,7,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
 multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references

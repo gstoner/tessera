@@ -253,10 +253,10 @@ min,reduction,public,public,registered,complete,partial,fused,ready,none
 prod,reduction,public,public,registered,complete,partial,reference,ready,none
 std,reduction,public,public,registered,complete,partial,reference,ready,none
 var,reduction,public,public,registered,complete,partial,reference,ready,none
-cispo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,ready,none
-grpo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,ready,none
-normalize_group_advantages,rl_loss,public,public,registered,complete,partial,reference,ready,none
-ppo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,ready,none
+cispo_policy_loss,rl_loss,public,public,registered,complete,partial,fused,ready,none
+grpo_policy_loss,rl_loss,public,public,registered,complete,partial,fused,ready,none
+normalize_group_advantages,rl_loss,public,public,registered,complete,partial,fused,ready,none
+ppo_policy_loss,rl_loss,public,public,registered,complete,partial,fused,ready,none
 rope,rotary_embedding,public,public,registered,complete,partial,fused,ready,none
 segment_reduce,segment_reduce,public,public,registered,complete,partial,reference,ready,none
 argsort,sort,public,public,registered,complete,partial,reference,ready,none

@@ -269,10 +269,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `prod` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `std` | reduction | public | public | registered | complete | partial | reference | ready | none |
 | `var` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `cispo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
-| `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
-| `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
-| `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
+| `cispo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
+| `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
+| `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
+| `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
 | `rope` | rotary_embedding | public | public | registered | complete | partial | fused | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
 | `argsort` | sort | public | public | registered | complete | partial | reference | ready | none |
@@ -356,7 +356,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
 | reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rotary_embedding | 1 | PPGCpFN· |
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |

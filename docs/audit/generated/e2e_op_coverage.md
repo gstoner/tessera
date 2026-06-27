@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 120 |
-| ``runnable_reference`` | 189 |
+| ``complete`` | 124 |
+| ``runnable_reference`` | 185 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (120)
+## complete (124)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -147,6 +147,10 @@ each row into a single E2E tier.
 | ``max`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``min`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``cispo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
+| ``grpo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
+| ``normalize_group_advantages`` | rl_loss | public | public | registered | partial | fused | ready | none |
+| ``ppo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``rope`` | rotary_embedding | public | public | registered | partial | fused | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | benchmarked |
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
@@ -156,7 +160,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (189)
+## runnable_reference (185)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -302,10 +306,6 @@ each row into a single E2E tier.
 | ``prod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``std`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``var`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``cispo_policy_loss`` | rl_loss | public | public | registered | partial | reference | ready | none |
-| ``grpo_policy_loss`` | rl_loss | public | public | registered | partial | reference | ready | none |
-| ``normalize_group_advantages`` | rl_loss | public | public | registered | partial | reference | ready | none |
-| ``ppo_policy_loss`` | rl_loss | public | public | registered | partial | reference | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``argsort`` | sort | public | public | registered | partial | reference | ready | none |
 | ``sort`` | sort | public | public | registered | partial | reference | ready | none |

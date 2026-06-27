@@ -73,7 +73,7 @@
 |--------|--------------|
 | `GPUTargetProfile`, `ISA` enum | PYTHON_API_SPEC §11 |
 | `FlashAttnLoweringConfig` | PYTHON_API_SPEC §12 |
-| String targets (`"apple_cpu"`, `"apple_gpu"`, `"rocm"`, `"metalium"`) | [tessera-api-reference §Targeting](../reference/tessera-api-reference.md) |
+| String targets (`"apple_cpu"`, `"apple_gpu"`, `"rocm"`) | [tessera-api-reference §Targeting](../reference/tessera-api-reference.md) |
 
 ### Operations
 

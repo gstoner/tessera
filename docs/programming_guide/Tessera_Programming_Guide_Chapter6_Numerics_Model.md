@@ -30,8 +30,8 @@ The **canonical storage-dtype set** (15 names, enforced by
 `fp8_e4m3`, `fp8_e5m2`, `fp6_e2m3`, `fp6_e3m2`, `fp4_e2m1`, `nvfp4`,
 `int8`, `int16`, `int32`, `int64`, `bool`. Aliases (`f32`, `bfloat16`,
 `half`, `i8`, …) normalize to these. A further planned/gated set
-(`uint*`, `complex*`, packed `int4`, AMD `mxfp*`, Tenstorrent
-`bfp*`/`blockfp*`) requires `allow_planned_gated=True`.
+(`uint*`, `complex*`, packed `int4`, AMD `mxfp*`) requires
+`allow_planned_gated=True`.
 
 > **TF32 is not a storage dtype.** `canonicalize_dtype("tf32")` is
 > rejected; TF32 is modeled as a **compute mode** —

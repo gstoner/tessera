@@ -1280,6 +1280,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_rl_loss_compiled.py"
        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
                   "normalize_group_advantages")},
+    **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
+       for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
+                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1862,6 +1865,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernel; x86_rl_loss_compiled lane; core path, f32, numpy 2e-5)",
     } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
                  "normalize_group_advantages")},
+    # Class-axis losses — exp/log on the AVX-512 transcendental kernel +
+    # class-axis structure on the host + reduce kernel (x86_class_loss_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 class-axis loss {op} "
+                 "(exp/log on the transcendental kernel + host class-axis "
+                 "structure + reduce kernel; x86_class_loss_compiled lane; f32, "
+                 "matches numpy 2e-4)",
+    } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
+                 "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
 }
 
 

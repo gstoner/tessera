@@ -183,13 +183,13 @@ quantized_matmul,loop_nest,public,public,registered,complete,partial,reference,r
 asymmetric_bce,loss,public,public,registered,complete,partial,fused,ready,none
 binary_cross_entropy_loss,loss,public,public,registered,complete,partial,fused,ready,none
 contrastive_divergence_loss,loss,public,public,registered,complete,partial,reference,ready,none
-cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
+cross_entropy_loss,loss,public,public,registered,complete,partial,fused,ready,none
 ddpm_noise_pred_loss,loss,public,public,registered,complete,partial,reference,ready,none
 denoising_score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
 huber_loss,loss,public,public,registered,complete,partial,fused,ready,none
 implicit_score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
-js_divergence,loss,public,public,registered,complete,partial,reference,ready,none
-kl_divergence,loss,public,public,registered,complete,partial,reference,ready,none
+js_divergence,loss,public,public,registered,complete,partial,fused,ready,none
+kl_divergence,loss,public,public,registered,complete,partial,fused,ready,none
 load_balance_loss,loss,public,public,registered,complete,partial,reference,ready,none
 log_cosh_loss,loss,public,public,registered,complete,partial,fused,ready,none
 mae_loss,loss,public,public,registered,complete,partial,fused,ready,none
@@ -198,7 +198,7 @@ persistent_cd_loss,loss,public,public,registered,complete,partial,reference,read
 score_matching_loss,loss,public,public,registered,complete,partial,reference,ready,none
 smooth_l1_loss,loss,public,public,registered,complete,partial,fused,ready,none
 vlb_loss,loss,public,public,registered,complete,partial,reference,ready,none
-z_loss,loss,public,public,registered,complete,partial,reference,ready,none
+z_loss,loss,public,public,registered,complete,partial,fused,ready,none
 linear_general,model_layer,public,public,registered,complete,partial,fused,ready,none
 moe,moe,public,public,registered,complete,partial,reference,ready,none
 moe_combine,moe_transport,public,public,registered,complete,partial,reference,ready,none

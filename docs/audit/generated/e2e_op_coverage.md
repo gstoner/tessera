@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 124 |
-| ``runnable_reference`` | 185 |
+| ``complete`` | 128 |
+| ``runnable_reference`` | 181 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (124)
+## complete (128)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -116,11 +116,15 @@ each row into a single E2E tier.
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``asymmetric_bce`` | loss | public | public | registered | partial | fused | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``cross_entropy_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``huber_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``js_divergence`` | loss | public | public | registered | partial | fused | ready | none |
+| ``kl_divergence`` | loss | public | public | registered | partial | fused | ready | none |
 | ``log_cosh_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``mae_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``mse_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``smooth_l1_loss`` | loss | public | public | registered | partial | fused | ready | none |
+| ``z_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
@@ -160,7 +164,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (185)
+## runnable_reference (181)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -267,17 +271,13 @@ each row into a single E2E tier.
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``quantized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``cross_entropy_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``ddpm_noise_pred_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``denoising_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``implicit_score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``js_divergence`` | loss | public | public | registered | partial | reference | ready | none |
-| ``kl_divergence`` | loss | public | public | registered | partial | reference | ready | none |
 | ``load_balance_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``persistent_cd_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``z_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``moe`` | moe | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |

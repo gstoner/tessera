@@ -410,7 +410,7 @@ sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
-softmax,110,37,22,147,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,147 direct test references
+softmax,112,37,24,149,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,149 direct test references
 softmax_safe,4,4,1,8,0,bf16,directly_tested,8 direct test references
 softplus,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 sort,3,0,0,3,0,,directly_tested,3 direct test references
@@ -470,6 +470,6 @@ vlb_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'
 wasserstein_distance,6,0,0,6,0,,directly_tested,6 direct test references
 weight_norm,7,0,0,7,0,,directly_tested,7 direct test references
-where,3,0,0,3,0,,directly_tested,3 direct test references
+where,5,0,0,5,0,f32,directly_tested,5 direct test references
 while_loop,4,0,1,4,0,,directly_tested,4 direct test references
 z_loss,3,0,0,3,0,,directly_tested,3 direct test references

@@ -31,6 +31,7 @@ std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBitwiseKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMWhereKernelPass();
 std::unique_ptr<mlir::Pass> createLowerROCMAsyncCopyToLoopPass();
 void buildTesseraROCMBackendPipeline(mlir::OpPassManager &pm);
 void registerTesseraROCMPasses();

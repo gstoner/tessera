@@ -3422,8 +3422,13 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
 # ``compiler_path = "x86_matmul_family_compiled"``. f32.
 # ─────────────────────────────────────────────────────────────────────────────
 def _x86_gemm_2d(a: Any, b: Any) -> Any:
-    """C[M,N] = A[M,K] @ B[K,N] on the AVX-512 f32 GEMM microkernel."""
+    """C[M,N] = A[M,K] @ B[K,N] on the AVX-512 f32 GEMM microkernel. f32 only —
+    rejects other dtypes rather than silently coercing (the lane advertises
+    f32, matching the other x86 compiled lanes)."""
     import numpy as np
+    if a.dtype != np.float32 or b.dtype != np.float32:
+        raise ValueError(
+            f"x86 gemm lane handles f32 only; got {a.dtype} @ {b.dtype}")
     lib = _load_x86_elementwise()
     if lib is None:
         raise _RocmCompiledUnavailable(
@@ -3445,8 +3450,10 @@ def _x86_gemm_2d(a: Any, b: Any) -> Any:
 
 
 def _x86_batched_gemm(a: Any, b: Any) -> Any:
-    """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the
-    AVX-512 GEMM. ``b`` may be rank-2 (shared) or batched to match."""
+    """Full np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the
+    AVX-512 GEMM. The batch dims of ``a`` and ``b`` BROADCAST against each other
+    (NumPy rules), so a rank-2 shared operand and shapes like (2,1,M,K) @
+    (1,3,K,N) -> (2,3,M,N) are all valid."""
     import numpy as np
     if a.ndim < 2 or b.ndim < 2:
         raise ValueError("batched_gemm needs rank>=2 operands")
@@ -3455,18 +3462,17 @@ def _x86_batched_gemm(a: Any, b: Any) -> Any:
         raise ValueError(
             f"batched_gemm inner dims must match; got {a.shape} @ {b.shape}")
     n = b.shape[-1]
-    a_batch = a.reshape(-1, m, k)
-    nb_a = a_batch.shape[0]
-    if b.ndim == 2:
-        b_batch = np.broadcast_to(b, (nb_a, k, n))
-    else:
-        b_batch = b.reshape(-1, k, n)
-        if b_batch.shape[0] != nb_a:
-            raise ValueError(
-                f"batched_gemm batch mismatch; got {a.shape} @ {b.shape}")
-    out = np.stack([_x86_gemm_2d(a_batch[i], b_batch[i])
-                    for i in range(nb_a)], axis=0)
-    return out.reshape(*a.shape[:-2], m, n)
+    try:
+        batch = np.broadcast_shapes(a.shape[:-2], b.shape[:-2])
+    except ValueError as exc:
+        raise ValueError(
+            f"batched_gemm batch dims do not broadcast; got {a.shape} @ "
+            f"{b.shape}") from exc
+    a_b = np.broadcast_to(a, batch + (m, k)).reshape(-1, m, k)
+    b_b = np.broadcast_to(b, batch + (k, n)).reshape(-1, k, n)
+    nb = a_b.shape[0]
+    out = np.stack([_x86_gemm_2d(a_b[i], b_b[i]) for i in range(nb)], axis=0)
+    return out.reshape(*batch, m, n)
 
 
 def _x86_einsum_via_gemm(spec: str, lhs: Any, rhs: Any) -> Any:

@@ -61,6 +61,32 @@ def test_batched_gemm_shared_rank2_rhs():
                                (a @ b).astype(np.float32), **_TOL)
 
 
+@pytest.mark.parametrize("ash,bsh", [
+    ((2, 1, 5, 8), (1, 3, 8, 6)),    # mutual broadcast -> (2, 3, 5, 6)
+    ((1, 4, 8), (3, 8, 6)),          # broadcast leading 1
+    ((3, 5, 8), (8, 6)),             # rank-2 rhs shared across batch
+    ((5, 8), (2, 8, 6)),             # rank-2 lhs shared across batch
+])
+def test_batched_gemm_broadcast(ash, bsh):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(hash((ash, bsh)) % 2**31)
+    a = rng.standard_normal(ash).astype(np.float32)
+    b = rng.standard_normal(bsh).astype(np.float32)
+    res = rt.launch(_artifact(rt, "tessera.batched_gemm", ("a", "b")), (a, b))
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]).astype(np.float32),
+                               (a @ b).astype(np.float32), **_TOL)
+
+
+def test_gemm_rejects_non_f32():
+    rt = _x86_or_skip()
+    a = np.zeros((4, 8), np.float64)
+    b = np.zeros((8, 4), np.float64)
+    res = rt.launch(_artifact(rt, "tessera.batched_gemm", ("a", "b")), (a, b))
+    assert res["ok"] is False
+    assert "f32 only" in str(res.get("reason"))
+
+
 def test_linear_general_with_bias():
     rt = _x86_or_skip()
     rng = np.random.default_rng(7)

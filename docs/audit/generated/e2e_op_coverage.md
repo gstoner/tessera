@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 99 |
-| ``runnable_reference`` | 210 |
+| ``complete`` | 102 |
+| ``runnable_reference`` | 207 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (99)
+## complete (102)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -107,6 +107,8 @@ each row into a single E2E tier.
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
+| ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -128,6 +130,7 @@ each row into a single E2E tier.
 | ``max`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``min`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | benchmarked |
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
@@ -135,7 +138,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (210)
+## runnable_reference (207)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -273,8 +276,6 @@ each row into a single E2E tier.
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``group_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``instance_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``layer_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``rmsnorm`` | normalization | public | public | registered | partial | reference | ready | benchmarked |
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``abs`` | numeric_helper | public | public | registered | partial | reference | ready | none |
@@ -326,7 +327,6 @@ each row into a single E2E tier.
 | ``logsumexp`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``sigmoid_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``softmax`` | stable_reduction | public | public | registered | partial | reference | ready | benchmarked |
 | ``softmax_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |

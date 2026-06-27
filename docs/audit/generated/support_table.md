@@ -221,8 +221,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `group_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `instance_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `layer_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `rmsnorm` | normalization | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `layer_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
+| `rmsnorm` | normalization | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `weight_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
@@ -295,7 +295,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `logsumexp` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `softmax` | stable_reduction | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `softmax_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
@@ -348,7 +348,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | model_layer | 1 | PPGCpRN· |
 | moe | 1 | PPGCpRN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· |
+| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpRN· PPGCpRN· |
 | projection | 1 | PPGCpRN· |
@@ -362,7 +362,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpFN· |
+| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpFN· |
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
 | stencil | 2 | PPGCpRNB PPGCpRN· |

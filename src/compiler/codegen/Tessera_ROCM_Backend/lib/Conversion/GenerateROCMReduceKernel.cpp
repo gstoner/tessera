@@ -11,8 +11,14 @@
 //   kind = "max"  : O[m] = max_k X[m,k]
 //   kind = "min"  : O[m] = min_k X[m,k]
 //
-// One workgroup per row (blockIdx.x = m), blockDim = 256, LDS tree-reduce.
-// Reductions run in f32 regardless of storage dtype; M/K are runtime index args.
+// One workgroup per row (blockIdx.x = m), blockDim = 256. The intra-row reduce
+// uses a CUB/rocPRIM-style WARP-SHUFFLE reduction: each thread strided-
+// accumulates its elements in-register, then a `gpu.shuffle xor` butterfly
+// reduces within a 32-lane subgroup (no LDS), so only the 8 per-subgroup
+// partials touch LDS for the final combine — vs the old 8-step LDS tree-reduce
+// (8 barriers, 256-wide LDS traffic). Reductions run in f32 regardless of
+// storage dtype; M/K are runtime index args. FP add reorders, so results match
+// numpy within tolerance (not bit-exact); max/min stay NaN-propagating.
 // Validated vs numpy (np.sum/mean/amax/amin) on gfx1151.
 //===----------------------------------------------------------------------===//
 
@@ -34,6 +40,8 @@ using namespace mlir;
 namespace {
 
 static constexpr int64_t BD = 256;
+static constexpr int64_t SG = 32;          // shuffle subgroup width
+static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 enum class Red { Sum, Mean, Max, Min };
 
@@ -47,7 +55,8 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   bool isMinMax = isMax || isMin;
 
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
-  auto ldsT = MemRefType::get({BD}, f32, MemRefLayoutAttrInterface(), ws);
+  // LDS holds only the per-subgroup partials (NGROUPS = 8), not all BD threads.
+  auto ldsT = MemRefType::get({NGROUPS}, f32, MemRefLayoutAttrInterface(), ws);
   Value buf = f.addWorkgroupAttribution(ldsT, loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
@@ -91,32 +100,43 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     Value v = loadF32(b.create<arith::AddIOp>(loc, base, c));
     b.create<scf::YieldOp>(loc, ValueRange{combine(acc, v)});
   }
-  b.create<memref::StoreOp>(loc, lp.getResult(0), buf, ValueRange{tid});
-  b.create<gpu::BarrierOp>(loc);
 
-  // unrolled LDS tree-reduce over buf[0..BD) with `combine`
-  for (int64_t s = BD / 2; s > 0; s >>= 1) {
-    Value cs = ci(s);
-    Value lt = b.create<arith::CmpIOp>(loc, slt, tid, cs);
-    auto ifo = b.create<scf::IfOp>(loc, lt, /*withElse=*/false);
-    {
-      OpBuilder::InsertionGuard g(b);
-      b.setInsertionPointToStart(ifo.thenBlock());
-      Value a = b.create<memref::LoadOp>(loc, buf, ValueRange{tid});
-      Value o = b.create<memref::LoadOp>(
-          loc, buf, ValueRange{b.create<arith::AddIOp>(loc, tid, cs)});
-      b.create<memref::StoreOp>(loc, combine(a, o), buf, ValueRange{tid});
-    }
-    b.create<gpu::BarrierOp>(loc);
+  // ── warp-shuffle butterfly reduce within a 32-lane subgroup (no LDS) ──
+  // After log2(SG) xor-shuffles every lane holds its 32-lane-group total.
+  Type i32 = b.getI32Type();
+  Value wSG = b.create<arith::ConstantIntOp>(loc, i32, SG);
+  Value acc = lp.getResult(0);
+  for (int64_t off = SG / 2; off > 0; off >>= 1) {
+    Value offC = b.create<arith::ConstantIntOp>(loc, i32, off);
+    auto sh = b.create<gpu::ShuffleOp>(loc, acc, offC, wSG,
+                                       gpu::ShuffleMode::XOR);
+    acc = combine(acc, sh.getShuffleResult());
   }
 
-  // thread 0 writes O[m] (mean divides by K)
+  // lane 0 of each subgroup writes its partial to LDS buf[group]
+  Value cSG = ci(SG);
+  Value group = b.create<arith::DivUIOp>(loc, tid, cSG);
+  Value laneInSg = b.create<arith::RemUIOp>(loc, tid, cSG);
+  Value isLeader =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, laneInSg, c0);
+  auto ldIf = b.create<scf::IfOp>(loc, isLeader, /*withElse=*/false);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(ldIf.thenBlock());
+    b.create<memref::StoreOp>(loc, acc, buf, ValueRange{group});
+  }
+  b.create<gpu::BarrierOp>(loc);
+
+  // thread 0 combines the NGROUPS partials + writes O[m] (mean divides by K)
   Value isT0 = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, tid, c0);
   auto t0if = b.create<scf::IfOp>(loc, isT0, /*withElse=*/false);
   {
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(t0if.thenBlock());
     Value total = b.create<memref::LoadOp>(loc, buf, ValueRange{c0});
+    for (int64_t gi = 1; gi < NGROUPS; ++gi)
+      total = combine(total,
+                      b.create<memref::LoadOp>(loc, buf, ValueRange{ci(gi)}));
     if (red == Red::Mean) {
       Value Kf = b.create<arith::SIToFPOp>(
           loc, f32, b.create<arith::IndexCastOp>(loc, b.getI64Type(), K));

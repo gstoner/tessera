@@ -256,13 +256,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `rng_uniform` | random_source | public | public | registered | complete | partial | reference | ready | none |
 | `amax` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `amin` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `argmax` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `argmin` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `argmax` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `argmin` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `count_nonzero` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `cummax` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `cummin` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `cumprod` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `cumsum` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `cummax` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `cummin` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `cumprod` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `cumsum` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `max` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `mean` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `min` | reduction | public | public | registered | complete | partial | fused | ready | none |
@@ -355,7 +355,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
-| reduction | 15 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rotary_embedding | 1 | PPGCpRN· |
 | segment_reduce | 1 | PPGCpRN· |

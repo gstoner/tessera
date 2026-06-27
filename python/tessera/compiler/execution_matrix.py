@@ -142,6 +142,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "last-axis (16 f32 lanes/__m512, NaN-propagating "
                             "max/min); tessera.sum/mean/max/min (amax/amin) by "
                             "op name. f32 only",
+    "x86_scan_compiled": "x86 CPU inclusive prefix scan (cumsum/cumprod/cummax/"
+                            "cummin) — tessera_x86_avx512_scan_f32 from "
+                            "libtessera_x86_elementwise.so along one axis; "
+                            "same-shape output (CPU analog of the ROCm block-scan "
+                            "lane). f32 only",
+    "x86_argreduce_compiled": "x86 CPU argmax/argmin — "
+                            "tessera_x86_avx512_argreduce_f32 from "
+                            "libtessera_x86_elementwise.so along one axis, "
+                            "first-occurrence tie-break. f32 in, i32 index out",
     "x86_unary_compiled": "x86 CPU flat elementwise unary math — the hand-written "
                             "AVX-512 kernel (tessera_x86_avx512_unary_f32) the "
                             "Python runtime ctypes-loads from "
@@ -339,6 +348,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "tessera_x86_avx512_reduce_f32. An arbitrary reduced axis folds to "
                "[outer,inner]; handles tessera.sum/mean/max/min (amax/amin) by op "
                "name. f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_scan_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_scan_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_scan_compiled", runtime_status="success",
+        reason="x86 scan artifact runs the inclusive prefix scan (cumsum/cumprod/"
+               "cummax/cummin) from libtessera_x86_elementwise.so "
+               "(tessera_x86_avx512_scan_f32) along one axis; same-shape output. "
+               "The CPU analog of the ROCm block-scan lane (scalar row "
+               "recurrence, rows parallel; SIMD prefix is a perf follow-up). "
+               "f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_argreduce_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_argreduce_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_argreduce_compiled", runtime_status="success",
+        reason="x86 argreduce artifact runs argmax/argmin from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_argreduce_f32) "
+               "along one axis, numpy first-occurrence tie-break (strict compare). "
+               "f32 input, i32 index output.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_unary_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_unary_compiled",

@@ -1226,6 +1226,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("argmax", "argmin")},
     **{(op, "rocm"): "tests/unit/test_rocm_scan_compiled.py"
        for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{(op, "x86"): "tests/unit/test_x86_scan_compiled.py"
+       for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{(op, "x86"): "tests/unit/test_x86_argreduce_compiled.py"
+       for op in ("argmax", "argmin")},
     **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"
@@ -1629,6 +1633,21 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 row reduction {op} (tessera_x86_avx512_reduce_f32, "
                  "runtime-loaded; x86_reduce_compiled lane)",
     } for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    # scan + argreduce — runtime-loaded x86 kernels (x86_scan_compiled /
+    # x86_argreduce_compiled lanes), the CPU analog of the ROCm block-scan /
+    # arg-reduce. f32; validated on-device (execute_compare_fixture).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 inclusive scan {op} (tessera_x86_avx512_scan_f32, "
+                 "runtime-loaded; x86_scan_compiled lane)",
+    } for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 {op} (tessera_x86_avx512_argreduce_f32, runtime-"
+                 "loaded; x86_argreduce_compiled lane; i32 index output)",
+    } for op in ("argmax", "argmin")},
     # S2 unary-math algebraic + rounding subset — hand-written AVX-512 kernel
     # (tessera_x86_avx512_unary_f32) the runtime ctypes-loads and executes
     # (x86_unary_compiled). f32; transcendentals stay numpy-reference on CPU.

@@ -2910,6 +2910,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_gemm_f32":
             [c_f32, c_f32, i64, i64, i64, c_f32],
+        "tessera_x86_avx512_rope_f32":
+            [c_f32, c_f32, i64, i64, c_f32],
+        "tessera_x86_avx512_alibi_f32":
+            [c_f32, i64, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3594,6 +3598,104 @@ def _execute_x86_compiled_matmul_family(artifact: RuntimeArtifact,
     if len(operands) == 3:
         y = y + _as_numpy(values[operand_names[2]]).astype(np.float32)
     return y
+
+
+def _execute_x86_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` rope lane: run the hand-written AVX-512 interleaved-
+    pair rotary-position-embedding kernel from libtessera_x86_elementwise.so.
+    Operands X, Theta are both ``[.., D]`` (D even, same shape); the angle for
+    pair p is theta[.., 2p]. f32. ``compiler_path = "x86_rope_compiled"``."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.rope":
+        raise ValueError(
+            "x86_rope_compiled executor handles exactly one tessera.rope op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("rope requires two operands (x, theta)")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    theta = _as_numpy(values[operand_names[1]])
+    if x.ndim < 1 or int(x.shape[-1]) % 2 != 0:
+        raise ValueError(f"rope needs an even innermost dim; got x{x.shape}")
+    if theta.shape != x.shape:
+        raise ValueError(
+            f"rope requires theta to match x shape; got x{x.shape} "
+            f"theta{theta.shape}")
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 rope lane handles f32 only; got {x.dtype}")
+    d = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    tc = np.ascontiguousarray(theta, dtype=np.float32).reshape(-1)
+    out = np.zeros(m * d, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_rope_f32(
+        xc.ctypes.data_as(cf), tc.ctypes.data_as(cf),
+        ctypes.c_int64(m), ctypes.c_int64(d), out.ctypes.data_as(cf))
+    return out.reshape(x.shape)
+
+
+def _execute_x86_compiled_alibi(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` alibi lane: run the hand-written AVX-512 ALiBi
+    positional-bias generator from libtessera_x86_elementwise.so —
+    bias[h,i,j] = slope[h]·(j−i), shape [H, S, S]. ``num_heads`` / ``seq_len``
+    from kwargs; the optional ``slopes`` operand overrides the default
+    2^(-8k/H) ramp. f32. ``compiler_path = "x86_alibi_compiled"``."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.alibi":
+        raise ValueError(
+            "x86_alibi_compiled executor handles exactly one tessera.alibi op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    operand_names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names) if arg_names else {}
+
+    h_val = kwargs.get("num_heads")
+    s_val = kwargs.get("seq_len")
+    if h_val is None or s_val is None:
+        raise ValueError("alibi requires num_heads and seq_len")
+    hh = int(h_val)
+    ss = int(s_val)
+    if hh <= 0 or ss <= 0:
+        raise ValueError(f"alibi needs positive num_heads/seq_len; got {hh}/{ss}")
+
+    if operand_names:
+        slopes = np.ascontiguousarray(
+            _as_numpy(values[operand_names[0]]), dtype=np.float32).reshape(-1)
+        if slopes.size != hh:
+            raise ValueError(
+                f"alibi slopes must have length num_heads={hh}; got {slopes.size}")
+    else:
+        k = np.arange(1, hh + 1, dtype=np.float32)
+        slopes = (2.0 ** (-8.0 * k / hh)).astype(np.float32)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    sc = np.ascontiguousarray(slopes, dtype=np.float32)
+    out = np.zeros(hh * ss * ss, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_alibi_f32(
+        sc.ctypes.data_as(cf), ctypes.c_int64(hh), ctypes.c_int64(ss),
+        out.ctypes.data_as(cf))
+    return out.reshape(hh, ss, ss)
 
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -5772,6 +5874,8 @@ def _executor_table():
         "x86_norm_compiled": _execute_x86_compiled_norm,
         "x86_softmax_compiled": _execute_x86_compiled_softmax,
         "x86_matmul_family_compiled": _execute_x86_compiled_matmul_family,
+        "x86_rope_compiled": _execute_x86_compiled_rope,
+        "x86_alibi_compiled": _execute_x86_compiled_alibi,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

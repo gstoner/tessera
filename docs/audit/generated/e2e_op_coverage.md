@@ -24,17 +24,21 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 109 |
-| ``runnable_reference`` | 200 |
+| ``complete`` | 113 |
+| ``runnable_reference`` | 196 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (109)
+## complete (113)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``gqa_attention`` | attention | public | public | registered | partial | fused | ready | none |
+| ``mla_decode`` | attention | public | public | registered | partial | fused | ready | none |
+| ``mqa_attention`` | attention | public | public | registered | partial | fused | ready | none |
+| ``multi_head_attention`` | attention | public | public | registered | partial | fused | ready | benchmarked |
 | ``eq`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``ge`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``gt`` | comparison | public | public | registered | partial | fused | ready | none |
@@ -145,7 +149,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (200)
+## runnable_reference (196)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -157,7 +161,6 @@ each row into a single E2E tier.
 | ``flash_attn`` | attention | public | public | registered | partial | reference | ready | benchmarked |
 | ``gated_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``gated_deltanet`` | attention | public | public | registered | partial | reference | ready | none |
-| ``gqa_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``hybrid_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``kimi_delta_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``lightning_attention`` | attention | public | public | registered | partial | reference | ready | none |
@@ -165,13 +168,10 @@ each row into a single E2E tier.
 | ``linear_attn_state`` | attention | public | public | registered | partial | reference | ready | none |
 | ``lookahead_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``memory_index_score`` | attention | public | public | registered | partial | reference | ready | none |
-| ``mla_decode`` | attention | public | public | registered | partial | reference | ready | none |
 | ``mla_decode_fused`` | attention | public | public | registered | partial | reference | ready | none |
 | ``modified_delta_attention`` | attention | public | public | registered | partial | reference | ready | none |
-| ``mqa_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``msa_index_scores`` | attention | public | public | registered | partial | reference | ready | none |
 | ``msa_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
-| ``multi_head_attention`` | attention | public | public | registered | partial | reference | ready | benchmarked |
 | ``power_attn`` | attention | public | public | registered | partial | reference | ready | none |
 | ``retention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``varlen_sdpa`` | attention | public | public | registered | partial | reference | ready | none |

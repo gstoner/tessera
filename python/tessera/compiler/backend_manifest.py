@@ -1269,6 +1269,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "factorized_matmul", "einsum")},
     ("rope", "x86"): "tests/unit/test_x86_posenc_compiled.py",
     ("alibi", "x86"): "tests/unit/test_x86_posenc_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_attention_compiled.py"
+       for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
+                  "mla_decode")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1810,6 +1813,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "slope[h]*(j-i) (tessera_x86_avx512_alibi_f32, runtime-loaded; "
                  "x86_alibi_compiled lane; f32)",
     },
+    # Softmax-attention family — multi_head / gqa / mqa / mla_decode, composed
+    # from the AVX-512 GEMM (QK^T, probs*V) + the row-softmax kernel. The CPU
+    # analog of the ROCm flash-attention family (x86_attention_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 softmax-attention {op} "
+                 "(O=softmax(QK^T*scale[+causal])V on the f32 GEMM + row-softmax "
+                 "kernels; x86_attention_compiled lane; f32)",
+    } for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
+                 "mla_decode")},
 }
 
 

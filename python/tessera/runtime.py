@@ -3698,6 +3698,134 @@ def _execute_x86_compiled_alibi(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(hh, ss, ss)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 softmax-attention lane — multi_head / gqa / mqa / mla_decode, all composed
+# from the AVX-512 f32 GEMM (QKᵀ and probs·V) + the AVX-512 row-softmax kernel.
+# The CPU analog of the ROCm WMMA flash-attention family; reshapes / scaling /
+# causal masking / KV-group expansion happen in Python around the two kernels.
+# ``compiler_path = "x86_attention_compiled"``. f32.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_softmax_rows(x: Any, np: Any) -> Any:
+    """Numerically-stable softmax over the last axis on the AVX-512 kernel."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    k = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(m * k, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_softmax_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
+        out.ctypes.data_as(cf))
+    return out.reshape(x.shape)
+
+
+def _x86_sdpa(Q: Any, K: Any, V: Any, nq: int, nkv: int, np: Any,
+              scale: Any = None, causal: bool = False) -> Any:
+    """Scaled dot-product attention with GQA head grouping, on the x86 kernels:
+    O = softmax(Q·Kᵀ·scale [+ causal mask]) · V. Q is [.., nq, Sq, D]; K/V are
+    [.., nkv, Sk, D]; query head h reads KV group h // (nq/nkv). f32."""
+    import math
+    Q = np.ascontiguousarray(Q, np.float32)
+    K = np.ascontiguousarray(K, np.float32)
+    V = np.ascontiguousarray(V, np.float32)
+    if Q.ndim < 3 or K.ndim < 3 or V.ndim < 3:
+        raise ValueError("sdpa needs rank>=3 Q/K/V")
+    if nkv <= 0 or nq % nkv != 0:
+        raise ValueError(f"sdpa needs nq divisible by nkv; got {nq}/{nkv}")
+    d = int(Q.shape[-1])
+    sq, sk = int(Q.shape[-2]), int(K.shape[-2])
+    if int(K.shape[-1]) != d or int(V.shape[-1]) != d:
+        raise ValueError("sdpa head dim D must match across Q/K/V")
+    sc = float(scale) if scale is not None else 1.0 / math.sqrt(d)
+    g = nq // nkv
+    kx = np.repeat(K, g, axis=-3) if g > 1 else K   # query head h -> kv h//g
+    vx = np.repeat(V, g, axis=-3) if g > 1 else V
+    kxt = np.ascontiguousarray(np.swapaxes(kx, -1, -2))
+    scores = _x86_batched_gemm(Q, kxt) * np.float32(sc)
+    if causal:
+        i = np.arange(sq).reshape(sq, 1)
+        j = np.arange(sk).reshape(1, sk)
+        scores = np.where(j > i + (sk - sq), np.float32(-1e30), scores)
+    probs = _x86_softmax_rows(scores, np)
+    return _x86_batched_gemm(probs, vx)
+
+
+_X86_ATTN_OPS = ("tessera.multi_head_attention", "tessera.gqa_attention",
+                 "tessera.mqa_attention", "tessera.mla_decode")
+
+
+def _execute_x86_compiled_attention(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` softmax-attention lane: multi_head / gqa / mqa /
+    mla_decode, all composed from the AVX-512 GEMM + row-softmax kernels.
+    multi_head_attention reshapes [B,S,H·D]→[B,H,S,D]; gqa/mqa pick the KV-group
+    counts; mla_decode optionally projects K/V. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_ATTN_OPS:
+        raise ValueError(
+            f"x86_attention_compiled executor handles one of {_X86_ATTN_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    if len(operands) < 3:
+        raise ValueError("attention needs at least three operands (Q, K, V)")
+    scale = kwargs.get("scale")
+    causal = bool(kwargs.get("causal", False))
+    q, k, v = operands[0], operands[1], operands[2]
+    if any(o.dtype != np.float32 for o in (q, k, v)):
+        raise ValueError("x86 attention lane handles f32 only")
+
+    if op_name == "tessera.multi_head_attention":
+        nh = int(kwargs["num_heads"])
+        if q.ndim != 3:
+            raise ValueError("multi_head_attention expects rank-3 [B, S, H*D]")
+        b, sq, hd = q.shape
+        if hd % nh != 0:
+            raise ValueError(f"H*D={hd} not divisible by num_heads={nh}")
+        dd = hd // nh
+
+        def split(t: Any) -> Any:
+            st = int(t.shape[1])
+            return np.ascontiguousarray(
+                t.reshape(b, st, nh, dd).transpose(0, 2, 1, 3))
+
+        out = _x86_sdpa(split(q), split(k), split(v), nh, nh, np,
+                        scale=scale, causal=causal)
+        return np.ascontiguousarray(out.transpose(0, 2, 1, 3).reshape(b, sq, hd))
+
+    if op_name in ("tessera.gqa_attention", "tessera.mqa_attention"):
+        if q.ndim != 4:
+            raise ValueError("gqa/mqa attention expects rank-4 [B, H, S, D]")
+        if op_name == "tessera.mqa_attention":
+            nq, nkv = int(q.shape[1]), 1
+        else:
+            nq = int(kwargs["num_query_heads"])
+            nkv = int(kwargs["num_kv_heads"])
+        return _x86_sdpa(q, k, v, nq, nkv, np, scale=scale, causal=causal)
+
+    # tessera.mla_decode — optional latent K/V projection, then GQA attention.
+    w_k = operands[3] if len(operands) > 3 else kwargs.get("W_k")
+    w_v = operands[4] if len(operands) > 4 else kwargs.get("W_v")
+    if w_k is not None:
+        k = _x86_batched_gemm(k, np.ascontiguousarray(np.asarray(w_k), np.float32))
+    if w_v is not None:
+        v = _x86_batched_gemm(v, np.ascontiguousarray(np.asarray(w_v), np.float32))
+    if q.ndim != 4 or k.ndim != 4:
+        raise ValueError("mla_decode expects rank-4 Q and projected K")
+    return _x86_sdpa(q, k, v, int(q.shape[1]), int(k.shape[1]), np,
+                     scale=scale, causal=causal)
+
+
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
 #: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
 _X86_BINARY_OPS = {
@@ -5876,6 +6004,7 @@ def _executor_table():
         "x86_matmul_family_compiled": _execute_x86_compiled_matmul_family,
         "x86_rope_compiled": _execute_x86_compiled_rope,
         "x86_alibi_compiled": _execute_x86_compiled_alibi,
+        "x86_attention_compiled": _execute_x86_compiled_attention,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

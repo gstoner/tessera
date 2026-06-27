@@ -23,7 +23,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `flash_attn` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `gqa_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `gqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `hybrid_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `kimi_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `lightning_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -31,13 +31,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `linear_attn_state` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `lookahead_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `memory_index_score` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `mla_decode` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `mla_decode` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `mla_decode_fused` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `modified_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `mqa_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `mqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `msa_index_scores` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `msa_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `multi_head_attention` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `multi_head_attention` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `power_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `retention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `varlen_sdpa` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -329,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |

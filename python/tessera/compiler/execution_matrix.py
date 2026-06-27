@@ -242,7 +242,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "cond i8 != 0, a/b/out f32",
     "x86_transcendental_compiled": "x86 CPU vectorized transcendental / "
                             "activation kernel (exp/log/tanh/sigmoid/silu/gelu/"
-                            "erf/softplus/expm1/log1p) — "
+                            "erf/softplus/expm1/log1p/cos/tan/sinh/cosh/asin/"
+                            "acos/atan/erfc) — "
                             "tessera_x86_avx512_transcendental_f32 from "
                             "libtessera_x86_elementwise.so (Cephes exp/log "
                             "minimax cores + Abramowitz-Stegun erf; activations "

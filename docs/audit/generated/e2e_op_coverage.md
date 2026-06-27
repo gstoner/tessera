@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 89 |
-| ``runnable_reference`` | 220 |
+| ``complete`` | 97 |
+| ``runnable_reference`` | 212 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (89)
+## complete (97)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -41,8 +41,14 @@ each row into a single E2E tier.
 | ``le`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``lt`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``ne`` | comparison | public | public | registered | partial | fused | ready | none |
+| ``acos`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``asin`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``atan`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``cos`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``cosh`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``erf`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``erfc`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``exp`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``expm1`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``gelu`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -52,9 +58,11 @@ each row into a single E2E tier.
 | ``rsqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sigmoid`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``silu`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``sinh`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``softplus`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sub`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``tan`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``tanh`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``ebm_bivector_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
 | ``ebm_decode_init`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
@@ -125,7 +133,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (220)
+## runnable_reference (212)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -160,16 +168,10 @@ each row into a single E2E tier.
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``einsum`` | contraction | public | public | registered | partial | reference | ready | none |
-| ``acos`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``add`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``asin`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``atan`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``atan2`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``clip`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``cos`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``cosh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``erfc`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``floor_div`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``mod`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -179,9 +181,7 @@ each row into a single E2E tier.
 | ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``silu_mul`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``sin`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``sinh`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softcap`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``tan`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``adam`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``adamw`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |

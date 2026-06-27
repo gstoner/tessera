@@ -1258,7 +1258,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
        for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                  "softplus", "expm1", "log1p")},
+                  "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
+                  "asin", "acos", "atan", "erfc")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1734,7 +1735,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
                  "erf; f32, matches numpy 2e-5)",
     } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                 "softplus", "expm1", "log1p")},
+                 "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
+                 "asin", "acos", "atan", "erfc")},
 }
 
 

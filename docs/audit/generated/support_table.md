@@ -52,18 +52,18 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `lt` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `einsum` | contraction | public | public | registered | complete | partial | reference | ready | none |
-| `acos` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `acos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `add` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `asin` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `atan` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `atan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan2` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `clip` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `cos` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `cosh` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `cos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `cosh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `digamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `erf` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `erfc` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `erfc` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `exp` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `expm1` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `floor_div` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -82,12 +82,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `silu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `silu_mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `sin` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `sinh` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `sinh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `softcap` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `softplus` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sub` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `tan` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `tan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `tanh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
@@ -333,7 +333,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpRN· |
-| elementwise | 37 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· |
+| elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCpRN· |

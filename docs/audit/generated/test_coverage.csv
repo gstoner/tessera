@@ -1,7 +1,7 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
 abs,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
 absolute,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-acos,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,7,5,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adamw,6,2,0,8,0,fp32 fp64,directly_tested,8 direct test references
@@ -20,10 +20,10 @@ arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,
 argmax,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 argmin,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 argsort,2,0,0,2,0,,directly_tested,2 direct test references
-asin,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+asin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
 asymmetric_bce,3,0,0,3,0,,directly_tested,3 direct test references
-atan,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+atan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 atan2,2,0,0,2,0,,directly_tested,2 direct test references
 attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
 attn_local_window_2d,34,25,1,59,0,fp32,directly_tested,59 direct test references
@@ -100,8 +100,8 @@ conv1d,2,0,0,2,0,,directly_tested,2 direct test references
 conv2d,11,2,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
 conv3d,8,0,0,8,0,,directly_tested,8 direct test references
 conv_transpose,3,0,0,3,0,,directly_tested,3 direct test references
-cos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-cosh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+cos,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
+cosh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
@@ -172,7 +172,7 @@ empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 eq,3,0,1,3,0,bf16 f32,directly_tested,3 direct test references
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-erfc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
+erfc,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 exp,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references
 expand,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 expm1,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
@@ -406,7 +406,7 @@ silu,85,2,5,87,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,dir
 silu_mul,14,13,0,27,0,bf16 fp32,directly_tested,27 direct test references
 simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
 sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
-sinh,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 softcap,7,0,1,7,0,,directly_tested,7 direct test references
@@ -436,7 +436,7 @@ sum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references
 svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-tan,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
+tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 tanh,6,0,1,6,0,bf16 f16 f32,directly_tested,6 direct test references
 tile,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tile_view,2,0,0,2,0,,directly_tested,2 direct test references

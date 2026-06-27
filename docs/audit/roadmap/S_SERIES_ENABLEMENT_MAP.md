@@ -179,70 +179,50 @@ ROCm + x86 (the proven dual-device lane), in the model-value order above. The
 IR-Transform / AST-Frontend / Host-Library paths are already structurally enabled
 and need only test-presence confirmation for a handful of thin ops.
 
-## Device-library acceleration: CUB (CCCL) / rocPRIM
+## Kernel-technique reference: CUB (CCCL) / rocPRIM — study, reimplement, don't wrap
 
-For the **data-parallel primitive families** (reduction, scan, sort, select/
-partition, histogram, segmented, run-length, by-key), do NOT hand-roll the GPU
-kernel — route the **Device-lib mechanism** through the canonical tuned
-primitive libraries:
+Tessera is a **standalone compiler** that generates its **own** kernels — it does
+NOT take a CUB/rocPRIM runtime dependency. But those two libraries are the
+gold-standard *reference implementations* of the data-parallel primitives, so we
+**mine them for the algorithmic techniques + intrinsics** and reimplement those
+patterns in the Tessera codegen lanes (`generate-rocm-<fam>-kernel`, the AVX-512
+C-ABI kernels, the NVIDIA Target IR). They expose the same three tiers — **device
+/ block / warp** — and a set of cross-lane **intrinsics**; the techniques port
+1:1 between CUB and rocPRIM (rocPRIM mirrors CUB).
 
-- **NVIDIA → CUB** (part of CCCL — CUDA Core Compute Libraries):
-  <https://github.com/NVIDIA/cub>, <https://nvidia.github.io/cccl/>
-- **AMD ROCm → rocPRIM**:
-  <https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocprim>,
+- **NVIDIA → CUB** (CCCL): <https://github.com/NVIDIA/cub>, <https://nvidia.github.io/cccl/>
+- **AMD ROCm → rocPRIM**: <https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocprim>,
   <https://rocm.docs.amd.com/projects/rocPRIM/en/latest/reference/reference.html>
 
-Both expose the same three-tier surface (**device / block / warp** primitives) +
-**fancy iterators** + **intrinsics**, with near-identical APIs (rocPRIM mirrors
-CUB), so one Target-IR lowering shape covers both backends.
+### Techniques to adopt (and the kernel each one upgrades)
 
-### S-series family → CUB / rocPRIM primitive
-
-| Family (S-series ops) | CUB (CCCL) | rocPRIM |
-|-----------------------|------------|---------|
-| `reduction` sum/mean/max/min | `DeviceReduce::{Sum,Max,Min,Reduce}` | `rocprim::device_reduce` |
-| `reduction` amax/amin (arg) | `DeviceReduce::{ArgMax,ArgMin}` + `ArgIndexInputIterator` | `device_reduce` + `arg_index_iterator` |
-| `segment_reduce`, segmented norms | `DeviceSegmentedReduce` | `device_segmented_reduce` |
-| `stable_reduction` logsumexp/softmax-denom/var | `DeviceReduce` + **`TransformInputIterator`** (fuse exp/square — no temp buffer) | `device_reduce` + `transform_iterator` |
-| `scan` cumsum/cumprod/`associative_scan` | `DeviceScan::{InclusiveSum,InclusiveScan,ExclusiveScan}` | `device_scan` (inclusive/exclusive) |
-| `sort` / `argsort` / `top_k` | `DeviceRadixSort::{SortKeys,SortPairs}`, `DeviceMergeSort` | `device_radix_sort`, `device_merge_sort` |
-| `indexing` where/nonzero/masked_select/boolean_mask | `DeviceSelect::{Flagged,If,Unique}`, `DevicePartition` | `device_select`, `device_partition` |
-| histogram / bincount | `DeviceHistogram::{Even,Range}` | `device_histogram` |
-| `moe` token dispatch/combine (offsets) | `DeviceScan` + `DeviceSelect` | `device_scan` + `device_select` |
-| run-length / unique | `DeviceRunLengthEncode` | `device_run_length_encode` |
-| segment ops (by key) | `DeviceReduce::ReduceByKey` | `device_reduce_by_key`, `device_scan_by_key` |
-
-### Two optimization levers these give us for free
-
-1. **Iterator fusion (the big one).** `TransformInputIterator` / `transform_iterator`
-   fuses the elementwise pre-map *into* the reduce/scan with **no intermediate
-   buffer** — e.g. variance/L2-norm = reduce over `x²`, logsumexp/softmax-denom =
-   max-reduce then `sum(exp(x−max))`, all as a single pass. `counting_iterator`,
-   `constant_iterator`, `zip_iterator`, `discard_iterator` cover index-gen,
-   multi-input, and drop-output. This collapses several reference-only
-   `stable_reduction` / `normalization` ops into one fused device call.
-2. **Block/warp tiles inside larger kernels.** `BlockReduce`/`BlockScan` /
-   `block_reduce`/`block_scan` and `WarpReduce`/`warp_reduce` replace the
-   hand-rolled LDS tree-reduce inside the existing fused kernels (the current
-   `generate-rocm-reduce-kernel` / norm / softmax lanes hand-roll this) — better
-   perf, less codegen, and they back the row-reduce in rmsnorm/layer_norm/softmax
-   and the online-softmax reduction in flash-attention.
+| Technique (from CUB/rocPRIM) | Intrinsics to emit | Improves which Tessera kernel |
+|------------------------------|--------------------|-------------------------------|
+| **Warp-shuffle reduction** — each warp reduces in-register (butterfly `shfl_xor` / down-shift), only per-warp partials touch LDS → block reduce = warp-reduce + 1 LDS round-trip (vs O(blockDim) LDS tree) | NV `__shfl_down_sync`/`__shfl_xor_sync`; RDNA `ds_swizzle` / DPP (`v_*_dpp`) / `ds_permute` / `__shfl`; x86 `_mm512_reduce_*` | `generate-rocm-reduce-kernel` (replace the LDS tree-reduce), and the row-reduce inside `norm`/`softmax` + online-softmax in flash-attn |
+| **Block scan** — warp-scan (Kogge-Stone via `shfl_up`) + scan of per-warp totals + uniform add-back | `__shfl_up_sync`; RDNA DPP `wave_shr`/`ds_permute` | new `scan` lane (cumsum/cumprod/`associative_scan`) |
+| **Decoupled look-back single-pass scan** (CUB chained-scan) — device-wide scan/compaction in ONE kernel: each block publishes its aggregate, looks back at predecessors | atomics + `__threadfence` / `s_waitcnt` + ballot | device-wide `scan`, stream-compaction `select` |
+| **Stream compaction via scan-of-flags** — predicate→flags→exclusive-scan→scatter survivors | x86 **`vpcompressd`/`_mm512_mask_compress`** (direct analog!); RDNA `__ballot` + `v_mbcnt_{lo,hi}` for per-lane offsets | `where`/`nonzero`/`masked_select`/`boolean_mask`, MoE token dispatch |
+| **Radix sort** — per-digit: block count (ballot/`match_any`) → exclusive scan of digit offsets → scatter | `__ballot`, `__match_any_sync` / RDNA `v_cmp`+`s_ff1` | `sort`/`argsort`/`top_k` |
+| **Vectorized blocked/striped load-store** (BlockLoad/BlockStore) — wide vector loads + coalesced/blocked arrangement instead of scalar per-element loads | RDNA `global_load_dwordx4`; NV `ld.global.v4`; x86 already 512-bit | all elementwise/reduce lanes (raise mem throughput) |
+| **Welford online mean+variance** (single fused pass, numerically stable) | — (algorithmic) | `layer_norm`/`group_norm`/`instance_norm` (replace the two-pass) |
+| **Transform-fused-into-reduce** (CUB `TransformInputIterator` pattern) — compute the pre-map (`exp`, `x²`) inline in the reduce loop, **no temp buffer** | — (codegen pattern) | `stable_reduction` (logsumexp, softmax-denom, var/L2-norm) collapse to one pass |
 
 ### How this folds into the plan
 
-- The **Device-lib Target IR** for these families should emit a CUB/rocPRIM call
-  (Decision #19: hardware-free Target IR → backend). NVIDIA gets CUB, ROCm gets
-  rocPRIM from the *same* IR shape. This **replaces** hand-rolling
-  `reduce`/`scan`/`sort`/`select`/`histogram` kernels for those backends.
-- **x86 / Apple have no CUB/rocPRIM:** x86 keeps the AVX-512 hand-kernel lane
-  (oneDPL/Thrust-CPU is a possible future device-lib); Apple uses MPS/MPSGraph
-  reduction/scan/sort. So the family stays **dual-mechanism**: CUB/rocPRIM on
-  NV/AMD, hand-kernel/vendor-lib on x86/Apple.
-- **Priority:** retrofit the already-landed ROCm `reduce` lane to `rocprim::
-  device_reduce` + `block_reduce` (validate parity vs the current hand-kernel),
-  then bring `scan`, `sort`, `select`, `histogram`, `segmented` online via
-  rocPRIM/CUB rather than new hand-written passes — this is the fastest path
-  through a large slice of the 175 reference-only Kernel ops.
+- These are **codegen upgrades**, not a new dependency — each technique is
+  reimplemented inside the existing/new `generate-*-kernel` passes + AVX-512
+  lanes, lowering through the hardware-free Target IR (Decision #19). Same
+  algorithm shape emits the right intrinsics per backend (RDNA DPP/`ds_swizzle`,
+  NV `__shfl`, AVX-512 `reduce`/`compress`).
+- **Highest-leverage first move:** retrofit the landed
+  `generate-rocm-reduce-kernel` from the LDS tree-reduce to a **warp-shuffle
+  reduce** (DPP / `ds_swizzle`), validate bit-parity vs the current kernel on
+  gfx1151, then reuse that warp-reduce primitive in the `norm`/`softmax` lanes.
+  That single technique upgrades every reduction-bearing kernel.
+- Then bring the new families online with the matching technique: `scan`
+  (block-scan), `select`/`where` (compaction; x86 gets `vpcompress` "for free"),
+  `sort` (radix), `histogram` — all reimplemented in Tessera codegen, inspired by
+  CUB/rocPRIM but owned by us.
 
 ## Appendix — full per-op table
 

@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 134 |
-| ``runnable_reference`` | 175 |
+| ``complete`` | 136 |
+| ``runnable_reference`` | 173 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (134)
+## complete (136)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -143,9 +143,11 @@ each row into a single E2E tier.
 | ``dequantize_fp4`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``dequantize_fp6`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``dequantize_fp8`` | quantize | public | public | registered | partial | fused | ready | none |
+| ``dequantize_nvfp4`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``quantize_fp4`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``quantize_fp6`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``quantize_fp8`` | quantize | public | public | registered | partial | fused | ready | none |
+| ``quantize_nvfp4`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -170,7 +172,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (175)
+## runnable_reference (173)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -297,8 +299,6 @@ each row into a single E2E tier.
 | ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
-| ``dequantize_nvfp4`` | quantize | public | public | registered | partial | reference | ready | none |
-| ``quantize_nvfp4`` | quantize | public | public | registered | partial | reference | ready | none |
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |
 | ``rng_uniform`` | random_source | public | public | registered | partial | reference | ready | none |

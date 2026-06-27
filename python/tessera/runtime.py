@@ -4350,6 +4350,83 @@ def _execute_x86_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
         ctypes.c_int(min_exp), out.ctypes.data_as(cf))
     return (out.reshape(x.shape) * np.float32(scale)).astype(np.float32)
 
+
+def _x86_fpgrid(x: Any, max_normal: float, mantissa_bits: int, min_exp: int,
+                np: Any) -> Any:
+    """Snap an array to a low-precision float grid on the AVX-512 fpquant kernel
+    (no scaling — the caller pre-scales). Shape-preserving."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, np.float32).reshape(-1)
+    out = np.zeros(int(xc.size), dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_fpquant_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(int(xc.size)),
+        ctypes.c_float(max_normal), ctypes.c_int(mantissa_bits),
+        ctypes.c_int(min_exp), out.ctypes.data_as(cf))
+    return out.reshape(np.shape(x))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 NVFP4 lane — block-scaled fp4 (Blackwell convention): per-block (default
+# 16 elems along the last axis) symmetric E2M1 with one fp8-E4M3 scale per block.
+# Both the per-block fp8 scale and the e2m1 codes run on the AVX-512 fpquant
+# kernel; block partition / amax / reassembly are host structure. Matches the
+# compiler/microscaling reference exactly (verified 0 abs err). f32 fake-quant.
+# ``compiler_path = "x86_nvfp4_compiled"``.
+# ─────────────────────────────────────────────────────────────────────────────
+def _execute_x86_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` nvfp4 lane: quantize/dequantize block-scaled fp4.
+    quantize returns the dequantized fp32 (fake-quant); dequantize is the fp32
+    passthrough. block_size from kwargs (default 16)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    _OPS = ("tessera.quantize_nvfp4", "tessera.dequantize_nvfp4")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPS:
+        raise ValueError(
+            f"x86_nvfp4_compiled executor handles one of {_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("nvfp4 op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    bs = int(kwargs.get("block_size", 16))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 nvfp4 lane handles f32 only; got {x.dtype}")
+
+    if op_name == "tessera.dequantize_nvfp4":
+        return np.ascontiguousarray(x, np.float32)
+
+    if bs <= 0:
+        raise ValueError("block_size must be positive")
+    if x.ndim < 1 or int(x.shape[-1]) % bs != 0:
+        raise ValueError(
+            f"nvfp4 last dim {x.shape[-1] if x.ndim else 0} must be divisible "
+            f"by block_size {bs}")
+    x = np.ascontiguousarray(x, np.float32)
+    n = int(x.shape[-1])
+    nb = n // bs
+    blocks = x.reshape(*x.shape[:-1], nb, bs)
+    amax = np.abs(blocks).max(axis=-1)                    # (*lead, nblocks)
+    # per-block fp8-E4M3 scale (E2M1 max_normal = 6.0); on the fpquant kernel.
+    raw = np.maximum(amax / np.float32(6.0), np.float32(1e-30))
+    scale = _x86_fpgrid(raw, 448.0, 3, -6, np)            # fp8 e4m3
+    scale = np.where(scale == 0.0, np.float32(1.0), scale).astype(np.float32)
+    sf = scale[..., None]
+    # E2M1 codes of block / scale (IEEE e2m1 subnormal clamp at min_exp=0).
+    codes = _x86_fpgrid(blocks / sf, 6.0, 1, 0, np)
+    dq = (codes * sf).reshape(*x.shape[:-1], n)
+    return dq.astype(np.float32)
+
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
 #: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
 _X86_BINARY_OPS = {
@@ -6534,6 +6611,7 @@ def _executor_table():
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
+        "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

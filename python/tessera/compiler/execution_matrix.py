@@ -240,6 +240,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_nvfp4_compiled": "x86 CPU NVFP4 — block-scaled fp4 (E2M1 codes + one "
+                            "fp8-E4M3 scale per 16-elem block): per-block amax / "
+                            "reassembly on the host, the fp8 scale and the e2m1 "
+                            "codes on the AVX-512 fpquant kernel. Matches the "
+                            "compiler/microscaling reference exactly. f32 "
+                            "fake-quant",
     "x86_fpquant_compiled": "x86 CPU low-precision float quantize — quantize/"
                             "dequantize fp8 / fp6 / fp4: per-tensor symmetric "
                             "scale + grid-snap on the AVX-512 fpquant kernel "
@@ -469,6 +475,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_nvfp4_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_nvfp4_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_nvfp4_compiled", runtime_status="success",
+        reason="x86 nvfp4 artifact runs block-scaled fp4: per-block amax / "
+               "reassembly on the host, the per-block fp8-E4M3 scale and the "
+               "E2M1 codes on the AVX-512 fpquant kernel; dequantize is the fp32 "
+               "passthrough. Matches the compiler/microscaling reference exactly "
+               "(0 abs err). f32 fake-quant.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_fpquant_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_fpquant_compiled",

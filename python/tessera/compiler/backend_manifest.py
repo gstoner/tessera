@@ -1277,6 +1277,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "log_cosh_loss")},
     **{(op, "x86"): "tests/unit/test_x86_binary_loss_compiled.py"
        for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    **{(op, "x86"): "tests/unit/test_x86_rl_loss_compiled.py"
+       for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
+                  "normalize_group_advantages")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1848,6 +1851,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_binary_loss_f32 per-element + reduce "
                  "kernel; x86_binary_loss_compiled lane; f32, matches numpy 2e-5)",
     } for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    # RL policy losses — ppo/cispo/grpo core surrogate on the AVX-512 policy-loss
+    # kernel; normalize_group_advantages on the layer_norm kernel over the group
+    # axis (x86_rl_loss_compiled). KL/entropy/mask add-ons diagnose out.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 RL policy loss {op} "
+                 "(tessera_x86_avx512_policy_loss_f32 surrogate / layer_norm "
+                 "kernel; x86_rl_loss_compiled lane; core path, f32, numpy 2e-5)",
+    } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
+                 "normalize_group_advantages")},
 }
 
 

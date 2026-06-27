@@ -2919,6 +2919,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_binary_loss_f32":
             [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, ctypes.c_float,
              c_f32],
+        "tessera_x86_avx512_policy_loss_f32":
+            [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3991,6 +3993,124 @@ def _execute_x86_compiled_binary_loss(artifact: RuntimeArtifact,
         per.ctypes.data_as(cf))
     if reduction == "none":
         return per.reshape(z.shape)
+    return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 RL policy-loss lane — ppo / cispo / grpo (core surrogate on the AVX-512
+# policy-loss kernel) + normalize_group_advantages (the AVX-512 layer_norm
+# kernel over the group axis). ``compiler_path = "x86_rl_loss_compiled"``. f32.
+# The optional KL-penalty / entropy-bonus / masked-reduce add-ons are NOT in the
+# fused lane — the runtime emits a stable diagnostic if they are requested.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_group_normalize(r: Any, group_axis: int, eps: float, np: Any) -> Any:
+    """(r − mean) / sqrt(var + eps) over ``group_axis`` — the unweighted
+    layer_norm kernel applied over an arbitrary axis (transpose-to-last → kernel
+    → transpose-back)."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    r = np.ascontiguousarray(r, np.float32)
+    nd = r.ndim
+    ax = int(group_axis) if group_axis >= 0 else nd + int(group_axis)
+    if ax < 0 or ax >= nd:
+        raise ValueError(f"normalize_group_advantages: group_axis out of range "
+                         f"for shape {r.shape}")
+    perm = [i for i in range(nd) if i != ax] + [ax]
+    rt = np.ascontiguousarray(np.transpose(r, perm))
+    k = int(rt.shape[-1])
+    m = int(np.prod(rt.shape[:-1])) if rt.ndim > 1 else 1
+    out = np.zeros(m * k, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_layernorm_f32(
+        rt.reshape(-1).ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
+        ctypes.c_float(eps), out.ctypes.data_as(cf))
+    out = out.reshape(rt.shape)
+    inv = [perm.index(i) for i in range(nd)]
+    return np.ascontiguousarray(np.transpose(out, inv))
+
+
+#: op_name -> (policy-loss kind, clip-kwarg name, clip default). Matches
+#: avx512_policy_loss_f32.cpp.
+_X86_POLICY_OPS = {
+    "tessera.ppo_policy_loss": (0, "clip_epsilon", 0.2),
+    "tessera.grpo_policy_loss": (0, "clip_epsilon", 0.2),
+    "tessera.cispo_policy_loss": (1, "epsilon_high", 5.0),
+}
+
+
+def _execute_x86_compiled_rl_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` RL policy-loss lane: ppo / cispo / grpo core
+    surrogate (on the AVX-512 policy-loss kernel over logp_new/logp_old/
+    advantages) + normalize_group_advantages (layer_norm over the group axis).
+    The KL/entropy/mask add-ons get a stable diagnostic. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    handled = ("tessera.ppo_policy_loss", "tessera.cispo_policy_loss",
+               "tessera.grpo_policy_loss", "tessera.normalize_group_advantages")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"x86_rl_loss_compiled executor handles one of {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    if any(o.dtype != np.float32 for o in operands):
+        raise ValueError("x86 rl-loss lane handles f32 only")
+
+    if op_name == "tessera.normalize_group_advantages":
+        if len(operands) != 1:
+            raise ValueError(
+                "x86 normalize_group_advantages lane takes one operand "
+                "(rewards); masked normalization is not in the fused lane")
+        return _x86_group_normalize(
+            operands[0], int(kwargs.get("group_axis", 1)),
+            float(kwargs.get("eps", 1e-8)), np)
+
+    # ppo / cispo / grpo — core surrogate. The KL/entropy/masked-reduce add-ons
+    # are not in the fused lane (Decision #21: stable diagnostic, never silent).
+    if float(kwargs.get("kl_coef", 0.0)) or float(kwargs.get("entropy_coef", 0.0)):
+        raise ValueError(
+            f"x86 rl-loss lane handles the core {op_name} surrogate only; the "
+            "KL-penalty / entropy-bonus terms are unsupported (set "
+            "kl_coef=entropy_coef=0)")
+    if len(operands) < 3:
+        raise ValueError(f"{op_name} needs (logp_new, logp_old, advantages)")
+    kind, clip_kw, clip_default = _X86_POLICY_OPS[op_name]
+    clip = float(kwargs.get(clip_kw, clip_default))
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"rl-loss reduction must be none/mean/sum; got {reduction}")
+    ln = np.ascontiguousarray(operands[0], np.float32)
+    lo = np.ascontiguousarray(operands[1], np.float32)
+    adv = np.ascontiguousarray(operands[2], np.float32)
+    if not (ln.shape == lo.shape == adv.shape):
+        raise ValueError(
+            f"rl-loss requires matching shapes; got logp_new{ln.shape} "
+            f"logp_old{lo.shape} advantages{adv.shape}")
+    n = int(np.prod(ln.shape)) if ln.ndim else 1
+    if n <= 0:
+        return np.array(ln, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    per = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_policy_loss_f32(
+        ln.reshape(-1).ctypes.data_as(cf), lo.reshape(-1).ctypes.data_as(cf),
+        adv.reshape(-1).ctypes.data_as(cf), ctypes.c_int64(n),
+        ctypes.c_int(kind), ctypes.c_float(clip), per.ctypes.data_as(cf))
+    if reduction == "none":
+        return per.reshape(ln.shape)
     return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -6174,6 +6294,7 @@ def _executor_table():
         "x86_attention_compiled": _execute_x86_compiled_attention,
         "x86_loss_compiled": _execute_x86_compiled_loss,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
+        "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

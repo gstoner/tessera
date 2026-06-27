@@ -240,6 +240,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_rl_loss_compiled": "x86 CPU RL policy loss — ppo / cispo / grpo core "
+                            "surrogate on the AVX-512 policy-loss kernel "
+                            "(tessera_x86_avx512_policy_loss_f32, ratio=exp(ln-"
+                            "lo), clipped surrogate) + normalize_group_"
+                            "advantages on the AVX-512 layer_norm kernel over the "
+                            "group axis. KL/entropy/mask add-ons diagnose out. "
+                            "f32, matches numpy 2e-5",
     "x86_binary_loss_compiled": "x86 CPU binary-cross-entropy loss — bce / "
                             "asymmetric_bce over (logits, targets): per-element "
                             "loss on the AVX-512 binary-loss kernel "
@@ -450,6 +457,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_rl_loss_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_rl_loss_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_rl_loss_compiled", runtime_status="success",
+        reason="x86 rl-loss artifact runs the ppo / cispo / grpo core surrogate "
+               "(ratio=exp(logp_new−logp_old), clipped) on the AVX-512 policy-"
+               "loss kernel + normalize_group_advantages on the AVX-512 "
+               "layer_norm kernel over the group axis; reduction on the reduce "
+               "kernel. KL/entropy/mask add-ons get a stable diagnostic. f32, "
+               "numpy 2e-5.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_binary_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_binary_loss_compiled",

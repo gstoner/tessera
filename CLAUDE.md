@@ -19,8 +19,8 @@ precision, and parallelism are **first-class IR objects** — not runtime
 heuristics. "Standalone" means runtime-independent of PyTorch / JAX / Flax
 (Decision #23); those are reference vocabularies only.
 
-Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm, Google TPU,
-Cerebras WSE-3, Tenstorrent Metalium, x86 AMX/AVX512, Apple M-series CPU/GPU.
+Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm,
+x86 AMX/AVX512, Apple M-series CPU/GPU.
 
 **Execution reality:** the **x86 AMX/AVX512** backend and **Apple CPU
 (Accelerate) + GPU (MPS/MSL/MPSGraph)** backends execute natively today. NVIDIA
@@ -46,7 +46,7 @@ Schedule IR (schedule.* dialect — mesh regions, pipeline stages, optimizer sha
 Tile IR     (tile_opt_fa4 — warp specialization, TMEM, async copy, KV cache)
      │
      ▼
-Target IR   (per-backend: NVRubinCPX, ROCm, TPU/StableHLO, Cerebras, Metalium, Apple, x86)
+Target IR   (per-backend: NVRubinCPX, ROCm, Apple, x86)
 ```
 
 New backends MUST expose a hardware-free Target IR dialect before
@@ -60,8 +60,8 @@ PTX/HIP/Metal source.
 | Phase | Status | Scope |
 |-------|--------|-------|
 | 1–6 | ✅ Complete | Python frontend → C++ lowering → NVIDIA backend IR → distributed training → solver passes/autotuner → runtime wrapper + CUDA/HIP backends |
-| 7 | 🟢 Lit-verified | Neighbors (halo/stencil) dialect; Cerebras + Metalium backends; real HW gated on Phase G/H |
-| 8 | 🟢 Apple operational | Hardware-free Target IR; `@jit(target="rocm"/"metalium"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph) execute natively |
+| 7 | 🟢 Lit-verified | Neighbors (halo/stencil) dialect; real HW gated on Phase G/H |
+| 8 | 🟢 Apple operational | Hardware-free Target IR; `@jit(target="rocm"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph) execute natively |
 | S-series | 🟢 In progress | Standalone-compiler track — primitive contract registry + S2–S15 Python reference surface + reasoning-model attention/RL; `backend_kernel` axis is the long-pole gate (Phase G/H/I) |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect + 4 passes + `tessera-cpx-opt` driver |
 
@@ -82,7 +82,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
-| `compiler/gpu_target.py` / `rocm_target.py` / `tpu_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.3; AMD pinned ROCm 7.2.4; TPU MXU tile 128. |
+| `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.3; AMD pinned ROCm 7.2.4. |
 | `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
@@ -106,7 +106,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/*.td` | FA-4 Tile IR dialects |
 | `compiler/codegen/tessera_x86_backend/` | AMX BF16 + AVX512 GEMM — **works end-to-end** |
 | `compiler/codegen/Tessera_Apple_Backend/` | Apple CPU + GPU — **operational**. CPU: `MatmulToAppleCPU` + Accelerate shim. GPU: 17-pass Tile→Apple lowering + Objective-C++ runtime (`apple_gpu_runtime.mm`) with MPS/MSL/MPSGraph lanes. |
-| `compiler/codegen/{tessera_gpu_backend_NVIDIA,Tessera_ROCM_Backend,Tessera_TPU_Backend,Tessera_Cerebras_backend,Tessera_Metalium_Backend,Tessera_RubinCPX_Backend}/` | Per-target backends (IR/artifact; HW execution gated where noted) |
+| `compiler/codegen/{tessera_gpu_backend_NVIDIA,Tessera_ROCM_Backend,Tessera_RubinCPX_Backend}/` | Per-target backends (IR/artifact; HW execution gated where noted) |
 | `compiler/tessera_neighbors/` | Halo/stencil neighbor-exchange dialect (Phase 7) |
 | `transforms/lib/*.cpp` | Pass bodies — Canonicalize/Verify/Migrate (P1), Distribution/Effect/Tiling/TileToX86 (P2), TileIRLowering/WarpSpec/AsyncCopy/WGMMA/TMA (P3), Collective/PipelineStage (P4), `AttentionFamilyPasses.cpp` (reasoning-model attention) |
 | `solvers/` | Core (11 passes), linalg, scaling-resilience, spectral (6 pass bodies + `ts-spectral-opt`), TPP (7 passes + `tpp-space-time`) |
@@ -167,9 +167,9 @@ Per-phase deliverables and the open-work priority queue live in
 
 18. **RNG streams are deterministically assigned.** `stream_id = global_seed * num_ranks + rank`. Philox counter offsets are non-overlapping for 2^128 elements.
 
-19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_metalium.dma/matmul`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. The hardware-free layer is what makes backends lit-testable; validated by `test_target_ir_contract.py`.
+19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. The hardware-free layer is what makes backends lit-testable; validated by `test_target_ir_contract.py`.
 
-20. **`@jit(target=...)` accepts both `GPUTargetProfile` and string aliases.** Valid strings: `"rocm"`, `"metalium"`, `"apple_cpu"`, `"apple_gpu"`. Strings dispatch through `matmul_pipeline.py` to `tessera-lower-to-{target}`. Do not invent new string aliases without adding the corresponding pipeline.
+20. **`@jit(target=...)` accepts both `GPUTargetProfile` and string aliases.** Valid strings: `"rocm"`, `"apple_cpu"`, `"apple_gpu"`. Strings dispatch through `matmul_pipeline.py` to `tessera-lower-to-{target}`. Do not invent new string aliases without adding the corresponding pipeline.
 
 21. **Unsupported lowering must emit a stable diagnostic.** When a backend cannot lower an op (e.g., KV-cache on a target without it), emit a diagnostic naming the op and the target — never silently no-op or fall through. See the KV-cache → target lowering for the canonical pattern.
 
@@ -204,8 +204,6 @@ X    = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 # X.shard_spec → ShardSpec(partition=(0,), mesh_axes=("dp",)); X.parts("dp") → per-rank slices
 ```
 `Cyclic.parts("dp")` → element `i` on rank `i % dp_size`. Cyclic + Block requires `all_to_all` rebalance (emitted by `distributed_planner.py`).
-
-**TPU constraint.** MXU tile 128×128. `@jit(target=tpu)` auto-injects `Divisible("M/N/K", 128)`.
 
 **FA-4 tile sizes (SM_90).** Default `tile_q=64, tile_kv=64, pipeline_stages=2`, stored as `tessera.tile_q`/`tessera.tile_kv` attrs so the autotuner can sweep them.
 
@@ -307,7 +305,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 |----------|--------|
 | `tessera-lower-to-x86` | x86 AMX/AVX512 (Phase 2) |
 | `tessera-lower-to-gpu` | NVIDIA SM_90+ WGMMA/TMA (Phase 3); `tessera-nvidia-pipeline-{sm90,sm100,sm120}` variants |
-| `tessera-lower-to-rocm` / `-metalium` | AMD ROCm MFMA / Tenstorrent Metalium |
+| `tessera-lower-to-rocm` | AMD ROCm MFMA |
 | `tessera-lower-to-apple_cpu[-runtime]` | Apple CPU (Accelerate artifact / cblas_sgemm runtime) |
 | `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering) |
 | `tessera-cpx-pipeline` / `-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
@@ -323,7 +321,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |
 | Apple GPU architecture + kernel inventory | `docs/apple_gpu_overview.md`, `docs/apple_gpu_kernel_inventory.md` |
-| NVIDIA / ROCm / Metalium kernel inventories | `docs/nvidia_cuda13_kernel_inventory.md`, `docs/rocm_mfma_kernel_inventory.md`, `docs/metalium_kernel_inventory.md` |
+| NVIDIA / ROCm kernel inventories | `docs/nvidia_cuda13_kernel_inventory.md`, `docs/rocm_mfma_kernel_inventory.md` |
 | **RDNA ISA data archive** (does-this-op-exist-on-my-target truth before emitting) | `docs/reference/isa/rdna/` — structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides + Micro Engine Scheduler. Per-version instruction DB (`<ver>/instructions.json`: opcodes, pseudocode), microcode encoding bit-fields (`encodings.json`), and a cross-version opcode matrix (`cross_version/instruction_matrix.{json,md}`). **gfx1151 = RDNA3.5: WMMA F16/BF16/IU8/IU4, NO FP8/BF8 WMMA (those + sparse SWMMAC are RDNA4-only).** JSON = machine truth, MD = mirror; regenerate via `tools/build_archive.py` (no network). MES scheduler write-up at `mes/SCHEDULER_OVERVIEW.md`. |
 | Graph IR ops / canonicalizations | `src/compiler/ir/TesseraOps.td`, `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
 | Schedule IR / FA-4 Tile IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`, `src/compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/` |

@@ -220,7 +220,7 @@ remaining themes (descriptor-driven dispatch, feature-table-driven selection,
 perf ratchets, auto_batch polish). Everything previously tracked under "Still
 Open" / "Next Work" has landed and is summarized under **Finished** above. The
 only remaining frontier is cross-backend **real-hardware** proof for NVIDIA /
-ROCm / Metalium — tracked in the per-platform audits, not here.
+ROCm — tracked in the per-platform audits, not here.
 
 ## Hardware capability reference (grounded 2026-06-17)
 

@@ -119,8 +119,8 @@ Finished:
 
 Still needs work:
 
-- Nothing open on the Apple compiler track. (Real-hardware NVIDIA/ROCm/
-  Metalium execution proof remains the cross-backend gate — see those tracks.)
+- Nothing open on the Apple compiler track. (Real-hardware NVIDIA/ROCm
+  execution proof remains the cross-backend gate — see those tracks.)
 
 Closed 2026-06-02 → 2026-06-09: binding specs/descriptors for all kernel
 families; descriptor-driven dispatch (single-source envelope in

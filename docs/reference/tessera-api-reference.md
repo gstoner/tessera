@@ -339,8 +339,8 @@ blocks) so KV-cached decode ≡ recompute. LSA also ships a `TieredKVCache`
 ## Targeting
 
 `@ts.jit(target=...)` accepts both a `GPUTargetProfile` object and **string
-aliases**. Valid string targets: `"apple_cpu"`, `"apple_gpu"`, `"rocm"`,
-`"metalium"` (Architecture Decision #20). On Apple Silicon, `"apple_cpu"` and
+aliases**. Valid string targets: `"apple_cpu"`, `"apple_gpu"`, `"rocm"`
+(Architecture Decision #20). On Apple Silicon, `"apple_cpu"` and
 `"apple_gpu"` are **executable** today; NVIDIA/ROCm string/profile targets emit
 artifacts pending Phase G/H hardware.
 

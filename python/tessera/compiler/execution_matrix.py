@@ -240,6 +240,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_norm_compiled": "x86 CPU row-reduction norm kernel — unweighted "
+                            "rmsnorm / layer_norm over the last axis "
+                            "(tessera_x86_avx512_{rmsnorm,layernorm}_f32 from "
+                            "libtessera_x86_elementwise.so; AVX-512 horizontal "
+                            "reduce); the CPU analog of the ROCm norm lane. f32, "
+                            "matches numpy 2e-5",
+    "x86_softmax_compiled": "x86 CPU row-reduction softmax kernel — "
+                            "numerically-stable softmax over the last axis "
+                            "(tessera_x86_avx512_softmax_f32 from "
+                            "libtessera_x86_elementwise.so; AVX-512 max+exp+sum, "
+                            "exp via the Cephes core); the CPU analog of the "
+                            "ROCm softmax lane. f32, matches numpy 2e-5",
     "x86_binary_math_compiled": "x86 CPU transcendental-backed binary kernel — "
                             "pow(a,b) (positive base, a^b via exp(b*log(a))) + "
                             "silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply) from "
@@ -401,6 +413,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_norm_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_norm_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_norm_compiled", runtime_status="success",
+        reason="x86 norm artifact runs the unweighted rmsnorm / layer_norm "
+               "row-reduction over the last axis from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_rmsnorm_f32 / "
+               "_layernorm_f32; AVX-512 horizontal reduce, eps from kwargs). The "
+               "CPU analog of the ROCm warp-shuffle norm lane. f32, numpy 2e-5.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_softmax_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_softmax_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_softmax_compiled", runtime_status="success",
+        reason="x86 softmax artifact runs the numerically-stable softmax "
+               "row-reduction over the last axis from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_softmax_f32; "
+               "AVX-512 max + exp via the Cephes core + sum). The CPU analog of "
+               "the ROCm softmax lane. f32, numpy 2e-5.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_binary_math_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_binary_math_compiled",

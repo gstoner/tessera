@@ -205,8 +205,8 @@ moe_combine,moe_transport,public,public,registered,complete,partial,reference,re
 moe_dispatch,moe_transport,public,public,registered,complete,partial,reference,ready,none
 group_norm,normalization,public,public,registered,complete,partial,reference,ready,none
 instance_norm,normalization,public,public,registered,complete,partial,reference,ready,none
-layer_norm,normalization,public,public,registered,complete,partial,reference,ready,none
-rmsnorm,normalization,public,public,registered,complete,partial,reference,ready,benchmarked
+layer_norm,normalization,public,public,registered,complete,partial,fused,ready,none
+rmsnorm,normalization,public,public,registered,complete,partial,fused,ready,benchmarked
 rmsnorm_safe,normalization,public,public,registered,complete,partial,reference,ready,none
 weight_norm,normalization,public,public,registered,complete,partial,reference,ready,none
 abs,numeric_helper,public,public,registered,complete,partial,reference,ready,none
@@ -279,7 +279,7 @@ log_softmax,stable_reduction,public,public,registered,complete,partial,reference
 logsumexp,stable_reduction,public,public,registered,complete,partial,reference,ready,none
 reduce,stable_reduction,public,public,registered,complete,partial,reference,ready,none
 sigmoid_safe,stable_reduction,public,public,registered,complete,partial,reference,ready,none
-softmax,stable_reduction,public,public,registered,complete,partial,reference,ready,benchmarked
+softmax,stable_reduction,public,public,registered,complete,partial,fused,ready,benchmarked
 softmax_safe,stable_reduction,public,public,registered,complete,partial,reference,ready,none
 sum,stable_reduction,public,public,registered,complete,partial,fused,ready,none
 selective_ssm,state_space,public,public,registered,complete,partial,reference,ready,none

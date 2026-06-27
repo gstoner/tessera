@@ -2902,6 +2902,12 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, i64, c_f32],
         "tessera_x86_avx512_silu_mul_f32":
             [c_f32, c_f32, i64, c_f32],
+        "tessera_x86_avx512_rmsnorm_f32":
+            [c_f32, i64, i64, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_layernorm_f32":
+            [c_f32, i64, i64, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_softmax_f32":
+            [c_f32, i64, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3301,6 +3307,109 @@ def _execute_x86_compiled_binary_math(artifact: RuntimeArtifact,
         ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
         out.ctypes.data_as(cf))
     return out.reshape(a.shape)
+
+
+#: op_name -> (.so symbol, default eps) for the x86 norm lane. UNWEIGHTED
+#: rmsnorm / layer_norm over the last axis (matching the ROCm norm lane's op
+#: signature — no γ/β operands).
+_X86_NORM_OPS = {
+    "tessera.rmsnorm": ("tessera_x86_avx512_rmsnorm_f32", 1e-5),
+    "tessera.rmsnorm_safe": ("tessera_x86_avx512_rmsnorm_f32", 1e-6),
+    "tessera.layer_norm": ("tessera_x86_avx512_layernorm_f32", 1e-5),
+}
+
+
+def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` norm lane: run the hand-written AVX-512 row-reduction
+    kernel — unweighted rmsnorm / layer_norm over the last axis, from
+    libtessera_x86_elementwise.so. ``eps`` from kwargs (per-op default). f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_NORM_OPS:
+        raise ValueError(
+            "x86_norm_compiled executor handles exactly one of "
+            f"{tuple(_X86_NORM_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    sym, eps_default = _X86_NORM_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("norm requires one operand")
+    kwargs = op.get("kwargs") or {}
+    eps = float(kwargs.get("eps", eps_default))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.ndim < 1:
+        raise ValueError("norm operand must have rank >= 1")
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 norm lane handles f32 only; got {x.dtype}")
+    k = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    if k <= 0:
+        raise ValueError(f"norm last dim must be positive; got {k}")
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(m * k, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    getattr(lib, sym)(
+        xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
+        ctypes.c_float(eps), out.ctypes.data_as(cf))
+    return out.reshape(x.shape)
+
+
+def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` softmax lane: run the hand-written AVX-512 row-
+    reduction kernel — numerically-stable softmax over the last axis, from
+    libtessera_x86_elementwise.so. f32. axis=-1 only."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    _SM_OPS = ("tessera.softmax", "tessera.softmax_safe")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SM_OPS:
+        raise ValueError(
+            "x86_softmax_compiled executor handles exactly one of "
+            f"{_SM_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("softmax requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    if axis not in (-1,):
+        raise ValueError(
+            f"x86 softmax lane only supports axis=-1 (last); got {axis}")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.ndim < 1:
+        raise ValueError("softmax operand must have rank >= 1")
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 softmax lane handles f32 only; got {x.dtype}")
+    k = int(x.shape[-1])
+    m = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    if k <= 0:
+        raise ValueError(f"softmax last dim must be positive; got {k}")
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(m * k, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_softmax_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
+        out.ctypes.data_as(cf))
+    return out.reshape(x.shape)
 
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -5476,6 +5585,8 @@ def _executor_table():
         "x86_where_compiled": _execute_x86_compiled_where,
         "x86_transcendental_compiled": _execute_x86_compiled_transcendental,
         "x86_binary_math_compiled": _execute_x86_compiled_binary_math,
+        "x86_norm_compiled": _execute_x86_compiled_norm,
+        "x86_softmax_compiled": _execute_x86_compiled_softmax,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

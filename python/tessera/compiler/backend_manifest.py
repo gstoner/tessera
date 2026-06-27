@@ -1262,6 +1262,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "asin", "acos", "atan", "erfc")},
     **{(op, "x86"): "tests/unit/test_x86_binary_math_compiled.py"
        for op in ("pow", "silu_mul")},
+    **{(op, "x86"): "tests/unit/test_x86_norm_softmax_compiled.py"
+       for op in ("rmsnorm", "layer_norm", "softmax")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1749,6 +1751,31 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_{pow,silu_mul}_f32, runtime-loaded; "
                  "x86_binary_math_compiled lane; f32, matches numpy 2e-5)",
     } for op in ("pow", "silu_mul")},
+    # Row-reduction norm / softmax — unweighted rmsnorm / layer_norm and stable
+    # softmax over the last axis (AVX-512 horizontal reduce). The CPU analog of
+    # the ROCm warp-shuffle norm/softmax lanes (x86_norm_compiled /
+    # x86_softmax_compiled).
+    "rmsnorm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 unweighted rmsnorm row-reduction "
+                 "(tessera_x86_avx512_rmsnorm_f32, runtime-loaded; "
+                 "x86_norm_compiled lane; f32, matches numpy 2e-5)",
+    },
+    "layer_norm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 unweighted layer_norm row-reduction "
+                 "(tessera_x86_avx512_layernorm_f32, runtime-loaded; "
+                 "x86_norm_compiled lane; f32, matches numpy 2e-5)",
+    },
+    "softmax": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 stable softmax row-reduction "
+                 "(tessera_x86_avx512_softmax_f32, runtime-loaded; "
+                 "x86_softmax_compiled lane; f32, matches numpy 2e-5)",
+    },
 }
 
 

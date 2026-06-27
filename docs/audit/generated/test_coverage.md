@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3075** total Python-test references, **825** total lit-fixture references.
+- **3087** total Python-test references, **825** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **167** ops have ≤1 reference ("thinly tested").
-- **64** ops have ≥10 references ("well tested").
+- **166** ops have ≤1 reference ("thinly tested").
+- **65** ops have ≥10 references ("well tested").
 - **106** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **167** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **166** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -51,7 +51,6 @@ These **167** ops have at most one test reference across the whole test surface.
 | `axis_index` |    0 |    0 |    0 |
 | `axis_name` |    0 |    0 |    0 |
 | `axis_size` |    0 |    0 |    0 |
-| `binary_cross_entropy_loss` |    1 |    0 |    1 |
 | `broadcast` |    1 |    0 |    1 |
 | `calibration_observer` |    0 |    0 |    0 |
 | `centralize_grad` |    1 |    0 |    1 |
@@ -104,8 +103,9 @@ These **167** ops have at most one test reference across the whole test surface.
 | `dynamic_update_slice` |    1 |    0 |    1 |
 | `dz` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_sample` |    0 |    0 |    0 |
+| `ebm_bivector_langevin_step` |    0 |    0 |    0 |
 
-_(107 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(106 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**167** ops have ≤1 direct test reference.  They break down as:
+**166** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   56 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   55 | Tested via a parent op or family wrapper |
 | `structural_only`        |  105 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -147,13 +147,12 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 56 ops
+## `covered_by_family` — 55 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
 | Op | reason |
 |----|--------|
-| `binary_cross_entropy_loss` | category default for 'loss' |
 | `check_cauchy_riemann` | exercised by complex_jit / CR conformance tests |
 | `clifford_codiff` | category default for 'geometric_algebra' |
 | `clifford_conjugate` | category default for 'geometric_algebra' |
@@ -183,8 +182,9 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `floor_div` | category default for 'elementwise' |
 | `implicit_score_matching_loss` | category default for 'loss' |
 | `is_concyclic` | category default for 'elementwise' |
+| `lgamma` | category default for 'elementwise' |
 
-_(26 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(25 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 105 ops
 

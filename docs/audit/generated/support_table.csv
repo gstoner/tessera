@@ -180,8 +180,8 @@ latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 moe_swiglu_block,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 quantized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none
-asymmetric_bce,loss,public,public,registered,complete,partial,reference,ready,none
-binary_cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
+asymmetric_bce,loss,public,public,registered,complete,partial,fused,ready,none
+binary_cross_entropy_loss,loss,public,public,registered,complete,partial,fused,ready,none
 contrastive_divergence_loss,loss,public,public,registered,complete,partial,reference,ready,none
 cross_entropy_loss,loss,public,public,registered,complete,partial,reference,ready,none
 ddpm_noise_pred_loss,loss,public,public,registered,complete,partial,reference,ready,none

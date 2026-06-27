@@ -2908,6 +2908,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, ctypes.c_float, c_f32],
         "tessera_x86_avx512_softmax_f32":
             [c_f32, i64, i64, c_f32],
+        "tessera_x86_avx512_gemm_f32":
+            [c_f32, c_f32, i64, i64, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3410,6 +3412,188 @@ def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
         xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
         out.ctypes.data_as(cf))
     return out.reshape(x.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 GEMM-family lane — batched_gemm / linear_general / qkv_projection /
+# factorized_matmul / einsum, all built on the AVX-512 f32 GEMM microkernel
+# (tessera_x86_avx512_gemm_f32). The CPU analog of the ROCm WMMA matmul-family
+# lane; each op reshapes/batches/splits around the 2D GEMM in Python.
+# ``compiler_path = "x86_matmul_family_compiled"``. f32.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_gemm_2d(a: Any, b: Any) -> Any:
+    """C[M,N] = A[M,K] @ B[K,N] on the AVX-512 f32 GEMM microkernel. f32 only —
+    rejects other dtypes rather than silently coercing (the lane advertises
+    f32, matching the other x86 compiled lanes)."""
+    import numpy as np
+    if a.dtype != np.float32 or b.dtype != np.float32:
+        raise ValueError(
+            f"x86 gemm lane handles f32 only; got {a.dtype} @ {b.dtype}")
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    a2 = np.ascontiguousarray(a, dtype=np.float32)
+    b2 = np.ascontiguousarray(b, dtype=np.float32)
+    m, k = int(a2.shape[0]), int(a2.shape[1])
+    if b2.shape[0] != k:
+        raise ValueError(f"x86 gemm inner dims must match; got {a2.shape} @ "
+                         f"{b2.shape}")
+    n = int(b2.shape[1])
+    out = np.zeros((m, n), dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_gemm_f32(
+        a2.ctypes.data_as(cf), b2.ctypes.data_as(cf),
+        ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+        out.ctypes.data_as(cf))
+    return out
+
+
+def _x86_batched_gemm(a: Any, b: Any) -> Any:
+    """Full np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the
+    AVX-512 GEMM. The batch dims of ``a`` and ``b`` BROADCAST against each other
+    (NumPy rules), so a rank-2 shared operand and shapes like (2,1,M,K) @
+    (1,3,K,N) -> (2,3,M,N) are all valid."""
+    import numpy as np
+    if a.ndim < 2 or b.ndim < 2:
+        raise ValueError("batched_gemm needs rank>=2 operands")
+    m, k = a.shape[-2], a.shape[-1]
+    if b.shape[-2] != k:
+        raise ValueError(
+            f"batched_gemm inner dims must match; got {a.shape} @ {b.shape}")
+    n = b.shape[-1]
+    try:
+        batch = np.broadcast_shapes(a.shape[:-2], b.shape[:-2])
+    except ValueError as exc:
+        raise ValueError(
+            f"batched_gemm batch dims do not broadcast; got {a.shape} @ "
+            f"{b.shape}") from exc
+    a_b = np.broadcast_to(a, batch + (m, k)).reshape(-1, m, k)
+    b_b = np.broadcast_to(b, batch + (k, n)).reshape(-1, k, n)
+    nb = a_b.shape[0]
+    out = np.stack([_x86_gemm_2d(a_b[i], b_b[i]) for i in range(nb)], axis=0)
+    return out.reshape(*batch, m, n)
+
+
+def _x86_einsum_via_gemm(spec: str, lhs: Any, rhs: Any) -> Any:
+    """Single-contraction two-operand einsum mapped to a (batched) AVX-512 gemm.
+    Raises a stable diagnostic when the spec is not a single-contraction
+    two-tensor matmul (Decision #21)."""
+    import numpy as np
+    if "->" not in spec:
+        raise ValueError(f"x86 einsum needs an explicit '->' spec; got {spec!r}")
+    ins, out = spec.split("->")
+    terms = [t.strip() for t in ins.split(",")]
+    if len(terms) != 2:
+        raise ValueError(
+            "x86 einsum lane handles exactly two operands; got "
+            f"{len(terms)} in {spec!r}")
+    lt, rt = terms
+    out = out.strip()
+    contracted = (set(lt) & set(rt)) - set(out)
+    if len(contracted) != 1:
+        raise ValueError(
+            "x86 einsum lane handles a single contraction index that maps to a "
+            f"(batched) matmul; spec {spec!r} has {len(contracted)} — unsupported")
+    c = next(iter(contracted))
+    batch = [x for x in lt if x in rt and x in out]
+    free_l = [x for x in lt if x not in rt]
+    free_r = [x for x in rt if x not in lt]
+    if set(out) != set(batch) | set(free_l) | set(free_r):
+        raise ValueError(f"x86 einsum: output indices in {spec!r} are unsupported")
+    lhs_t = np.transpose(lhs, [lt.index(x) for x in batch + free_l + [c]])
+    rhs_t = np.transpose(rhs, [rt.index(x) for x in batch + [c] + free_r])
+    bsh = [lhs.shape[lt.index(x)] for x in batch]
+    msh = [lhs.shape[lt.index(x)] for x in free_l]
+    nsh = [rhs.shape[rt.index(x)] for x in free_r]
+    kdim = lhs.shape[lt.index(c)]
+    a2 = lhs_t.reshape(int(np.prod(bsh or [1])), int(np.prod(msh or [1])), kdim)
+    b2 = rhs_t.reshape(int(np.prod(bsh or [1])), kdim, int(np.prod(nsh or [1])))
+    prod = _x86_batched_gemm(a2, b2)
+    canon = prod.reshape(*(bsh + msh + nsh))
+    canon_order = batch + free_l + free_r
+    return np.transpose(canon, [canon_order.index(x) for x in out])
+
+
+def _execute_x86_compiled_matmul_family(artifact: RuntimeArtifact,
+                                        args: Any) -> Any:
+    """The ``target="x86"`` matmul-family lane: batched_gemm / linear_general /
+    qkv_projection / factorized_matmul / einsum, all on the AVX-512 f32 GEMM
+    microkernel. Each op reshapes/batches/splits around the gemm; einsum maps
+    single-contraction specs to a (batched) matmul. Matches numpy to a
+    K-scaled f32 tolerance."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    handled = ("tessera.batched_gemm", "tessera.linear_general",
+               "tessera.qkv_projection", "tessera.factorized_matmul",
+               "tessera.einsum")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"x86_matmul_family_compiled executor handles one of {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+
+    if op_name == "tessera.einsum":
+        spec = kwargs.get("spec") or kwargs.get("equation")
+        if spec is None or len(operands) != 2:
+            raise ValueError(
+                "x86 einsum lane needs a 'spec' kwarg and exactly two tensors")
+        return _x86_einsum_via_gemm(str(spec), operands[0], operands[1])
+
+    if op_name == "tessera.batched_gemm":
+        if len(operands) != 2:
+            raise ValueError("batched_gemm takes two operands (A, B)")
+        return _x86_batched_gemm(operands[0], operands[1])
+
+    if op_name == "tessera.qkv_projection":
+        if len(operands) != 2:
+            raise ValueError("qkv_projection takes two operands (x, W_qkv)")
+        x, w = operands
+        if w.ndim != 2:
+            raise ValueError(f"qkv_projection W_qkv must be rank-2; got {w.shape}")
+        k, n3 = w.shape
+        return _x86_gemm_2d(x.reshape(-1, k), w).reshape(*x.shape[:-1], n3)
+
+    if op_name == "tessera.factorized_matmul":
+        if len(operands) != 2:
+            raise ValueError("factorized_matmul takes two operands (A, B)")
+        a, b = operands
+        if a.ndim != 2 or b.ndim != 2:
+            raise ValueError("x86 factorized_matmul handles rank-2 A, B")
+        rank = int(kwargs.get("rank", min(a.shape[0], b.shape[1])))
+        out = _x86_gemm_2d(a, b).astype(np.float32)
+        u, s, vh = np.linalg.svd(out, full_matrices=False)
+        r = max(1, min(rank, s.shape[-1]))
+        return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
+
+    # tessera.linear_general — default axis=-1, rank-2 weight [K, N] (+ bias).
+    if len(operands) not in (2, 3):
+        raise ValueError("linear_general takes (x, W) plus an optional bias")
+    axis = kwargs.get("axis", -1)
+    if axis not in (-1, None):
+        raise ValueError(
+            f"x86 linear_general lane handles axis=-1 only; got axis={axis}")
+    x, w = operands[0], operands[1]
+    if w.ndim != 2:
+        raise ValueError(
+            f"x86 linear_general lane handles a rank-2 weight [K, N]; got "
+            f"{w.shape}")
+    k, n = w.shape
+    if x.shape[-1] != k:
+        raise ValueError(
+            f"linear_general contracted dim mismatch: x{x.shape} @ W{w.shape}")
+    y = _x86_gemm_2d(x.reshape(-1, k), w).reshape(*x.shape[:-1], n)
+    if len(operands) == 3:
+        y = y + _as_numpy(values[operand_names[2]]).astype(np.float32)
+    return y
 
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
@@ -5587,6 +5771,7 @@ def _executor_table():
         "x86_binary_math_compiled": _execute_x86_compiled_binary_math,
         "x86_norm_compiled": _execute_x86_compiled_norm,
         "x86_softmax_compiled": _execute_x86_compiled_softmax,
+        "x86_matmul_family_compiled": _execute_x86_compiled_matmul_family,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

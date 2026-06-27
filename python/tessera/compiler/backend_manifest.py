@@ -1264,6 +1264,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("pow", "silu_mul")},
     **{(op, "x86"): "tests/unit/test_x86_norm_softmax_compiled.py"
        for op in ("rmsnorm", "layer_norm", "softmax")},
+    **{(op, "x86"): "tests/unit/test_x86_matmul_family_compiled.py"
+       for op in ("batched_gemm", "linear_general", "qkv_projection",
+                  "factorized_matmul", "einsum")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1776,6 +1779,18 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_softmax_f32, runtime-loaded; "
                  "x86_softmax_compiled lane; f32, matches numpy 2e-5)",
     },
+    # GEMM family — batched_gemm / linear_general / qkv_projection /
+    # factorized_matmul / einsum, all on the AVX-512 f32 GEMM microkernel
+    # (tessera_x86_avx512_gemm_f32) with reshape/batch/einsum in Python. The CPU
+    # analog of the ROCm WMMA matmul-family lane (x86_matmul_family_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 f32 GEMM-family {op} "
+                 "(tessera_x86_avx512_gemm_f32 microkernel + Python "
+                 "reshape/batch/einsum; x86_matmul_family_compiled lane; f32)",
+    } for op in ("batched_gemm", "linear_general", "qkv_projection",
+                 "factorized_matmul", "einsum")},
 }
 
 

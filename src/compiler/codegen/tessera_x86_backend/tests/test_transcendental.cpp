@@ -29,6 +29,14 @@ static float libm_ref(float v, int kind) {
     case 7: return std::log1p(std::exp(-std::fabs(v))) + std::fmax(v, 0.0f);
     case 8: return std::exp(v) - 1.0f;
     case 9: return std::log1p(v);
+    case 10: return std::cos(v);
+    case 11: return std::tan(v);
+    case 12: return std::sinh(v);
+    case 13: return std::cosh(v);
+    case 14: return std::asin(v);
+    case 15: return std::acos(v);
+    case 16: return std::atan(v);
+    case 17: return std::erfc(v);
     default: return v;
     }
 }
@@ -72,6 +80,14 @@ int main() {
         {7, "softplus", -30.0f, 30.0f},
         {8, "expm1",     -8.0f,  8.0f},
         {9, "log1p",    -0.99f, 50.0f},
+        {10, "cos",     -12.0f, 12.0f},
+        {11, "tan",      -1.3f,  1.3f},   // away from ±π/2 singularities
+        {12, "sinh",    -11.0f, 11.0f},
+        {13, "cosh",    -11.0f, 11.0f},
+        {14, "asin",    -0.99f, 0.99f},
+        {15, "acos",     -0.9f,  0.9f},   // pi/2-asin cancellation near ±1
+        {16, "atan",    -50.0f, 50.0f},
+        {17, "erfc",     -4.0f,  4.0f},
     };
     for (const Op& op : ops) {
         check(op, 64);    // aligned

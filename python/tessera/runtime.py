@@ -3185,6 +3185,14 @@ _X86_TRANSCENDENTAL_OPS = {
     "tessera.softplus": 7,
     "tessera.expm1": 8,
     "tessera.log1p": 9,
+    "tessera.cos": 10,
+    "tessera.tan": 11,
+    "tessera.sinh": 12,
+    "tessera.cosh": 13,
+    "tessera.asin": 14,
+    "tessera.acos": 15,
+    "tessera.atan": 16,
+    "tessera.erfc": 17,
 }
 
 

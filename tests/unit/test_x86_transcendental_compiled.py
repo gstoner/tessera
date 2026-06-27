@@ -57,6 +57,10 @@ def _erf(x):
     return _np_erf(x).astype(np.float32)
 
 
+def _erfc(x):
+    return (1.0 - _np_erf(x)).astype(np.float32)
+
+
 def _normal(scale):
     return lambda r, s: (r.standard_normal(s) * scale).astype(np.float32)
 
@@ -65,7 +69,12 @@ def _pos(scale, base=0.0):
     return lambda r, s: (r.random(s) * scale + base).astype(np.float32)
 
 
-# op -> (numpy reference, input sampler). log/log1p restricted to valid domain.
+def _uniform(lo, hi):
+    return lambda r, s: (r.random(s) * (hi - lo) + lo).astype(np.float32)
+
+
+# op -> (numpy reference, input sampler). Domains avoid singularities
+# (tan near ±π/2) and pi/2-asin cancellation (acos near ±1).
 _REFS = {
     "tessera.exp": (np.exp, _normal(3)),
     "tessera.log": (np.log, _pos(50, 1e-3)),
@@ -77,6 +86,14 @@ _REFS = {
     "tessera.softplus": (_softplus, _normal(8)),
     "tessera.expm1": (np.expm1, _normal(3)),
     "tessera.log1p": (np.log1p, _pos(50)),
+    "tessera.cos": (np.cos, _normal(4)),
+    "tessera.tan": (np.tan, _uniform(-1.3, 1.3)),
+    "tessera.sinh": (np.sinh, _normal(4)),
+    "tessera.cosh": (np.cosh, _normal(4)),
+    "tessera.asin": (np.arcsin, _uniform(-0.99, 0.99)),
+    "tessera.acos": (np.arccos, _uniform(-0.9, 0.9)),
+    "tessera.atan": (np.arctan, _normal(20)),
+    "tessera.erfc": (_erfc, _normal(2)),
 }
 
 

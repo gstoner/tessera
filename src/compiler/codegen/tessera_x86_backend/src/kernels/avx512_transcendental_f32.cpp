@@ -40,6 +40,15 @@ constexpr int kErf = 6;
 constexpr int kSoftplus = 7;
 constexpr int kExpm1 = 8;
 constexpr int kLog1p = 9;
+// trig / inverse-trig / hyperbolic / erfc siblings (ROCm-parity batch)
+constexpr int kCos = 10;
+constexpr int kTan = 11;
+constexpr int kSinh = 12;
+constexpr int kCosh = 13;
+constexpr int kAsin = 14;
+constexpr int kAcos = 15;
+constexpr int kAtan = 16;
+constexpr int kErfc = 17;
 
 constexpr float kSqrt2OverPi = 0.7978845608028654f;  // √(2/π)
 constexpr float kGeluC = 0.044715f;
@@ -60,6 +69,14 @@ inline float scalar_transcendental(float v, int kind) {
                            std::fmax(v, 0.0f);
     case kExpm1:    return std::exp(v) - 1.0f;
     case kLog1p:    return std::log1p(v);
+    case kCos:      return std::cos(v);
+    case kTan:      return std::tan(v);
+    case kSinh:     return std::sinh(v);
+    case kCosh:     return std::cosh(v);
+    case kAsin:     return std::asin(v);
+    case kAcos:     return std::acos(v);
+    case kAtan:     return std::atan(v);
+    case kErfc:     return std::erfc(v);
     default:        return v;
     }
 }
@@ -156,6 +173,107 @@ inline __m512 erf512(__m512 x) {
     return _mm512_mask_sub_ps(y, neg, _mm512_setzero_ps(), y);  // odd: -y for x<0
 }
 
+// Cephes sincosf (avx_mathfun formulation): computes sin and cos together via a
+// 4/π argument reduction + the cos/sin minimax polynomials on [-π/4, π/4].
+inline void sincos512(__m512 x, __m512* sptr, __m512* cptr) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 half = _mm512_set1_ps(0.5f);
+    __mmask16 sin_sign = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LT_OQ);
+    __m512 ax = _mm512_abs_ps(x);
+    // j = (int)(ax * 4/π); round up to even
+    __m512i j = _mm512_cvttps_epi32(
+        _mm512_mul_ps(ax, _mm512_set1_ps(1.27323954473516f)));
+    j = _mm512_and_si512(_mm512_add_epi32(j, _mm512_set1_epi32(1)),
+                         _mm512_set1_epi32(~1));
+    __m512 y = _mm512_cvtepi32_ps(j);
+    __mmask16 poly2 = _mm512_test_epi32_mask(j, _mm512_set1_epi32(2));
+    __mmask16 sin_swap = _mm512_test_epi32_mask(j, _mm512_set1_epi32(4));
+    __mmask16 cos_keep = _mm512_test_epi32_mask(
+        _mm512_sub_epi32(j, _mm512_set1_epi32(2)), _mm512_set1_epi32(4));
+    // extended-precision argument reduction: ax -= y*(DP1+DP2+DP3)
+    __m512 xr = _mm512_fmadd_ps(y, _mm512_set1_ps(-0.78515625f), ax);
+    xr = _mm512_fmadd_ps(y, _mm512_set1_ps(-2.4187564849853515625e-4f), xr);
+    xr = _mm512_fmadd_ps(y, _mm512_set1_ps(-3.77489497744594108e-8f), xr);
+    __m512 z = _mm512_mul_ps(xr, xr);
+    // cos poly on [-π/4, π/4]
+    __m512 cp = _mm512_set1_ps(2.443315711809948E-005f);
+    cp = _mm512_fmadd_ps(cp, z, _mm512_set1_ps(-1.388731625493765E-003f));
+    cp = _mm512_fmadd_ps(cp, z, _mm512_set1_ps(4.166664568298827E-002f));
+    cp = _mm512_mul_ps(cp, _mm512_mul_ps(z, z));
+    cp = _mm512_fnmadd_ps(half, z, cp);   // - 0.5*z
+    cp = _mm512_add_ps(cp, one);
+    // sin poly
+    __m512 sp = _mm512_set1_ps(-1.9515295891E-4f);
+    sp = _mm512_fmadd_ps(sp, z, _mm512_set1_ps(8.3321608736E-3f));
+    sp = _mm512_fmadd_ps(sp, z, _mm512_set1_ps(-1.6666654611E-1f));
+    sp = _mm512_mul_ps(sp, _mm512_mul_ps(z, xr));
+    sp = _mm512_add_ps(sp, xr);
+    // select poly per octant
+    __m512 s = _mm512_mask_blend_ps(poly2, sp, cp);
+    __m512 c = _mm512_mask_blend_ps(poly2, cp, sp);
+    // signs
+    s = _mm512_mask_sub_ps(s, sin_swap, _mm512_setzero_ps(), s);
+    s = _mm512_mask_sub_ps(s, sin_sign, _mm512_setzero_ps(), s);
+    // cos is negated where (j-2)&4 == 0  (i.e. cos_keep false)
+    c = _mm512_mask_sub_ps(c, _knot_mask16(cos_keep), _mm512_setzero_ps(), c);
+    *sptr = s;
+    *cptr = c;
+}
+
+// Cephes asinf: poly on [0, 0.5]; |x|>0.5 maps via x = √(0.5(1-|x|)).
+inline __m512 asin512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 PIO2 = _mm512_set1_ps(1.5707963267948966f);
+    __mmask16 sign = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LT_OQ);
+    __m512 a = _mm512_abs_ps(x);
+    __mmask16 big = _mm512_cmp_ps_mask(a, _mm512_set1_ps(0.5f), _CMP_GT_OQ);
+    __m512 z_big = _mm512_mul_ps(_mm512_set1_ps(0.5f), _mm512_sub_ps(one, a));
+    __m512 x_big = _mm512_sqrt_ps(z_big);
+    __m512 z = _mm512_mask_blend_ps(big, _mm512_mul_ps(a, a), z_big);
+    __m512 xx = _mm512_mask_blend_ps(big, a, x_big);
+    __m512 p = _mm512_set1_ps(4.2163199048E-2f);
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(2.4181311049E-2f));
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(4.5470025998E-2f));
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(7.4953002686E-2f));
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(1.6666752422E-1f));
+    p = _mm512_mul_ps(p, _mm512_mul_ps(z, xx));
+    p = _mm512_add_ps(p, xx);
+    // big: p = π/2 - 2p
+    __m512 p_big = _mm512_fnmadd_ps(_mm512_set1_ps(2.0f), p, PIO2);
+    p = _mm512_mask_blend_ps(big, p, p_big);
+    return _mm512_mask_sub_ps(p, sign, _mm512_setzero_ps(), p);
+}
+
+// Cephes atanf: 3-region reduction (|x|>tan(3π/8), >tan(π/8), else) + poly.
+inline __m512 atan512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    __mmask16 sign = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LT_OQ);
+    __m512 a = _mm512_abs_ps(x);
+    __mmask16 big = _mm512_cmp_ps_mask(a, _mm512_set1_ps(2.414213562373095f),
+                                       _CMP_GT_OQ);
+    __mmask16 mid = _mm512_cmp_ps_mask(a, _mm512_set1_ps(0.4142135623730950f),
+                                       _CMP_GT_OQ);
+    __m512 y = _mm512_setzero_ps();
+    __m512 xr = a;
+    // mid (and not big): y=π/4, xr=(a-1)/(a+1)
+    __m512 xr_mid = _mm512_div_ps(_mm512_sub_ps(a, one), _mm512_add_ps(a, one));
+    y = _mm512_mask_blend_ps(mid, y, _mm512_set1_ps(0.7853981633974483f));
+    xr = _mm512_mask_blend_ps(mid, xr, xr_mid);
+    // big: y=π/2, xr=-1/a
+    __m512 xr_big = _mm512_div_ps(_mm512_set1_ps(-1.0f), a);
+    y = _mm512_mask_blend_ps(big, y, _mm512_set1_ps(1.5707963267948966f));
+    xr = _mm512_mask_blend_ps(big, xr, xr_big);
+    __m512 z = _mm512_mul_ps(xr, xr);
+    __m512 p = _mm512_set1_ps(8.05374449538e-2f);
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(-1.38776856032E-1f));
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(1.99777106478E-1f));
+    p = _mm512_fmadd_ps(p, z, _mm512_set1_ps(-3.33329491539E-1f));
+    p = _mm512_mul_ps(p, _mm512_mul_ps(z, xr));
+    p = _mm512_add_ps(p, xr);
+    p = _mm512_add_ps(y, p);
+    return _mm512_mask_sub_ps(p, sign, _mm512_setzero_ps(), p);
+}
+
 inline __m512 apply512(__m512 v, int kind) {
     const __m512 one = _mm512_set1_ps(1.0f);
     switch (kind) {
@@ -183,6 +301,32 @@ inline __m512 apply512(__m512 v, int kind) {
     }
     case kExpm1:   return _mm512_sub_ps(exp512(v), one);
     case kLog1p:   return log512(_mm512_add_ps(one, v));
+    case kCos: {
+        __m512 s, c;
+        sincos512(v, &s, &c);
+        return c;
+    }
+    case kTan: {
+        __m512 s, c;
+        sincos512(v, &s, &c);
+        return _mm512_div_ps(s, c);
+    }
+    case kSinh: {
+        // 0.5 (e^x - e^-x)
+        __m512 ex = exp512(v);
+        __m512 enx = exp512(_mm512_sub_ps(_mm512_setzero_ps(), v));
+        return _mm512_mul_ps(_mm512_set1_ps(0.5f), _mm512_sub_ps(ex, enx));
+    }
+    case kCosh: {
+        __m512 ex = exp512(v);
+        __m512 enx = exp512(_mm512_sub_ps(_mm512_setzero_ps(), v));
+        return _mm512_mul_ps(_mm512_set1_ps(0.5f), _mm512_add_ps(ex, enx));
+    }
+    case kAsin:    return asin512(v);
+    case kAcos:    return _mm512_sub_ps(_mm512_set1_ps(1.5707963267948966f),
+                                        asin512(v));
+    case kAtan:    return atan512(v);
+    case kErfc:    return _mm512_sub_ps(one, erf512(v));
     default:       return v;
     }
 }

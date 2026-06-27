@@ -4113,6 +4113,153 @@ def _execute_x86_compiled_rl_loss(artifact: RuntimeArtifact, args: Any) -> Any:
         return per.reshape(ln.shape)
     return _x86_reduce_scalar(per, 0 if reduction == "sum" else 2, np)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 class-axis loss lane — cross_entropy / kl / js / focal /
+# label_smoothed_cross_entropy / z_loss. The transcendentals (exp / log) run on
+# the AVX-512 transcendental kernel; the class-axis max / sum and gather / one-hot
+# are host structure (the same compose-kernels pattern as attention). Reduction
+# over the leading axes on the reduce kernel. ``compiler_path =
+# "x86_class_loss_compiled"``. f32.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_unary_t(x: Any, kind: int, np: Any) -> Any:
+    """Elementwise exp (kind 0) / log (kind 1) on the AVX-512 transcendental
+    kernel."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    n = int(xc.size)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_transcendental_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(n), out.ctypes.data_as(cf),
+        ctypes.c_int(kind))
+    return out.reshape(np.shape(x))
+
+
+def _x86_log_softmax(z: Any, np: Any) -> Any:
+    """Numerically-stable log_softmax over the last axis: shifted − log(Σ exp),
+    exp/log on the AVX-512 kernel."""
+    m = np.max(z, axis=-1, keepdims=True)
+    shifted = (z - m).astype(np.float32)
+    e = _x86_unary_t(shifted, 0, np)
+    s = e.sum(axis=-1, keepdims=True).astype(np.float32)
+    return (shifted - _x86_log_arr(s, np)).astype(np.float32)
+
+
+def _x86_log_arr(x: Any, np: Any) -> Any:
+    return _x86_unary_t(x, 1, np)
+
+
+def _x86_reduce_leading(loss: Any, reduction: str, np: Any) -> Any:
+    """Apply none/mean/sum over all axes of the class-axis-reduced loss array."""
+    if reduction == "none":
+        return loss.astype(np.float32)
+    flat = np.ascontiguousarray(loss, np.float32).reshape(-1)
+    return _x86_reduce_scalar(flat, 0 if reduction == "sum" else 2, np)
+
+
+_X86_CLASS_LOSS_OPS = (
+    "tessera.cross_entropy_loss", "tessera.kl_divergence",
+    "tessera.js_divergence", "tessera.focal_loss",
+    "tessera.label_smoothed_cross_entropy", "tessera.z_loss",
+)
+
+
+def _execute_x86_compiled_class_loss(artifact: RuntimeArtifact,
+                                     args: Any) -> Any:
+    """The ``target="x86"`` class-axis loss lane: cross_entropy / kl / js / focal
+    / label_smoothed_cross_entropy / z_loss. exp/log on the AVX-512 kernel;
+    class-axis structure (max/sum/gather/one-hot) on the host. f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_CLASS_LOSS_OPS:
+        raise ValueError(
+            f"x86_class_loss_compiled executor handles one of "
+            f"{_X86_CLASS_LOSS_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+
+    def _gather(logp: Any, targets: Any) -> Any:
+        flat = logp.reshape(-1, logp.shape[-1])
+        idx = targets.reshape(-1).astype(np.int64)
+        return flat[np.arange(idx.size), idx].reshape(targets.shape)
+
+    if op_name == "tessera.cross_entropy_loss":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1]
+        logp = _x86_log_softmax(logits, np)
+        if targets.dtype.kind in "iu":
+            loss = -_gather(logp, targets)
+        else:
+            loss = -np.sum(targets.astype(np.float32) * logp, axis=-1)
+        return _x86_reduce_leading(loss, reduction, np)
+
+    if op_name == "tessera.label_smoothed_cross_entropy":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1].astype(np.int64)
+        c = int(logits.shape[-1])
+        smooth = float(kwargs.get("smoothing", 0.1))
+        soft = np.full(targets.shape + (c,), smooth / max(1, c - 1),
+                       dtype=np.float32)
+        np.put_along_axis(soft, targets[..., None], 1.0 - smooth, axis=-1)
+        logp = _x86_log_softmax(logits, np)
+        loss = -np.sum(soft * logp, axis=-1)
+        return _x86_reduce_leading(loss, reduction, np)
+
+    if op_name == "tessera.focal_loss":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1]
+        gamma = float(kwargs.get("gamma", 2.0))
+        alpha = kwargs.get("alpha")
+        logp = _x86_log_softmax(logits, np)
+        probs = _x86_unary_t(logp, 0, np)              # exp(log_softmax)
+        pt = _gather(probs, targets)
+        logpt = _x86_log_arr(np.maximum(pt, 1e-12).astype(np.float32), np)
+        loss = -((1.0 - pt) ** gamma) * logpt
+        if alpha is not None:
+            loss = float(alpha) * loss
+        return _x86_reduce_leading(loss, reduction, np)
+
+    if op_name == "tessera.z_loss":
+        z = operands[0].astype(np.float32)
+        m = np.max(z, axis=-1, keepdims=True)
+        e = _x86_unary_t((z - m).astype(np.float32), 0, np)
+        s = e.sum(axis=-1, keepdims=True).astype(np.float32)
+        lse = (m + _x86_log_arr(s, np)).squeeze(axis=-1)
+        return _x86_reduce_leading(lse * lse, reduction, np)
+
+    if op_name == "tessera.kl_divergence":
+        p_log = operands[0].astype(np.float32)
+        q = operands[1].astype(np.float32)
+        p = _x86_unary_t(p_log, 0, np)                 # exp(p_log)
+        logq = _x86_log_arr(np.maximum(q, 1e-12).astype(np.float32), np)
+        loss = np.sum(p * (p_log - logq), axis=-1)
+        return _x86_reduce_leading(loss, reduction, np)
+
+    # tessera.js_divergence
+    p = operands[0].astype(np.float32)
+    q = operands[1].astype(np.float32)
+    mid = (0.5 * (p + q)).astype(np.float32)
+    logp = _x86_log_arr(np.maximum(p, 1e-12).astype(np.float32), np)
+    logq = _x86_log_arr(np.maximum(q, 1e-12).astype(np.float32), np)
+    logm = _x86_log_arr(np.maximum(mid, 1e-12).astype(np.float32), np)
+    kl_pm = np.sum(p * (logp - logm), axis=-1)
+    kl_qm = np.sum(q * (logq - logm), axis=-1)
+    return _x86_reduce_leading(0.5 * (kl_pm + kl_qm), reduction, np)
+
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
 #: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
 _X86_BINARY_OPS = {
@@ -6295,6 +6442,7 @@ def _executor_table():
         "x86_loss_compiled": _execute_x86_compiled_loss,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
+        "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

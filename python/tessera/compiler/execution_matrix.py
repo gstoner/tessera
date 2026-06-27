@@ -127,6 +127,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "style warp-shuffle reduce carrying the (value,index) "
                             "pair, first-occurrence tie-break, along one axis. "
                             "f16/bf16/f32 input, i32 index output",
+    "rocm_scan_compiled": "AMD GPU RDNA row inclusive prefix scan (cumsum/"
+                            "cumprod/cummax/cummin) the Tessera compiler GENERATES "
+                            "(generate-rocm-scan-kernel -> ROCDL -> hsaco), then "
+                            "HIP launches it — the CUB BlockScan technique "
+                            "(gpu.shuffle up Kogge-Stone warp-scan + subgroup "
+                            "offset + cross-tile carry) along one axis; same-shape "
+                            "output. f16/bf16/f32",
     "x86_reduce_compiled": "x86 CPU row reduction (sum/mean/max/min) — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "reduce_f32) the Python runtime ctypes-loads from "
@@ -505,6 +512,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "reduces the pair within a 32-lane subgroup (CUB ArgMax pattern), "
                "first-occurrence tie-break. tessera-opt → hsaco in-process, HIP "
                "launches it. f16/bf16/f32 input, i32 index output.",
+        execution_mode="hip_runtime"),
+    # cumsum/cumprod/cummax/cummin — CUB BlockScan, inclusive prefix, same shape.
+    ("rocm", "rocm_scan_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_scan_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_scan_compiled", runtime_status="success",
+        reason="ROCm scan artifact runs the COMPILER-GENERATED RDNA row inclusive "
+               "prefix scan (cumsum/cumprod/cummax/cummin along one axis): the CUB "
+               "BlockScan technique — gpu.shuffle up (Kogge-Stone) warp-scan + "
+               "per-subgroup exclusive offset + cross-tile carry. tessera-opt → "
+               "hsaco in-process, HIP launches it. Same-shape output. f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # Standalone elementwise activations (gelu/silu/relu) — flat per-element
     # kernel; the standalone analog of the GEMM fused epilogue. vs numpy.

@@ -3517,6 +3517,132 @@ def _execute_rocm_compiled_argreduce(artifact: RuntimeArtifact, args: Any) -> An
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED scan lane (2026-06-27) — cumsum/cumprod/cummax/cummin (CUB
+# BlockScan technique). Inclusive prefix scan along one axis; output same shape.
+# ``compiler_path = "rocm_scan_compiled"``. f16/bf16/f32. ONE hsaco per
+# (chip, kind, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_scan_hsaco_cache: dict[tuple[str, str, str], bytes] = {}
+_ROCM_SCAN_OPS = {
+    "tessera.cumsum": "cumsum", "tessera.cumprod": "cumprod",
+    "tessera.cummax": "cummax", "tessera.cummin": "cummin",
+}
+
+
+def _build_compiled_scan_hsaco(kind: str, dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.scan"() {{name = "sc", kind = "{kind}", '
+        f'dtype = "{dtype}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-scan-kernel", directive, _rocm_scan_hsaco_cache,
+        (chip, kind, dtype))
+
+
+def _execute_rocm_compiled_scan(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` scan lane: run the COMPILER-GENERATED block-scan
+    kernel (cumsum/cumprod/cummax/cummin) along one axis. Output same shape;
+    axis=None flattens to 1-D (numpy semantics). f16/bf16/f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_SCAN_OPS:
+        raise ValueError(
+            "rocm_scan_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_SCAN_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _ROCM_SCAN_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("scan requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    n = x.ndim
+
+    store: Any
+    if x.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif x.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and x.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm scan lane handles f16/bf16/f32; got {x.dtype}")
+
+    axis = kwargs.get("axis", None)
+    flatten = axis is None or n <= 1
+    if flatten:
+        flat = np.ascontiguousarray(x, dtype=store).reshape(1, -1)
+        inner = int(flat.shape[1])
+        outer = 1
+        kept_then_axis: tuple[int, ...] = ()
+        inv: list[int] = []
+    else:
+        assert axis is not None
+        a = int(axis) if axis >= 0 else n + int(axis)
+        perm = [i for i in range(n) if i != a] + [a]
+        inv = [int(perm.index(i)) for i in range(n)]
+        flat = np.ascontiguousarray(np.transpose(x, perm), dtype=store)
+        inner = int(x.shape[a])
+        outer = int(flat.size // inner)
+        kept_then_axis = tuple(int(x.shape[i]) for i in perm)
+    if inner <= 0:
+        return np.array(x, copy=True)
+
+    hsaco = _build_compiled_scan_hsaco(kind, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm scan: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm scan: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sc") != 0:
+        raise RuntimeError("rocm scan: kernel symbol 'sc' not found")
+
+    xc = np.ascontiguousarray(flat, dtype=store).reshape(-1)
+    o = np.zeros(outer * inner, dtype=store)
+    nelem = outer * inner
+    dx, do = ctypes.c_void_p(), ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(dx), esz * nelem) != 0 or \
+       hip.hipMalloc(ctypes.byref(do), esz * nelem) != 0:
+        raise RuntimeError("rocm scan: hipMalloc failed")
+    hip.hipMemcpy(dx, xc.ctypes.data_as(ctypes.c_void_p), esz * nelem, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dx, nelem) + _mr(do, nelem)
+                   + [ctypes.c_int64(outer), ctypes.c_int64(inner)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, max(outer, 1), 1, 1, _REDUCE_BLOCKDIM,
+                                   1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in (dx, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm scan: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * nelem, 2)
+    for dev in (dx, do):
+        hip.hipFree(dev)
+    if flatten:
+        return o.reshape(-1)             # numpy flattens for axis=None
+    return np.transpose(o.reshape(kept_then_axis), inv)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED elementwise activation lane (2026-06-25) — standalone gelu /
 # silu / relu (the same activations the GEMM fused epilogue applies in-register).
 # ``compiler_path = "rocm_activation_compiled"`` builds the COMPILER-GENERATED
@@ -4904,6 +5030,7 @@ def _executor_table():
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,
         "rocm_argreduce_compiled": _execute_rocm_compiled_argreduce,
+        "rocm_scan_compiled": _execute_rocm_compiled_scan,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,

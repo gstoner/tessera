@@ -240,6 +240,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_binary_math_compiled": "x86 CPU transcendental-backed binary kernel — "
+                            "pow(a,b) (positive base, a^b via exp(b*log(a))) + "
+                            "silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply) from "
+                            "libtessera_x86_elementwise.so, sharing the AVX-512 "
+                            "exp/log/sigmoid cores; f32, matches numpy 2e-5",
     "x86_transcendental_compiled": "x86 CPU vectorized transcendental / "
                             "activation kernel (exp/log/tanh/sigmoid/silu/gelu/"
                             "erf/softplus/expm1/log1p/cos/tan/sinh/cosh/asin/"
@@ -396,6 +401,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_binary_math_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_binary_math_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_binary_math_compiled", runtime_status="success",
+        reason="x86 binary-math artifact runs pow(a,b) (positive base, a^b via "
+               "exp(b*log(a))) and silu_mul(a,b)=silu(a)*b from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_pow_f32 / "
+               "_silu_mul_f32), sharing the AVX-512 exp/log/sigmoid cores. f32, "
+               "matches numpy 2e-5.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_transcendental_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_transcendental_compiled",

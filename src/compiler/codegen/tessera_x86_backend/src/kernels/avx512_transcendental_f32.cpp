@@ -347,3 +347,36 @@ extern "C" void tessera_x86_avx512_transcendental_f32(const float* X, int64_t n,
         _mm512_storeu_ps(out + i, apply512(_mm512_loadu_ps(X + i), kind));
     for (; i < n; ++i) out[i] = scalar_transcendental(X[i], kind);
 }
+
+// ── transcendental-backed BINARY ops (share the exp/log/sigmoid cores) ───────
+//
+// pow(a, b) = a^b via exp(b·log(a)) — POSITIVE BASE (a>0); a≤0 → NaN/0 like
+// exp(b·log(a)). The scalar tail uses std::pow so partial blocks match libm.
+extern "C" void tessera_x86_avx512_pow_f32(const float* A, const float* B,
+                                           int64_t n, float* out) {
+    const int64_t vstep = 16;
+    int64_t i = 0;
+    for (; i + vstep <= n; i += vstep) {
+        __m512 a = _mm512_loadu_ps(A + i);
+        __m512 b = _mm512_loadu_ps(B + i);
+        _mm512_storeu_ps(out + i, exp512(_mm512_mul_ps(b, log512(a))));
+    }
+    for (; i < n; ++i) out[i] = std::pow(A[i], B[i]);
+}
+
+// silu_mul(a, b) = silu(a)·b = a·sigmoid(a)·b  (SwiGLU gate-multiply).
+extern "C" void tessera_x86_avx512_silu_mul_f32(const float* A, const float* B,
+                                                int64_t n, float* out) {
+    const int64_t vstep = 16;
+    int64_t i = 0;
+    for (; i + vstep <= n; i += vstep) {
+        __m512 a = _mm512_loadu_ps(A + i);
+        __m512 b = _mm512_loadu_ps(B + i);
+        __m512 s = _mm512_mul_ps(a, sigmoid512(a));
+        _mm512_storeu_ps(out + i, _mm512_mul_ps(s, b));
+    }
+    for (; i < n; ++i) {
+        float s = A[i] / (1.0f + std::exp(-A[i]));
+        out[i] = s * B[i];
+    }
+}

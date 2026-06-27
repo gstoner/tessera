@@ -94,6 +94,9 @@ target_link_libraries(test_where PRIVATE tessera_x86_backend)
 add_executable(test_transcendental tests/test_transcendental.cpp)
 target_link_libraries(test_transcendental PRIVATE tessera_x86_backend)
 
+add_executable(test_binary_math tests/test_binary_math.cpp)
+target_link_libraries(test_binary_math PRIVATE tessera_x86_backend)
+
 # ── Runtime-loadable elementwise kernel lane ────────────────────────────────
 # A SHARED library of just the AVX-512 elementwise kernels (reduce / unary /
 # binary / compare / logical / bitwise) — the C-ABI symbols the Python runtime

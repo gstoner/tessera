@@ -77,11 +77,26 @@ def test_huber_custom_delta():
                                rtol=2e-5)
 
 
-def test_loss_shape_mismatch_rejected():
+@pytest.mark.parametrize("tshape", [(8, 1), (1, 5), (1,), ()])
+def test_loss_broadcastable_target(tshape):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(hash(tshape) % 2**31)
+    pred = (rng.standard_normal((8, 5)) * 2).astype(np.float32)
+    target = (rng.standard_normal(tshape) * 2).astype(np.float32)
+    res = rt.launch(_artifact(rt, "tessera.mse_loss", {"reduction": "none"}),
+                    (pred, target))
+    assert res["ok"] is True, res.get("reason")
+    ref = np.asarray(losses.mse_loss(pred, target, reduction="none"),
+                     dtype=np.float32)
+    np.testing.assert_allclose(np.asarray(res["output"]).astype(np.float32), ref,
+                               atol=2e-5, rtol=2e-5)
+
+
+def test_loss_non_broadcastable_rejected():
     rt = _x86_or_skip()
     a = np.zeros((4, 8), np.float32)
     b = np.zeros((4, 9), np.float32)
-    with pytest.raises(ValueError, match="matching shapes"):
+    with pytest.raises(ValueError, match="do not broadcast"):
         rt._execute_x86_compiled_loss(
             _artifact(rt, "tessera.mse_loss", {}), (a, b))
 

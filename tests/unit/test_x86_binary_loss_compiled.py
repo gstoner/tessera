@@ -83,6 +83,30 @@ def test_asymmetric_bce_weights_one_equals_bce():
                                atol=1e-6)
 
 
+@pytest.mark.parametrize("tshape", [(8, 1), (1, 5), (1,), ()])
+def test_bce_broadcastable_targets(tshape):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(hash(tshape) % 2**31)
+    z = (rng.standard_normal((8, 5)) * 3).astype(np.float32)
+    t = rng.integers(0, 2, size=tshape).astype(np.float32)
+    res = rt.launch(_artifact(rt, "tessera.binary_cross_entropy_loss",
+                              {"reduction": "none"}), (z, t))
+    assert res["ok"] is True, res.get("reason")
+    ref = np.asarray(losses.binary_cross_entropy_loss(z, t, reduction="none"),
+                     dtype=np.float32)
+    np.testing.assert_allclose(np.asarray(res["output"]).astype(np.float32), ref,
+                               atol=2e-5, rtol=2e-5)
+
+
+def test_bce_non_broadcastable_rejected():
+    rt = _x86_or_skip()
+    z = np.zeros((8, 5), np.float32)
+    t = np.zeros((8, 4), np.float32)
+    with pytest.raises(ValueError, match="not broadcastable"):
+        rt._execute_x86_compiled_binary_loss(
+            _artifact(rt, "tessera.binary_cross_entropy_loss", {}), (z, t))
+
+
 def test_binary_loss_unknown_op_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)

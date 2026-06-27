@@ -3890,13 +3890,19 @@ def _execute_x86_compiled_loss(artifact: RuntimeArtifact, args: Any) -> Any:
     values = _bind_launch_args(args, arg_names)
     pred = _as_numpy(values[operand_names[0]])
     target = _as_numpy(values[operand_names[1]])
-    if pred.shape != target.shape:
-        raise ValueError(
-            f"loss requires matching shapes; got pred{pred.shape} "
-            f"target{target.shape}")
     if pred.dtype != np.float32:
         raise ValueError(f"x86 loss lane handles f32 only; got {pred.dtype}")
-    n = int(np.prod(pred.shape)) if pred.ndim else 1
+    # pred/target broadcast against each other (the reference uses NumPy
+    # broadcasting), so e.g. a (N, C) pred with a (N, 1) / scalar target works.
+    try:
+        bshape = np.broadcast_shapes(pred.shape, target.shape)
+    except ValueError as exc:
+        raise ValueError(
+            f"loss pred{pred.shape} and target{target.shape} do not "
+            f"broadcast") from exc
+    pred = np.broadcast_to(pred, bshape)
+    target = np.broadcast_to(target, bshape)
+    n = int(np.prod(bshape)) if bshape else 1
     if n <= 0:
         return np.array(pred, copy=True)
 
@@ -3954,13 +3960,20 @@ def _execute_x86_compiled_binary_loss(artifact: RuntimeArtifact,
     values = _bind_launch_args(args, arg_names)
     z = _as_numpy(values[operand_names[0]])
     t = _as_numpy(values[operand_names[1]])
-    if z.shape != t.shape:
-        raise ValueError(
-            f"binary loss requires matching shapes; got logits{z.shape} "
-            f"targets{t.shape}")
     if z.dtype != np.float32:
         raise ValueError(f"x86 binary-loss lane handles f32 only; got {z.dtype}")
-    n = int(np.prod(z.shape)) if z.ndim else 1
+    # targets are broadcastable to logits (the reference uses NumPy broadcasting;
+    # asymmetric_bce documents targets as broadcastable). Broadcast both to the
+    # common shape so e.g. logits (N, C) + targets (N, 1) / scalar work.
+    try:
+        bshape = np.broadcast_shapes(z.shape, t.shape)
+    except ValueError as exc:
+        raise ValueError(
+            f"binary loss targets {t.shape} not broadcastable to logits "
+            f"{z.shape}") from exc
+    z = np.broadcast_to(z, bshape)
+    t = np.broadcast_to(t, bshape)
+    n = int(np.prod(bshape)) if bshape else 1
     if n <= 0:
         return np.array(z, copy=True)
 

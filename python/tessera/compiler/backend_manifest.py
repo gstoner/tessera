@@ -1267,6 +1267,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_matmul_family_compiled.py"
        for op in ("batched_gemm", "linear_general", "qkv_projection",
                   "factorized_matmul", "einsum")},
+    ("rope", "x86"): "tests/unit/test_x86_posenc_compiled.py",
+    ("alibi", "x86"): "tests/unit/test_x86_posenc_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1791,6 +1793,23 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "reshape/batch/einsum; x86_matmul_family_compiled lane; f32)",
     } for op in ("batched_gemm", "linear_general", "qkv_projection",
                  "factorized_matmul", "einsum")},
+    # Position encodings — interleaved-pair rope and the ALiBi bias generator.
+    # The CPU analog of the ROCm rope/alibi lanes (x86_rope_compiled /
+    # x86_alibi_compiled).
+    "rope": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 interleaved-pair rotary position embedding "
+                 "(tessera_x86_avx512_rope_f32, runtime-loaded; deinterleave + "
+                 "Cephes sincos; x86_rope_compiled lane; f32, matches numpy 2e-5)",
+    },
+    "alibi": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 ALiBi positional-bias generator bias[h,i,j]="
+                 "slope[h]*(j-i) (tessera_x86_avx512_alibi_f32, runtime-loaded; "
+                 "x86_alibi_compiled lane; f32)",
+    },
 }
 
 

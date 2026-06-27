@@ -224,7 +224,7 @@ round,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 sign,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 trunc,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 where,numeric_helper,public,public,registered,complete,partial,fused,ready,none
-alibi,position_encoding,public,public,registered,complete,partial,reference,ready,none
+alibi,position_encoding,public,public,registered,complete,partial,fused,ready,none
 ntk_rope,position_encoding,public,public,registered,complete,partial,reference,ready,none
 qkv_projection,projection,public,public,registered,complete,partial,fused,ready,none
 dequantize_fp4,quantize,public,public,registered,complete,partial,reference,ready,none
@@ -257,7 +257,7 @@ cispo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,re
 grpo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,ready,none
 normalize_group_advantages,rl_loss,public,public,registered,complete,partial,reference,ready,none
 ppo_policy_loss,rl_loss,public,public,registered,complete,partial,reference,ready,none
-rope,rotary_embedding,public,public,registered,complete,partial,reference,ready,none
+rope,rotary_embedding,public,public,registered,complete,partial,fused,ready,none
 segment_reduce,segment_reduce,public,public,registered,complete,partial,reference,ready,none
 argsort,sort,public,public,registered,complete,partial,reference,ready,none
 sort,sort,public,public,registered,complete,partial,reference,ready,none

@@ -240,6 +240,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so "
                             "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
                             "cond i8 != 0, a/b/out f32",
+    "x86_rope_compiled": "x86 CPU interleaved-pair rotary position embedding "
+                            "(rope) — tessera_x86_avx512_rope_f32 from "
+                            "libtessera_x86_elementwise.so (AVX-512 deinterleave "
+                            "+ Cephes sincos + re-interleave); operands x, theta "
+                            "both [.., D] (D even). The CPU analog of the ROCm "
+                            "rope lane. f32, matches numpy 2e-5",
+    "x86_alibi_compiled": "x86 CPU ALiBi positional-bias generator "
+                            "bias[h,i,j]=slope[h]*(j-i) over [H,S,S] — "
+                            "tessera_x86_avx512_alibi_f32 from "
+                            "libtessera_x86_elementwise.so; default slope ramp "
+                            "2^(-8k/H), optional slopes operand. The CPU analog "
+                            "of the ROCm alibi lane. f32",
     "x86_matmul_family_compiled": "x86 CPU matmul-family kernel — batched_gemm "
                             "/ linear_general / qkv_projection / "
                             "factorized_matmul / einsum, all built on the "
@@ -420,6 +432,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
                "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
                "normalized != 0, a/b/out f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_rope_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_rope_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_rope_compiled", runtime_status="success",
+        reason="x86 rope artifact runs the interleaved-pair rotary position "
+               "embedding from libtessera_x86_elementwise.so "
+               "(tessera_x86_avx512_rope_f32; AVX-512 deinterleave + Cephes "
+               "sincos + re-interleave). Operands x, theta both [.., D] (D "
+               "even). The CPU analog of the ROCm rope lane. f32, numpy 2e-5.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_alibi_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_alibi_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_alibi_compiled", runtime_status="success",
+        reason="x86 alibi artifact runs the ALiBi positional-bias generator "
+               "bias[h,i,j]=slope[h]*(j-i) over [H,S,S] from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_alibi_f32; "
+               "default slope ramp 2^(-8k/H), optional slopes operand). The CPU "
+               "analog of the ROCm alibi lane. f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_matmul_family_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_matmul_family_compiled",

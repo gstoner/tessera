@@ -576,6 +576,7 @@ x86,tessera_x86_amx_available,amx_available,,src/compiler/codegen/tessera_x86_ba
 x86,tessera_x86_amx_gemm_bf16,amx_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/amx_gemm_bf16.cpp
 x86,tessera_x86_amx_gemm_s8s8_s32,amx_gemm_s8s8_s32,,src/compiler/codegen/tessera_x86_backend/include/tessera/x86/target.h
 x86,tessera_x86_amx_gemm_s8s8_s32,amx_gemm_s8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/amx_gemm_int8.cpp
+x86,tessera_x86_avx512_alibi_f32,avx512_alibi,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
 x86,tessera_x86_avx512_argreduce_f32,avx512_argreduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_argreduce_f32.cpp
 x86,tessera_x86_avx512_binary_f32,avx512_binary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_binary_f32.cpp
 x86,tessera_x86_avx512_bitwise_i32,avx512_bitwise,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_bitwise_i32.cpp
@@ -587,6 +588,7 @@ x86,tessera_x86_avx512_logical_i8,avx512_logical,i8,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_pow_f32,avx512_pow,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_reduce_f32,avx512_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
 x86,tessera_x86_avx512_rmsnorm_f32,avx512_rmsnorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
+x86,tessera_x86_avx512_rope_f32,avx512_rope,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
 x86,tessera_x86_avx512_scan_f32,avx512_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
 x86,tessera_x86_avx512_silu_mul_f32,avx512_silu_mul,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_softmax_f32,avx512_softmax,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp

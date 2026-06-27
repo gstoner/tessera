@@ -240,7 +240,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `sign` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `trunc` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `where` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `alibi` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
+| `alibi` | position_encoding | public | public | registered | complete | partial | fused | ready | none |
 | `ntk_rope` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
 | `qkv_projection` | projection | public | public | registered | complete | partial | fused | ready | none |
 | `dequantize_fp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
@@ -273,7 +273,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
 | `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
 | `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | reference | ready | none |
-| `rope` | rotary_embedding | public | public | registered | complete | partial | reference | ready | none |
+| `rope` | rotary_embedding | public | public | registered | complete | partial | fused | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
 | `argsort` | sort | public | public | registered | complete | partial | reference | ready | none |
 | `sort` | sort | public | public | registered | complete | partial | reference | ready | none |
@@ -350,14 +350,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| position_encoding | 2 | PPGCpRN· PPGCpRN· |
+| position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
 | reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | rl_loss | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| rotary_embedding | 1 | PPGCpRN· |
+| rotary_embedding | 1 | PPGCpFN· |
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |

@@ -34,7 +34,7 @@ avg_pool,2,0,0,2,0,,directly_tested,2 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
-batched_gemm,16,4,0,20,0,bf16 f16 f32 fp16 fp32,directly_tested,20 direct test references
+batched_gemm,18,4,0,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
 bidirectional_scan,2,0,0,2,0,,directly_tested,2 direct test references
 binary_cross_entropy_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 bitwise_and,3,0,0,3,0,,directly_tested,3 direct test references

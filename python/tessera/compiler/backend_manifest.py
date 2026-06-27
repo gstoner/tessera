@@ -973,6 +973,18 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "of the fused SwiGLU gate-multiply. Executes via "
                  "runtime.launch() (rocm_silu_mul_compiled).",
     },
+    # S11 pointwise regression losses — per-element loss kernel
+    # (generate-rocm-pointwise-loss-kernel) + host none/mean/sum reduction. The
+    # ROCm mirror of the x86_loss lane. Executes via rocm_loss_compiled.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"Pointwise regression loss {op} — per-element kernel "
+                 "(generate-rocm-pointwise-loss-kernel; exp/log1p via "
+                 "math->rocdl) + reduction. Executes via runtime.launch() "
+                 "(rocm_loss_compiled).",
+    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                 "log_cosh_loss")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1293,6 +1305,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
+    **{(op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
+       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
+                  "log_cosh_loss")},
     **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",

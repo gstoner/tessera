@@ -295,6 +295,27 @@ def ROCM_SiluMulKernelOp : TesseraROCM_Op<"silu_mul"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_PointwiseLossKernelOp : TesseraROCM_Op<"pointwise_loss"> {
+  let summary = "Pointwise regression loss (2-operand elementwise) kernel";
+  let description = [{
+    The directive `generate-rocm-pointwise-loss-kernel` expands into a flat
+    2-operand elementwise gpu kernel computing the PER-ELEMENT S11 regression
+    loss over N elements (one thread per element). The runtime reduces
+    (none/mean/sum) via the rocm reduce lane.
+
+      kind 0 mse  (p−t)²; 1 mae |p−t|; 2 huber(δ); 3 smooth_l1(β);
+      4 log_cosh  e + log1p(exp(−2e)) − log2
+
+    `kind` and `param` (δ/β) are compile-time attrs. Computes in f32; exp/log1p
+    lower through `math` → ROCDL. The CPU analog is `avx512_loss_f32.cpp`.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<I64Attr, "0">:$kind,
+                       DefaultValuedAttr<F32Attr, "1.0">:$param);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

@@ -2890,6 +2890,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_i8, c_i8, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_bitwise_i32":
             [c_i32, c_i32, i64, c_i32, ctypes.c_int],
+        "tessera_x86_avx512_scan_f32":
+            [c_f32, i64, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_argreduce_f32":
+            [c_f32, i64, i64, c_i32, ctypes.c_int],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -2978,6 +2982,137 @@ def _execute_x86_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
         shape = [1 if i in axes else int(x.shape[i]) for i in range(n)]
         res = res.reshape(shape)
     return res
+
+
+#: op_name -> scan kind index (must match avx512_scan_f32.cpp).
+_X86_SCAN_OPS = {
+    "tessera.cumsum": 0, "tessera.cumprod": 1,
+    "tessera.cummax": 2, "tessera.cummin": 3,
+}
+
+
+def _execute_x86_compiled_scan(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` scan lane: run the AVX-512 inclusive prefix scan
+    (cumsum/cumprod/cummax/cummin) from libtessera_x86_elementwise.so along one
+    axis; same-shape output (axis=None flattens, numpy semantics). f32 only."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_SCAN_OPS:
+        raise ValueError(
+            "x86_scan_compiled executor handles exactly one of "
+            f"{tuple(_X86_SCAN_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_SCAN_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("scan requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 scan lane handles f32 only; got {x.dtype}")
+    n = x.ndim
+
+    axis = kwargs.get("axis", None)
+    flatten = axis is None or n <= 1
+    if flatten:
+        flat = np.ascontiguousarray(x, dtype=np.float32).reshape(1, -1)
+        inner = int(flat.shape[1])
+        outer = 1
+        kept_then_axis: tuple[int, ...] = ()
+        inv: list[int] = []
+    else:
+        assert axis is not None
+        a = int(axis) if axis >= 0 else n + int(axis)
+        perm = [i for i in range(n) if i != a] + [a]
+        inv = [int(perm.index(i)) for i in range(n)]
+        flat = np.ascontiguousarray(np.transpose(x, perm), dtype=np.float32)
+        inner = int(x.shape[a])
+        outer = int(flat.size // inner)
+        kept_then_axis = tuple(int(x.shape[i]) for i in perm)
+    if inner <= 0:
+        return np.array(x, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(flat, dtype=np.float32).reshape(-1)
+    out = np.zeros(outer * inner, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_scan_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(outer), ctypes.c_int64(inner),
+        out.ctypes.data_as(cf), ctypes.c_int(kind))
+    if flatten:
+        return out.reshape(-1)
+    return np.transpose(out.reshape(kept_then_axis), inv)
+
+
+#: op_name -> argreduce kind index (must match avx512_argreduce_f32.cpp).
+_X86_ARGREDUCE_OPS = {"tessera.argmax": 0, "tessera.argmin": 1}
+
+
+def _execute_x86_compiled_argreduce(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` arg-reduce lane: run the AVX-512 argmax/argmin from
+    libtessera_x86_elementwise.so along one axis (numpy first-occurrence
+    tie-break). f32 input, i32 index output."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_ARGREDUCE_OPS:
+        raise ValueError(
+            "x86_argreduce_compiled executor handles exactly one of "
+            f"{tuple(_X86_ARGREDUCE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_ARGREDUCE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("argreduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 argreduce lane handles f32 only; got {x.dtype}")
+    n = x.ndim
+    if n == 0:
+        return np.array(0, dtype=np.int32)
+
+    axis = kwargs.get("axis", None)
+    if axis is None:
+        axes = tuple(range(n))
+    elif isinstance(axis, int):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        raise ValueError("argreduce supports a single int axis or None")
+    kept = [i for i in range(n) if i not in axes]
+    perm = kept + list(axes)
+    xt = np.ascontiguousarray(np.transpose(x, perm), dtype=np.float32)
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    outer = int(xt.size // inner) if inner else 0
+    if inner <= 0:
+        raise ValueError("x86 argreduce: empty reduction axis")
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(xt, dtype=np.float32).reshape(-1)
+    out = np.zeros(max(outer, 1), dtype=np.int32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_argreduce_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(outer), ctypes.c_int64(inner),
+        out.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(kind))
+    return out.reshape(kept_shape)
 
 
 #: op_name -> unary kind index (must match avx512_unary_f32.cpp). The x86 lane
@@ -5038,6 +5173,8 @@ def _executor_table():
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
+        "x86_scan_compiled": _execute_x86_compiled_scan,
+        "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

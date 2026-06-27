@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 72 |
-| ``runnable_reference`` | 237 |
+| ``complete`` | 78 |
+| ``runnable_reference`` | 231 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (72)
+## complete (78)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -98,6 +98,12 @@ each row into a single E2E tier.
 | ``trunc`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``argmin`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``cummax`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``cummin`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``cumprod`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``cumsum`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``max`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``min`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -108,7 +114,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (237)
+## runnable_reference (231)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -290,13 +296,7 @@ each row into a single E2E tier.
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |
 | ``rng_uniform`` | random_source | public | public | registered | partial | reference | ready | none |
-| ``argmax`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``argmin`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``count_nonzero`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``cummax`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``cummin`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``cumprod`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``cumsum`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``prod`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``std`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``var`` | reduction | public | public | registered | partial | reference | ready | none |

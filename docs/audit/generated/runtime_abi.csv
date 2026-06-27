@@ -582,6 +582,7 @@ x86,tessera_x86_avx512_binary_f32,avx512_binary,f32,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_binary_loss_f32,avx512_binary_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_bitwise_i32,avx512_bitwise,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_bitwise_i32.cpp
 x86,tessera_x86_avx512_compare_f32,avx512_compare,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
+x86,tessera_x86_avx512_fpquant_f32,avx512_fpquant,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fpquant_f32.cpp
 x86,tessera_x86_avx512_gemm_bf16,avx512_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp
 x86,tessera_x86_avx512_gemm_f32,avx512_gemm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_f32.cpp
 x86,tessera_x86_avx512_layernorm_f32,avx512_layernorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp

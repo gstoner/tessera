@@ -1283,6 +1283,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
+       for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
+                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1876,6 +1879,18 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "matches numpy 2e-4)",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    # Low-precision float quantization — quantize/dequantize fp8/fp6/fp4 on the
+    # AVX-512 fpquant kernel (per-tensor symmetric grid-snap, fake-quant in f32
+    # storage; x86_fpquant_compiled). The lane is f32 in/out (the fpN grid is
+    # the quantization target, stored back as f32 — the dtypes the KERNEL runs).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 low-precision float {op} "
+                 "(tessera_x86_avx512_fpquant_f32 grid-snap, per-tensor scale; "
+                 "x86_fpquant_compiled lane; f32 fake-quant, matches reference)",
+    } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
+                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
 }
 
 

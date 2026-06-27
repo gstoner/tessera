@@ -243,13 +243,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `alibi` | position_encoding | public | public | registered | complete | partial | fused | ready | none |
 | `ntk_rope` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
 | `qkv_projection` | projection | public | public | registered | complete | partial | fused | ready | none |
-| `dequantize_fp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
-| `dequantize_fp6` | quantize | public | public | registered | complete | partial | reference | ready | none |
-| `dequantize_fp8` | quantize | public | public | registered | complete | partial | reference | ready | none |
+| `dequantize_fp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
+| `dequantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
+| `dequantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `dequantize_nvfp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
-| `quantize_fp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
-| `quantize_fp6` | quantize | public | public | registered | complete | partial | reference | ready | none |
-| `quantize_fp8` | quantize | public | public | registered | complete | partial | reference | ready | none |
+| `quantize_fp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
+| `quantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
+| `quantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `quantize_nvfp4` | quantize | public | public | registered | complete | partial | reference | ready | none |
 | `dropout` | random_mask | public | public | registered | complete | partial | reference | ready | none |
 | `rng_normal` | random_source | public | public | registered | complete | partial | reference | ready | none |
@@ -352,7 +352,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
-| quantize | 8 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
 | reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |

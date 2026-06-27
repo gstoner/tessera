@@ -2921,6 +2921,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
              c_f32],
         "tessera_x86_avx512_policy_loss_f32":
             [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
+        "tessera_x86_avx512_fpquant_f32":
+            [c_f32, i64, ctypes.c_float, ctypes.c_int, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4259,6 +4261,86 @@ def _execute_x86_compiled_class_loss(artifact: RuntimeArtifact,
     kl_pm = np.sum(p * (logp - logm), axis=-1)
     kl_qm = np.sum(q * (logq - logm), axis=-1)
     return _x86_reduce_leading(0.5 * (kl_pm + kl_qm), reduction, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
+# fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
+# AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the
+# forward already rescaled). ``compiler_path = "x86_fpquant_compiled"``. f32.
+# (nvfp4's block-scaled microscaling path is a separate lane.)
+# ─────────────────────────────────────────────────────────────────────────────
+#: op_name -> (is_quantize, {format: (max_normal, mantissa_bits)}, default_fmt).
+_X86_FPQUANT_OPS = {
+    "tessera.quantize_fp8": (True, {"e4m3": (448.0, 3), "e5m2": (57344.0, 2)},
+                             "e4m3"),
+    "tessera.dequantize_fp8": (False, {"e4m3": (448.0, 3), "e5m2": (57344.0, 2)},
+                               "e4m3"),
+    "tessera.quantize_fp6": (True, {"e2m3": (7.5, 3), "e3m2": (28.0, 2)}, "e3m2"),
+    "tessera.dequantize_fp6": (False, {"e2m3": (7.5, 3), "e3m2": (28.0, 2)},
+                               "e3m2"),
+    "tessera.quantize_fp4": (True, {"e2m1": (6.0, 1)}, "e2m1"),
+    "tessera.dequantize_fp4": (False, {"e2m1": (6.0, 1)}, "e2m1"),
+}
+
+
+def _execute_x86_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` low-precision-float quantize lane: quantize/
+    dequantize fp8 / fp6 / fp4. quantize snaps to the format's float grid on the
+    AVX-512 fpquant kernel (per-tensor symmetric scale); dequantize is the fp32
+    passthrough. Returns the dequantized fp32 array (x_q). f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_FPQUANT_OPS:
+        raise ValueError(
+            "x86_fpquant_compiled executor handles exactly one of "
+            f"{tuple(_X86_FPQUANT_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    is_quant, fmt_map, default_fmt = _X86_FPQUANT_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("quantize op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    fmt = str(kwargs.get("format", default_fmt))
+    if fmt not in fmt_map:
+        raise ValueError(
+            f"{op_name}: format must be one of {tuple(fmt_map)}; got {fmt!r}")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 fpquant lane handles f32 only; got {x.dtype}")
+
+    if not is_quant:
+        # dequantize: the forward already rescaled — fp32 passthrough.
+        return np.ascontiguousarray(x, np.float32)
+
+    max_normal, mantissa_bits = fmt_map[fmt]
+    scale_kw = kwargs.get("scale")
+    if scale_kw is None:
+        amax = float(np.max(np.abs(x))) if x.size else 0.0
+        scale = max(amax / max_normal, 1e-12)
+    else:
+        scale = float(scale_kw)
+    scaled = np.clip(np.ascontiguousarray(x, np.float32) / np.float32(scale),
+                     -max_normal, max_normal).astype(np.float32).reshape(-1)
+    n = int(scaled.size)
+    if n <= 0:
+        return np.array(x, copy=True)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_fpquant_f32(
+        scaled.ctypes.data_as(cf), ctypes.c_int64(n),
+        ctypes.c_float(max_normal), ctypes.c_int(mantissa_bits),
+        out.ctypes.data_as(cf))
+    return (out.reshape(x.shape) * np.float32(scale)).astype(np.float32)
 
 #: op_name -> binary kind index (must match avx512_binary_f32.cpp). The x86 lane
 #: covers the direct-intrinsic subset; `pow` is transcendental → numpy-reference.
@@ -6443,6 +6525,7 @@ def _executor_table():
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
+        "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

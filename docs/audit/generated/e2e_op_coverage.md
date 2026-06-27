@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 78 |
-| ``runnable_reference`` | 231 |
+| ``complete`` | 79 |
+| ``runnable_reference`` | 230 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (78)
+## complete (79)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -96,6 +96,7 @@ each row into a single E2E tier.
 | ``round`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``sign`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``trunc`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``where`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -114,7 +115,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (231)
+## runnable_reference (230)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -281,7 +282,6 @@ each row into a single E2E tier.
 | ``isfinite`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``where`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``qkv_projection`` | projection | public | public | registered | partial | reference | ready | none |

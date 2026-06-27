@@ -2894,6 +2894,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_argreduce_f32":
             [c_f32, i64, i64, c_i32, ctypes.c_int],
+        "tessera_x86_avx512_where_f32":
+            [c_i8, c_f32, c_f32, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3218,6 +3220,54 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     lib.tessera_x86_avx512_binary_f32(
         ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
         out.ctypes.data_as(cf), ctypes.c_int(kind))
+    return out.reshape(a.shape)
+
+
+def _execute_x86_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` where lane: run the AVX-512 ternary select
+    where(cond, a, b) = cond ? a : b from libtessera_x86_elementwise.so. cond is
+    normalized via != 0 (numpy); a/b/out f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.where":
+        raise ValueError(
+            "x86_where_compiled executor handles exactly one tessera.where op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("where requires three operands (cond, a, b)")
+    values = _bind_launch_args(args, arg_names)
+    cond = _as_numpy(values[operand_names[0]])
+    a = _as_numpy(values[operand_names[1]])
+    b = _as_numpy(values[operand_names[2]])
+    if a.shape != b.shape or cond.shape != a.shape:
+        raise ValueError(
+            f"x86 where lane requires matching operand shapes; got "
+            f"cond{cond.shape} a{a.shape} b{b.shape}")
+    if a.dtype != np.float32:
+        raise ValueError(f"x86 where lane handles f32 a/b; got {a.dtype}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    cc = (np.ascontiguousarray(cond).reshape(-1) != 0).astype(np.uint8)
+    ac = np.ascontiguousarray(a, dtype=np.float32).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    cv = ctypes.c_void_p
+    lib.tessera_x86_avx512_where_f32(
+        cc.ctypes.data_as(cv), ac.ctypes.data_as(cf), bc.ctypes.data_as(cf),
+        ctypes.c_int64(n), out.ctypes.data_as(cf))
     return out.reshape(a.shape)
 
 
@@ -4152,6 +4202,118 @@ def _execute_rocm_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     hip.hipDeviceSynchronize()
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
     for dev in (da, db, do):
+        hip.hipFree(dev)
+    return o.reshape(a.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED where lane (2026-06-27) — ternary select where(cond, a, b).
+# cond i8 (normalized != 0), a/b/out float. ``compiler_path = "rocm_where_
+# compiled"``. ONE hsaco per (chip, dtype), cached.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_where_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _build_compiled_where_hsaco(dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.where"() {{name = "w", dtype = "{dtype}"}} '
+        ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-where-kernel", directive, _rocm_where_hsaco_cache,
+        (chip, dtype))
+
+
+def _execute_rocm_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` where lane: run the COMPILER-GENERATED flat 3-operand
+    ternary select where(cond, a, b) = cond ? a : b. cond i8 (normalized != 0),
+    a/b/out f16/bf16/f32."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.where":
+        raise ValueError(
+            "rocm_where_compiled executor handles exactly one tessera.where op; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("where requires three operands (cond, a, b)")
+    values = _bind_launch_args(args, arg_names)
+    cond = _as_numpy(values[operand_names[0]])
+    a = _as_numpy(values[operand_names[1]])
+    b = _as_numpy(values[operand_names[2]])
+    if a.shape != b.shape or cond.shape != a.shape:
+        raise ValueError(
+            f"rocm where lane requires matching operand shapes; got "
+            f"cond{cond.shape} a{a.shape} b{b.shape}")
+    n = int(np.prod(a.shape)) if a.ndim else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    store: Any
+    if a.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif a.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and a.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm where lane handles f32/f16/bf16; got {a.dtype}")
+
+    hsaco = _build_compiled_where_hsaco(dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm where: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm where: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"w") != 0:
+        raise RuntimeError("rocm where: kernel symbol 'w' not found")
+
+    cc = (np.ascontiguousarray(cond).reshape(-1) != 0).astype(np.uint8)
+    ac = np.ascontiguousarray(a, dtype=store).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=store).reshape(-1)
+    o = np.zeros(n, dtype=store)
+    dc, da, db, do = (ctypes.c_void_p(), ctypes.c_void_p(),
+                      ctypes.c_void_p(), ctypes.c_void_p())
+    if hip.hipMalloc(ctypes.byref(dc), n) != 0:
+        raise RuntimeError("rocm where: hipMalloc failed")
+    for dev in (da, db, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm where: hipMalloc failed")
+    hip.hipMemcpy(dc, cc.ctypes.data_as(ctypes.c_void_p), n, 1)
+    hip.hipMemcpy(da, ac.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+    hip.hipMemcpy(db, bc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(dc, n) + _mr(da, n) + _mr(db, n) + _mr(do, n)
+                   + [ctypes.c_int64(n)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (dc, da, db, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm where: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (dc, da, db, do):
         hip.hipFree(dev)
     return o.reshape(a.shape)
 
@@ -5172,9 +5334,11 @@ def _executor_table():
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
+        "rocm_where_compiled": _execute_rocm_compiled_where,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "x86_scan_compiled": _execute_x86_compiled_scan,
         "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
+        "x86_where_compiled": _execute_x86_compiled_where,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,

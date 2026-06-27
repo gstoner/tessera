@@ -230,6 +230,16 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "family (and/or/xor binary, not unary) over i32 "
                             "integers (full bit pattern, no normalization), one "
                             "thread per element, dispatched by op name; i32 in/out",
+    "rocm_where_compiled": "AMD GPU RDNA flat 3-operand ternary select "
+                            "where(cond,a,b)=cond?a:b the Tessera compiler "
+                            "GENERATES (generate-rocm-where-kernel -> ROCDL -> "
+                            "hsaco), then HIP launches it; cond i8 normalized != "
+                            "0, a/b/out f16/bf16/f32",
+    "x86_where_compiled": "x86 CPU ternary select where(cond,a,b) — "
+                            "tessera_x86_avx512_where_f32 from "
+                            "libtessera_x86_elementwise.so "
+                            "(_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); "
+                            "cond i8 != 0, a/b/out f32",
     "rocm_silu_mul_compiled": "AMD GPU RDNA SwiGLU gate-multiply the Tessera "
                             "compiler GENERATES (generate-rocm-silu-mul-kernel "
                             "-> ROCDL -> hsaco, in-process via tessera-opt), then "
@@ -368,6 +378,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so (tessera_x86_avx512_argreduce_f32) "
                "along one axis, numpy first-occurrence tie-break (strict compare). "
                "f32 input, i32 index output.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_where_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_where_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_where_compiled", runtime_status="success",
+        reason="x86 where artifact runs the ternary select where(cond,a,b) from "
+               "libtessera_x86_elementwise.so (tessera_x86_avx512_where_f32, "
+               "_mm512_cmpneq_epi8_mask + _mm512_mask_blend_ps); cond i8 "
+               "normalized != 0, a/b/out f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_unary_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_unary_compiled",
@@ -620,6 +639,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "i32 integers, one thread per element): tessera-opt generates + "
                "serializes the kernel to hsaco in-process, then HIP loads + "
                "launches it. Dispatched by op name.",
+        execution_mode="hip_runtime"),
+    # Ternary select where(cond,a,b) — flat 3-operand elementwise. vs numpy.
+    ("rocm", "rocm_where_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_where_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_where_compiled", runtime_status="success",
+        reason="ROCm where artifact runs the COMPILER-GENERATED flat 3-operand "
+               "ternary select where(cond,a,b)=cond?a:b (one thread per element): "
+               "tessera-opt generates + serializes the kernel to hsaco in-process "
+               "(generate-rocm-where-kernel -> ROCDL), then HIP loads + launches "
+               "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
     ("rocm", "rocm_silu_mul_compiled"): ExecutionRow(

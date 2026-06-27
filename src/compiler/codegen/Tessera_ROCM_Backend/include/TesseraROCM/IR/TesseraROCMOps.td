@@ -576,6 +576,23 @@ def ROCM_BitwiseKernelOp : TesseraROCM_Op<"bitwise"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_WhereKernelOp : TesseraROCM_Op<"where"> {
+  let summary = "Elementwise ternary select — where(cond, a, b)";
+  let description = [{
+    The directive `generate-rocm-where-kernel` expands into a flat 3-operand
+    elementwise gpu kernel computing numpy `where`/select over N elements:
+
+      `where(cond, a, b)[i] = cond[i] ? a[i] : b[i]`
+
+    `cond` is an `i8` boolean (normalized via `!= 0`, matching numpy where any
+    nonzero is true); `a`/`b`/output share a float storage `dtype` (f16/bf16/f32).
+    `N` is a runtime `index` arg. Validated vs `np.where` on gfx1151.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

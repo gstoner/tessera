@@ -223,7 +223,7 @@ reciprocal,numeric_helper,public,public,registered,complete,partial,fused,ready,
 round,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 sign,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 trunc,numeric_helper,public,public,registered,complete,partial,fused,ready,none
-where,numeric_helper,public,public,registered,complete,partial,reference,ready,none
+where,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 alibi,position_encoding,public,public,registered,complete,partial,reference,ready,none
 ntk_rope,position_encoding,public,public,registered,complete,partial,reference,ready,none
 qkv_projection,projection,public,public,registered,complete,partial,reference,ready,none

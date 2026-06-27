@@ -1031,6 +1031,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-bitwise-kernel) over i32 integers. Executes via "
                  "runtime.launch() (rocm_bitwise_compiled).",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # Ternary select where(cond,a,b)=cond?a:b — flat 3-operand elementwise
+    # kernel (generate-rocm-where-kernel). cond i8 normalized != 0, a/b/out
+    # float. Executes via runtime.launch() (rocm_where_compiled).
+    "where": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone ternary select where(cond,a,b)=cond?a:b — flat "
+                 "3-operand per-element kernel (generate-rocm-where-kernel); "
+                 "cond i8 normalized != 0, a/b/out float. Executes via "
+                 "runtime.launch() (rocm_where_compiled).",
+    },
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1243,6 +1254,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     **{(op, "x86"): "tests/unit/test_x86_bitwise_compiled.py"
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    ("where", "x86"): "tests/unit/test_x86_where_compiled.py",
+    ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -1694,6 +1707,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 bitwise {op} (tessera_x86_avx512_bitwise_i32, "
                  "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # Ternary select where(cond,a,b) — hand-written AVX-512 kernel
+    # (tessera_x86_avx512_where_f32, _mm512_cmpneq_epi8_mask +
+    # _mm512_mask_blend_ps) the runtime ctypes-loads (x86_where_compiled).
+    # cond i8 normalized != 0, a/b/out f32.
+    "where": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 ternary select where(cond,a,b) "
+                 "(tessera_x86_avx512_where_f32, runtime-loaded; "
+                 "x86_where_compiled lane; cond i8 != 0, a/b/out f32)",
+    },
 }
 
 

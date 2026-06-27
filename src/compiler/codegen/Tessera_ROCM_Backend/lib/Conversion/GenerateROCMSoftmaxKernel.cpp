@@ -6,9 +6,10 @@
 // axis:  O[m,:] = exp(X[m,:] - max_k X[m,k]) / Σ_k exp(X[m,k] - max).
 //
 //   One workgroup per row (blockIdx.x = m), blockDim = 256. The 256 lanes
-//   stride over K and tree-reduce through LDS:
-//     pass 1: local max → LDS tree-reduce → row max.
-//     pass 2: e = exp(x - max) staged into O, local sum → tree-reduce → row sum.
+//   stride over K and reduce via a CUB/rocPRIM-style warp-shuffle (gpu.shuffle
+//   xor within a 32-lane subgroup → 8 LDS partials → combine; no 256-wide tree):
+//     pass 1: local max → warp-reduce → row max.
+//     pass 2: e = exp(x - max) staged into O, local sum → warp-reduce → row sum.
 //     pass 3: O[m,c] /= row sum.
 //   Reductions run in f32 for stability regardless of storage dtype; `exp`
 //   lowers through `convert-math-to-rocdl` (OCML), the same path flash_attn
@@ -32,9 +33,11 @@ using namespace mlir;
 
 namespace {
 
-// Workgroup size (one wavefront-multiple block per row). Power of two so the
-// LDS tree-reduction halving is exact.
+// Workgroup size (one wavefront-multiple block per row). Multiple of the
+// 32-lane shuffle subgroup.
 static constexpr int64_t BD = 256;
+static constexpr int64_t SG = 32;           // shuffle subgroup width
+static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy) {
   MLIRContext *ctx = b.getContext();
@@ -43,8 +46,9 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
   auto slt = arith::CmpIPredicate::slt;
 
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  // LDS holds only the per-subgroup partials (NGROUPS = 8), reused per pass.
   Value red = f.addWorkgroupAttribution(
-      MemRefType::get({BD}, f32, MemRefLayoutAttrInterface(), ws), loc);
+      MemRefType::get({NGROUPS}, f32, MemRefLayoutAttrInterface(), ws), loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1);
@@ -58,6 +62,13 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
 
   Value m = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Type i32 = b.getI32Type();
+  Value wSG = b.create<arith::ConstantIntOp>(loc, i32, SG);
+  Value cSG = ci(SG);
+  Value group = b.create<arith::DivUIOp>(loc, tid, cSG);
+  Value laneInSg = b.create<arith::RemUIOp>(loc, tid, cSG);
+  Value isLeader =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, laneInSg, c0);
   Value rowInb = b.create<arith::CmpIOp>(loc, slt, m, M);
   // Guard the whole body on a valid row (grid is exactly M, so always true, but
   // keep it total).
@@ -75,29 +86,38 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
     b.create<memref::StoreOp>(loc, sv, O, ValueRange{idx});
   };
 
-  // Unrolled LDS tree-reduction over red[0..BD): combine red[t] with red[t+s]
-  // for s = BD/2, BD/4, ..., 1, with a barrier between levels. `isMax` selects
-  // max vs add. Leaves the result in red[0].
-  auto treeReduce = [&](bool isMax) {
-    for (int64_t s = BD / 2; s > 0; s >>= 1) {
-      Value cs = ci(s);
-      Value lt = b.create<arith::CmpIOp>(loc, slt, tid, cs);
-      auto ifo = b.create<scf::IfOp>(loc, lt, /*withElse=*/false);
-      {
-        OpBuilder::InsertionGuard g(b);
-        b.setInsertionPointToStart(ifo.thenBlock());
-        Value a = b.create<memref::LoadOp>(loc, red, ValueRange{tid});
-        Value other = b.create<memref::LoadOp>(
-            loc, red, ValueRange{b.create<arith::AddIOp>(loc, tid, cs)});
-        Value comb = isMax ? b.create<arith::MaximumFOp>(loc, a, other).getResult()
-                           : b.create<arith::AddFOp>(loc, a, other).getResult();
-        b.create<memref::StoreOp>(loc, comb, red, ValueRange{tid});
-      }
-      b.create<gpu::BarrierOp>(loc);
+  // CUB/rocPRIM warp-shuffle reduce: butterfly within a 32-lane subgroup (no
+  // LDS) over `acc`, stage the 8 per-subgroup partials to `red`, then every
+  // thread combines the partials to the broadcast total. `red` is reused per
+  // pass, so barriers bracket its read. `isMax` selects max vs add.
+  auto warpReduce = [&](Value acc, bool isMax) -> Value {
+    auto comb = [&](Value a, Value c) -> Value {
+      return isMax ? b.create<arith::MaximumFOp>(loc, a, c).getResult()
+                   : b.create<arith::AddFOp>(loc, a, c).getResult();
+    };
+    for (int64_t off = SG / 2; off > 0; off >>= 1) {
+      Value offC = b.create<arith::ConstantIntOp>(loc, i32, off);
+      auto sh = b.create<gpu::ShuffleOp>(loc, acc, offC, wSG,
+                                         gpu::ShuffleMode::XOR);
+      acc = comb(acc, sh.getShuffleResult());
     }
+    auto ldIf = b.create<scf::IfOp>(loc, isLeader, /*withElse=*/false);
+    {
+      OpBuilder::InsertionGuard g(b);
+      b.setInsertionPointToStart(ldIf.thenBlock());
+      b.create<memref::StoreOp>(loc, acc, red, ValueRange{group});
+    }
+    b.create<gpu::BarrierOp>(loc);
+    Value total = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
+    for (int64_t gi = 1; gi < NGROUPS; ++gi)
+      total = comb(total,
+                   b.create<memref::LoadOp>(loc, red, ValueRange{ci(gi)}));
+    b.create<gpu::BarrierOp>(loc);
+    return total;
   };
 
-  // pass 1 — local max over strided cols, then tree-reduce to the row max.
+  // pass 1 — local max over strided cols, then warp-reduce to the row max.
+  Value localMax;
   {
     auto lp = b.create<scf::ForOp>(loc, tid, K, cBD, ValueRange{negInf});
     OpBuilder::InsertionGuard g(b);
@@ -105,17 +125,14 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
     Value c = lp.getInductionVar();
     Value acc = lp.getRegionIterArgs()[0];
     Value v = loadF32(b.create<arith::AddIOp>(loc, base, c));
-    Value nmax = b.create<arith::MaximumFOp>(loc, acc, v);
-    b.create<scf::YieldOp>(loc, ValueRange{nmax});
-    b.setInsertionPointAfter(lp);
-    b.create<memref::StoreOp>(loc, lp.getResult(0), red, ValueRange{tid});
+    b.create<scf::YieldOp>(
+        loc, ValueRange{b.create<arith::MaximumFOp>(loc, acc, v)});
+    localMax = lp.getResult(0);
   }
-  b.create<gpu::BarrierOp>(loc);
-  treeReduce(/*isMax=*/true);
-  Value rmax = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
-  b.create<gpu::BarrierOp>(loc);
+  Value rmax = warpReduce(localMax, /*isMax=*/true);
 
-  // pass 2 — e = exp(x - max) staged into O; local sum, then tree-reduce.
+  // pass 2 — e = exp(x - max) staged into O; local sum, then warp-reduce.
+  Value localSum;
   {
     auto lp = b.create<scf::ForOp>(loc, tid, K, cBD, ValueRange{zerof});
     OpBuilder::InsertionGuard g(b);
@@ -126,15 +143,11 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
     Value e = b.create<math::ExpOp>(
         loc, b.create<arith::SubFOp>(loc, loadF32(idx), rmax));
     storeFromF32(e, idx);
-    Value nsum = b.create<arith::AddFOp>(loc, acc, e);
-    b.create<scf::YieldOp>(loc, ValueRange{nsum});
-    b.setInsertionPointAfter(lp);
-    b.create<memref::StoreOp>(loc, lp.getResult(0), red, ValueRange{tid});
+    b.create<scf::YieldOp>(loc,
+                           ValueRange{b.create<arith::AddFOp>(loc, acc, e)});
+    localSum = lp.getResult(0);
   }
-  b.create<gpu::BarrierOp>(loc);
-  treeReduce(/*isMax=*/false);
-  Value rsum = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
-  b.create<gpu::BarrierOp>(loc);
+  Value rsum = warpReduce(localSum, /*isMax=*/false);
 
   // pass 3 — divide O by the row sum.
   {

@@ -8,7 +8,9 @@
 //   kind = "layer_norm" : O[m,:] = (X[m,:] − μ) / sqrt(var + eps),
 //                         μ = mean_k X,  var = mean_k (X − μ)²
 //
-//   One workgroup per row (blockIdx.x = m), blockDim = 256, LDS tree-reduce.
+//   One workgroup per row (blockIdx.x = m), blockDim = 256, CUB/rocPRIM-style
+//   warp-shuffle reduction (gpu.shuffle xor within a 32-lane subgroup → 8 LDS
+//   partials → combine; no 256-wide LDS tree).
 //   rmsnorm is one reduction (Σx²). layer_norm is TWO reductions — Σx for the
 //   mean, then Σ(x−μ)² for the variance (the stable squared-deviation form,
 //   NOT E[x²]−E[x]², which cancels for large-offset/small-variance rows). Then
@@ -35,6 +37,8 @@ using namespace mlir;
 namespace {
 
 static constexpr int64_t BD = 256;
+static constexpr int64_t SG = 32;           // shuffle subgroup width
+static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
 void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
                   bool isLayerNorm) {
@@ -44,8 +48,9 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   auto slt = arith::CmpIPredicate::slt;
 
   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
-  auto ldsT = MemRefType::get({BD}, f32, MemRefLayoutAttrInterface(), ws);
-  Value red = f.addWorkgroupAttribution(ldsT, loc);  // reused per reduction pass
+  // LDS holds only the per-subgroup partials (NGROUPS = 8), reused per pass.
+  auto ldsT = MemRefType::get({NGROUPS}, f32, MemRefLayoutAttrInterface(), ws);
+  Value red = f.addWorkgroupAttribution(ldsT, loc);
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1);
@@ -57,6 +62,13 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
 
   Value m = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Type i32 = b.getI32Type();
+  Value wSG = b.create<arith::ConstantIntOp>(loc, i32, SG);
+  Value cSG = ci(SG);
+  Value group = b.create<arith::DivUIOp>(loc, tid, cSG);     // subgroup id
+  Value laneInSg = b.create<arith::RemUIOp>(loc, tid, cSG);   // lane within it
+  Value isLeader =
+      b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, laneInSg, c0);
   Value rowInb = b.create<arith::CmpIOp>(loc, slt, m, M);
   auto rowIf = b.create<scf::IfOp>(loc, rowInb, /*withElse=*/false);
   b.setInsertionPointToStart(rowIf.thenBlock());
@@ -73,28 +85,12 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     Value sv = isF32 ? val : b.create<arith::TruncFOp>(loc, storeTy, val);
     b.create<memref::StoreOp>(loc, sv, O, ValueRange{idx});
   };
-  // Unrolled LDS sum tree-reduction over `buf[0..BD)`, result in buf[0].
-  auto treeReduceSum = [&](Value buf) {
-    for (int64_t s = BD / 2; s > 0; s >>= 1) {
-      Value cs = ci(s);
-      Value lt = b.create<arith::CmpIOp>(loc, slt, tid, cs);
-      auto ifo = b.create<scf::IfOp>(loc, lt, /*withElse=*/false);
-      {
-        OpBuilder::InsertionGuard g(b);
-        b.setInsertionPointToStart(ifo.thenBlock());
-        Value a = b.create<memref::LoadOp>(loc, buf, ValueRange{tid});
-        Value o = b.create<memref::LoadOp>(
-            loc, buf, ValueRange{b.create<arith::AddIOp>(loc, tid, cs)});
-        b.create<memref::StoreOp>(loc, b.create<arith::AddFOp>(loc, a, o), buf,
-                                  ValueRange{tid});
-      }
-      b.create<gpu::BarrierOp>(loc);
-    }
-  };
-
-  // One full row reduction: accumulate a per-element f32 value over the strided
-  // cols, stage to red[tid], tree-reduce, and return the row total (red[0]).
-  // `red` is reused across passes, so a barrier brackets the read of red[0].
+  // One full row reduction (sum), CUB/rocPRIM warp-shuffle style: accumulate a
+  // per-element f32 value over the strided cols in-register, butterfly-reduce
+  // within a 32-lane subgroup via `gpu.shuffle xor` (no LDS), stage the 8
+  // per-subgroup partials to `red`, then every thread sums the partials to get
+  // the broadcast row total. `red` is reused across passes, so barriers bracket
+  // its read. (FP add reorders → matches numpy within tolerance.)
   auto reduceRow =
       [&](function_ref<Value(Value /*idx*/)> localOf) -> Value {
     auto lp = b.create<scf::ForOp>(loc, tid, K, cBD, ValueRange{zerof});
@@ -107,11 +103,25 @@ void emitNormBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
       b.create<scf::YieldOp>(loc,
                              ValueRange{b.create<arith::AddFOp>(loc, acc, v)});
     }
-    b.create<memref::StoreOp>(loc, lp.getResult(0), red, ValueRange{tid});
+    Value acc = lp.getResult(0);
+    for (int64_t off = SG / 2; off > 0; off >>= 1) {
+      Value offC = b.create<arith::ConstantIntOp>(loc, i32, off);
+      auto sh = b.create<gpu::ShuffleOp>(loc, acc, offC, wSG,
+                                         gpu::ShuffleMode::XOR);
+      acc = b.create<arith::AddFOp>(loc, acc, sh.getShuffleResult());
+    }
+    auto ldIf = b.create<scf::IfOp>(loc, isLeader, /*withElse=*/false);
+    {
+      OpBuilder::InsertionGuard g(b);
+      b.setInsertionPointToStart(ldIf.thenBlock());
+      b.create<memref::StoreOp>(loc, acc, red, ValueRange{group});
+    }
     b.create<gpu::BarrierOp>(loc);
-    treeReduceSum(red);
     Value total = b.create<memref::LoadOp>(loc, red, ValueRange{c0});
-    b.create<gpu::BarrierOp>(loc);  // all read red[0] before the next pass reuses red
+    for (int64_t gi = 1; gi < NGROUPS; ++gi)
+      total = b.create<arith::AddFOp>(
+          loc, total, b.create<memref::LoadOp>(loc, red, ValueRange{ci(gi)}));
+    b.create<gpu::BarrierOp>(loc);  // all read red before the next pass reuses it
     return total;
   };
 

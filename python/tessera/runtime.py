@@ -2925,6 +2925,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32],
         "tessera_x86_fft_c2c_f32":
             [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_avx512_spmm_csr_f32":
+            [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
+        "tessera_x86_avx512_sddmm_f32":
+            [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4537,6 +4541,117 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
     return _spectral_composite(op_name, operands, op.get("kwargs") or {},
                                _x86_fftexec, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sparse linear algebra (S-series `sparse`) — GENUINELY sparse kernels (iterate
+# the nonzero structure, not densify-then-GEMM). spmm_csr/coo = row-wise SpMM;
+# sddmm = sampled dense-dense; bsmm = block-sparse → GEMM. compiler_path=
+# "x86_sparse_compiled" / "rocm_sparse_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_SPARSE_OPS = ("tessera.spmm_csr", "tessera.spmm_coo", "tessera.sddmm",
+               "tessera.bsmm")
+
+
+def _coo_to_csr(coords: Any, nrows: int, np: Any) -> Any:
+    """COO coords [nnz,2] (row,col) → (sort_order, indptr[nrows+1] i32). The
+    caller reorders values/cols by ``sort_order`` to get CSR layout."""
+    coords = np.asarray(coords)
+    order = np.lexsort((coords[:, 1], coords[:, 0]))
+    counts = np.zeros(nrows + 1, np.int64)
+    np.add.at(counts, coords[order, 0].astype(np.int64) + 1, 1)
+    indptr = np.cumsum(counts).astype(np.int32)
+    return order, indptr
+
+
+def _x86_spmm_csr(indptr: Any, indices: Any, values: Any, B: Any,
+                  m: int, n: int, np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    ip = np.ascontiguousarray(indptr, np.int32)
+    ix = np.ascontiguousarray(indices, np.int32)
+    vv = np.ascontiguousarray(values, np.float32)
+    bc = np.ascontiguousarray(B, np.float32)
+    out = np.zeros((m, n), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    vp = ctypes.c_void_p
+    lib.tessera_x86_avx512_spmm_csr_f32(
+        ip.ctypes.data_as(vp), ix.ctypes.data_as(vp), vv.ctypes.data_as(cf),
+        bc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(n),
+        out.ctypes.data_as(cf))
+    return out
+
+
+def _x86_sddmm(A: Any, B: Any, mask: Any, np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    bt = np.ascontiguousarray(np.asarray(B, np.float32).T)   # Bt[N,K]
+    mk = np.ascontiguousarray(mask, np.float32)
+    m, k = int(a.shape[0]), int(a.shape[1])
+    n = int(bt.shape[0])
+    out = np.zeros((m, n), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_sddmm_f32(
+        a.ctypes.data_as(cf), bt.ctypes.data_as(cf), mk.ctypes.data_as(cf),
+        ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
+        out.ctypes.data_as(cf))
+    return out
+
+
+def _sparse_compute(op_name: str, operands: list, spmm_fn: Any, sddmm_fn: Any,
+                    gemm_fn: Any, np: Any) -> Any:
+    """Dispatch a sparse op over device spmm/sddmm/gemm kernels. ``spmm_fn(indptr,
+    indices, values, B, M, N)`` runs CSR SpMM on the device; COO is converted to
+    CSR on host first; bsmm routes through the dense GEMM."""
+    if op_name in ("tessera.spmm_csr", "tessera.spmm_coo"):
+        a, b = operands[0], operands[1]
+        b = np.asarray(b, np.float32)
+        if op_name == "tessera.spmm_csr":
+            indptr, indices, values, shape = a
+            m, _ = int(shape[0]), int(shape[1])
+            return spmm_fn(np.asarray(indptr), np.asarray(indices),
+                           np.asarray(values, np.float32), b, m, int(b.shape[1]))
+        coords, values, shape = a
+        m = int(shape[0])
+        order, indptr = _coo_to_csr(coords, m, np)
+        indices = np.asarray(coords)[order, 1].astype(np.int32)
+        values = np.asarray(values, np.float32)[order]
+        return spmm_fn(indptr, indices, values, b, m, int(b.shape[1]))
+    if op_name == "tessera.sddmm":
+        return sddmm_fn(np.asarray(operands[0], np.float32),
+                        np.asarray(operands[1], np.float32),
+                        np.asarray(operands[2], np.float32))
+    # tessera.bsmm — block-sparse matmul collapses to dense GEMM (meta=None)
+    return gemm_fn(np.asarray(operands[0], np.float32),
+                   np.asarray(operands[1], np.float32))
+
+
+def _execute_x86_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` sparse lane: spmm_csr / spmm_coo / sddmm / bsmm on
+    the AVX-512 sparse kernels (spmm_csr row-AXPY, sddmm sampled-dot) + the GEMM
+    microkernel for bsmm. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SPARSE_OPS:
+        raise ValueError(
+            f"x86_sparse_compiled executor handles one of {_SPARSE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands = [values[str(n)] for n in op.get("operands", [])]
+
+    def _spmm(indptr, indices, vals, b, m, n):
+        return _x86_spmm_csr(indptr, indices, vals, b, m, n, np)
+
+    return _sparse_compute(
+        op_name, operands, _spmm,
+        lambda a, b, mk: _x86_sddmm(a, b, mk, np), _x86_gemm_2d, np)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7356,6 +7471,162 @@ def _execute_rocm_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED sparse lane (Sparse PR) — genuinely sparse kernels: spmm (CSR
+# row-wise) + sddmm (sampled dense-dense). compiler_path="rocm_sparse_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_spmm_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_sddmm_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_sparse_launch(hsaco: bytes, sym: bytes, buffers: list,
+                        scalars: list, grid_total: int) -> None:
+    """Launch a sparse kernel: ``buffers`` = list of (device_ptr, elem_count)
+    memref args; ``scalars`` = trailing index args; grid sized to grid_total."""
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
+        raise RuntimeError(f"rocm sparse: kernel symbol {sym!r} not found")
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args: list = []
+    for dev, size in buffers:
+        launch_args += _mr(dev, size)
+    launch_args += [ctypes.c_int64(s) for s in scalars]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (grid_total + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        raise RuntimeError(f"rocm sparse: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+
+
+def _rocm_dev_in(hip: Any, host: Any, nbytes: int) -> Any:
+    d = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
+        raise RuntimeError("rocm sparse: hipMalloc failed")
+    hip.hipMemcpy(d, host.ctypes.data_as(ctypes.c_void_p), nbytes, 1)
+    return d
+
+
+def _rocm_spmm_csr(indptr: Any, indices: Any, values: Any, B: Any,
+                   m: int, n: int, np: Any) -> Any:
+    """C[m,n] = A_csr @ B[K,n] on the gfx1151 row-wise SpMM kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.spmm"() {name = "sp"} '
+                 ': () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-spmm-kernel", directive, _rocm_spmm_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm spmm: hipInit failed")
+    ip = np.ascontiguousarray(indptr, np.int32)
+    ix = np.ascontiguousarray(indices, np.int32)
+    vv = np.ascontiguousarray(values, np.float32)
+    bc = np.ascontiguousarray(B, np.float32).reshape(-1)
+    out = np.zeros(m * n, np.float32)
+    d_ip = _rocm_dev_in(hip, ip, 4 * ip.size)
+    d_ix = _rocm_dev_in(hip, ix, 4 * ix.size)
+    d_vv = _rocm_dev_in(hip, vv, 4 * vv.size)
+    d_bc = _rocm_dev_in(hip, bc, 4 * bc.size)
+    d_out = _rocm_dev_in(hip, out, 4 * out.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"sp",
+            [(d_ip, ip.size), (d_ix, ix.size), (d_vv, vv.size),
+             (d_bc, bc.size), (d_out, out.size)],
+            [m, n], m * n)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_out,
+                      4 * out.size, 2)
+    finally:
+        for d in (d_ip, d_ix, d_vv, d_bc, d_out):
+            hip.hipFree(d)
+    return out.reshape(m, n)
+
+
+def _rocm_sddmm(A: Any, B: Any, mask: Any, np: Any) -> Any:
+    """OUT[M,N] = (A[M,K] @ B[K,N]) ⊙ mask on the gfx1151 sampled kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.sddmm"() {name = "sd"} '
+                 ': () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-sddmm-kernel", directive, _rocm_sddmm_hsaco_cache,
+        (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm sddmm: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    bt = np.ascontiguousarray(np.asarray(B, np.float32).T)
+    mk = np.ascontiguousarray(mask, np.float32).reshape(-1)
+    m, k = int(a.shape[0]), int(a.shape[1])
+    n = int(bt.shape[0])
+    out = np.zeros(m * n, np.float32)
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_bt = _rocm_dev_in(hip, bt.reshape(-1), 4 * bt.size)
+    d_mk = _rocm_dev_in(hip, mk, 4 * mk.size)
+    d_out = _rocm_dev_in(hip, out, 4 * out.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"sd",
+            [(d_a, a.size), (d_bt, bt.size), (d_mk, mk.size),
+             (d_out, out.size)],
+            [m, n, k], m * n)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_out,
+                      4 * out.size, 2)
+    finally:
+        for d in (d_a, d_bt, d_mk, d_out):
+            hip.hipFree(d)
+    return out.reshape(m, n)
+
+
+def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` sparse lane: spmm_csr / spmm_coo / sddmm / bsmm on
+    the COMPILER-GENERATED gfx1151 sparse kernels (CSR SpMM + sampled SDDMM) +
+    the ROCm matmul lane for bsmm. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SPARSE_OPS:
+        raise ValueError(
+            f"rocm_sparse_compiled executor handles one of {_SPARSE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands = [values[str(n)] for n in op.get("operands", [])]
+
+    def _spmm(indptr, indices, vals, b, m, n):
+        return _rocm_spmm_csr(indptr, indices, vals, b, m, n, np)
+
+    def _bsmm(x, w):
+        bf16 = _bfloat16_dtype()
+        if bf16 is None:
+            raise _RocmCompiledUnavailable("rocm bsmm needs bf16 (ml_dtypes)")
+        return _rocm_wmma_gemm_2d(np.asarray(x, bf16), np.asarray(w, bf16))
+
+    return _sparse_compute(
+        op_name, operands, _spmm,
+        lambda a, b, mk: _rocm_sddmm(a, b, mk, np), _bsmm, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -7925,6 +8196,7 @@ def _executor_table():
         "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
         "x86_fft_compiled": _execute_x86_compiled_fft,
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
+        "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
@@ -7946,6 +8218,7 @@ def _executor_table():
         "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
+        "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

@@ -384,6 +384,32 @@ def ROCM_DftKernelOp : TesseraROCM_Op<"dft"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SpmmKernelOp : TesseraROCM_Op<"spmm"> {
+  let summary = "Row-wise CSR sparse-dense matmul gpu kernel";
+  let description = [{
+    `generate-rocm-spmm-kernel` expands into a genuinely sparse row-wise SpMM —
+    C[M,N] = A_csr[M,K] @ B[K,N], one thread per output element (i,n):
+    C[i,n] = Σ_{p=indptr[i]}^{indptr[i+1]} values[p]·B[indices[p]·N+n]. It
+    iterates the CSR nonzero structure (indptr/indices i32, values/B/OUT f32),
+    NOT densify-then-GEMM. CPU analog: avx512_sparse_f32 spmm_csr.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_SddmmKernelOp : TesseraROCM_Op<"sddmm"> {
+  let summary = "Sampled dense-dense matmul gpu kernel";
+  let description = [{
+    `generate-rocm-sddmm-kernel` expands into a sampled dense-dense matmul —
+    OUT[M,N] = (A[M,K]·Bt[N,K]^row) ⊙ mask[M,N], one thread per (i,j) that skips
+    the length-K dot when mask=0 (genuinely sampled). B is passed row-major-
+    transposed as Bt[N,K] so both dot operands are contiguous. All f32. CPU
+    analog: avx512_sparse_f32 sddmm.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

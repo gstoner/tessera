@@ -23,6 +23,8 @@ std::unique_ptr<mlir::Pass> createGenerateROCMBinaryLossKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMPolicyLossKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMFpQuantKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMDftKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMSpmmKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMSddmmKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMAlibiKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMDeltaNetKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMRopeKernelPass();

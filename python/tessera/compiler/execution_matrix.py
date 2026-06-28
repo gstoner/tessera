@@ -283,6 +283,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "spectral_conv / spectral_filter) — compose the "
                             "x86_fft_compiled FFT lane (frame / window / "
                             "overlap-add / pointwise complex-mul on host). f32",
+    "x86_sparse_compiled": "x86 CPU sparse linear algebra (spmm_csr / spmm_coo / "
+                            "sddmm / bsmm) — GENUINELY sparse AVX-512 kernels "
+                            "(spmm = row-wise AXPY over CSR nonzeros, sddmm = "
+                            "sampled dense-dense dot over masked entries), bsmm "
+                            "via the AVX-512 GEMM microkernel. COO folds to CSR "
+                            "on host. f32",
     "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
                             "count_nonzero) composed from the AVX-512 reduce "
                             "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
@@ -374,6 +380,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "istft / spectral_conv / spectral_filter) — compose "
                             "the rocm_fft_compiled DFT lane (frame / window / "
                             "overlap-add / pointwise complex-mul on host). f32",
+    "rocm_sparse_compiled": "AMD GPU RDNA sparse linear algebra (spmm_csr / "
+                            "spmm_coo / sddmm / bsmm) — COMPILER-GENERATED gfx1151 "
+                            "sparse kernels (generate-rocm-spmm/sddmm-kernel: row-"
+                            "wise CSR SpMM, sampled dense-dense SDDMM that skips "
+                            "masked-zero entries) then HIP-launched; bsmm via the "
+                            "WMMA matmul (bf16). f32",
     "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
                             "/ count_nonzero) composed from the warp-shuffle "
                             "reduce kernel: var=mean(x^2)-mean(x)^2, "
@@ -621,6 +633,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "framing / windowing / overlap-add / pointwise complex-mul on "
                "host, the transform on the AVX-512 radix-2 kernel. f32, "
                "matches np.fft.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_sparse_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_sparse_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_sparse_compiled", runtime_status="success",
+        reason="x86 sparse lane (spmm_csr / spmm_coo / sddmm / bsmm) runs the "
+               "AVX-512 sparse kernels — spmm = row-wise AXPY iterating the CSR "
+               "nonzeros (COO folds to CSR on host), sddmm = sampled dense-dense "
+               "dot over masked entries, bsmm via the GEMM microkernel. f32, "
+               "matches numpy.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stat_reduce_compiled",
@@ -1017,6 +1039,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "framing / windowing / overlap-add / pointwise complex-mul on "
                "host, the transform on the gfx1151 DFT kernel. f32, matches "
                "np.fft.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_sparse_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_sparse_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_sparse_compiled", runtime_status="success",
+        reason="ROCm sparse lane (spmm_csr / spmm_coo / sddmm / bsmm) runs the "
+               "COMPILER-GENERATED gfx1151 sparse kernels (generate-rocm-spmm/"
+               "sddmm-kernel: row-wise CSR SpMM, sampled SDDMM skipping masked-"
+               "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
+               "the WMMA matmul (bf16). f32, matches numpy.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_stat_reduce_compiled",

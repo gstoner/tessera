@@ -294,12 +294,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "vectorized over the state dim N, exp via the Cephes "
                             "core; in-place (B,D,N) state). f32",
     "x86_linalg_compiled": "x86 CPU dense linear algebra (cholesky / tri_solve / "
-                            "cholesky_solve / lu / qr) — AVX-512 Cholesky–"
+                            "cholesky_solve / lu / qr / svd) — AVX-512 Cholesky–"
                             "Banachiewicz factorization, forward/back triangular "
                             "substitution (RHS columns vectorized), getrf partial-"
-                            "pivot LU, Householder QR (vectorized rank-1/reflector "
-                            "updates); cholesky_solve = two triangular solves. "
-                            "Batched. f32",
+                            "pivot LU, Householder QR, one-sided Jacobi SVD "
+                            "(vectorized rank-1/reflector/rotation updates); "
+                            "cholesky_solve = two triangular solves. Batched. f32",
     "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
                             "count_nonzero) composed from the AVX-512 reduce "
                             "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
@@ -402,11 +402,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "rocm-selective-ssm-kernel, one thread per (b,d) "
                             "channel, exp via math->rocdl) HIP-launched. f32",
     "rocm_linalg_compiled": "AMD GPU RDNA dense linear algebra (cholesky / "
-                            "tri_solve / cholesky_solve / lu / qr) — COMPILER-"
-                            "GENERATED gfx1151 kernels (generate-rocm-cholesky / "
-                            "tri-solve / lu / qr-kernel, one thread per matrix or "
-                            "matrix/RHS-column) HIP-launched; cholesky_solve = two "
-                            "triangular solves. f32",
+                            "tri_solve / cholesky_solve / lu / qr / svd) — "
+                            "COMPILER-GENERATED gfx1151 kernels (generate-rocm-"
+                            "cholesky / tri-solve / lu / qr / svd-kernel, one "
+                            "thread per matrix or matrix/RHS-column) HIP-launched; "
+                            "cholesky_solve = two triangular solves. f32",
     "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
                             "/ count_nonzero) composed from the warp-shuffle "
                             "reduce kernel: var=mean(x^2)-mean(x)^2, "
@@ -678,12 +678,12 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="x86", compiler_path="x86_linalg_compiled",
         execution_kind="native_cpu", executable=True,
         executor_id="x86_linalg_compiled", runtime_status="success",
-        reason="x86 linalg lane (cholesky / tri_solve / cholesky_solve / lu / qr) "
-               "runs the AVX-512 kernels — Cholesky–Banachiewicz factorization, "
-               "forward/back triangular substitution (RHS columns vectorized), "
-               "getrf partial-pivot LU, Householder QR (vectorized rank-1/"
-               "reflector updates); cholesky_solve composes two triangular "
-               "solves. Batched. f32, matches numpy.",
+        reason="x86 linalg lane (cholesky / tri_solve / cholesky_solve / lu / qr "
+               "/ svd) runs the AVX-512 kernels — Cholesky–Banachiewicz "
+               "factorization, forward/back triangular substitution (RHS columns "
+               "vectorized), getrf partial-pivot LU, Householder QR, one-sided "
+               "Jacobi SVD; cholesky_solve composes two triangular solves. "
+               "Batched. f32, matches numpy.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stat_reduce_compiled",
@@ -1105,10 +1105,10 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="rocm", compiler_path="rocm_linalg_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_linalg_compiled", runtime_status="success",
-        reason="ROCm linalg lane (cholesky / tri_solve / cholesky_solve / lu / qr) "
-               "runs the COMPILER-GENERATED gfx1151 kernels (generate-rocm-"
-               "cholesky / tri-solve / lu / qr-kernel, one thread per matrix or "
-               "matrix/RHS-column) HIP-launched; cholesky_solve composes two "
+        reason="ROCm linalg lane (cholesky / tri_solve / cholesky_solve / lu / qr "
+               "/ svd) runs the COMPILER-GENERATED gfx1151 kernels (generate-rocm-"
+               "cholesky / tri-solve / lu / qr / svd-kernel, one thread per matrix "
+               "or matrix/RHS-column) HIP-launched; cholesky_solve composes two "
                "triangular solves. f32, matches numpy.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(

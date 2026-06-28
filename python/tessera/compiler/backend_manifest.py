@@ -1118,6 +1118,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel, one thread per matrix) on gfx1151. Executes via "
                  "runtime.launch() (rocm_linalg_compiled).",
     } for op in ("lu", "qr")},
+    # Linalg PR-C — one-sided Jacobi SVD on gfx1151 (rocm_linalg_compiled).
+    "svd": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("linalg",),
+        "notes": "Linalg svd — direct one-sided Jacobi SVD kernel (generate-rocm-"
+                 "svd-kernel, one thread per matrix, m>=n; wide case via "
+                 "transpose) on gfx1151. Executes via runtime.launch() "
+                 "(rocm_linalg_compiled).",
+    },
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1457,6 +1466,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_lu_qr_compiled.py" for op in ("lu", "qr")},
     **{(op, "rocm"): "tests/unit/test_rocm_lu_qr_compiled.py"
        for op in ("lu", "qr")},
+    ("svd", "x86"): "tests/unit/test_x86_svd_compiled.py",
+    ("svd", "rocm"): "tests/unit/test_rocm_svd_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2168,6 +2179,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "Householder QR with vectorized rank-1 / reflector updates; "
                  "batched; x86_linalg_compiled lane; f32, matches numpy)",
     } for op in ("lu", "qr")},
+    # Linalg PR-C — one-sided Jacobi SVD (x86_linalg_compiled).
+    "svd": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Linalg svd — AVX-512 one-sided Jacobi (column-major working "
+                 "copy, vectorized column dots/rotations, descending sort; wide "
+                 "case via transpose; batched; x86_linalg_compiled lane; f32, "
+                 "matches numpy by invariants)",
+    },
 }
 
 

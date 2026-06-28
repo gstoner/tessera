@@ -474,6 +474,20 @@ def ROCM_QrKernelOp : TesseraROCM_Op<"qr"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SvdKernelOp : TesseraROCM_Op<"svd"> {
+  let summary = "Batched one-sided Jacobi SVD gpu kernel";
+  let description = [{
+    `generate-rocm-svd-kernel` expands into a batched one-sided Jacobi SVD (one
+    thread per matrix, m≥n) — A[b,m,n]=U[b,m,n]·diag(S[b,n])·Vᵀ[b,n,n]. The
+    column-major working copy + accumulated V live in global scratch buffers;
+    fixed sweeps of 2×2 column rotations, then column norms → S, normalized
+    columns → U, sorted descending. sqrt via math→ROCDL. All f32. CPU analog:
+    avx512_svd_f32.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

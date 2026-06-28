@@ -2939,6 +2939,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_f32, c_i32],
         "tessera_x86_qr_f32":
             [c_f32, i64, i64, i64, c_f32, c_f32],
+        "tessera_x86_svd_f32":
+            [c_f32, i64, i64, i64, c_f32, c_f32, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4747,7 +4749,7 @@ def _execute_x86_compiled_state_space(artifact: RuntimeArtifact, args: Any) -> A
 # compiler_path="x86_linalg_compiled" / "rocm_linalg_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
 _LINALG_OPS = ("tessera.cholesky", "tessera.tri_solve", "tessera.cholesky_solve",
-               "tessera.lu", "tessera.qr")
+               "tessera.lu", "tessera.qr", "tessera.svd")
 
 
 def _x86_cholesky(A: Any, np: Any) -> Any:
@@ -4820,17 +4822,56 @@ def _x86_qr(A: Any, np: Any) -> tuple:
     return np.ascontiguousarray(qf), np.ascontiguousarray(rf)
 
 
+def _x86_svd_mn(A: Any, np: Any) -> tuple:
+    """One-sided Jacobi SVD for the m≥n case — A[..,m,n] → (U[..,m,n], S[..,n],
+    Vh[..,n,n]) on the AVX-512 kernel. f32."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    m, n = int(a.shape[-2]), int(a.shape[-1])
+    batch = int(a.size // (m * n))
+    u = np.zeros(batch * m * n, np.float32)
+    s = np.zeros(batch * n, np.float32)
+    vt = np.zeros(batch * n * n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_svd_f32(a.ctypes.data_as(cf), ctypes.c_int64(batch),
+                            ctypes.c_int64(m), ctypes.c_int64(n),
+                            u.ctypes.data_as(cf), s.ctypes.data_as(cf),
+                            vt.ctypes.data_as(cf))
+    return (u.reshape(a.shape[:-2] + (m, n)), s.reshape(a.shape[:-2] + (n,)),
+            vt.reshape(a.shape[:-2] + (n, n)))
+
+
+def _svd_via(A: Any, svd_mn_fn: Any, np: Any) -> tuple:
+    """SVD with the m≥n device kernel ``svd_mn_fn(A)→(U[..,m,n], S[..,n],
+    Vh[..,n,n])``. For the wide case (m<n) compute on Aᵀ and swap: A=Uᵀ... i.e.
+    (U,S,Vh) of A = (Vh'ᵀ, S', U'ᵀ) of Aᵀ. Returns the reduced numpy convention."""
+    a = np.ascontiguousarray(A, np.float32)
+    m, n = int(a.shape[-2]), int(a.shape[-1])
+    if m >= n:
+        return svd_mn_fn(a)
+    at = np.ascontiguousarray(np.swapaxes(a, -1, -2))
+    u2, s2, vh2 = svd_mn_fn(at)            # Aᵀ = U2·diag(S2)·Vh2
+    u = np.ascontiguousarray(np.swapaxes(vh2, -1, -2))
+    vh = np.ascontiguousarray(np.swapaxes(u2, -1, -2))
+    return u, s2, vh
+
+
 def _linalg_compute(op_name: str, operands: list, chol_fn: Any, tri_fn: Any,
-                    lu_fn: Any, qr_fn: Any, np: Any) -> Any:
+                    lu_fn: Any, qr_fn: Any, svd_fn: Any, np: Any) -> Any:
     """Dispatch a linalg op over the device kernels. ``tri_fn(A, B, lower)`` solves
     A·X=B; cholesky_solve = two triangular solves (L then Lᵀ). RHS may be a vector
-    [..,n] (→ m=1, squeezed) or matrix [..,n,m]. lu→(packed, piv); qr→(Q, R)."""
+    [..,n] (→ m=1, squeezed) or matrix [..,n,m]. lu→(packed, piv); qr→(Q, R);
+    svd→(U, S, Vh) reduced."""
     if op_name == "tessera.cholesky":
         return chol_fn(np.asarray(operands[0], np.float32))
     if op_name == "tessera.lu":
         return lu_fn(np.asarray(operands[0], np.float32))
     if op_name == "tessera.qr":
         return qr_fn(np.asarray(operands[0], np.float32))
+    if op_name == "tessera.svd":
+        return _svd_via(np.asarray(operands[0], np.float32), svd_fn, np)
 
     A = np.asarray(operands[0], np.float32)
     b = np.asarray(operands[1], np.float32)
@@ -4869,7 +4910,8 @@ def _execute_x86_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
                            lambda a: _x86_cholesky(a, np),
                            lambda a, b, lo: _x86_tri_solve_raw(a, b, lo, np),
                            lambda a: _x86_lu(a, np),
-                           lambda a: _x86_qr(a, np), np)
+                           lambda a: _x86_qr(a, np),
+                           lambda a: _x86_svd_mn(a, np), np)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -8051,6 +8093,51 @@ def _rocm_qr(A: Any, np: Any) -> tuple:
     return np.ascontiguousarray(qf), np.ascontiguousarray(rf)
 
 
+_rocm_svd_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_svd_mn(A: Any, np: Any) -> tuple:
+    """One-sided Jacobi SVD for m≥n — A[..,m,n] → (U[..,m,n], S[..,n],
+    Vh[..,n,n]) on the gfx1151 kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.svd"() {name = "sv"} : () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-svd-kernel", directive, _rocm_svd_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm svd: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    m, n = int(a.shape[-2]), int(a.shape[-1])
+    batch = int(a.size // (m * n))
+    u = np.zeros(batch * m * n, np.float32)
+    s = np.zeros(batch * n, np.float32)
+    vt = np.zeros(batch * n * n, np.float32)
+    uc = np.zeros(batch * n * m, np.float32)   # column-major working scratch
+    vc = np.zeros(batch * n * n, np.float32)   # V scratch
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_u = _rocm_dev_in(hip, u, 4 * u.size)
+    d_s = _rocm_dev_in(hip, s, 4 * s.size)
+    d_vt = _rocm_dev_in(hip, vt, 4 * vt.size)
+    d_uc = _rocm_dev_in(hip, uc, 4 * uc.size)
+    d_vc = _rocm_dev_in(hip, vc, 4 * vc.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"sv",
+            [(d_a, a.size), (d_u, u.size), (d_s, s.size), (d_vt, vt.size),
+             (d_uc, uc.size), (d_vc, vc.size)],
+            [batch, m, n], batch)
+        hip.hipMemcpy(u.ctypes.data_as(ctypes.c_void_p), d_u, 4 * u.size, 2)
+        hip.hipMemcpy(s.ctypes.data_as(ctypes.c_void_p), d_s, 4 * s.size, 2)
+        hip.hipMemcpy(vt.ctypes.data_as(ctypes.c_void_p), d_vt, 4 * vt.size, 2)
+    finally:
+        for d in (d_a, d_u, d_s, d_vt, d_uc, d_vc):
+            hip.hipFree(d)
+    return (u.reshape(a.shape[:-2] + (m, n)), s.reshape(a.shape[:-2] + (n,)),
+            vt.reshape(a.shape[:-2] + (n, n)))
+
+
 def _execute_rocm_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` linalg lane: cholesky / tri_solve / cholesky_solve on
     the COMPILER-GENERATED gfx1151 Cholesky + triangular-solve kernels. f32."""
@@ -8072,7 +8159,8 @@ def _execute_rocm_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
                            lambda a: _rocm_cholesky(a, np),
                            lambda a, b, lo: _rocm_tri_solve_raw(a, b, lo, np),
                            lambda a: _rocm_lu(a, np),
-                           lambda a: _rocm_qr(a, np), np)
+                           lambda a: _rocm_qr(a, np),
+                           lambda a: _rocm_svd_mn(a, np), np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

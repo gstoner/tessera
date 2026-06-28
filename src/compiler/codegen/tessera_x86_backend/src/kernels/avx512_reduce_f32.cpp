@@ -20,6 +20,7 @@ constexpr int kSum = 0;
 constexpr int kMax = 1;
 constexpr int kMean = 2;
 constexpr int kMin = 3;
+constexpr int kProd = 4;
 // NaN must PROPAGATE in reduce_max to match the reference (numpy `np.amax`):
 // a row containing a NaN reduces to NaN. Plain MAXPS / ordered `>` would drop
 // it. We track NaN explicitly (the f32 self-inequality test) and force NaN out.
@@ -43,6 +44,10 @@ extern "C" void tessera_x86_reference_reduce_f32(const float* X, int64_t rows,
                 else if (kind == kMax ? (v > acc) : (v < acc)) acc = v;
             }
             out[r] = nan ? kQNaN : acc;
+        } else if (kind == kProd) {  // product — `*` propagates NaN
+            float acc = 1.0f;
+            for (int64_t c = 0; c < cols; ++c) acc *= row[c];
+            out[r] = acc;
         } else {  // sum / mean — `+` already propagates NaN
             float acc = 0.0f;
             for (int64_t c = 0; c < cols; ++c) acc += row[c];
@@ -79,6 +84,13 @@ extern "C" void tessera_x86_avx512_reduce_f32(const float* X, int64_t rows,
                 else if (kind == kMax ? (v > acc) : (v < acc)) acc = v;
             }
             out[r] = nan ? kQNaN : acc;
+        } else if (kind == kProd) {  // product
+            __m512 vacc = _mm512_set1_ps(1.0f);
+            for (; c + vstep <= cols; c += vstep)
+                vacc = _mm512_mul_ps(vacc, _mm512_loadu_ps(row + c));
+            float acc = _mm512_reduce_mul_ps(vacc);
+            for (; c < cols; ++c) acc *= row[c];
+            out[r] = acc;
         } else {  // sum / mean — `+` already propagates NaN
             __m512 vacc = _mm512_setzero_ps();
             for (; c + vstep <= cols; c += vstep)

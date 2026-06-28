@@ -2943,6 +2943,7 @@ _X86_REDUCE_OPS = {
     "tessera.sum": 0, "tessera.mean": 2,
     "tessera.max": 1, "tessera.amax": 1,
     "tessera.min": 3, "tessera.amin": 3,
+    "tessera.prod": 4,
 }
 
 
@@ -4161,6 +4162,127 @@ def _x86_reduce_leading(loss: Any, reduction: str, np: Any) -> Any:
         return loss.astype(np.float32)
     flat = np.ascontiguousarray(loss, np.float32).reshape(-1)
     return _x86_reduce_scalar(flat, 0 if reduction == "sum" else 2, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 reduce/stable-reduce FOUNDATION — var/std/count_nonzero (stat) and
+# logsumexp/log_softmax/softmax_safe/sigmoid_safe (stable), the x86 mirror of the
+# ROCm reduce-foundation lane. prod routes through x86_reduce_compiled (new
+# kernel kind). var/std/count_nonzero and logsumexp/log_softmax compose the
+# AVX-512 reduce kernel + the transcendental exp/log lane.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_reduce(x: Any, op_name: str, axis: Any, keepdims: bool, np: Any) -> Any:
+    """Row-reduction (sum/mean/max/min/prod) over ``axis`` on the AVX-512 reduce
+    kernel, via the x86_reduce_compiled lane."""
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_reduce_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["x"],
+                 "kwargs": {"axis": axis, "keepdims": keepdims}}]})
+    return np.asarray(_execute_x86_compiled_reduce(
+        art, (np.ascontiguousarray(x, np.float32),)), np.float32)
+
+
+_X86_STAT_REDUCE_OPS = ("tessera.var", "tessera.std", "tessera.count_nonzero")
+
+
+def _execute_x86_compiled_stat_reduce(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` statistical-reduction lane: var / std /
+    count_nonzero over an axis, composed from the AVX-512 reduce kernel."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_STAT_REDUCE_OPS:
+        raise ValueError(
+            f"x86_stat_reduce_compiled executor handles one of "
+            f"{_X86_STAT_REDUCE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("stat reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = kwargs.get("axis", None)
+    keepdims = bool(kwargs.get("keepdims", False))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]]).astype(np.float32)
+
+    if op_name == "tessera.count_nonzero":
+        out = _x86_reduce((x != 0.0).astype(np.float32), "tessera.sum", axis,
+                          keepdims, np)
+        return np.rint(out).astype(np.int64)
+
+    mean = _x86_reduce(x, "tessera.mean", axis, True, np)
+    m2 = _x86_reduce(x * x, "tessera.mean", axis, True, np)
+    var = np.maximum(m2 - mean * mean, np.float32(0.0))
+    if op_name == "tessera.std":
+        var = np.sqrt(var).astype(np.float32)
+    if not keepdims:
+        if axis is None:
+            var = var.reshape(())
+        else:
+            axes = (axis,) if isinstance(axis, int) else tuple(axis)
+            var = np.squeeze(var, axis=tuple(a if a >= 0 else x.ndim + a
+                                             for a in axes))
+    return var.astype(np.float32)
+
+
+_X86_STABLE_REDUCE_OPS = ("tessera.logsumexp", "tessera.log_softmax",
+                          "tessera.softmax_safe", "tessera.sigmoid_safe")
+
+
+def _execute_x86_compiled_stable_reduce(artifact: RuntimeArtifact,
+                                        args: Any) -> Any:
+    """The ``target="x86"`` stable-reduction lane: logsumexp / log_softmax /
+    softmax_safe / sigmoid_safe. logsumexp/log_softmax compose the AVX-512 reduce
+    (max/sum) + the transcendental exp/log lane (max-shifted, overflow-safe);
+    softmax_safe routes to the stable softmax lane, sigmoid_safe to sigmoid."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_STABLE_REDUCE_OPS:
+        raise ValueError(
+            f"x86_stable_reduce_compiled executor handles one of "
+            f"{_X86_STABLE_REDUCE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("stable reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]]).astype(np.float32)
+
+    if op_name == "tessera.softmax_safe":
+        return _execute_x86_compiled_softmax(
+            RuntimeArtifact(metadata={
+                "target": "x86", "compiler_path": "x86_softmax_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.softmax", "result": "o",
+                         "operands": ["x"], "kwargs": kwargs}]}), (x,))
+    if op_name == "tessera.sigmoid_safe":
+        return _x86_unary_t(x, 3, np)              # sigmoid kind in transcendental
+
+    axis = kwargs.get("axis", -1)
+    keepdims = bool(kwargs.get("keepdims", False))
+    m = _x86_reduce(x, "tessera.max", axis, True, np)
+    e = _x86_unary_t((x - m).astype(np.float32), 0, np)
+    s = _x86_reduce(e, "tessera.sum", axis, True, np)
+    lse_keep = (m + _x86_log_arr(s, np)).astype(np.float32)
+    if op_name == "tessera.log_softmax":
+        return (x - lse_keep).astype(np.float32)
+    if keepdims:
+        return lse_keep
+    if axis is None:
+        return lse_keep.reshape(())
+    axes = (axis,) if isinstance(axis, int) else tuple(axis)
+    return np.squeeze(lse_keep, axis=tuple(a if a >= 0 else x.ndim + a
+                                           for a in axes)).astype(np.float32)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7381,6 +7503,8 @@ def _executor_table():
         "x86_alibi_compiled": _execute_x86_compiled_alibi,
         "x86_attention_compiled": _execute_x86_compiled_attention,
         "x86_loss_compiled": _execute_x86_compiled_loss,
+        "x86_stat_reduce_compiled": _execute_x86_compiled_stat_reduce,
+        "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,

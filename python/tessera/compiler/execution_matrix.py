@@ -292,6 +292,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_moe_compiled": "x86 CPU mixture-of-experts compute (moe) — AVX-512 "
                             "routed per-token expert GEMV kernel (top-1; routing "
                             "resolved on host, out_dim vectorized). f32",
+    "x86_optimizer_compiled": "x86 CPU optimizer steps (sgd / momentum / adam / "
+                            "adamw / lion) — AVX-512 fused per-parameter update "
+                            "kernel (kind-selected; m/v state in-place; host "
+                            "computes the 1-β^t bias correction). f32",
     "x86_selective_ssm_compiled": "x86 CPU Mamba2 selective_ssm — AVX-512 fused "
                             "selective-scan kernel (single pass over S, "
                             "vectorized over the state dim N, exp via the Cephes "
@@ -400,6 +404,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "wise CSR SpMM, sampled dense-dense SDDMM that skips "
                             "masked-zero entries) then HIP-launched; bsmm via the "
                             "WMMA matmul (bf16). f32",
+    "rocm_optimizer_compiled": "AMD GPU RDNA optimizer steps (sgd / momentum / "
+                            "adam / adamw / lion) — COMPILER-GENERATED gfx1151 "
+                            "fused per-parameter update kernel (generate-rocm-"
+                            "optimizer-kernel, kind StrAttr-selected; host "
+                            "computes the 1-β^t bias correction). f32",
     "rocm_moe_compiled": "AMD GPU RDNA mixture-of-experts compute (moe) — "
                             "COMPILER-GENERATED gfx1151 kernel (generate-rocm-moe-"
                             "kernel: routed per-token expert GEMV, one thread per "
@@ -681,6 +690,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(top-1) on the AVX-512 kernel — routing (argmax/round-robin) "
                "resolved on host, the expert matmuls vectorized over out_dim. "
                "f32, matches numpy.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_optimizer_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_optimizer_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_optimizer_compiled", runtime_status="success",
+        reason="x86 optimizer lane runs sgd / momentum / adam / adamw / lion as a "
+               "fused per-parameter update on the AVX-512 kernel (kind-selected; "
+               "m/v state updated in place; the 1-β^t bias correction computed on "
+               "host from the step). f32, matches the optim.py reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_selective_ssm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_selective_ssm_compiled",
@@ -1107,6 +1125,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "sddmm-kernel: row-wise CSR SpMM, sampled SDDMM skipping masked-"
                "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
                "the WMMA matmul (bf16). f32, matches numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_optimizer_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_optimizer_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_optimizer_compiled", runtime_status="success",
+        reason="ROCm optimizer lane runs sgd / momentum / adam / adamw / lion as "
+               "a fused per-parameter update on the COMPILER-GENERATED gfx1151 "
+               "kernel (generate-rocm-optimizer-kernel, kind StrAttr-selected, "
+               "one thread per element; the 1-β^t bias correction computed on "
+               "host) HIP-launched. f32, matches the optim.py reference.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_moe_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_moe_compiled",

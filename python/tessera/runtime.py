@@ -2943,6 +2943,11 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, i64, c_f32, c_f32, c_f32],
         "tessera_x86_moe_f32":
             [c_f32, c_f32, c_i32, i64, i64, i64, c_f32],
+        "tessera_x86_optimizer_f32":
+            [c_f32, c_f32, c_f32, c_f32, i64, ctypes.c_int,
+             ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+             ctypes.c_float, ctypes.c_float, ctypes.c_float,
+             c_f32, c_f32, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4742,6 +4747,102 @@ def _execute_x86_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
     values = _bind_launch_args(args, arg_names)
     x, experts, route, scores = _moe_bind(ops[0], values)
     return _x86_moe(x, experts, route, scores, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fused optimizer steps (S-series `functional_optimizer_step`, P3) — a single
+# flat per-parameter update kernel parameterized by optimizer `kind`. The pytree
+# orchestration + the bias-correction scalars (1-β^t) are host-side; the kernel
+# is pure elementwise. State (m,v) is in/out. compiler_path="x86_optimizer_
+# compiled" / "rocm_optimizer_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+# op_name -> (kind_str, kind_int, state-buffer names in return order)
+_OPTIMIZER_OPS: dict[str, tuple[str, int, tuple[str, ...]]] = {
+    "tessera.sgd": ("sgd", 0, ()),
+    "tessera.momentum": ("momentum", 1, ("v",)),
+    "tessera.adam": ("adam", 2, ("m", "v")),
+    "tessera.adamw": ("adamw", 3, ("m", "v")),
+    "tessera.lion": ("lion", 4, ("m",)),
+}
+
+
+def _optimizer_bind(op: dict, values: dict) -> tuple:
+    """Unpack [p, g] + state extras (m/v) named by kwargs["extras"]."""
+    names = [str(nm) for nm in op.get("operands", [])]
+    extras = list((op.get("kwargs") or {}).get("extras", []))
+    ev = {kk: values[names[2 + i]] for i, kk in enumerate(extras)}
+    return values[names[0]], values[names[1]], ev.get("m"), ev.get("v")
+
+
+def _optimizer_compute(op_name: str, p: Any, g: Any, m: Any, v: Any,
+                       kwargs: dict, run_kernel: Any, np: Any) -> Any:
+    """Run one optimizer step over a single parameter tensor. ``run_kernel(kind,
+    p, g, m, v, n, lr, b1, b2, eps, wd, b1c, b2c)`` does the device update and
+    returns (p_out, m_out, v_out). Returns (p_new, *state) per the op's kind."""
+    _, kind, state_names = _OPTIMIZER_OPS[op_name]
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    shape = p.shape
+    pf = p.reshape(-1)
+    gf = g.reshape(-1)
+    n = int(pf.size)
+    mf = (np.ascontiguousarray(m, np.float32).reshape(-1) if m is not None
+          else np.zeros(n, np.float32))
+    vf = (np.ascontiguousarray(v, np.float32).reshape(-1) if v is not None
+          else np.zeros(n, np.float32))
+    lr = float(kwargs.get("lr", 1e-3))
+    beta1 = float(kwargs.get("beta1", kwargs.get("momentum", 0.9)))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1e-8))
+    wd = float(kwargs.get("weight_decay", 0.0))
+    step = int(kwargs.get("step", 1))
+    b1c = 1.0 - beta1 ** step if kind in (2, 3) else 1.0
+    b2c = 1.0 - beta2 ** step if kind in (2, 3) else 1.0
+    p_out, m_out, v_out = run_kernel(kind, pf, gf, mf, vf, n, lr, beta1, beta2,
+                                     eps, wd, b1c, b2c)
+    out = [p_out.reshape(shape)]
+    for sn in state_names:
+        out.append((m_out if sn == "m" else v_out).reshape(shape))
+    return tuple(out) if len(out) > 1 else out[0]
+
+
+def _x86_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                          lr: float, b1: float, b2: float, eps: float, wd: float,
+                          b1c: float, b2c: float) -> tuple:
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    p_out = np.zeros(n, np.float32)
+    m_out = np.zeros(n, np.float32)
+    v_out = np.zeros(n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_optimizer_f32(
+        p.ctypes.data_as(cf), g.ctypes.data_as(cf), m.ctypes.data_as(cf),
+        v.ctypes.data_as(cf), ctypes.c_int64(n), ctypes.c_int(kind),
+        ctypes.c_float(lr), ctypes.c_float(b1), ctypes.c_float(b2),
+        ctypes.c_float(eps), ctypes.c_float(wd), ctypes.c_float(b1c),
+        ctypes.c_float(b2c), p_out.ctypes.data_as(cf), m_out.ctypes.data_as(cf),
+        v_out.ctypes.data_as(cf))
+    return p_out, m_out, v_out
+
+
+def _execute_x86_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` optimizer lane: sgd / momentum / adam / adamw / lion
+    per-parameter update on the AVX-512 fused kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPTIMIZER_OPS:
+        raise ValueError(
+            f"x86_optimizer_compiled executor handles one of "
+            f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
+                              _x86_optimizer_kernel, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -8061,6 +8162,95 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
     return _rocm_moe(x, experts, route, scores, np)
 
 
+_rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion"}
+
+
+def _rocm_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                           lr: float, b1: float, b2: float, eps: float,
+                           wd: float, b1c: float, b2c: float) -> tuple:
+    """One fused optimizer step over a flat parameter array on the gfx1151
+    kernel (kind StrAttr-selected). Returns (p_out, m_out, v_out). f32."""
+    import numpy as np
+    chip = _rocm_chip()
+    kstr = _OPTIMIZER_KIND_STR[kind]
+    directive = ('module {\n  "tessera_rocm.optimizer"() {name = "op", '
+                 f'kind = "{kstr}"}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel", directive, _rocm_opt_hsaco_cache,
+        (chip, kstr))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm optimizer: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm optimizer: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"op") != 0:
+        raise RuntimeError("rocm optimizer: kernel symbol 'op' not found")
+    pf = np.ascontiguousarray(p, np.float32).reshape(-1)
+    gf = np.ascontiguousarray(g, np.float32).reshape(-1)
+    mf = np.ascontiguousarray(m, np.float32).reshape(-1)
+    vf = np.ascontiguousarray(v, np.float32).reshape(-1)
+    p_out = np.zeros(n, np.float32)
+    m_out = np.zeros(n, np.float32)
+    v_out = np.zeros(n, np.float32)
+    d_p = _rocm_dev_in(hip, pf, 4 * n)
+    d_g = _rocm_dev_in(hip, gf, 4 * n)
+    d_m = _rocm_dev_in(hip, mf, 4 * n)
+    d_v = _rocm_dev_in(hip, vf, 4 * n)
+    d_po = _rocm_dev_in(hip, p_out, 4 * n)
+    d_mo = _rocm_dev_in(hip, m_out, 4 * n)
+    d_vo = _rocm_dev_in(hip, v_out, 4 * n)
+
+    def _mr(dev):
+        return [ctypes.c_void_p(dev.value), ctypes.c_void_p(dev.value),
+                ctypes.c_int64(0), ctypes.c_int64(n), ctypes.c_int64(1)]
+
+    launch_args: list = []
+    for dev in (d_p, d_g, d_m, d_v, d_po, d_mo, d_vo):
+        launch_args += _mr(dev)
+    launch_args.append(ctypes.c_int64(n))
+    launch_args += [ctypes.c_float(x) for x in
+                    (lr, b1, b2, eps, wd, b1c, b2c)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    try:
+        rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                       0, None, arr, None)
+        if rc != 0:
+            raise RuntimeError(f"rocm optimizer: launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        for host, dev in ((p_out, d_po), (m_out, d_mo), (v_out, d_vo)):
+            hip.hipMemcpy(host.ctypes.data_as(ctypes.c_void_p), dev, 4 * n, 2)
+    finally:
+        for dev in (d_p, d_g, d_m, d_v, d_po, d_mo, d_vo):
+            hip.hipFree(dev)
+    return p_out, m_out, v_out
+
+
+def _execute_rocm_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` optimizer lane: sgd / momentum / adam / adamw / lion
+    per-parameter update on the COMPILER-GENERATED gfx1151 kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPTIMIZER_OPS:
+        raise ValueError(
+            f"rocm_optimizer_compiled executor handles one of "
+            f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
+                              _rocm_optimizer_kernel, np)
+
+
 def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
     """The ``target="rocm"`` state-space lane: selective_ssm (Mamba2) on the
@@ -8864,6 +9054,7 @@ def _executor_table():
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
+        "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
         "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
@@ -8889,6 +9080,7 @@ def _executor_table():
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
+        "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
         "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,

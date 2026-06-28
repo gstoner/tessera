@@ -84,11 +84,11 @@ ebm_refinement,energy_based_models,public,public,not_applicable,complete,fused,f
 ebm_self_verify,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_sphere_langevin,energy_based_models,public,public,not_applicable,not_applicable,fused,fused,fused,benchmarked
 adafactor,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
-adam,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
-adamw,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
-lion,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
-momentum,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
-sgd,functional_optimizer_step,public,public,registered,complete,partial,reference,ready,none
+adam,functional_optimizer_step,public,public,registered,complete,partial,fused,ready,none
+adamw,functional_optimizer_step,public,public,registered,complete,partial,fused,ready,none
+lion,functional_optimizer_step,public,public,registered,complete,partial,fused,ready,none
+momentum,functional_optimizer_step,public,public,registered,complete,partial,fused,ready,none
+sgd,functional_optimizer_step,public,public,registered,complete,partial,fused,ready,none
 fused_epilogue,fused_epilogue,public,public,registered,complete,partial,reference,ready,none
 clifford_codiff,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_conjugate,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked

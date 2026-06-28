@@ -2931,6 +2931,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_selective_ssm_f32":
             [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
+        "tessera_x86_cholesky_f32":
+            [c_f32, i64, i64, c_f32],
+        "tessera_x86_tri_solve_f32":
+            [c_f32, c_f32, i64, i64, i64, ctypes.c_int, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4731,6 +4735,93 @@ def _execute_x86_compiled_state_space(artifact: RuntimeArtifact, args: Any) -> A
     values = _bind_launch_args(args, arg_names)
     x, A, B, C, delta, gate, state = _ssm_bind_operands(ops[0], values)
     return _x86_selective_ssm(x, A, B, C, delta, gate, state, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dense linear algebra (S-series `linalg`) — Cholesky / triangular solve family.
+# Genuinely computes the factorization / substitution (does not wrap LAPACK).
+# compiler_path="x86_linalg_compiled" / "rocm_linalg_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_LINALG_OPS = ("tessera.cholesky", "tessera.tri_solve", "tessera.cholesky_solve")
+
+
+def _x86_cholesky(A: Any, np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    n = int(a.shape[-1])
+    batch = int(a.size // (n * n))
+    out = np.zeros_like(a)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_cholesky_f32(a.ctypes.data_as(cf), ctypes.c_int64(batch),
+                                 ctypes.c_int64(n), out.ctypes.data_as(cf))
+    return out
+
+
+def _x86_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
+    """A[..,n,n] · X = B[..,n,m] (triangular part of A used). f32."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    b = np.ascontiguousarray(B, np.float32)
+    n = int(a.shape[-1])
+    m = int(b.shape[-1])
+    batch = int(a.size // (n * n))
+    out = np.zeros_like(b)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_tri_solve_f32(
+        a.ctypes.data_as(cf), b.ctypes.data_as(cf), ctypes.c_int64(batch),
+        ctypes.c_int64(n), ctypes.c_int64(m), ctypes.c_int(1 if lower else 0),
+        out.ctypes.data_as(cf))
+    return out
+
+
+def _linalg_compute(op_name: str, operands: list, chol_fn: Any, tri_fn: Any,
+                    np: Any) -> Any:
+    """Dispatch a linalg op over the device cholesky / triangular-solve kernels.
+    ``tri_fn(A, B, lower)`` solves A·X=B; cholesky_solve = two triangular solves
+    (L then Lᵀ). RHS may be a vector [..,n] (→ m=1, squeezed) or matrix [..,n,m]."""
+    if op_name == "tessera.cholesky":
+        return chol_fn(np.asarray(operands[0], np.float32))
+
+    A = np.asarray(operands[0], np.float32)
+    b = np.asarray(operands[1], np.float32)
+    vec = b.ndim == A.ndim - 1
+    B = b[..., None] if vec else b
+
+    if op_name == "tessera.tri_solve":
+        kwargs = operands[2] if len(operands) > 2 else {}
+        lower = bool(kwargs.get("lower", True)) if isinstance(kwargs, dict) else True
+        x = tri_fn(A, B, lower)
+    else:  # tessera.cholesky_solve — solve (L Lᵀ) x = b
+        y = tri_fn(A, B, True)
+        lt = np.ascontiguousarray(np.swapaxes(A, -1, -2))
+        x = tri_fn(lt, y, False)
+    return x[..., 0] if vec else x
+
+
+def _execute_x86_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` linalg lane: cholesky / tri_solve / cholesky_solve on
+    the AVX-512 Cholesky + triangular-solve kernels. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _LINALG_OPS:
+        raise ValueError(
+            f"x86_linalg_compiled executor handles one of {_LINALG_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands: list = [values[str(n)] for n in op.get("operands", [])]
+    if op_name == "tessera.tri_solve":
+        operands = operands[:2] + [op.get("kwargs") or {}]
+    return _linalg_compute(op_name, operands,
+                           lambda a: _x86_cholesky(a, np),
+                           lambda a, b, lo: _x86_tri_solve_raw(a, b, lo, np), np)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7770,6 +7861,99 @@ def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED linalg lane — Cholesky factorization + triangular solve.
+# compiler_path="rocm_linalg_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_chol_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_tri_hsaco_cache: dict[tuple[str, bool], bytes] = {}
+
+
+def _rocm_cholesky(A: Any, np: Any) -> Any:
+    """L[..,n,n] lower s.t. A=L·Lᵀ on the gfx1151 batched Cholesky kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.cholesky"() {name = "ch"} '
+                 ': () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-cholesky-kernel", directive, _rocm_chol_hsaco_cache,
+        (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm cholesky: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    n = int(a.shape[-1])
+    batch = int(a.size // (n * n))
+    out = np.zeros(a.size, np.float32)
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_l = _rocm_dev_in(hip, out, 4 * out.size)
+    try:
+        _rocm_sparse_launch(hsaco, b"ch", [(d_a, a.size), (d_l, out.size)],
+                            [batch, n], batch)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_l, 4 * out.size, 2)
+    finally:
+        for d in (d_a, d_l):
+            hip.hipFree(d)
+    return out.reshape(a.shape)
+
+
+def _rocm_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
+    """A[..,n,n] · X = B[..,n,m] on the gfx1151 triangular-solve kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.tri_solve"() {name = "ts", '
+                 f'lower = {"true" if lower else "false"}}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-tri-solve-kernel", directive, _rocm_tri_hsaco_cache,
+        (chip, bool(lower)))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm tri_solve: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    bb = np.ascontiguousarray(B, np.float32)
+    n = int(a.shape[-1])
+    m = int(bb.shape[-1])
+    batch = int(a.size // (n * n))
+    out = np.zeros(bb.size, np.float32)
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_b = _rocm_dev_in(hip, bb.reshape(-1), 4 * bb.size)
+    d_x = _rocm_dev_in(hip, out, 4 * out.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"ts",
+            [(d_a, a.size), (d_b, bb.size), (d_x, out.size)],
+            [batch, n, m], batch * m)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_x, 4 * out.size, 2)
+    finally:
+        for d in (d_a, d_b, d_x):
+            hip.hipFree(d)
+    return out.reshape(bb.shape)
+
+
+def _execute_rocm_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` linalg lane: cholesky / tri_solve / cholesky_solve on
+    the COMPILER-GENERATED gfx1151 Cholesky + triangular-solve kernels. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _LINALG_OPS:
+        raise ValueError(
+            f"rocm_linalg_compiled executor handles one of {_LINALG_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands: list = [values[str(n)] for n in op.get("operands", [])]
+    if op_name == "tessera.tri_solve":
+        operands = operands[:2] + [op.get("kwargs") or {}]
+    return _linalg_compute(op_name, operands,
+                           lambda a: _rocm_cholesky(a, np),
+                           lambda a, b, lo: _rocm_tri_solve_raw(a, b, lo, np), np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -8341,6 +8525,7 @@ def _executor_table():
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
+        "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
@@ -8364,6 +8549,7 @@ def _executor_table():
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
+        "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

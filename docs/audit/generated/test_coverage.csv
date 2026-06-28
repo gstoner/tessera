@@ -197,7 +197,7 @@ gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directl
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
 gqa_attention,8,0,2,8,0,,directly_tested,8 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
-group_norm,6,0,0,6,0,,directly_tested,6 direct test references
+group_norm,9,0,0,9,0,,directly_tested,9 direct test references
 grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references
 grpo_policy_loss,8,3,0,11,0,,directly_tested,11 direct test references
 gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
@@ -211,7 +211,7 @@ implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for '
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 index_update,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 info_nce_loss,3,0,0,3,0,,directly_tested,3 direct test references
-instance_norm,6,0,0,6,0,,directly_tested,6 direct test references
+instance_norm,8,0,0,8,0,,directly_tested,8 direct test references
 interpolate,6,0,1,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 irfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
@@ -469,7 +469,7 @@ vjp,0,0,0,0,1,,structural_only,category default for 'transform'
 vlb_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'
 wasserstein_distance,6,0,0,6,0,,directly_tested,6 direct test references
-weight_norm,7,0,0,7,0,,directly_tested,7 direct test references
+weight_norm,9,0,0,9,0,,directly_tested,9 direct test references
 where,5,0,0,5,0,f32,directly_tested,5 direct test references
 while_loop,4,0,1,4,0,,directly_tested,4 direct test references
 z_loss,7,0,0,7,0,,directly_tested,7 direct test references

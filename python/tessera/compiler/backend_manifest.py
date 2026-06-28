@@ -1061,6 +1061,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "unary exp/log lane. Executes via runtime.launch() "
                  "(rocm_stable_reduce_compiled).",
     } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
+    # Spectral FFT (PR4) — fft/ifft/rfft/irfft on the COMPILER-GENERATED DFT
+    # kernel (generate-rocm-dft-kernel) on gfx1151 (rocm_fft_compiled).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("spectral",),
+        "notes": f"Spectral {op} — direct DFT kernel (generate-rocm-dft-kernel, "
+                 "cos/sin via math->rocdl) any length + r2c/c2r + plan scale. "
+                 "Executes via runtime.launch() (rocm_fft_compiled).",
+    } for op in ("fft", "ifft", "rfft", "irfft")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1380,6 +1389,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
                   "log_softmax", "softmax_safe", "sigmoid_safe")},
     **{(op, "x86"): "tests/unit/test_x86_fft_compiled.py"
+       for op in ("fft", "ifft", "rfft", "irfft")},
+    **{(op, "rocm"): "tests/unit/test_rocm_fft_compiled.py"
        for op in ("fft", "ifft", "rfft", "irfft")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",

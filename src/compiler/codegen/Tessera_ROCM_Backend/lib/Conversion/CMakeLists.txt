@@ -13,6 +13,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMBinaryLossKernel.cpp
   GenerateROCMPolicyLossKernel.cpp
   GenerateROCMFpQuantKernel.cpp
+  GenerateROCMDftKernel.cpp
   GenerateROCMAlibiKernel.cpp
   GenerateROCMDeltaNetKernel.cpp
   GenerateROCMRopeKernel.cpp

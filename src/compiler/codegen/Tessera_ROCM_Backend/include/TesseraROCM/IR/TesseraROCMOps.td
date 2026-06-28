@@ -369,6 +369,21 @@ def ROCM_FpQuantKernelOp : TesseraROCM_Op<"fpquant"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_DftKernelOp : TesseraROCM_Op<"dft"> {
+  let summary = "Direct DFT (one-thread-per-bin) gpu kernel";
+  let description = [{
+    `generate-rocm-dft-kernel` expands into a one-thread-per-output-bin DFT over
+    a batch of interleaved-complex rows: OUT[b,k]=Σ_j IN[b,j]·exp(sign·2πi·kj/n).
+    `inverse` selects the sign (unnormalized; the runtime applies the plan
+    scale). cos/sin via math→ROCDL. The correctness foundation for the ROCm
+    spectral lane (radix-2/Bluestein perf is a follow-up). CPU analog:
+    avx512_fft_f32 + the Bluestein/DFT executor.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<BoolAttr, "false">:$inverse);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

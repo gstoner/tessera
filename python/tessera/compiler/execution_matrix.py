@@ -359,6 +359,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco), then HIP launches it; per-element "
                             "loss on gfx1151 + none/mean/sum reduction. The CPU "
                             "analog is the x86_loss lane. f32/f16/bf16",
+    "rocm_fft_compiled": "AMD GPU RDNA spectral FFT (fft / ifft / rfft / irfft) "
+                            "the Tessera compiler GENERATES (generate-rocm-dft-"
+                            "kernel -> ROCDL -> hsaco; one thread per output bin, "
+                            "cos/sin twiddles), then HIP launches it. Direct DFT "
+                            "(any length) on gfx1151 + r2c/c2r pack-unpack + plan "
+                            "scale (radix-2/Bluestein perf is a follow-up). "
+                            "complex64/f32",
     "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
                             "/ count_nonzero) composed from the warp-shuffle "
                             "reduce kernel: var=mean(x^2)-mean(x)^2, "
@@ -973,6 +980,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_fft_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_fft_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_fft_compiled", runtime_status="success",
+        reason="ROCm FFT artifact runs fft / ifft / rfft / irfft over any axis "
+               "length on the COMPILER-GENERATED one-thread-per-bin DFT kernel "
+               "(generate-rocm-dft-kernel -> ROCDL, cos/sin twiddles) on gfx1151 "
+               "+ r2c/c2r pack-unpack + plan scale. Direct DFT (radix-2/Bluestein "
+               "perf is a follow-up). complex64/f32.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_stat_reduce_compiled",
         execution_kind="native_gpu", executable=True,

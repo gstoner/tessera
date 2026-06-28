@@ -7092,6 +7092,142 @@ def _execute_rocm_compiled_stable_reduce(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm spectral (FFT) lane — fft / ifft / rfft / irfft (Spectral PR4). The
+# COMPILER-GENERATED one-thread-per-bin DFT kernel (generate-rocm-dft-kernel)
+# does the transform for ANY length on gfx1151; r2c/c2r pack/unpack + the
+# SpectralPlan scale wrap it (radix-2/Bluestein perf is a follow-up — the plan
+# still records the strategy). complex64/f32. compiler_path="rocm_fft_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_dft_hsaco_cache: dict[tuple[str, bool], bytes] = {}
+
+
+def _rocm_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized DFT of complex64 rows [batch, n] on the gfx1151 DFT kernel.
+    Returns complex64 [batch, n]."""
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.dft"() {{name = "dt", '
+        f'inverse = {"true" if inverse else "false"}}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-dft-kernel", directive, _rocm_dft_hsaco_cache,
+        (chip, bool(inverse)))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm dft: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm dft: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"dt") != 0:
+        raise RuntimeError("rocm dft: kernel symbol 'dt' not found")
+
+    rows = np.ascontiguousarray(rows, np.complex64)
+    batch, n = int(rows.shape[0]), int(rows.shape[1])
+    L = 2 * batch * n
+    inb = np.ascontiguousarray(rows.view(np.float32).reshape(-1))
+    out = np.zeros(L, dtype=np.float32)
+    din, dout = ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (din, dout):
+        if hip.hipMalloc(ctypes.byref(dev), 4 * L) != 0:
+            raise RuntimeError("rocm dft: hipMalloc failed")
+    hip.hipMemcpy(din, inb.ctypes.data_as(ctypes.c_void_p), 4 * L, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(din, L) + _mr(dout, L)
+                   + [ctypes.c_int64(batch), ctypes.c_int64(n)])
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    total = batch * n
+    gx = (total + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (din, dout):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm dft: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), dout, 4 * L, 2)
+    for dev in (din, dout):
+        hip.hipFree(dev)
+    return out.view(np.complex64).reshape(batch, n)
+
+
+_ROCM_FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
+
+
+def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` spectral lane: fft / ifft / rfft / irfft over any
+    axis length, on the gfx1151 DFT kernel + r2c/c2r pack-unpack. The
+    SpectralPlan owns normalization. complex64/f32."""
+    import numpy as np
+
+    from .compiler.spectral_plan import plan_fft
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_FFT_OPS:
+        raise ValueError(
+            f"rocm_fft_compiled executor handles one of {_ROCM_FFT_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("fft requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    nd = x.ndim
+    if nd < 1:
+        raise ValueError("fft operand must have rank >= 1")
+    ax = axis if axis >= 0 else nd + axis
+
+    inverse = op_name == "tessera.ifft"
+    if op_name == "tessera.irfft":
+        m = int(x.shape[ax])
+        n = int(kwargs.get("n") or 2 * (m - 1))
+    else:
+        n = int(x.shape[ax])
+    mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
+    plan = plan_fft(n, axis=ax, mode=mode,
+                    inverse=inverse or op_name == "tessera.irfft")
+
+    xm = np.moveaxis(x, ax, -1)
+    lead = xm.shape[:-1]
+
+    if op_name in ("tessera.fft", "tessera.ifft"):
+        out = _rocm_dft_rows(xm.reshape(-1, n).astype(np.complex64),
+                             plan.inverse, np)
+        if plan.scale != 1.0:
+            out = out * np.complex64(plan.scale)
+        return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
+
+    if op_name == "tessera.rfft":
+        full = _rocm_dft_rows(xm.reshape(-1, n).astype(np.complex64), False, np)
+        half = full[:, : n // 2 + 1]
+        return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(
+            np.complex64)
+
+    rows = xm.reshape(-1, m).astype(np.complex64)
+    batch = rows.shape[0]
+    full = np.zeros((batch, n), np.complex64)
+    full[:, :m] = rows[:, :m]
+    if n - m > 0:
+        full[:, m:n] = np.conj(rows[:, 1:n - n // 2])[:, ::-1]
+    out = _rocm_dft_rows(full, True, np).real * np.float32(1.0 / n)
+    return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -7679,6 +7815,7 @@ def _executor_table():
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,
         "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
+        "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

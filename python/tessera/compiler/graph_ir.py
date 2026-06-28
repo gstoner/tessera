@@ -65,6 +65,10 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.expand": ("shape",),
     "tessera.broadcast": ("shape",),
     "tessera.flatten": ("start", "end"),
+    # reshape/view — their own ODS ops (same SameOperandsAndResultElementType
+    # contract); the target shape binds as the `shape` attr, not an operand.
+    "tessera.reshape": ("shape",),
+    "tessera.view": ("shape",),
 }
 
 

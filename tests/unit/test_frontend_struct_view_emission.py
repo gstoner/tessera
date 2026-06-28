@@ -42,6 +42,14 @@ def _flatten_fn(x):
     return ops.flatten(x, 0, 1)
 
 
+def _reshape_fn(x):
+    return ops.reshape(x, (6, 4))
+
+
+def _view_fn(x):
+    return ops.view(x, (24,))
+
+
 def _chain_fn(x):
     a = ops.squeeze(x, (0, 2))
     b = ops.unsqueeze(a, 0)
@@ -99,6 +107,16 @@ def test_broadcast_emits_shape_attr():
 def test_flatten_emits_start_end_attrs():
     line = _op_line(_emit(_flatten_fn), "tessera.flatten")
     assert "start = 0" in line and "end = 1" in line and "%?" not in line, line
+
+
+def test_reshape_emits_shape_attr():
+    line = _op_line(_emit(_reshape_fn), "tessera.reshape")
+    assert "shape = [6, 4]" in line and "%?" not in line, line
+
+
+def test_view_emits_shape_attr():
+    line = _op_line(_emit(_view_fn), "tessera.view")
+    assert "shape = [24]" in line and "%?" not in line, line
 
 
 def test_chain_emits_all_six_with_no_bogus_operand():

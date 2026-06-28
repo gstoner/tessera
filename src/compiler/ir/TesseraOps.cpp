@@ -2273,6 +2273,9 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor) {
 OpFoldResult FlattenOp::fold(FoldAdaptor) {
   return foldStructuralIdentity(*this, getX(), getY());
 }
+OpFoldResult ViewOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
 
 OpFoldResult PermuteOp::fold(FoldAdaptor) {
   if (getX().getType() != getY().getType() || (*this)->hasAttr("tessera.layout"))

@@ -59,3 +59,13 @@ def test_x86_digamma_poles_are_nan():
     x = np.array([0.0, -1.0, -2.0, -5.0], np.float32)
     out = np.asarray(rt.launch(_art(rt), (x,))["output"]).astype(np.float32)
     assert np.all(np.isnan(out))
+
+
+def test_x86_digamma_plus_inf_full_block():
+    """A full 16-lane block of +inf goes through the SIMD path. ψ(+inf)=+inf,
+    but the local log512 core does not preserve +inf (returns ~88.7); the
+    non-finite fallback must keep the result +inf and block-independent."""
+    rt = _x86_or_skip()
+    inf_blk = np.full(16, np.inf, np.float32)
+    out = np.asarray(rt.launch(_art(rt), (inf_blk,))["output"]).astype(np.float32)
+    assert np.all(np.isinf(out)) and np.all(out > 0), out

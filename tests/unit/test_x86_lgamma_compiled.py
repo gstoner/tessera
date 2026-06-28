@@ -56,3 +56,16 @@ def test_x86_lgamma_reflection_and_small():
     out = np.asarray(rt.launch(_art(rt), (x,))["output"]).astype(np.float32)
     np.testing.assert_allclose(out, _ref(x), rtol=1e-4, atol=1e-4)
     assert abs(out[0] - math.log(math.sqrt(math.pi))) < 1e-4
+
+
+def test_x86_lgamma_non_finite_full_block():
+    """A full 16-lane block of +inf / nan exercises the SIMD path (not the
+    scalar tail). lgamma(+inf)=+inf, lgamma(nan)=nan — must NOT degrade to NaN
+    from the Lanczos `inf - inf*log(inf)`, so the result is block-independent."""
+    rt = _x86_or_skip()
+    inf_blk = np.full(16, np.inf, np.float32)
+    out = np.asarray(rt.launch(_art(rt), (inf_blk,))["output"]).astype(np.float32)
+    assert np.all(np.isinf(out)) and np.all(out > 0), out
+    nan_blk = np.full(16, np.nan, np.float32)
+    out2 = np.asarray(rt.launch(_art(rt), (nan_blk,))["output"]).astype(np.float32)
+    assert np.all(np.isnan(out2)), out2

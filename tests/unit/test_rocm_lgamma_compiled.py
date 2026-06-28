@@ -54,3 +54,17 @@ def test_rocm_lgamma_reflection_and_small():
     out = np.asarray(rt.launch(_art(rt), (x,))["output"]).astype(np.float32)
     np.testing.assert_allclose(out, _ref(x), rtol=2e-4, atol=2e-4)
     assert abs(out[0] - math.log(math.sqrt(math.pi))) < 2e-4
+
+
+def test_rocm_lgamma_poles_are_inf():
+    """lnΓ has poles at non-positive integers. The reflection sin(πx) with an
+    f32 π is not exactly 0 there, so the explicit pole check must force +inf
+    (matching std::lgamma) instead of returning finite garbage."""
+    rt = _rocm_or_skip()
+    x = np.array([0.0, -1.0, -2.0, -5.0], np.float32)
+    out = np.asarray(rt.launch(_art(rt), (x,))["output"]).astype(np.float32)
+    assert np.all(np.isinf(out)) and np.all(out > 0), out
+    # a near-integer is NOT a pole — stays finite
+    near = np.array([-1.00005, -2.0003], np.float32)
+    out2 = np.asarray(rt.launch(_art(rt), (near,))["output"]).astype(np.float32)
+    assert np.all(np.isfinite(out2)), out2

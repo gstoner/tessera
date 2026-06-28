@@ -59,3 +59,13 @@ def test_rocm_digamma_poles_are_nan():
     x = np.array([0.0, -1.0, -2.0, -5.0], np.float32)
     out = np.asarray(rt.launch(_art(rt), (x,))["output"]).astype(np.float32)
     assert np.all(np.isnan(out))
+
+
+def test_rocm_digamma_near_pole_is_finite():
+    """Only EXACT non-positive integers are poles. A near-integer like -1.00005
+    is finite (very large) — the exact-integer test must not NaN a whole fp32
+    band around each pole (the old frac<1e-4 window did)."""
+    rt = _rocm_or_skip()
+    near = np.array([-1.00005, -2.0003, -0.9999], np.float32)
+    out = np.asarray(rt.launch(_art(rt), (near,))["output"]).astype(np.float32)
+    assert np.all(np.isfinite(out)), out

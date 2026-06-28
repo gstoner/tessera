@@ -57,6 +57,7 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   auto ogt = arith::CmpFPredicate::OGT;
   auto olt = arith::CmpFPredicate::OLT;
   auto ole = arith::CmpFPredicate::OLE;
+  auto oeq = arith::CmpFPredicate::OEQ;
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1), N = f.getArgument(2);
@@ -175,7 +176,20 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
         loc,
         b.create<arith::SubFOp>(loc, b.create<math::LogOp>(loc, pi), lnAbsSin),
         core);
-    y = b.create<arith::SelectOp>(loc, isRefl, reflected, core);
+    Value yl = b.create<arith::SelectOp>(loc, isRefl, reflected, core);
+    // Poles at non-positive integers: lnΓ has a pole (+inf), but the reflection
+    // sin(πx) with an f32 π is not exactly 0 there, so it would return finite
+    // garbage. Detect x<=0 AND exactly integer and force +inf (matching
+    // std::lgamma at the poles). Exact (oeq) test — a near-integer like -1.00005
+    // is NOT a pole.
+    Value zeroL = cst(b, loc, f32, 0.0f);
+    Value isNonPos = b.create<arith::CmpFOp>(loc, ole, x, zeroL);
+    Value rnd = b.create<math::RoundOp>(loc, x);
+    Value frac = b.create<math::AbsFOp>(loc, b.create<arith::SubFOp>(loc, x, rnd));
+    Value isInt = b.create<arith::CmpFOp>(loc, oeq, frac, zeroL);
+    Value isPole = b.create<arith::AndIOp>(loc, isNonPos, isInt);
+    Value inf = cst(b, loc, f32, std::numeric_limits<float>::infinity());
+    y = b.create<arith::SelectOp>(loc, isPole, inf, yl);
     break;
   }
   case Un::Digamma: {
@@ -221,10 +235,14 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     Value reflected = b.create<arith::SubFOp>(
         loc, core, b.create<arith::DivFOp>(loc, pi, tanPiX));
     Value yv = b.create<arith::SelectOp>(loc, isRefl, reflected, core);
-    // pole at non-positive integer -> NaN
+    // Pole at non-positive integer -> NaN. EXACT integer test (frac == 0): a
+    // negative non-integer like -1.00005 is finite (very large), not a pole —
+    // a broad 1e-4 window would wrongly NaN a whole fp32 band around each pole.
+    // f32 integers are exactly representable, so round() of an integer-valued
+    // float is exact and frac is exactly 0.
     Value rnd = b.create<math::RoundOp>(loc, x);
     Value frac = b.create<math::AbsFOp>(loc, b.create<arith::SubFOp>(loc, x, rnd));
-    Value isInt = b.create<arith::CmpFOp>(loc, olt, frac, cst(b, loc, f32, 1e-4f));
+    Value isInt = b.create<arith::CmpFOp>(loc, oeq, frac, zero);
     Value isPole = b.create<arith::AndIOp>(loc, isRefl, isInt);
     Value nan = cst(b, loc, f32, std::numeric_limits<float>::quiet_NaN());
     y = b.create<arith::SelectOp>(loc, isPole, nan, yv);

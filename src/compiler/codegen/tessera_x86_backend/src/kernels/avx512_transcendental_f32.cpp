@@ -198,13 +198,19 @@ inline __m512 lgamma512(__m512 x) {
     __m512 lg = _mm512_add_ps(
         _mm512_sub_ps(_mm512_setzero_ps(), tmp),
         log512(_mm512_div_ps(_mm512_mul_ps(sqrt2pi, ser), x)));
-    __mmask16 refl = _mm512_cmp_ps_mask(x, half, _CMP_LT_OQ);
-    if (refl) {
+    // Scalar std::lgamma for the reflection lanes (x < 0.5) AND any non-finite
+    // lane: the SIMD Lanczos evaluates inf - inf*log(inf) = NaN at +inf, but
+    // std::lgamma(+inf)=+inf / lgamma(NaN)=NaN, so the vector and tail paths
+    // would otherwise disagree by block alignment for non-finite inputs.
+    const __m512 kInf = _mm512_set1_ps(std::numeric_limits<float>::infinity());
+    __mmask16 nonfinite = _mm512_cmp_ps_mask(_mm512_abs_ps(x), kInf, _CMP_NLT_UQ);
+    __mmask16 special = _mm512_cmp_ps_mask(x, half, _CMP_LT_OQ) | nonfinite;
+    if (special) {
         float vx[16], vr[16];
         _mm512_storeu_ps(vx, x);
         _mm512_storeu_ps(vr, lg);
         for (int i = 0; i < 16; ++i)
-            if (refl & (1u << i)) vr[i] = std::lgamma(vx[i]);
+            if (special & (1u << i)) vr[i] = std::lgamma(vx[i]);
         lg = _mm512_loadu_ps(vr);
     }
     return lg;
@@ -238,13 +244,20 @@ inline __m512 digamma512(__m512 x) {
     r = _mm512_fnmadd_ps(_mm512_set1_ps(1.0f / 252.0f), inv6, r);
     r = _mm512_fmadd_ps(_mm512_set1_ps(1.0f / 240.0f), inv8, r);
     result = _mm512_add_ps(result, r);
-    __mmask16 refl = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LE_OQ);
-    if (refl) {
+    // Scalar digamma_d for x <= 0 (reflection / poles) AND any non-finite lane:
+    // log512 does not preserve +inf (returns ~88.7), so without this the vector
+    // path would return a finite value for ψ(+inf) while the tail/reference give
+    // +inf — a block-alignment-dependent disagreement.
+    const __m512 kInf = _mm512_set1_ps(std::numeric_limits<float>::infinity());
+    __mmask16 nonfinite = _mm512_cmp_ps_mask(_mm512_abs_ps(x), kInf, _CMP_NLT_UQ);
+    __mmask16 special =
+        _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LE_OQ) | nonfinite;
+    if (special) {
         float vx[16], vr[16];
         _mm512_storeu_ps(vx, x);
         _mm512_storeu_ps(vr, result);
         for (int i = 0; i < 16; ++i)
-            if (refl & (1u << i)) vr[i] = static_cast<float>(digamma_d(vx[i]));
+            if (special & (1u << i)) vr[i] = static_cast<float>(digamma_d(vx[i]));
         result = _mm512_loadu_ps(vr);
     }
     return result;

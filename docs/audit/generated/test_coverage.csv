@@ -174,7 +174,7 @@ equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to 
 erf,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 erfc,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 exp,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references
-expand,1,5,0,6,0,,directly_tested,6 direct test references
+expand,1,7,0,8,0,,directly_tested,8 direct test references
 expm1,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 factorized_matmul,5,0,1,5,0,,directly_tested,5 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
@@ -319,7 +319,7 @@ partial_state_load,0,0,0,0,1,,structural_only,category default for 'serializatio
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 patchify,6,0,1,6,0,,directly_tested,6 direct test references
 perceiver_resampler,1,0,0,1,1,,needs_direct_test,category default for 'attention'
-permute,1,7,0,8,0,,directly_tested,8 direct test references
+permute,1,9,0,10,0,,directly_tested,10 direct test references
 persistent_cd_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
 pixel_shuffle,1,0,1,1,1,,needs_direct_test,category default for 'layout_transform'
 pixel_unshuffle,5,0,1,5,0,,directly_tested,5 direct test references

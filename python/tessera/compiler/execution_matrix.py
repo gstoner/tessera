@@ -271,6 +271,16 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(tessera_x86_avx512_binary_loss_f32, stable "
                             "softplus form) + none/mean/sum reduction on the "
                             "reduce kernel. f32, matches numpy 2e-5",
+    "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
+                            "count_nonzero) composed from the AVX-512 reduce "
+                            "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
+                            "count_nonzero=sum(x!=0) over an axis. f32",
+    "x86_stable_reduce_compiled": "x86 CPU stable reduction (logsumexp / "
+                            "log_softmax / softmax_safe / sigmoid_safe) — "
+                            "max-shifted, composed from the AVX-512 reduce "
+                            "(max/sum) + the transcendental exp/log lane; "
+                            "softmax_safe / sigmoid_safe alias the stable softmax "
+                            "/ sigmoid lanes. f32",
     "x86_loss_compiled": "x86 CPU pointwise loss — mse / mae / huber / "
                             "smooth_l1 / log_cosh over (pred, target): per-element "
                             "loss on the AVX-512 loss kernel "
@@ -567,6 +577,25 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "kernel (tessera_x86_avx512_binary_loss_f32, stable softplus "
                "form) + none/mean/sum reduction on the reduce kernel. f32, "
                "numpy 2e-5.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_stat_reduce_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_stat_reduce_compiled", runtime_status="success",
+        reason="x86 stat-reduce artifact runs var / std / count_nonzero over an "
+               "axis, composed from the AVX-512 reduce kernel "
+               "(var=mean(x^2)-mean(x)^2, std=sqrt(var), count_nonzero=sum(x!=0))"
+               ". f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_stable_reduce_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_stable_reduce_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_stable_reduce_compiled", runtime_status="success",
+        reason="x86 stable-reduce artifact runs logsumexp / log_softmax / "
+               "softmax_safe / sigmoid_safe — max-shifted, composed from the "
+               "AVX-512 reduce (max/sum) + the transcendental exp/log lane; "
+               "softmax_safe / sigmoid_safe alias the stable softmax / sigmoid "
+               "lanes. f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_loss_compiled",

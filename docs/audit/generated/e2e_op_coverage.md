@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 136 |
-| ``runnable_reference`` | 173 |
+| ``complete`` | 144 |
+| ``runnable_reference`` | 165 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (136)
+## complete (144)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -152,6 +152,7 @@ each row into a single E2E tier.
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmin`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``count_nonzero`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``cummax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``cummin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``cumprod`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -159,12 +160,19 @@ each row into a single E2E tier.
 | ``max`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``mean`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``min`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``prod`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``std`` | reduction | public | public | registered | partial | fused | ready | none |
+| ``var`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``cispo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``grpo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``normalize_group_advantages`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``ppo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``rope`` | rotary_embedding | public | public | registered | partial | fused | ready | none |
+| ``log_softmax`` | stable_reduction | public | public | registered | partial | fused | ready | none |
+| ``logsumexp`` | stable_reduction | public | public | registered | partial | fused | ready | none |
+| ``sigmoid_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | benchmarked |
+| ``softmax_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
@@ -172,7 +180,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (173)
+## runnable_reference (165)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -302,10 +310,6 @@ each row into a single E2E tier.
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |
 | ``rng_uniform`` | random_source | public | public | registered | partial | reference | ready | none |
-| ``count_nonzero`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``prod`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``std`` | reduction | public | public | registered | partial | reference | ready | none |
-| ``var`` | reduction | public | public | registered | partial | reference | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``argsort`` | sort | public | public | registered | partial | reference | ready | none |
 | ``sort`` | sort | public | public | registered | partial | reference | ready | none |
@@ -323,11 +327,7 @@ each row into a single E2E tier.
 | ``spectral_conv`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``spectral_filter`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``stft`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``log_softmax`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``logsumexp`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``sigmoid_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``softmax_safe`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |

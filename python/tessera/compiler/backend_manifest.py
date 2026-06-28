@@ -1376,6 +1376,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
     **{(op, "x86"): "tests/unit/test_x86_nvfp4_compiled.py"
        for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    **{(op, "x86"): "tests/unit/test_x86_reduce_foundation_compiled.py"
+       for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
+                  "log_softmax", "softmax_safe", "sigmoid_safe")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2008,6 +2011,28 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "+ E2M1 codes on the fpquant kernel; x86_nvfp4_compiled lane; "
                  "f32 fake-quant, matches the microscaling reference)",
     } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    # S2 reduce/stable-reduce foundation — prod (new AVX-512 reduce kind);
+    # var/std/count_nonzero composed from the reduce kernel; logsumexp/
+    # log_softmax/softmax_safe/sigmoid_safe (max-shifted reduce + exp/log lane).
+    # x86 mirror of the ROCm reduce-foundation lane.
+    "prod": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 row reduction prod (tessera_x86_avx512_reduce_f32 "
+                 "kind 4; x86_reduce_compiled lane; f32)",
+    },
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 statistical reduction {op} (composed from the reduce "
+                 "kernel; x86_stat_reduce_compiled lane; f32)",
+    } for op in ("var", "std", "count_nonzero")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 stable reduction {op} (max-shifted reduce + exp/log "
+                 "lane; x86_stable_reduce_compiled lane; f32)",
+    } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
 }
 
 

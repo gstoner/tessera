@@ -258,7 +258,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `amin` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `argmax` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `argmin` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `count_nonzero` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `count_nonzero` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `cummax` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `cummin` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `cumprod` | reduction | public | public | registered | complete | partial | fused | ready | none |
@@ -266,9 +266,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `max` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `mean` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `min` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `prod` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `std` | reduction | public | public | registered | complete | partial | reference | ready | none |
-| `var` | reduction | public | public | registered | complete | partial | reference | ready | none |
+| `prod` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `std` | reduction | public | public | registered | complete | partial | fused | ready | none |
+| `var` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `cispo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
 | `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
 | `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
@@ -291,12 +291,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `spectral_conv` | spectral | public | public | registered | complete | partial | reference | ready | none |
 | `spectral_filter` | spectral | public | public | registered | complete | partial | reference | ready | none |
 | `stft` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `log_softmax` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `logsumexp` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `log_softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
+| `logsumexp` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `softmax_safe` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
+| `softmax_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `selective_ssm` | state_space | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
@@ -355,14 +355,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | random_mask | 1 | PPGCpRN· |
 | random_source | 2 | PPGCpRN· PPGCpRN· |
-| reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rotary_embedding | 1 | PPGCpFN· |
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| stable_reduction | 7 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpFN· |
+| stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
 | stencil | 2 | PPGCpRNB PPGCpRN· |

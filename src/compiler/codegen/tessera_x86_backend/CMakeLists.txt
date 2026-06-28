@@ -25,6 +25,7 @@ if (TESSERA_ENABLE_AVX512)
   try_add_flag("-mavx512vl" HAS_AVX512VL)
   try_add_flag("-mavx512vnni" HAS_AVX512VNNI)
   try_add_flag("-mavx512bf16" HAS_AVX512BF16)
+  try_add_flag("-mavx512vpopcntdq" HAS_AVX512VPOPCNTDQ)  # popcount lane
 endif()
 
 if (TESSERA_ENABLE_AMX)

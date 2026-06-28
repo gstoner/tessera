@@ -5786,6 +5786,7 @@ def _execute_x86_compiled_logical(artifact: RuntimeArtifact, args: Any) -> Any:
 _X86_BITWISE_OPS = {
     "tessera.bitwise_and": (0, 2), "tessera.bitwise_or": (1, 2),
     "tessera.bitwise_xor": (2, 2), "tessera.bitwise_not": (3, 1),
+    "tessera.popcount": (4, 1),  # VPOPCNTDQ; set-bit count per i32 lane (unary)
 }
 
 
@@ -7108,6 +7109,7 @@ _rocm_bitwise_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _ROCM_BITWISE_OPS: dict[str, tuple[str, int]] = {
     "tessera.bitwise_and": ("and", 2), "tessera.bitwise_or": ("or", 2),
     "tessera.bitwise_xor": ("xor", 2), "tessera.bitwise_not": ("not", 1),
+    "tessera.popcount": ("popcount", 1),  # math.ctpop (RDNA v_bcnt); unary
 }
 
 

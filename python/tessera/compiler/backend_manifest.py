@@ -1242,6 +1242,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-bitwise-kernel) over i32 integers. Executes via "
                  "runtime.launch() (rocm_bitwise_compiled).",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # P2e — popcount: set-bit count per i32 element, unary, on the bitwise lane
+    # via math.ctpop (RDNA v_bcnt). Executes via runtime.launch().
+    "popcount": {
+        "dtypes": ("int32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise popcount — flat per-element set-bit "
+                 "count (generate-rocm-bitwise-kernel, math.ctpop / v_bcnt) over "
+                 "i32 integers. Executes via runtime.launch() "
+                 "(rocm_bitwise_compiled).",
+    },
     # Ternary select where(cond,a,b)=cond?a:b — flat 3-operand elementwise
     # kernel (generate-rocm-where-kernel). cond i8 normalized != 0, a/b/out
     # float. Executes via runtime.launch() (rocm_where_compiled).
@@ -1484,6 +1494,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     **{(op, "x86"): "tests/unit/test_x86_bitwise_compiled.py"
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    ("popcount", "x86"): "tests/unit/test_x86_popcount_compiled.py",
     ("where", "x86"): "tests/unit/test_x86_where_compiled.py",
     ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
@@ -1586,6 +1597,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     **{(op, "rocm"): "tests/unit/test_rocm_bitwise_compiled.py"
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    ("popcount", "rocm"): "tests/unit/test_rocm_popcount_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
@@ -2055,6 +2067,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 bitwise {op} (tessera_x86_avx512_bitwise_i32, "
                  "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # P2e — popcount: set-bit count per i32, unary, on the bitwise lane via the
+    # AVX-512 VPOPCNTDQ instruction (_mm512_popcnt_epi32).
+    "popcount": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("int32",),
+        "notes": "Standalone elementwise popcount — set-bit count per i32 "
+                 "element via AVX-512 VPOPCNTDQ (tessera_x86_avx512_bitwise_i32, "
+                 "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
+    },
     # Ternary select where(cond,a,b) — hand-written AVX-512 kernel
     # (tessera_x86_avx512_where_f32, _mm512_cmpneq_epi8_mask +
     # _mm512_mask_blend_ps) the runtime ctypes-loads (x86_where_compiled).

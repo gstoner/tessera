@@ -2929,6 +2929,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_sddmm_f32":
             [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
+        "tessera_x86_avx512_selective_ssm_f32":
+            [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4652,6 +4654,83 @@ def _execute_x86_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
     return _sparse_compute(
         op_name, operands, _spmm,
         lambda a, b, mk: _x86_sddmm(a, b, mk, np), _x86_gemm_2d, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# State-space model (S-series `state_space`) — Mamba2 selective scan. A single
+# fused sequential scan over S, vectorized over the state dim N, maintaining the
+# (B,D,N) state in place. compiler_path="x86_selective_ssm_compiled" /
+# "rocm_selective_ssm_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+def _ssm_prepare(x: Any, A: Any, B: Any, C: Any, delta: Any, state: Any,
+                 np: Any) -> tuple:
+    """Validate shapes + broadcast A→(D,N) + init working state h→(B,D,N). Returns
+    (x, A2d, B, C, delta, h, Bsz, S, D, N) all contiguous f32."""
+    x = np.ascontiguousarray(x, np.float32)
+    Bc = np.ascontiguousarray(B, np.float32)
+    Cc = np.ascontiguousarray(C, np.float32)
+    delta = np.ascontiguousarray(delta, np.float32)
+    if x.ndim != 3:
+        raise ValueError(f"selective_ssm: x must be (B,S,D); got {x.shape}")
+    bsz, s, d = (int(v) for v in x.shape)
+    n = int(Bc.shape[2])
+    A = np.asarray(A, np.float32)
+    if A.ndim == 1:
+        a2d = np.ascontiguousarray(np.broadcast_to(A[:, None], (d, n)), np.float32)
+    else:
+        a2d = np.ascontiguousarray(A, np.float32)
+    if state is not None:
+        h = np.ascontiguousarray(state, np.float32).copy()
+    else:
+        h = np.zeros((bsz, d, n), np.float32)
+    return x, a2d, Bc, Cc, delta, h, bsz, s, d, n
+
+
+def _x86_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
+                       gate: Any, state: Any, np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(x, A, B, C, delta, state, np)
+    y = np.zeros((bsz, s, d), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_selective_ssm_f32(
+        x.ctypes.data_as(cf), a2d.ctypes.data_as(cf), Bc.ctypes.data_as(cf),
+        Cc.ctypes.data_as(cf), dl.ctypes.data_as(cf),
+        ctypes.c_int64(bsz), ctypes.c_int64(s), ctypes.c_int64(d),
+        ctypes.c_int64(n), h.ctypes.data_as(cf), y.ctypes.data_as(cf))
+    if gate is not None:
+        y = y * np.ascontiguousarray(gate, np.float32)
+    return y
+
+
+def _ssm_bind_operands(op: dict, values: dict) -> tuple:
+    """Unpack the selective_ssm operands. Positional [x,A,B,C,delta] then any
+    trailing operands named by ``kwargs["extras"]`` (e.g. ["gate"], ["state"],
+    ["gate","state"])."""
+    names = [str(nm) for nm in op.get("operands", [])]
+    base = [values[nm] for nm in names[:5]]
+    extras = list((op.get("kwargs") or {}).get("extras", []))
+    extra_vals = {k: values[names[5 + i]] for i, k in enumerate(extras)}
+    return (base[0], base[1], base[2], base[3], base[4],
+            extra_vals.get("gate"), extra_vals.get("state"))
+
+
+def _execute_x86_compiled_state_space(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` state-space lane: selective_ssm (Mamba2) on the
+    AVX-512 fused selective-scan kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.selective_ssm":
+        raise ValueError(
+            "x86_selective_ssm_compiled executor handles tessera.selective_ssm; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    x, A, B, C, delta, gate, state = _ssm_bind_operands(ops[0], values)
+    return _x86_selective_ssm(x, A, B, C, delta, gate, state, np)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7627,6 +7706,70 @@ def _execute_rocm_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED state-space lane — Mamba2 selective scan (one thread per (b,d)).
+# compiler_path="rocm_selective_ssm_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_ssm_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
+                        gate: Any, state: Any, np: Any) -> Any:
+    """y[B,S,D] = Mamba2 selective scan on the gfx1151 kernel. f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.selective_ssm"() {name = "ss"} '
+                 ': () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-selective-ssm-kernel", directive, _rocm_ssm_hsaco_cache,
+        (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ssm: hipInit failed")
+    x, a2d, Bc, Cc, dl, h, bsz, s, d, n = _ssm_prepare(x, A, B, C, delta, state, np)
+    y = np.zeros(bsz * s * d, np.float32)
+    d_x = _rocm_dev_in(hip, x.reshape(-1), 4 * x.size)
+    d_a = _rocm_dev_in(hip, a2d.reshape(-1), 4 * a2d.size)
+    d_b = _rocm_dev_in(hip, Bc.reshape(-1), 4 * Bc.size)
+    d_c = _rocm_dev_in(hip, Cc.reshape(-1), 4 * Cc.size)
+    d_dl = _rocm_dev_in(hip, dl.reshape(-1), 4 * dl.size)
+    d_h = _rocm_dev_in(hip, h.reshape(-1), 4 * h.size)
+    d_y = _rocm_dev_in(hip, y, 4 * y.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"ss",
+            [(d_x, x.size), (d_a, a2d.size), (d_b, Bc.size), (d_c, Cc.size),
+             (d_dl, dl.size), (d_h, h.size), (d_y, y.size)],
+            [bsz, s, d, n], bsz * d)
+        hip.hipMemcpy(y.ctypes.data_as(ctypes.c_void_p), d_y, 4 * y.size, 2)
+    finally:
+        for dev in (d_x, d_a, d_b, d_c, d_dl, d_h, d_y):
+            hip.hipFree(dev)
+    out = y.reshape(bsz, s, d)
+    if gate is not None:
+        out = out * np.ascontiguousarray(gate, np.float32)
+    return out
+
+
+def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` state-space lane: selective_ssm (Mamba2) on the
+    COMPILER-GENERATED gfx1151 selective-scan kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.selective_ssm":
+        raise ValueError(
+            "rocm_selective_ssm_compiled executor handles tessera.selective_ssm; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    x, A, B, C, delta, gate, state = _ssm_bind_operands(ops[0], values)
+    return _rocm_selective_ssm(x, A, B, C, delta, gate, state, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -8197,6 +8340,7 @@ def _executor_table():
         "x86_fft_compiled": _execute_x86_compiled_fft,
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
+        "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
@@ -8219,6 +8363,7 @@ def _executor_table():
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
+        "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

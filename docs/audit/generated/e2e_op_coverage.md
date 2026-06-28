@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 157 |
-| ``runnable_reference`` | 152 |
+| ``complete`` | 158 |
+| ``runnable_reference`` | 151 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (157)
+## complete (158)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -187,13 +187,14 @@ each row into a single E2E tier.
 | ``softmax`` | stable_reduction | public | public | registered | partial | fused | ready | benchmarked |
 | ``softmax_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
+| ``selective_ssm`` | state_space | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (152)
+## runnable_reference (151)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -328,7 +329,6 @@ each row into a single E2E tier.
 | ``sort`` | sort | public | public | registered | partial | reference | ready | none |
 | ``top_k`` | sort | public | public | registered | partial | reference | ready | none |
 | ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | none |
-| ``selective_ssm`` | state_space | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``conv2d`` | stencil | public | public | registered | partial | reference | ready | benchmarked |

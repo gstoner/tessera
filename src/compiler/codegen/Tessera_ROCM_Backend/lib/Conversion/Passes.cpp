@@ -45,6 +45,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMDftKernelPass(); });
   registerPass([]() { return createGenerateROCMSpmmKernelPass(); });
   registerPass([]() { return createGenerateROCMSddmmKernelPass(); });
+  registerPass([]() { return createGenerateROCMSelectiveSsmKernelPass(); });
   registerPass([]() { return createGenerateROCMAlibiKernelPass(); });
   registerPass([]() { return createGenerateROCMDeltaNetKernelPass(); });
   registerPass([]() { return createGenerateROCMRopeKernelPass(); });

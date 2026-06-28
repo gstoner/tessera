@@ -1089,6 +1089,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "WMMA matmul (bf16). Executes via runtime.launch() "
                  "(rocm_sparse_compiled).",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
+    # gfx1151 (rocm_selective_ssm_compiled).
+    "selective_ssm": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("state_space",),
+        "notes": "Mamba2 selective_ssm — direct selective-scan kernel "
+                 "(generate-rocm-selective-ssm-kernel, one thread per (b,d) "
+                 "channel, exp via math->rocdl) on gfx1151. Executes via "
+                 "runtime.launch() (rocm_selective_ssm_compiled).",
+    },
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1419,6 +1429,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py"
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
+    ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2101,6 +2113,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
                  "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
+    # vectorized over the state dim N (x86_selective_ssm_compiled).
+    "selective_ssm": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Mamba2 selective_ssm — AVX-512 fused selective-scan kernel "
+                 "(single pass over S, vectorized over the state dim N, exp via "
+                 "the Cephes core; x86_selective_ssm_compiled lane; f32, matches "
+                 "the numpy reference)",
+    },
 }
 
 

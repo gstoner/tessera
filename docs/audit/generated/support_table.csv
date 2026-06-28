@@ -282,7 +282,7 @@ sigmoid_safe,stable_reduction,public,public,registered,complete,partial,fused,re
 softmax,stable_reduction,public,public,registered,complete,partial,fused,ready,benchmarked
 softmax_safe,stable_reduction,public,public,registered,complete,partial,fused,ready,none
 sum,stable_reduction,public,public,registered,complete,partial,fused,ready,none
-selective_ssm,state_space,public,public,registered,complete,partial,reference,ready,none
+selective_ssm,state_space,public,public,registered,complete,partial,fused,ready,none
 kv_cache_append,state_update,public,public,registered,complete,partial,reference,ready,none
 kv_cache_prune,state_update,public,public,registered,complete,partial,reference,ready,none
 kv_cache_read,state_update,public,public,registered,complete,partial,fused,ready,none

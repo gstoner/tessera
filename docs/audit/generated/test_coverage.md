@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3310** total Python-test references, **825** total lit-fixture references.
+- **3310** total Python-test references, **837** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **163** ops have ≤1 reference ("thinly tested").
+- **158** ops have ≤1 reference ("thinly tested").
 - **76** ops have ≥10 references ("well tested").
 - **111** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **163** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **158** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -51,7 +51,6 @@ These **163** ops have at most one test reference across the whole test surface.
 | `axis_index` |    0 |    0 |    0 |
 | `axis_name` |    0 |    0 |    0 |
 | `axis_size` |    0 |    0 |    0 |
-| `broadcast` |    1 |    0 |    1 |
 | `calibration_observer` |    0 |    0 |    0 |
 | `centralize_grad` |    1 |    0 |    1 |
 | `chained_schedule` |    1 |    0 |    1 |
@@ -104,8 +103,9 @@ These **163** ops have at most one test reference across the whole test surface.
 | `dz` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_sample` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_step` |    0 |    0 |    0 |
+| `ebm_decode_init` |    0 |    0 |    0 |
 
-_(103 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(98 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**163** ops have ≤1 direct test reference.  They break down as:
+**158** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   54 | Tested via a parent op or family wrapper |
-| `structural_only`        |  103 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |   98 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -186,7 +186,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 
 _(24 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 103 ops
+## `structural_only` — 98 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -199,7 +199,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `axis_index` | category default for 'transform' |
 | `axis_name` | category default for 'transform' |
 | `axis_size` | category default for 'transform' |
-| `broadcast` | unclassified — defaults to structural_only |
 | `calibration_observer` | stateful observer; tested via fake_quantize loop |
 | `centralize_grad` | category default for 'grad_transform' |
 | `chained_schedule` | category default for 'schedule' |
@@ -222,5 +221,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_prefetch` | category default for 'data' |
 | `dataset_repeat` | category default for 'data' |
 | `dataset_shuffle` | category default for 'data' |
+| `dataset_zip` | category default for 'data' |
 
-_(73 additional structural ops omitted.)_
+_(68 additional structural ops omitted.)_

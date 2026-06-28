@@ -9,8 +9,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `real` | 113 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 47 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 160 | |
+| `no_verifier` | 53 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 166 | |
 
 ## Per-dialect details
 
@@ -37,6 +37,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnSlidingWindowOp` | `real` |
 | `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
+| `BroadcastOp` | `no_verifier` |
 | `CachePageLookupOp` | `no_verifier` |
 | `CastOp` | `real` |
 | `CholeskyOp` | `real` |
@@ -72,8 +73,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `EBMRefinementOp` | `real` |
 | `EBMSelfVerifyOp` | `real` |
 | `EBMSphereLangevinStepOp` | `real` |
+| `ExpandOp` | `no_verifier` |
 | `FFTOp` | `real` |
 | `FlashAttnOp` | `real` |
+| `FlattenOp` | `no_verifier` |
 | `FusedEpilogueOp` | `real` |
 | `GQAAttentionOp` | `real` |
 | `GatedAttentionOp` | `real` |
@@ -129,6 +132,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `NeighborsStencilApplyOp` | `no_verifier` |
 | `NeighborsStencilDefineOp` | `no_verifier` |
 | `NeighborsTopologyCreateOp` | `no_verifier` |
+| `PermuteOp` | `no_verifier` |
 | `PowerAttnOp` | `real` |
 | `QROp` | `real` |
 | `QuantizeFP4Op` | `real` |
@@ -161,11 +165,13 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SoftmaxSafeOp` | `real` |
 | `SoftplusOp` | `no_verifier` |
 | `SpectralConvOp` | `no_verifier` |
+| `SqueezeOp` | `no_verifier` |
 | `SubOp` | `no_verifier` |
 | `SwigluFusedOp` | `no_verifier` |
 | `TanhOp` | `no_verifier` |
 | `TransposeOp` | `real` |
 | `TriSolveOp` | `real` |
+| `UnsqueezeOp` | `no_verifier` |
 | `VarlenSdpaOp` | `real` |
 | `WriteRowOp` | `no_verifier` |
 

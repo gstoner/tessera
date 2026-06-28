@@ -42,6 +42,14 @@ def _flatten_fn(x):
     return ops.flatten(x, 0, 1)
 
 
+def _reshape_fn(x):
+    return ops.reshape(x, (6, 4))
+
+
+def _view_fn(x):
+    return ops.view(x, (24,))
+
+
 def _chain_fn(x):
     a = ops.squeeze(x, (0, 2))
     b = ops.unsqueeze(a, 0)
@@ -101,6 +109,16 @@ def test_flatten_emits_start_end_attrs():
     assert "start = 0" in line and "end = 1" in line and "%?" not in line, line
 
 
+def test_reshape_emits_shape_attr():
+    line = _op_line(_emit(_reshape_fn), "tessera.reshape")
+    assert "shape = [6, 4]" in line and "%?" not in line, line
+
+
+def test_view_emits_shape_attr():
+    line = _op_line(_emit(_view_fn), "tessera.view")
+    assert "shape = [24]" in line and "%?" not in line, line
+
+
 def test_chain_emits_all_six_with_no_bogus_operand():
     mlir = _emit(_chain_fn)
     for op in ("squeeze", "unsqueeze", "permute", "expand", "flatten",
@@ -108,3 +126,27 @@ def test_chain_emits_all_six_with_no_bogus_operand():
         assert f"tessera.{op}" in mlir, f"missing tessera.{op}:\n{mlir}"
     # The whole module must be free of dropped operands.
     assert "%?" not in mlir, mlir
+
+
+def _static_reshape_fn(x: "tensor<2x3x4xf32>"):
+    a = ops.reshape(x, (6, 4))
+    return ops.view(a, (24,))
+
+
+def _static_squeeze_fn(x: "tensor<1x3x1x4xf32>"):
+    return ops.squeeze(x, (0, 2))
+
+
+def test_static_shape_result_types_derived_from_attr():
+    """The result type must come from the shape/axes attr, NOT the input type —
+    otherwise a static reshape emits `<in> -> <in>` and the identity folder
+    erases it (silent miscompile). Regression for PR #202 review."""
+    mlir = _emit(_static_reshape_fn)
+    rl = _op_line(mlir, "tessera.reshape")
+    assert "-> tensor<6x4xf32>" in rl, rl
+    assert "tensor<2x3x4xf32> -> tensor<2x3x4xf32>" not in rl, rl
+    vl = _op_line(mlir, "tessera.view")
+    assert "-> tensor<24xf32>" in vl, vl
+    # squeeze on static 1x3x1x4 with axes [0,2] -> 3x4 (not the input type)
+    sl = _op_line(_emit(_static_squeeze_fn), "tessera.squeeze")
+    assert "-> tensor<3x4xf32>" in sl, sl

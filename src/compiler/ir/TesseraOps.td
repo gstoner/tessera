@@ -1814,6 +1814,18 @@ def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndRes
   let hasFolder = 1;
 }
 
+def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultElementType]> {
+  let summary = "Reshape sharing storage (contiguous view, no copy; `shape` attr)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // A no-copy contiguous view cannot change the element count — mirror
+  // ReshapeOp's static product check so an impossible alias shape (e.g.
+  // 2x3 -> 5) is rejected, not trusted by later view-elision/lowering.
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]>]> {
   let summary = "Reference random dropout with optional deterministic seed";
   // Sprint V4b (2026-05-22): dropout probability must be in [0, 1).

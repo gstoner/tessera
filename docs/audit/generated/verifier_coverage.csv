@@ -154,6 +154,7 @@ src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
 src/compiler/ir/TesseraOps.td,UnsqueezeOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,VarlenSdpaOp,1,1,real
+src/compiler/ir/TesseraOps.td,ViewOp,1,1,real
 src/compiler/ir/TesseraOps.td,WriteRowOp,0,0,no_verifier
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,CausalMaskOp,0,0,no_verifier
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,DropoutMaskOp,0,0,no_verifier

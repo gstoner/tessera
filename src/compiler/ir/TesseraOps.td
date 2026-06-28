@@ -1758,6 +1758,56 @@ def Tessera_CastOp : Op<
   let hasFolder = 1;
 }
 
+// ── Structural / layout-view ops (P1a, S_SERIES_GAP_CLOSURE_PLAN §6.A) ────────
+// The 0-view metadata family — pure tensor reshape/permute views (the shape
+// transform is encoded in the result type, mirroring ReshapeOp; an optional
+// attr-dict carries axis/shape/perm detail). These give the 28 structural ops a
+// Graph IR identity so a @jit body can lower through the compiled pipeline + the
+// view/copy analysis (§6.B) instead of dropping to the numpy reference. Pure:
+// no FLOP, no memory effect (their backend_kernel is `not_applicable`, P0).
+// Frontend emission + the view-elision lowering are the P1b/§6.B follow-ups.
+def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure]> {
+  let summary = "Remove size-1 dimensions (optional `axes` attr selects which)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure]> {
+  let summary = "Insert size-1 dimensions (the `axes` attr selects positions)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure]> {
+  let summary = "Broadcast-expand to a larger shape (stride-0 view, no copy)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure]> {
+  let summary = "Broadcast to a target shape (stride-0 view, no copy)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure]> {
+  let summary = "General axis permutation (the `perm` attr is the new order)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure]> {
+  let summary = "Collapse a contiguous dim range (optional `start`/`end` attrs)";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]>]> {
   let summary = "Reference random dropout with optional deterministic seed";
   // Sprint V4b (2026-05-22): dropout probability must be in [0, 1).

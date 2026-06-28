@@ -7,6 +7,7 @@
 //
 //   sgd      : p -= lr·g
 //   momentum : v = β1·v + g ; p -= lr·v
+//   nesterov : v = β1·v + g ; p -= lr·(g + β1·v)   (look-ahead momentum)
 //   adam     : m=β1·m+(1-β1)g ; v=β2·v+(1-β2)g² ; p -= lr·(m/b1c)/(√(v/b2c)+eps)
 //   adamw    : p *= (1-lr·wd) ; then adam (decoupled decay)
 //   lion     : u=β1·m+(1-β1)g ; m=β2·m+(1-β2)g ; p *= (1-lr·wd) ; p -= lr·sign(u)
@@ -76,6 +77,15 @@ void emitOptBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, StringRef kind) {
     st(VOUT, vv);
     st(POUT, b.create<arith::SubFOp>(loc, pi,
                                      b.create<arith::MulFOp>(loc, lr, vv)));
+  } else if (kind == "nesterov") {
+    // v = β1·v + g ; p -= lr·(g + β1·v)  (look-ahead momentum)
+    Value vv = b.create<arith::AddFOp>(loc, b.create<arith::MulFOp>(loc, b1, ld(V)),
+                                       gi);
+    st(VOUT, vv);
+    Value upd = b.create<arith::AddFOp>(loc, gi,
+                                        b.create<arith::MulFOp>(loc, b1, vv));
+    st(POUT, b.create<arith::SubFOp>(loc, pi,
+                                     b.create<arith::MulFOp>(loc, lr, upd)));
   } else if (kind == "lion") {
     Value mi = ld(M);
     Value om1 = b.create<arith::SubFOp>(loc, one, b1);

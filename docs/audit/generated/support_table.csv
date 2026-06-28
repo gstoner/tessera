@@ -267,11 +267,11 @@ sddmm,sparse,public,public,registered,complete,partial,reference,ready,none
 spmm_coo,sparse,public,public,registered,complete,partial,reference,ready,none
 spmm_csr,sparse,public,public,registered,complete,partial,reference,ready,none
 dct,spectral,public,public,registered,complete,partial,reference,ready,none
-fft,spectral,public,public,registered,complete,partial,reference,ready,none
-ifft,spectral,public,public,registered,complete,partial,reference,ready,none
-irfft,spectral,public,public,registered,complete,partial,reference,ready,none
+fft,spectral,public,public,registered,complete,partial,fused,ready,none
+ifft,spectral,public,public,registered,complete,partial,fused,ready,none
+irfft,spectral,public,public,registered,complete,partial,fused,ready,none
 istft,spectral,public,public,registered,complete,partial,reference,ready,none
-rfft,spectral,public,public,registered,complete,partial,reference,ready,none
+rfft,spectral,public,public,registered,complete,partial,fused,ready,none
 spectral_conv,spectral,public,public,registered,complete,partial,reference,ready,none
 spectral_filter,spectral,public,public,registered,complete,partial,reference,ready,none
 stft,spectral,public,public,registered,complete,partial,reference,ready,none

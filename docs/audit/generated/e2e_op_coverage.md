@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 144 |
-| ``runnable_reference`` | 165 |
+| ``complete`` | 148 |
+| ``runnable_reference`` | 161 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (144)
+## complete (148)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -168,6 +168,10 @@ each row into a single E2E tier.
 | ``normalize_group_advantages`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``ppo_policy_loss`` | rl_loss | public | public | registered | partial | fused | ready | none |
 | ``rope`` | rotary_embedding | public | public | registered | partial | fused | ready | none |
+| ``fft`` | spectral | public | public | registered | partial | fused | ready | none |
+| ``ifft`` | spectral | public | public | registered | partial | fused | ready | none |
+| ``irfft`` | spectral | public | public | registered | partial | fused | ready | none |
+| ``rfft`` | spectral | public | public | registered | partial | fused | ready | none |
 | ``log_softmax`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``logsumexp`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``sigmoid_safe`` | stable_reduction | public | public | registered | partial | fused | ready | none |
@@ -180,7 +184,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (165)
+## runnable_reference (161)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -319,11 +323,7 @@ each row into a single E2E tier.
 | ``spmm_coo`` | sparse | public | public | registered | partial | reference | ready | none |
 | ``spmm_csr`` | sparse | public | public | registered | partial | reference | ready | none |
 | ``dct`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``fft`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``ifft`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``irfft`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``istft`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``rfft`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``spectral_conv`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``spectral_filter`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``stft`` | spectral | public | public | registered | partial | reference | ready | none |

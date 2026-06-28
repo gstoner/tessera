@@ -1379,6 +1379,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_reduce_foundation_compiled.py"
        for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
                   "log_softmax", "softmax_safe", "sigmoid_safe")},
+    **{(op, "x86"): "tests/unit/test_x86_fft_compiled.py"
+       for op in ("fft", "ifft", "rfft", "irfft")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2033,6 +2035,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 stable reduction {op} (max-shifted reduce + exp/log "
                  "lane; x86_stable_reduce_compiled lane; f32)",
     } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
+    # Spectral FFT (PR2) — fft/ifft/rfft/irfft over a power-of-two axis on the
+    # AVX-512 radix-2 C2C kernel + r2c/c2r pack-unpack (x86_fft_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 radix-2 FFT {op} (tessera_x86_fft_c2c_f32 SIMD "
+                 "butterflies + r2c/c2r; x86_fft_compiled lane; power-of-two, "
+                 "complex64/f32, matches np.fft)",
+    } for op in ("fft", "ifft", "rfft", "irfft")},
 }
 
 

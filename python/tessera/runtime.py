@@ -3247,6 +3247,8 @@ _X86_TRANSCENDENTAL_OPS = {
     "tessera.atan": 16,
     "tessera.erfc": 17,
     "tessera.sin": 18,
+    "tessera.lgamma": 19,  # ln Γ(x) — NR Lanczos g=5 SIMD core
+    "tessera.digamma": 20,  # ψ(x) — recurrence + asymptotic series
 }
 
 
@@ -6518,6 +6520,8 @@ _ROCM_UNARY_OPS: dict[str, str] = {
     "tessera.atan": "atan", "tessera.erfc": "erfc",
     "tessera.floor": "floor", "tessera.ceil": "ceil", "tessera.round": "round",
     "tessera.trunc": "trunc",
+    "tessera.lgamma": "lgamma",  # MLIR-built Lanczos g=5 (no math.lgamma)
+    "tessera.digamma": "digamma",  # MLIR recurrence + asymptotic series
 }
 
 

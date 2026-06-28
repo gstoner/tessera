@@ -1179,6 +1179,25 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "abs", "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
                  "softplus", "sin", "cos", "tan", "sinh", "cosh", "asin", "acos",
                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
+    # P2e — lgamma: ln Γ(x) via an MLIR-built Lanczos g=5 series + reflection
+    # (no math.lgamma exists). fp32 only (the series is f32-tuned).
+    "lgamma": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise lgamma — MLIR-built Lanczos g=5 series "
+                 "(generate-rocm-unary-kernel; reflection via math.sin for "
+                 "x<0.5). Executes via runtime.launch() (rocm_unary_compiled).",
+    },
+    # P2e — digamma: ψ(x) via an MLIR-built recurrence + asymptotic series
+    # (no math.digamma); reflection (math.tan) + pole->NaN for x<=0. fp32 only.
+    "digamma": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise digamma — MLIR-built recurrence + "
+                 "asymptotic series (generate-rocm-unary-kernel; reflection via "
+                 "math.tan, poles->NaN for x<=0). Executes via runtime.launch() "
+                 "(rocm_unary_compiled).",
+    },
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
     # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
     # Executes via runtime.launch() (rocm_binary_compiled). f32/f16/bf16, f32
@@ -1502,6 +1521,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
     ("sin", "rocm"): "tests/unit/test_rocm_sin_compiled.py",
+    ("lgamma", "x86"): "tests/unit/test_x86_lgamma_compiled.py",
+    ("lgamma", "rocm"): "tests/unit/test_rocm_lgamma_compiled.py",
+    ("digamma", "x86"): "tests/unit/test_x86_digamma_compiled.py",
+    ("digamma", "rocm"): "tests/unit/test_rocm_digamma_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
        for op in ("isnan", "isinf", "isfinite")},
     **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
@@ -2124,6 +2147,26 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
                  "softplus", "expm1", "log1p", "sin", "cos", "tan", "sinh",
                  "cosh", "asin", "acos", "atan", "erfc")},
+    # P2e — lgamma: ln Γ(x) via the AVX-512 NR-Lanczos g=5 SIMD core (positive
+    # domain) + std::lgamma fallback for reflection lanes (x<0.5).
+    "lgamma": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 lgamma — NR-Lanczos g=5 SIMD core "
+                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+                 "x86_transcendental_compiled lane; std::lgamma fallback for "
+                 "x<0.5; f32, matches math.lgamma rel 1e-4)",
+    },
+    # P2e — digamma: ψ(x) AVX-512 recurrence + asymptotic SIMD core (x>0) +
+    # scalar digamma_d fallback for x<=0 (reflection / poles).
+    "digamma": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 digamma — recurrence + asymptotic SIMD core "
+                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+                 "x86_transcendental_compiled lane; scalar fallback for x<=0; "
+                 "f32, matches tessera.ops.digamma rel 1e-4)",
+    },
     # Transcendental-backed BINARY ops — pow(a,b) (positive base) and
     # silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply); share the exp/log/sigmoid
     # cores. Runtime ctypes-loads them (x86_binary_math_compiled lane).

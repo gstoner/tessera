@@ -2240,6 +2240,50 @@ OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+// ── Structural 0-view ops (P1b) — identity folds ────────────────────────────
+// For the shape-only ops (squeeze/unsqueeze/expand/broadcast/flatten) an equal
+// operand/result type means the op is a genuine no-op (no dim was added/removed/
+// broadcast), so it folds to its input. `permute` is the exception: a square
+// tensor keeps its type under a real axis swap (e.g. [1,0] on NxN), so it folds
+// only when the `perm` attribute is the identity permutation (or absent).
+static OpFoldResult foldStructuralIdentity(Operation *op, Value x, Value y) {
+  if (x.getType() == y.getType() && !op->hasAttr("tessera.layout"))
+    return x;
+  return {};
+}
+
+OpFoldResult SqueezeOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
+OpFoldResult UnsqueezeOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
+OpFoldResult ExpandOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
+OpFoldResult BroadcastOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
+OpFoldResult FlattenOp::fold(FoldAdaptor) {
+  return foldStructuralIdentity(*this, getX(), getY());
+}
+
+OpFoldResult PermuteOp::fold(FoldAdaptor) {
+  if (getX().getType() != getY().getType() || (*this)->hasAttr("tessera.layout"))
+    return {};
+  // Only an identity permutation is a no-op. Absent `perm` is treated as
+  // identity (the op carries no reordering).
+  auto perm = (*this)->getAttrOfType<ArrayAttr>("perm");
+  if (perm) {
+    for (auto [i, a] : llvm::enumerate(perm)) {
+      auto ia = llvm::dyn_cast<IntegerAttr>(a);
+      if (!ia || ia.getInt() != static_cast<int64_t>(i))
+        return {};
+    }
+  }
+  return getX();
+}
+
 namespace {
 // (2) reshape(reshape(x)) -> reshape(x): a chain of element-count-preserving
 // reshapes is one reshape straight to the final type.

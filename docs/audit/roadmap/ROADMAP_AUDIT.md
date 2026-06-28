@@ -82,6 +82,14 @@ Mamba, Hyena, Linformer, cosFormer, Griffin, Megalodon, JEPA, and Titans/Atlas.
 3. Delete or archive roadmap fragments once their decisions are represented in
    the owning theme audit.
 
+**Active plan — closing the S-series device-execution gap on x86 + ROCm gfx1151:**
+see [`S_SERIES_GAP_CLOSURE_PLAN.md`](S_SERIES_GAP_CLOSURE_PLAN.md). Triages the
+~171 both-device gap into not-applicable / mesh-gated / closeable-compute tiers,
+sequences phased PRs (A: bookkeeping honesty → G: marquee fused kernels), and
+records the **native** (AVX-512 + RDNA WMMA) planned fused-kernel inventory
+(flash_attn, MLA, NSA, lightning/kimi, swiglu, fused AdamW, conv, sort, RNG) —
+the executable-now companion to the hardware-gated WGMMA/MFMA inventories.
+
 ## Deferred — sequenced to the NVIDIA/AMD backend timeline
 
 - **Tiled fused SSD (Mamba-2) as a Tile-IR schedule** — decided 2026-06-07,

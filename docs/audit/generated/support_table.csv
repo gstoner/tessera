@@ -57,7 +57,7 @@ log,elementwise,public,public,registered,complete,partial,fused,ready,none
 log1p,elementwise,public,public,registered,complete,partial,fused,ready,none
 mod,elementwise,public,public,registered,complete,partial,fused,ready,none
 mul,elementwise,public,public,registered,complete,partial,fused,ready,none
-popcount,elementwise,public,public,registered,complete,partial,reference,ready,none
+popcount,elementwise,public,public,registered,complete,partial,fused,ready,none
 pow,elementwise,public,public,registered,complete,partial,fused,ready,none
 relu,elementwise,public,public,registered,complete,partial,fused,ready,none
 rsqrt,elementwise,public,public,registered,complete,partial,fused,ready,none

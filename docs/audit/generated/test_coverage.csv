@@ -329,7 +329,7 @@ pmean,2,0,0,2,0,,directly_tested,2 direct test references
 pmin,2,0,0,2,0,,directly_tested,2 direct test references
 polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-popcount,7,0,0,7,0,,directly_tested,7 direct test references
+popcount,9,0,0,9,0,,directly_tested,9 direct test references
 pow,5,0,2,5,0,bf16 f32,directly_tested,5 direct test references
 power_attn,6,0,1,6,0,,directly_tested,6 direct test references
 ppo_policy_loss,14,11,1,25,0,bf16 f16 f32 fp16 fp32,directly_tested,25 direct test references

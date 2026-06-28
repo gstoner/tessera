@@ -21,7 +21,8 @@
 #include <cstdint>
 
 namespace {
-constexpr int kSgd = 0, kMomentum = 1, kAdam = 2, kAdamW = 3, kLion = 4;
+constexpr int kSgd = 0, kMomentum = 1, kAdam = 2, kAdamW = 3, kLion = 4,
+              kNesterov = 5;
 
 inline float signf(float x) { return (x > 0.0f) - (x < 0.0f); }
 }  // namespace
@@ -37,6 +38,12 @@ extern "C" void tessera_x86_reference_optimizer_f32(
             float vv = beta1 * v[i] + gi;
             v_out[i] = vv;
             p_out[i] = pi - lr * vv;
+            continue;
+        }
+        if (kind == kNesterov) {
+            float vv = beta1 * v[i] + gi;            // new velocity
+            v_out[i] = vv;
+            p_out[i] = pi - lr * (gi + beta1 * vv);  // look-ahead update
             continue;
         }
         if (kind == kLion) {
@@ -83,6 +90,13 @@ extern "C" void tessera_x86_optimizer_f32(
             __m512 vv = _mm512_fmadd_ps(vb1, _mm512_loadu_ps(v + i), gi);
             _mm512_storeu_ps(v_out + i, vv);
             _mm512_storeu_ps(p_out + i, _mm512_fnmadd_ps(vlr, vv, pi));
+            continue;
+        }
+        if (kind == kNesterov) {
+            __m512 vv = _mm512_fmadd_ps(vb1, _mm512_loadu_ps(v + i), gi);
+            _mm512_storeu_ps(v_out + i, vv);
+            __m512 upd = _mm512_fmadd_ps(vb1, vv, gi);   // g + beta1*vv
+            _mm512_storeu_ps(p_out + i, _mm512_fnmadd_ps(vlr, upd, pi));
             continue;
         }
         if (kind == kLion) {

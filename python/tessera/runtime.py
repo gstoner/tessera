@@ -4768,6 +4768,7 @@ _OPTIMIZER_OPS: dict[str, tuple[str, int, tuple[str, ...]]] = {
     "tessera.adam": ("adam", 2, ("m", "v")),
     "tessera.adamw": ("adamw", 3, ("m", "v")),
     "tessera.lion": ("lion", 4, ("m",)),
+    "tessera.nesterov": ("nesterov", 5, ("v",)),  # look-ahead momentum
 }
 
 
@@ -8516,7 +8517,8 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 _rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
-_OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion"}
+_OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion",
+                       5: "nesterov"}
 
 
 def _rocm_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,

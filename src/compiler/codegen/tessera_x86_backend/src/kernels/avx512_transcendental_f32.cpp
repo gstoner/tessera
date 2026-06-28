@@ -49,6 +49,7 @@ constexpr int kAsin = 14;
 constexpr int kAcos = 15;
 constexpr int kAtan = 16;
 constexpr int kErfc = 17;
+constexpr int kSin = 18;
 
 constexpr float kSqrt2OverPi = 0.7978845608028654f;  // √(2/π)
 constexpr float kGeluC = 0.044715f;
@@ -69,6 +70,7 @@ inline float scalar_transcendental(float v, int kind) {
                            std::fmax(v, 0.0f);
     case kExpm1:    return std::exp(v) - 1.0f;
     case kLog1p:    return std::log1p(v);
+    case kSin:      return std::sin(v);
     case kCos:      return std::cos(v);
     case kTan:      return std::tan(v);
     case kSinh:     return std::sinh(v);
@@ -220,6 +222,30 @@ inline void sincos512(__m512 x, __m512* sptr, __m512* cptr) {
     *cptr = c;
 }
 
+// sincos512's f32 4/π reduction loses precision for large |x| (catastrophic
+// cancellation in `ax - y*DP` once ax exceeds f32's ~24-bit window), so the SIMD
+// trig result diverges from libm there while the scalar n%16 tail stays accurate
+// — making the result both wrong and block-size-dependent. Past this magnitude
+// we recompute the offending lanes with libm (the SIMD fast path still covers
+// the common small-argument case). Threshold is conservative (Cephes sincosf is
+// good well past π·2^11); the slow path is rare. kind: 0=sin, 1=cos, 2=tan.
+constexpr float kTrigReduceLimit = 8192.0f;  // 2^13
+inline __m512 trigCorrectLarge(__m512 v, __m512 simd, int kind) {
+    __mmask16 big = _mm512_cmp_ps_mask(_mm512_abs_ps(v),
+                                       _mm512_set1_ps(kTrigReduceLimit),
+                                       _CMP_GT_OQ);
+    if (!big) return simd;  // common case: every lane in range
+    float vv[16], rr[16];
+    _mm512_storeu_ps(vv, v);
+    _mm512_storeu_ps(rr, simd);
+    for (int i = 0; i < 16; ++i)
+        if (big & (1u << i))
+            rr[i] = (kind == 0) ? std::sin(vv[i])
+                    : (kind == 1) ? std::cos(vv[i])
+                                  : std::tan(vv[i]);
+    return _mm512_loadu_ps(rr);
+}
+
 // Cephes asinf: poly on [0, 0.5]; |x|>0.5 maps via x = √(0.5(1-|x|)).
 inline __m512 asin512(__m512 x) {
     const __m512 one = _mm512_set1_ps(1.0f);
@@ -301,15 +327,20 @@ inline __m512 apply512(__m512 v, int kind) {
     }
     case kExpm1:   return _mm512_sub_ps(exp512(v), one);
     case kLog1p:   return log512(_mm512_add_ps(one, v));
+    case kSin: {
+        __m512 s, c;
+        sincos512(v, &s, &c);
+        return trigCorrectLarge(v, s, 0);
+    }
     case kCos: {
         __m512 s, c;
         sincos512(v, &s, &c);
-        return c;
+        return trigCorrectLarge(v, c, 1);
     }
     case kTan: {
         __m512 s, c;
         sincos512(v, &s, &c);
-        return _mm512_div_ps(s, c);
+        return trigCorrectLarge(v, _mm512_div_ps(s, c), 2);
     }
     case kSinh: {
         // 0.5 (e^x - e^-x)

@@ -39,7 +39,8 @@ enum class Un {
   Erf, Tanh, Sigmoid, Log1p, Expm1, Softplus,
   // tail: trig / special / rounding (2026-06-26)
   Cos, Tan, Sinh, Cosh, Asin, Acos, Atan, Erfc,
-  Floor, Ceil, Round, Trunc
+  Floor, Ceil, Round, Trunc,
+  Sin
 };
 
 static Value cst(OpBuilder &b, Location loc, Type f32, float v) {
@@ -128,6 +129,9 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<arith::AddFOp>(loc, lp, mx);
     break;
   }
+  case Un::Sin:
+    y = b.create<math::SinOp>(loc, x);
+    break;
   case Un::Cos:
     y = b.create<math::CosOp>(loc, x);
     break;
@@ -218,6 +222,7 @@ struct GenerateROCMUnaryKernelPass
                   .Case("log1p", Un::Log1p)
                   .Case("expm1", Un::Expm1)
                   .Case("softplus", Un::Softplus)
+                  .Case("sin", Un::Sin)
                   .Case("cos", Un::Cos)
                   .Case("tan", Un::Tan)
                   .Case("sinh", Un::Sinh)
@@ -234,7 +239,7 @@ struct GenerateROCMUnaryKernelPass
       static const llvm::StringSet<> kValid = {
           "exp",  "log",     "sqrt",  "rsqrt", "reciprocal", "abs",  "neg",
           "sign", "erf",     "tanh",  "sigmoid", "log1p",    "expm1",
-          "softplus", "cos", "tan",   "sinh",  "cosh", "asin", "acos",
+          "softplus", "sin", "cos", "tan",   "sinh",  "cosh", "asin", "acos",
           "atan", "erfc",    "floor", "ceil",  "round", "trunc"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-unary-kernel: unknown kind '")

@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3320** total Python-test references, **857** total lit-fixture references.
+- **3322** total Python-test references, **857** total lit-fixture references.
 - **103** ops have **zero** references in either test surface.
-- **158** ops have ≤1 reference ("thinly tested").
+- **157** ops have ≤1 reference ("thinly tested").
 - **77** ops have ≥10 references ("well tested").
 - **111** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **158** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **157** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **158** ops have at most one test reference across the whole test surface.
 | `ebm_bivector_langevin_step` |    0 |    0 |    0 |
 | `ebm_decode_init` |    0 |    0 |    0 |
 
-_(98 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(97 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**158** ops have ≤1 direct test reference.  They break down as:
+**157** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   54 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   53 | Tested via a parent op or family wrapper |
 | `structural_only`        |   98 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -147,7 +147,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 54 ops
+## `covered_by_family` — 53 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -184,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `lgamma` | category default for 'elementwise' |
 | `mobius` | category default for 'elementwise' |
 
-_(24 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(23 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 98 ops
 

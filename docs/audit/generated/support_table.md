@@ -216,7 +216,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `vlb_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `z_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | partial | fused | ready | none |
-| `moe` | moe | public | public | registered | complete | partial | reference | ready | none |
+| `moe` | moe | public | public | registered | complete | partial | fused | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `group_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
@@ -346,7 +346,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
 | loss | 19 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· |
 | model_layer | 1 | PPGCpFN· |
-| moe | 1 | PPGCpRN· |
+| moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
 | numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

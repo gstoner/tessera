@@ -1089,6 +1089,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "WMMA matmul (bf16). Executes via runtime.launch() "
                  "(rocm_sparse_compiled).",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    # MoE compute (PR) — routed per-token expert GEMVs (top-1) on gfx1151
+    # (rocm_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
+    "moe": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("moe",),
+        "notes": "MoE compute (moe) — direct routed per-token expert GEMV kernel "
+                 "(generate-rocm-moe-kernel, one thread per (token, out-col); "
+                 "routing resolved on host) on gfx1151. Executes via "
+                 "runtime.launch() (rocm_moe_compiled).",
+    },
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
@@ -1459,6 +1469,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
+    ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
+    ("moe", "rocm"): "tests/unit/test_rocm_moe_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
@@ -2150,6 +2162,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
                  "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    # MoE compute (PR) — routed per-token expert GEMVs (top-1), AVX-512
+    # (x86_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
+    "moe": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "MoE compute (moe) — AVX-512 routed per-token expert GEMV kernel "
+                 "(top-1; routing resolved on host, out_dim vectorized); "
+                 "x86_moe_compiled lane; f32, matches numpy",
+    },
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).
     "selective_ssm": {

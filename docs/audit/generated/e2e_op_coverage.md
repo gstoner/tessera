@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 164 |
-| ``runnable_reference`` | 145 |
+| ``complete`` | 165 |
+| ``runnable_reference`` | 144 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (164)
+## complete (165)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -132,6 +132,7 @@ each row into a single E2E tier.
 | ``smooth_l1_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``z_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
+| ``moe`` | moe | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -200,7 +201,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (145)
+## runnable_reference (144)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -308,7 +309,6 @@ each row into a single E2E tier.
 | ``persistent_cd_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``score_matching_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
-| ``moe`` | moe | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``group_norm`` | normalization | public | public | registered | partial | reference | ready | none |

@@ -488,6 +488,19 @@ def ROCM_SvdKernelOp : TesseraROCM_Op<"svd"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
+  let summary = "Mixture-of-experts compute (routed expert GEMV) gpu kernel";
+  let description = [{
+    `generate-rocm-moe-kernel` expands into the MoE compute part — the routed
+    per-token expert matmuls (top-1), one thread per (token, out-column):
+    out[t,o] = Σ_i x[t,i]·experts[route[t],i,o]. experts is [E,in,out]; route[t]
+    (i32) is the resolved top-1 expert (routing done on host). All f32. CPU
+    analog: avx512_moe_f32.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

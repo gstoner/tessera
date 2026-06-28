@@ -501,6 +501,19 @@ def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_OptimizerKernelOp : TesseraROCM_Op<"optimizer"> {
+  let summary = "Fused per-parameter optimizer-step gpu kernel";
+  let description = [{
+    `generate-rocm-optimizer-kernel` expands into a fused per-parameter update
+    (one thread per element); the `kind` StrAttr selects sgd/momentum/adam/adamw/
+    lion at codegen. p/g/m/v in, p_out/m_out/v_out out; lr/β1/β2/eps/wd + the
+    host-computed bias-correction scalars (b1c,b2c) are f32 args. sqrt via
+    math→ROCDL. All f32. CPU analog: avx512_optimizer_f32.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

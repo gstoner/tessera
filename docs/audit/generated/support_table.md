@@ -100,11 +100,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `adafactor` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `adam` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `adamw` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `lion` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `momentum` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `sgd` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
+| `adam` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `adamw` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `lion` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `momentum` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `sgd` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
 | `fused_epilogue` | fused_epilogue | public | public | registered | complete | partial | reference | ready | none |
 | `clifford_codiff` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_conjugate` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -335,7 +335,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | contraction | 1 | PPGCpFN· |
 | elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |

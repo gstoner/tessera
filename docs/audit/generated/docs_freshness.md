@@ -6,9 +6,9 @@ Reference date for staleness: **2026-06-28**.
 
 ## Headline
 
-- **91** docs catalogued across the canonical doc tree.
-- **90** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **53** updated within the last 30 days.
+- **92** docs catalogued across the canonical doc tree.
+- **91** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **54** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -139,6 +139,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 7 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 17 | ✓ |
 | `roadmap/CONTRACT_PASS_PLAN.md` | - | 2026-06-20 | 8 | ✓ |
+| `roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md` | - | 2026-06-28 | 0 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-06-26 | 2 | ✓ |
 | `roadmap/REPLAYSSM_PLAN.md` | - | 2026-06-15 | 13 | ✓ |
 | `roadmap/ROADMAP_AUDIT.md` | - | 2026-06-26 | 2 | ✓ |

@@ -5363,6 +5363,8 @@ _X86_BINARY_OPS = {
     "tessera.sub": 0, "tessera.subtract": 0,
     "tessera.div": 1, "tessera.divide": 1,
     "tessera.maximum": 2, "tessera.minimum": 3,
+    "tessera.add": 4, "tessera.mul": 5, "tessera.multiply": 5,
+    "tessera.mod": 6, "tessera.floor_div": 7, "tessera.floor_divide": 7,
 }
 
 
@@ -6293,6 +6295,9 @@ _ROCM_BINARY_OPS: dict[str, str] = {
     "tessera.div": "div", "tessera.divide": "div",
     "tessera.pow": "pow", "tessera.power": "pow",
     "tessera.maximum": "maximum", "tessera.minimum": "minimum",
+    "tessera.add": "add", "tessera.mul": "mul", "tessera.multiply": "mul",
+    "tessera.mod": "mod", "tessera.floor_div": "floor_div",
+    "tessera.floor_divide": "floor_div",
 }
 
 

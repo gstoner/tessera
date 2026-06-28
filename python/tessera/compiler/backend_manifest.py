@@ -1158,7 +1158,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel (generate-rocm-unary-kernel). Executes via "
                  "runtime.launch() (rocm_unary_compiled).",
     } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
-                 "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
+                 "abs", "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
                  "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
@@ -1171,7 +1171,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "notes": f"Standalone elementwise binary {op} — flat 2-operand "
                  "per-element kernel (generate-rocm-binary-kernel). Executes via "
                  "runtime.launch() (rocm_binary_compiled).",
-    } for op in ("sub", "div", "pow", "maximum", "minimum")},
+    } for op in ("sub", "div", "pow", "maximum", "minimum",
+                 "add", "mul", "mod", "floor_div")},
     # S2 comparison family — flat 2-operand per-element kernel
     # (generate-rocm-compare-kernel) with boolean (i8 0/1) output, NaN semantics
     # matching numpy. Executes via runtime.launch() (rocm_compare_compiled).
@@ -1422,6 +1423,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "floor", "ceil", "round", "trunc")},
     **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py"
        for op in ("sub", "div", "maximum", "minimum")},
+    # P2a — binary arithmetic completion (add/mul/mod/floor_div) + abs alias.
+    **{(op, "x86"): "tests/unit/test_x86_elementwise_p2_compiled.py"
+       for op in ("add", "mul", "mod", "floor_div", "abs")},
+    **{(op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
+       for op in ("add", "mul", "mod", "floor_div", "abs")},
     **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
        for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     **{(op, "x86"): "tests/unit/test_x86_logical_compiled.py"
@@ -1925,17 +1931,19 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "notes": f"AVX-512 unary {op} (tessera_x86_avx512_unary_f32, direct "
                  "intrinsic; runtime-loaded; x86_unary_compiled lane)",
-    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
+    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "abs", "sign",
                  "floor", "ceil", "round", "trunc")},
     # S2 binary-arithmetic direct-intrinsic subset — hand-written AVX-512 kernel
     # (tessera_x86_avx512_binary_f32) the runtime ctypes-loads and executes
     # (x86_binary_compiled). f32; `pow` is transcendental → numpy-reference.
+    # P2a adds add/mul (arithmetic) + mod/floor_div (floor-based, numpy semantics).
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
                  "intrinsic; runtime-loaded; x86_binary_compiled lane)",
-    } for op in ("sub", "div", "maximum", "minimum")},
+    } for op in ("sub", "div", "maximum", "minimum",
+                 "add", "mul", "mod", "floor_div")},
     # S2 comparison family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_compare_f32) the runtime ctypes-loads and executes
     # (x86_compare_compiled). f32 in, bool out; NaN semantics match numpy.

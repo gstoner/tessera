@@ -37,7 +37,7 @@ lt,comparison,public,public,registered,complete,partial,fused,ready,none
 ne,comparison,public,public,registered,complete,partial,fused,ready,none
 einsum,contraction,public,public,registered,complete,partial,fused,ready,none
 acos,elementwise,public,public,registered,complete,partial,fused,ready,none
-add,elementwise,public,public,registered,complete,partial,reference,ready,none
+add,elementwise,public,public,registered,complete,partial,fused,ready,none
 asin,elementwise,public,public,registered,complete,partial,fused,ready,none
 atan,elementwise,public,public,registered,complete,partial,fused,ready,none
 atan2,elementwise,public,public,registered,complete,partial,reference,ready,none
@@ -50,13 +50,13 @@ erf,elementwise,public,public,registered,complete,partial,fused,ready,none
 erfc,elementwise,public,public,registered,complete,partial,fused,ready,none
 exp,elementwise,public,public,registered,complete,partial,fused,ready,none
 expm1,elementwise,public,public,registered,complete,partial,fused,ready,none
-floor_div,elementwise,public,public,registered,complete,partial,reference,ready,none
+floor_div,elementwise,public,public,registered,complete,partial,fused,ready,none
 gelu,elementwise,public,public,registered,complete,partial,fused,ready,none
 lgamma,elementwise,public,public,registered,complete,partial,reference,ready,none
 log,elementwise,public,public,registered,complete,partial,fused,ready,none
 log1p,elementwise,public,public,registered,complete,partial,fused,ready,none
-mod,elementwise,public,public,registered,complete,partial,reference,ready,none
-mul,elementwise,public,public,registered,complete,partial,reference,ready,none
+mod,elementwise,public,public,registered,complete,partial,fused,ready,none
+mul,elementwise,public,public,registered,complete,partial,fused,ready,none
 popcount,elementwise,public,public,registered,complete,partial,reference,ready,none
 pow,elementwise,public,public,registered,complete,partial,fused,ready,none
 relu,elementwise,public,public,registered,complete,partial,fused,ready,none
@@ -209,7 +209,7 @@ layer_norm,normalization,public,public,registered,complete,partial,fused,ready,n
 rmsnorm,normalization,public,public,registered,complete,partial,fused,ready,benchmarked
 rmsnorm_safe,normalization,public,public,registered,complete,partial,reference,ready,none
 weight_norm,normalization,public,public,registered,complete,partial,reference,ready,none
-abs,numeric_helper,public,public,registered,complete,partial,reference,ready,none
+abs,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 absolute,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 ceil,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 clamp,numeric_helper,public,public,registered,complete,partial,reference,ready,none

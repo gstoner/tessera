@@ -33,7 +33,7 @@ namespace {
 
 static constexpr int64_t BD = 256;
 
-enum class Bin { Sub, Div, Pow, Maximum, Minimum };
+enum class Bin { Sub, Div, Pow, Maximum, Minimum, Add, Mul, Mod, FloorDiv };
 
 void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
                     Bin bin) {
@@ -75,6 +75,21 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   case Bin::Minimum:
     y = b.create<arith::MinimumFOp>(loc, a, bb);
     break;
+  case Bin::Add:
+    y = b.create<arith::AddFOp>(loc, a, bb);
+    break;
+  case Bin::Mul:
+    y = b.create<arith::MulFOp>(loc, a, bb);
+    break;
+  case Bin::FloorDiv:
+    y = b.create<math::FloorOp>(loc, b.create<arith::DivFOp>(loc, a, bb));
+    break;
+  case Bin::Mod: {
+    // numpy.mod: a - floor(a/b)*b
+    Value q = b.create<math::FloorOp>(loc, b.create<arith::DivFOp>(loc, a, bb));
+    y = b.create<arith::SubFOp>(loc, a, b.create<arith::MulFOp>(loc, q, bb));
+    break;
+  }
   }
   Value sv = isF32 ? y : b.create<arith::TruncFOp>(loc, storeTy, y);
   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
@@ -119,12 +134,17 @@ struct GenerateROCMBinaryKernelPass
                     .Case("pow", Bin::Pow)
                     .Case("maximum", Bin::Maximum)
                     .Case("minimum", Bin::Minimum)
+                    .Case("add", Bin::Add)
+                    .Case("mul", Bin::Mul)
+                    .Case("mod", Bin::Mod)
+                    .Case("floor_div", Bin::FloorDiv)
                     .Default(Bin::Sub);
-      static const llvm::StringSet<> kValid = {"sub", "div", "pow", "maximum",
-                                               "minimum"};
+      static const llvm::StringSet<> kValid = {
+          "sub", "div", "pow", "maximum", "minimum",
+          "add", "mul", "mod", "floor_div"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-binary-kernel: unknown kind '")
-            << kindStr << "' (sub/div/pow/maximum/minimum)";
+            << kindStr << "' (sub/div/pow/maximum/minimum/add/mul/mod/floor_div)";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());

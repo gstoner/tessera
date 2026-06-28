@@ -1118,6 +1118,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "layer-wise trust ratio ‖p‖/‖update‖. Executes via "
                  "runtime.launch() (rocm_lamb_compiled).",
     },
+    # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from a gfx1151
+    # device SVD (host does the small U@Vh + momentum/sgd). <2-D normalizes.
+    "muon": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer",),
+        "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
+                 "gfx1151 SVD kernel (rocm_linalg svd); host U@Vh + sgd. Executes "
+                 "via runtime.launch() (rocm_muon_compiled).",
+    },
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
@@ -1563,6 +1572,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sgd", "momentum", "adam", "adamw", "lion")},
     ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
     ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
+    ("muon", "x86"): "tests/unit/test_x86_muon_compiled.py",
+    ("muon", "rocm"): "tests/unit/test_rocm_muon_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
@@ -2325,6 +2336,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "Optimizer lamb — AVX-512 adam kernel (lr=1/wd=0) + host "
                  "layer-wise trust ratio ‖p‖/‖update‖; x86_lamb_compiled lane; "
                  "f32, matches optim.lamb",
+    },
+    # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from the AVX-512
+    # device SVD (host does U@Vh + momentum/sgd). <2-D normalizes.
+    "muon": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
+                 "AVX-512 SVD kernel; host U@Vh + sgd; x86_muon_compiled lane; "
+                 "f32, matches optim.muon",
     },
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).

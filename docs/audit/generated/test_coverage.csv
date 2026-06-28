@@ -302,7 +302,7 @@ msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
 mul,87,4,7,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
 multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
-muon,5,0,0,5,0,,directly_tested,5 direct test references
+muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,4,0,0,4,0,,directly_tested,4 direct test references

@@ -289,6 +289,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "sampled dense-dense dot over masked entries), bsmm "
                             "via the AVX-512 GEMM microkernel. COO folds to CSR "
                             "on host. f32",
+    "x86_selective_ssm_compiled": "x86 CPU Mamba2 selective_ssm — AVX-512 fused "
+                            "selective-scan kernel (single pass over S, "
+                            "vectorized over the state dim N, exp via the Cephes "
+                            "core; in-place (B,D,N) state). f32",
     "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
                             "count_nonzero) composed from the AVX-512 reduce "
                             "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
@@ -386,6 +390,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "wise CSR SpMM, sampled dense-dense SDDMM that skips "
                             "masked-zero entries) then HIP-launched; bsmm via the "
                             "WMMA matmul (bf16). f32",
+    "rocm_selective_ssm_compiled": "AMD GPU RDNA Mamba2 selective_ssm — COMPILER-"
+                            "GENERATED gfx1151 selective-scan kernel (generate-"
+                            "rocm-selective-ssm-kernel, one thread per (b,d) "
+                            "channel, exp via math->rocdl) HIP-launched. f32",
     "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
                             "/ count_nonzero) composed from the warp-shuffle "
                             "reduce kernel: var=mean(x^2)-mean(x)^2, "
@@ -643,6 +651,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "nonzeros (COO folds to CSR on host), sddmm = sampled dense-dense "
                "dot over masked entries, bsmm via the GEMM microkernel. f32, "
                "matches numpy.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_selective_ssm_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_selective_ssm_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_selective_ssm_compiled", runtime_status="success",
+        reason="x86 state-space lane runs selective_ssm (Mamba2) on the AVX-512 "
+               "fused selective-scan kernel — a single pass over S vectorized "
+               "over the state dim N, exp via the Cephes core, (B,D,N) state "
+               "updated in place. f32, matches the numpy reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stat_reduce_compiled",
@@ -1049,6 +1066,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "sddmm-kernel: row-wise CSR SpMM, sampled SDDMM skipping masked-"
                "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
                "the WMMA matmul (bf16). f32, matches numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_selective_ssm_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_selective_ssm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_selective_ssm_compiled", runtime_status="success",
+        reason="ROCm state-space lane runs selective_ssm (Mamba2) on the "
+               "COMPILER-GENERATED gfx1151 selective-scan kernel (generate-rocm-"
+               "selective-ssm-kernel: one thread per (b,d) channel, sequential "
+               "over time, exp via math->rocdl) HIP-launched. f32, matches the "
+               "numpy reference.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_stat_reduce_compiled",

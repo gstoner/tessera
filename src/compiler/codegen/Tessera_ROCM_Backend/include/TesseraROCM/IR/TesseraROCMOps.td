@@ -410,6 +410,20 @@ def ROCM_SddmmKernelOp : TesseraROCM_Op<"sddmm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SelectiveSsmKernelOp : TesseraROCM_Op<"selective_ssm"> {
+  let summary = "Mamba2 selective state-space scan gpu kernel";
+  let description = [{
+    `generate-rocm-selective-ssm-kernel` expands into a Mamba2 selective scan,
+    one thread per (b,d) channel (sequential over time, parallel over channels):
+    A_bar=exp(delta[b,t,d]·A[d,n]); h[b,d,n]=A_bar·h+delta·B[b,t,n]·x[b,t,d];
+    y[b,t,d]=Σ_n C[b,t,n]·h[b,d,n]. The N-length state slice h[b,d,:] is a global
+    scratch buffer (init to the caller's state or zeros). exp via math→ROCDL. All
+    f32. CPU analog: avx512_ssm_f32.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

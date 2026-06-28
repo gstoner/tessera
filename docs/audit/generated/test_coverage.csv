@@ -394,7 +394,7 @@ score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 sddmm,4,0,0,4,0,,directly_tested,4 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-selective_ssm,51,10,2,61,0,bf16 fp16 fp32,directly_tested,61 direct test references
+selective_ssm,60,10,2,70,0,bf16 fp16 fp32,directly_tested,70 direct test references
 seq2seq_loss,3,0,0,3,0,,directly_tested,3 direct test references
 sgd,6,0,0,6,0,,directly_tested,6 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'

@@ -1159,7 +1159,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_unary_compiled).",
     } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                  "abs", "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                 "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
+                 "softplus", "sin", "cos", "tan", "sinh", "cosh", "asin", "acos",
                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
     # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
@@ -1450,6 +1450,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("clamp", "clip")},
     **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py"
        for op in ("clamp", "clip")},
+    ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
+    ("sin", "rocm"): "tests/unit/test_rocm_sin_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
        for op in ("isnan", "isinf", "isfinite")},
     **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
@@ -2037,8 +2039,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
                  "erf; f32, matches numpy 2e-5)",
     } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                 "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
-                 "asin", "acos", "atan", "erfc")},
+                 "softplus", "expm1", "log1p", "sin", "cos", "tan", "sinh",
+                 "cosh", "asin", "acos", "atan", "erfc")},
     # Transcendental-backed BINARY ops — pow(a,b) (positive base) and
     # silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply); share the exp/log/sigmoid
     # cores. Runtime ctypes-loads them (x86_binary_math_compiled lane).

@@ -405,7 +405,7 @@ sign,5,0,1,5,0,bf16 f32,directly_tested,5 direct test references
 silu,85,2,5,87,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,87 direct test references
 silu_mul,15,13,1,28,0,bf16 fp32,directly_tested,28 direct test references
 simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
-sin,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+sin,3,0,0,3,0,,directly_tested,3 direct test references
 sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,5,0,0,5,0,f32,directly_tested,5 direct test references

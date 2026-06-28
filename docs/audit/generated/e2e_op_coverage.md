@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 180 |
-| ``runnable_reference`` | 129 |
+| ``complete`` | 181 |
+| ``runnable_reference`` | 128 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (180)
+## complete (181)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -70,6 +70,7 @@ each row into a single E2E tier.
 | ``sigmoid`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``silu`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``silu_mul`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``sin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sinh`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``softplus`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -216,7 +217,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (129)
+## runnable_reference (128)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -251,7 +252,6 @@ each row into a single E2E tier.
 | ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``sin`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``softcap`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``fused_epilogue`` | fused_epilogue | public | public | registered | partial | reference | ready | none |

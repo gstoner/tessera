@@ -3246,6 +3246,7 @@ _X86_TRANSCENDENTAL_OPS = {
     "tessera.acos": 15,
     "tessera.atan": 16,
     "tessera.erfc": 17,
+    "tessera.sin": 18,
 }
 
 
@@ -6276,6 +6277,7 @@ _ROCM_UNARY_OPS: dict[str, str] = {
     "tessera.log1p": "log1p", "tessera.expm1": "expm1",
     "tessera.softplus": "softplus",
     # tail: trig / special / rounding (2026-06-26)
+    "tessera.sin": "sin",
     "tessera.cos": "cos", "tessera.tan": "tan", "tessera.sinh": "sinh",
     "tessera.cosh": "cosh", "tessera.asin": "asin", "tessera.acos": "acos",
     "tessera.atan": "atan", "tessera.erfc": "erfc",

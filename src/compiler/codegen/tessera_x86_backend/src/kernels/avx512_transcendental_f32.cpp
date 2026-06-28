@@ -49,6 +49,7 @@ constexpr int kAsin = 14;
 constexpr int kAcos = 15;
 constexpr int kAtan = 16;
 constexpr int kErfc = 17;
+constexpr int kSin = 18;
 
 constexpr float kSqrt2OverPi = 0.7978845608028654f;  // √(2/π)
 constexpr float kGeluC = 0.044715f;
@@ -69,6 +70,7 @@ inline float scalar_transcendental(float v, int kind) {
                            std::fmax(v, 0.0f);
     case kExpm1:    return std::exp(v) - 1.0f;
     case kLog1p:    return std::log1p(v);
+    case kSin:      return std::sin(v);
     case kCos:      return std::cos(v);
     case kTan:      return std::tan(v);
     case kSinh:     return std::sinh(v);
@@ -301,6 +303,11 @@ inline __m512 apply512(__m512 v, int kind) {
     }
     case kExpm1:   return _mm512_sub_ps(exp512(v), one);
     case kLog1p:   return log512(_mm512_add_ps(one, v));
+    case kSin: {
+        __m512 s, c;
+        sincos512(v, &s, &c);
+        return s;
+    }
     case kCos: {
         __m512 s, c;
         sincos512(v, &s, &c);

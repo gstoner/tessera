@@ -3496,6 +3496,17 @@ def _execute_norm_compose(artifact: RuntimeArtifact, args: Any, target: str,
             f"{path} executor handles one of {_NORM_COMPOSE_OPS}; "
             f"got {[o.get('op_name') for o in ops]!r}")
     operand_names = [str(n) for n in ops[0].get("operands", [])]
+    # group_norm/instance_norm accept optional weight/bias operands in the
+    # catalog, but this device lane (like the rmsnorm/layer_norm device ops) is
+    # UNWEIGHTED — the affine composes separately through ops.mul/ops.add. Reject
+    # an artifact that carries affine operands rather than silently returning the
+    # unweighted result (Decision #21: stable diagnostic, never silently wrong).
+    if len(operand_names) > 1:
+        raise ValueError(
+            f"{path} is an UNWEIGHTED normalize lane for {op_name}; it takes a "
+            f"single input operand but got {len(operand_names)} "
+            f"({operand_names!r}). Compose the per-channel weight/bias affine "
+            f"separately via ops.mul / ops.add.")
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
     return _norm_compose_compute(op_name, x, ops[0].get("kwargs") or {},

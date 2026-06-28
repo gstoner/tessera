@@ -72,3 +72,20 @@ def test_group_norm_bad_divisor_rejected():
     x = np.zeros((2, 5, 4), np.float32)
     res = rt.launch(_art(rt, "tessera.group_norm", {"num_groups": 3}), (x,))
     assert res["ok"] is False
+
+
+def test_affine_operands_rejected():
+    """The device lane is unweighted — an artifact carrying weight/bias operands
+    must be rejected, not silently return the unweighted result."""
+    rt = _rt_or_skip()
+    x = np.zeros((2, 4, 3), np.float32)
+    weight = np.ones((4,), np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_normcompose_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["a0", "a1"], "output_name": "o",
+        "ops": [{"op_name": "tessera.instance_norm", "result": "o",
+                 "operands": ["a0", "a1"], "kwargs": {"eps": 1e-5}}]})
+    res = rt.launch(art, (x, weight))
+    assert res["ok"] is False
+    assert "UNWEIGHTED" in str(res.get("reason", ""))

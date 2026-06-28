@@ -230,9 +230,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ceil` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `clamp` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
 | `floor` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `isfinite` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
-| `isinf` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
-| `isnan` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `isfinite` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
+| `isinf` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
+| `isnan` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `maximum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `minimum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `reciprocal` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
@@ -349,7 +349,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
-| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

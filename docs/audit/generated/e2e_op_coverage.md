@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 175 |
-| ``runnable_reference`` | 134 |
+| ``complete`` | 178 |
+| ``runnable_reference`` | 131 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (175)
+## complete (178)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -148,6 +148,9 @@ each row into a single E2E tier.
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isfinite`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isinf`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isnan`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``maximum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``minimum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``reciprocal`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -211,7 +214,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (134)
+## runnable_reference (131)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -317,9 +320,6 @@ each row into a single E2E tier.
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``clamp`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isfinite`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |

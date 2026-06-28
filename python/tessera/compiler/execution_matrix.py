@@ -166,6 +166,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "direct-intrinsic subset sub/div/maximum/minimum "
                             "(NaN-propagating max/min), 16 f32 lanes/__m512. `pow` "
                             "is transcendental → numpy-reference. f32 only",
+    "x86_predicate_compiled": "x86 CPU unary predicate (isnan / isinf / "
+                            "isfinite) — the hand-written AVX-512 kernel "
+                            "(tessera_x86_avx512_predicate_f32; mask -> 0/1 "
+                            "bytes), runtime-loaded. f32 in, bool out",
     "x86_compare_compiled": "x86 CPU flat 2-operand elementwise comparison — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "compare_f32) the Python runtime ctypes-loads from "
@@ -209,6 +213,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "it — the S2 binary-arithmetic family (sub/div/pow/"
                             "maximum/minimum), one thread per element, dispatched "
                             "by op name; f32/f16/bf16 storage, f32 compute",
+    "rocm_predicate_compiled": "AMD GPU RDNA unary predicate (isnan / isinf / "
+                            "isfinite) kernel the Tessera compiler GENERATES "
+                            "(generate-rocm-predicate-kernel, kind StrAttr → ROCDL "
+                            "→ hsaco), then HIP launches — one thread per element. "
+                            "f32 in, i8/bool out",
     "rocm_compare_compiled": "AMD GPU RDNA flat 2-operand elementwise comparison "
                             "kernel the Tessera compiler GENERATES (generate-rocm-"
                             "compare-kernel -> ROCDL -> hsaco, in-process via "
@@ -854,6 +863,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "tessera_x86_avx512_binary_f32. `pow` stays numpy-reference. "
                "f32 only.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_predicate_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_predicate_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_predicate_compiled", runtime_status="success",
+        reason="x86 predicate artifact runs the hand-written AVX-512 unary "
+               "predicate kernel (isnan = x!=x, isinf = |x|==inf, isfinite = "
+               "ordered & |x|<inf; mask -> 0/1 bytes): the Python runtime "
+               "ctypes-loads libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_predicate_f32. f32 in, bool out.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_compare_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_compare_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1052,6 +1071,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Dispatched by op name.",
         execution_mode="hip_runtime"),
     # Comparison eq/ne/lt/le/gt/ge — flat 2-operand elementwise, bool output.
+    ("rocm", "rocm_predicate_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_predicate_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_predicate_compiled", runtime_status="success",
+        reason="ROCm predicate artifact runs the COMPILER-GENERATED unary "
+               "predicate kernel (isnan/isinf/isfinite, kind StrAttr-selected, one "
+               "thread per element): tessera-opt generates generate-rocm-predicate-"
+               "kernel -> ROCDL -> hsaco, then HIP launches it. f32 in, bool out.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_compare_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_compare_compiled",
         execution_kind="native_gpu", executable=True,

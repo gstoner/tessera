@@ -350,6 +350,25 @@ def ROCM_PolicyLossKernelOp : TesseraROCM_Op<"policy_loss"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_FpQuantKernelOp : TesseraROCM_Op<"fpquant"> {
+  let summary = "Low-precision float-grid quantization (1-operand) kernel";
+  let description = [{
+    `generate-rocm-fpquant-kernel` expands into a flat 1-operand elementwise
+    kernel snapping each value to a low-precision float grid (mantissa-snap):
+    `ax=min(|x|,max_normal)`; `e=max(floor(log2 ax),min_exp)`;
+    `ulp=2^(e−mantissa_bits)`; `out=sign·min(roundeven(ax/ulp)·ulp,max_normal)`,
+    NaN-propagating. `max_normal`/`mantissa_bits`/`min_exp` are compile-time
+    attrs (fp8 e4m3/e5m2, fp6 e2m3/e3m2, fp4 e2m1). The runtime applies the
+    per-tensor / per-block scale. CPU analog: avx512_fpquant_f32.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<F32Attr, "6.0">:$max_normal,
+                       DefaultValuedAttr<I64Attr, "1">:$mantissa_bits,
+                       DefaultValuedAttr<I64Attr, "-126">:$min_exp);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

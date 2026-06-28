@@ -985,6 +985,28 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_loss_compiled).",
     } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                  "log_cosh_loss")},
+    # S11 binary-cross-entropy losses (generate-rocm-binary-loss-kernel) — ROCm
+    # mirror of x86_binary_loss. Executes via rocm_binary_loss_compiled.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"Binary-cross-entropy loss {op} — per-element kernel "
+                 "(generate-rocm-binary-loss-kernel, stable softplus) + "
+                 "reduction. Executes via runtime.launch() "
+                 "(rocm_binary_loss_compiled).",
+    } for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    # S11 RL policy losses — ppo/cispo/grpo surrogate
+    # (generate-rocm-policy-loss-kernel) + normalize_group_advantages on the norm
+    # lane. ROCm mirror of x86_rl_loss. Executes via rocm_rl_loss_compiled.
+    **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("elementwise",),
+        "notes": f"RL policy loss {op} — surrogate kernel "
+                 "(generate-rocm-policy-loss-kernel) / norm-lane normalize + "
+                 "reduction. Executes via runtime.launch() "
+                 "(rocm_rl_loss_compiled).",
+    } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
+                 "normalize_group_advantages")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1308,6 +1330,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_binary_loss_compiled.py"
+       for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    **{(op, "rocm"): "tests/unit/test_rocm_rl_loss_compiled.py"
+       for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
+                  "normalize_group_advantages")},
     **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",

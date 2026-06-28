@@ -22,7 +22,7 @@ argmin,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 argsort,2,0,0,2,0,,directly_tested,2 direct test references
 asin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
-asymmetric_bce,6,0,0,6,0,,directly_tested,6 direct test references
+asymmetric_bce,8,0,0,8,0,f32,directly_tested,8 direct test references
 atan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 atan2,2,0,0,2,0,,directly_tested,2 direct test references
 attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
@@ -36,7 +36,7 @@ axis_name,0,0,0,0,1,,structural_only,category default for 'transform'
 axis_size,0,0,0,0,1,,structural_only,category default for 'transform'
 batched_gemm,18,4,0,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
 bidirectional_scan,2,0,0,2,0,,directly_tested,2 direct test references
-binary_cross_entropy_loss,7,0,1,7,0,,directly_tested,7 direct test references
+binary_cross_entropy_loss,9,0,1,9,0,f32,directly_tested,9 direct test references
 bitwise_and,3,0,0,3,0,,directly_tested,3 direct test references
 bitwise_not,4,0,2,4,0,,directly_tested,4 direct test references
 bitwise_or,5,0,2,5,0,,directly_tested,5 direct test references
@@ -56,7 +56,7 @@ checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
 cholesky,15,30,0,45,0,bf16 f16 f32 fp16 fp32,directly_tested,45 direct test references
 cholesky_solve,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-cispo_policy_loss,4,2,0,6,0,,directly_tested,6 direct test references
+cispo_policy_loss,6,2,0,8,0,,directly_tested,8 direct test references
 clamp,3,0,0,3,0,,directly_tested,3 direct test references
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
@@ -307,7 +307,7 @@ named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,4,0,0,4,0,,directly_tested,4 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-normalize_group_advantages,4,0,0,4,0,,directly_tested,4 direct test references
+normalize_group_advantages,6,0,0,6,0,,directly_tested,6 direct test references
 nt_xent_loss,4,0,0,4,0,,directly_tested,4 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
 online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
@@ -332,7 +332,7 @@ polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 popcount,7,0,0,7,0,,directly_tested,7 direct test references
 pow,5,0,2,5,0,bf16 f32,directly_tested,5 direct test references
 power_attn,6,0,1,6,0,,directly_tested,6 direct test references
-ppo_policy_loss,11,11,1,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
+ppo_policy_loss,14,11,1,25,0,bf16 f16 f32 fp16 fp32,directly_tested,25 direct test references
 prod,2,0,0,2,0,,directly_tested,2 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
 qkv_projection,9,0,0,9,0,fp32,directly_tested,9 direct test references

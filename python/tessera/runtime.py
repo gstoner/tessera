@@ -5690,8 +5690,10 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict,
     shape = tuple(int(d) for d in kwargs.get("shape", ()))
     n = int(np.prod(shape)) if shape else 1
     if op_name == "tessera.rng_uniform":
-        lo = float(kwargs.get("low", 0.0))
-        hi = float(kwargs.get("high", 1.0))
+        # Accept both the public-API names (lo/hi, used by tessera.ops.rng_uniform
+        # + the CPU reference) and the low/high aliases.
+        lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
+        hi = float(kwargs.get("hi", kwargs.get("high", 1.0)))
         out = np.float32(lo) + np.float32(hi - lo) * uniform_fn(seed, cbase, n)
         return out.reshape(shape).astype(np.float32)
     # rng_normal — Box-Muller from two Philox halves (mirrors rng_device.normal)

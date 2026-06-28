@@ -45,6 +45,17 @@ def test_rng_uniform_bit_exact_and_shape():
     np.testing.assert_array_equal(out.ravel(), R.uniform(42, 20, -1.0, 3.0))
 
 
+def test_rng_uniform_accepts_lo_hi_alias():
+    """The public tessera.ops.rng_uniform API passes lo/hi; the lane must honor
+    those, not only the low/high test aliases."""
+    rt = _rt_or_skip()
+    a = np.asarray(rt.launch(_art(rt, "tessera.rng_uniform",
+                                  {"seed": 5, "shape": [50], "lo": 2.0,
+                                   "hi": 4.0}), ())["output"])
+    np.testing.assert_array_equal(a, R.uniform(5, 50, 2.0, 4.0))
+    assert a.min() >= 2.0 and a.max() < 4.0
+
+
 def test_rng_uniform_statistics():
     rt = _rt_or_skip()
     out = np.asarray(rt.launch(_art(rt, "tessera.rng_uniform",

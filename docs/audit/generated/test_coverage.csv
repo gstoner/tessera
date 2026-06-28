@@ -375,7 +375,7 @@ rng_poisson,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_randint,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_split,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_truncated_normal,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_uniform,10,0,0,10,0,fp32,directly_tested,10 direct test references
+rng_uniform,12,0,0,12,0,fp32,directly_tested,12 direct test references
 roll,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 rope,20,10,0,30,0,bf16,directly_tested,30 direct test references
 rope_merge,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references

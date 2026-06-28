@@ -4716,6 +4716,7 @@ _ROCM_REDUCE_OPS = {
     "tessera.sum": "sum", "tessera.mean": "mean",
     "tessera.max": "max", "tessera.amax": "max",
     "tessera.min": "min", "tessera.amin": "min",
+    "tessera.prod": "prod",
 }
 
 
@@ -6690,6 +6691,131 @@ def _execute_rocm_compiled_class_loss(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm reduce/stable-reduce FOUNDATION — the reduction + stable_reduction ops
+# beyond the base sum/mean/max/min/amax/amin (warp-shuffle reduce kernel) and
+# softmax. var/std/count_nonzero and logsumexp/log_softmax compose the
+# warp-shuffle reduce kernel + the unary exp/log lane (the same compose pattern
+# as the class-loss lane); prod is a new reduce-kernel combine (rocm_reduce_
+# compiled); softmax_safe/sigmoid_safe alias the stable softmax / sigmoid lanes.
+# ─────────────────────────────────────────────────────────────────────────────
+def _rocm_reduce(x: Any, op_name: str, axis: Any, keepdims: bool,
+                 np: Any) -> Any:
+    """Row-reduction (sum/mean/max/min/prod) over ``axis`` on the warp-shuffle
+    reduce kernel, via the rocm_reduce_compiled lane."""
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_reduce_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["x"],
+                 "kwargs": {"axis": axis, "keepdims": keepdims}}]})
+    return np.asarray(_execute_rocm_compiled_reduce(
+        art, (np.ascontiguousarray(x, np.float32),)), np.float32)
+
+
+_ROCM_STAT_REDUCE_OPS = ("tessera.var", "tessera.std", "tessera.count_nonzero")
+
+
+def _execute_rocm_compiled_stat_reduce(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` statistical-reduction lane: var / std /
+    count_nonzero over an axis, composed from the warp-shuffle reduce kernel.
+    var = mean(x²) − mean(x)²; std = sqrt(var); count_nonzero = sum(x != 0)."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_STAT_REDUCE_OPS:
+        raise ValueError(
+            f"rocm_stat_reduce_compiled executor handles one of "
+            f"{_ROCM_STAT_REDUCE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("stat reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = kwargs.get("axis", None)
+    keepdims = bool(kwargs.get("keepdims", False))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]]).astype(np.float32)
+
+    if op_name == "tessera.count_nonzero":
+        mask = (x != 0.0).astype(np.float32)
+        out = _rocm_reduce(mask, "tessera.sum", axis, keepdims, np)
+        return np.rint(out).astype(np.int64)
+
+    mean = _rocm_reduce(x, "tessera.mean", axis, True, np)
+    m2 = _rocm_reduce(x * x, "tessera.mean", axis, True, np)
+    var = np.maximum(m2 - mean * mean, np.float32(0.0))
+    if op_name == "tessera.std":
+        var = _rocm_unary_t(var, "sqrt", np)
+    if not keepdims:
+        if axis is None:
+            var = var.reshape(())
+        else:
+            axes = (axis,) if isinstance(axis, int) else tuple(axis)
+            var = np.squeeze(var, axis=tuple(a if a >= 0 else x.ndim + a
+                                             for a in axes))
+    return var.astype(np.float32)
+
+
+_ROCM_STABLE_REDUCE_OPS = ("tessera.logsumexp", "tessera.log_softmax",
+                           "tessera.softmax_safe", "tessera.sigmoid_safe")
+
+
+def _execute_rocm_compiled_stable_reduce(artifact: RuntimeArtifact,
+                                         args: Any) -> Any:
+    """The ``target="rocm"`` stable-reduction lane: logsumexp / log_softmax /
+    softmax_safe / sigmoid_safe. logsumexp/log_softmax compose the warp-shuffle
+    reduce (max/sum) + the unary exp/log lane (max-shifted, overflow-safe);
+    softmax_safe routes to the stable softmax lane, sigmoid_safe to sigmoid."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_STABLE_REDUCE_OPS:
+        raise ValueError(
+            f"rocm_stable_reduce_compiled executor handles one of "
+            f"{_ROCM_STABLE_REDUCE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("stable reduce requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]]).astype(np.float32)
+
+    if op_name == "tessera.softmax_safe":
+        return _execute_rocm_compiled_softmax(
+            RuntimeArtifact(metadata={
+                "target": "rocm", "compiler_path": "rocm_softmax_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.softmax", "result": "o",
+                         "operands": ["x"], "kwargs": kwargs}]}), (x,))
+    if op_name == "tessera.sigmoid_safe":
+        return _rocm_unary_t(x, "sigmoid", np)
+
+    axis = kwargs.get("axis", -1)
+    keepdims = bool(kwargs.get("keepdims", False))
+    m = _rocm_reduce(x, "tessera.max", axis, True, np)
+    e = _rocm_unary_t((x - m).astype(np.float32), "exp", np)
+    s = _rocm_reduce(e, "tessera.sum", axis, True, np)
+    lse_keep = (m + _rocm_unary_t(s, "log", np)).astype(np.float32)
+    if op_name == "tessera.log_softmax":
+        return (x - lse_keep).astype(np.float32)
+    # tessera.logsumexp
+    if keepdims:
+        return lse_keep
+    if axis is None:
+        return lse_keep.reshape(())
+    axes = (axis,) if isinstance(axis, int) else tuple(axis)
+    return np.squeeze(lse_keep, axis=tuple(a if a >= 0 else x.ndim + a
+                                           for a in axes)).astype(np.float32)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -7272,6 +7398,8 @@ def _executor_table():
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
+        "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,
+        "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

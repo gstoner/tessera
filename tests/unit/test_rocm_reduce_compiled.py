@@ -120,7 +120,8 @@ def test_reduce_codegen_and_lowers(kind):
 
 
 def test_reduce_codegen_bad_kind_rejected():
-    d = ('module {\n  "tessera_rocm.reduce"() {name = "rd", kind = "prod"} '
+    d = ('module {\n  "tessera_rocm.reduce"() {name = "rd", kind = "zzz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-reduce-kernel")
-    assert r.returncode != 0 and "kind must be sum, mean, max, or min" in r.stderr
+    assert r.returncode != 0 and \
+        "kind must be sum, mean, max, min, or prod" in r.stderr

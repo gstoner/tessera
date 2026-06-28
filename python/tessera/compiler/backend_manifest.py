@@ -1099,6 +1099,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "channel, exp via math->rocdl) on gfx1151. Executes via "
                  "runtime.launch() (rocm_selective_ssm_compiled).",
     },
+    # Linalg PR-A — Cholesky + triangular solve on gfx1151 (one thread per matrix
+    # / per matrix-RHS-column) (rocm_linalg_compiled).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("linalg",),
+        "notes": f"Linalg {op} — direct factorization/solve kernel (generate-"
+                 "rocm-cholesky/tri-solve-kernel) on gfx1151; cholesky_solve = "
+                 "two triangular solves. Executes via runtime.launch() "
+                 "(rocm_linalg_compiled).",
+    } for op in ("cholesky", "tri_solve", "cholesky_solve")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1431,6 +1441,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
+       for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
+       for op in ("cholesky", "tri_solve", "cholesky_solve")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2123,6 +2137,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "the Cephes core; x86_selective_ssm_compiled lane; f32, matches "
                  "the numpy reference)",
     },
+    # Linalg PR-A — Cholesky + triangular solve (SPD/triangular family). Genuine
+    # AVX-512 factorization/substitution kernels (x86_linalg_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Linalg {op} — AVX-512 kernel (Cholesky–Banachiewicz "
+                 "factorization / forward-back triangular substitution; "
+                 "cholesky_solve = two triangular solves; batched; "
+                 "x86_linalg_compiled lane; f32, matches numpy)",
+    } for op in ("cholesky", "tri_solve", "cholesky_solve")},
 }
 
 

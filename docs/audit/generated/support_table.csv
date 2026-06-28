@@ -154,12 +154,12 @@ transpose,layout_transform,public,public,registered,complete,partial,reference,r
 unpack,layout_transform,public,public,registered,complete,partial,reference,ready,none
 unsqueeze,layout_transform,public,public,registered,complete,partial,reference,ready,none
 view,layout_transform,public,public,registered,complete,partial,reference,ready,none
-cholesky,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
+cholesky,linalg_decomposition,public,public,registered,complete,partial,fused,ready,none
 lu,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
 qr,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
 svd,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
-cholesky_solve,linalg_solver,public,public,registered,complete,partial,reference,ready,none
-tri_solve,linalg_solver,public,public,registered,complete,partial,reference,ready,none
+cholesky_solve,linalg_solver,public,public,registered,complete,partial,fused,ready,none
+tri_solve,linalg_solver,public,public,registered,complete,partial,fused,ready,none
 bitwise_and,logical,public,public,registered,complete,partial,fused,ready,none
 bitwise_not,logical,public,public,registered,complete,partial,fused,ready,none
 bitwise_or,logical,public,public,registered,complete,partial,fused,ready,none

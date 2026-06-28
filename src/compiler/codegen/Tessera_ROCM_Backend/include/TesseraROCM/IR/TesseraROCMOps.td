@@ -424,6 +424,31 @@ def ROCM_SelectiveSsmKernelOp : TesseraROCM_Op<"selective_ssm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_CholeskyKernelOp : TesseraROCM_Op<"cholesky"> {
+  let summary = "Batched Cholesky factorization gpu kernel";
+  let description = [{
+    `generate-rocm-cholesky-kernel` expands into a batched Cholesky (one thread
+    per matrix) — A[b,n,n] SPD → L[b,n,n] lower, A=L·Lᵀ (Cholesky–Banachiewicz):
+    L[j,j]=sqrt(A[j,j]-Σ_{k<j}L[j,k]²); L[i,j]=(A[i,j]-Σ_{k<j}L[i,k]·L[j,k])/L[j,j].
+    sqrt via math→ROCDL. All f32. CPU analog: avx512_linalg_f32 cholesky.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_TriSolveKernelOp : TesseraROCM_Op<"tri_solve"> {
+  let summary = "Batched triangular solve gpu kernel";
+  let description = [{
+    `generate-rocm-tri-solve-kernel` expands into a batched triangular solve
+    A·X=B (one thread per matrix/RHS-column) — `lower` (BoolAttr) selects forward
+    (lower) vs back (upper) substitution at codegen. A[b,n,n] (triangular part
+    used), B/X[b,n,m]. All f32. CPU analog: avx512_linalg_f32 tri_solve.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<BoolAttr, "true">:$lower);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

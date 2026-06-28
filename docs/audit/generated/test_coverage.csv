@@ -53,8 +53,8 @@ centralize_grad,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 chained_schedule,1,0,0,1,1,,structural_only,category default for 'schedule'
 check_cauchy_riemann,0,0,0,0,1,,covered_by_family,exercised by complex_jit / CR conformance tests
 checkpoint,0,0,0,0,1,,structural_only,category default for 'transform'
-cholesky,15,30,0,45,0,bf16 f16 f32 fp16 fp32,directly_tested,45 direct test references
-cholesky_solve,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
+cholesky,19,30,0,49,0,bf16 f16 f32 fp16 fp32,directly_tested,49 direct test references
+cholesky_solve,3,1,0,4,0,bf16 f16 f32 fp16 fp32,directly_tested,4 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 cispo_policy_loss,6,2,0,8,0,,directly_tested,8 direct test references
 clamp,3,0,0,3,0,,directly_tested,3 direct test references
@@ -456,7 +456,7 @@ tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_transpose,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_unflatten,1,0,0,1,1,,structural_only,category default for 'state_tree'
-tri_solve,5,2,0,7,0,bf16 f16 f32 fp16 fp32,directly_tested,7 direct test references
+tri_solve,9,2,0,11,0,bf16 f16 f32 fp16 fp32,directly_tested,11 direct test references
 triplet_loss,6,0,0,6,0,,directly_tested,6 direct test references
 trunc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 unpack,2,0,0,2,0,,directly_tested,2 direct test references

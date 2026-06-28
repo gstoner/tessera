@@ -170,12 +170,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `unpack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `unsqueeze` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `view` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `cholesky` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
+| `cholesky` | linalg_decomposition | public | public | registered | complete | partial | fused | ready | none |
 | `lu` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
 | `qr` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
 | `svd` | linalg_decomposition | public | public | registered | complete | partial | reference | ready | none |
-| `cholesky_solve` | linalg_solver | public | public | registered | complete | partial | reference | ready | none |
-| `tri_solve` | linalg_solver | public | public | registered | complete | partial | reference | ready | none |
+| `cholesky_solve` | linalg_solver | public | public | registered | complete | partial | fused | ready | none |
+| `tri_solve` | linalg_solver | public | public | registered | complete | partial | fused | ready | none |
 | `bitwise_and` | logical | public | public | registered | complete | partial | fused | ready | none |
 | `bitwise_not` | logical | public | public | registered | complete | partial | fused | ready | none |
 | `bitwise_or` | logical | public | public | registered | complete | partial | fused | ready | none |
@@ -340,8 +340,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| linalg_decomposition | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| linalg_solver | 2 | PPGCpRN· PPGCpRN· |
+| linalg_decomposition | 4 | PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
 | loss | 19 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· |

@@ -603,6 +603,7 @@ x86,tessera_x86_avx512_transcendental_f32,avx512_transcendental,f32,src/compiler
 x86,tessera_x86_avx512_unary_f32,avx512_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_avx512_vnni_gemm_u8s8_s32,avx512_vnni_gemm_u8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp
 x86,tessera_x86_avx512_where_f32,avx512_where,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_where_f32.cpp
+x86,tessera_x86_cholesky_f32,cholesky,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
@@ -620,3 +621,4 @@ x86,tessera_x86_reference_spmm_csr_f32,reference_spmm_csr,f32,src/compiler/codeg
 x86,tessera_x86_reference_transcendental_f32,reference_transcendental,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_reference_unary_f32,reference_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_reference_where_f32,reference_where,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_where_f32.cpp
+x86,tessera_x86_tri_solve_f32,tri_solve,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp

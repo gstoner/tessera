@@ -2242,14 +2242,20 @@ OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
 
 // ── Structural 0-view ops (P1b) — identity folds ────────────────────────────
 // For the shape-only ops (squeeze/unsqueeze/expand/broadcast/flatten) an equal
-// operand/result type means the op is a genuine no-op (no dim was added/removed/
-// broadcast), so it folds to its input. `permute` is the exception: a square
-// tensor keeps its type under a real axis swap (e.g. [1,0] on NxN), so it folds
-// only when the `perm` attribute is the identity permutation (or absent).
+// operand/result type means the op is a no-op, so it folds to its input.
+//
+// CRUCIAL: type equality alone is NOT a runtime-identity proof when the type is
+// unranked or has dynamic dims — a dynamic tessera.expand/broadcast can carry a
+// runtime extent change (1->N) in the attr-dict while both sides stay typed
+// `tensor<?xf32>`. So only fold when the operand type is RANKED + FULLY STATIC
+// (every dim known); then equal types prove identical runtime shapes.
 static OpFoldResult foldStructuralIdentity(Operation *op, Value x, Value y) {
-  if (x.getType() == y.getType() && !op->hasAttr("tessera.layout"))
-    return x;
-  return {};
+  if (x.getType() != y.getType() || op->hasAttr("tessera.layout"))
+    return {};
+  auto rt = llvm::dyn_cast<RankedTensorType>(x.getType());
+  if (!rt || !rt.hasStaticShape())
+    return {};
+  return x;
 }
 
 OpFoldResult SqueezeOp::fold(FoldAdaptor) {
@@ -2271,10 +2277,17 @@ OpFoldResult FlattenOp::fold(FoldAdaptor) {
 OpFoldResult PermuteOp::fold(FoldAdaptor) {
   if (getX().getType() != getY().getType() || (*this)->hasAttr("tessera.layout"))
     return {};
-  // Only an identity permutation is a no-op. Absent `perm` is treated as
-  // identity (the op carries no reordering).
-  auto perm = (*this)->getAttrOfType<ArrayAttr>("perm");
-  if (perm) {
+  // permute keeps its type under a real axis swap on a square static tensor, so
+  // fold only on a ranked + fully static shape...
+  auto rt = llvm::dyn_cast<RankedTensorType>(getX().getType());
+  if (!rt || !rt.hasStaticShape())
+    return {};
+  // ...AND only when `perm` is the FULL-RANK identity permutation. A truncated
+  // perm (e.g. [0] on a rank-2 tensor) is malformed/non-identity — reject it
+  // rather than match an identity prefix. An absent perm carries no reordering.
+  if (auto perm = (*this)->getAttrOfType<ArrayAttr>("perm")) {
+    if (perm.size() != static_cast<size_t>(rt.getRank()))
+      return {};
     for (auto [i, a] : llvm::enumerate(perm)) {
       auto ia = llvm::dyn_cast<IntegerAttr>(a);
       if (!ia || ia.getInt() != static_cast<int64_t>(i))

@@ -49,6 +49,22 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     # ints is literal-eval'd; contrast cat/stack, whose list-of-tensors flattens
     # into operands.)
     "tessera.slice": ("start_indices", "slice_sizes"),
+    # P1 frontend emission — the 6 structural view ops (P1a ODS) carry their
+    # axes/perm/shape as a *discardable* attribute. Those ODS ops take ONLY
+    # `TensorType:$x`; without binding the trailing positional arg as an
+    # attribute it drops to a bogus "%?" operand and the op fails the 1-operand
+    # verifier. Attribute NAMES match the canonical lit-fixture vocabulary
+    # (tests/tessera-ir/phase2/structural_view_ops.mlir) so the §6.B view/copy
+    # analysis reads one spelling: squeeze/unsqueeze=`axes`, permute=`perm`
+    # (the C++ PermuteOp::fold reads getAttrOfType<ArrayAttr>("perm")),
+    # expand/broadcast=`shape`, flatten=`start`/`end`. Tuple/list values
+    # serialize to `[…]` array attrs via _format_attr_value.
+    "tessera.squeeze": ("axes",),
+    "tessera.unsqueeze": ("axes",),
+    "tessera.permute": ("perm",),
+    "tessera.expand": ("shape",),
+    "tessera.broadcast": ("shape",),
+    "tessera.flatten": ("start", "end"),
 }
 
 

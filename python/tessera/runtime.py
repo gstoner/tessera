@@ -6598,6 +6598,11 @@ _ROCM_PREDICATE_OPS = {
 def _rocm_predicate(x: Any, kind: str, np: Any) -> Any:
     """isnan/isinf/isfinite over f32 input on the gfx1151 predicate kernel,
     returning numpy bool_ (one thread per element)."""
+    shape = np.asarray(x).shape
+    if int(np.prod(shape)) == 0:
+        # Empty input: nothing to launch (a 0-sized grid is undefined) — return
+        # the empty bool result, mirroring the x86 predicate lane's short-circuit.
+        return np.zeros(shape, dtype=np.bool_)
     chip = _rocm_chip()
     directive = ('module {\n  "tessera_rocm.predicate"() {name = "pr", '
                  f'kind = "{kind}"}} : () -> ()\n}}\n')

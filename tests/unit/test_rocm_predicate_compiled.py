@@ -56,6 +56,18 @@ def test_predicate_shape_preserved():
     np.testing.assert_array_equal(np.asarray(res["output"]), np.isfinite(x))
 
 
+@pytest.mark.parametrize("shape", [(0,), (0, 3), (2, 0)])
+def test_predicate_empty_input(shape):
+    # Empty input must short-circuit (a 0-sized grid is undefined for
+    # hipModuleLaunchKernel) — return the empty bool result without launching.
+    rt = _rocm_or_skip()
+    x = np.zeros(shape, np.float32)
+    res = rt.launch(_art(rt, "tessera.isnan"), (x,))
+    assert res["ok"] is True, res.get("reason")
+    out = np.asarray(res["output"])
+    assert out.shape == shape and out.dtype == np.bool_
+
+
 @pytest.mark.parametrize("kind", ["isnan", "isinf", "isfinite"])
 def test_predicate_codegen_lowers(kind):
     import subprocess

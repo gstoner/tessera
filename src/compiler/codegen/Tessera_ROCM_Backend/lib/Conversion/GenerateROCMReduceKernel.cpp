@@ -43,7 +43,7 @@ static constexpr int64_t BD = 256;
 static constexpr int64_t SG = 32;          // shuffle subgroup width
 static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
-enum class Red { Sum, Mean, Max, Min };
+enum class Red { Sum, Mean, Max, Min, Prod };
 
 void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
                     Red red) {
@@ -70,11 +70,14 @@ void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   Value c0 = ci(0), cBD = ci(BD);
   float ninf = -std::numeric_limits<float>::infinity();
   float pinf = std::numeric_limits<float>::infinity();
-  Value ident = isMax ? cf(ninf) : isMin ? cf(pinf) : cf(0.0f);
+  bool isProd = red == Red::Prod;
+  Value ident = isMax ? cf(ninf) : isMin ? cf(pinf)
+                : isProd ? cf(1.0f) : cf(0.0f);
 
   auto combine = [&](Value a, Value c) -> Value {
     if (isMax) return b.create<arith::MaximumFOp>(loc, a, c);
     if (isMin) return b.create<arith::MinimumFOp>(loc, a, c);
+    if (isProd) return b.create<arith::MulFOp>(loc, a, c);
     return b.create<arith::AddFOp>(loc, a, c);
   };
 
@@ -185,9 +188,10 @@ struct GenerateROCMReduceKernelPass
       else if (kindStr == "mean") red = Red::Mean;
       else if (kindStr == "max") red = Red::Max;
       else if (kindStr == "min") red = Red::Min;
+      else if (kindStr == "prod") red = Red::Prod;
       else {
         op->emitError("generate-rocm-reduce-kernel: kind must be sum, mean, "
-                      "max, or min (got '") << kindStr << "')";
+                      "max, min, or prod (got '") << kindStr << "')";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());

@@ -1035,6 +1035,32 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "codes on the fpquant kernel + host block structure. Executes "
                  "via runtime.launch() (rocm_nvfp4_compiled).",
     } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    # S2 reduction foundation — prod via the warp-shuffle reduce kernel (new
+    # combine); var/std/count_nonzero composed from it. rocm_reduce_compiled /
+    # rocm_stat_reduce_compiled.
+    "prod": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Row reduction prod (Π_k X[m,k]) — warp-shuffle reduce kernel "
+                 "(generate-rocm-reduce-kernel, prod combine). Executes via "
+                 "runtime.launch() (rocm_reduce_compiled).",
+    },
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction",),
+        "notes": f"Statistical reduction {op} — composed from the warp-shuffle "
+                 "reduce kernel (var=mean(x^2)-mean(x)^2). Executes via "
+                 "runtime.launch() (rocm_stat_reduce_compiled).",
+    } for op in ("var", "std", "count_nonzero")},
+    # S2 stable-reduction foundation — logsumexp/log_softmax (max-shifted reduce
+    # + exp/log lane), softmax_safe/sigmoid_safe (alias stable softmax/sigmoid).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction",),
+        "notes": f"Stable reduction {op} — max-shifted reduce (max/sum) + "
+                 "unary exp/log lane. Executes via runtime.launch() "
+                 "(rocm_stable_reduce_compiled).",
+    } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1370,6 +1396,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
                   "quantize_nvfp4", "dequantize_nvfp4")},
+    **{(op, "rocm"): "tests/unit/test_rocm_reduce_foundation_compiled.py"
+       for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
+                  "log_softmax", "softmax_safe", "sigmoid_safe")},
     **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",

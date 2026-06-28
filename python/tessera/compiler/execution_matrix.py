@@ -341,6 +341,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco), then HIP launches it; per-element "
                             "loss on gfx1151 + none/mean/sum reduction. The CPU "
                             "analog is the x86_loss lane. f32/f16/bf16",
+    "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
+                            "/ count_nonzero) composed from the warp-shuffle "
+                            "reduce kernel: var=mean(x^2)-mean(x)^2, "
+                            "std=sqrt(var), count_nonzero=sum(x!=0) over an axis. "
+                            "f32",
+    "rocm_stable_reduce_compiled": "AMD GPU RDNA stable reduction (logsumexp / "
+                            "log_softmax / softmax_safe / sigmoid_safe) — "
+                            "max-shifted, composed from the warp-shuffle reduce "
+                            "(max/sum) + the unary exp/log lane; softmax_safe / "
+                            "sigmoid_safe alias the stable softmax / sigmoid "
+                            "lanes. f32",
     "rocm_class_loss_compiled": "AMD GPU RDNA class-axis loss (cross_entropy / "
                             "kl / js / focal / label_smoothed / z_loss) — exp/log "
                             "on the rocm unary lane (gfx1151), class-axis "
@@ -914,6 +925,25 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_stat_reduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_stat_reduce_compiled", runtime_status="success",
+        reason="ROCm stat-reduce artifact runs var / std / count_nonzero over an "
+               "axis, composed from the warp-shuffle reduce kernel "
+               "(var=mean(x^2)-mean(x)^2, std=sqrt(var), count_nonzero=sum(x!=0))"
+               ". f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_stable_reduce_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_stable_reduce_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_stable_reduce_compiled", runtime_status="success",
+        reason="ROCm stable-reduce artifact runs logsumexp / log_softmax / "
+               "softmax_safe / sigmoid_safe — max-shifted, composed from the "
+               "warp-shuffle reduce (max/sum) + the unary exp/log lane; "
+               "softmax_safe / sigmoid_safe alias the stable softmax / sigmoid "
+               "lanes. f32.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_class_loss_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_class_loss_compiled",
         execution_kind="native_gpu", executable=True,

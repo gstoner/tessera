@@ -433,7 +433,7 @@ stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 stft,7,0,0,7,0,,directly_tested,7 direct test references
 sub,13,4,2,17,0,bf16 f16 f32,directly_tested,17 direct test references
 sum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references
-svd,8,5,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
+svd,10,5,0,15,0,bf16 f16 f32 fp16 fp32,directly_tested,15 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references

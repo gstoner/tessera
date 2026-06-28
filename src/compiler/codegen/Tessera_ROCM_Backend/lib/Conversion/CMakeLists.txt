@@ -21,6 +21,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMTriSolveKernel.cpp
   GenerateROCMLuKernel.cpp
   GenerateROCMQrKernel.cpp
+  GenerateROCMSvdKernel.cpp
   GenerateROCMAlibiKernel.cpp
   GenerateROCMDeltaNetKernel.cpp
   GenerateROCMRopeKernel.cpp

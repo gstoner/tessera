@@ -170,6 +170,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "isfinite) — the hand-written AVX-512 kernel "
                             "(tessera_x86_avx512_predicate_f32; mask -> 0/1 "
                             "bytes), runtime-loaded. f32 in, bool out",
+    "x86_clamp_compiled": "x86 CPU clamp / clip — min(max(x, lo), hi) composed on "
+                            "the AVX-512 binary max/min kernel (either bound "
+                            "optional; scalar bounds broadcast on host). f32",
     "x86_compare_compiled": "x86 CPU flat 2-operand elementwise comparison — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "compare_f32) the Python runtime ctypes-loads from "
@@ -218,6 +221,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(generate-rocm-predicate-kernel, kind StrAttr → ROCDL "
                             "→ hsaco), then HIP launches — one thread per element. "
                             "f32 in, i8/bool out",
+    "rocm_clamp_compiled": "AMD GPU RDNA clamp / clip — min(max(x, lo), hi) "
+                            "composed on the rocm_binary_compiled max/min kernel "
+                            "(either bound optional; scalar bounds broadcast on "
+                            "host). f32",
     "rocm_compare_compiled": "AMD GPU RDNA flat 2-operand elementwise comparison "
                             "kernel the Tessera compiler GENERATES (generate-rocm-"
                             "compare-kernel -> ROCDL -> hsaco, in-process via "
@@ -863,6 +870,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "tessera_x86_avx512_binary_f32. `pow` stays numpy-reference. "
                "f32 only.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_clamp_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_clamp_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_clamp_compiled", runtime_status="success",
+        reason="x86 clamp lane runs clamp / clip as min(max(x, lo), hi) composed "
+               "on the AVX-512 binary max/min kernel (either bound optional; the "
+               "scalar bounds are broadcast on host). f32, matches np.clip.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_predicate_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_predicate_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1071,6 +1086,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Dispatched by op name.",
         execution_mode="hip_runtime"),
     # Comparison eq/ne/lt/le/gt/ge — flat 2-operand elementwise, bool output.
+    ("rocm", "rocm_clamp_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_clamp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_clamp_compiled", runtime_status="success",
+        reason="ROCm clamp lane runs clamp / clip as min(max(x, lo), hi) composed "
+               "on the COMPILER-GENERATED gfx1151 binary max/min kernel (either "
+               "bound optional; scalar bounds broadcast on host). f32, matches "
+               "np.clip.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_predicate_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_predicate_compiled",
         execution_kind="native_gpu", executable=True,

@@ -57,7 +57,7 @@ cholesky,19,30,0,49,0,bf16 f16 f32 fp16 fp32,directly_tested,49 direct test refe
 cholesky_solve,3,1,0,4,0,bf16 f16 f32 fp16 fp32,directly_tested,4 direct test references
 chunk,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 cispo_policy_loss,6,2,0,8,0,,directly_tested,8 direct test references
-clamp,3,0,0,3,0,,directly_tested,3 direct test references
+clamp,8,0,0,8,0,,directly_tested,8 direct test references
 clifford_codiff,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_conjugate,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_exp,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
@@ -76,7 +76,7 @@ clifford_reverse,1,0,0,1,1,,covered_by_family,category default for 'geometric_al
 clifford_rotor_sandwich,2,0,0,2,0,,directly_tested,2 direct test references
 clifford_vec_deriv,0,0,0,0,1,,covered_by_family,category default for 'geometric_algebra'
 clifford_wedge,1,0,0,1,1,,covered_by_family,category default for 'geometric_algebra'
-clip,11,0,1,11,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,11 direct test references
+clip,15,0,1,15,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 clip_grad_norm,3,0,0,3,0,,directly_tested,3 direct test references
 clip_grad_value,2,0,0,2,0,,directly_tested,2 direct test references
 collective_permute,2,0,0,2,0,,directly_tested,2 direct test references

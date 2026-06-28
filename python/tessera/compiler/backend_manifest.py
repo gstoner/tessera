@@ -1193,6 +1193,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-predicate-kernel), bool output. Executes via "
                  "runtime.launch() (rocm_predicate_compiled).",
     } for op in ("isnan", "isinf", "isfinite")},
+    # P2c — clamp/clip composed on the gfx1151 binary max/min lane (no new
+    # kernel; scalar bounds broadcast on host). Executes via rocm_clamp_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone {op} — min(max(x, lo), hi) composed on the "
+                 "rocm_binary_compiled max/min kernel (either bound optional). "
+                 "Executes via runtime.launch() (rocm_clamp_compiled).",
+    } for op in ("clamp", "clip")},
     # S2 logical family — flat elementwise kernel over i8 booleans
     # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
     # normalized via != 0 (numpy semantics). Executes via runtime.launch()
@@ -1437,6 +1446,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("add", "mul", "mod", "floor_div", "abs")},
     **{(op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
        for op in ("add", "mul", "mod", "floor_div", "abs")},
+    **{(op, "x86"): "tests/unit/test_x86_clamp_compiled.py"
+       for op in ("clamp", "clip")},
+    **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py"
+       for op in ("clamp", "clip")},
     **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
        for op in ("isnan", "isinf", "isfinite")},
     **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
@@ -1974,6 +1987,14 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 predicate {op} (tessera_x86_avx512_predicate_f32, "
                  "runtime-loaded; x86_predicate_compiled lane; bool output)",
     } for op in ("isnan", "isinf", "isfinite")},
+    # P2c — clamp/clip composed on the AVX-512 binary max/min kernel (no new
+    # kernel; scalar bounds broadcast on host; x86_clamp_compiled lane).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
+                 "AVX-512 max/min kernel (either bound optional; matches np.clip)",
+    } for op in ("clamp", "clip")},
     # S2 logical family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes
     # (x86_logical_compiled). i8 bool in/out; inputs normalized via != 0.

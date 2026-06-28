@@ -1109,6 +1109,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "thread per element; host computes the 1-β^t bias correction) on "
                  "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
     } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    # P3 tail — LAMB: device adam update + a per-tensor trust ratio ‖p‖/‖update‖
+    # on host (the reduction the elementwise lane can't do).
+    "lamb": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer",),
+        "notes": "Optimizer lamb — gfx1151 adam kernel (lr=1/wd=0) + host "
+                 "layer-wise trust ratio ‖p‖/‖update‖. Executes via "
+                 "runtime.launch() (rocm_lamb_compiled).",
+    },
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
@@ -1552,6 +1561,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sgd", "momentum", "adam", "adamw", "lion")},
     **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
        for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
+    ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
@@ -2307,6 +2318,14 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(state m/v in-place; host computes the 1-β^t bias correction); "
                  "x86_optimizer_compiled lane; f32, matches the optim.py reference",
     } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    # P3 tail — LAMB: AVX-512 adam update + host per-tensor trust ratio.
+    "lamb": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Optimizer lamb — AVX-512 adam kernel (lr=1/wd=0) + host "
+                 "layer-wise trust ratio ‖p‖/‖update‖; x86_lamb_compiled lane; "
+                 "f32, matches optim.lamb",
+    },
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).
     "selective_ssm": {

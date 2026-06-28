@@ -324,6 +324,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "adamw / lion) — AVX-512 fused per-parameter update "
                             "kernel (kind-selected; m/v state in-place; host "
                             "computes the 1-β^t bias correction). f32",
+    "x86_lamb_compiled": "x86 CPU LAMB — AVX-512 adam kernel (lr=1/wd=0) + host "
+                            "per-tensor trust ratio ‖p‖/‖update‖. f32",
     "x86_selective_ssm_compiled": "x86 CPU Mamba2 selective_ssm — AVX-512 fused "
                             "selective-scan kernel (single pass over S, "
                             "vectorized over the state dim N, exp via the Cephes "
@@ -437,6 +439,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "fused per-parameter update kernel (generate-rocm-"
                             "optimizer-kernel, kind StrAttr-selected; host "
                             "computes the 1-β^t bias correction). f32",
+    "rocm_lamb_compiled": "AMD GPU RDNA LAMB — COMPILER-GENERATED gfx1151 adam "
+                            "kernel (lr=1/wd=0) + host per-tensor trust ratio "
+                            "‖p‖/‖update‖. f32",
     "rocm_moe_compiled": "AMD GPU RDNA mixture-of-experts compute (moe) — "
                             "COMPILER-GENERATED gfx1151 kernel (generate-rocm-moe-"
                             "kernel: routed per-token expert GEMV, one thread per "
@@ -727,6 +732,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "fused per-parameter update on the AVX-512 kernel (kind-selected; "
                "m/v state updated in place; the 1-β^t bias correction computed on "
                "host from the step). f32, matches the optim.py reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_lamb_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_lamb_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_lamb_compiled", runtime_status="success",
+        reason="x86 LAMB lane runs the AVX-512 adam kernel (lr=1/wd=0) then "
+               "applies the per-tensor trust ratio ‖p‖/‖update‖ on host (the "
+               "reduction the elementwise lane can't do). f32, matches "
+               "optim.lamb.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_selective_ssm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_selective_ssm_compiled",
@@ -1231,6 +1245,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "kernel (generate-rocm-optimizer-kernel, kind StrAttr-selected, "
                "one thread per element; the 1-β^t bias correction computed on "
                "host) HIP-launched. f32, matches the optim.py reference.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_lamb_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_lamb_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_lamb_compiled", runtime_status="success",
+        reason="ROCm LAMB lane runs the COMPILER-GENERATED gfx1151 adam kernel "
+               "(lr=1/wd=0) then applies the per-tensor trust ratio "
+               "‖p‖/‖update‖ on host. f32, matches optim.lamb.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_moe_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_moe_compiled",

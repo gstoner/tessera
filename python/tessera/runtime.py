@@ -4852,6 +4852,131 @@ def _execute_x86_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# LAMB — layer-wise adaptive moments (P3 optimizer tail). LAMB is the device
+# adam update (the FLOP-heavy elementwise m/v step, run with lr=1 / wd=0 on the
+# fused optimizer kernel) followed by a PER-TENSOR trust ratio ‖p‖/‖update‖ that
+# the elementwise lane cannot compute — that reduction + the final scaling run on
+# host. compiler_path="x86_lamb_compiled" / "rocm_lamb_compiled". f32. Matches
+# tessera.optim.lamb.
+# ─────────────────────────────────────────────────────────────────────────────
+_LAMB_OPS = ("tessera.lamb",)
+
+
+def _lamb_compute(p: Any, g: Any, m: Any, v: Any, kwargs: dict,
+                  run_kernel: Any, np: Any) -> tuple:
+    """One LAMB step over a single parameter tensor. ``run_kernel`` is the fused
+    optimizer device kernel; kind 2 (adam) with lr=1/wd=0 yields the adam update,
+    then the host applies the layer-wise trust ratio. Returns (p_new, m, v)."""
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    shape = p.shape
+    pf = p.reshape(-1)
+    gf = g.reshape(-1)
+    n = int(pf.size)
+    mf = (np.ascontiguousarray(m, np.float32).reshape(-1) if m is not None
+          else np.zeros(n, np.float32))
+    vf = (np.ascontiguousarray(v, np.float32).reshape(-1) if v is not None
+          else np.zeros(n, np.float32))
+    lr = float(kwargs.get("lr", 1e-3))
+    beta1 = float(kwargs.get("beta1", 0.9))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1e-6))
+    wd = float(kwargs.get("weight_decay", 0.0))
+    step = int(kwargs.get("step", 1))
+    b1c = 1.0 - beta1 ** step
+    b2c = 1.0 - beta2 ** step
+    # device adam update (lr=1, wd=0): next_p = p - adam_update; m/v advanced.
+    next_p, m_out, v_out = run_kernel(2, pf, gf, mf, vf, n, 1.0, beta1, beta2,
+                                      eps, 0.0, b1c, b2c)
+    update = (pf - next_p) + wd * pf
+    p_norm = float(np.linalg.norm(pf))
+    u_norm = float(np.linalg.norm(update))
+    trust = 1.0 if (p_norm == 0.0 or u_norm == 0.0) else p_norm / u_norm
+    p_new = pf - np.float32(lr * trust) * update
+    return (p_new.reshape(shape), m_out.reshape(shape), v_out.reshape(shape))
+
+
+def _execute_lamb(artifact: RuntimeArtifact, args: Any, run_kernel: Any,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _LAMB_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_LAMB_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _lamb_compute(p, g, m, v, ops[0].get("kwargs") or {}, run_kernel, np)
+
+
+def _execute_x86_compiled_lamb(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` LAMB lane: AVX-512 adam kernel + host trust ratio."""
+    return _execute_lamb(artifact, args, _x86_optimizer_kernel,
+                         "x86_lamb_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Muon — momentum + orthogonalized update (P3 optimizer tail). The orthogonal
+# polar factor U·Vh of the momentum matrix is computed from a DEVICE SVD (the
+# FLOP-heavy linalg op, on the x86/gfx1151 one-sided-Jacobi kernel); the small
+# U@Vh product + the momentum / sgd elementwise steps run on host — the same
+# device-heavy / host-light split LAMB uses. <2-D params normalize instead.
+# compiler_path="x86_muon_compiled" / "rocm_muon_compiled". f32. Matches
+# tessera.optim.muon.
+# ─────────────────────────────────────────────────────────────────────────────
+_MUON_OPS = ("tessera.muon",)
+
+
+def _muon_compute(p: Any, g: Any, v: Any, kwargs: dict, svd_mn_fn: Any,
+                  np: Any) -> tuple:
+    """One Muon step over a single parameter. ``svd_mn_fn(A)→(U,S,Vh)`` is the
+    m≥n device SVD kernel. Returns (p_new, new_velocity)."""
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    momentum = float(kwargs.get("momentum", 0.95))
+    lr = float(kwargs.get("lr", 1e-3))
+    v_arr = (np.ascontiguousarray(v, np.float32) if v is not None
+             else np.zeros_like(p))
+    new_v = (momentum * v_arr + g).astype(np.float32)
+    if new_v.ndim < 2:
+        update = new_v / (float(np.linalg.norm(new_v)) + 1e-12)
+    else:
+        mat = new_v.reshape(int(new_v.shape[0]), -1)
+        u, _s, vh = _svd_via(mat, lambda A: svd_mn_fn(A, np), np)  # device SVD
+        update = (np.asarray(u) @ np.asarray(vh)).reshape(new_v.shape)
+    p_new = (p - np.float32(lr) * update.astype(np.float32)).astype(np.float32)
+    return (p_new, new_v)
+
+
+def _execute_muon(artifact: RuntimeArtifact, args: Any, svd_mn_fn: Any,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _MUON_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_MUON_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    names = [str(nm) for nm in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    p = values[names[0]]
+    g = values[names[1]]
+    v = values[names[2]] if len(names) > 2 else None
+    return _muon_compute(p, g, v, op.get("kwargs") or {}, svd_mn_fn, np)
+
+
+def _execute_x86_compiled_muon(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` Muon lane: AVX-512 SVD orthogonalization + host."""
+    return _execute_muon(artifact, args, _x86_svd_mn, "x86_muon_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # State-space model (S-series `state_space`) — Mamba2 selective scan. A single
 # fused sequential scan over S, vectorized over the state dim N, maintaining the
 # (B,D,N) state in place. compiler_path="x86_selective_ssm_compiled" /
@@ -8606,6 +8731,17 @@ def _execute_rocm_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> An
                               _rocm_optimizer_kernel, np)
 
 
+def _execute_rocm_compiled_lamb(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` LAMB lane: gfx1151 adam kernel + host trust ratio."""
+    return _execute_lamb(artifact, args, _rocm_optimizer_kernel,
+                         "rocm_lamb_compiled")
+
+
+def _execute_rocm_compiled_muon(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` Muon lane: gfx1151 SVD orthogonalization + host."""
+    return _execute_muon(artifact, args, _rocm_svd_mn, "rocm_muon_compiled")
+
+
 def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
     """The ``target="rocm"`` state-space lane: selective_ssm (Mamba2) on the
@@ -9414,6 +9550,8 @@ def _executor_table():
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
+        "x86_lamb_compiled": _execute_x86_compiled_lamb,
+        "x86_muon_compiled": _execute_x86_compiled_muon,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
         "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
@@ -9444,6 +9582,8 @@ def _executor_table():
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
+        "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
+        "rocm_muon_compiled": _execute_rocm_compiled_muon,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
         "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,

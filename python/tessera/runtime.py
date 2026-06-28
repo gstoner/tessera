@@ -3410,6 +3410,123 @@ def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(x.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Composed normalization (P5) — group_norm / instance_norm / weight_norm built
+# on the existing device lanes (no new kernels): group/instance normalize is a
+# row-wise mean/var normalize, which IS the layer_norm kernel applied to a
+# reshaped [rows, cols] view (device); weight_norm is a row sum-of-squares on
+# the device reduce lane + a host divide. The reshape/affine structure runs on
+# host — the same device-heavy / host-light split LAMB/Muon use. These device
+# ops are UNWEIGHTED (like rmsnorm/layer_norm); the affine composes separately
+# through ops.mul/ops.add. compiler_path="x86_normcompose_compiled" /
+# "rocm_normcompose_compiled". f32. Matches nn.functional.{group,instance,
+# weight}_norm (weight=bias=None).
+# ─────────────────────────────────────────────────────────────────────────────
+_NORM_COMPOSE_OPS = ("tessera.group_norm", "tessera.instance_norm",
+                     "tessera.weight_norm")
+
+
+def _device_layernorm_rows(x2d: Any, eps: float, target: str, np: Any) -> Any:
+    fn = (_execute_x86_compiled_norm if target == "x86"
+          else _execute_rocm_compiled_norm)
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": f"{target}_norm_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.layer_norm", "result": "o",
+                 "operands": ["x"], "kwargs": {"eps": eps}}]})
+    return np.asarray(fn(art, (np.ascontiguousarray(x2d, np.float32),)),
+                      np.float32)
+
+
+def _device_reduce_sum_rows(x2d: Any, target: str, np: Any) -> Any:
+    fn = (_execute_x86_compiled_reduce if target == "x86"
+          else _execute_rocm_compiled_reduce)
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": f"{target}_reduce_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.sum", "result": "o", "operands": ["x"],
+                 "kwargs": {"axis": -1}}]})
+    return np.asarray(fn(art, (np.ascontiguousarray(x2d, np.float32),)),
+                      np.float32)
+
+
+def _norm_compose_compute(op_name: str, x: Any, kwargs: dict, target: str,
+                          np: Any) -> Any:
+    x = np.ascontiguousarray(x, np.float32)
+    if op_name == "tessera.instance_norm":
+        if x.ndim < 3:
+            raise ValueError(f"instance_norm expects rank>=3; got {x.shape}")
+        eps = float(kwargs.get("eps", 1e-5))
+        n, c = int(x.shape[0]), int(x.shape[1])
+        rows = x.reshape(n * c, -1)
+        return _device_layernorm_rows(rows, eps, target, np).reshape(x.shape)
+    if op_name == "tessera.group_norm":
+        if x.ndim < 2:
+            raise ValueError(f"group_norm expects rank>=2; got {x.shape}")
+        ng = int(kwargs["num_groups"])
+        eps = float(kwargs.get("eps", 1e-5))
+        n, c = int(x.shape[0]), int(x.shape[1])
+        if c % ng != 0:
+            raise ValueError(f"channels {c} not divisible by num_groups {ng}")
+        rows = x.reshape(n * ng, -1)
+        return _device_layernorm_rows(rows, eps, target, np).reshape(x.shape)
+    if op_name == "tessera.weight_norm":
+        axis = int(kwargs.get("axis", 0))
+        axis = axis if axis >= 0 else x.ndim + axis
+        eps = float(kwargs.get("eps", 1e-12))
+        wt = np.moveaxis(x, axis, 0)
+        flat = np.ascontiguousarray(wt.reshape(int(wt.shape[0]), -1), np.float32)
+        sumsq = _device_reduce_sum_rows(flat * flat, target, np).reshape(-1)
+        norm = np.sqrt(sumsq + np.float32(eps)).astype(np.float32)
+        out = (flat / norm[:, None]).reshape(wt.shape)
+        return np.ascontiguousarray(np.moveaxis(out, 0, axis), np.float32)
+    raise ValueError(f"norm-compose executor handles {_NORM_COMPOSE_OPS}; "
+                     f"got {op_name!r}")
+
+
+def _execute_norm_compose(artifact: RuntimeArtifact, args: Any, target: str,
+                          path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _NORM_COMPOSE_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_NORM_COMPOSE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    # group_norm/instance_norm accept optional weight/bias operands in the
+    # catalog, but this device lane (like the rmsnorm/layer_norm device ops) is
+    # UNWEIGHTED — the affine composes separately through ops.mul/ops.add. Reject
+    # an artifact that carries affine operands rather than silently returning the
+    # unweighted result (Decision #21: stable diagnostic, never silently wrong).
+    if len(operand_names) > 1:
+        raise ValueError(
+            f"{path} is an UNWEIGHTED normalize lane for {op_name}; it takes a "
+            f"single input operand but got {len(operand_names)} "
+            f"({operand_names!r}). Compose the per-channel weight/bias affine "
+            f"separately via ops.mul / ops.add.")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _norm_compose_compute(op_name, x, ops[0].get("kwargs") or {},
+                                 target, np)
+
+
+def _execute_x86_compiled_normcompose(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` group/instance/weight-norm lane (composed)."""
+    return _execute_norm_compose(artifact, args, "x86",
+                                 "x86_normcompose_compiled")
+
+
+def _execute_rocm_compiled_normcompose(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` group/instance/weight-norm lane (composed)."""
+    return _execute_norm_compose(artifact, args, "rocm",
+                                 "rocm_normcompose_compiled")
+
+
 def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` softmax lane: run the hand-written AVX-512 row-
     reduction kernel — numerically-stable softmax over the last axis, from
@@ -9691,6 +9808,7 @@ def _executor_table():
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_complex_compiled": _execute_x86_compiled_complex,
+        "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
@@ -9724,6 +9842,7 @@ def _executor_table():
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
+        "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,

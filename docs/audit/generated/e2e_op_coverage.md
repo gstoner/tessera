@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 193 |
-| ``runnable_reference`` | 116 |
+| ``complete`` | 196 |
+| ``runnable_reference`` | 113 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (193)
+## complete (196)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -149,8 +149,11 @@ each row into a single E2E tier.
 | ``z_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
 | ``moe`` | moe | public | public | registered | partial | fused | ready | none |
+| ``group_norm`` | normalization | public | public | registered | partial | fused | ready | none |
+| ``instance_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
+| ``weight_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``abs`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -229,7 +232,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (116)
+## runnable_reference (113)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -323,10 +326,7 @@ each row into a single E2E tier.
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
-| ``group_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``instance_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |

@@ -951,6 +951,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
                  "Executes via runtime.launch() (rocm_norm_compiled).",
     },
+    # P5 — group/instance/weight norm composed on the gfx1151 layer_norm (row
+    # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("normalization",),
+        "notes": f"Standalone {op} — composed on the gfx1151 layer_norm / reduce "
+                 "kernels (no new kernel; host reshape/affine). Executes via "
+                 "runtime.launch() (rocm_normcompose_compiled).",
+    } for op in ("group_norm", "instance_norm", "weight_norm")},
     "gelu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1618,6 +1627,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("svd", "rocm"): "tests/unit/test_rocm_svd_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_normcompose_compiled.py"
+       for op in ("group_norm", "instance_norm", "weight_norm")},
+    **{(op, "rocm"): "tests/unit/test_rocm_normcompose_compiled.py"
+       for op in ("group_norm", "instance_norm", "weight_norm")},
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
@@ -2207,6 +2220,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_layernorm_f32, runtime-loaded; "
                  "x86_norm_compiled lane; f32, matches numpy 2e-5)",
     },
+    # P5 — group/instance/weight norm composed on the AVX-512 layer_norm (row
+    # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} composed on the AVX-512 layer_norm / reduce kernels "
+                 "(no new kernel; host reshape/affine; x86_normcompose_compiled "
+                 "lane; f32, matches nn.functional)",
+    } for op in ("group_norm", "instance_norm", "weight_norm")},
     "softmax": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),

@@ -330,6 +330,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "adamw / lion) — AVX-512 fused per-parameter update "
                             "kernel (kind-selected; m/v state in-place; host "
                             "computes the 1-β^t bias correction). f32",
+    "x86_normcompose_compiled": "x86 CPU group/instance/weight norm — composed "
+                            "on the AVX-512 layer_norm + reduce kernels (host "
+                            "reshape/divide). f32",
     "x86_lamb_compiled": "x86 CPU LAMB — AVX-512 adam kernel (lr=1/wd=0) + host "
                             "per-tensor trust ratio ‖p‖/‖update‖. f32",
     "x86_muon_compiled": "x86 CPU Muon — AVX-512 SVD U·Vh orthogonalization of "
@@ -458,6 +461,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kernel: routed per-token expert GEMV, one thread per "
                             "(token, out-col); routing resolved on host) HIP-"
                             "launched. f32",
+    "rocm_normcompose_compiled": "AMD GPU RDNA group/instance/weight norm — "
+                            "composed on the gfx1151 layer_norm + reduce kernels "
+                            "(host reshape/divide). f32",
     "rocm_selective_ssm_compiled": "AMD GPU RDNA Mamba2 selective_ssm — COMPILER-"
                             "GENERATED gfx1151 selective-scan kernel (generate-"
                             "rocm-selective-ssm-kernel, one thread per (b,d) "
@@ -743,6 +749,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "fused per-parameter update on the AVX-512 kernel (kind-selected; "
                "m/v state updated in place; the 1-β^t bias correction computed on "
                "host from the step). f32, matches the optim.py reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_normcompose_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_normcompose_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_normcompose_compiled", runtime_status="success",
+        reason="x86 group/instance/weight-norm lane composed on the AVX-512 "
+               "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
+               "host does the reshape / per-axis divide. f32, matches "
+               "nn.functional.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_lamb_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_lamb_compiled",
@@ -1309,6 +1324,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(top-1) on the COMPILER-GENERATED gfx1151 kernel (generate-rocm-"
                "moe-kernel: one thread per (token, out-col); routing resolved on "
                "host) HIP-launched. f32, matches numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_normcompose_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_normcompose_compiled", runtime_status="success",
+        reason="ROCm group/instance/weight-norm lane composed on the gfx1151 "
+               "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
+               "host does the reshape / per-axis divide. f32, matches "
+               "nn.functional.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_selective_ssm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_selective_ssm_compiled",

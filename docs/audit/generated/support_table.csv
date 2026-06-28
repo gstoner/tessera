@@ -40,7 +40,7 @@ acos,elementwise,public,public,registered,complete,partial,fused,ready,none
 add,elementwise,public,public,registered,complete,partial,fused,ready,none
 asin,elementwise,public,public,registered,complete,partial,fused,ready,none
 atan,elementwise,public,public,registered,complete,partial,fused,ready,none
-atan2,elementwise,public,public,registered,complete,partial,reference,ready,none
+atan2,elementwise,public,public,registered,complete,partial,fused,ready,none
 clip,elementwise,public,public,registered,complete,partial,fused,ready,none
 cos,elementwise,public,public,registered,complete,partial,fused,ready,none
 cosh,elementwise,public,public,registered,complete,partial,fused,ready,none
@@ -67,7 +67,7 @@ silu,elementwise,public,public,registered,complete,partial,fused,ready,none
 silu_mul,elementwise,public,public,registered,complete,partial,fused,ready,none
 sin,elementwise,public,public,registered,complete,partial,fused,ready,none
 sinh,elementwise,public,public,registered,complete,partial,fused,ready,none
-softcap,elementwise,public,public,registered,complete,partial,reference,ready,none
+softcap,elementwise,public,public,registered,complete,partial,fused,ready,none
 softplus,elementwise,public,public,registered,complete,partial,fused,ready,none
 sqrt,elementwise,public,public,registered,complete,partial,fused,ready,none
 sub,elementwise,public,public,registered,complete,partial,fused,ready,none

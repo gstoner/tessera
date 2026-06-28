@@ -316,6 +316,40 @@ def ROCM_PointwiseLossKernelOp : TesseraROCM_Op<"pointwise_loss"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_BinaryLossKernelOp : TesseraROCM_Op<"binary_loss"> {
+  let summary = "Binary-cross-entropy loss (2-operand elementwise) kernel";
+  let description = [{
+    `generate-rocm-binary-loss-kernel` expands into a flat 2-operand elementwise
+    per-element BCE-with-logits kernel over (z=logits, t=target):
+    kind 0 bce `max(z,0) − z·t + log1p(exp(−|z|))`; kind 1 asymmetric_bce
+    `pw·t·softplus(−z) + nw·(1−t)·softplus(z)`. `kind`/`pos_weight`/`neg_weight`
+    are compile-time attrs; the runtime reduces. CPU analog: avx512_loss_f32.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<I64Attr, "0">:$kind,
+                       DefaultValuedAttr<F32Attr, "1.0">:$pos_weight,
+                       DefaultValuedAttr<F32Attr, "1.0">:$neg_weight);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_PolicyLossKernelOp : TesseraROCM_Op<"policy_loss"> {
+  let summary = "PPO / CISPO RL policy-loss surrogate (3-operand) kernel";
+  let description = [{
+    `generate-rocm-policy-loss-kernel` expands into a flat 3-operand elementwise
+    per-element RL policy-loss surrogate over (logp_new, logp_old, advantages),
+    `ratio = exp(ln−lo)`: kind 0 ppo `−min(ratio·adv, clip(ratio,1−ε,1+ε)·adv)`;
+    kind 1 cispo `−(min(ratio,ε_high)·adv·ln)`. `kind`/`clip` are compile-time
+    attrs; the runtime reduces and normalizes grpo advantages. CPU analog:
+    avx512_policy_loss_f32.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<I64Attr, "0">:$kind,
+                       DefaultValuedAttr<F32Attr, "0.2">:$clip);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

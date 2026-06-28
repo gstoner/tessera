@@ -341,6 +341,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco), then HIP launches it; per-element "
                             "loss on gfx1151 + none/mean/sum reduction. The CPU "
                             "analog is the x86_loss lane. f32/f16/bf16",
+    "rocm_binary_loss_compiled": "AMD GPU RDNA binary-cross-entropy loss (bce / "
+                            "asymmetric_bce) the Tessera compiler GENERATES "
+                            "(generate-rocm-binary-loss-kernel -> ROCDL -> "
+                            "hsaco), then HIP launches it; per-element on gfx1151 "
+                            "+ reduction. ROCm mirror of x86_binary_loss. "
+                            "f32/f16/bf16",
+    "rocm_rl_loss_compiled": "AMD GPU RDNA RL policy loss (ppo / cispo / grpo "
+                            "surrogate on generate-rocm-policy-loss-kernel + "
+                            "normalize_group_advantages on the norm lane) the "
+                            "Tessera compiler GENERATES, then HIP launches; "
+                            "per-element on gfx1151 + reduction. ROCm mirror of "
+                            "x86_rl_loss. f32/f16/bf16",
     "rocm_alibi_compiled":  "AMD GPU RDNA ALiBi positional-bias generator the "
                             "Tessera compiler GENERATES (generate-rocm-alibi-"
                             "kernel -> ROCDL -> hsaco, in-process via "
@@ -890,6 +902,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_binary_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_binary_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_binary_loss_compiled", runtime_status="success",
+        reason="ROCm binary-loss artifact runs the COMPILER-GENERATED bce / "
+               "asymmetric_bce per-element loss over (logits, targets) on "
+               "gfx1151 (generate-rocm-binary-loss-kernel -> ROCDL, stable "
+               "softplus) + reduction. ROCm mirror of x86_binary_loss. "
+               "f32/f16/bf16.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_rl_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_rl_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_rl_loss_compiled", runtime_status="success",
+        reason="ROCm rl-loss artifact runs the ppo / cispo / grpo core surrogate "
+               "on the COMPILER-GENERATED policy-loss kernel (generate-rocm-"
+               "policy-loss-kernel -> ROCDL) + normalize_group_advantages on the "
+               "norm lane, then reduction. ROCm mirror of x86_rl_loss. "
+               "f32/f16/bf16.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_loss_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_loss_compiled",
         execution_kind="native_gpu", executable=True,

@@ -10,6 +10,8 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMActivationKernel.cpp
   GenerateROCMSiluMulKernel.cpp
   GenerateROCMPointwiseLossKernel.cpp
+  GenerateROCMBinaryLossKernel.cpp
+  GenerateROCMPolicyLossKernel.cpp
   GenerateROCMAlibiKernel.cpp
   GenerateROCMDeltaNetKernel.cpp
   GenerateROCMRopeKernel.cpp

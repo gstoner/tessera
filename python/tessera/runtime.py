@@ -6177,6 +6177,260 @@ def _execute_rocm_compiled_pointwise_loss(artifact: RuntimeArtifact,
     return np.float32(per.sum() if reduction == "sum" else per.mean())
 
 
+def _rocm_launch_nary_elementwise(hsaco: bytes, sym: bytes,
+                                  inputs_flat: list, n: int, store: Any,
+                                  esz: int, tag: str, np: Any) -> Any:
+    """Malloc/copy/launch/copy-back/free for a flat n-element gpu kernel taking
+    K input memrefs + 1 output memref + N. Returns the output as a flat
+    ``store``-dtype array. Shared by the ROCm loss lanes."""
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable(f"rocm {tag}: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(f"rocm {tag}: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
+        raise RuntimeError(f"rocm {tag}: kernel symbol not found")
+    devs = []
+    for arr in inputs_flat:
+        d = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(d), esz * n) != 0:
+            raise RuntimeError(f"rocm {tag}: hipMalloc failed")
+        hip.hipMemcpy(d, arr.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+        devs.append(d)
+    do = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(do), esz * n) != 0:
+        raise RuntimeError(f"rocm {tag}: hipMalloc failed")
+
+    def _mr(p):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(n), ctypes.c_int64(1)]
+
+    launch_args = []
+    for d in devs:
+        launch_args += _mr(d)
+    launch_args += _mr(do) + [ctypes.c_int64(n)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    o = np.zeros(n, dtype=store)
+    if rc != 0:
+        for d in devs + [do]:
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm {tag}: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for d in devs + [do]:
+        hip.hipFree(d)
+    return o
+
+
+def _rocm_loss_store(a: Any, np: Any) -> tuple:
+    if a.dtype == np.float32:
+        return "f32", np.float32, 4
+    if a.dtype == np.float16:
+        return "f16", np.float16, 2
+    bf16 = _bfloat16_dtype()
+    if bf16 is not None and a.dtype == bf16:
+        return "bf16", bf16, 2
+    raise ValueError(f"rocm loss lane handles f32/f16/bf16; got {a.dtype}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED binary-loss lane — bce / asymmetric_bce (ROCm mirror of the x86
+# binary-loss lane). ``compiler_path = "rocm_binary_loss_compiled"``.
+# ─────────────────────────────────────────────────────────────────────────────
+_ROCM_BINARY_LOSS_OPS = {
+    "tessera.binary_cross_entropy_loss": (0, None),
+    "tessera.asymmetric_bce": (1, ("pos_weight", "neg_weight")),
+}
+_rocm_binary_loss_hsaco_cache: dict[tuple, bytes] = {}
+
+
+def _build_compiled_binary_loss_hsaco(kind: int, pw: float, nw: float,
+                                      dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.binary_loss"() {{name = "bl", dtype = "{dtype}", '
+        f'kind = {int(kind)} : i64, pos_weight = {float(pw):e} : f32, '
+        f'neg_weight = {float(nw):e} : f32}} : () -> ()\n}}\n')
+    key = (chip, dtype, int(kind), float(pw), float(nw))
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-binary-loss-kernel", directive,
+        _rocm_binary_loss_hsaco_cache, key)
+
+
+def _execute_rocm_compiled_binary_loss(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` binary-loss lane: bce / asymmetric_bce over
+    (logits, targets) on gfx1151 + reduction. f32/f16/bf16."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_BINARY_LOSS_OPS:
+        raise ValueError(
+            "rocm_binary_loss_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_BINARY_LOSS_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    kind, weight_kws = _ROCM_BINARY_LOSS_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("binary loss requires two operands (logits, targets)")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    pw = float(kwargs.get(weight_kws[0], 1.0)) if weight_kws else 1.0
+    nw = float(kwargs.get(weight_kws[1], 1.0)) if weight_kws else 1.0
+    values = _bind_launch_args(args, arg_names)
+    z = _as_numpy(values[operand_names[0]])
+    t = _as_numpy(values[operand_names[1]])
+    try:
+        bshape = np.broadcast_shapes(z.shape, t.shape)
+    except ValueError as exc:
+        raise ValueError(
+            f"binary loss logits{z.shape} targets{t.shape} do not "
+            f"broadcast") from exc
+    z = np.broadcast_to(z, bshape)
+    t = np.broadcast_to(t, bshape)
+    n = int(np.prod(bshape)) if bshape else 1
+    if n <= 0:
+        return np.array(z, copy=True)
+    dtype_tag, store, esz = _rocm_loss_store(z, np)
+    hsaco = _build_compiled_binary_loss_hsaco(kind, pw, nw, dtype_tag)
+    zc = np.ascontiguousarray(z, dtype=store).reshape(-1)
+    tc = np.ascontiguousarray(t, dtype=store).reshape(-1)
+    o = _rocm_launch_nary_elementwise(hsaco, b"bl", [zc, tc], n, store, esz,
+                                      "binary_loss", np)
+    per = o.reshape(bshape).astype(np.float32)
+    if reduction == "none":
+        return per
+    return np.float32(per.sum() if reduction == "sum" else per.mean())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED rl policy-loss lane — ppo / cispo / grpo + normalize_group_
+# advantages (ROCm mirror of the x86 rl-loss lane). The surrogate runs on the
+# policy-loss kernel; normalize runs on the rocm norm (layer_norm) lane over the
+# group axis. KL/entropy/mask add-ons diagnose out. ``compiler_path =
+# "rocm_rl_loss_compiled"``.
+# ─────────────────────────────────────────────────────────────────────────────
+_ROCM_POLICY_OPS = {
+    "tessera.ppo_policy_loss": (0, "clip_epsilon", 0.2),
+    "tessera.grpo_policy_loss": (0, "clip_epsilon", 0.2),
+    "tessera.cispo_policy_loss": (1, "epsilon_high", 5.0),
+}
+_rocm_policy_loss_hsaco_cache: dict[tuple, bytes] = {}
+
+
+def _build_compiled_policy_loss_hsaco(kind: int, clip: float,
+                                      dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.policy_loss"() {{name = "pol", dtype = "{dtype}", '
+        f'kind = {int(kind)} : i64, clip = {float(clip):e} : f32}} '
+        ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-policy-loss-kernel", directive,
+        _rocm_policy_loss_hsaco_cache, (chip, dtype, int(kind), float(clip)))
+
+
+def _rocm_group_normalize(r: Any, group_axis: int, eps: float, np: Any) -> Any:
+    """(r − mean)/sqrt(var + eps) over ``group_axis`` via the ROCm layer_norm
+    lane (transpose-to-last → norm kernel → transpose-back)."""
+    r = np.ascontiguousarray(r, np.float32)
+    nd = r.ndim
+    ax = int(group_axis) if group_axis >= 0 else nd + int(group_axis)
+    if ax < 0 or ax >= nd:
+        raise ValueError("normalize_group_advantages: group_axis out of range")
+    perm = [i for i in range(nd) if i != ax] + [ax]
+    rt = np.ascontiguousarray(np.transpose(r, perm))
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_norm_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.layer_norm", "result": "o",
+                 "operands": ["x"], "kwargs": {"eps": float(eps)}}]})
+    out = np.asarray(_execute_rocm_compiled_norm(art, (rt,)), np.float32)
+    inv = [perm.index(i) for i in range(nd)]
+    return np.ascontiguousarray(np.transpose(out, inv))
+
+
+def _execute_rocm_compiled_rl_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` RL policy-loss lane: ppo / cispo / grpo core
+    surrogate (policy-loss kernel) + normalize_group_advantages (norm lane).
+    KL/entropy/mask add-ons get a stable diagnostic. f32/f16/bf16."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    handled = ("tessera.ppo_policy_loss", "tessera.cispo_policy_loss",
+               "tessera.grpo_policy_loss", "tessera.normalize_group_advantages")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"rocm_rl_loss_compiled executor handles one of {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+
+    if op_name == "tessera.normalize_group_advantages":
+        if len(operands) != 1:
+            raise ValueError(
+                "rocm normalize_group_advantages lane takes one operand "
+                "(rewards); masked normalization is not in the fused lane")
+        return _rocm_group_normalize(
+            operands[0], int(kwargs.get("group_axis", 1)),
+            float(kwargs.get("eps", 1e-8)), np)
+
+    if float(kwargs.get("kl_coef", 0.0)) or float(kwargs.get("entropy_coef", 0.0)):
+        raise ValueError(
+            f"rocm rl-loss lane handles the core {op_name} surrogate only; the "
+            "KL-penalty / entropy-bonus terms are unsupported")
+    if len(operands) < 3:
+        raise ValueError(f"{op_name} needs (logp_new, logp_old, advantages)")
+    kind, clip_kw, clip_default = _ROCM_POLICY_OPS[op_name]
+    clip = float(kwargs.get(clip_kw, clip_default))
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"rl-loss reduction must be none/mean/sum; got {reduction}")
+    ln = operands[0]
+    lo = operands[1]
+    adv = operands[2]
+    if not (ln.shape == lo.shape == adv.shape):
+        raise ValueError(
+            f"rl-loss requires matching shapes; got logp_new{ln.shape} "
+            f"logp_old{lo.shape} advantages{adv.shape}")
+    n = int(np.prod(ln.shape)) if ln.ndim else 1
+    if n <= 0:
+        return np.array(ln, copy=True)
+    dtype_tag, store, esz = _rocm_loss_store(ln, np)
+    hsaco = _build_compiled_policy_loss_hsaco(kind, clip, dtype_tag)
+    flats = [np.ascontiguousarray(x, dtype=store).reshape(-1)
+             for x in (ln, lo, adv)]
+    o = _rocm_launch_nary_elementwise(hsaco, b"pol", flats, n, store, esz,
+                                      "policy_loss", np)
+    per = o.reshape(ln.shape).astype(np.float32)
+    if reduction == "none":
+        return per
+    return np.float32(per.sum() if reduction == "sum" else per.mean())
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
@@ -6755,6 +7009,8 @@ def _executor_table():
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
+        "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
+        "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

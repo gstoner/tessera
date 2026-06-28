@@ -305,7 +305,7 @@ multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
-nesterov,4,0,0,4,0,,directly_tested,4 direct test references
+nesterov,10,0,0,10,0,,directly_tested,10 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 normalize_group_advantages,6,0,0,6,0,,directly_tested,6 direct test references
 nt_xent_loss,4,0,0,4,0,,directly_tested,4 direct test references

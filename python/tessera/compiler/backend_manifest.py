@@ -1108,7 +1108,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-optimizer-kernel, kind StrAttr-selected, one "
                  "thread per element; host computes the 1-β^t bias correction) on "
                  "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
@@ -1549,9 +1549,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
     ("moe", "rocm"): "tests/unit/test_rocm_moe_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
@@ -2306,7 +2306,7 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
                  "(state m/v in-place; host computes the 1-β^t bias correction); "
                  "x86_optimizer_compiled lane; f32, matches the optim.py reference",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).
     "selective_ssm": {

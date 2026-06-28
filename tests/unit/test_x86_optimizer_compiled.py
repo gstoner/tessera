@@ -86,6 +86,27 @@ def test_momentum():
     np.testing.assert_allclose(vn, np.asarray(rst["velocity"]), atol=1e-6)
 
 
+def test_nesterov_multistep():
+    """Look-ahead momentum: v=β·v+g ; p -= lr·(g+β·v). Multi-step vs
+    optim.nesterov so the carried velocity is exercised."""
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(7)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    v = np.zeros(SHAPE, np.float32)
+    state = None
+    for _ in range(5):
+        g = rng.standard_normal(SHAPE).astype(np.float32)
+        res = rt.launch(_art(rt, "tessera.nesterov", [p, g, v], ["v"],
+                             {"lr": 1e-2, "momentum": 0.9}), (p, g, v))
+        assert res["ok"] is True, res.get("reason")
+        assert res["compiler_path"] == "x86_optimizer_compiled"
+        pn, v = (np.asarray(x) for x in res["output"])
+        rp, state = optim.nesterov(p, g, state, lr=1e-2, momentum=0.9)
+        np.testing.assert_allclose(pn, np.asarray(rp), atol=2e-6)
+        np.testing.assert_allclose(v, np.asarray(state["velocity"]), atol=2e-6)
+        p = pn
+
+
 def test_adam():
     rt = _rt_or_skip()
     rng = np.random.default_rng(4)

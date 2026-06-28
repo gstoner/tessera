@@ -2040,9 +2040,10 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": f"AVX-512 radix-2 FFT {op} (tessera_x86_fft_c2c_f32 SIMD "
-                 "butterflies + r2c/c2r; x86_fft_compiled lane; power-of-two, "
-                 "complex64/f32, matches np.fft)",
+        "notes": f"AVX-512 FFT {op} (radix-2 C2C kernel for power-of-two; tiny "
+                 "non-pow2 via the DFT-matrix on the GEMM; other non-pow2 via "
+                 "Bluestein; x86_fft_compiled lane; complex64/f32, matches "
+                 "np.fft)",
     } for op in ("fft", "ifft", "rfft", "irfft")},
 }
 

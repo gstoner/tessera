@@ -271,13 +271,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(tessera_x86_avx512_binary_loss_f32, stable "
                             "softplus form) + none/mean/sum reduction on the "
                             "reduce kernel. f32, matches numpy 2e-5",
-    "x86_fft_compiled": "x86 CPU spectral FFT (fft / ifft / rfft / irfft) over a "
-                            "power-of-two axis — AVX-512 radix-2 Cooley-Tukey C2C "
+    "x86_fft_compiled": "x86 CPU spectral FFT (fft / ifft / rfft / irfft) over "
+                            "ANY axis length — AVX-512 radix-2 Cooley-Tukey C2C "
                             "kernel (tessera_x86_fft_c2c_f32; deinterleave-permute "
-                            "SIMD complex butterflies, per-stage twiddles) + "
-                            "r2c/c2r pack-unpack; SpectralPlan owns strategy + "
-                            "normalization. Non-power-of-two diagnoses out (PR3). "
-                            "complex64/f32",
+                            "SIMD complex butterflies) for power-of-two; tiny "
+                            "non-pow2 via the DFT-matrix on the AVX-512 GEMM; "
+                            "other non-pow2 via Bluestein (chirp-z) over the "
+                            "radix-2 kernel. SpectralPlan owns strategy + "
+                            "normalization. complex64/f32",
     "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
                             "count_nonzero) composed from the AVX-512 reduce "
                             "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
@@ -589,12 +590,12 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="x86", compiler_path="x86_fft_compiled",
         execution_kind="native_cpu", executable=True,
         executor_id="x86_fft_compiled", runtime_status="success",
-        reason="x86 FFT artifact runs fft / ifft / rfft / irfft over a "
-               "power-of-two axis on the AVX-512 radix-2 Cooley-Tukey C2C kernel "
-               "(tessera_x86_fft_c2c_f32; SIMD complex butterflies via "
-               "deinterleave-permute, per-stage twiddles) + r2c/c2r pack-unpack; "
-               "the SpectralPlan owns strategy + normalization. Non-power-of-two "
-               "lengths emit a stable diagnostic (Spectral PR3). complex64/f32.",
+        reason="x86 FFT artifact runs fft / ifft / rfft / irfft over any axis "
+               "length on the AVX-512 radix-2 C2C kernel (power-of-two; SIMD "
+               "complex butterflies) + r2c/c2r pack-unpack; tiny non-pow2 via "
+               "the DFT-matrix on the AVX-512 GEMM, other non-pow2 via Bluestein "
+               "(chirp-z) over the radix-2 kernel. The SpectralPlan owns strategy "
+               "+ normalization. complex64/f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stat_reduce_compiled",

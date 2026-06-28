@@ -60,11 +60,13 @@ extern "C" void tessera_x86_cholesky_f32(const float* A, int64_t batch,
 extern "C" void tessera_x86_tri_solve_f32(const float* A, const float* B,
                                           int64_t batch, int64_t n, int64_t m,
                                           int lower, float* X) {
+    // Per-row accumulator — allocated ONCE (size is loop-invariant); never alloca
+    // inside the batch loop (would grow the stack per iteration).
+    float* acc = (float*)__builtin_alloca(sizeof(float) * (m > 0 ? m : 1));
     for (int64_t b = 0; b < batch; ++b) {
         const float* a = A + b * n * n;
         const float* bb = B + b * n * m;
         float* x = X + b * n * m;
-        float* acc = (float*)__builtin_alloca(sizeof(float) * (m > 0 ? m : 1));
         if (lower) {
             for (int64_t i = 0; i < n; ++i) {
                 for (int64_t c = 0; c < m; ++c) acc[c] = 0.0f;

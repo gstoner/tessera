@@ -61,13 +61,15 @@ extern "C" void tessera_x86_lu_f32(const float* A, int64_t batch, int64_t n,
 extern "C" void tessera_x86_qr_f32(const float* A, int64_t batch, int64_t m,
                                    int64_t n, float* Q, float* R) {
     int64_t k = m < n ? m : n;
+    // Reflector scratch — allocated ONCE (size is loop-invariant); never alloca
+    // inside the batch loop (would grow the stack per iteration).
+    float* v = (float*)__builtin_alloca(sizeof(float) * (m > 0 ? m : 1));
     for (int64_t b = 0; b < batch; ++b) {
         float* q = Q + b * m * m;
         float* r = R + b * m * n;
         for (int64_t i = 0; i < m * n; ++i) r[i] = A[b * m * n + i];
         for (int64_t i = 0; i < m * m; ++i) q[i] = 0.0f;
         for (int64_t i = 0; i < m; ++i) q[i * m + i] = 1.0f;
-        float* v = (float*)__builtin_alloca(sizeof(float) * (m > 0 ? m : 1));
         for (int64_t j = 0; j < k; ++j) {
             float norm = 0.0f;
             for (int64_t i = j; i < m; ++i) norm += r[i * n + j] * r[i * n + j];

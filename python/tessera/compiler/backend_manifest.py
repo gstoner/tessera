@@ -1070,6 +1070,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "cos/sin via math->rocdl) any length + r2c/c2r + plan scale. "
                  "Executes via runtime.launch() (rocm_fft_compiled).",
     } for op in ("fft", "ifft", "rfft", "irfft")},
+    # Spectral composites (PR5) — dct/stft/istft/spectral_conv/spectral_filter
+    # composed on the gfx1151 FFT (DFT) lane (rocm_spectral_compiled).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("spectral",),
+        "notes": f"Spectral {op} — composes the rocm_fft_compiled DFT lane "
+                 "(frame/window/overlap-add/pointwise on host). Executes via "
+                 "runtime.launch() (rocm_spectral_compiled).",
+    } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1392,6 +1401,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("fft", "ifft", "rfft", "irfft")},
     **{(op, "rocm"): "tests/unit/test_rocm_fft_compiled.py"
        for op in ("fft", "ifft", "rfft", "irfft")},
+    **{(op, "x86"): "tests/unit/test_x86_spectral_compiled.py"
+       for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+    **{(op, "rocm"): "tests/unit/test_rocm_spectral_compiled.py"
+       for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2056,6 +2069,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "Bluestein; x86_fft_compiled lane; complex64/f32, matches "
                  "np.fft)",
     } for op in ("fft", "ifft", "rfft", "irfft")},
+    # Spectral composites (PR5) — dct/stft/istft/spectral_conv/spectral_filter
+    # composed on the AVX-512 FFT lane (x86_spectral_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Spectral {op} — composes the x86_fft_compiled radix-2 lane "
+                 "(frame/window/overlap-add/pointwise on host; "
+                 "x86_spectral_compiled lane; f32, matches np.fft)",
+    } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
 }
 
 

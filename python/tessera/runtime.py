@@ -4439,6 +4439,106 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Spectral composite ops (Spectral PR5) — dct / stft / istft / spectral_conv /
+# spectral_filter. Device-agnostic: each composes the device FFT lane (passed as
+# ``fftexec``) for the transform + host framing / windowing / overlap-add /
+# pointwise. One implementation, two thin per-device wrappers (x86 / ROCm).
+# ─────────────────────────────────────────────────────────────────────────────
+_SPECTRAL_COMPOSITE_OPS = ("tessera.dct", "tessera.stft", "tessera.istft",
+                           "tessera.spectral_conv", "tessera.spectral_filter")
+
+
+def _spectral_composite(op_name: str, operands: list, kwargs: dict,
+                        fftexec: Any, np: Any) -> Any:
+    """Composite spectral op over the device FFT lane. ``fftexec(sub_op, x,
+    sub_kwargs)`` runs fft/ifft/rfft/irfft on the device."""
+    if op_name == "tessera.spectral_filter":               # pointwise cmul
+        return (np.asarray(operands[0]) * np.asarray(operands[1])).astype(
+            np.complex64)
+
+    if op_name == "tessera.dct":                            # type-2 via FFT
+        x = np.asarray(operands[0])
+        axis = int(kwargs.get("axis", -1))
+        ax = axis if axis >= 0 else x.ndim + axis
+        n = int(x.shape[ax])
+        y = np.concatenate([x, np.flip(x, axis=ax)], axis=ax).astype(np.complex64)
+        spec = np.asarray(fftexec("tessera.fft", y, {"axis": ax}))
+        sl = [slice(None)] * spec.ndim
+        sl[ax] = slice(0, n)
+        return np.real(spec[tuple(sl)]).astype(np.float32)
+
+    if op_name == "tessera.spectral_conv":                  # FFT convolution
+        x = np.asarray(operands[0], np.float32)
+        w = np.asarray(operands[1], np.float32)
+        n = int(x.shape[-1] + w.shape[-1] - 1)
+        nfft = 1 << int(np.ceil(np.log2(max(n, 1))))
+        xp = np.zeros(x.shape[:-1] + (nfft,), np.float32)
+        xp[..., :x.shape[-1]] = x
+        wp = np.zeros(w.shape[:-1] + (nfft,), np.float32)
+        wp[..., :w.shape[-1]] = w
+        xf = np.asarray(fftexec("tessera.rfft", xp, {"axis": -1}))
+        wf = np.asarray(fftexec("tessera.rfft", wp, {"axis": -1}))
+        y = fftexec("tessera.irfft", (xf * wf).astype(np.complex64),
+                    {"axis": -1, "n": nfft})
+        return np.asarray(y, np.float32)[..., :n]
+
+    if op_name == "tessera.stft":                           # framed windowed rfft
+        x = np.asarray(operands[0])
+        win = np.asarray(operands[1])
+        hop = int(kwargs["hop"])
+        wl = int(win.shape[-1])
+        starts = list(range(0, max(1, int(x.shape[-1]) - wl + 1), hop))
+        frames = np.stack([x[..., s:s + wl] * win for s in starts], axis=-2)
+        return np.asarray(fftexec("tessera.rfft", frames.astype(np.float32),
+                                  {"axis": -1})).astype(np.complex64)
+
+    # tessera.istft — overlap-add of windowed irfft frames
+    xf = np.asarray(operands[0])
+    win = np.asarray(operands[1])
+    hop = int(kwargs["hop"])
+    fl = int(win.shape[-1])
+    nf = int(xf.shape[-2])
+    frames = np.asarray(fftexec("tessera.irfft", xf.astype(np.complex64),
+                                {"axis": -1, "n": fl}))
+    out = np.zeros(xf.shape[:-2] + ((nf - 1) * hop + fl,), np.float64)
+    weight = np.zeros_like(out)
+    for idx in range(nf):
+        fr = frames[..., idx, :] * win
+        s = idx * hop
+        out[..., s:s + fl] += fr
+        weight[..., s:s + fl] += win * win
+    return (out / np.maximum(weight, 1e-12)).astype(np.float32)
+
+
+def _x86_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_fft_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": sub_op, "result": "o", "operands": ["x"],
+                 "kwargs": sub_kwargs}]})
+    return _execute_x86_compiled_fft(art, (x,))
+
+
+def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` composite spectral lane: dct / stft / istft /
+    spectral_conv / spectral_filter, composing the x86 FFT lane."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SPECTRAL_COMPOSITE_OPS:
+        raise ValueError(
+            f"x86_spectral_compiled executor handles one of "
+            f"{_SPECTRAL_COMPOSITE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
+    return _spectral_composite(op_name, operands, op.get("kwargs") or {},
+                               _x86_fftexec, np)
+
+
 _X86_CLASS_LOSS_OPS = (
     "tessera.cross_entropy_loss", "tessera.kl_divergence",
     "tessera.js_divergence", "tessera.focal_loss",
@@ -7227,6 +7327,34 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 
+def _rocm_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_fft_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": sub_op, "result": "o", "operands": ["x"],
+                 "kwargs": sub_kwargs}]})
+    return _execute_rocm_compiled_fft(art, (x,))
+
+
+def _execute_rocm_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` composite spectral lane: dct / stft / istft /
+    spectral_conv / spectral_filter, composing the gfx1151 FFT (DFT) lane."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SPECTRAL_COMPOSITE_OPS:
+        raise ValueError(
+            f"rocm_spectral_compiled executor handles one of "
+            f"{_SPECTRAL_COMPOSITE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
+    return _spectral_composite(op_name, operands, op.get("kwargs") or {},
+                               _rocm_fftexec, np)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
@@ -7796,6 +7924,7 @@ def _executor_table():
         "x86_stat_reduce_compiled": _execute_x86_compiled_stat_reduce,
         "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
         "x86_fft_compiled": _execute_x86_compiled_fft,
+        "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
@@ -7816,6 +7945,7 @@ def _executor_table():
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,
         "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
+        "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

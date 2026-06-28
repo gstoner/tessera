@@ -279,6 +279,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "other non-pow2 via Bluestein (chirp-z) over the "
                             "radix-2 kernel. SpectralPlan owns strategy + "
                             "normalization. complex64/f32",
+    "x86_spectral_compiled": "x86 CPU spectral composites (dct / stft / istft / "
+                            "spectral_conv / spectral_filter) — compose the "
+                            "x86_fft_compiled FFT lane (frame / window / "
+                            "overlap-add / pointwise complex-mul on host). f32",
     "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
                             "count_nonzero) composed from the AVX-512 reduce "
                             "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
@@ -366,6 +370,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(any length) on gfx1151 + r2c/c2r pack-unpack + plan "
                             "scale (radix-2/Bluestein perf is a follow-up). "
                             "complex64/f32",
+    "rocm_spectral_compiled": "AMD GPU RDNA spectral composites (dct / stft / "
+                            "istft / spectral_conv / spectral_filter) — compose "
+                            "the rocm_fft_compiled DFT lane (frame / window / "
+                            "overlap-add / pointwise complex-mul on host). f32",
     "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
                             "/ count_nonzero) composed from the warp-shuffle "
                             "reduce kernel: var=mean(x^2)-mean(x)^2, "
@@ -603,6 +611,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "the DFT-matrix on the AVX-512 GEMM, other non-pow2 via Bluestein "
                "(chirp-z) over the radix-2 kernel. The SpectralPlan owns strategy "
                "+ normalization. complex64/f32.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_spectral_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_spectral_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_spectral_compiled", runtime_status="success",
+        reason="x86 spectral composites (dct / stft / istft / spectral_conv / "
+               "spectral_filter) compose the x86_fft_compiled FFT lane — "
+               "framing / windowing / overlap-add / pointwise complex-mul on "
+               "host, the transform on the AVX-512 radix-2 kernel. f32, "
+               "matches np.fft.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stat_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stat_reduce_compiled",
@@ -989,6 +1007,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(generate-rocm-dft-kernel -> ROCDL, cos/sin twiddles) on gfx1151 "
                "+ r2c/c2r pack-unpack + plan scale. Direct DFT (radix-2/Bluestein "
                "perf is a follow-up). complex64/f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_spectral_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_spectral_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_spectral_compiled", runtime_status="success",
+        reason="ROCm spectral composites (dct / stft / istft / spectral_conv / "
+               "spectral_filter) compose the rocm_fft_compiled DFT lane — "
+               "framing / windowing / overlap-add / pointwise complex-mul on "
+               "host, the transform on the gfx1151 DFT kernel. f32, matches "
+               "np.fft.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_stat_reduce_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_stat_reduce_compiled",

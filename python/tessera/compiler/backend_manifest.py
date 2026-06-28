@@ -1221,6 +1221,18 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_binary_compiled max/min kernel (either bound optional). "
                  "Executes via runtime.launch() (rocm_clamp_compiled).",
     } for op in ("clamp", "clip")},
+    # P5 — complex arithmetic (9 pointwise ops) over interleaved-f32 [...,2],
+    # composed on the gfx1151 unary/binary/atan2 lanes (no new kernel; host
+    # packs the interleave). Executes via rocm_complex_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone {op} — interleaved-f32 complex op composed on the "
+                 "gfx1151 unary/binary/atan2 kernels (host interleave). Executes "
+                 "via runtime.launch() (rocm_complex_compiled).",
+    } for op in ("complex_mul", "complex_div", "complex_conjugate",
+                 "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                 "complex_sqrt", "complex_pow")},
     # P2e — softcap composed on the gfx1151 unary tanh lane (no new kernel;
     # scalar cap broadcast on host). Executes via rocm_softcap_compiled.
     "softcap": {
@@ -1497,6 +1509,14 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("clamp", "clip")},
     **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py"
        for op in ("clamp", "clip")},
+    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+       for op in ("complex_mul", "complex_div", "complex_conjugate",
+                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                  "complex_sqrt", "complex_pow")},
+    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+       for op in ("complex_mul", "complex_div", "complex_conjugate",
+                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                  "complex_sqrt", "complex_pow")},
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
     ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
@@ -2054,6 +2074,18 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
                  "AVX-512 max/min kernel (either bound optional; matches np.clip)",
     } for op in ("clamp", "clip")},
+    # P5 — complex arithmetic (9 pointwise ops) over interleaved-f32 [...,2],
+    # composed on the AVX-512 transcendental/unary/binary/atan2 lanes (host
+    # packs the interleave; x86_complex_compiled lane).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — interleaved-f32 complex op composed on the AVX-512 "
+                 "transcendental/unary/binary/atan2 kernels (host interleave; "
+                 "x86_complex_compiled lane; f32, matches tessera.complex)",
+    } for op in ("complex_mul", "complex_div", "complex_conjugate",
+                 "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                 "complex_sqrt", "complex_pow")},
     # P2e — softcap composed on the AVX-512 transcendental tanh kernel (no new
     # kernel; scalar cap broadcast on host; x86_softcap_compiled lane).
     "softcap": {

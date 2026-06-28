@@ -170,6 +170,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "isfinite) — the hand-written AVX-512 kernel "
                             "(tessera_x86_avx512_predicate_f32; mask -> 0/1 "
                             "bytes), runtime-loaded. f32 in, bool out",
+    "x86_complex_compiled": "x86 CPU complex arithmetic (9 pointwise ops) — "
+                            "interleaved-f32 composed on AVX-512 transcendental/"
+                            "unary/binary/atan2 kernels. f32",
     "x86_clamp_compiled": "x86 CPU clamp / clip — min(max(x, lo), hi) composed on "
                             "the AVX-512 binary max/min kernel (either bound "
                             "optional; scalar bounds broadcast on host). f32",
@@ -227,6 +230,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(generate-rocm-predicate-kernel, kind StrAttr → ROCDL "
                             "→ hsaco), then HIP launches — one thread per element. "
                             "f32 in, i8/bool out",
+    "rocm_complex_compiled": "AMD GPU RDNA complex arithmetic (9 pointwise ops) "
+                            "— interleaved-f32 composed on gfx1151 unary/binary/"
+                            "atan2 kernels. f32",
     "rocm_clamp_compiled": "AMD GPU RDNA clamp / clip — min(max(x, lo), hi) "
                             "composed on the rocm_binary_compiled max/min kernel "
                             "(either bound optional; scalar bounds broadcast on "
@@ -890,6 +896,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "on the AVX-512 binary max/min kernel (either bound optional; the "
                "scalar bounds are broadcast on host). f32, matches np.clip.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_complex_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_complex_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_complex_compiled", runtime_status="success",
+        reason="x86 complex-arithmetic lane (9 pointwise ops) over "
+               "interleaved-f32 [...,2] composed on the AVX-512 transcendental / "
+               "unary / binary / atan2 kernels; host packs the interleave. f32, "
+               "matches tessera.complex.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_softcap_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_softcap_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1122,6 +1137,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "on the COMPILER-GENERATED gfx1151 binary max/min kernel (either "
                "bound optional; scalar bounds broadcast on host). f32, matches "
                "np.clip.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_complex_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_complex_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_complex_compiled", runtime_status="success",
+        reason="ROCm complex-arithmetic lane (9 pointwise ops) over "
+               "interleaved-f32 [...,2] composed on the gfx1151 unary / binary / "
+               "atan2 kernels; host packs the interleave. f32, matches "
+               "tessera.complex.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_softcap_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_softcap_compiled",

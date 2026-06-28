@@ -44,7 +44,7 @@ atan2,elementwise,public,public,registered,complete,partial,fused,ready,none
 clip,elementwise,public,public,registered,complete,partial,fused,ready,none
 cos,elementwise,public,public,registered,complete,partial,fused,ready,none
 cosh,elementwise,public,public,registered,complete,partial,fused,ready,none
-digamma,elementwise,public,public,registered,complete,partial,reference,ready,none
+digamma,elementwise,public,public,registered,complete,partial,fused,ready,none
 div,elementwise,public,public,registered,complete,partial,fused,ready,none
 erf,elementwise,public,public,registered,complete,partial,fused,ready,none
 erfc,elementwise,public,public,registered,complete,partial,fused,ready,none
@@ -52,7 +52,7 @@ exp,elementwise,public,public,registered,complete,partial,fused,ready,none
 expm1,elementwise,public,public,registered,complete,partial,fused,ready,none
 floor_div,elementwise,public,public,registered,complete,partial,fused,ready,none
 gelu,elementwise,public,public,registered,complete,partial,fused,ready,none
-lgamma,elementwise,public,public,registered,complete,partial,reference,ready,none
+lgamma,elementwise,public,public,registered,complete,partial,fused,ready,none
 log,elementwise,public,public,registered,complete,partial,fused,ready,none
 log1p,elementwise,public,public,registered,complete,partial,fused,ready,none
 mod,elementwise,public,public,registered,complete,partial,fused,ready,none

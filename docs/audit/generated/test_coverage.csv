@@ -144,7 +144,7 @@ dequantize_fp8,4,0,1,4,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_test
 dequantize_int4,3,0,0,3,0,,directly_tested,3 direct test references
 dequantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
-digamma,2,0,0,2,0,,directly_tested,2 direct test references
+digamma,8,0,0,8,0,,directly_tested,8 direct test references
 div,7,2,0,9,0,bf16 f16 f32,directly_tested,9 direct test references
 dropout,19,8,3,27,0,f32 fp32 fp64,directly_tested,27 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -237,7 +237,7 @@ latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test reference
 latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
 layer_norm,25,7,3,32,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,32 direct test references
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
-lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+lgamma,3,0,0,3,0,,directly_tested,3 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
 linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references

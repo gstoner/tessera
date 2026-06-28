@@ -57,7 +57,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan2` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `clip` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `clip` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `cos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `cosh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `digamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -228,7 +228,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `abs` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `ceil` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `clamp` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `clamp` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `floor` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `isfinite` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `isinf` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
@@ -333,7 +333,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |
-| elementwise | 37 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| elementwise | 37 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
@@ -349,7 +349,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
-| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

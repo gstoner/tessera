@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 178 |
-| ``runnable_reference`` | 131 |
+| ``complete`` | 180 |
+| ``runnable_reference`` | 129 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (178)
+## complete (180)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -50,6 +50,7 @@ each row into a single E2E tier.
 | ``add`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``asin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``atan`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``clip`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cos`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cosh`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -147,6 +148,7 @@ each row into a single E2E tier.
 | ``abs`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``clamp`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``isfinite`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``isinf`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -214,7 +216,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (131)
+## runnable_reference (129)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -245,7 +247,6 @@ each row into a single E2E tier.
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``atan2`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``clip`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
@@ -319,7 +320,6 @@ each row into a single E2E tier.
 | ``instance_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``clamp`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |

@@ -5416,6 +5416,57 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(a.shape)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
+# may be None (one-sided). The scalar bound is broadcast to the input shape and
+# the elementwise max (lower) / min (upper) run on the device binary kernel — no
+# new kernel. compiler_path="x86_clamp_compiled" / "rocm_clamp_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_CLAMP_OPS = ("tessera.clamp", "tessera.clip")
+
+
+def _clamp_compute(x: Any, kwargs: dict, binary_exec: Any, np: Any) -> Any:
+    """clip(x, [lo, hi]) = min(max(x, lo), hi) with either bound optional.
+    ``binary_exec(op_name, a, b)`` runs the device elementwise binary kernel."""
+    lo = kwargs.get("min_val", kwargs.get("min"))
+    hi = kwargs.get("max_val", kwargs.get("max"))
+    out = np.ascontiguousarray(x, np.float32)
+    if lo is not None:
+        bound = np.full(out.shape, np.float32(lo), np.float32)
+        out = np.asarray(binary_exec("tessera.maximum", out, bound), np.float32)
+    if hi is not None:
+        bound = np.full(out.shape, np.float32(hi), np.float32)
+        out = np.asarray(binary_exec("tessera.minimum", out, bound), np.float32)
+    return out
+
+
+def _x86_binary_exec(op_name: str, a: Any, b: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_binary_compiled",
+        "arg_names": ["a", "b"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["a", "b"],
+                 "kwargs": {}}]})
+    return _execute_x86_compiled_binary(art, (a, b))
+
+
+def _execute_x86_compiled_clamp(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` clamp lane: clamp / clip composed on the AVX-512
+    binary max/min kernel (scalar bounds broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CLAMP_OPS:
+        raise ValueError(
+            f"x86_clamp_compiled executor handles one of {_CLAMP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _clamp_compute(x, ops[0].get("kwargs") or {}, _x86_binary_exec, np)
+
+
 def _execute_x86_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` where lane: run the AVX-512 ternary select
     where(cond, a, b) = cond ? a : b from libtessera_x86_elementwise.so. cond is
@@ -6443,6 +6494,33 @@ def _execute_rocm_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     for dev in (da, db, do):
         hip.hipFree(dev)
     return o.reshape(a.shape)
+
+
+def _rocm_binary_exec(op_name: str, a: Any, b: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_binary_compiled",
+        "arg_names": ["a", "b"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["a", "b"],
+                 "kwargs": {}}]})
+    return _execute_rocm_compiled_binary(art, (a, b))
+
+
+def _execute_rocm_compiled_clamp(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` clamp lane: clamp / clip composed on the gfx1151
+    binary max/min kernel (scalar bounds broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CLAMP_OPS:
+        raise ValueError(
+            f"rocm_clamp_compiled executor handles one of {_CLAMP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _clamp_compute(x, ops[0].get("kwargs") or {}, _rocm_binary_exec, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9142,6 +9220,7 @@ def _executor_table():
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
         "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
+        "rocm_clamp_compiled": _execute_rocm_compiled_clamp,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
@@ -9174,6 +9253,7 @@ def _executor_table():
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
+        "x86_clamp_compiled": _execute_x86_compiled_clamp,
         "x86_compare_compiled": _execute_x86_compiled_compare,
         "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,

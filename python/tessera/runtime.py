@@ -2923,6 +2923,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
         "tessera_x86_avx512_fpquant_f32":
             [c_f32, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32],
+        "tessera_x86_fft_c2c_f32":
+            [c_f32, i64, i64, ctypes.c_int],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4283,6 +4285,106 @@ def _execute_x86_compiled_stable_reduce(artifact: RuntimeArtifact,
     axes = (axis,) if isinstance(axis, int) else tuple(axis)
     return np.squeeze(lse_keep, axis=tuple(a if a >= 0 else x.ndim + a
                                            for a in axes)).astype(np.float32)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 spectral (FFT) lane — fft / ifft / rfft / irfft over power-of-two lengths
+# (Spectral PR2). The radix-2 C2C kernel (tessera_x86_fft_c2c_f32) does the
+# transform; r2c/c2r pack/unpack around it; the SpectralPlan (compiler/
+# spectral_plan.py) owns strategy + normalization. Non-power-of-two lengths emit
+# a stable diagnostic until the Bluestein/DFT path (PR3). f32/complex64.
+# ─────────────────────────────────────────────────────────────────────────────
+def _x86_fft_c2c_rows(xc: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized radix-2 C2C FFT of complex64 rows [batch, n] (n a power of
+    two) on the AVX-512 kernel. Returns a new complex64 [batch, n]."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable(
+            "libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(xc, np.complex64)
+    batch, n = int(xc.shape[0]), int(xc.shape[1])
+    buf = np.ascontiguousarray(xc.view(np.float32).reshape(-1))
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_fft_c2c_f32(
+        buf.ctypes.data_as(cf), ctypes.c_int64(batch), ctypes.c_int64(n),
+        ctypes.c_int(1 if inverse else 0))
+    return buf.view(np.complex64).reshape(batch, n)
+
+
+_X86_FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
+
+
+def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` spectral lane: fft / ifft / rfft / irfft over a
+    power-of-two axis. Consumes the SpectralPlan for strategy + normalization;
+    radix-2 C2C kernel + r2c/c2r pack-unpack. Non-power-of-two → stable
+    diagnostic (Spectral PR3)."""
+    import numpy as np
+
+    from .compiler.spectral_plan import plan_fft
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_FFT_OPS:
+        raise ValueError(
+            f"x86_fft_compiled executor handles one of {_X86_FFT_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("fft requires one operand")
+    kwargs = op.get("kwargs") or {}
+    axis = int(kwargs.get("axis", -1))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    nd = x.ndim
+    if nd < 1:
+        raise ValueError("fft operand must have rank >= 1")
+    ax = axis if axis >= 0 else nd + axis
+
+    inverse = op_name == "tessera.ifft"
+    if op_name == "tessera.irfft":
+        m = int(x.shape[ax])
+        n = int(kwargs.get("n") or 2 * (m - 1))
+    else:
+        n = int(x.shape[ax])
+    mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
+    plan = plan_fft(n, axis=ax, mode=mode,
+                    inverse=inverse or op_name == "tessera.irfft")
+    if plan.strategy != "radix2":
+        raise ValueError(
+            f"x86 FFT lane handles power-of-two lengths (radix-2); length {n} "
+            f"needs the Bluestein/DFT path (Spectral PR3); got "
+            f"strategy={plan.strategy}")
+
+    xm = np.moveaxis(x, ax, -1)
+    lead = xm.shape[:-1]
+
+    if op_name in ("tessera.fft", "tessera.ifft"):
+        rows = xm.reshape(-1, n).astype(np.complex64)
+        out = _x86_fft_c2c_rows(rows, plan.inverse, np)
+        if plan.scale != 1.0:
+            out = out * np.complex64(plan.scale)
+        return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
+
+    if op_name == "tessera.rfft":
+        rows = xm.reshape(-1, n).astype(np.complex64)   # im = 0
+        full = _x86_fft_c2c_rows(rows, False, np)
+        half = full[:, : n // 2 + 1]
+        return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(
+            np.complex64)
+
+    # tessera.irfft — Hermitian-reconstruct the full spectrum, ifft, take real.
+    rows = xm.reshape(-1, m).astype(np.complex64)
+    batch = rows.shape[0]
+    full = np.zeros((batch, n), np.complex64)
+    full[:, :m] = rows[:, :m]
+    if n - m > 0:                                       # mirror conj tail
+        full[:, m:n] = np.conj(rows[:, 1:n // 2])[:, ::-1]
+    out = _x86_fft_c2c_rows(full, True, np).real * np.float32(1.0 / n)
+    return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7505,6 +7607,7 @@ def _executor_table():
         "x86_loss_compiled": _execute_x86_compiled_loss,
         "x86_stat_reduce_compiled": _execute_x86_compiled_stat_reduce,
         "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
+        "x86_fft_compiled": _execute_x86_compiled_fft,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,

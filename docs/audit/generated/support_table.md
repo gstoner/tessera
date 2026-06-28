@@ -283,11 +283,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `spmm_coo` | sparse | public | public | registered | complete | partial | reference | ready | none |
 | `spmm_csr` | sparse | public | public | registered | complete | partial | reference | ready | none |
 | `dct` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `fft` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `ifft` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `irfft` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `fft` | spectral | public | public | registered | complete | partial | fused | ready | none |
+| `ifft` | spectral | public | public | registered | complete | partial | fused | ready | none |
+| `irfft` | spectral | public | public | registered | complete | partial | fused | ready | none |
 | `istft` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `rfft` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `rfft` | spectral | public | public | registered | complete | partial | fused | ready | none |
 | `spectral_conv` | spectral | public | public | registered | complete | partial | reference | ready | none |
 | `spectral_filter` | spectral | public | public | registered | complete | partial | reference | ready | none |
 | `stft` | spectral | public | public | registered | complete | partial | reference | ready | none |
@@ -361,7 +361,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| spectral | 9 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| spectral | 9 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |
 | state_space | 1 | PPGCpRN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |

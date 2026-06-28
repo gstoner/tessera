@@ -131,7 +131,7 @@ dataset_repeat,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_shuffle,0,0,0,0,1,,structural_only,category default for 'data'
 dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
-dct,5,0,0,5,0,fp32,directly_tested,5 direct test references
+dct,6,0,1,6,0,fp32,directly_tested,6 direct test references
 ddpm_noise_pred_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 deepseek_sparse_attention,12,5,0,17,0,,directly_tested,17 direct test references
 denoising_score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
@@ -179,7 +179,7 @@ expm1,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 factorized_matmul,5,0,1,5,0,,directly_tested,5 direct test references
 factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
 fake_quantize,3,0,0,3,0,,directly_tested,3 direct test references
-fft,11,2,0,13,0,f32 fp32,directly_tested,13 direct test references
+fft,14,2,1,16,0,f32 fp32,directly_tested,16 direct test references
 flash_attn,100,57,8,157,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,157 direct test references
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -204,7 +204,7 @@ gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
 gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 huber_loss,8,0,0,8,0,f32,directly_tested,8 direct test references
 hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
-ifft,3,0,0,3,0,fp32,directly_tested,3 direct test references
+ifft,4,0,0,4,0,fp32,directly_tested,4 direct test references
 image_normalize,4,0,1,4,0,,directly_tested,4 direct test references
 image_resize,6,0,1,6,0,,directly_tested,6 direct test references
 implicit_score_matching_loss,0,0,0,0,1,,covered_by_family,category default for 'loss'
@@ -214,7 +214,7 @@ info_nce_loss,3,0,0,3,0,,directly_tested,3 direct test references
 instance_norm,6,0,0,6,0,,directly_tested,6 direct test references
 interpolate,6,0,1,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-irfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
+irfft,4,0,1,4,0,fp32,directly_tested,4 direct test references
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 isfinite,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 isinf,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -353,7 +353,7 @@ remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 reshape,7,15,0,22,0,,directly_tested,22 direct test references
 retention,8,0,2,8,0,,directly_tested,8 direct test references
-rfft,3,0,0,3,0,fp32,directly_tested,3 direct test references
+rfft,4,0,0,4,0,fp32,directly_tested,4 direct test references
 rmsnorm,74,10,3,84,0,bf16 f16 f32 f64 fp32,directly_tested,84 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'

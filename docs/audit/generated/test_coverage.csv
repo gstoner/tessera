@@ -259,7 +259,7 @@ logsumexp,6,3,0,9,0,,directly_tested,9 direct test references
 lookahead_sparse_attention,15,4,1,19,0,,directly_tested,19 direct test references
 lora_linear,5,0,0,5,0,,directly_tested,5 direct test references
 lt,4,0,2,4,0,bf16 f32,directly_tested,4 direct test references
-lu,1,1,0,2,0,bf16 f16 f32 fp16 fp32,directly_tested,2 direct test references
+lu,5,1,0,6,0,bf16 f16 f32 fp16 fp32,directly_tested,6 direct test references
 mae_loss,5,0,0,5,0,f32,directly_tested,5 direct test references
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
@@ -336,7 +336,7 @@ ppo_policy_loss,14,11,1,25,0,bf16 f16 f32 fp16 fp32,directly_tested,25 direct te
 prod,4,0,0,4,0,,directly_tested,4 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
 qkv_projection,9,0,0,9,0,fp32,directly_tested,9 direct test references
-qr,5,3,0,8,0,bf16 f16 f32 fp16 fp32,directly_tested,8 direct test references
+qr,9,3,0,12,0,bf16 f16 f32 fp16 fp32,directly_tested,12 direct test references
 quantize_fp4,15,0,3,15,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,15 direct test references
 quantize_fp6,13,0,2,13,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,13 direct test references
 quantize_fp8,31,3,4,34,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,34 direct test references

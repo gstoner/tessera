@@ -1109,6 +1109,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "two triangular solves. Executes via runtime.launch() "
                  "(rocm_linalg_compiled).",
     } for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    # Linalg PR-B — LU (partial pivot) + Householder QR on gfx1151, one thread
+    # per matrix (rocm_linalg_compiled).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("linalg",),
+        "notes": f"Linalg {op} — direct factorization kernel (generate-rocm-{op}-"
+                 "kernel, one thread per matrix) on gfx1151. Executes via "
+                 "runtime.launch() (rocm_linalg_compiled).",
+    } for op in ("lu", "qr")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1445,6 +1454,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{(op, "x86"): "tests/unit/test_x86_lu_qr_compiled.py" for op in ("lu", "qr")},
+    **{(op, "rocm"): "tests/unit/test_rocm_lu_qr_compiled.py"
+       for op in ("lu", "qr")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2147,6 +2159,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "cholesky_solve = two triangular solves; batched; "
                  "x86_linalg_compiled lane; f32, matches numpy)",
     } for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    # Linalg PR-B — LU (partial pivot) + Householder QR. Genuine AVX-512
+    # factorization kernels (x86_linalg_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Linalg {op} — AVX-512 kernel (getrf partial-pivot LU / "
+                 "Householder QR with vectorized rank-1 / reflector updates; "
+                 "batched; x86_linalg_compiled lane; f32, matches numpy)",
+    } for op in ("lu", "qr")},
 }
 
 

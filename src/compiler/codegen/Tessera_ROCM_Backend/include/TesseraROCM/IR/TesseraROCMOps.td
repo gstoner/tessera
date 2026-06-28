@@ -449,6 +449,31 @@ def ROCM_TriSolveKernelOp : TesseraROCM_Op<"tri_solve"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_LuKernelOp : TesseraROCM_Op<"lu"> {
+  let summary = "Batched LU (partial pivoting) gpu kernel";
+  let description = [{
+    `generate-rocm-lu-kernel` expands into a batched getrf (one thread per
+    matrix) — A[b,n,n] → packed LU[b,n,n] (unit-lower L below diag, U on/above)
+    + pivots[b,n] (0-based, piv[k]=row swapped with k). All f32 (pivots i32).
+    CPU analog: avx512_lu_qr lu.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_QrKernelOp : TesseraROCM_Op<"qr"> {
+  let summary = "Batched Householder QR gpu kernel";
+  let description = [{
+    `generate-rocm-qr-kernel` expands into a batched Householder QR (one thread
+    per matrix) — A[b,m,n] → full Q[b,m,m] orthonormal + R[b,m,n] upper-trapezoid,
+    A=Q·R (the runtime slices the reduced Q[:, :k] / R[:k, :], k=min(m,n)). The
+    per-thread reflector v[m] lives in a global scratch buffer. norm via
+    math→ROCDL. All f32. CPU analog: avx512_lu_qr qr.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{

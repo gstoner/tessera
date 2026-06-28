@@ -155,8 +155,8 @@ unpack,layout_transform,public,public,registered,complete,partial,reference,read
 unsqueeze,layout_transform,public,public,registered,complete,partial,reference,ready,none
 view,layout_transform,public,public,registered,complete,partial,reference,ready,none
 cholesky,linalg_decomposition,public,public,registered,complete,partial,fused,ready,none
-lu,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
-qr,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
+lu,linalg_decomposition,public,public,registered,complete,partial,fused,ready,none
+qr,linalg_decomposition,public,public,registered,complete,partial,fused,ready,none
 svd,linalg_decomposition,public,public,registered,complete,partial,reference,ready,none
 cholesky_solve,linalg_solver,public,public,registered,complete,partial,fused,ready,none
 tri_solve,linalg_solver,public,public,registered,complete,partial,fused,ready,none

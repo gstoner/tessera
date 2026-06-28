@@ -6,9 +6,9 @@ Reference date for staleness: **2026-06-28**.
 
 ## Headline
 
-- **90** docs catalogued across the canonical doc tree.
-- **89** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **52** updated within the last 30 days.
+- **91** docs catalogued across the canonical doc tree.
+- **90** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **53** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -143,3 +143,4 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `roadmap/REPLAYSSM_PLAN.md` | - | 2026-06-15 | 13 | ✓ |
 | `roadmap/ROADMAP_AUDIT.md` | - | 2026-06-26 | 2 | ✓ |
 | `roadmap/S_SERIES_ENABLEMENT_MAP.md` | - | 2026-06-27 | 1 | ✓ |
+| `roadmap/S_SERIES_GAP_CLOSURE_PLAN.md` | - | 2026-06-28 | 0 | ✓ |

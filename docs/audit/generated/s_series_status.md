@@ -18,13 +18,13 @@
 | `transpose_rule` | 0 | 474 |
 | `sharding_rule` | 47 | 427 |
 | `lowering_rule` | 0 | 474 |
-| `backend_kernel` | 474 | 0 |
+| `backend_kernel` | 467 | 7 |
 
 ## Per-category breakdown
 
 | sprint | category | total | batching | transpose | sharding | lowering | backend |
 |---|---|---:|---:|---:|---:|---:|---:|
-| S2 | `tensor_algebra` | 19 | — | — | — | — | 19 |
+| S2 | `tensor_algebra` | 19 | — | — | — | — | 12 |
 | S2 | `reduction` | 16 | — | — | — | — | 16 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
@@ -89,7 +89,7 @@
 
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
-| S2 | 56 | 0 | 0 | 0 | 56 |
+| S2 | 56 | 0 | 0 | 0 | 49 |
 | S5 | 7 | 0 | 0 | 0 | 7 |
 | S7 | 58 | 0 | 0 | 14 | 58 |
 | S10 | 18 | 0 | 0 | 0 | 18 |

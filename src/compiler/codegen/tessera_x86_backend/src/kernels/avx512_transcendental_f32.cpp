@@ -27,6 +27,7 @@
 #include <immintrin.h>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace {
 
@@ -50,6 +51,27 @@ constexpr int kAcos = 15;
 constexpr int kAtan = 16;
 constexpr int kErfc = 17;
 constexpr int kSin = 18;
+constexpr int kLgamma = 19;
+constexpr int kDigamma = 20;
+
+// ψ(x) = d/dx ln Γ(x). Scalar reference (also the n%16 tail + the x<=0
+// reflection lanes) — matches tessera.ops.digamma's _digamma_scalar exactly:
+// recurrence up to x>=8 then the asymptotic series; reflection for x<=0; poles
+// at non-positive integers return NaN.
+inline double digamma_d(double x) {
+    constexpr double kPi = 3.14159265358979323846;
+    if (x <= 0.0) {
+        if (std::fabs(x - std::round(x)) < 1e-12)
+            return std::numeric_limits<double>::quiet_NaN();
+        return digamma_d(1.0 - x) - kPi / std::tan(kPi * x);
+    }
+    double result = 0.0;
+    while (x < 8.0) { result -= 1.0 / x; x += 1.0; }
+    double inv = 1.0 / x, inv2 = inv * inv;
+    return result + std::log(x) - 0.5 * inv - inv2 / 12.0
+           + inv2 * inv2 / 120.0 - inv2 * inv2 * inv2 / 252.0
+           + inv2 * inv2 * inv2 * inv2 / 240.0;
+}
 
 constexpr float kSqrt2OverPi = 0.7978845608028654f;  // √(2/π)
 constexpr float kGeluC = 0.044715f;
@@ -79,6 +101,8 @@ inline float scalar_transcendental(float v, int kind) {
     case kAcos:     return std::acos(v);
     case kAtan:     return std::atan(v);
     case kErfc:     return std::erfc(v);
+    case kLgamma:   return std::lgamma(v);
+    case kDigamma:  return static_cast<float>(digamma_d(v));
     default:        return v;
     }
 }
@@ -150,6 +174,80 @@ inline __m512 tanh512(__m512 x) {
     const __m512 one = _mm512_set1_ps(1.0f);
     __m512 a = exp512(_mm512_mul_ps(x, _mm512_set1_ps(2.0f)));
     return _mm512_div_ps(_mm512_sub_ps(a, one), _mm512_add_ps(a, one));
+}
+
+// ── ln Γ(x): Numerical Recipes `gammln` — Lanczos g=5 approximation ───────────
+// Valid for x > 0; the SIMD series is accurate to ~1e-6 (f32). Reflection /
+// non-positive lanes (x < 0.5) fall back to scalar std::lgamma (the exact libm
+// reference for those rarer args) — the same SIMD-core + scalar-edge split the
+// sin lane uses for large arguments (trigCorrectLarge). Matches math.lgamma.
+inline __m512 lgamma512(__m512 x) {
+    static const float cof[6] = {
+        76.18009172947146f,    -86.50532032941677f,    24.01409824083091f,
+        -1.231739572450155f,    0.1208650973866179e-2f, -0.5395239384953e-5f};
+    const __m512 half = _mm512_set1_ps(0.5f);
+    __m512 y = x;
+    __m512 ser = _mm512_set1_ps(1.000000000190015f);
+    for (int j = 0; j < 6; ++j) {
+        y = _mm512_add_ps(y, _mm512_set1_ps(1.0f));      // ++y, starting x+1
+        ser = _mm512_add_ps(ser, _mm512_div_ps(_mm512_set1_ps(cof[j]), y));
+    }
+    __m512 tmp = _mm512_add_ps(x, _mm512_set1_ps(5.5f));
+    tmp = _mm512_sub_ps(tmp, _mm512_mul_ps(_mm512_add_ps(x, half), log512(tmp)));
+    const __m512 sqrt2pi = _mm512_set1_ps(2.5066282746310005f);
+    __m512 lg = _mm512_add_ps(
+        _mm512_sub_ps(_mm512_setzero_ps(), tmp),
+        log512(_mm512_div_ps(_mm512_mul_ps(sqrt2pi, ser), x)));
+    __mmask16 refl = _mm512_cmp_ps_mask(x, half, _CMP_LT_OQ);
+    if (refl) {
+        float vx[16], vr[16];
+        _mm512_storeu_ps(vx, x);
+        _mm512_storeu_ps(vr, lg);
+        for (int i = 0; i < 16; ++i)
+            if (refl & (1u << i)) vr[i] = std::lgamma(vx[i]);
+        lg = _mm512_loadu_ps(vr);
+    }
+    return lg;
+}
+
+// ── ψ(x) = digamma — recurrence to x>=8 + asymptotic series ───────────────────
+// SIMD core for x > 0 (8 masked recurrence steps reach x>=8 for any x>0, then
+// the asymptotic expansion). x <= 0 lanes (reflection / poles) fall back to the
+// scalar digamma_d. Matches tessera.ops.digamma.
+inline __m512 digamma512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 eight = _mm512_set1_ps(8.0f);
+    __m512 result = _mm512_setzero_ps();
+    __m512 xx = x;
+    for (int k = 0; k < 8; ++k) {
+        __mmask16 m = _mm512_cmp_ps_mask(xx, eight, _CMP_LT_OQ);
+        __m512 recip = _mm512_div_ps(one, xx);
+        result = _mm512_mask_sub_ps(result, m, result, recip);  // -= 1/xx
+        xx = _mm512_mask_add_ps(xx, m, xx, one);                 // xx += 1
+    }
+    __m512 inv = _mm512_div_ps(one, xx);
+    __m512 inv2 = _mm512_mul_ps(inv, inv);
+    __m512 inv4 = _mm512_mul_ps(inv2, inv2);
+    __m512 inv6 = _mm512_mul_ps(inv4, inv2);
+    __m512 inv8 = _mm512_mul_ps(inv4, inv4);
+    // log(xx) - inv/2 - inv2/12 + inv4/120 - inv6/252 + inv8/240
+    __m512 r = log512(xx);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(0.5f), inv, r);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(1.0f / 12.0f), inv2, r);
+    r = _mm512_fmadd_ps(_mm512_set1_ps(1.0f / 120.0f), inv4, r);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(1.0f / 252.0f), inv6, r);
+    r = _mm512_fmadd_ps(_mm512_set1_ps(1.0f / 240.0f), inv8, r);
+    result = _mm512_add_ps(result, r);
+    __mmask16 refl = _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LE_OQ);
+    if (refl) {
+        float vx[16], vr[16];
+        _mm512_storeu_ps(vx, x);
+        _mm512_storeu_ps(vr, result);
+        for (int i = 0; i < 16; ++i)
+            if (refl & (1u << i)) vr[i] = static_cast<float>(digamma_d(vx[i]));
+        result = _mm512_loadu_ps(vr);
+    }
+    return result;
 }
 
 inline __m512 sigmoid512(__m512 x) {
@@ -318,6 +416,8 @@ inline __m512 apply512(__m512 v, int kind) {
                              _mm512_add_ps(one, t));
     }
     case kErf:     return erf512(v);
+    case kLgamma:  return lgamma512(v);
+    case kDigamma: return digamma512(v);
     case kSoftplus: {
         // log1p(exp(-|x|)) + max(x, 0)  — overflow-stable
         __m512 ax = _mm512_abs_ps(v);

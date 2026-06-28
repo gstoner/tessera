@@ -341,6 +341,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco), then HIP launches it; per-element "
                             "loss on gfx1151 + none/mean/sum reduction. The CPU "
                             "analog is the x86_loss lane. f32/f16/bf16",
+    "rocm_class_loss_compiled": "AMD GPU RDNA class-axis loss (cross_entropy / "
+                            "kl / js / focal / label_smoothed / z_loss) — exp/log "
+                            "on the rocm unary lane (gfx1151), class-axis "
+                            "max/sum/gather/one-hot on the host. ROCm mirror of "
+                            "x86_class_loss. f32",
+    "rocm_fpquant_compiled": "AMD GPU RDNA low-precision float quantize "
+                            "(quantize/dequantize fp8 / fp6 / fp4) — grid-snap on "
+                            "generate-rocm-fpquant-kernel (log2/exp2/roundeven) + "
+                            "per-tensor scale. ROCm mirror of x86_fpquant. f32",
+    "rocm_nvfp4_compiled": "AMD GPU RDNA NVFP4 block-scaled fp4 — per-block "
+                            "fp8-E4M3 scale + E2M1 codes on the fpquant kernel + "
+                            "host block structure. ROCm mirror of x86_nvfp4. f32",
     "rocm_binary_loss_compiled": "AMD GPU RDNA binary-cross-entropy loss (bce / "
                             "asymmetric_bce) the Tessera compiler GENERATES "
                             "(generate-rocm-binary-loss-kernel -> ROCDL -> "
@@ -902,6 +914,32 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_class_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_class_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_class_loss_compiled", runtime_status="success",
+        reason="ROCm class-loss artifact runs cross_entropy / kl / js / focal / "
+               "label_smoothed_cross_entropy / z_loss: exp/log on the rocm unary "
+               "lane (gfx1151), class-axis max/sum/gather/one-hot on the host. "
+               "ROCm mirror of x86_class_loss. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_fpquant_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_fpquant_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_fpquant_compiled", runtime_status="success",
+        reason="ROCm fpquant artifact runs quantize/dequantize fp8 / fp6 / fp4: "
+               "per-tensor scale + grid-snap on the COMPILER-GENERATED fpquant "
+               "kernel (generate-rocm-fpquant-kernel: log2/exp2/roundeven -> "
+               "ROCDL). ROCm mirror of x86_fpquant. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_nvfp4_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_nvfp4_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_nvfp4_compiled", runtime_status="success",
+        reason="ROCm nvfp4 artifact runs block-scaled fp4: per-block fp8-E4M3 "
+               "scale + E2M1 codes on the fpquant kernel + host block structure. "
+               "ROCm mirror of x86_nvfp4. f32.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_binary_loss_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_binary_loss_compiled",
         execution_kind="native_gpu", executable=True,

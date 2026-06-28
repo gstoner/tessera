@@ -6432,6 +6432,264 @@ def _execute_rocm_compiled_rl_loss(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED fpquant lane — quantize/dequantize fp8 / fp6 / fp4 + nvfp4 (ROCm
+# mirror of the x86 fpquant/nvfp4 lanes). Grid-snap on the COMPILER-GENERATED
+# fpquant kernel; per-tensor / per-block scale is host structure.
+# ─────────────────────────────────────────────────────────────────────────────
+_rocm_fpquant_hsaco_cache: dict[tuple, bytes] = {}
+_FP_NO_CLAMP_ROCM = -126
+_ROCM_FPQUANT_OPS = {
+    "tessera.quantize_fp8": (True, {"e4m3": (448.0, 3, -6),
+                                    "e5m2": (57344.0, 2, -14)}, "e4m3"),
+    "tessera.dequantize_fp8": (False, {"e4m3": (448.0, 3, -6),
+                                       "e5m2": (57344.0, 2, -14)}, "e4m3"),
+    "tessera.quantize_fp6": (True, {"e2m3": (7.5, 3, _FP_NO_CLAMP_ROCM),
+                                    "e3m2": (28.0, 2, _FP_NO_CLAMP_ROCM)}, "e3m2"),
+    "tessera.dequantize_fp6": (False, {"e2m3": (7.5, 3, _FP_NO_CLAMP_ROCM),
+                                       "e3m2": (28.0, 2, _FP_NO_CLAMP_ROCM)},
+                               "e3m2"),
+    "tessera.quantize_fp4": (True, {"e2m1": (6.0, 1, _FP_NO_CLAMP_ROCM)}, "e2m1"),
+    "tessera.dequantize_fp4": (False, {"e2m1": (6.0, 1, _FP_NO_CLAMP_ROCM)},
+                               "e2m1"),
+}
+
+
+def _rocm_fpgrid(x: Any, max_normal: float, mantissa_bits: int, min_exp: int,
+                 np: Any) -> Any:
+    """Snap an array to a low-precision float grid on the ROCm fpquant kernel
+    (no scaling — caller pre-scales). Shape-preserving, f32."""
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.fpquant"() {{name = "fq", dtype = "f32", '
+        f'max_normal = {float(max_normal):e} : f32, '
+        f'mantissa_bits = {int(mantissa_bits)} : i64, '
+        f'min_exp = {int(min_exp)} : i64}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-fpquant-kernel", directive, _rocm_fpquant_hsaco_cache,
+        (chip, float(max_normal), int(mantissa_bits), int(min_exp)))
+    flat = np.ascontiguousarray(x, np.float32).reshape(-1)
+    n = int(flat.size)
+    if n <= 0:
+        return np.array(x, copy=True)
+    o = _rocm_launch_nary_elementwise(hsaco, b"fq", [flat], n, np.float32, 4,
+                                      "fpquant", np)
+    return o.reshape(np.shape(x))
+
+
+def _execute_rocm_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` low-precision-float quantize lane: quantize/
+    dequantize fp8 / fp6 / fp4 on gfx1151. quantize snaps to the format grid on
+    the fpquant kernel (per-tensor symmetric scale); dequantize is the fp32
+    passthrough."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_FPQUANT_OPS:
+        raise ValueError(
+            "rocm_fpquant_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_FPQUANT_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    is_quant, fmt_map, default_fmt = _ROCM_FPQUANT_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("quantize op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    fmt = str(kwargs.get("format", default_fmt))
+    if fmt not in fmt_map:
+        raise ValueError(
+            f"{op_name}: format must be one of {tuple(fmt_map)}; got {fmt!r}")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"rocm fpquant lane handles f32 only; got {x.dtype}")
+    if not is_quant:
+        return np.ascontiguousarray(x, np.float32)
+    max_normal, mantissa_bits, min_exp = fmt_map[fmt]
+    scale_kw = kwargs.get("scale")
+    if scale_kw is None:
+        amax = float(np.max(np.abs(x))) if x.size else 0.0
+        scale = max(amax / max_normal, 1e-12)
+    else:
+        scale = float(scale_kw)
+    scaled = np.clip(np.ascontiguousarray(x, np.float32) / np.float32(scale),
+                     -max_normal, max_normal).astype(np.float32)
+    out = _rocm_fpgrid(scaled, max_normal, mantissa_bits, min_exp, np)
+    return (out * np.float32(scale)).astype(np.float32)
+
+
+def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
+    fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
+    returns the dequantized fp32; dequantize is the passthrough."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    _OPS = ("tessera.quantize_nvfp4", "tessera.dequantize_nvfp4")
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPS:
+        raise ValueError(
+            f"rocm_nvfp4_compiled executor handles one of {_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("nvfp4 op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    bs = int(kwargs.get("block_size", 16))
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"rocm nvfp4 lane handles f32 only; got {x.dtype}")
+    if op_name == "tessera.dequantize_nvfp4":
+        return np.ascontiguousarray(x, np.float32)
+    if bs <= 0 or x.ndim < 1 or int(x.shape[-1]) % bs != 0:
+        raise ValueError(
+            f"nvfp4 last dim must be divisible by block_size {bs}")
+    x = np.ascontiguousarray(x, np.float32)
+    n = int(x.shape[-1])
+    nb = n // bs
+    blocks = x.reshape(*x.shape[:-1], nb, bs)
+    amax = np.abs(blocks).max(axis=-1)
+    raw = np.maximum(amax / np.float32(6.0), np.float32(1e-30))
+    scale = _rocm_fpgrid(raw, 448.0, 3, -6, np)            # fp8 e4m3 scale
+    scale = np.where(scale == 0.0, np.float32(1.0), scale).astype(np.float32)
+    sf = scale[..., None]
+    codes = _rocm_fpgrid(blocks / sf, 6.0, 1, 0, np)       # fp4 e2m1 (clamp 0)
+    return (codes * sf).reshape(*x.shape[:-1], n).astype(np.float32)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCm class-axis loss lane — cross_entropy / kl / js / focal /
+# label_smoothed_cross_entropy / z_loss (ROCm mirror of the x86 class-loss lane).
+# exp/log on the rocm unary lane; class-axis structure on the host.
+# ─────────────────────────────────────────────────────────────────────────────
+def _rocm_unary_t(x: Any, kind: str, np: Any) -> Any:
+    """Elementwise exp/log on the ROCm unary lane (tessera.exp / tessera.log)."""
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_unary_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": f"tessera.{kind}", "result": "o",
+                 "operands": ["x"]}]})
+    return np.asarray(_execute_rocm_compiled_unary(
+        art, (np.ascontiguousarray(x, np.float32),)), np.float32)
+
+
+def _rocm_log_softmax(z: Any, np: Any) -> Any:
+    m = np.max(z, axis=-1, keepdims=True)
+    shifted = (z - m).astype(np.float32)
+    e = _rocm_unary_t(shifted, "exp", np)
+    s = e.sum(axis=-1, keepdims=True).astype(np.float32)
+    return (shifted - _rocm_unary_t(s, "log", np)).astype(np.float32)
+
+
+_ROCM_CLASS_LOSS_OPS = (
+    "tessera.cross_entropy_loss", "tessera.kl_divergence",
+    "tessera.js_divergence", "tessera.focal_loss",
+    "tessera.label_smoothed_cross_entropy", "tessera.z_loss",
+)
+
+
+def _execute_rocm_compiled_class_loss(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="rocm"`` class-axis loss lane: cross_entropy / kl / js /
+    focal / label_smoothed_cross_entropy / z_loss. exp/log on the rocm unary
+    lane (gfx1151); class-axis max/sum/gather/one-hot on the host."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_CLASS_LOSS_OPS:
+        raise ValueError(
+            f"rocm_class_loss_compiled executor handles one of "
+            f"{_ROCM_CLASS_LOSS_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+
+    def _red(loss):
+        if reduction == "none":
+            return loss.astype(np.float32)
+        return np.float32(loss.sum() if reduction == "sum" else loss.mean())
+
+    def _gather(logp, targets):
+        flat = logp.reshape(-1, logp.shape[-1])
+        idx = targets.reshape(-1).astype(np.int64)
+        return flat[np.arange(idx.size), idx].reshape(targets.shape)
+
+    if op_name == "tessera.cross_entropy_loss":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1]
+        logp = _rocm_log_softmax(logits, np)
+        if targets.dtype.kind in "iu":
+            loss = -_gather(logp, targets)
+        else:
+            loss = -np.sum(targets.astype(np.float32) * logp, axis=-1)
+        return _red(loss)
+
+    if op_name == "tessera.label_smoothed_cross_entropy":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1].astype(np.int64)
+        c = int(logits.shape[-1])
+        smooth = float(kwargs.get("smoothing", 0.1))
+        soft = np.full(targets.shape + (c,), smooth / max(1, c - 1), np.float32)
+        np.put_along_axis(soft, targets[..., None], 1.0 - smooth, axis=-1)
+        loss = -np.sum(soft * _rocm_log_softmax(logits, np), axis=-1)
+        return _red(loss)
+
+    if op_name == "tessera.focal_loss":
+        logits = operands[0].astype(np.float32)
+        targets = operands[1]
+        gamma = float(kwargs.get("gamma", 2.0))
+        alpha = kwargs.get("alpha")
+        probs = _rocm_unary_t(_rocm_log_softmax(logits, np), "exp", np)
+        pt = _gather(probs, targets)
+        logpt = _rocm_unary_t(np.maximum(pt, 1e-12).astype(np.float32), "log", np)
+        loss = -((1.0 - pt) ** gamma) * logpt
+        if alpha is not None:
+            loss = float(alpha) * loss
+        return _red(loss)
+
+    if op_name == "tessera.z_loss":
+        z = operands[0].astype(np.float32)
+        m = np.max(z, axis=-1, keepdims=True)
+        e = _rocm_unary_t((z - m).astype(np.float32), "exp", np)
+        s = e.sum(axis=-1, keepdims=True).astype(np.float32)
+        lse = (m + _rocm_unary_t(s, "log", np)).squeeze(axis=-1)
+        return _red(lse * lse)
+
+    if op_name == "tessera.kl_divergence":
+        p_log = operands[0].astype(np.float32)
+        q = operands[1].astype(np.float32)
+        p = _rocm_unary_t(p_log, "exp", np)
+        logq = _rocm_unary_t(np.maximum(q, 1e-12).astype(np.float32), "log", np)
+        return _red(np.sum(p * (p_log - logq), axis=-1))
+
+    # tessera.js_divergence
+    p = operands[0].astype(np.float32)
+    q = operands[1].astype(np.float32)
+    mid = (0.5 * (p + q)).astype(np.float32)
+    logp = _rocm_unary_t(np.maximum(p, 1e-12).astype(np.float32), "log", np)
+    logq = _rocm_unary_t(np.maximum(q, 1e-12).astype(np.float32), "log", np)
+    logm = _rocm_unary_t(np.maximum(mid, 1e-12).astype(np.float32), "log", np)
+    kl_pm = np.sum(p * (logp - logm), axis=-1)
+    kl_qm = np.sum(q * (logq - logm), axis=-1)
+    return _red(0.5 * (kl_pm + kl_qm))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -7011,6 +7269,9 @@ def _executor_table():
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
+        "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
+        "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
+        "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

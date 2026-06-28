@@ -1007,6 +1007,34 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_rl_loss_compiled).",
     } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
                  "normalize_group_advantages")},
+    # S11 class-axis losses — exp/log on the rocm unary lane + host class-axis
+    # structure. ROCm mirror of x86_class_loss. Executes via
+    # rocm_class_loss_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Class-axis loss {op} — exp/log on the rocm unary lane + host "
+                 "class-axis max/sum/gather. Executes via runtime.launch() "
+                 "(rocm_class_loss_compiled).",
+    } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
+                 "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
+    # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Low-precision float {op} — grid-snap kernel "
+                 "(generate-rocm-fpquant-kernel; log2/exp2/roundeven) + scale. "
+                 "Executes via runtime.launch() (rocm_fpquant_compiled).",
+    } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
+                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"NVFP4 block-scaled fp4 {op} — per-block fp8-E4M3 scale + E2M1 "
+                 "codes on the fpquant kernel + host block structure. Executes "
+                 "via runtime.launch() (rocm_nvfp4_compiled).",
+    } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1335,6 +1363,13 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_rl_loss_compiled.py"
        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
                   "normalize_group_advantages")},
+    **{(op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
+       for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
+                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_fpquant_compiled.py"
+       for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
+                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
+                  "quantize_nvfp4", "dequantize_nvfp4")},
     **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
        for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
                   "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",

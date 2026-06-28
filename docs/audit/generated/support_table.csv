@@ -65,7 +65,7 @@ score_combine,elementwise,public,public,registered,complete,partial,reference,re
 sigmoid,elementwise,public,public,registered,complete,partial,fused,ready,none
 silu,elementwise,public,public,registered,complete,partial,fused,ready,none
 silu_mul,elementwise,public,public,registered,complete,partial,fused,ready,none
-sin,elementwise,public,public,registered,complete,partial,reference,ready,none
+sin,elementwise,public,public,registered,complete,partial,fused,ready,none
 sinh,elementwise,public,public,registered,complete,partial,fused,ready,none
 softcap,elementwise,public,public,registered,complete,partial,fused,ready,none
 softplus,elementwise,public,public,registered,complete,partial,fused,ready,none

@@ -2935,6 +2935,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, c_f32],
         "tessera_x86_tri_solve_f32":
             [c_f32, c_f32, i64, i64, i64, ctypes.c_int, c_f32],
+        "tessera_x86_lu_f32":
+            [c_f32, i64, i64, c_f32, c_i32],
+        "tessera_x86_qr_f32":
+            [c_f32, i64, i64, i64, c_f32, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4742,7 +4746,8 @@ def _execute_x86_compiled_state_space(artifact: RuntimeArtifact, args: Any) -> A
 # Genuinely computes the factorization / substitution (does not wrap LAPACK).
 # compiler_path="x86_linalg_compiled" / "rocm_linalg_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
-_LINALG_OPS = ("tessera.cholesky", "tessera.tri_solve", "tessera.cholesky_solve")
+_LINALG_OPS = ("tessera.cholesky", "tessera.tri_solve", "tessera.cholesky_solve",
+               "tessera.lu", "tessera.qr")
 
 
 def _x86_cholesky(A: Any, np: Any) -> Any:
@@ -4778,13 +4783,54 @@ def _x86_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
     return out
 
 
+def _x86_lu(A: Any, np: Any) -> tuple:
+    """getrf — A[..,n,n] → (packed LU[..,n,n], pivots[..,n] int32). f32."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    n = int(a.shape[-1])
+    batch = int(a.size // (n * n))
+    lu = np.zeros_like(a)
+    piv = np.zeros(batch * n, np.int32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_lu_f32(a.ctypes.data_as(cf), ctypes.c_int64(batch),
+                           ctypes.c_int64(n), lu.ctypes.data_as(cf),
+                           piv.ctypes.data_as(ctypes.c_void_p))
+    return lu, piv.reshape(a.shape[:-1])
+
+
+def _x86_qr(A: Any, np: Any) -> tuple:
+    """Householder QR — A[..,m,n] → reduced (Q[..,m,k], R[..,k,n]), k=min(m,n)."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    a = np.ascontiguousarray(A, np.float32)
+    m, n = int(a.shape[-2]), int(a.shape[-1])
+    k = min(m, n)
+    batch = int(a.size // (m * n))
+    q = np.zeros(batch * m * m, np.float32)
+    r = np.zeros(batch * m * n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_qr_f32(a.ctypes.data_as(cf), ctypes.c_int64(batch),
+                           ctypes.c_int64(m), ctypes.c_int64(n),
+                           q.ctypes.data_as(cf), r.ctypes.data_as(cf))
+    qf = q.reshape(a.shape[:-2] + (m, m))[..., :, :k]
+    rf = r.reshape(a.shape[:-2] + (m, n))[..., :k, :]
+    return np.ascontiguousarray(qf), np.ascontiguousarray(rf)
+
+
 def _linalg_compute(op_name: str, operands: list, chol_fn: Any, tri_fn: Any,
-                    np: Any) -> Any:
-    """Dispatch a linalg op over the device cholesky / triangular-solve kernels.
-    ``tri_fn(A, B, lower)`` solves A·X=B; cholesky_solve = two triangular solves
-    (L then Lᵀ). RHS may be a vector [..,n] (→ m=1, squeezed) or matrix [..,n,m]."""
+                    lu_fn: Any, qr_fn: Any, np: Any) -> Any:
+    """Dispatch a linalg op over the device kernels. ``tri_fn(A, B, lower)`` solves
+    A·X=B; cholesky_solve = two triangular solves (L then Lᵀ). RHS may be a vector
+    [..,n] (→ m=1, squeezed) or matrix [..,n,m]. lu→(packed, piv); qr→(Q, R)."""
     if op_name == "tessera.cholesky":
         return chol_fn(np.asarray(operands[0], np.float32))
+    if op_name == "tessera.lu":
+        return lu_fn(np.asarray(operands[0], np.float32))
+    if op_name == "tessera.qr":
+        return qr_fn(np.asarray(operands[0], np.float32))
 
     A = np.asarray(operands[0], np.float32)
     b = np.asarray(operands[1], np.float32)
@@ -4821,7 +4867,9 @@ def _execute_x86_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
         operands = operands[:2] + [op.get("kwargs") or {}]
     return _linalg_compute(op_name, operands,
                            lambda a: _x86_cholesky(a, np),
-                           lambda a, b, lo: _x86_tri_solve_raw(a, b, lo, np), np)
+                           lambda a, b, lo: _x86_tri_solve_raw(a, b, lo, np),
+                           lambda a: _x86_lu(a, np),
+                           lambda a: _x86_qr(a, np), np)
 
 
 _X86_CLASS_LOSS_OPS = (
@@ -7931,6 +7979,78 @@ def _rocm_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
     return out.reshape(bb.shape)
 
 
+_rocm_lu_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_qr_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_lu(A: Any, np: Any) -> tuple:
+    """getrf — A[..,n,n] → (packed LU[..,n,n], pivots[..,n] int32) on gfx1151."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.lu"() {name = "lu"} : () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-lu-kernel", directive, _rocm_lu_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm lu: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    n = int(a.shape[-1])
+    batch = int(a.size // (n * n))
+    lu = np.zeros(a.size, np.float32)
+    piv = np.zeros(batch * n, np.int32)
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_lu = _rocm_dev_in(hip, lu, 4 * lu.size)
+    d_pv = _rocm_dev_in(hip, piv, 4 * piv.size)
+    try:
+        _rocm_sparse_launch(hsaco, b"lu",
+                            [(d_a, a.size), (d_lu, lu.size), (d_pv, piv.size)],
+                            [batch, n], batch)
+        hip.hipMemcpy(lu.ctypes.data_as(ctypes.c_void_p), d_lu, 4 * lu.size, 2)
+        hip.hipMemcpy(piv.ctypes.data_as(ctypes.c_void_p), d_pv, 4 * piv.size, 2)
+    finally:
+        for d in (d_a, d_lu, d_pv):
+            hip.hipFree(d)
+    return lu.reshape(a.shape), piv.reshape(a.shape[:-1])
+
+
+def _rocm_qr(A: Any, np: Any) -> tuple:
+    """Householder QR — A[..,m,n] → reduced (Q[..,m,k], R[..,k,n]) on gfx1151."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.qr"() {name = "qr"} : () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-qr-kernel", directive, _rocm_qr_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm qr: hipInit failed")
+    a = np.ascontiguousarray(A, np.float32)
+    m, n = int(a.shape[-2]), int(a.shape[-1])
+    k = min(m, n)
+    batch = int(a.size // (m * n))
+    q = np.zeros(batch * m * m, np.float32)
+    r = np.zeros(batch * m * n, np.float32)
+    vscratch = np.zeros(batch * m, np.float32)
+    d_a = _rocm_dev_in(hip, a.reshape(-1), 4 * a.size)
+    d_q = _rocm_dev_in(hip, q, 4 * q.size)
+    d_r = _rocm_dev_in(hip, r, 4 * r.size)
+    d_v = _rocm_dev_in(hip, vscratch, 4 * vscratch.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"qr",
+            [(d_a, a.size), (d_q, q.size), (d_r, r.size), (d_v, vscratch.size)],
+            [batch, m, n], batch)
+        hip.hipMemcpy(q.ctypes.data_as(ctypes.c_void_p), d_q, 4 * q.size, 2)
+        hip.hipMemcpy(r.ctypes.data_as(ctypes.c_void_p), d_r, 4 * r.size, 2)
+    finally:
+        for d in (d_a, d_q, d_r, d_v):
+            hip.hipFree(d)
+    qf = q.reshape(a.shape[:-2] + (m, m))[..., :, :k]
+    rf = r.reshape(a.shape[:-2] + (m, n))[..., :k, :]
+    return np.ascontiguousarray(qf), np.ascontiguousarray(rf)
+
+
 def _execute_rocm_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` linalg lane: cholesky / tri_solve / cholesky_solve on
     the COMPILER-GENERATED gfx1151 Cholesky + triangular-solve kernels. f32."""
@@ -7950,7 +8070,9 @@ def _execute_rocm_compiled_linalg(artifact: RuntimeArtifact, args: Any) -> Any:
         operands = operands[:2] + [op.get("kwargs") or {}]
     return _linalg_compute(op_name, operands,
                            lambda a: _rocm_cholesky(a, np),
-                           lambda a, b, lo: _rocm_tri_solve_raw(a, b, lo, np), np)
+                           lambda a, b, lo: _rocm_tri_solve_raw(a, b, lo, np),
+                           lambda a: _rocm_lu(a, np),
+                           lambda a: _rocm_qr(a, np), np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

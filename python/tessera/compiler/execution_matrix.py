@@ -335,6 +335,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "silu(a)·b (one thread per element); the standalone "
                             "analog of the fused SwiGLU gate-multiply; "
                             "f32/f16/bf16 storage, f32 compute",
+    "rocm_loss_compiled": "AMD GPU RDNA pointwise regression loss (mse / mae / "
+                            "huber / smooth_l1 / log_cosh) the Tessera compiler "
+                            "GENERATES (generate-rocm-pointwise-loss-kernel -> "
+                            "ROCDL -> hsaco), then HIP launches it; per-element "
+                            "loss on gfx1151 + none/mean/sum reduction. The CPU "
+                            "analog is the x86_loss lane. f32/f16/bf16",
     "rocm_alibi_compiled":  "AMD GPU RDNA ALiBi positional-bias generator the "
                             "Tessera compiler GENERATES (generate-rocm-alibi-"
                             "kernel -> ROCDL -> hsaco, in-process via "
@@ -884,6 +890,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "it. cond i8 normalized != 0, a/b/out f16/bf16/f32.",
         execution_mode="hip_runtime"),
     # SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise. vs numpy.
+    ("rocm", "rocm_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_loss_compiled", runtime_status="success",
+        reason="ROCm loss artifact runs the COMPILER-GENERATED per-element "
+               "regression loss (mse/mae/huber/smooth_l1/log_cosh) over "
+               "(pred, target) on gfx1151 (generate-rocm-pointwise-loss-kernel "
+               "-> ROCDL, exp/log1p via math->rocdl), then the none/mean/sum "
+               "reduction. The CPU analog of the x86_loss lane. f32/f16/bf16.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_silu_mul_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_silu_mul_compiled",
         execution_kind="native_gpu", executable=True,

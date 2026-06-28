@@ -6042,6 +6042,142 @@ def _execute_rocm_compiled_silu_mul(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROCm COMPILED pointwise-loss lane — mse / mae / huber / smooth_l1 / log_cosh.
+# The per-element loss runs on the COMPILER-GENERATED gpu kernel
+# (generate-rocm-pointwise-loss-kernel); the reduction (none/mean/sum) is a host
+# epilogue on the GPU-computed array. The CPU analog is the x86_loss lane.
+# ``compiler_path = "rocm_loss_compiled"``. ONE hsaco per (chip, dtype, kind).
+# ─────────────────────────────────────────────────────────────────────────────
+#: op_name -> (loss kind, param-kwarg name or None). Matches the x86 lane and
+#: GenerateROCMPointwiseLossKernel.cpp.
+_ROCM_POINTWISE_LOSS_OPS = {
+    "tessera.mse_loss": (0, None),
+    "tessera.mae_loss": (1, None),
+    "tessera.huber_loss": (2, "delta"),
+    "tessera.smooth_l1_loss": (3, "beta"),
+    "tessera.log_cosh_loss": (4, None),
+}
+_rocm_pointwise_loss_hsaco_cache: dict[tuple[str, str, int], bytes] = {}
+
+
+def _build_compiled_pointwise_loss_hsaco(kind: int, param: float,
+                                         dtype: str = "f32") -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.pointwise_loss"() {{name = "pl", dtype = "{dtype}", '
+        f'kind = {int(kind)} : i64, param = {float(param):e} : f32}} '
+        ': () -> ()\n}\n')
+    # param only affects huber/smooth_l1; bake it into the cache key for those.
+    key = (chip, dtype, int(kind)) if kind not in (2, 3) else \
+        (chip, f"{dtype}:{float(param):e}", int(kind))
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-pointwise-loss-kernel", directive,
+        _rocm_pointwise_loss_hsaco_cache, key)
+
+
+def _execute_rocm_compiled_pointwise_loss(artifact: RuntimeArtifact,
+                                          args: Any) -> Any:
+    """The ``target="rocm"`` pointwise-loss lane: run the COMPILER-GENERATED
+    per-element regression loss (mse/mae/huber/smooth_l1/log_cosh) over
+    (pred, target) on gfx1151, then apply the none/mean/sum reduction. f32/f16/
+    bf16 storage, f32 compute."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_POINTWISE_LOSS_OPS:
+        raise ValueError(
+            "rocm_loss_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_POINTWISE_LOSS_OPS)}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    kind, param_kw = _ROCM_POINTWISE_LOSS_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("loss requires two operands (pred, target)")
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    if reduction not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {reduction}")
+    param = float(kwargs.get(param_kw, 1.0)) if param_kw else 1.0
+    values = _bind_launch_args(args, arg_names)
+    a = _as_numpy(values[operand_names[0]])
+    b = _as_numpy(values[operand_names[1]])
+    try:
+        bshape = np.broadcast_shapes(a.shape, b.shape)
+    except ValueError as exc:
+        raise ValueError(
+            f"loss pred{a.shape} and target{b.shape} do not broadcast") from exc
+    a = np.broadcast_to(a, bshape)
+    b = np.broadcast_to(b, bshape)
+    n = int(np.prod(bshape)) if bshape else 1
+    if n <= 0:
+        return np.array(a, copy=True)
+
+    store: Any
+    if a.dtype == np.float32:
+        dtype_tag, store, esz = "f32", np.float32, 4
+    elif a.dtype == np.float16:
+        dtype_tag, store, esz = "f16", np.float16, 2
+    else:
+        bf16 = _bfloat16_dtype()
+        if bf16 is not None and a.dtype == bf16:
+            dtype_tag, store, esz = "bf16", bf16, 2
+        else:
+            raise ValueError(f"rocm loss lane handles f32/f16/bf16; got {a.dtype}")
+
+    hsaco = _build_compiled_pointwise_loss_hsaco(kind, param, dtype_tag)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm loss: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm loss: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"pl") != 0:
+        raise RuntimeError("rocm loss: kernel symbol 'pl' not found")
+
+    ac = np.ascontiguousarray(a, dtype=store).reshape(-1)
+    bc = np.ascontiguousarray(b, dtype=store).reshape(-1)
+    o = np.zeros(n, dtype=store)
+    da, db, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for dev in (da, db, do):
+        if hip.hipMalloc(ctypes.byref(dev), esz * n) != 0:
+            raise RuntimeError("rocm loss: hipMalloc failed")
+    hip.hipMemcpy(da, ac.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+    hip.hipMemcpy(db, bc.ctypes.data_as(ctypes.c_void_p), esz * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = _mr(da, n) + _mr(db, n) + _mr(do, n) + [ctypes.c_int64(n)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for dev in (da, db, do):
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm loss: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * n, 2)
+    for dev in (da, db, do):
+        hip.hipFree(dev)
+    per = o.reshape(bshape).astype(np.float32)
+    if reduction == "none":
+        return per
+    return np.float32(per.sum() if reduction == "sum" else per.mean())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED alibi lane (2026-06-25) — ALiBi positional-bias generator
 # bias[h,i,j] = slope[h]·(j−i), shape [H, S, S], a flat elementwise kernel
 # (sibling of the rope lane). ``compiler_path = "rocm_alibi_compiled"``. Slopes
@@ -6618,6 +6754,7 @@ def _executor_table():
         "x86_logical_compiled": _execute_x86_compiled_logical,
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
+        "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,

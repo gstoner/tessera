@@ -9,6 +9,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateWMMALinearAttnKernel.cpp
   GenerateROCMActivationKernel.cpp
   GenerateROCMSiluMulKernel.cpp
+  GenerateROCMPointwiseLossKernel.cpp
   GenerateROCMAlibiKernel.cpp
   GenerateROCMDeltaNetKernel.cpp
   GenerateROCMRopeKernel.cpp

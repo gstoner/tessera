@@ -230,7 +230,7 @@ kv_cache_append,5,0,1,5,0,f32 fp16 fp32 fp8_e4m3,directly_tested,5 direct test r
 kv_cache_prune,4,0,1,4,0,fp16 fp32,directly_tested,4 direct test references
 kv_cache_read,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 label_smoothed_cross_entropy,8,0,0,8,0,,directly_tested,8 direct test references
-lamb,4,0,0,4,0,,directly_tested,4 direct test references
+lamb,11,0,0,11,0,,directly_tested,11 direct test references
 laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
 latent_kv_compress,6,19,0,25,0,fp16 fp32,directly_tested,25 direct test references
 latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test references
@@ -302,7 +302,7 @@ msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
 mul,87,4,7,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
 multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
-muon,5,0,0,5,0,,directly_tested,5 direct test references
+muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,10,0,0,10,0,,directly_tested,10 direct test references

@@ -1221,18 +1221,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_binary_compiled max/min kernel (either bound optional). "
                  "Executes via runtime.launch() (rocm_clamp_compiled).",
     } for op in ("clamp", "clip")},
-    # P5 — complex arithmetic (9 pointwise ops) over interleaved-f32 [...,2],
-    # composed on the gfx1151 unary/binary/atan2 lanes (no new kernel; host
-    # packs the interleave). Executes via rocm_complex_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone {op} — interleaved-f32 complex op composed on the "
-                 "gfx1151 unary/binary/atan2 kernels (host interleave). Executes "
-                 "via runtime.launch() (rocm_complex_compiled).",
-    } for op in ("complex_mul", "complex_div", "complex_conjugate",
-                 "complex_abs", "complex_arg", "complex_exp", "complex_log",
-                 "complex_sqrt", "complex_pow")},
+    # (complex_* ops route through complex_manifest_for() — their compiled
+    # device-lane status is emitted there, not in this generic _ROCM table.)
     # P2e — softcap composed on the gfx1151 unary tanh lane (no new kernel;
     # scalar cap broadcast on host). Executes via rocm_softcap_compiled.
     "softcap": {
@@ -2074,18 +2064,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
                  "AVX-512 max/min kernel (either bound optional; matches np.clip)",
     } for op in ("clamp", "clip")},
-    # P5 — complex arithmetic (9 pointwise ops) over interleaved-f32 [...,2],
-    # composed on the AVX-512 transcendental/unary/binary/atan2 lanes (host
-    # packs the interleave; x86_complex_compiled lane).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — interleaved-f32 complex op composed on the AVX-512 "
-                 "transcendental/unary/binary/atan2 kernels (host interleave; "
-                 "x86_complex_compiled lane; f32, matches tessera.complex)",
-    } for op in ("complex_mul", "complex_div", "complex_conjugate",
-                 "complex_abs", "complex_arg", "complex_exp", "complex_log",
-                 "complex_sqrt", "complex_pow")},
+    # (complex_* ops route through complex_manifest_for() — their fused
+    # device-lane status is emitted there, not in this generic _X86 table.)
     # P2e — softcap composed on the AVX-512 transcendental tanh kernel (no new
     # kernel; scalar cap broadcast on host; x86_softcap_compiled lane).
     "softcap": {
@@ -3126,6 +3106,15 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
     #   complex_conjugate, complex_abs, conformal_jacobian, laplacian_2d
 )
 
+# P5 (2026-06-28) — the 9 pointwise complex ops that now ship a REAL device lane
+# (interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
+# binary / atan2 kernels; runtime x86_complex_compiled / rocm_complex_compiled).
+# complex_manifest_for() emits these as fused (x86) / compiled (rocm).
+_COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
+    "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
+    "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
+})
+
 
 # E3 (2026-05-20) — every M7 Visual Complex op (4 fused + 16 long-tail)
 # routes through ``complex_manifest_for``.  The 16 long-tail ops don't
@@ -3208,6 +3197,14 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     in_long_tail = op_name in _M7_LONG_TAIL
     if not (in_fused or in_long_tail):
         return []
+    # P5 (2026-06-28): the 9 pointwise complex ops now ship REAL device lanes —
+    # interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
+    # binary / atan2 kernels (runtime x86_complex_compiled / rocm_complex_compiled).
+    # Emit them as fused (x86) / compiled (rocm) HERE — manifest_for() routes all
+    # complex_* ops through this function before the generic _X86_KERNELS /
+    # _ROCM_COMPILED tables, so the compiled status must live here to be seen by
+    # support / conformance / gating.
+    _complex_compiled = op_name in _COMPLEX_DEVICE_COMPILED
     entries: list[BackendKernelEntry] = []
     # CPU targets — Python reference always available for the entire
     # M7 surface (the numpy code in ``tessera.complex.*`` runs on
@@ -3226,10 +3223,15 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     ))
     entries.append(BackendKernelEntry(
         target="x86",
-        status=_REFERENCE_STATUS,
+        status=_FUSED_KERNEL_STATUS if _complex_compiled else _REFERENCE_STATUS,
         dtypes=("fp32",),
-        feature_flags=("complex_namespace", "numpy_reference"),
-        notes="Python complex reference (tessera.complex.*)",
+        feature_flags=(("complex_namespace", "interleaved_f32", "avx512")
+                       if _complex_compiled
+                       else ("complex_namespace", "numpy_reference")),
+        notes=("interleaved-f32 complex op composed on the AVX-512 "
+               "transcendental/unary/binary/atan2 kernels "
+               "(x86_complex_compiled lane)" if _complex_compiled
+               else "Python complex reference (tessera.complex.*)"),
     ))
     entries.append(BackendKernelEntry(
         target="apple_cpu",
@@ -3291,20 +3293,36 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             cuda_arch_min=arch_min,
             nvcc_version_min="13.3",
         ))
-    # ROCm — planned slot, gated on Phase H.
-    entries.append(BackendKernelEntry(
-        target="rocm",
-        status=_PLANNED_STATUS,
-        dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
-        feature_flags=("complex_namespace", "mfma"),
-        notes=(
-            "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
-            "Today: this op runs only via the Python reference path "
-            "(fp32-only); fp16/bf16 lanes land with the Phase H "
-            "kernel work."
-        ),
-        hipcc_version_min="7.2.4",
-    ))
+    # ROCm — the 9 pointwise ops ship a compiled device lane (interleaved-f32
+    # composed on the gfx1151 unary/binary/atan2 kernels, rocm_complex_compiled);
+    # the long-tail stays planned (Phase H).
+    if _complex_compiled:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_COMPILED_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("complex_namespace", "interleaved_f32", "hip_runtime"),
+            notes=(
+                "interleaved-f32 complex op composed on the gfx1151 "
+                "unary/binary/atan2 kernels (rocm_complex_compiled lane)"
+            ),
+            execute_compare_fixture="tests/unit/test_rocm_complex_compiled.py",
+            hipcc_version_min="7.2.4",
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_PLANNED_STATUS,
+            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+            feature_flags=("complex_namespace", "mfma"),
+            notes=(
+                "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
+                "Today: this op runs only via the Python reference path "
+                "(fp32-only); fp16/bf16 lanes land with the Phase H "
+                "kernel work."
+            ),
+            hipcc_version_min="7.2.4",
+        ))
     return entries
 
 

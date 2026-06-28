@@ -305,15 +305,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_arg` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_div` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_abs` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_arg` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_div` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `complex_exp` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_log` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_log` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_pow` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_pow` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `conformal_jacobian` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `cross_ratio` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -366,7 +366,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | state_space | 1 | PPGCpFN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
 | stencil | 2 | PPGCpRNB PPGCpRN· |
-| visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
+| visual_complex | 20 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPnCFFN· PPGCpFN· PPnCFFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

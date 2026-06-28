@@ -1620,6 +1620,17 @@ class _OpExtractor(ast.NodeVisitor):
                 value_name = self._emit_expr(kw.value)
                 kwargs[kw.arg] = value_name or "?"
 
+        # Structural view ops: derive the result type from the shape/axes/perm
+        # attr (now fully bound) instead of the input-type fallback, so a static
+        # reshape/view/squeeze/… emits its real output shape and is not erased by
+        # the identity folder.
+        _struct = _struct_result_type(
+            mlir_name,
+            self._value_types.get(operands[0]) if operands else None,
+            kwargs)
+        if _struct is not None:
+            result_type = _struct
+
         return IROp(
             result=None,  # filled in by caller
             op_name=mlir_name,
@@ -1687,6 +1698,71 @@ def _infer_result_type(op_name: str, operand_types: List[IRType]) -> IRType:
         first = operand_types[0]
         return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
     return operand_types[0]
+
+
+def _struct_result_type(op_name: str, in_type: Optional[IRType],
+                        kwargs: Dict[str, Any]) -> Optional[IRType]:
+    """Result type for the structural view ops from their shape-determining
+    attr. Without this, `_infer_result_type`'s fallback returns the INPUT type,
+    so a static `reshape(x, (6,4))` would emit `<in> -> <in>` and the identity
+    folder could erase a real reshape (silent miscompile). Returns ``None`` when
+    the output shape isn't statically derivable (keeps the opaque fallback,
+    which the static-shape-guarded folder never touches)."""
+    if in_type is None:
+        return None
+    dtype, layout = in_type.dtype, in_type.layout
+    # Ops whose `shape` attr IS the output shape.
+    if op_name in ("tessera.reshape", "tessera.view", "tessera.expand",
+                   "tessera.broadcast"):
+        shape = kwargs.get("shape")
+        if isinstance(shape, (list, tuple)) and shape and all(
+                isinstance(d, int) for d in shape):
+            return tensor_ir_type(tuple(shape), dtype, layout=layout)
+        return None
+    # The rest derive the output shape from a static input shape.
+    ishape = in_type.shape
+    if not ishape or "*" in ishape or "?" in ishape:
+        return None
+    try:
+        dims = [int(d) for d in ishape]
+    except (ValueError, TypeError):
+        return None
+    if op_name == "tessera.squeeze":
+        axes = kwargs.get("axes")
+        if axes is None:
+            out = [d for d in dims if d != 1]
+        else:
+            al = [axes] if isinstance(axes, int) else list(axes)
+            drop = {a % len(dims) for a in al}
+            out = [d for i, d in enumerate(dims) if i not in drop]
+        return tensor_ir_type(tuple(out), dtype, layout=layout)
+    if op_name == "tessera.unsqueeze":
+        axes = kwargs.get("axes")
+        if axes is None:
+            return None
+        al = sorted([axes] if isinstance(axes, int) else list(axes))
+        out = list(dims)
+        for a in al:
+            out.insert(a if a >= 0 else len(out) + 1 + a, 1)
+        return tensor_ir_type(tuple(out), dtype, layout=layout)
+    if op_name == "tessera.permute":
+        perm = kwargs.get("perm")
+        if not isinstance(perm, (list, tuple)) or len(perm) != len(dims):
+            return None
+        return tensor_ir_type(tuple(dims[p] for p in perm), dtype, layout=layout)
+    if op_name == "tessera.flatten":
+        start = int(kwargs.get("start", 0))
+        end = int(kwargs.get("end", len(dims) - 1))
+        start = start if start >= 0 else len(dims) + start
+        end = end if end >= 0 else len(dims) + end
+        if not (0 <= start <= end < len(dims)):
+            return None
+        prod = 1
+        for d in dims[start:end + 1]:
+            prod *= d
+        return tensor_ir_type(tuple(dims[:start] + [prod] + dims[end + 1:]),
+                              dtype, layout=layout)
+    return None
 
 
 def _parse_mlir_tensor_type(text: str) -> IRType:

@@ -2276,6 +2276,25 @@ OpFoldResult FlattenOp::fold(FoldAdaptor) {
 OpFoldResult ViewOp::fold(FoldAdaptor) {
   return foldStructuralIdentity(*this, getX(), getY());
 }
+LogicalResult ViewOp::verify() {
+  // A contiguous view shares storage, so it must preserve the element count —
+  // the same static-product invariant as ReshapeOp (dtype is already enforced
+  // by SameOperandsAndResultElementType; dynamic dims defer to the runtime).
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy) return success();
+  if (!inTy.hasStaticShape() || !outTy.hasStaticShape()) return success();
+  int64_t inProd = 1;
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i)
+    inProd *= inTy.getDimSize(i);
+  int64_t outProd = 1;
+  for (int64_t i = 0, e = outTy.getRank(); i < e; ++i)
+    outProd *= outTy.getDimSize(i);
+  if (inProd != outProd)
+    return emitOpError("view must preserve element count: input has ")
+           << inProd << " elements but output has " << outProd;
+  return success();
+}
 
 OpFoldResult PermuteOp::fold(FoldAdaptor) {
   if (getX().getType() != getY().getType() || (*this)->hasAttr("tessera.layout"))

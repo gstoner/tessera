@@ -126,3 +126,27 @@ def test_chain_emits_all_six_with_no_bogus_operand():
         assert f"tessera.{op}" in mlir, f"missing tessera.{op}:\n{mlir}"
     # The whole module must be free of dropped operands.
     assert "%?" not in mlir, mlir
+
+
+def _static_reshape_fn(x: "tensor<2x3x4xf32>"):
+    a = ops.reshape(x, (6, 4))
+    return ops.view(a, (24,))
+
+
+def _static_squeeze_fn(x: "tensor<1x3x1x4xf32>"):
+    return ops.squeeze(x, (0, 2))
+
+
+def test_static_shape_result_types_derived_from_attr():
+    """The result type must come from the shape/axes attr, NOT the input type —
+    otherwise a static reshape emits `<in> -> <in>` and the identity folder
+    erases it (silent miscompile). Regression for PR #202 review."""
+    mlir = _emit(_static_reshape_fn)
+    rl = _op_line(mlir, "tessera.reshape")
+    assert "-> tensor<6x4xf32>" in rl, rl
+    assert "tensor<2x3x4xf32> -> tensor<2x3x4xf32>" not in rl, rl
+    vl = _op_line(mlir, "tessera.view")
+    assert "-> tensor<24xf32>" in vl, vl
+    # squeeze on static 1x3x1x4 with axes [0,2] -> 3x4 (not the input type)
+    sl = _op_line(_emit(_static_squeeze_fn), "tessera.squeeze")
+    assert "-> tensor<3x4xf32>" in sl, sl

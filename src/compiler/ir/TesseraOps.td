@@ -1819,6 +1819,10 @@ def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultEle
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  // A no-copy contiguous view cannot change the element count — mirror
+  // ReshapeOp's static product check so an impossible alias shape (e.g.
+  // 2x3 -> 5) is rejected, not trusted by later view-elision/lowering.
+  let hasVerifier = 1;
   let hasFolder = 1;
 }
 

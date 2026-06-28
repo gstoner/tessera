@@ -1108,7 +1108,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-optimizer-kernel, kind StrAttr-selected, one "
                  "thread per element; host computes the 1-β^t bias correction) on "
                  "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     # P3 tail — LAMB: device adam update + a per-tensor trust ratio ‖p‖/‖update‖
     # on host (the reduction the elementwise lane can't do).
     "lamb": {
@@ -1590,9 +1590,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
     ("moe", "rocm"): "tests/unit/test_rocm_moe_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
     ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
     ("muon", "x86"): "tests/unit/test_x86_muon_compiled.py",
@@ -2371,7 +2371,7 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
                  "(state m/v in-place; host computes the 1-β^t bias correction); "
                  "x86_optimizer_compiled lane; f32, matches the optim.py reference",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     # P3 tail — LAMB: AVX-512 adam update + host per-tensor trust ratio.
     "lamb": {
         "status": _FUSED_KERNEL_STATUS,

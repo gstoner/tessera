@@ -1771,6 +1771,7 @@ def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndRes
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAndResultElementType]> {
@@ -1778,6 +1779,7 @@ def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAn
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResultElementType]> {
@@ -1785,6 +1787,7 @@ def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResul
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure, SameOperandsAndResultElementType]> {
@@ -1792,6 +1795,7 @@ def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure, SameOperandsAn
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndResultElementType]> {
@@ -1799,6 +1803,7 @@ def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndRes
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndResultElementType]> {
@@ -1806,6 +1811,7 @@ def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndRes
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasFolder = 1;
 }
 
 def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]>]> {

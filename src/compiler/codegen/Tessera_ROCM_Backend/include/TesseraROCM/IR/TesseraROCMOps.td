@@ -501,6 +501,18 @@ def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
+  let summary = "Unary predicate (isnan/isinf/isfinite) gpu kernel";
+  let description = [{
+    `generate-rocm-predicate-kernel` expands into a flat per-element unary
+    predicate over f32 input with i8 (0/1) bool output; the `kind` StrAttr selects
+    isnan (x!=x) / isinf (|x|==inf) / isfinite (ordered & |x|<inf). One thread per
+    element. CPU analog: avx512_predicate_f32.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_OptimizerKernelOp : TesseraROCM_Op<"optimizer"> {
   let summary = "Fused per-parameter optimizer-step gpu kernel";
   let description = [{

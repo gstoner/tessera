@@ -590,6 +590,7 @@ x86,tessera_x86_avx512_logical_i8,avx512_logical,i8,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_pointwise_loss_f32,avx512_pointwise_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_policy_loss_f32,avx512_policy_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_policy_loss_f32.cpp
 x86,tessera_x86_avx512_pow_f32,avx512_pow,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
+x86,tessera_x86_avx512_predicate_f32,avx512_predicate,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_predicate_f32.cpp
 x86,tessera_x86_avx512_reduce_f32,avx512_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
 x86,tessera_x86_avx512_rmsnorm_f32,avx512_rmsnorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_rope_f32,avx512_rope,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
@@ -619,6 +620,7 @@ x86,tessera_x86_reference_gemm_bf16,reference_gemm,bf16,src/compiler/codegen/tes
 x86,tessera_x86_reference_logical_i8,reference_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
 x86,tessera_x86_reference_moe_f32,reference_moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_reference_optimizer_f32,reference_optimizer,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_optimizer_f32.cpp
+x86,tessera_x86_reference_predicate_f32,reference_predicate,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_predicate_f32.cpp
 x86,tessera_x86_reference_reduce_f32,reference_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
 x86,tessera_x86_reference_scan_f32,reference_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
 x86,tessera_x86_reference_sddmm_f32,reference_sddmm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp

@@ -216,9 +216,9 @@ interpolate,6,0,1,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 irfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-isfinite,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-isinf,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-isnan,2,0,0,2,0,,directly_tested,2 direct test references
+isfinite,5,0,0,5,0,,directly_tested,5 direct test references
+isinf,3,0,0,3,0,,directly_tested,3 direct test references
+isnan,4,0,0,4,0,,directly_tested,4 direct test references
 istft,6,0,0,6,0,,directly_tested,6 direct test references
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,10,0,1,10,0,,directly_tested,10 direct test references

@@ -2886,6 +2886,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_compare_f32":
             [c_f32, c_f32, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_predicate_f32":
+            [c_f32, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_logical_i8":
             [c_i8, c_i8, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_bitwise_i32":
@@ -5520,6 +5522,48 @@ def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(a.shape).astype(np.bool_)
 
 
+#: op_name -> predicate kind index. Must match avx512_predicate_f32.cpp.
+_X86_PREDICATE_OPS = {
+    "tessera.isnan": 0, "tessera.isinf": 1, "tessera.isfinite": 2,
+}
+
+
+def _execute_x86_compiled_predicate(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` predicate lane: isnan / isinf / isfinite on the
+    AVX-512 unary predicate kernel (f32 → numpy bool_), any shape."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_PREDICATE_OPS:
+        raise ValueError(
+            "x86_predicate_compiled executor handles exactly one of "
+            f"{tuple(_X86_PREDICATE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_PREDICATE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("predicate requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 predicate lane handles f32 only; got {x.dtype}")
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.zeros(x.shape, dtype=np.bool_)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.uint8)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_predicate_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(n),
+        out.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(kind))
+    return out.reshape(x.shape).astype(np.bool_)
+
+
 #: op_name -> (logical kind index, operand count). Must match avx512_logical_i8.
 _X86_LOGICAL_OPS = {
     "tessera.logical_and": (0, 2), "tessera.logical_or": (1, 2),
@@ -6542,6 +6586,61 @@ def _build_compiled_compare_hsaco(kind: str, dtype: str = "f32") -> bytes:
     return _build_rocm_elementwise_hsaco(
         "generate-rocm-compare-kernel", directive, _rocm_compare_hsaco_cache,
         (chip, kind, dtype))
+
+
+_rocm_predicate_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_ROCM_PREDICATE_OPS = {
+    "tessera.isnan": "isnan", "tessera.isinf": "isinf",
+    "tessera.isfinite": "isfinite",
+}
+
+
+def _rocm_predicate(x: Any, kind: str, np: Any) -> Any:
+    """isnan/isinf/isfinite over f32 input on the gfx1151 predicate kernel,
+    returning numpy bool_ (one thread per element)."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.predicate"() {name = "pr", '
+                 f'kind = "{kind}"}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-predicate-kernel", directive, _rocm_predicate_hsaco_cache,
+        (chip, kind))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm predicate: hipInit failed")
+    xc = np.ascontiguousarray(x, np.float32).reshape(-1)
+    n = int(xc.size)
+    out = np.zeros(n, np.uint8)
+    d_x = _rocm_dev_in(hip, xc, 4 * n)
+    d_o = _rocm_dev_in(hip, out, n)
+    try:
+        _rocm_sparse_launch(hsaco, b"pr", [(d_x, n), (d_o, n)], [n], n)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, n, 2)
+    finally:
+        for d in (d_x, d_o):
+            hip.hipFree(d)
+    return out.reshape(np.asarray(x).shape).astype(np.bool_)
+
+
+def _execute_rocm_compiled_predicate(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` predicate lane: isnan / isinf / isfinite on the
+    COMPILER-GENERATED gfx1151 predicate kernel. f32 in / bool out."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_PREDICATE_OPS:
+        raise ValueError(
+            "rocm_predicate_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_PREDICATE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("predicate requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _rocm_predicate(x, _ROCM_PREDICATE_OPS[op_name], np)
 
 
 def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -9037,6 +9136,7 @@ def _executor_table():
         "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
+        "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
@@ -9070,6 +9170,7 @@ def _executor_table():
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_compare_compiled": _execute_x86_compiled_compare,
+        "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,

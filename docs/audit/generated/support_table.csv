@@ -214,9 +214,9 @@ absolute,numeric_helper,public,public,registered,complete,partial,fused,ready,no
 ceil,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 clamp,numeric_helper,public,public,registered,complete,partial,reference,ready,none
 floor,numeric_helper,public,public,registered,complete,partial,fused,ready,none
-isfinite,numeric_helper,public,public,registered,complete,partial,reference,ready,none
-isinf,numeric_helper,public,public,registered,complete,partial,reference,ready,none
-isnan,numeric_helper,public,public,registered,complete,partial,reference,ready,none
+isfinite,numeric_helper,public,public,registered,complete,partial,fused,ready,none
+isinf,numeric_helper,public,public,registered,complete,partial,fused,ready,none
+isnan,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 maximum,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 minimum,numeric_helper,public,public,registered,complete,partial,fused,ready,none
 reciprocal,numeric_helper,public,public,registered,complete,partial,fused,ready,none

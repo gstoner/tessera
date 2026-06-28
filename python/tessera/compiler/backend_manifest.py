@@ -1184,6 +1184,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "per-element kernel (generate-rocm-compare-kernel), bool output. "
                  "Executes via runtime.launch() (rocm_compare_compiled).",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # P2b — unary predicate family (isnan/isinf/isfinite), f32 in / i8 bool out
+    # (generate-rocm-predicate-kernel). Executes via rocm_predicate_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone unary predicate {op} — flat per-element kernel "
+                 "(generate-rocm-predicate-kernel), bool output. Executes via "
+                 "runtime.launch() (rocm_predicate_compiled).",
+    } for op in ("isnan", "isinf", "isfinite")},
     # S2 logical family — flat elementwise kernel over i8 booleans
     # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
     # normalized via != 0 (numpy semantics). Executes via runtime.launch()
@@ -1428,6 +1437,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("add", "mul", "mod", "floor_div", "abs")},
     **{(op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
        for op in ("add", "mul", "mod", "floor_div", "abs")},
+    **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
+       for op in ("isnan", "isinf", "isfinite")},
+    **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
+       for op in ("isnan", "isinf", "isfinite")},
     **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
        for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     **{(op, "x86"): "tests/unit/test_x86_logical_compiled.py"
@@ -1953,6 +1966,14 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
                  "runtime-loaded; x86_compare_compiled lane; bool output)",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # P2b — unary predicate family (isnan/isinf/isfinite), AVX-512 kernel
+    # (tessera_x86_avx512_predicate_f32; x86_predicate_compiled). f32 in, bool out.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 predicate {op} (tessera_x86_avx512_predicate_f32, "
+                 "runtime-loaded; x86_predicate_compiled lane; bool output)",
+    } for op in ("isnan", "isinf", "isfinite")},
     # S2 logical family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes
     # (x86_logical_compiled). i8 bool in/out; inputs normalized via != 0.

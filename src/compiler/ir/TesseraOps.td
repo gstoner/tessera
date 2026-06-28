@@ -1766,42 +1766,42 @@ def Tessera_CastOp : Op<
 // view/copy analysis (§6.B) instead of dropping to the numpy reference. Pure:
 // no FLOP, no memory effect (their backend_kernel is `not_applicable`, P0).
 // Frontend emission + the view-elision lowering are the P1b/§6.B follow-ups.
-def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure]> {
+def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndResultElementType]> {
   let summary = "Remove size-1 dimensions (optional `axes` attr selects which)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure]> {
+def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAndResultElementType]> {
   let summary = "Insert size-1 dimensions (the `axes` attr selects positions)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure]> {
+def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResultElementType]> {
   let summary = "Broadcast-expand to a larger shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure]> {
+def Tessera_BroadcastOp : Op<Tessera_Dialect, "broadcast", [Pure, SameOperandsAndResultElementType]> {
   let summary = "Broadcast to a target shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure]> {
+def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndResultElementType]> {
   let summary = "General axis permutation (the `perm` attr is the new order)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure]> {
+def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndResultElementType]> {
   let summary = "Collapse a contiguous dim range (optional `start`/`end` attrs)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);

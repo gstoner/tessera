@@ -1,12 +1,12 @@
 op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants,bucket,reason
-abs,4,0,1,4,0,bf16 f32,directly_tested,4 direct test references
+abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,95,13,8,108,0,bf16 f16 f32 f64 fp32,directly_tested,108 direct test references
+add,97,13,8,110,0,bf16 f16 f32 f64 fp32,directly_tested,110 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -184,7 +184,7 @@ flash_attn,100,57,8,157,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,di
 flatten,2,0,0,2,0,,directly_tested,2 direct test references
 flip,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
-floor_div,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+floor_div,3,0,0,3,0,f32,directly_tested,3 direct test references
 focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
 fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
 fused_epilogue,3,6,1,9,0,,directly_tested,9 direct test references
@@ -283,7 +283,7 @@ mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
 mla_decode_fused,5,9,1,14,0,,directly_tested,14 direct test references
 mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
-mod,2,0,0,2,0,,directly_tested,2 direct test references
+mod,4,0,0,4,0,f32,directly_tested,4 direct test references
 modified_delta_attention,8,0,0,8,0,f32 fp64,directly_tested,8 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
 moe,21,0,0,21,0,fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,21 direct test references
@@ -300,7 +300,7 @@ msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
-mul,85,4,7,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
+mul,87,4,7,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
 multi_head_attention,8,0,1,8,0,,directly_tested,8 direct test references
 muon,5,0,0,5,0,,directly_tested,5 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'

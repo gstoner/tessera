@@ -36,11 +36,19 @@ constexpr int kSub = 0;
 constexpr int kDiv = 1;
 constexpr int kMax = 2;
 constexpr int kMin = 3;
+constexpr int kAdd = 4;
+constexpr int kMul = 5;
+constexpr int kMod = 6;       // numpy.mod: a - floor(a/b)*b (sign of divisor)
+constexpr int kFloorDiv = 7;  // numpy.floor_divide: floor(a/b)
 
 inline float scalar_binary(float a, float b, int kind) {
     switch (kind) {
     case kSub: return a - b;
     case kDiv: return a / b;
+    case kAdd: return a + b;
+    case kMul: return a * b;
+    case kMod: return a - std::floor(a / b) * b;
+    case kFloorDiv: return std::floor(a / b);
     case kMax:  // NaN-propagating (numpy.maximum), not fmax
         if (std::isnan(a) || std::isnan(b)) return std::nanf("");
         return a > b ? a : b;
@@ -70,6 +78,18 @@ extern "C" void tessera_x86_avx512_binary_f32(const float* A, const float* B,
         switch (kind) {
         case kSub: y = _mm512_sub_ps(a, b); break;
         case kDiv: y = _mm512_div_ps(a, b); break;
+        case kAdd: y = _mm512_add_ps(a, b); break;
+        case kMul: y = _mm512_mul_ps(a, b); break;
+        case kFloorDiv:
+            y = _mm512_roundscale_ps(_mm512_div_ps(a, b),
+                                     _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+            break;
+        case kMod: {
+            __m512 q = _mm512_roundscale_ps(
+                _mm512_div_ps(a, b), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC);
+            y = _mm512_fnmadd_ps(q, b, a);  // a - floor(a/b)*b
+            break;
+        }
         case kMax: {
             // NaN-propagating: where (a or b) is unordered (NaN), force NaN.
             __mmask16 un = _mm512_cmp_ps_mask(a, b, _CMP_UNORD_Q);

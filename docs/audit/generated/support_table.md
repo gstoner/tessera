@@ -53,7 +53,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `einsum` | contraction | public | public | registered | complete | partial | fused | ready | none |
 | `acos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `add` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `add` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan2` | elementwise | public | public | registered | complete | partial | reference | ready | none |
@@ -66,13 +66,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `erfc` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `exp` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `expm1` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `floor_div` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `floor_div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `gelu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `lgamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `log` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `log1p` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `mod` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `mod` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `popcount` | elementwise | public | public | registered | complete | partial | reference | ready | none |
 | `pow` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
@@ -225,7 +225,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `rmsnorm` | normalization | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
 | `weight_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `abs` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `ceil` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `clamp` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
@@ -333,7 +333,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |
-| elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| elementwise | 37 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
@@ -349,7 +349,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
 | normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
-| numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

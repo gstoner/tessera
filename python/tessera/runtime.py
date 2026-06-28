@@ -4311,6 +4311,61 @@ def _x86_fft_c2c_rows(xc: Any, inverse: bool, np: Any) -> Any:
     return buf.view(np.complex64).reshape(batch, n)
 
 
+def _x86_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized naive DFT of complex64 rows [batch, n] via the DFT matrix
+    on the AVX-512 GEMM (complex = 4 real matmuls). For tiny non-power-of-two n
+    (Spectral PR3, strategy='dft'). X = rows @ W, W[j,k]=exp(sign·2πi·jk/n)."""
+    n = int(rows.shape[1])
+    sign = 1.0 if inverse else -1.0
+    j = np.arange(n)
+    w = np.exp(sign * 2j * np.pi * np.outer(j, j) / n).astype(np.complex64)
+    ar = np.ascontiguousarray(rows.real, np.float32)
+    ai = np.ascontiguousarray(rows.imag, np.float32)
+    wr = np.ascontiguousarray(w.real, np.float32)
+    wi = np.ascontiguousarray(w.imag, np.float32)
+    rr = _x86_gemm_2d(ar, wr) - _x86_gemm_2d(ai, wi)
+    ri = _x86_gemm_2d(ar, wi) + _x86_gemm_2d(ai, wr)
+    return (rr + 1j * ri).astype(np.complex64)
+
+
+def _x86_bluestein_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized Bluestein (chirp-z) DFT of complex64 rows [batch, n] for an
+    arbitrary n, as a power-of-two convolution on the radix-2 C2C kernel
+    (Spectral PR3, strategy='bluestein'). m = next_pow2(2n-1)."""
+    from .compiler.spectral_plan import next_power_of_two
+    n = int(rows.shape[1])
+    batch = int(rows.shape[0])
+    m = next_power_of_two(2 * n - 1)
+    sign = 1.0 if inverse else -1.0
+    j = np.arange(n)
+    chirp = np.exp(sign * 1j * np.pi * (j.astype(np.float64) ** 2) / n).astype(
+        np.complex64)
+    a = np.zeros((batch, m), np.complex64)
+    a[:, :n] = rows * chirp[None, :]
+    b = np.zeros(m, np.complex64)
+    bconj = np.conj(chirp)
+    b[:n] = bconj
+    if n > 1:
+        b[m - n + 1:] = bconj[1:][::-1]      # circular filter == linear conv
+    fa = _x86_fft_c2c_rows(a, False, np)
+    fb = _x86_fft_c2c_rows(b[None, :].copy(), False, np)[0]
+    c = _x86_fft_c2c_rows(fa * fb[None, :], True, np) / np.float32(m)
+    return (c[:, :n] * chirp[None, :]).astype(np.complex64)
+
+
+def _x86_transform_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized DFT of complex64 rows [batch, n] for ANY n — dispatches the
+    plan's strategy: radix-2 (power-of-two), naive DFT (tiny), or Bluestein."""
+    from .compiler.spectral_plan import plan_fft
+    n = int(rows.shape[1])
+    strat = plan_fft(n, inverse=inverse).strategy
+    if strat == "radix2":
+        return _x86_fft_c2c_rows(rows, inverse, np)
+    if strat == "dft":
+        return _x86_dft_rows(rows, inverse, np)
+    return _x86_bluestein_rows(rows, inverse, np)
+
+
 _X86_FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
 
 
@@ -4353,25 +4408,22 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
     plan = plan_fft(n, axis=ax, mode=mode,
                     inverse=inverse or op_name == "tessera.irfft")
-    if plan.strategy != "radix2":
-        raise ValueError(
-            f"x86 FFT lane handles power-of-two lengths (radix-2); length {n} "
-            f"needs the Bluestein/DFT path (Spectral PR3); got "
-            f"strategy={plan.strategy}")
+    # strategy (radix-2 / dft / bluestein) is dispatched per-row by
+    # _x86_transform_rows; any positive length is supported (Spectral PR3).
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
 
     if op_name in ("tessera.fft", "tessera.ifft"):
         rows = xm.reshape(-1, n).astype(np.complex64)
-        out = _x86_fft_c2c_rows(rows, plan.inverse, np)
+        out = _x86_transform_rows(rows, plan.inverse, np)
         if plan.scale != 1.0:
             out = out * np.complex64(plan.scale)
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
 
     if op_name == "tessera.rfft":
         rows = xm.reshape(-1, n).astype(np.complex64)   # im = 0
-        full = _x86_fft_c2c_rows(rows, False, np)
+        full = _x86_transform_rows(rows, False, np)
         half = full[:, : n // 2 + 1]
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(
             np.complex64)
@@ -4382,8 +4434,8 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     full = np.zeros((batch, n), np.complex64)
     full[:, :m] = rows[:, :m]
     if n - m > 0:                                       # mirror conj tail
-        full[:, m:n] = np.conj(rows[:, 1:n // 2])[:, ::-1]
-    out = _x86_fft_c2c_rows(full, True, np).real * np.float32(1.0 / n)
+        full[:, m:n] = np.conj(rows[:, 1:n - n // 2])[:, ::-1]
+    out = _x86_transform_rows(full, True, np).real * np.float32(1.0 / n)
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 

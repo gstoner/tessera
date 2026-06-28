@@ -80,12 +80,52 @@ def test_rfft_irfft(n):
                                **_TOL)
 
 
-def test_non_power_of_two_diagnoses():
+@pytest.mark.parametrize("n", [3, 5, 6, 7])      # tiny -> naive DFT (gemm)
+def test_fft_tiny_dft(n):
     rt = _x86_or_skip()
-    x = np.zeros((100,), np.complex64)
-    res = rt.launch(_art(rt, "tessera.fft", {"axis": -1}), (x,))
-    assert res["ok"] is False
-    assert "power-of-two" in str(res.get("reason"))
+    rng = np.random.default_rng(20 + n)
+    x = (rng.standard_normal((2, n))
+         + 1j * rng.standard_normal((2, n))).astype(np.complex64)
+    rf = rt.launch(_art(rt, "tessera.fft", {"axis": -1}), (x,))
+    assert rf["ok"] is True, rf.get("reason")
+    np.testing.assert_allclose(np.asarray(rf["output"]).astype(np.complex64),
+                               np.fft.fft(x, axis=-1).astype(np.complex64),
+                               atol=1e-3, rtol=1e-3)
+
+
+@pytest.mark.parametrize("n", [9, 12, 100, 127, 384])   # non-pow2 -> Bluestein
+def test_fft_bluestein(n):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(40 + n)
+    x = (rng.standard_normal((2, n))
+         + 1j * rng.standard_normal((2, n))).astype(np.complex64)
+    rf = rt.launch(_art(rt, "tessera.fft", {"axis": -1}), (x,))
+    assert rf["ok"] is True, rf.get("reason")
+    np.testing.assert_allclose(np.asarray(rf["output"]).astype(np.complex64),
+                               np.fft.fft(x, axis=-1).astype(np.complex64),
+                               atol=1e-2, rtol=1e-2)
+    # inverse round-trips
+    ri = rt.launch(_art(rt, "tessera.ifft", {"axis": -1}), (rf["output"],))
+    assert ri["ok"] is True, ri.get("reason")
+    np.testing.assert_allclose(np.asarray(ri["output"]).astype(np.complex64), x,
+                               atol=1e-2, rtol=1e-2)
+
+
+def test_rfft_irfft_non_pow2():
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(99)
+    for n in (6, 100):
+        x = rng.standard_normal((2, n)).astype(np.float32)
+        rf = rt.launch(_art(rt, "tessera.rfft", {"axis": -1}), (x,))
+        assert rf["ok"] is True, rf.get("reason")
+        np.testing.assert_allclose(np.asarray(rf["output"]).astype(np.complex64),
+                                   np.fft.rfft(x, axis=-1).astype(np.complex64),
+                                   atol=1e-2, rtol=1e-2)
+        ir = rt.launch(_art(rt, "tessera.irfft", {"axis": -1, "n": n}),
+                       (np.fft.rfft(x, axis=-1).astype(np.complex64),))
+        assert ir["ok"] is True, ir.get("reason")
+        np.testing.assert_allclose(np.asarray(ir["output"]).astype(np.float32),
+                                   x, atol=1e-2, rtol=1e-2)
 
 
 def test_fft_unknown_op_rejected():

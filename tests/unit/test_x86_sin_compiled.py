@@ -40,3 +40,18 @@ def test_sin_range():
     res = rt.launch(_art(rt, x), (x,))
     assert res["ok"] is True, res.get("reason")
     np.testing.assert_allclose(np.asarray(res["output"]), np.sin(x), atol=2e-5)
+
+
+def test_sin_large_magnitude():
+    # The SIMD sincos f32 reduction degrades for large |x|; the lane fallback to
+    # libm must keep it numpy-accurate (and NOT block-size-dependent — a large
+    # arg mixed into a full 16-lane block of small args must still be correct).
+    rt = _rt_or_skip()
+    big = (np.random.default_rng(1).standard_normal(64) * 1e6).astype(np.float32)
+    res = rt.launch(_art(rt, big), (big,))
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]), np.sin(big), atol=1e-4)
+    mixed = np.array([0.5, 1.0, -0.3, 2.0, 1e6, 0.1, -1.5, 0.7] * 2, np.float32)
+    res = rt.launch(_art(rt, mixed), (mixed,))
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]), np.sin(mixed), atol=1e-4)

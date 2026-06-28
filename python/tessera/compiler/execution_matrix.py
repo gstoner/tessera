@@ -289,6 +289,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "sampled dense-dense dot over masked entries), bsmm "
                             "via the AVX-512 GEMM microkernel. COO folds to CSR "
                             "on host. f32",
+    "x86_moe_compiled": "x86 CPU mixture-of-experts compute (moe) — AVX-512 "
+                            "routed per-token expert GEMV kernel (top-1; routing "
+                            "resolved on host, out_dim vectorized). f32",
     "x86_selective_ssm_compiled": "x86 CPU Mamba2 selective_ssm — AVX-512 fused "
                             "selective-scan kernel (single pass over S, "
                             "vectorized over the state dim N, exp via the Cephes "
@@ -397,6 +400,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "wise CSR SpMM, sampled dense-dense SDDMM that skips "
                             "masked-zero entries) then HIP-launched; bsmm via the "
                             "WMMA matmul (bf16). f32",
+    "rocm_moe_compiled": "AMD GPU RDNA mixture-of-experts compute (moe) — "
+                            "COMPILER-GENERATED gfx1151 kernel (generate-rocm-moe-"
+                            "kernel: routed per-token expert GEMV, one thread per "
+                            "(token, out-col); routing resolved on host) HIP-"
+                            "launched. f32",
     "rocm_selective_ssm_compiled": "AMD GPU RDNA Mamba2 selective_ssm — COMPILER-"
                             "GENERATED gfx1151 selective-scan kernel (generate-"
                             "rocm-selective-ssm-kernel, one thread per (b,d) "
@@ -664,6 +672,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "nonzeros (COO folds to CSR on host), sddmm = sampled dense-dense "
                "dot over masked entries, bsmm via the GEMM microkernel. f32, "
                "matches numpy.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_moe_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_moe_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_moe_compiled", runtime_status="success",
+        reason="x86 moe-compute lane runs the routed per-token expert GEMVs "
+               "(top-1) on the AVX-512 kernel — routing (argmax/round-robin) "
+               "resolved on host, the expert matmuls vectorized over out_dim. "
+               "f32, matches numpy.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_selective_ssm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_selective_ssm_compiled",
@@ -1090,6 +1107,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "sddmm-kernel: row-wise CSR SpMM, sampled SDDMM skipping masked-"
                "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
                "the WMMA matmul (bf16). f32, matches numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_moe_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_moe_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_moe_compiled", runtime_status="success",
+        reason="ROCm moe-compute lane runs the routed per-token expert GEMVs "
+               "(top-1) on the COMPILER-GENERATED gfx1151 kernel (generate-rocm-"
+               "moe-kernel: one thread per (token, out-col); routing resolved on "
+               "host) HIP-launched. f32, matches numpy.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_selective_ssm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_selective_ssm_compiled",

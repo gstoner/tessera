@@ -608,6 +608,7 @@ x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tess
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_lu_f32,lu,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
+x86,tessera_x86_moe_f32,moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_qr_f32,qr,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_reference_argreduce_f32,reference_argreduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_argreduce_f32.cpp
 x86,tessera_x86_reference_binary_f32,reference_binary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_binary_f32.cpp
@@ -615,6 +616,7 @@ x86,tessera_x86_reference_bitwise_i32,reference_bitwise,i32,src/compiler/codegen
 x86,tessera_x86_reference_compare_f32,reference_compare,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
 x86,tessera_x86_reference_gemm_bf16,reference_gemm,bf16,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gemm_bf16.cpp
 x86,tessera_x86_reference_logical_i8,reference_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
+x86,tessera_x86_reference_moe_f32,reference_moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_reference_reduce_f32,reference_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
 x86,tessera_x86_reference_scan_f32,reference_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
 x86,tessera_x86_reference_sddmm_f32,reference_sddmm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp

@@ -2941,6 +2941,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, i64, c_f32, c_f32],
         "tessera_x86_svd_f32":
             [c_f32, i64, i64, i64, c_f32, c_f32, c_f32],
+        "tessera_x86_moe_f32":
+            [c_f32, c_f32, c_i32, i64, i64, i64, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -4664,6 +4666,82 @@ def _execute_x86_compiled_sparse(artifact: RuntimeArtifact, args: Any) -> Any:
     return _sparse_compute(
         op_name, operands, _spmm,
         lambda a, b, mk: _x86_sddmm(a, b, mk, np), _x86_gemm_2d, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mixture-of-experts COMPUTE (S-series `moe`) — the routed per-token expert
+# matmuls (top-1). Routing (argmax/round-robin) is resolved on host; the device
+# kernel runs the FLOP-heavy expert GEMVs. compiler_path="x86_moe_compiled" /
+# "rocm_moe_compiled". f32. (moe_dispatch/moe_combine = transport, mesh-gated.)
+# ─────────────────────────────────────────────────────────────────────────────
+def _moe_prepare(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> tuple:
+    """Reshape to (tokens, in_dim) + stacked experts (E,in,out) + resolved int32
+    route[tokens] (route → scores-argmax → round-robin). Returns (tokens, experts,
+    route_i32, lead_shape, in_dim, out_dim)."""
+    x = np.ascontiguousarray(x, np.float32)
+    experts = np.asarray(experts, np.float32)
+    if experts.ndim == 2:
+        experts = experts[None, :, :]
+    if experts.ndim != 3:
+        raise ValueError("moe experts must be (num_experts, in_dim, out_dim)")
+    e, in_dim, out_dim = (int(v) for v in experts.shape)
+    if int(x.shape[-1]) != in_dim:
+        raise ValueError(f"moe input dim {x.shape[-1]} != expert dim {in_dim}")
+    tokens = x.reshape(-1, in_dim)
+    t = int(tokens.shape[0])
+    if route is not None:
+        r = np.asarray(route, np.int64).reshape(-1)
+    elif scores is not None:
+        r = np.argmax(np.asarray(scores).reshape(t, e), axis=-1)
+    else:
+        r = np.arange(t, dtype=np.int64) % e
+    if r.shape[0] != t:
+        raise ValueError("moe route length must match token count")
+    r = np.mod(r, e).astype(np.int32)
+    return (np.ascontiguousarray(tokens, np.float32),
+            np.ascontiguousarray(experts, np.float32), r,
+            x.shape[:-1], in_dim, out_dim)
+
+
+def _x86_moe(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    tk, ex, r, lead, in_dim, out_dim = _moe_prepare(x, experts, route, scores, np)
+    t = int(tk.shape[0])
+    out = np.zeros((t, out_dim), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_moe_f32(
+        tk.ctypes.data_as(cf), ex.ctypes.data_as(cf),
+        r.ctypes.data_as(ctypes.c_void_p), ctypes.c_int64(t),
+        ctypes.c_int64(in_dim), ctypes.c_int64(out_dim), out.ctypes.data_as(cf))
+    return out.reshape(lead + (out_dim,))
+
+
+def _moe_bind(op: dict, values: dict) -> tuple:
+    """Unpack moe operands: [x, experts] + trailing extras named by
+    kwargs["extras"] (e.g. ["route"], ["scores"])."""
+    names = [str(nm) for nm in op.get("operands", [])]
+    extras = list((op.get("kwargs") or {}).get("extras", []))
+    ev = {kk: values[names[2 + i]] for i, kk in enumerate(extras)}
+    return values[names[0]], values[names[1]], ev.get("route"), ev.get("scores")
+
+
+def _execute_x86_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` moe-compute lane: routed per-token expert GEMVs (top-1)
+    on the AVX-512 kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.moe":
+        raise ValueError(
+            "x86_moe_compiled executor handles tessera.moe; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    x, experts, route, scores = _moe_bind(ops[0], values)
+    return _x86_moe(x, experts, route, scores, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7932,6 +8010,57 @@ def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any,
     return out
 
 
+_rocm_moe_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_moe(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:
+    """MoE compute — routed per-token expert GEMVs (top-1) on the gfx1151 kernel.
+    f32."""
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.moe"() {name = "mo"} : () -> ()\n}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-moe-kernel", directive, _rocm_moe_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm moe: hipInit failed")
+    tk, ex, r, lead, in_dim, out_dim = _moe_prepare(x, experts, route, scores, np)
+    t = int(tk.shape[0])
+    out = np.zeros(t * out_dim, np.float32)
+    d_x = _rocm_dev_in(hip, tk.reshape(-1), 4 * tk.size)
+    d_e = _rocm_dev_in(hip, ex.reshape(-1), 4 * ex.size)
+    d_r = _rocm_dev_in(hip, r, 4 * r.size)
+    d_o = _rocm_dev_in(hip, out, 4 * out.size)
+    try:
+        _rocm_sparse_launch(
+            hsaco, b"mo",
+            [(d_x, tk.size), (d_e, ex.size), (d_r, r.size), (d_o, out.size)],
+            [t, in_dim, out_dim], t * out_dim)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 4 * out.size, 2)
+    finally:
+        for d in (d_x, d_e, d_r, d_o):
+            hip.hipFree(d)
+    return out.reshape(lead + (out_dim,))
+
+
+def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` moe-compute lane: routed per-token expert GEMVs
+    (top-1) on the COMPILER-GENERATED gfx1151 kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name != "tessera.moe":
+        raise ValueError(
+            "rocm_moe_compiled executor handles tessera.moe; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    x, experts, route, scores = _moe_bind(ops[0], values)
+    return _rocm_moe(x, experts, route, scores, np)
+
+
 def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
     """The ``target="rocm"`` state-space lane: selective_ssm (Mamba2) on the
@@ -8734,6 +8863,7 @@ def _executor_table():
         "x86_fft_compiled": _execute_x86_compiled_fft,
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
+        "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
         "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
@@ -8758,6 +8888,7 @@ def _executor_table():
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
+        "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
         "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,

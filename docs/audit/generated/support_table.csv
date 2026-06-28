@@ -200,7 +200,7 @@ smooth_l1_loss,loss,public,public,registered,complete,partial,fused,ready,none
 vlb_loss,loss,public,public,registered,complete,partial,reference,ready,none
 z_loss,loss,public,public,registered,complete,partial,fused,ready,none
 linear_general,model_layer,public,public,registered,complete,partial,fused,ready,none
-moe,moe,public,public,registered,complete,partial,reference,ready,none
+moe,moe,public,public,registered,complete,partial,fused,ready,none
 moe_combine,moe_transport,public,public,registered,complete,partial,reference,ready,none
 moe_dispatch,moe_transport,public,public,registered,complete,partial,reference,ready,none
 group_norm,normalization,public,public,registered,complete,partial,reference,ready,none

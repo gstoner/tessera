@@ -67,7 +67,7 @@ silu,elementwise,public,public,registered,complete,partial,fused,ready,none
 silu_mul,elementwise,public,public,registered,complete,partial,fused,ready,none
 sin,elementwise,public,public,registered,complete,partial,reference,ready,none
 sinh,elementwise,public,public,registered,complete,partial,fused,ready,none
-softcap,elementwise,public,public,registered,complete,partial,reference,ready,none
+softcap,elementwise,public,public,registered,complete,partial,fused,ready,none
 softplus,elementwise,public,public,registered,complete,partial,fused,ready,none
 sqrt,elementwise,public,public,registered,complete,partial,fused,ready,none
 sub,elementwise,public,public,registered,complete,partial,fused,ready,none

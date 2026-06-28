@@ -824,6 +824,22 @@ def ROCM_WhereKernelOp : TesseraROCM_Op<"where"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
+  let summary = "Counter-based Philox-4x32-10 uniform RNG kernel";
+  let description = [{
+    The directive `generate-rocm-philox-kernel` expands into a flat counter-based
+    RNG gpu kernel: one thread per counter block `b` writes 4 uniform-f32 in
+    [0,1) to `out[4b..4b+3]` from Philox-4x32-10 (Salmon et al. 2011 — the
+    JAX / cuRAND algorithm) keyed by `(seed_lo, seed_hi)` with counter
+    `(cbase+b, 0, 0, 0)`. Bit-identical to the x86 kernel + the
+    `tessera.rng_device` numpy reference. Args:
+    `(out : memref<?xf32>, N : index, seed_lo i32, seed_hi i32,
+      cbase_lo i32, cbase_hi i32)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

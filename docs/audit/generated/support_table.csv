@@ -40,7 +40,7 @@ acos,elementwise,public,public,registered,complete,partial,fused,ready,none
 add,elementwise,public,public,registered,complete,partial,fused,ready,none
 asin,elementwise,public,public,registered,complete,partial,fused,ready,none
 atan,elementwise,public,public,registered,complete,partial,fused,ready,none
-atan2,elementwise,public,public,registered,complete,partial,reference,ready,none
+atan2,elementwise,public,public,registered,complete,partial,fused,ready,none
 clip,elementwise,public,public,registered,complete,partial,fused,ready,none
 cos,elementwise,public,public,registered,complete,partial,fused,ready,none
 cosh,elementwise,public,public,registered,complete,partial,fused,ready,none

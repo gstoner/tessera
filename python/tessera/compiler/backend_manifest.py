@@ -1211,6 +1211,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_unary_compiled tanh kernel (scalar cap on host). "
                  "Executes via runtime.launch() (rocm_softcap_compiled).",
     },
+    # P2e — atan2 composed on the gfx1151 unary atan lane (no new kernel;
+    # quadrant/sign logic on host). Executes via rocm_atan2_compiled.
+    "atan2": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone atan2 — quadrant-aware atan2(y, x) composed on the "
+                 "rocm_unary_compiled atan kernel (sign/quadrant on host). "
+                 "Executes via runtime.launch() (rocm_atan2_compiled).",
+    },
     # S2 logical family — flat elementwise kernel over i8 booleans
     # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
     # normalized via != 0 (numpy semantics). Executes via runtime.launch()
@@ -1461,6 +1470,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("clamp", "clip")},
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
+    ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
+    ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
        for op in ("isnan", "isinf", "isfinite")},
     **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
@@ -2014,6 +2025,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "softcap — cap*tanh(x/cap) composed on the "
                  "x86_transcendental_compiled AVX-512 tanh kernel "
                  "(scalar cap on host; matches cap*tanh(x/cap))",
+    },
+    # P2e — atan2 composed on the AVX-512 transcendental atan kernel (no new
+    # kernel; quadrant/sign logic on host; x86_atan2_compiled lane).
+    "atan2": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "atan2 — quadrant-aware atan2(y, x) composed on the "
+                 "x86_transcendental_compiled AVX-512 atan kernel "
+                 "(sign/quadrant on host; matches np.arctan2)",
     },
     # S2 logical family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes

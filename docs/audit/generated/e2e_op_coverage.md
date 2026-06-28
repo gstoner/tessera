@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 181 |
-| ``runnable_reference`` | 128 |
+| ``complete`` | 182 |
+| ``runnable_reference`` | 127 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (181)
+## complete (182)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -50,6 +50,7 @@ each row into a single E2E tier.
 | ``add`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``asin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``atan`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``atan2`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``clip`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cos`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cosh`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -217,7 +218,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (128)
+## runnable_reference (127)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -247,7 +248,6 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``atan2`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |

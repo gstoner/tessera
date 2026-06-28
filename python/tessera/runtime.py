@@ -5487,6 +5487,68 @@ def _softcap_compute(x: Any, kwargs: dict, tanh_exec: Any, np: Any) -> Any:
     return (np.float32(cap) * t).astype(np.float32)
 
 
+_ATAN2_OPS = ("tessera.atan2",)
+
+
+def _atan2_compute(y: Any, x: Any, atan_exec: Any, np: Any) -> Any:
+    """atan2(y, x) = angle of the point (x, y) in (-pi, pi], matching
+    np.arctan2. The device lane computes the first-quadrant magnitude
+    ``atan(|y| / |x|)`` (the transcendental FLOP); the quadrant placement and
+    the on-axis special cases are cheap host sign logic — the same host-
+    structure / device-FLOP split the softcap lane uses."""
+    y = np.ascontiguousarray(y, np.float32)
+    x = np.ascontiguousarray(x, np.float32)
+    if y.shape != x.shape:
+        y, x = np.broadcast_arrays(y, x)
+        y = np.ascontiguousarray(y, np.float32)
+        x = np.ascontiguousarray(x, np.float32)
+    ax = np.abs(x)
+    ay = np.abs(y)
+    # First-quadrant magnitude in [0, pi/2]. Where |x|==0 the ratio is set to 0
+    # and the angle forced to pi/2 (vertical) after the device call.
+    safe = ax > 0
+    ratio = np.where(safe, ay / np.where(safe, ax, np.float32(1.0)),
+                     np.float32(0.0)).astype(np.float32)
+    core = np.asarray(atan_exec(ratio), np.float32)
+    core = np.where(safe, core, np.float32(np.pi / 2.0)).astype(np.float32)
+    # Reflect across the y-axis for x<0, then across the x-axis for y<0.
+    res = np.where(x < 0, np.float32(np.pi) - core, core)
+    res = np.where(y < 0, -res, res).astype(np.float32)
+    # numpy convention: atan2(0, 0) == 0 (the |x|==0 path forced pi/2 above).
+    res = np.where((x == 0) & (y == 0), np.float32(0.0), res)
+    return res.astype(np.float32)
+
+
+def _x86_atan_exec(x: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_transcendental_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.atan", "result": "o", "operands": ["x"],
+                 "kwargs": {}}]})
+    return _execute_x86_compiled_transcendental(art, (x,))
+
+
+def _execute_x86_compiled_atan2(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` atan2 lane: quadrant-aware atan2(y, x) composed on
+    the AVX-512 transcendental atan kernel (sign/quadrant logic on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ATAN2_OPS:
+        raise ValueError(
+            f"x86_atan2_compiled executor handles one of {_ATAN2_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("atan2 requires two operands (y, x)")
+    values = _bind_launch_args(args, arg_names)
+    y = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[operand_names[1]])
+    return _atan2_compute(y, x, _x86_atan_exec, np)
+
+
 def _x86_tanh_exec(x: Any) -> Any:
     art = RuntimeArtifact(metadata={
         "target": "x86", "compiler_path": "x86_transcendental_compiled",
@@ -6573,6 +6635,32 @@ def _execute_rocm_compiled_clamp(artifact: RuntimeArtifact, args: Any) -> Any:
 def _rocm_tanh_exec(x: Any) -> Any:
     import numpy as np
     return _rocm_unary_t(x, "tanh", np)
+
+
+def _rocm_atan_exec(x: Any) -> Any:
+    import numpy as np
+    return _rocm_unary_t(x, "atan", np)
+
+
+def _execute_rocm_compiled_atan2(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` atan2 lane: quadrant-aware atan2(y, x) composed on
+    the gfx1151 unary atan kernel (sign/quadrant logic on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ATAN2_OPS:
+        raise ValueError(
+            f"rocm_atan2_compiled executor handles one of {_ATAN2_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("atan2 requires two operands (y, x)")
+    values = _bind_launch_args(args, arg_names)
+    y = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[operand_names[1]])
+    return _atan2_compute(y, x, _rocm_atan_exec, np)
 
 
 def _execute_rocm_compiled_softcap(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -9292,6 +9380,7 @@ def _executor_table():
         "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
         "rocm_clamp_compiled": _execute_rocm_compiled_clamp,
         "rocm_softcap_compiled": _execute_rocm_compiled_softcap,
+        "rocm_atan2_compiled": _execute_rocm_compiled_atan2,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
@@ -9326,6 +9415,7 @@ def _executor_table():
         "x86_binary_compiled": _execute_x86_compiled_binary,
         "x86_clamp_compiled": _execute_x86_compiled_clamp,
         "x86_softcap_compiled": _execute_x86_compiled_softcap,
+        "x86_atan2_compiled": _execute_x86_compiled_atan2,
         "x86_compare_compiled": _execute_x86_compiled_compare,
         "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,

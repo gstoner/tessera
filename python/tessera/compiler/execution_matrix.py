@@ -176,6 +176,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_softcap_compiled": "x86 CPU softcap — cap*tanh(x/cap) composed on the "
                             "AVX-512 transcendental tanh kernel (scalar cap "
                             "broadcast on host). f32",
+    "x86_atan2_compiled": "x86 CPU atan2 — quadrant-aware atan2(y, x) composed "
+                            "on the AVX-512 transcendental atan kernel "
+                            "(sign/quadrant on host). f32",
     "x86_compare_compiled": "x86 CPU flat 2-operand elementwise comparison — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "compare_f32) the Python runtime ctypes-loads from "
@@ -231,6 +234,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_softcap_compiled": "AMD GPU RDNA softcap — cap*tanh(x/cap) composed on "
                             "the rocm_unary_compiled tanh kernel (scalar cap "
                             "broadcast on host). f32",
+    "rocm_atan2_compiled": "AMD GPU RDNA atan2 — quadrant-aware atan2(y, x) "
+                            "composed on the rocm_unary_compiled atan kernel "
+                            "(sign/quadrant on host). f32",
     "rocm_compare_compiled": "AMD GPU RDNA flat 2-operand elementwise comparison "
                             "kernel the Tessera compiler GENERATES (generate-rocm-"
                             "compare-kernel -> ROCDL -> hsaco, in-process via "
@@ -892,6 +898,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "transcendental tanh kernel (scalar cap broadcast on host). "
                "f32, matches cap*tanh(x/cap).",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_atan2_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_atan2_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_atan2_compiled", runtime_status="success",
+        reason="x86 atan2 lane runs quadrant-aware atan2(y, x) composed on the "
+               "AVX-512 transcendental atan kernel (sign/quadrant logic on "
+               "host). f32, matches np.arctan2.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_predicate_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_predicate_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1116,6 +1130,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm softcap lane runs cap*tanh(x/cap) composed on the "
                "COMPILER-GENERATED gfx1151 unary tanh kernel (scalar cap "
                "broadcast on host). f32, matches cap*tanh(x/cap).",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_atan2_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_atan2_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_atan2_compiled", runtime_status="success",
+        reason="ROCm atan2 lane runs quadrant-aware atan2(y, x) composed on the "
+               "COMPILER-GENERATED gfx1151 unary atan kernel (sign/quadrant "
+               "logic on host). f32, matches np.arctan2.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_predicate_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_predicate_compiled",

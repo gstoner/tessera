@@ -807,6 +807,31 @@ _EXISTING_CONTRACT_OVERRIDES["dequant_grouped_gemm"] = {
     "jvp": "not_applicable",
 }
 
+# ── Tier-0 pure-view metadata (P0; S_SERIES_GAP_CLOSURE_PLAN §2 "0-view") ────
+# reshape / view / squeeze / unsqueeze / flatten / expand / broadcast are
+# ZERO-FLOP, zero-data-movement metadata ops: a device never runs a compute
+# kernel for them — the buffer is untouched, only shape/stride metadata changes
+# (expand/broadcast are stride-0 views). `backend_kernel` is therefore genuinely
+# `not_applicable` on EVERY target. This is NOT the PR #132 mistake: no real
+# kernel gap is hidden — the structural-IR / view-lowering foundation is tracked
+# on the graph_ir / lowering_rule axes, not here. The 0-move family
+# (cat/pad/gather/scatter/slice/roll/…) and transpose/permute stay `partial`:
+# they materialize data movement and earn a real memory-movement lane (plan
+# §6.C). 0-reduce (scatter_add/scatter_reduce) stays partial → real kernel.
+# Tier-1 transport (collective + moe_transport) stays `partial` too: it has
+# genuine single-rank reference + mock-mesh execution but is mesh-gated on real
+# multi-GPU hardware (Phase H) — NOT not_applicable (it is a real, non-universal
+# backend gap, the PR #132 distinction). Both dispositions are pinned by
+# tests/unit/test_tier0_tier1_disposition.py.
+_TIER0_PURE_VIEW: tuple[str, ...] = (
+    "reshape", "view", "squeeze", "unsqueeze", "flatten", "expand", "broadcast",
+)
+for _na_name in _TIER0_PURE_VIEW:
+    _EXISTING_CONTRACT_OVERRIDES[_na_name] = {
+        **_EXISTING_CONTRACT_OVERRIDES.get(_na_name, {}),
+        "backend_kernel": "not_applicable",
+    }
+
 # Set of names whose contract is hardened beyond the default
 # `explicit_partial` schema; these get a `contract_schema=explicit_semantic`
 # tag so the dashboard can distinguish "shipped + audited" from "shipped".

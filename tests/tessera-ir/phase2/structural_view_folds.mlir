@@ -36,3 +36,22 @@ func.func @real_permute_preserved(%x: tensor<4x4xf32>) -> tensor<4x4xf32> {
   %a = "tessera.permute"(%x) {perm = [1, 0]} : (tensor<4x4xf32>) -> tensor<4x4xf32>
   return %a : tensor<4x4xf32>
 }
+
+// CHECK-LABEL: func.func @dynamic_view_preserved
+func.func @dynamic_view_preserved(%x: tensor<?xf32>) -> tensor<?xf32> {
+  // a dynamic expand can carry a runtime extent change (1->N) in the attr-dict
+  // while both sides stay tensor<?xf32> — type equality is NOT runtime identity,
+  // so it must NOT fold.
+  // CHECK: tessera.expand
+  %a = "tessera.expand"(%x) {shape = [8]} : (tensor<?xf32>) -> tensor<?xf32>
+  return %a : tensor<?xf32>
+}
+
+// CHECK-LABEL: func.func @truncated_perm_preserved
+func.func @truncated_perm_preserved(%x: tensor<4x4xf32>) -> tensor<4x4xf32> {
+  // a truncated perm ([0] on a rank-2 tensor) is malformed/non-identity — it must
+  // NOT fold by matching an identity prefix.
+  // CHECK: tessera.permute %{{.*}} {perm = [0]}
+  %a = "tessera.permute"(%x) {perm = [0]} : (tensor<4x4xf32>) -> tensor<4x4xf32>
+  return %a : tensor<4x4xf32>
+}

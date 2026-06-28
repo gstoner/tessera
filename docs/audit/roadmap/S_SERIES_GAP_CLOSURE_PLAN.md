@@ -1,3 +1,9 @@
+---
+last_updated: 2026-06-28
+audit_role: plan
+plan_state: open
+---
+
 # S-series gap-closure plan + planned fused-kernel inventory
 
 > **Scope:** drive the remaining S-series primitives to **real, on-device-validated

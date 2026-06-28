@@ -43,7 +43,7 @@ bitwise_or,5,0,2,5,0,,directly_tested,5 direct test references
 bitwise_xor,3,0,0,3,0,,directly_tested,3 direct test references
 broadcast,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 broadcast_to_axis,3,0,0,3,0,,directly_tested,3 direct test references
-bsmm,2,0,0,2,0,,directly_tested,2 direct test references
+bsmm,4,0,0,4,0,,directly_tested,4 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
 cast,10,40,0,50,0,fp32,directly_tested,50 direct test references
 cat,12,0,0,12,0,,directly_tested,12 direct test references
@@ -391,7 +391,7 @@ scatter_add,1,0,0,1,1,,structural_only,unclassified — defaults to structural_o
 scatter_reduce,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 score_combine,3,6,1,9,0,,directly_tested,9 direct test references
 score_matching_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-sddmm,2,0,0,2,0,,directly_tested,2 direct test references
+sddmm,4,0,0,4,0,,directly_tested,4 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 selective_ssm,51,10,2,61,0,bf16 fp16 fp32,directly_tested,61 direct test references
@@ -418,8 +418,8 @@ spectral_conv,7,0,0,7,0,fp32,directly_tested,7 direct test references
 spectral_filter,5,0,0,5,0,fp32,directly_tested,5 direct test references
 spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-spmm_coo,3,0,0,3,0,,directly_tested,3 direct test references
-spmm_csr,2,0,0,2,0,,directly_tested,2 direct test references
+spmm_coo,5,0,0,5,0,,directly_tested,5 direct test references
+spmm_csr,4,0,0,4,0,,directly_tested,4 direct test references
 sqrt,7,0,1,7,0,bf16 f32,directly_tested,7 direct test references
 squeeze,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references

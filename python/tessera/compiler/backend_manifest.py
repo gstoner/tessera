@@ -1079,6 +1079,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(frame/window/overlap-add/pointwise on host). Executes via "
                  "runtime.launch() (rocm_spectral_compiled).",
     } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+    # Sparse (PR) — COMPILER-GENERATED gfx1151 sparse kernels (spmm CSR row-wise,
+    # sddmm sampled dense-dense) + the WMMA matmul for bsmm (rocm_sparse_compiled).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("sparse",),
+        "notes": f"Sparse {op} — direct sparse kernel (generate-rocm-spmm/sddmm-"
+                 "kernel, iterates the nonzero structure) on gfx1151; bsmm via the "
+                 "WMMA matmul (bf16). Executes via runtime.launch() "
+                 "(rocm_sparse_compiled).",
+    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
@@ -1405,6 +1415,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
     **{(op, "rocm"): "tests/unit/test_rocm_spectral_compiled.py"
        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+    **{(op, "x86"): "tests/unit/test_x86_sparse_compiled.py"
+       for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py"
+       for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
@@ -2078,6 +2092,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(frame/window/overlap-add/pointwise on host; "
                  "x86_spectral_compiled lane; f32, matches np.fft)",
     } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+    # Sparse (PR) — genuinely sparse AVX-512 kernels (spmm_csr row-AXPY, sddmm
+    # sampled-dot) + the GEMM microkernel for bsmm (x86_sparse_compiled).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Sparse {op} — AVX-512 sparse kernel (spmm = row-wise AXPY over "
+                 "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
+                 "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
+    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
 }
 
 

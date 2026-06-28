@@ -594,8 +594,10 @@ x86,tessera_x86_avx512_reduce_f32,avx512_reduce,f32,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_rmsnorm_f32,avx512_rmsnorm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
 x86,tessera_x86_avx512_rope_f32,avx512_rope,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_posenc_f32.cpp
 x86,tessera_x86_avx512_scan_f32,avx512_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
+x86,tessera_x86_avx512_sddmm_f32,avx512_sddmm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp
 x86,tessera_x86_avx512_silu_mul_f32,avx512_silu_mul,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_softmax_f32,avx512_softmax,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_norm_f32.cpp
+x86,tessera_x86_avx512_spmm_csr_f32,avx512_spmm_csr,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp
 x86,tessera_x86_avx512_transcendental_f32,avx512_transcendental,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_avx512_unary_f32,avx512_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_avx512_vnni_gemm_u8s8_s32,avx512_vnni_gemm_u8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp
@@ -611,6 +613,8 @@ x86,tessera_x86_reference_gemm_bf16,reference_gemm,bf16,src/compiler/codegen/tes
 x86,tessera_x86_reference_logical_i8,reference_logical,i8,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_logical_i8.cpp
 x86,tessera_x86_reference_reduce_f32,reference_reduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp
 x86,tessera_x86_reference_scan_f32,reference_scan,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scan_f32.cpp
+x86,tessera_x86_reference_sddmm_f32,reference_sddmm,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp
+x86,tessera_x86_reference_spmm_csr_f32,reference_spmm_csr,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sparse_f32.cpp
 x86,tessera_x86_reference_transcendental_f32,reference_transcendental,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
 x86,tessera_x86_reference_unary_f32,reference_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_reference_where_f32,reference_where,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_where_f32.cpp

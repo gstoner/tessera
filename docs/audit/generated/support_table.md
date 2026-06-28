@@ -278,10 +278,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `argsort` | sort | public | public | registered | complete | partial | reference | ready | none |
 | `sort` | sort | public | public | registered | complete | partial | reference | ready | none |
 | `top_k` | sort | public | public | registered | complete | partial | reference | ready | none |
-| `bsmm` | sparse | public | public | registered | complete | partial | reference | ready | none |
-| `sddmm` | sparse | public | public | registered | complete | partial | reference | ready | none |
-| `spmm_coo` | sparse | public | public | registered | complete | partial | reference | ready | none |
-| `spmm_csr` | sparse | public | public | registered | complete | partial | reference | ready | none |
+| `bsmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
+| `sddmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
+| `spmm_coo` | sparse | public | public | registered | complete | partial | fused | ready | none |
+| `spmm_csr` | sparse | public | public | registered | complete | partial | fused | ready | none |
 | `dct` | spectral | public | public | registered | complete | partial | fused | ready | none |
 | `fft` | spectral | public | public | registered | complete | partial | fused | ready | none |
 | `ifft` | spectral | public | public | registered | complete | partial | fused | ready | none |
@@ -360,7 +360,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | rotary_embedding | 1 | PPGCpFN· |
 | segment_reduce | 1 | PPGCpRN· |
 | sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
-| sparse | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| sparse | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | spectral | 9 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |
 | state_space | 1 | PPGCpRN· |

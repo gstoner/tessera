@@ -262,10 +262,10 @@ segment_reduce,segment_reduce,public,public,registered,complete,partial,referenc
 argsort,sort,public,public,registered,complete,partial,reference,ready,none
 sort,sort,public,public,registered,complete,partial,reference,ready,none
 top_k,sort,public,public,registered,complete,partial,reference,ready,none
-bsmm,sparse,public,public,registered,complete,partial,reference,ready,none
-sddmm,sparse,public,public,registered,complete,partial,reference,ready,none
-spmm_coo,sparse,public,public,registered,complete,partial,reference,ready,none
-spmm_csr,sparse,public,public,registered,complete,partial,reference,ready,none
+bsmm,sparse,public,public,registered,complete,partial,fused,ready,none
+sddmm,sparse,public,public,registered,complete,partial,fused,ready,none
+spmm_coo,sparse,public,public,registered,complete,partial,fused,ready,none
+spmm_csr,sparse,public,public,registered,complete,partial,fused,ready,none
 dct,spectral,public,public,registered,complete,partial,fused,ready,none
 fft,spectral,public,public,registered,complete,partial,fused,ready,none
 ifft,spectral,public,public,registered,complete,partial,fused,ready,none

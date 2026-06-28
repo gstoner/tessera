@@ -144,7 +144,7 @@ dequantize_fp8,4,0,1,4,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_test
 dequantize_int4,3,0,0,3,0,,directly_tested,3 direct test references
 dequantize_int8,3,0,0,3,0,,directly_tested,3 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
-digamma,2,0,0,2,0,,directly_tested,2 direct test references
+digamma,8,0,0,8,0,,directly_tested,8 direct test references
 div,7,2,0,9,0,bf16 f16 f32,directly_tested,9 direct test references
 dropout,19,8,3,27,0,f32 fp32 fp64,directly_tested,27 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
@@ -237,7 +237,7 @@ latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test reference
 latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
 layer_norm,25,7,3,32,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,32 direct test references
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
-lgamma,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+lgamma,3,0,0,3,0,,directly_tested,3 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
 linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
@@ -351,7 +351,7 @@ reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
 relu,105,20,9,125,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,125 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-reshape,7,15,0,22,0,,directly_tested,22 direct test references
+reshape,11,15,0,26,0,,directly_tested,26 direct test references
 retention,8,0,2,8,0,,directly_tested,8 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,74,10,3,84,0,bf16 f16 f32 f64 fp32,directly_tested,84 direct test references
@@ -421,7 +421,7 @@ split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,5,0,0,5,0,,directly_tested,5 direct test references
 spmm_csr,4,0,0,4,0,,directly_tested,4 direct test references
 sqrt,7,0,1,7,0,bf16 f32,directly_tested,7 direct test references
-squeeze,4,5,0,9,0,,directly_tested,9 direct test references
+squeeze,6,5,0,11,0,,directly_tested,11 direct test references
 stablehlo_export,2,0,0,2,0,,directly_tested,2 direct test references
 stack,2,0,0,2,0,,directly_tested,2 direct test references
 state_collection_spec,0,0,0,0,1,,structural_only,category default for 'state_tree'
@@ -464,7 +464,7 @@ unsqueeze,4,3,0,7,0,,directly_tested,7 direct test references
 value_and_grad,0,0,0,0,1,,structural_only,category default for 'transform'
 var,4,0,0,4,0,,directly_tested,4 direct test references
 varlen_sdpa,3,19,0,22,0,,directly_tested,22 direct test references
-view,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+view,5,9,0,14,0,,directly_tested,14 direct test references
 vjp,0,0,0,0,1,,structural_only,category default for 'transform'
 vlb_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'

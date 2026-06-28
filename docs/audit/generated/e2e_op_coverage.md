@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 184 |
-| ``runnable_reference`` | 125 |
+| ``complete`` | 186 |
+| ``runnable_reference`` | 123 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (184)
+## complete (186)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -54,6 +54,7 @@ each row into a single E2E tier.
 | ``clip`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cos`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cosh`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``digamma`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``erf`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``erfc`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -61,6 +62,7 @@ each row into a single E2E tier.
 | ``expm1`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``floor_div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``gelu`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``lgamma`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``log`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``log1p`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``mod`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -220,7 +222,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (125)
+## runnable_reference (123)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -250,8 +252,6 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``fused_epilogue`` | fused_epilogue | public | public | registered | partial | reference | ready | none |

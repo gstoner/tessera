@@ -251,9 +251,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `quantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `quantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `quantize_nvfp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dropout` | random_mask | public | public | registered | complete | partial | reference | ready | none |
-| `rng_normal` | random_source | public | public | registered | complete | partial | reference | ready | none |
-| `rng_uniform` | random_source | public | public | registered | complete | partial | reference | ready | none |
+| `dropout` | random_mask | public | public | registered | complete | partial | fused | ready | none |
+| `rng_normal` | random_source | public | public | registered | complete | partial | fused | ready | none |
+| `rng_uniform` | random_source | public | public | registered | complete | partial | fused | ready | none |
 | `amax` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `amin` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `argmax` | reduction | public | public | registered | complete | partial | fused | ready | none |
@@ -353,8 +353,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| random_mask | 1 | PPGCpRN· |
-| random_source | 2 | PPGCpRN· PPGCpRN· |
+| random_mask | 1 | PPGCpFN· |
+| random_source | 2 | PPGCpFN· PPGCpFN· |
 | reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rotary_embedding | 1 | PPGCpFN· |

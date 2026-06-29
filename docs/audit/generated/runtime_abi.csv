@@ -611,6 +611,7 @@ x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend
 x86,tessera_x86_lu_f32,lu,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_moe_f32,moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp
 x86,tessera_x86_optimizer_f32,optimizer,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_optimizer_f32.cpp
+x86,tessera_x86_philox_uniform_f32,philox_uniform,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_philox_f32.cpp
 x86,tessera_x86_qr_f32,qr,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_reference_argreduce_f32,reference_argreduce,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_argreduce_f32.cpp
 x86,tessera_x86_reference_binary_f32,reference_binary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_binary_f32.cpp

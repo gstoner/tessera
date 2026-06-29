@@ -235,9 +235,9 @@ quantize_fp4,quantize,public,public,registered,complete,partial,fused,ready,none
 quantize_fp6,quantize,public,public,registered,complete,partial,fused,ready,none
 quantize_fp8,quantize,public,public,registered,complete,partial,fused,ready,none
 quantize_nvfp4,quantize,public,public,registered,complete,partial,fused,ready,none
-dropout,random_mask,public,public,registered,complete,partial,reference,ready,none
-rng_normal,random_source,public,public,registered,complete,partial,reference,ready,none
-rng_uniform,random_source,public,public,registered,complete,partial,reference,ready,none
+dropout,random_mask,public,public,registered,complete,partial,fused,ready,none
+rng_normal,random_source,public,public,registered,complete,partial,fused,ready,none
+rng_uniform,random_source,public,public,registered,complete,partial,fused,ready,none
 amax,reduction,public,public,registered,complete,partial,fused,ready,none
 amin,reduction,public,public,registered,complete,partial,fused,ready,none
 argmax,reduction,public,public,registered,complete,partial,fused,ready,none

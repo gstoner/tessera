@@ -5803,6 +5803,158 @@ def _execute_rocm_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_complex(artifact, args, "rocm", "rocm_complex_compiled")
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Device RNG (P6) — counter-based Philox-4x32-10. The device kernel generates the
+# uniform[0,1) bits (the RNG core, bit-exact vs tessera.rng_device); the host
+# applies the cheap distribution transform (uniform scale / Box-Muller normal /
+# dropout mask). A SEPARATE deterministic stream from tessera.rng (host
+# numpy-Generator). compiler_path="x86_rng_compiled" / "rocm_rng_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_RNG_OPS = ("tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout")
+
+
+def _rng_compute(op_name: str, operands: list, kwargs: dict,
+                 uniform_fn: Any, np: Any) -> Any:
+    """``uniform_fn(seed, counter_base, n)`` returns n device Philox uniforms in
+    [0,1). Host transforms mirror tessera.rng_device exactly."""
+    seed = int(kwargs.get("seed", 0))
+    cbase = int(kwargs.get("counter_base", 0))
+    if op_name == "tessera.dropout":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        p = float(kwargs.get("p", 0.5))
+        if not bool(kwargs.get("training", True)) or p <= 0.0:
+            return x.copy()
+        u = uniform_fn(seed, cbase, int(x.size)).reshape(x.shape)
+        scale = np.float32(0.0) if p >= 1.0 else np.float32(1.0 / (1.0 - p))
+        return (x * (u >= np.float32(p)).astype(np.float32) * scale).astype(
+            np.float32)
+    shape = tuple(int(d) for d in kwargs.get("shape", ()))
+    n = int(np.prod(shape)) if shape else 1
+    if op_name == "tessera.rng_uniform":
+        # Accept both the public-API names (lo/hi, used by tessera.ops.rng_uniform
+        # + the CPU reference) and the low/high aliases.
+        lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
+        hi = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        out = np.float32(lo) + np.float32(hi - lo) * uniform_fn(seed, cbase, n)
+        return out.reshape(shape).astype(np.float32)
+    # rng_normal — Box-Muller from two Philox halves (mirrors rng_device.normal)
+    mean = float(kwargs.get("mean", 0.0))
+    std = float(kwargs.get("std", 1.0))
+    m = (n + 1) // 2
+    u1 = np.clip(uniform_fn(seed, cbase, m), np.float32(1e-7), np.float32(1.0))
+    u2 = uniform_fn(seed, cbase + (m + 3) // 4 + 1, m)
+    r = np.sqrt(-2.0 * np.log(u1)).astype(np.float32)
+    theta = np.float32(2.0 * np.pi) * u2
+    z = np.empty(2 * m, np.float32)
+    z[0::2] = r * np.cos(theta)
+    z[1::2] = r * np.sin(theta)
+    return (np.float32(mean) + np.float32(std) * z[:n]).reshape(shape).astype(
+        np.float32)
+
+
+def _x86_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    out = np.zeros(int(n), np.float32)
+    lib.tessera_x86_philox_uniform_f32(
+        ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_int64(int(n)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    return out
+
+
+def _execute_rng(artifact: RuntimeArtifact, args: Any, uniform_fn: Any,
+                 path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _RNG_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_RNG_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _rng_compute(op_name, operands, ops[0].get("kwargs") or {},
+                        uniform_fn, np)
+
+
+def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
+    return _execute_rng(artifact, args, _x86_philox_uniform, "x86_rng_compiled")
+
+
+_rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_philox_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.philox"() {name = "ph"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-philox-kernel", directive, _rocm_philox_hsaco_cache,
+        (chip,))
+
+
+def _rocm_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
+    """n device Philox-4x32-10 uniforms in [0,1) on gfx1151 (compiler-generated
+    kernel, HIP-launched). Bit-identical to the x86 / numpy reference."""
+    import numpy as np
+    n = int(n)
+    hsaco = _build_compiled_philox_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm philox: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm philox: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"ph") != 0:
+        raise RuntimeError("rocm philox: kernel symbol 'ph' not found")
+    o = np.zeros(n, np.float32)
+    do = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(do), 4 * n) != 0:
+        raise RuntimeError("rocm philox: hipMalloc failed")
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    s = int(seed) & 0xFFFFFFFFFFFFFFFF
+    cb = int(counter_base) & 0xFFFFFFFFFFFFFFFF
+    launch_args = _mr(do, n) + [
+        ctypes.c_int64(n),
+        ctypes.c_uint32(s & 0xFFFFFFFF), ctypes.c_uint32((s >> 32) & 0xFFFFFFFF),
+        ctypes.c_uint32(cb & 0xFFFFFFFF), ctypes.c_uint32((cb >> 32) & 0xFFFFFFFF)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    nblocks = (n + 3) // 4
+    gx = (nblocks + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        hip.hipFree(do)
+        raise RuntimeError(f"rocm philox: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * n, 2)
+    hip.hipFree(do)
+    return o
+
+
+def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
+    return _execute_rng(artifact, args, _rocm_philox_uniform, "rocm_rng_compiled")
+
+
 # clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
 # may be None (one-sided). The scalar bound is broadcast to the input shape and
 # the elementwise max (lower) / min (upper) run on the device binary kernel — no
@@ -9808,6 +9960,7 @@ def _executor_table():
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_complex_compiled": _execute_x86_compiled_complex,
+        "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -9842,6 +9995,7 @@ def _executor_table():
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
+        "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,

@@ -1259,6 +1259,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_unary_compiled tanh kernel (scalar cap on host). "
                  "Executes via runtime.launch() (rocm_softcap_compiled).",
     },
+    # P6 — device RNG: counter-based Philox-4x32-10 (generate-rocm-philox-kernel)
+    # produces the uniform bits; host applies the distribution transform. A
+    # SEPARATE deterministic stream from the host numpy-Generator path.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("random",),
+        "notes": f"Standalone {op} — Philox-4x32-10 uniform RNG kernel "
+                 "(generate-rocm-philox-kernel) + host transform. Executes via "
+                 "runtime.launch() (rocm_rng_compiled).",
+    } for op in ("rng_uniform", "rng_normal", "dropout")},
     # P2e — atan2 composed on the gfx1151 unary atan lane (no new kernel;
     # quadrant/sign logic on host). Executes via rocm_atan2_compiled.
     "atan2": {
@@ -1536,6 +1546,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "complex_sqrt", "complex_pow")},
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "dropout")},
+    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "dropout")},
     ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
     ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
@@ -2110,6 +2124,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_transcendental_compiled AVX-512 tanh kernel "
                  "(scalar cap on host; matches cap*tanh(x/cap))",
     },
+    # P6 — device RNG: counter-based Philox-4x32-10 (tessera_x86_philox_uniform_f32)
+    # produces the uniform bits; host applies the distribution transform.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — Philox-4x32-10 uniform RNG kernel "
+                 "(tessera_x86_philox_uniform_f32, runtime-loaded) + host "
+                 "transform; x86_rng_compiled lane; bit-exact vs "
+                 "tessera.rng_device (a deterministic stream, distinct from the "
+                 "host numpy-Generator path)",
+    } for op in ("rng_uniform", "rng_normal", "dropout")},
     # P2e — atan2 composed on the AVX-512 transcendental atan kernel (no new
     # kernel; quadrant/sign logic on host; x86_atan2_compiled lane).
     "atan2": {

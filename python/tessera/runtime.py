@@ -6398,6 +6398,180 @@ def _execute_rocm_compiled_sort(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Geometric algebra / Clifford lane (P12) — the table-driven bilinear products
+# of Cl(3,0) (8 blades): geometric_product / wedge / left_contraction, plus
+# inner + rotor_sandwich by host composition. A multivector product is a
+# STRUCTURED BILINEAR FORM driven by a compile-time Cayley table:
+# out[k] = Σ sign·a[i]·b[j]. x86 lane: tessera_x86_clifford_bilinear_f32
+# (blade-major [8,n]; AVX-512 FMA over the batch). ROCm lane: the
+# COMPILER-GENERATED kernel (generate-rocm-clifford-kernel; one thread per batch
+# element; triples unrolled at generation time). f32, matches the numpy GA
+# reference. compiler_path="x86_clifford_compiled" / "rocm_clifford_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_CLIFFORD_OPS = ("clifford_geometric_product", "clifford_wedge",
+                 "clifford_left_contraction", "clifford_inner",
+                 "clifford_rotor_sandwich")
+_CLIFFORD_KIND = {"clifford_geometric_product": 0, "clifford_wedge": 1,
+                  "clifford_left_contraction": 2}
+
+
+def _clifford_reverse(a: Any, np: Any) -> Any:
+    """Cl(3,0) reversion a† — blade of grade g picks up sign (-1)^(g(g-1)/2)
+    (blade signs by index: +,+,+,-,+,-,-,-). Cheap host sign-flip."""
+    s = np.array([1, 1, 1, -1, 1, -1, -1, -1], np.float32)
+    return (np.ascontiguousarray(a, np.float32) * s).astype(np.float32)
+
+
+def _clifford_bcast(a: Any, b: Any, np: Any) -> tuple:
+    a = np.ascontiguousarray(a, np.float32)
+    b = np.ascontiguousarray(b, np.float32)
+    if a.shape[-1] != 8 or b.shape[-1] != 8:
+        raise ValueError(f"clifford: Cl(3,0) inputs must be (...,8); "
+                         f"got {a.shape}, {b.shape}")
+    shp = np.broadcast_shapes(a.shape[:-1], b.shape[:-1])
+    a = np.ascontiguousarray(np.broadcast_to(a, shp + (8,)), np.float32)
+    b = np.ascontiguousarray(np.broadcast_to(b, shp + (8,)), np.float32)
+    return a, b, shp
+
+
+def _clifford_compute(op_name: str, operands: list, kwargs: dict, target: str,
+                      np: Any, bilinear: Any) -> Any:
+    if op_name in _CLIFFORD_KIND:
+        a, b, _ = _clifford_bcast(operands[0], operands[1], np)
+        return bilinear(a, b, _CLIFFORD_KIND[op_name], np)
+    if op_name == "clifford_inner":
+        a, b, _ = _clifford_bcast(operands[0], operands[1], np)
+        gp = bilinear(a, _clifford_reverse(b, np), 0, np)   # <a * b†>_0
+        return np.ascontiguousarray(gp[..., 0], np.float32)
+    if op_name == "clifford_rotor_sandwich":
+        r, x, _ = _clifford_bcast(operands[0], operands[1], np)
+        rx = bilinear(r, x, 0, np)                          # R x
+        return bilinear(rx, _clifford_reverse(r, np), 0, np)  # (R x) R†
+    raise ValueError(f"clifford executor: unknown op {op_name!r}")
+
+
+def _x86_clifford_bilinear(a: Any, b: Any, kind: int, np: Any) -> Any:
+    """Cl(3,0) bilinear product on the AVX-512 kernel (blade-major [8,n])."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_clifford_bilinear_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_clifford_bilinear_f32 missing")
+    shp = a.shape[:-1]
+    a2 = a.reshape(-1, 8)
+    b2 = b.reshape(-1, 8)
+    n = int(a2.shape[0])
+    am = np.ascontiguousarray(a2.T, np.float32)   # [8, n] blade-major
+    bm = np.ascontiguousarray(b2.T, np.float32)
+    out = np.zeros((8, n), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(am.ctypes.data_as(cf), bm.ctypes.data_as(cf), ctypes.c_int64(n),
+       ctypes.c_int(kind), out.ctypes.data_as(cf))
+    return np.ascontiguousarray(out.T.reshape(shp + (8,)), np.float32)
+
+
+def _execute_clifford(artifact: RuntimeArtifact, args: Any, target: str,
+                      path: str, bilinear: Any) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CLIFFORD_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_CLIFFORD_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _clifford_compute(op_name, operands, ops[0].get("kwargs") or {},
+                             target, np, bilinear)
+
+
+def _execute_x86_compiled_clifford(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` GA lane (geometric_product / wedge / lc / inner /
+    rotor_sandwich on Cl(3,0))."""
+    return _execute_clifford(artifact, args, "x86", "x86_clifford_compiled",
+                             _x86_clifford_bilinear)
+
+
+_rocm_clifford_hsaco_cache: dict[tuple[str, int], bytes] = {}
+_CLIFFORD_KIND_NAME = {0: "geometric_product", 1: "wedge",
+                       2: "left_contraction"}
+
+
+def _build_compiled_clifford_hsaco(kind: int) -> bytes:
+    chip = _rocm_chip()
+    kname = _CLIFFORD_KIND_NAME[kind]
+    directive = ('module {\n  "tessera_rocm.clifford"() '
+                 f'{{name = "c", kind = "{kname}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-clifford-kernel", directive, _rocm_clifford_hsaco_cache,
+        (chip, kind))
+
+
+def _rocm_clifford_bilinear(a: Any, b: Any, kind: int, np: Any) -> Any:
+    """Cl(3,0) bilinear product on gfx1151 via the compiler-generated kernel
+    (batch-major [n,8]; one thread per batch element)."""
+    shp = a.shape[:-1]
+    a2 = np.ascontiguousarray(a.reshape(-1, 8), np.float32)
+    b2 = np.ascontiguousarray(b.reshape(-1, 8), np.float32)
+    n = int(a2.shape[0])
+    flat = n * 8
+    hsaco = _build_compiled_clifford_hsaco(kind)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm clifford: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm clifford: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"c") != 0:
+        raise RuntimeError("rocm clifford: kernel symbol 'c' not found")
+    cv = ctypes.c_void_p
+    d_a, d_b, d_o = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_a), max(4 * flat, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_b), max(4 * flat, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * flat, 4)) != 0):
+        raise RuntimeError("rocm clifford: hipMalloc failed")
+    hip.hipMemcpy(d_a, a2.ctypes.data_as(cv), 4 * flat, 1)
+    hip.hipMemcpy(d_b, b2.ctypes.data_as(cv), 4 * flat, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_a, flat) + _mr(d_b, flat) + [ctypes.c_int64(n)]
+                   + _mr(d_o, flat))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_a, d_b, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm clifford: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros((n, 8), np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * flat, 2)
+    for d in (d_a, d_b, d_o):
+        hip.hipFree(d)
+    return np.ascontiguousarray(out.reshape(shp + (8,)), np.float32)
+
+
+def _execute_rocm_compiled_clifford(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` GA lane (geometric_product / wedge / lc / inner /
+    rotor_sandwich on Cl(3,0))."""
+    return _execute_clifford(artifact, args, "rocm", "rocm_clifford_compiled",
+                             _rocm_clifford_bilinear)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
 # may be None (one-sided). The scalar bound is broadcast to the input shape and
 # the elementwise max (lower) / min (upper) run on the device binary kernel — no
@@ -10407,6 +10581,7 @@ def _executor_table():
         "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_strided_compiled": _execute_x86_compiled_strided,
         "x86_sort_compiled": _execute_x86_compiled_sort,
+        "x86_clifford_compiled": _execute_x86_compiled_clifford,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -10445,6 +10620,7 @@ def _executor_table():
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
         "rocm_sort_compiled": _execute_rocm_compiled_sort,
+        "rocm_clifford_compiled": _execute_rocm_compiled_clifford,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,

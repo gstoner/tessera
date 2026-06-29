@@ -60,6 +60,13 @@ EXPECTED_CLIFFORD_OPS = {
 
 HEADLINE_OPS = {"clifford_geometric_product", "clifford_rotor_sandwich"}
 
+# P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops that now ship a native x86 +
+# ROCm device lane (table-driven Cl(3,0) bilinear products). For these, x86 is
+# `fused` and ROCm is `compiled` rather than reference / Phase-H-planned.
+DEVICE_COMPILED_OPS = set(bm._CLIFFORD_DEVICE_COMPILED)
+# The ops still on the reference / planned path (exp/log, grade/norm, diff-geo).
+REFERENCE_ONLY_OPS = EXPECTED_CLIFFORD_OPS - DEVICE_COMPILED_OPS
+
 
 def test_seventeen_clifford_ops_have_manifest_entries() -> None:
     assert set(bm._CLIFFORD_PRIMITIVES) == EXPECTED_CLIFFORD_OPS
@@ -78,13 +85,33 @@ def test_each_clifford_op_has_five_backend_entries(op_name: str) -> None:
 # Per-target status checks
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
+@pytest.mark.parametrize("op_name", sorted(REFERENCE_ONLY_OPS))
 def test_cpu_targets_carry_reference_status(op_name: str) -> None:
-    """x86 and apple_cpu run the Python GA reference path — v1 execution."""
+    """x86 and apple_cpu run the Python GA reference path — v1 execution.
+    (The P12 device-lane ops carry x86=fused; see
+    test_device_compiled_ops_carry_native_lane.)"""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["x86"].status == "reference"
     assert by_target["apple_cpu"].status == "reference"
+
+
+@pytest.mark.parametrize("op_name", sorted(DEVICE_COMPILED_OPS))
+def test_device_compiled_ops_carry_native_lane(op_name: str) -> None:
+    """P12 — the table-driven Cl(3,0) bilinear products ship a native x86
+    (fused, AVX-512) + ROCm (compiled, generated) lane; apple_cpu stays on
+    the Python reference. ROCm `compiled` carries the numerical fixture."""
+    manifest = bm.clifford_manifest_for(op_name)
+    by_target = {e.target: e for e in manifest}
+    assert by_target["x86"].status == "fused"
+    assert by_target["apple_cpu"].status == "reference"
+    assert by_target["rocm"].status == "compiled"
+    assert by_target["rocm"].execute_compare_fixture == (
+        "tests/unit/test_rocm_clifford_compiled.py")
+    assert by_target["x86"].execute_compare_fixture == (
+        "tests/unit/test_x86_clifford_compiled.py")
+    assert by_target["x86"].dtypes == ("fp32",)
+    assert by_target["rocm"].dtypes == ("fp32",)
 
 
 # Restrict to the 17 GA *primitives* — _CLIFFORD_APPLE_GPU_FUSED also carries
@@ -117,11 +144,13 @@ def test_fused_apple_gpu_status_for_all_seventeen_ops(op_name: str) -> None:
 
 @pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
 def test_nvidia_and_rocm_remain_planned(op_name: str) -> None:
-    """NVIDIA / ROCm gated on Phase G/H."""
+    """NVIDIA gated on Phase G for all GA ops; ROCm gated on Phase H except the
+    P12 device-lane ops (which ship a `compiled` ROCm kernel)."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
     assert by_target["nvidia_sm90"].status == "planned"
-    assert by_target["rocm"].status == "planned"
+    expected_rocm = "compiled" if op_name in DEVICE_COMPILED_OPS else "planned"
+    assert by_target["rocm"].status == expected_rocm
 
 
 # ---------------------------------------------------------------------------
@@ -170,10 +199,15 @@ def test_non_headline_fused_ops_fp32_only(op_name: str) -> None:
 
 @pytest.mark.parametrize("op_name", sorted(EXPECTED_CLIFFORD_OPS))
 def test_cpu_targets_carry_fp32_fp64(op_name: str) -> None:
-    """The Python GA ops accept fp32 + fp64 — manifest mirrors that."""
+    """The Python GA ops accept fp32 + fp64 — manifest mirrors that. The P12
+    device-lane ops are fp32-only on x86 (the AVX-512 kernel is f32); apple_cpu
+    keeps the fp32+fp64 reference."""
     manifest = bm.clifford_manifest_for(op_name)
     by_target = {e.target: e for e in manifest}
-    assert by_target["x86"].dtypes == ("fp32", "fp64")
+    if op_name in DEVICE_COMPILED_OPS:
+        assert by_target["x86"].dtypes == ("fp32",)
+    else:
+        assert by_target["x86"].dtypes == ("fp32", "fp64")
     assert by_target["apple_cpu"].dtypes == ("fp32", "fp64")
 
 
@@ -312,7 +346,8 @@ def test_headline_apple_gpu_entry_documents_all_three_dtype_kernels() -> None:
 
 
 def test_cpu_entries_document_python_reference_path() -> None:
-    manifest = bm.clifford_manifest_for("clifford_geometric_product")
+    # clifford_reverse stays on the reference path (not a P12 device-lane op).
+    manifest = bm.clifford_manifest_for("clifford_reverse")
     x86 = next(e for e in manifest if e.target == "x86")
     assert "Python GA reference" in x86.notes
     assert "GA8" in x86.notes  # references the GA8 lowering pass
@@ -325,7 +360,8 @@ def test_nvidia_entry_documents_phase_g_gating() -> None:
 
 
 def test_rocm_entry_documents_phase_h_gating() -> None:
-    manifest = bm.clifford_manifest_for("clifford_geometric_product")
+    # clifford_reverse stays Phase-H-gated (not a P12 device-lane op).
+    manifest = bm.clifford_manifest_for("clifford_reverse")
     rocm = next(e for e in manifest if e.target == "rocm")
     assert "Phase H" in rocm.notes
 

@@ -185,6 +185,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_sort_compiled": "x86 CPU sort lane — sort/argsort/top_k via the "
                          "AVX-512 bitonic sort network kernel (key+index; "
                          "host pads to a power of two + flips). f32",
+    "x86_clifford_compiled": "x86 CPU geometric-algebra lane — Cl(3,0) "
+                             "geometric_product/wedge/left_contraction/inner/"
+                             "rotor_sandwich via the AVX-512 table-driven "
+                             "bilinear kernel (compile-time Cayley table). f32",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -258,6 +262,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_sort_compiled": "AMD GPU RDNA sort lane — sort/argsort/top_k via the "
                           "COMPILER-GENERATED cooperative bitonic kernel "
                           "(one block per row; host pads + flips). f32",
+    "rocm_clifford_compiled": "AMD GPU RDNA geometric-algebra lane — Cl(3,0) "
+                              "geometric_product/wedge/left_contraction/inner/"
+                              "rotor_sandwich via the COMPILER-GENERATED "
+                              "table-driven bilinear kernel "
+                              "(triples unrolled at generation time). f32",
     "rocm_rng_compiled": "AMD GPU RDNA device RNG — COMPILER-GENERATED gfx1151 "
                             "Philox-4x32-10 uniform kernel + host transform "
                             "(uniform/normal/dropout). f32",
@@ -1016,6 +1025,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "compare-exchange; host pads each row to a power of two and "
                "flips for descending). f32, matches numpy.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_clifford_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_clifford_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_clifford_compiled", runtime_status="success",
+        reason="x86 GA lane runs the Cl(3,0) table-driven bilinear products "
+               "(geometric_product/wedge/left_contraction, + inner/"
+               "rotor_sandwich by composition) on the AVX-512 kernel "
+               "(blade-major [8,n]; compile-time Cayley table). f32, matches "
+               "the numpy GA reference.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1294,6 +1313,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(generate-rocm-sort-kernel; one block per row; host pads each "
                "row to a power of two and flips for descending). f32, matches "
                "numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_clifford_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_clifford_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_clifford_compiled", runtime_status="success",
+        reason="ROCm GA lane runs the Cl(3,0) table-driven bilinear products "
+               "(geometric_product/wedge/left_contraction, + inner/"
+               "rotor_sandwich by composition) on the COMPILER-GENERATED "
+               "gfx1151 kernel (generate-rocm-clifford-kernel; one thread per "
+               "batch element; triples unrolled at generation time). f32, "
+               "matches the numpy GA reference.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_atan2_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_atan2_compiled",

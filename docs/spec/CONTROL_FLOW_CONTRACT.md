@@ -7,6 +7,9 @@ last_updated: 2026-06-29
 
 <!-- CF1 (2026-06-29): trace-time carry/branch dtype contract + verifier lit
      coverage; pytree-carry tracing carved out to CF1b. -->
+<!-- CF2 (2026-06-29): control_for → scf.for lowering (LowerControlFlowToSCFPass);
+     the legacy all-carried form becomes multi-iter_args scf.for, where pytree
+     carries fold in. control_if/while + pipeline wiring → CF2b/CF3/CF4. -->
 
 
 # Control-Flow Contract (CF0)
@@ -213,10 +216,16 @@ claim.
   if-payload symmetry (`tests/tessera-ir/control_flow/cf1_control_verifiers.mlir`).
 - **CF1b** — pytree-carry tracing (multi-operand control ops + flatten/unflatten
   + `execute_traced` plumbing); optional `tessera.control.yield` helper.
-- **CF2** — Schedule/Tile lowering shared by CUDA/ROCm: static-trip loops with
-  explicit carry buffers; `while` → bounded loop + device predicate +
-  `actual_steps`; `cond` → predicated regions. One backend launch per loop
-  wrapper, not one per iteration.
+- **CF2** *(in progress)* — portable, hardware-free lowering shared by
+  CUDA/ROCm. **Done:** `control_for` → `scf.for` carrying state in `iter_args`
+  (`LowerControlFlowToSCFPass`, `--tessera-control-flow-to-scf`), the body kept
+  as a `func.call @body`; one `scf.for` wrapper, not one launch per iteration.
+  The legacy all-carried form becomes a **multi-`iter_args`** `scf.for` — where
+  **pytree carries fold in** (the CF1b front-end work then just has to flatten a
+  pytree carry into the operand list this lowering already threads). Runs before
+  the CF0 guard, so a lowered loop never trips it. **CF2b:** `control_if` →
+  `scf.if`, `control_while` → bounded `scf.while` + `actual_steps`; wiring into
+  the executable CUDA/ROCm pipelines (with downstream `scf` handling).
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

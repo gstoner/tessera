@@ -89,6 +89,9 @@ void registerTesseraPasses() {
   // pipelines below). Standalone form names the target via the `target` option.
   ::mlir::registerPass([]() { return createControlFlowTargetGuardPass(); });
 
+  // ── CF2 — control-flow → scf lowering (control_for → scf.for).
+  ::mlir::registerPass([]() { return createLowerControlFlowToSCFPass(); });
+
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):

@@ -276,6 +276,16 @@ std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
 std::unique_ptr<mlir::Pass>
 createControlFlowTargetGuardPass(llvm::StringRef target = "this backend");
 
+// ── CF2 — LowerControlFlowToSCFPass ──────────────────────────────────────
+// Lowers the Graph IR bounded loop tessera.control_for to a standard scf.for
+// carrying state in iter_args (body kept as a func.call) — the portable,
+// hardware-free first step of the CUDA/ROCm control-flow path so the loop
+// codegens as one wrapper, not one launch per iteration. The legacy all-carried
+// form becomes a multi-iter_args scf.for (where pytree carries fold in).
+// control_if/while → CF2b. See docs/spec/CONTROL_FLOW_CONTRACT.md. Standalone:
+// `--tessera-control-flow-to-scf`.
+std::unique_ptr<mlir::Pass> createLowerControlFlowToSCFPass();
+
 // ── 2026-06-23 — TileBarrierReuseLegalityPass (C2, TIRx review) ──────────
 // "Barriers are a layout-reuse correctness property." For a buffer carrying the
 // C1 #tile.layout attribute, two writes to overlapping storage-axis (m/tlane/

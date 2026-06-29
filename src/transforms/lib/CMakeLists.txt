@@ -20,6 +20,8 @@ add_library(TesseraPasses
 
   # CF0 — control-flow target guard (CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN)
   ControlFlowTargetGuardPass.cpp
+  # CF2 — control-flow → scf lowering (control_for → scf.for)
+  LowerControlFlowToSCFPass.cpp
 
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp

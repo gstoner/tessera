@@ -156,6 +156,15 @@ class TestFlashAttention:
                                        (2, 8, 512, 64))
         assert out == (2, 8, 128, 64)  # output seq = Q seq
 
+    def test_distinct_value_width(self, engine):
+        """V's value width may differ from the QK head dim (MLA
+        v_head_dim != qk_head_dim): output = Q[:-1] + V[-1:]."""
+        out = engine.infer_flash_attn((2, 8, 128, 64),   # Q: qk dim 64
+                                       (2, 8, 512, 64),   # K: qk dim 64
+                                       (2, 8, 512, 96))   # V: value dim 96
+        assert out == (2, 8, 128, 96)
+        assert not engine.reporter.has_errors()
+
 
 # ---------------------------------------------------------------------------
 # Graph inference

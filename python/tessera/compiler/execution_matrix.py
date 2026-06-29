@@ -337,6 +337,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "class-axis max/sum/gather/one-hot on the host, "
                             "leading-axis reduction on the reduce kernel. f32, "
                             "matches numpy 2e-4",
+    "x86_ebm_loss_compiled": "x86 CPU EBM/diffusion loss — score_matching / "
+                             "denoising / implicit / contrastive_divergence / "
+                             "persistent_cd / ddpm_noise_pred / vlb / "
+                             "load_balance: diff/square + reductions on the "
+                             "AVX-512 binary + reduce kernels, host structure. "
+                             "f32",
     "x86_rl_loss_compiled": "x86 CPU RL policy loss — ppo / cispo / grpo core "
                             "surrogate on the AVX-512 policy-loss kernel "
                             "(tessera_x86_avx512_policy_loss_f32, ratio=exp(ln-"
@@ -535,6 +541,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "on the rocm unary lane (gfx1151), class-axis "
                             "max/sum/gather/one-hot on the host. ROCm mirror of "
                             "x86_class_loss. f32",
+    "rocm_ebm_loss_compiled": "AMD GPU RDNA EBM/diffusion loss (score_matching / "
+                            "denoising / implicit / contrastive_divergence / "
+                            "persistent_cd / ddpm_noise_pred / vlb / "
+                            "load_balance) — diff/square + reductions on the "
+                            "gfx1151 binary + reduce kernels, host structure. "
+                            "ROCm mirror of x86_ebm_loss. f32",
     "rocm_fpquant_compiled": "AMD GPU RDNA low-precision float quantize "
                             "(quantize/dequantize fp8 / fp6 / fp4) — grid-snap on "
                             "generate-rocm-fpquant-kernel (log2/exp2/roundeven) + "
@@ -724,6 +736,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "transcendental kernel, class-axis max/sum/gather/one-hot on the "
                "host, leading-axis reduction on the reduce kernel. f32, "
                "numpy 2e-4.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_ebm_loss_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_ebm_loss_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_ebm_loss_compiled", runtime_status="success",
+        reason="x86 EBM/diffusion loss artifact runs score_matching / "
+               "denoising / implicit / contrastive_divergence / persistent_cd / "
+               "ddpm_noise_pred / vlb / load_balance: the diff/square and "
+               "reductions run on the AVX-512 binary + reduce kernels, the "
+               "cheap structure (argmax/one-hot/scalar scale) on the host. f32, "
+               "matches the numpy loss reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_rl_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rl_loss_compiled",
@@ -1560,6 +1583,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "label_smoothed_cross_entropy / z_loss: exp/log on the rocm unary "
                "lane (gfx1151), class-axis max/sum/gather/one-hot on the host. "
                "ROCm mirror of x86_class_loss. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_ebm_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_ebm_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_ebm_loss_compiled", runtime_status="success",
+        reason="ROCm EBM/diffusion loss artifact runs score_matching / "
+               "denoising / implicit / contrastive_divergence / persistent_cd / "
+               "ddpm_noise_pred / vlb / load_balance: the diff/square and "
+               "reductions run on the gfx1151 binary + reduce kernels, the "
+               "structure on the host. ROCm mirror of x86_ebm_loss. f32.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_fpquant_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_fpquant_compiled",

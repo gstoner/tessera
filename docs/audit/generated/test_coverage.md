@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3503** total Python-test references, **866** total lit-fixture references.
-- **98** ops have **zero** references in either test surface.
-- **141** ops have ≤1 reference ("thinly tested").
+- **3518** total Python-test references, **866** total lit-fixture references.
+- **96** ops have **zero** references in either test surface.
+- **136** ops have ≤1 reference ("thinly tested").
 - **87** ops have ≥10 references ("well tested").
 - **111** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **141** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **136** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -91,8 +91,6 @@ These **141** ops have at most one test reference across the whole test surface.
 | `dataset_shuffle` |    0 |    0 |    0 |
 | `dataset_zip` |    0 |    0 |    0 |
 | `dbar` |    0 |    0 |    0 |
-| `ddpm_noise_pred_loss` |    1 |    0 |    1 |
-| `denoising_score_matching_loss` |    1 |    0 |    1 |
 | `dynamic_slice` |    1 |    0 |    1 |
 | `dynamic_update_slice` |    1 |    0 |    1 |
 | `dz` |    0 |    0 |    0 |
@@ -104,8 +102,10 @@ These **141** ops have at most one test reference across the whole test surface.
 | `ebm_partition_ais` |    0 |    0 |    0 |
 | `ebm_partition_exact` |    0 |    0 |    0 |
 | `ebm_partition_monte_carlo` |    0 |    0 |    0 |
+| `ebm_self_verify` |    1 |    0 |    1 |
+| `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 
-_(81 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(76 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**141** ops have ≤1 direct test reference.  They break down as:
+**136** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   45 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
 | `structural_only`        |   90 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
@@ -147,7 +147,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 45 ops
+## `covered_by_family` — 40 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -170,11 +170,8 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
 | `cross_ratio` | category default for 'elementwise' |
 | `dbar` | exercised by complex differential tests |
-| `ddpm_noise_pred_loss` | category default for 'loss' |
-| `denoising_score_matching_loss` | category default for 'loss' |
 | `dz` | exercised by complex differential tests |
 | `ebm_decode_init` | scaffold for ebm decode tests |
-| `implicit_score_matching_loss` | category default for 'loss' |
 | `is_concyclic` | category default for 'elementwise' |
 | `mobius_from_three_points` | category default for 'elementwise' |
 | `persistent_cd_loss` | category default for 'loss' |
@@ -183,8 +180,11 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_categorical` | category default for 'rng' |
 | `rng_clone` | category default for 'rng' |
 | `rng_dirichlet` | category default for 'rng' |
+| `rng_fold_in` | category default for 'rng' |
+| `rng_gamma` | category default for 'rng' |
+| `rng_gibbs_sample` | category default for 'rng' |
 
-_(15 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(10 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
 ## `structural_only` — 90 ops
 

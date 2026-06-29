@@ -1027,6 +1027,19 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_class_loss_compiled).",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    # P7 — EBM / diffusion losses composed on the gfx1151 binary + reduce kernels
+    # (diff/square + reductions on device; host structure). Executes via
+    # rocm_ebm_loss_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"EBM/diffusion loss {op} — diff/square + reductions on the "
+                 "rocm binary + reduce kernels (host structure). Executes via "
+                 "runtime.launch() (rocm_ebm_loss_compiled).",
+    } for op in ("score_matching_loss", "denoising_score_matching_loss",
+                 "implicit_score_matching_loss", "contrastive_divergence_loss",
+                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
+                 "load_balance_loss")},
     # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
     # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
     **{op: {
@@ -1664,6 +1677,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_ebm_loss_compiled.py"
+       for op in ("score_matching_loss", "denoising_score_matching_loss",
+                  "implicit_score_matching_loss", "contrastive_divergence_loss",
+                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
+                  "load_balance_loss")},
     **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
@@ -1725,6 +1743,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_ebm_loss_compiled.py"
+       for op in ("score_matching_loss", "denoising_score_matching_loss",
+                  "implicit_score_matching_loss", "contrastive_divergence_loss",
+                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
+                  "load_balance_loss")},
     **{(op, "rocm"): "tests/unit/test_rocm_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
@@ -2468,6 +2491,19 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "matches numpy 2e-4)",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    # P7 — EBM / diffusion losses composed on the AVX-512 binary + reduce kernels
+    # (diff/square + reductions on device; argmax/one-hot/scalar scale on host;
+    # x86_ebm_loss_compiled lane). f32.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 EBM/diffusion loss {op} (diff/square + reductions on "
+                 "the binary + reduce kernels; host structure; "
+                 "x86_ebm_loss_compiled lane; f32, matches numpy)",
+    } for op in ("score_matching_loss", "denoising_score_matching_loss",
+                 "implicit_score_matching_loss", "contrastive_divergence_loss",
+                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
+                 "load_balance_loss")},
     # Low-precision float quantization — quantize/dequantize fp8/fp6/fp4 on the
     # AVX-512 fpquant kernel (per-tensor symmetric grid-snap, fake-quant in f32
     # storage; x86_fpquant_compiled). The lane is f32 in/out (the fpN grid is

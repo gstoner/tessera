@@ -198,22 +198,22 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `quantized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `cross_entropy_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
-| `denoising_score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
+| `denoising_score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `huber_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `implicit_score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `implicit_score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `js_divergence` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `kl_divergence` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `load_balance_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `load_balance_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `log_cosh_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `mae_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `mse_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `persistent_cd_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
-| `score_matching_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `persistent_cd_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
+| `score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `smooth_l1_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `vlb_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
+| `vlb_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `z_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | partial | fused | ready | none |
 | `moe` | moe | public | public | registered | complete | partial | fused | ready | none |
@@ -344,7 +344,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· |
-| loss | 19 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· |
+| loss | 19 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | model_layer | 1 | PPGCpFN· |
 | moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |

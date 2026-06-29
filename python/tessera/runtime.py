@@ -5614,6 +5614,142 @@ def _execute_x86_compiled_class_loss(artifact: RuntimeArtifact,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM + diffusion losses (P7) — score_matching / denoising_score_matching /
+# implicit_score_matching / contrastive_divergence / persistent_cd /
+# ddpm_noise_pred / vlb / load_balance. All are pre-computed-tensor losses that
+# COMPOSE on the device reduce + elementwise lanes (no new kernel): the
+# FLOP-heavy diff/square and the reductions run on the AVX-512 / gfx1151 binary +
+# reduce kernels (via _creal + _dev_reduce_*), with the cheap structure (argmax /
+# one-hot / scalar scale, the noise draw is the caller's) on the host. f32.
+# compiler_path="x86_ebm_loss_compiled" / "rocm_ebm_loss_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_EBM_LOSS_OPS = (
+    "tessera.loss.score_matching", "tessera.loss.denoising_score_matching",
+    "tessera.loss.implicit_score_matching", "tessera.loss.contrastive_divergence",
+    "tessera.loss.persistent_cd", "tessera.loss.ddpm_noise_pred",
+    "tessera.loss.vlb", "tessera.loss.load_balance",
+)
+
+
+def _dev_reduce_axis(x: Any, kind: str, axis: int, target: str, np: Any) -> Any:
+    """Sum/mean over one axis on the device reduce kernel."""
+    op = "tessera.sum" if kind == "sum" else "tessera.mean"
+    fn = _x86_reduce if target == "x86" else _rocm_reduce
+    return np.asarray(fn(np.ascontiguousarray(x, np.float32), op, axis, False,
+                         np), np.float32)
+
+
+def _dev_reduce_all(loss: Any, reduction: str, target: str, np: Any) -> Any:
+    """Apply none/mean/sum over ALL elements on the device reduce kernel."""
+    if reduction == "none":
+        return np.ascontiguousarray(loss, np.float32)
+    flat = np.ascontiguousarray(loss, np.float32).reshape(-1)
+    if target == "x86":
+        return _x86_reduce_scalar(flat, 0 if reduction == "sum" else 2, np)
+    r = _dev_reduce_axis(flat.reshape(1, -1), "sum" if reduction == "sum"
+                         else "mean", 1, target, np)
+    return np.float32(np.asarray(r).reshape(()))
+
+
+def _ebm_loss_compute(op_name: str, operands: list, kwargs: dict, target: str,
+                      np: Any) -> Any:
+    red = str(kwargs.get("reduction", "mean"))
+    if red not in ("none", "mean", "sum"):
+        raise ValueError(f"loss reduction must be none/mean/sum; got {red}")
+    ops = [np.ascontiguousarray(o, np.float32) for o in operands]
+
+    def sub(a: Any, b: Any) -> Any:
+        return _creal("sub", target, np, a, b)
+
+    def mul(a: Any, b: Any) -> Any:
+        return _creal("mul", target, np, a, b)
+
+    if op_name == "tessera.loss.ddpm_noise_pred":          # mse(pred, true)
+        d = sub(ops[0], ops[1])
+        return _dev_reduce_all(mul(d, d), red, target, np)
+
+    if op_name == "tessera.loss.score_matching":           # ½·mse(score, target)
+        d = sub(ops[0], ops[1])
+        out = _dev_reduce_all(mul(d, d), red, target, np)
+        return (np.float32(0.5) * np.asarray(out, np.float32)).astype(np.float32)
+
+    if op_name in ("tessera.loss.contrastive_divergence",
+                   "tessera.loss.persistent_cd"):          # reduce(E⁺ − E⁻)
+        return _dev_reduce_all(sub(ops[0], ops[1]), red, target, np)
+
+    if op_name == "tessera.loss.vlb":                      # reduce(terms)
+        return _dev_reduce_all(ops[0], red, target, np)
+
+    if op_name == "tessera.loss.implicit_score_matching":
+        # per-sample ½‖s‖² + div, then reduce.
+        sq = mul(ops[0], ops[0])
+        sumsq = _dev_reduce_axis(sq, "sum", -1, target, np)
+        persample = (np.float32(0.5) * sumsq + ops[1]).astype(np.float32)
+        return _dev_reduce_all(persample, red, target, np)
+
+    if op_name == "tessera.loss.denoising_score_matching":
+        # target = -(ỹ − y)/σ²; per-sample ½‖s − target‖² (sum over D); reduce.
+        sigma = float(kwargs.get("sigma", 0.0))
+        if sigma <= 0.0:
+            raise ValueError(
+                f"denoising_score_matching requires sigma > 0; got {sigma}")
+        s, yc, yn = ops[0], ops[1], ops[2]
+        tgt = (np.float32(-1.0) / np.float32(sigma * sigma)
+               * np.asarray(sub(yn, yc), np.float32)).astype(np.float32)
+        d = sub(s, tgt)
+        persample = (np.float32(0.5)
+                     * _dev_reduce_axis(mul(d, d), "sum", -1, target, np))
+        return _dev_reduce_all(persample.astype(np.float32), red, target, np)
+
+    if op_name == "tessera.loss.load_balance":
+        # Switch-Transformer aux: E·Σ_e f_e·P_e (f = routed fraction, P = mean
+        # prob). argmax / one-hot on host; the token-axis means + Σ on device.
+        p = ops[0]
+        n_experts = int(p.shape[-1])
+        assignment = kwargs.get("assignment")
+        if assignment is not None:
+            idx = np.asarray(assignment, np.int64)
+        else:
+            idx = np.argmax(p, axis=-1)
+        one_hot = np.eye(n_experts, dtype=np.float32)[idx]
+        f = _dev_reduce_axis(one_hot, "mean", -2, target, np)
+        P = _dev_reduce_axis(p, "mean", -2, target, np)
+        aux = (np.float32(n_experts)
+               * _dev_reduce_axis(mul(f, P), "sum", -1, target, np))
+        return _dev_reduce_all(aux.astype(np.float32), red, target, np)
+
+    raise ValueError(f"ebm_loss executor: unknown op {op_name!r}")
+
+
+def _execute_ebm_loss(artifact: RuntimeArtifact, args: Any, target: str,
+                      path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _EBM_LOSS_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_EBM_LOSS_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _ebm_loss_compute(op_name, operands, ops[0].get("kwargs") or {},
+                             target, np)
+
+
+def _execute_x86_compiled_ebm_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` EBM / diffusion loss lane."""
+    return _execute_ebm_loss(artifact, args, "x86", "x86_ebm_loss_compiled")
+
+
+def _execute_rocm_compiled_ebm_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` EBM / diffusion loss lane."""
+    return _execute_ebm_loss(artifact, args, "rocm", "rocm_ebm_loss_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the
@@ -10957,6 +11093,7 @@ def _executor_table():
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
+        "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
         "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
@@ -10973,6 +11110,7 @@ def _executor_table():
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
+        "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,

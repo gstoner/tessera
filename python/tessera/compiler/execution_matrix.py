@@ -182,6 +182,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_conformal_compiled": "x86 CPU conformal lane — mobius (az+b)/(cz+d) "
                               "on the AVX-512 complex mul/div lane, "
                               "stereographic on the binary div lane. f32",
+    "x86_sort_compiled": "x86 CPU sort lane — sort/argsort/top_k via the "
+                         "AVX-512 bitonic sort network kernel (key+index; "
+                         "host pads to a power of two + flips). f32",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -252,6 +255,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_conformal_compiled": "AMD GPU RDNA conformal lane — mobius "
                                "(az+b)/(cz+d) on the gfx1151 complex mul/div "
                                "lane, stereographic on the binary div lane. f32",
+    "rocm_sort_compiled": "AMD GPU RDNA sort lane — sort/argsort/top_k via the "
+                          "COMPILER-GENERATED cooperative bitonic kernel "
+                          "(one block per row; host pads + flips). f32",
     "rocm_rng_compiled": "AMD GPU RDNA device RNG — COMPILER-GENERATED gfx1151 "
                             "Philox-4x32-10 uniform kernel + host transform "
                             "(uniform/normal/dropout). f32",
@@ -1001,6 +1007,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "binary div lane (host orchestration). f32, matches "
                "tessera.complex.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_sort_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_sort_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_sort_compiled", runtime_status="success",
+        reason="x86 sort lane runs sort/argsort/top_k via the AVX-512 bitonic "
+               "sort network kernel (data-independent key+index "
+               "compare-exchange; host pads each row to a power of two and "
+               "flips for descending). f32, matches numpy.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1269,6 +1284,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "complex mul/div lane and stereographic (x+iy)/(1-z) on the "
                "binary div lane (host orchestration). f32, matches "
                "tessera.complex.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_sort_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_sort_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_sort_compiled", runtime_status="success",
+        reason="ROCm sort lane runs sort/argsort/top_k via the "
+               "COMPILER-GENERATED cooperative bitonic kernel "
+               "(generate-rocm-sort-kernel; one block per row; host pads each "
+               "row to a power of two and flips for descending). f32, matches "
+               "numpy.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_atan2_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_atan2_compiled",

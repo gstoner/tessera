@@ -1269,6 +1269,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "masked-gather kernel (generate-rocm-gather-kernel; host index "
                  "map). Executes via runtime.launch() (rocm_strided_compiled).",
     } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    # P9 — sort / argsort / top_k via the COMPILER-GENERATED cooperative bitonic
+    # kernel (generate-rocm-sort-kernel, one block per row; host pads/flips).
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("data_movement",),
+        "notes": f"Standalone {op} — data-independent bitonic sort network "
+                 "(generate-rocm-sort-kernel; one block per row; host pads to a "
+                 "power of two + flips for descending). Executes via "
+                 "runtime.launch() (rocm_sort_compiled).",
+    } for op in ("sort", "argsort", "top_k")},
     # P5 — conformal geometry: mobius / stereographic composed on the gfx1151
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
     **{op: {
@@ -1577,6 +1587,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("mobius", "stereographic")},
     **{(op, "rocm"): "tests/unit/test_rocm_conformal_compiled.py"
        for op in ("mobius", "stereographic")},
+    **{(op, "x86"): "tests/unit/test_x86_sort_compiled.py"
+       for op in ("sort", "argsort", "top_k")},
+    **{(op, "rocm"): "tests/unit/test_rocm_sort_compiled.py"
+       for op in ("sort", "argsort", "top_k")},
     ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
     ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
@@ -2160,6 +2174,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernel (tessera_x86_gather_f32, runtime-loaded; host index "
                  "map; x86_strided_compiled lane; f32, matches numpy)",
     } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    # P9 — sort / argsort / top_k via the AVX-512 bitonic sort network kernel
+    # (tessera_x86_bitonic_sort_kv_f32; host pads to a power of two + flips).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — data-independent bitonic sort network "
+                 "(tessera_x86_bitonic_sort_kv_f32, runtime-loaded; AVX-512 wide "
+                 "stages + scalar tail; host pads to a power of two + flips for "
+                 "descending; x86_sort_compiled lane; f32, matches numpy)",
+    } for op in ("sort", "argsort", "top_k")},
     # P5 — conformal geometry: mobius / stereographic composed on the AVX-512
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
     **{op: {

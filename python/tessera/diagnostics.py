@@ -704,8 +704,13 @@ class ShapeInferenceEngine:
         op_name: str = "tessera.flash_attn",
     ) -> Optional[tuple]:
         """
-        Infer output of flash attention: output has same shape as Q.
-        Validates (B, H, S, D) layout and K/V sequence lengths match.
+        Infer output of flash attention: output is ``Q[:-1] + V[-1:]``.
+
+        The output takes Q's batch / heads / query-length and **V's value
+        width** — the value width may differ from the QK head dim (MLA configs
+        with ``v_head_dim != qk_head_dim``), so the output is not simply Q.
+        Validates (B, H, S, D) layout, K/V sequence lengths, and that K shares
+        Q's head dim (the QK score dot).
         """
         Q, K, V = tuple(q_shape), tuple(k_shape), tuple(v_shape)
         for name, shape in [("Q", Q), ("K", K), ("V", V)]:
@@ -727,7 +732,8 @@ class ShapeInferenceEngine:
                 op_name=op_name,
             )
             return None
-        return Q  # output has same shape as Q
+        # Output width is V's value dim (may differ from the QK head dim).
+        return Q[:3] + (V[3],)
 
     # ------------------------------------------------------------------
     # Batch inference

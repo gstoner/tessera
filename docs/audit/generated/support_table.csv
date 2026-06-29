@@ -286,8 +286,8 @@ selective_ssm,state_space,public,public,registered,complete,partial,fused,ready,
 kv_cache_append,state_update,public,public,registered,complete,partial,reference,ready,none
 kv_cache_prune,state_update,public,public,registered,complete,partial,reference,ready,none
 kv_cache_read,state_update,public,public,registered,complete,partial,fused,ready,none
-conv2d,stencil,public,public,registered,complete,partial,reference,ready,benchmarked
-conv3d,stencil,public,public,registered,complete,partial,reference,ready,none
+conv2d,stencil,public,public,registered,complete,partial,fused,ready,benchmarked
+conv3d,stencil,public,public,registered,complete,partial,fused,ready,none
 check_cauchy_riemann,visual_complex,public,public,registered,complete,partial,reference,ready,none
 complex_abs,visual_complex,public,public,registered,complete,partial,fused,ready,none
 complex_arg,visual_complex,public,public,registered,complete,partial,fused,ready,none

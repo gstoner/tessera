@@ -195,6 +195,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_mla_compiled": "x86 CPU MLA latent-KV lane — DeepSeek "
                         "latent_kv_compress/expand_k/expand_v/mla_decode_fused "
                         "composed on the AVX-512 GEMM + flash_attn lanes. f32",
+    "x86_conv_compiled": "x86 CPU convolution lane — conv2d/conv3d via im2col "
+                         "(host) + the AVX-512 f32 GEMM (device); bias/groups "
+                         "on host. f32",
+    "rocm_conv_compiled": "AMD GPU RDNA convolution lane — conv2d/conv3d via "
+                          "im2col (host) + the COMPILER-GENERATED WMMA GEMM "
+                          "(f16/bf16 storage, f32 accumulate). f16",
     "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
                             "scatter_reduce (0-reduce indexed store) via the "
                             "AVX-512 row-scatter kernel. f32",
@@ -1138,6 +1144,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "compress→expand→flash_attn). f32, matches the numpy MLA "
                "reference.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_conv_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_conv_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_conv_compiled", runtime_status="success",
+        reason="x86 convolution lane runs conv2d/conv3d as im2col + a GEMM: the "
+               "host lays out the NHWC/NDHWC patch matrix (shape arithmetic "
+               "only), the FLOP-heavy GEMM runs on the AVX-512 f32 kernel, and "
+               "bias / groups / activation finish on the host. f32, matches the "
+               "conv reference.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1730,6 +1746,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "runtime — batched_gemm, linear_general, qkv_projection, "
                "factorized_matmul (GPU matmul + exact host SVD-truncate), and "
                "single-contraction einsum. f16/bf16, f32 accumulate.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_conv_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_conv_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_conv_compiled", runtime_status="success",
+        reason="ROCm convolution lane runs conv2d/conv3d as im2col + the "
+               "COMPILER-GENERATED WMMA GEMM: the host lays out the NHWC/NDHWC "
+               "patch matrix, the GEMM runs on the gfx1151 WMMA kernel (f16/bf16 "
+               "storage, f32 accumulate), bias/groups on the host. Matches the "
+               "conv reference to WMMA f16 tolerance.",
         execution_mode="hip_runtime"),
     # Exotic-attention compositions — gated_attention / mla_decode /
     # mla_decode_fused on the WMMA flash_attn + GEMM kernels. vs numpy.

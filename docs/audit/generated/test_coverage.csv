@@ -97,8 +97,8 @@ constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
 contrastive_divergence_loss,4,0,0,4,0,,directly_tested,4 direct test references
 contrastive_loss,5,0,0,5,0,,directly_tested,5 direct test references
 conv1d,2,0,0,2,0,,directly_tested,2 direct test references
-conv2d,11,2,0,13,0,bf16 f16 f32 fp16 fp32,directly_tested,13 direct test references
-conv3d,8,0,0,8,0,,directly_tested,8 direct test references
+conv2d,17,2,0,19,0,bf16 f16 f32 fp16 fp32,directly_tested,19 direct test references
+conv3d,10,0,0,10,0,,directly_tested,10 direct test references
 conv_transpose,3,0,0,3,0,,directly_tested,3 direct test references
 cos,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 cosh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references

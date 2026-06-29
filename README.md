@@ -107,36 +107,31 @@ source of truth for exact counts and executable lanes:
 | Distributed and training APIs | implemented / mock-runtime | DDP/FSDP, collectives, sharding, MoE/MegaMoE, optimizers, losses, and RL policy losses are usable through Python/reference and mock collectives; real NCCL/RCCL execution remains backend-gated. |
 | Standalone S-series contracts | implemented / planned | 474 primitive entries are tracked. `lowering_rule` is closed project-wide, while 467 `backend_kernel` rows remain open by design until backend-specific proof lands. |
 | Mathematical and model IR surfaces | implemented / lit-testable | GA/EBM, reasoning-attention families, DFlash, DiffusionGemma, and frontier MoE model-class contracts are compiler-visible. Native execution is claimed only where a backend row below or a generated audit proves it. |
-| Runtime ABI and audits | implemented | The generated ABI audit currently reports 372 `extern "C" tessera_*` symbols across all backends, including 304 Apple, 54 x86, 10 ROCm, and 4 NVIDIA symbols. |
-
-### Backend Status
-
-| Backend | Lowering / artifact status | Runtime execution today | Main remaining gates |
-|---------|----------------------------|-------------------------|----------------------|
-| x86 CPU | `tessera-lower-to-x86`, native CPU ABI, AMX/AVX512 codegen, and `tessera_jit` are implemented. | Hardware-runtime for the CPU JIT and AVX-512 `runtime.launch()` lanes, including elementwise, reductions, softmax/norm, losses, attention, matmul-family, FFT/spectral, linalg, sparse, MoE, RoPE, quant, scan, and SSM families. | Broader dtype/layout specialization, fewer reference fallbacks, and fuller mapping from S-series `backend_kernel` rows to compiled x86 lanes. |
-| Apple CPU | Apple Target IR and Accelerate/BNNS runtime paths are implemented. | Hardware-runtime on Darwin via Accelerate and BNNS where host support exists. | Keep BF16 and OS-dependent behavior capability-gated; avoid treating non-Darwin stubs as proof. |
-| Apple GPU | MPS, MPSGraph, custom MSL, Metal 4 experiments, packaged kernels, and synthesized fusion lanes are implemented. | Hardware-runtime on capable Darwin hosts. The ABI audit tracks 134 Apple GPU kernel families. | Continue moving catalog kernels into generated/synthesized lanes; keep fresh-process Metal proof for new claims. |
-| NVIDIA CUDA | SM_90+ WGMMA/TMA and Blackwell Target IR artifacts are lit-testable; CUDA 13.3 is pinned. | First hardware-runtime row exists: sm_120 `mma.sync` matmul on RTX 5070 Ti through the CUDA launcher bridge. | Compiler-generated CUDA lane breadth, sm_90/sm_100 silicon proof, flash-attn, NVFP4, and broader execute-and-compare coverage. |
-| AMD ROCm | ROCm Target IR, MFMA/RDNA WMMA contracts, gfx1151 compiler-generated HIP lanes, and ROCm 7.2.4 toolchain pin are implemented / lit-testable. | Hardware-runtime on capable gfx1151 hosts for a broad `runtime.launch()` family: matmul, attention, linear/exotic attention, elementwise, reductions, softmax/norm, losses, quant, FFT/spectral, linalg, sparse, scan, SSM, MoE, RoPE, ALiBi, and where/argreduce. | CDNA/MI300-class proof, HIP launcher breadth where still missing, performance tuning, and promotion of generic S-series backend-kernel rows. |
-| Distributed GPU | APIs, cyclic sharding, and NCCL/RCCL adapter surfaces are implemented / scaffolded. | In-process mock collectives plus backend-specific single-device execution. | Real multi-rank NCCL/RCCL execution and overlap proof across NVIDIA/ROCm. |
+| Runtime ABI and audits | implemented | Runtime C ABI surfaces and generated audit dashboards are drift-gated; exact counts are listed in the support snapshot below. |
 
 The ~9,560-test fast unit suite passes under `-m "not slow"`; the full Python
 suite collects ~10,340 tests including heavy benchmark contracts.
 
-### Current Source and Documentation Health
+### Current Support Snapshot
 
-This repository is moving quickly; prefer generated audits and executable tests
-over phase prose when they disagree. As of the June 29, 2026 source review:
+Generated audits and executable tests are the status authority when they
+disagree with prose. As of the June 29, 2026 review:
 
-| Surface | Health |
-|---------|--------|
-| Source and static checks | The `mypy` ratchet and generated-doc drift gates are part of the validation spine; rerun `scripts/validate.sh` or the focused generated-doc checks before treating a local checkout as green. |
-| Runtime ABI inventory | Drift-gated and current: `docs/audit/generated/runtime_abi.md` reports 372 unique `extern "C" tessera_*` C ABI symbols, 304 Apple symbols, 54 x86 symbols, 10 ROCm symbols, 4 NVIDIA symbols, and 134 Apple GPU kernel families. |
-| Apple backend | The source has moved beyond the older Phase 8.4.7 overview: MPS/MPSGraph remain the default lanes, while Metal 4 is additive for bf16/f16 `matmul2d`, fused epilogues, resident MLP sessions, pipeline archives, opt-in conv2d, and control-flow experiments. See `docs/apple_backend.md` (canonical CPU+GPU reference) and `docs/apple_gpu_metal4_adoption.md` (forward-looking ladder). |
-| Compiler gap focus | The front-to-back optimizing-compiler closure has landed its keystone phases (see below): the `tessera_jit` MLIR→LLVM lane is now the **executed** CPU path for the covered op set, and the Apple GPU fusion seam is closed (authoritative carried intent; the structural re-matchers are deleted). Current open work is stronger dtype/layout/aliasing/buffer-binding contracts, more Graph-IR folders/canonicalizers reaching the executed path, real Schedule-IR 1F1B ordering, and fixture-backed numerical proof before backend cells become complete. See [`docs/audit/compiler/COMPILER_AUDIT.md`](docs/audit/compiler/COMPILER_AUDIT.md). |
-| S-series backend proof | `docs/audit/generated/s_series_status.md` reports 474 entries with 0 open `lowering_rule` rows and 467 open `backend_kernel` rows. Treat broad S-series status as Python/reference + contract coverage until backend-specific proof closes those rows. |
-| Known Apple test gaps | Apple runtime claims require a capable Darwin host. Non-Darwin stubs are CI fallbacks, and hardware proof should come from fresh-process runtime checks or the backend-specific benchmark/test lanes before promoting a new Apple claim. |
-| Documentation | The freshness dashboard is healthy but date-sensitive (66 docs catalogued; current manifest summary: 65 dated, 42 within 30 days, 0 older than 90 days, 1 undated). Semantic freshness is uneven. Generated dashboards and `docs/README.md` are the most reliable surfaces; the consolidated `docs/apple_backend.md` is now the canonical Apple CPU+GPU reference. |
+| Source | Current facts |
+|--------|---------------|
+| [`docs/audit/generated/e2e_op_coverage.md`](docs/audit/generated/e2e_op_coverage.md) | 309 ops tracked: 214 native end-to-end, 95 runnable reference, 0 artifact-only/partial/planned. |
+| [`docs/audit/generated/runtime_abi.md`](docs/audit/generated/runtime_abi.md) | 381 unique `extern "C" tessera_*` C ABI symbols: 304 Apple, 63 x86, 10 ROCm, 4 NVIDIA; 134 Apple GPU kernel families. |
+| [`docs/audit/generated/s_series_status.md`](docs/audit/generated/s_series_status.md) | 474 S-series primitive-contract entries. `lowering_rule` is closed; aggregate `backend_kernel` remains open for 467 entries because backend proof is target-specific. |
+| [`docs/audit/generated/docs_freshness.md`](docs/audit/generated/docs_freshness.md) | 92 docs catalogued; 91 dated; 54 updated within 30 days; 0 older than 90 days; 1 undated. |
+
+| Lane | Supported now | Still gated |
+|------|---------------|-------------|
+| Source validation | `mypy` ratchet, generated-doc drift gates, and focused generated-dashboard checks. | A checkout should not be treated as green until `scripts/validate.sh` or the relevant focused checks pass locally. |
+| CPU / x86 | `tessera_jit` MLIR->LLVM CPU execution for the covered op set; native x86 AMX/AVX512 runtime rows for matmul, elementwise, reductions, softmax/norm, losses, FFT/spectral, sparse, linalg, optimizer, RNG, SSM, and related families. | Broader dtype/layout/aliasing and buffer-binding contracts; more Graph IR canonicalizers reaching the executed path. |
+| Apple CPU/GPU | Apple CPU uses Accelerate/BNNS lanes. Apple GPU uses MPS, MPSGraph, MSL, packaged kernels, GA/EBM kernels, fused MoE expert FFN, and additive Metal 4 lanes where documented. | Apple hardware proof requires a capable Darwin host; non-Darwin stubs are CI fallbacks only. |
+| ROCm | gfx1151 has real `runtime.launch()` lanes, including compiler-generated HIP for matmul-family, attention-family, elementwise, reductions, softmax/norm, losses, quant, FFT/spectral, linalg, sparse, scan, SSM, MoE, RoPE/ALiBi, GA/conformal, and where/argreduce. | CDNA/MI300-class proof, remaining target-map promotions, and performance hardening. |
+| NVIDIA | sm_120 has a hardware-verified `mma.sync` matmul lane through CUDA runtime. | Hopper sm_90, datacenter sm_100, broader Blackwell op coverage, and non-matmul kernels. |
+| Distributed GPU | APIs, sharding surfaces, and NCCL/RCCL adapter scaffolding exist; mock collectives cover development paths. | Real multi-rank NCCL/RCCL execution and overlap proof. |
 
 ---
 

@@ -35,6 +35,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -59,10 +60,13 @@ struct LowerControlFlowToSCF
            "CUDA/ROCm control-flow path. control_if/while → CF2b.";
   }
 
-  // tessera.control_for → scf.for. Returns failure only on a structurally
-  // malformed op (which the CF0 guard then reports); ops it can't yet handle
-  // are left untouched.
-  LogicalResult lowerControlFor(Operation *op) {
+  // Outcome of trying to lower one control_for.
+  enum class Outcome { Lowered, Skipped, Malformed };
+
+  // tessera.control_for → scf.for. `Malformed` ops (missing/invalid attrs) are
+  // reported; `Skipped` ops (a form this pass can't lower CORRECTLY yet — see
+  // the payload note) are left untouched for the CF0 guard / a later decoder.
+  Outcome lowerControlFor(Operation *op) {
     OpBuilder b(op);
     Location loc = op->getLoc();
 
@@ -71,7 +75,7 @@ struct LowerControlFlowToSCF
     auto stopA = op->getAttrOfType<IntegerAttr>("stop");
     auto stepA = op->getAttrOfType<IntegerAttr>("step");
     if (!bodySym || !startA || !stopA || !stepA)
-      return failure();
+      return Outcome::Malformed;
 
     SmallVector<Value> operands(op->getOperands().begin(),
                                 op->getOperands().end());
@@ -82,7 +86,7 @@ struct LowerControlFlowToSCF
     if (auto idxA = op->getAttrOfType<IntegerAttr>("carry_arg_index")) {
       int64_t idx = idxA.getInt();
       if (idx < 0 || idx >= n)
-        return failure();
+        return Outcome::Malformed;
       carriedPos.push_back(idx);
     } else {
       for (int64_t i = 0; i < n; ++i)
@@ -90,7 +94,28 @@ struct LowerControlFlowToSCF
     }
     if (static_cast<int64_t>(op->getNumResults()) !=
         static_cast<int64_t>(carriedPos.size()))
-      return failure();
+      return Outcome::Malformed;
+
+    // The executable-PAYLOAD form (Apple run_graph ABI): the real body is
+    // encoded in body_opcodes/body_in0/... and @body is a CARRY-ONLY stub —
+    // the loop-invariant captures live in the payload, not in @body's
+    // signature. Forwarding the captures to func.call @body would build a
+    // malformed call (e.g. a 2-arg call to a 1-arg @loop_body). We can't lower
+    // this to scf.for without decoding the payload into real body ops, so leave
+    // it for the CF0 guard (and the CF3/CF4 payload decoder).
+    if (op->getAttr("body_opcodes"))
+      return Outcome::Skipped;
+
+    // Defensive sibling of the payload check: only lower when @body's declared
+    // arity matches the call we would build (every operand forwarded in order).
+    // A carry-only stub (arity 1) against an n>1 operand list is the payload
+    // form above; skip rather than emit an ill-typed call.
+    if (auto *callee = SymbolTable::lookupNearestSymbolFrom(op, bodySym)) {
+      if (auto fn = dyn_cast<func::FuncOp>(callee)) {
+        if (static_cast<int64_t>(fn.getFunctionType().getNumInputs()) != n)
+          return Outcome::Skipped;
+      }
+    }
 
     // Loop bounds as index constants.
     Value lb = arith::ConstantIndexOp::create(b, loc, startA.getInt());
@@ -133,7 +158,7 @@ struct LowerControlFlowToSCF
 
     op->replaceAllUsesWith(forOp.getResults());
     op->erase();
-    return success();
+    return Outcome::Lowered;
   }
 
   void runOnOperation() override {
@@ -144,10 +169,13 @@ struct LowerControlFlowToSCF
         fors.push_back(op);
     });
     for (Operation *op : fors) {
-      if (failed(lowerControlFor(op)))
+      if (lowerControlFor(op) == Outcome::Malformed)
         op->emitWarning("tessera.control_for left unlowered by "
-                        "control-flow-to-scf (malformed or unsupported form); "
+                        "control-flow-to-scf (malformed: missing body / "
+                        "start / stop / step or carry/result-count mismatch); "
                         "the control-flow target guard will report it");
+      // Skipped (e.g. the executable-payload form) is intentional and silent —
+      // the op is left for the CF0 guard / the CF3/CF4 payload decoder.
     }
   }
 };

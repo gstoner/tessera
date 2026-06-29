@@ -7,6 +7,11 @@
 // RUN: tessera-opt %s -split-input-file -verify-diagnostics \
 // RUN:   --tessera-control-flow-to-scf \
 // RUN:   --tessera-control-flow-target-guard=target=rocm
+//
+// And through the NAMED pipeline (CF2-before-guard is wired there too): the
+// executable-payload control_for is skipped by CF2 and still guarded.
+// RUN: tessera-opt %s -split-input-file -verify-diagnostics \
+// RUN:   --tessera-lower-to-gpu --allow-unregistered-dialect
 
 // control_for lowers → no guard diagnostic (the function verifies clean).
 func.func private @body(%c: tensor<1x8xf32>) -> tensor<1x8xf32>

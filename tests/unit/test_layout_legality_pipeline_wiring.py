@@ -22,11 +22,12 @@ def _pipeline_body(src: str, anchor: str) -> str:
     builder boundary — enough to check a builder's pass list.
 
     Window sized to cover the longest builder's early pass list. Bumped
-    1800 → 2200 when CF0 added createControlFlowTargetGuardPass right after
-    addGraphIRPreLoweringPasses in the x86 builder (it pushed
-    createSymbolicDimEqualityPass to ~char 1900 from the anchor)."""
+    1800 → 2200 (CF0 added createControlFlowTargetGuardPass) → 2400 (CF2 added
+    createLowerControlFlowToSCFPass before that guard) right after
+    addGraphIRPreLoweringPasses in the x86 builder — the two early control-flow
+    passes push createSymbolicDimEqualityPass to ~char 2200 from the anchor."""
     i = src.index(anchor)
-    return src[i:i + 2200]
+    return src[i:i + 2400]
 
 
 def test_layout_legality_in_all_three_lowering_pipelines():

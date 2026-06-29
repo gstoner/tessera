@@ -222,10 +222,15 @@ claim.
   as a `func.call @body`; one `scf.for` wrapper, not one launch per iteration.
   The legacy all-carried form becomes a **multi-`iter_args`** `scf.for` — where
   **pytree carries fold in** (the CF1b front-end work then just has to flatten a
-  pytree carry into the operand list this lowering already threads). Runs before
-  the CF0 guard, so a lowered loop never trips it. **CF2b:** `control_if` →
-  `scf.if`, `control_while` → bounded `scf.while` + `actual_steps`; wiring into
-  the executable CUDA/ROCm pipelines (with downstream `scf` handling).
+  pytree carry into the operand list this lowering already threads). Wired into
+  the named `tessera-lower-to-x86` / `-gpu` / `-nvidia-pipeline*` builders
+  **before** the CF0 guard, so a lowerable loop becomes `scf.for` and never
+  trips the guard; the executable-**payload** form (where `@body` is a
+  carry-only stub and the real body lives in `body_opcodes`) is **skipped**
+  (can't form a correct `func.call` without decoding the payload) and still
+  guarded. **CF2b:** `control_if` → `scf.if`, `control_while` → bounded
+  `scf.while` + `actual_steps`; decoding the payload body into real `scf.for`
+  region ops (CF3/CF4).
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

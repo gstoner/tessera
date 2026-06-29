@@ -38,8 +38,8 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `fused_epilogue` | 1 | 0 | 1 | `eligible` |
 | `geometric_algebra` | 17 | 16 | 1 | `eligible` |
 | `grad_transform` | 7 | 0 | 7 | `eligible` |
-| `indexing` | 14 | 1 | 0 | `host` |
-| `layout_transform` | 17 | 2 | 0 | `host` |
+| `indexing` | 15 | 2 | 0 | `host` |
+| `layout_transform` | 16 | 1 | 0 | `host` |
 | `linalg_decomposition` | 4 | 1 | 0 | `host` |
 | `linalg_solver` | 2 | 1 | 0 | `host` |
 | `logical` | 8 | 8 | 0 | `eligible` |

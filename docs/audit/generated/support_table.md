@@ -126,6 +126,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `dynamic_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `dynamic_update_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `gather` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_select` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_update` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `masked_categorical` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -147,7 +148,6 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `expand` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `flatten` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `flip` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
-| `gather` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_partition` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_router` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
@@ -299,8 +299,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `softmax_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
 | `selective_ssm` | state_space | public | public | registered | complete | partial | fused | ready | none |
-| `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
+| `kv_cache_append` | state_update | public | public | registered | complete | partial | fused | ready | none |
+| `kv_cache_prune` | state_update | public | public | registered | complete | partial | fused | ready | none |
 | `kv_cache_read` | state_update | public | public | registered | complete | partial | fused | ready | none |
 | `conv2d` | stencil | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `conv3d` | stencil | public | public | registered | complete | partial | fused | ready | none |
@@ -338,8 +338,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
-| indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| layout_transform | 31 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
+| indexing | 16 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| layout_transform | 30 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
 | linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
@@ -364,7 +364,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | spectral | 9 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |
 | state_space | 1 | PPGCpFN· |
-| state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
+| state_update | 3 | PPGCpFN· PPGCpFN· PPGCpFN· |
 | stencil | 2 | PPGCpFNB PPGCpFN· |
 | visual_complex | 20 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPnCFFN· PPGCpFN· PPnCFFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 

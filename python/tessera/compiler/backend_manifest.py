@@ -1316,6 +1316,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "f32 accumulate). Executes via runtime.launch() "
                  "(rocm_conv_compiled).",
     } for op in ("conv2d", "conv3d")},
+    # P13 — kv_cache state_update: paged scatter-copy into the KV buffer. append
+    # via the gfx1151 scatter kernel, read via the gather kernel, prune via host
+    # compaction. Executes via rocm_kv_cache_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("data_movement",),
+        "notes": f"Standalone {op} — paged KV-buffer movement: append via the "
+                 "gfx1151 scatter kernel, read via the gather kernel, prune via "
+                 "host compaction. Executes via runtime.launch() "
+                 "(rocm_kv_cache_compiled).",
+    } for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
     # P5 — conformal geometry: mobius / stereographic composed on the gfx1151
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
     **{op: {
@@ -1689,6 +1700,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_x86_flash_attn_compiled.py",
     ("deepseek_sparse_attention", "x86"):
         "tests/unit/test_x86_nsa_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_kv_cache_compiled.py"
+       for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
+    **{(op, "rocm"): "tests/unit/test_rocm_kv_cache_compiled.py"
+       for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
@@ -2513,6 +2528,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "dense FA) branches blended by the gate; x86_nsa_compiled lane; "
                  "f32, matches the dense-masked reference",
     },
+    # P13 — kv_cache state_update: the paged scatter-copy into the KV buffer.
+    # append = the AVX-512 scatter (set), read = the gather, prune = host page
+    # compaction (x86_kv_cache_compiled lane).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — paged KV-buffer movement: append via the AVX-512 "
+                 "row-scatter, read via the gather, prune via host compaction "
+                 "(x86_kv_cache_compiled lane; f32)",
+    } for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
     # Pointwise regression losses — per-element loss on the AVX-512 loss kernel
     # + none/mean/sum on the reduce kernel (x86_loss_compiled).
     **{op: {

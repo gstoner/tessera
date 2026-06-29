@@ -2625,6 +2625,89 @@ def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# kv_cache state_update (P13) — the paged scatter-copy into a KV buffer:
+#   append(buffer, positions, updates) -> the row-buffer with `updates` written
+#       at `positions` (the P8 scatter, set mode);
+#   read(buffer, positions)            -> the gathered rows (the P4 gather);
+#   prune(buffer)                      -> buffer[:keep] (host page compaction).
+# The buffer is [S, F] (F = the flattened per-slot K/V feature width); the host
+# flattens any trailing dims. The device does the scatter / gather; prune is a
+# structural host slice. compiler_path="x86_kv_cache_compiled" /
+# "rocm_kv_cache_compiled". f32, matches the numpy paged-buffer reference.
+# ─────────────────────────────────────────────────────────────────────────────
+_KV_CACHE_OPS = ("tessera.kv_cache.append", "tessera.kv_cache.read",
+                 "tessera.kv_cache.prune")
+
+
+def _kv_cache_compute(op_name: str, operands: list, kwargs: dict,
+                      scatter_fn: Any, gather_fn: Any, np: Any) -> Any:
+    buf = np.ascontiguousarray(operands[0], np.float32)
+    if buf.ndim < 1:
+        raise ValueError("kv_cache buffer must be at least rank 1 ([S, ...])")
+    S = int(buf.shape[0])
+    F = int(np.prod(buf.shape[1:])) if buf.ndim > 1 else 1
+    row_shape = buf.shape[1:]
+
+    if op_name == "tessera.kv_cache.prune":
+        keep = kwargs.get("keep", kwargs.get("max_seq", kwargs.get("max_entries")))
+        if keep is None:
+            return np.ascontiguousarray(buf, np.float32)
+        keep = max(0, min(int(keep), S))
+        return np.ascontiguousarray(buf[:keep], np.float32)
+
+    if len(operands) < 2:
+        raise ValueError(f"{op_name} needs (buffer, positions[, updates])")
+    pos = np.ascontiguousarray(operands[1], np.int64).reshape(-1)
+
+    if op_name == "tessera.kv_cache.append":
+        if len(operands) < 3:
+            raise ValueError("kv_cache.append needs (buffer, positions, updates)")
+        upd = np.ascontiguousarray(operands[2], np.float32).reshape(
+            int(pos.shape[0]), F)
+        out = np.ascontiguousarray(buf.reshape(S, F), np.float32).copy()
+        scatter_fn(out, upd, pos, S, F, 0, np)            # P8 scatter, set mode
+        return np.ascontiguousarray(out.reshape((S,) + row_shape), np.float32)
+
+    # tessera.kv_cache.read — gather rows `pos` from the buffer.
+    n = int(pos.shape[0])
+    flat = np.ascontiguousarray(buf.reshape(-1), np.float32)
+    idx = (pos[:, None] * F + np.arange(F, dtype=np.int64)[None, :]).reshape(-1)
+    out = np.zeros(n * F, np.float32)
+    gather_fn(flat, idx, out)                              # P4 gather
+    return np.ascontiguousarray(out.reshape((n,) + row_shape), np.float32)
+
+
+def _execute_kv_cache(artifact: RuntimeArtifact, args: Any, scatter_fn: Any,
+                      gather_fn: Any, path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _KV_CACHE_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_KV_CACHE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _kv_cache_compute(op_name, operands, ops[0].get("kwargs") or {},
+                             scatter_fn, gather_fn, np)
+
+
+def _execute_x86_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` kv_cache state_update lane (append/read/prune)."""
+    return _execute_kv_cache(artifact, args, _x86_scatter, _x86_gather,
+                             "x86_kv_cache_compiled")
+
+
+def _execute_rocm_compiled_kv_cache(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` kv_cache state_update lane (append/read/prune)."""
+    return _execute_kv_cache(artifact, args, _rocm_scatter, _rocm_gather,
+                             "rocm_kv_cache_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED linear_attn lane (2026-06-25) — the quadratic-parallel form
 # O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V, NO softmax (a distinct algorithm from
 # flash_attn). ``runtime.launch()`` of an artifact stamped
@@ -11541,6 +11624,7 @@ def _executor_table():
         "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_conv_compiled": _execute_x86_compiled_conv,
         "x86_nsa_compiled": _execute_x86_compiled_nsa,
+        "x86_kv_cache_compiled": _execute_x86_compiled_kv_cache,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -11595,6 +11679,7 @@ def _executor_table():
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
         "rocm_conv_compiled": _execute_rocm_compiled_conv,
+        "rocm_kv_cache_compiled": _execute_rocm_compiled_kv_cache,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
         "rocm_deltanet_compiled": _execute_rocm_compiled_deltanet,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,

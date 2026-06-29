@@ -204,6 +204,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_nsa_compiled": "x86 CPU NSA lane — deepseek_sparse_attention: sliding "
                         "+ compressed-block + top-k-block branches on the "
                         "AVX-512 flash_attn kernels, gate blend on host. f32",
+    "x86_kv_cache_compiled": "x86 CPU kv_cache state_update — append (AVX-512 "
+                             "row-scatter) / read (gather) / prune (host "
+                             "compaction) into a paged KV buffer. f32",
+    "rocm_kv_cache_compiled": "AMD GPU RDNA kv_cache state_update — append "
+                              "(gfx1151 scatter) / read (gather) / prune (host "
+                              "compaction) into a paged KV buffer. f32",
     "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
                             "scatter_reduce (0-reduce indexed store) via the "
                             "AVX-512 row-scatter kernel. f32",
@@ -1169,6 +1175,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "FLOPs run on the device kernels; compression / selection / "
                "blend on the host. f32, matches the dense-masked reference.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_kv_cache_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_kv_cache_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_kv_cache_compiled", runtime_status="success",
+        reason="x86 kv_cache state_update — the paged scatter-copy into a KV "
+               "buffer: append writes the new rows via the AVX-512 row-scatter, "
+               "read gathers rows via the gather kernel, prune compacts pages on "
+               "the host. f32, matches the numpy paged-buffer reference.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1771,6 +1786,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "patch matrix, the GEMM runs on the gfx1151 WMMA kernel (f16/bf16 "
                "storage, f32 accumulate), bias/groups on the host. Matches the "
                "conv reference to WMMA f16 tolerance.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_kv_cache_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_kv_cache_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_kv_cache_compiled", runtime_status="success",
+        reason="ROCm kv_cache state_update — the paged scatter-copy into a KV "
+               "buffer: append writes the new rows via the COMPILER-GENERATED "
+               "gfx1151 scatter kernel, read gathers rows via the gather kernel, "
+               "prune compacts pages on the host. f32, matches the numpy "
+               "paged-buffer reference.",
         execution_mode="hip_runtime"),
     # Exotic-attention compositions — gated_attention / mla_decode /
     # mla_decode_fused on the WMMA flash_attn + GEMM kernels. vs numpy.

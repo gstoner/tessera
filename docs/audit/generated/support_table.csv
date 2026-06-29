@@ -110,6 +110,7 @@ clifford_vec_deriv,geometric_algebra,public,public,not_applicable,complete,fused
 clifford_wedge,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 dynamic_slice,indexing,public,public,registered,complete,partial,reference,ready,none
 dynamic_update_slice,indexing,public,public,registered,complete,partial,reference,ready,none
+gather,indexing,public,public,registered,complete,partial,reference,ready,none
 index_select,indexing,public,public,registered,complete,partial,reference,ready,none
 index_update,indexing,public,public,registered,complete,partial,reference,ready,none
 masked_categorical,indexing,public,public,registered,complete,partial,reference,ready,none
@@ -131,7 +132,6 @@ chunk,layout_transform,public,public,registered,complete,partial,reference,ready
 expand,layout_transform,public,public,registered,complete,not_applicable,reference,ready,none
 flatten,layout_transform,public,public,registered,complete,not_applicable,reference,ready,none
 flip,layout_transform,public,public,registered,complete,partial,fused,ready,none
-gather,layout_transform,public,public,registered,complete,partial,reference,ready,none
 masked_fill,layout_transform,public,public,registered,complete,partial,reference,ready,none
 mor_partition,layout_transform,public,public,registered,complete,partial,reference,ready,none
 mor_router,layout_transform,public,public,registered,complete,partial,reference,ready,none
@@ -283,8 +283,8 @@ softmax,stable_reduction,public,public,registered,complete,partial,fused,ready,b
 softmax_safe,stable_reduction,public,public,registered,complete,partial,fused,ready,none
 sum,stable_reduction,public,public,registered,complete,partial,fused,ready,none
 selective_ssm,state_space,public,public,registered,complete,partial,fused,ready,none
-kv_cache_append,state_update,public,public,registered,complete,partial,reference,ready,none
-kv_cache_prune,state_update,public,public,registered,complete,partial,reference,ready,none
+kv_cache_append,state_update,public,public,registered,complete,partial,fused,ready,none
+kv_cache_prune,state_update,public,public,registered,complete,partial,fused,ready,none
 kv_cache_read,state_update,public,public,registered,complete,partial,fused,ready,none
 conv2d,stencil,public,public,registered,complete,partial,fused,ready,benchmarked
 conv3d,stencil,public,public,registered,complete,partial,fused,ready,none

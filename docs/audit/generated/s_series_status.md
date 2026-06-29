@@ -52,8 +52,8 @@
 | other | `extension` | 6 | — | — | — | — | 6 |
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
-| other | `indexing` | 14 | — | — | — | — | 14 |
-| other | `layout_transform` | 17 | — | — | — | — | 17 |
+| other | `indexing` | 15 | — | — | — | — | 15 |
+| other | `layout_transform` | 16 | — | — | — | — | 16 |
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |

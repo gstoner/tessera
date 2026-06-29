@@ -2300,8 +2300,13 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
 # logit-softcap / attn_bias / dropout are the ROCm lane's extras — the x86 lane
 # rejects them with a stable diagnostic (Decision #21) rather than silently
 # dropping. compiler_path="x86_flash_attn_compiled". Matches tessera.flash_attn.
+#
+# ONLY tessera.flash_attn (the per-head [..., S, D] contract) is accepted.
+# tessera.multi_head_attention is a DIFFERENT contract — rank-3 [B, S, H*D] +
+# num_heads, needing a split to [B, H, S, D] this kernel does not do — so it is
+# rejected here rather than mis-run as single-head attention over H*D.
 # ─────────────────────────────────────────────────────────────────────────────
-_X86_FA_OPS = ("tessera.flash_attn", "tessera.multi_head_attention")
+_X86_FA_OPS = ("tessera.flash_attn",)
 
 
 def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
@@ -2327,6 +2332,14 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 3:
         raise ValueError("flash_attn requires Q, K, V operands")
+    # A 4th operand is the additive attn_bias / mask (the Graph IR + Apple path
+    # normalize flash_attn(..., attn_bias=…) into a 4th operand). The x86 lane
+    # does not apply it, so reject rather than silently run un-biased attention.
+    if len(operand_names) > 3:
+        raise ValueError(
+            "x86 flash_attn lane does not support an attn_bias / mask operand "
+            f"(got {len(operand_names)} operands; ROCm-lane feature) — not "
+            "supported on x86_flash_attn_compiled")
     values = _bind_launch_args(args, arg_names)
     q = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
     k = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)

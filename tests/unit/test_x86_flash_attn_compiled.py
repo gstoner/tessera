@@ -104,3 +104,36 @@ def test_gqa_rejected_with_stable_diagnostic():
     res = rt.launch(_art(rt, {}), (q, k, v))
     assert res["ok"] is False
     assert "GQA" in res.get("reason", "") or "MHA" in res.get("reason", "")
+
+
+def test_attn_bias_operand_rejected_with_stable_diagnostic():
+    """A 4th operand is the additive attn_bias/mask — the x86 lane must reject
+    it (not silently run un-biased attention)."""
+    rt = _rt_or_skip()
+    q, k, v = _qkv((4, 16))
+    bias = _RNG.standard_normal((4, 4)).astype(np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["q", "k", "v", "bias"], "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": ["q", "k", "v", "bias"], "kwargs": {}}]})
+    res = rt.launch(art, (q, k, v, bias))
+    assert res["ok"] is False
+    assert "attn_bias" in res.get("reason", "") or "bias" in res.get("reason", "")
+
+
+def test_multi_head_attention_op_rejected():
+    """tessera.multi_head_attention ([B,S,H*D] + num_heads) is a different
+    contract — the x86 lane only accepts tessera.flash_attn ([..., S, D])."""
+    rt = _rt_or_skip()
+    q, k, v = _qkv((2, 8, 32))
+    art = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["q", "k", "v"], "output_name": "o",
+        "ops": [{"op_name": "tessera.multi_head_attention", "result": "o",
+                 "operands": ["q", "k", "v"], "kwargs": {"num_heads": 4}}]})
+    res = rt.launch(art, (q, k, v))
+    assert res["ok"] is False
+    assert "tessera.flash_attn" in res.get("reason", "")

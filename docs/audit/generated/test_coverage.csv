@@ -19,7 +19,7 @@ aot_load,0,0,0,0,1,,structural_only,category default for 'aot'
 arange,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
 argmax,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 argmin,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-argsort,2,0,0,2,0,,directly_tested,2 direct test references
+argsort,5,0,0,5,0,,directly_tested,5 direct test references
 asin,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
 asymmetric_bce,8,0,0,8,0,f32,directly_tested,8 direct test references
@@ -413,7 +413,7 @@ softcap,9,0,1,9,0,,directly_tested,9 direct test references
 softmax,120,37,30,157,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,157 direct test references
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-sort,3,0,0,3,0,,directly_tested,3 direct test references
+sort,10,0,0,10,0,,directly_tested,10 direct test references
 spectral_conv,7,0,0,7,0,fp32,directly_tested,7 direct test references
 spectral_filter,5,0,0,5,0,fp32,directly_tested,5 direct test references
 spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
@@ -449,7 +449,7 @@ tokenizer_byte,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_sentencepiece_compat,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_unigram,1,0,0,1,1,,structural_only,category default for 'tokenizer'
 tokenizer_wordpiece,1,0,0,1,1,,structural_only,category default for 'tokenizer'
-top_k,14,0,0,14,0,,directly_tested,14 direct test references
+top_k,16,0,0,16,0,,directly_tested,16 direct test references
 transpose,23,27,0,50,0,bf16 f16 fp32,directly_tested,50 direct test references
 tree_flatten,2,0,0,2,0,,directly_tested,2 direct test references
 tree_map,0,0,0,0,1,,structural_only,category default for 'state_tree'

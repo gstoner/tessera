@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 225 |
-| ``runnable_reference`` | 84 |
+| ``complete`` | 227 |
+| ``runnable_reference`` | 82 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (225)
+## complete (227)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -249,6 +249,8 @@ each row into a single E2E tier.
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
+| ``conv2d`` | stencil | public | public | registered | partial | fused | ready | benchmarked |
+| ``conv3d`` | stencil | public | public | registered | partial | fused | ready | none |
 | ``complex_abs`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_arg`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_conjugate`` | visual_complex | public | public | registered | partial | fused | ready | none |
@@ -261,7 +263,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (84)
+## runnable_reference (82)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -338,8 +340,6 @@ each row into a single E2E tier.
 | ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |
-| ``conv2d`` | stencil | public | public | registered | partial | reference | ready | benchmarked |
-| ``conv3d`` | stencil | public | public | registered | partial | reference | ready | none |
 | ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_jacobian`` | visual_complex | public | public | registered | partial | reference | ready | none |

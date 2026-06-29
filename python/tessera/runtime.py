@@ -11379,6 +11379,7 @@ def _executor_table():
         "x86_clifford_compiled": _execute_x86_compiled_clifford,
         "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
         "x86_mla_compiled": _execute_x86_compiled_mla,
+        "x86_conv_compiled": _execute_x86_compiled_conv,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -11432,6 +11433,7 @@ def _executor_table():
         "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,
         "rocm_matmul_family_compiled": _execute_rocm_compiled_matmul_family,
+        "rocm_conv_compiled": _execute_rocm_compiled_conv,
         "rocm_exotic_attn_compiled": _execute_rocm_compiled_exotic_attention,
         "rocm_deltanet_compiled": _execute_rocm_compiled_deltanet,
         "rocm_rope_compiled":   _execute_rocm_compiled_rope,
@@ -15966,6 +15968,142 @@ def _im2col_nhwc(X: Any, kH: int, kW: int, sH: int, sW: int,
     N, OH, OW, Cin, kh, kw = win.shape
     col = np.transpose(win, (0, 1, 2, 4, 5, 3)).reshape(N * OH * OW, kh * kw * Cin)
     return np.ascontiguousarray(col), OH, OW
+
+
+def _im2col_ndhwc(X: Any, kD: int, kH: int, kW: int, sD: int, sH: int, sW: int,
+                  pD: int, pH: int, pW: int, dD: int, dH: int, dW: int,
+                  np: Any):
+    """Vectorized NDHWC im2col → (col[N*OD*OH*OW, kD*kH*kW*Cin], OD, OH, OW).
+    The 3-D analog of _im2col_nhwc; patch order (kD, kH, kW, Cin) to match a
+    weights reshape of DHWIO → [kD*kH*kW*Cin, Cout]."""
+    N, D, H, W, Cin = X.shape
+    if pD or pH or pW:
+        X = np.pad(X, ((0, 0), (pD, pD), (pH, pH), (pW, pW), (0, 0)))
+    spanD, spanH, spanW = dD * (kD - 1) + 1, dH * (kH - 1) + 1, dW * (kW - 1) + 1
+    win = np.lib.stride_tricks.sliding_window_view(
+        X, (spanD, spanH, spanW), axis=(1, 2, 3))
+    win = win[:, ::sD, ::sH, ::sW, :, ::dD, ::dH, ::dW]
+    N, OD, OH, OW, Cin, kd, kh, kw = win.shape
+    col = np.transpose(win, (0, 1, 2, 3, 5, 6, 7, 4)).reshape(
+        N * OD * OH * OW, kd * kh * kw * Cin)
+    return np.ascontiguousarray(col), OD, OH, OW
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Convolution lane (P13) — conv2d (NHWC/HWIO) + conv3d (NDHWC/DHWIO) via
+# im2col + the device GEMM (no new kernel): the host lays out the im2col patch
+# matrix (shape arithmetic only), the FLOP-heavy GEMM runs on the device matmul
+# lane (x86 AVX-512 f32; ROCm WMMA f16/bf16 with f32 accumulate). groups > 1 run
+# as per-group GEMMs. bias + activation epilogue on the host. compiler_path=
+# "x86_conv_compiled" / "rocm_conv_compiled". Matches the conv reference.
+# ─────────────────────────────────────────────────────────────────────────────
+_CONV_OPS = ("tessera.conv2d", "tessera.conv2d_nhwc",
+             "tessera.conv3d", "tessera.conv3d_ndhwc")
+
+
+def _conv_pair(v: Any, n: int) -> tuple:
+    if isinstance(v, (tuple, list)):
+        return tuple(int(x) for x in v)
+    return tuple([int(v)] * n)
+
+
+def _conv_compute(op_name: str, operands: list, kwargs: dict, gemm_fn: Any,
+                  np: Any) -> Any:
+    X = np.ascontiguousarray(operands[0], np.float32)
+    W = np.ascontiguousarray(operands[1], np.float32)
+    bias = (np.ascontiguousarray(operands[2], np.float32)
+            if len(operands) > 2 and operands[2] is not None else None)
+    groups = int(kwargs.get("groups", 1))
+    is3d = "conv3d" in op_name
+
+    if is3d:
+        sD, sH, sW = _conv_pair(kwargs.get("stride", 1), 3)
+        pD, pH, pW = _conv_pair(kwargs.get("padding", 0), 3)
+        dD, dH, dW = _conv_pair(kwargs.get("dilation", 1), 3)
+        kD, kH, kW, cinG, Cout = (int(s) for s in W.shape)
+        Cin = int(X.shape[-1])
+        ksize = kD * kH * kW
+    else:
+        sH, sW = _conv_pair(kwargs.get("stride", 1), 2)
+        pH, pW = _conv_pair(kwargs.get("padding", 0), 2)
+        dH, dW = _conv_pair(kwargs.get("dilation", 1), 2)
+        kH, kW, cinG, Cout = (int(s) for s in W.shape)
+        Cin = int(X.shape[-1])
+        ksize = kH * kW
+
+    if groups <= 0 or Cin % groups or Cout % groups or cinG != Cin // groups:
+        raise ValueError(
+            f"conv: bad groups={groups} for Cin={Cin}, Cout={Cout}, "
+            f"weight cin/group={cinG}")
+    cinPerG, coutPerG = Cin // groups, Cout // groups
+
+    def _one_group(Xg: Any, Wg: Any) -> tuple:
+        spatial: tuple
+        if is3d:
+            col, OD, OH, OW = _im2col_ndhwc(
+                Xg, kD, kH, kW, sD, sH, sW, pD, pH, pW, dD, dH, dW, np)
+            spatial = (OD, OH, OW)
+        else:
+            col, OH, OW = _im2col_nhwc(Xg, kH, kW, sH, sW, pH, pW, dH, dW, np)
+            spatial = (OH, OW)
+        Wm = Wg.reshape(ksize * cinPerG, Wg.shape[-1])
+        y = np.asarray(gemm_fn(col, Wm), np.float32)
+        return y, spatial
+
+    N = int(X.shape[0])
+    if groups == 1:
+        Y, spatial = _one_group(X, W)
+        Y = Y.reshape((N,) + spatial + (Cout,))
+    else:
+        parts = []
+        spatial = None
+        for g in range(groups):
+            Xg = np.ascontiguousarray(X[..., g * cinPerG:(g + 1) * cinPerG])
+            Wg = np.ascontiguousarray(W[..., g * coutPerG:(g + 1) * coutPerG])
+            yg, spatial = _one_group(Xg, Wg)
+            parts.append(yg.reshape((N,) + spatial + (coutPerG,)))
+        Y = np.concatenate(parts, axis=-1)
+    if bias is not None:
+        Y = Y + bias.reshape((1,) * (Y.ndim - 1) + (-1,))
+    return np.ascontiguousarray(Y, np.float32)
+
+
+def _execute_conv(artifact: RuntimeArtifact, args: Any, gemm_fn: Any,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CONV_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_CONV_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("conv needs (x, weight[, bias]) operands")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _conv_compute(op_name, operands, ops[0].get("kwargs") or {},
+                         gemm_fn, np)
+
+
+def _execute_x86_compiled_conv(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` convolution lane (im2col + AVX-512 f32 GEMM)."""
+    return _execute_conv(artifact, args, _x86_gemm_2d, "x86_conv_compiled")
+
+
+def _rocm_conv_gemm(a: Any, b: Any) -> Any:
+    """conv GEMM on the ROCm WMMA lane — f16 storage, f32 accumulate."""
+    import numpy as np
+    f16 = np.float16
+    return _rocm_wmma_gemm_2d(np.ascontiguousarray(a, f16),
+                              np.ascontiguousarray(b, f16))
+
+
+def _execute_rocm_compiled_conv(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` convolution lane (im2col + WMMA f16 GEMM)."""
+    return _execute_conv(artifact, args, _rocm_conv_gemm, "rocm_conv_compiled")
 
 
 def _apple_gpu_mtl4_conv2d_sym(dtype: str) -> Any:

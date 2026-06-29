@@ -1306,6 +1306,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "power of two + flips for descending). Executes via "
                  "runtime.launch() (rocm_sort_compiled).",
     } for op in ("sort", "argsort", "top_k")},
+    # P13 — conv2d / conv3d via im2col + the gfx1151 WMMA GEMM (host im2col,
+    # device WMMA f16/bf16 with f32 accumulate). Executes via rocm_conv_compiled.
+    **{op: {
+        "dtypes": ("fp16", "bf16"),
+        "feature_flags": ("stencil", "wmma"),
+        "notes": f"Standalone {op} — im2col + the COMPILER-GENERATED gfx1151 "
+                 "WMMA GEMM (host lays out the patch matrix; f16/bf16 storage, "
+                 "f32 accumulate). Executes via runtime.launch() "
+                 "(rocm_conv_compiled).",
+    } for op in ("conv2d", "conv3d")},
     # P5 — conformal geometry: mobius / stereographic composed on the gfx1151
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
     **{op: {
@@ -1555,6 +1565,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
+    # P13 — conv2d/conv3d via im2col + the device GEMM, compared to the conv
+    # reference on x86 (f32) + gfx1151 (WMMA f16). Skip-clean w/o the .so / GPU.
+    ("conv2d", "x86"): "tests/unit/test_x86_conv_compiled.py",
+    ("conv3d", "x86"): "tests/unit/test_x86_conv_compiled.py",
+    ("conv2d", "rocm"): "tests/unit/test_rocm_conv_compiled.py",
+    ("conv3d", "rocm"): "tests/unit/test_rocm_conv_compiled.py",
     # P8 — scatter family (0-reduce indexed store) on x86 + ROCm, each compared
     # to the numpy scatter reference. Skip-clean w/o the .so / GPU.
     **{(op, "x86"): "tests/unit/test_x86_scatter_compiled.py"
@@ -2155,6 +2171,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_flash_attn_f32, runtime-loaded; "
                  "x86_flash_attn_compiled lane; MHA scale+causal; f32)",
     },
+    # P13 — conv2d / conv3d via im2col + the AVX-512 f32 GEMM (host im2col,
+    # device GEMM; x86_conv_compiled lane). f32.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — im2col + the AVX-512 f32 GEMM (host lays out the "
+                 "patch matrix; the device runs the GEMM; bias/groups on host; "
+                 "x86_conv_compiled lane; f32, matches the conv reference)",
+    } for op in ("conv2d", "conv3d")},
     # P11 — MLA latent-KV building blocks composed on the AVX-512 GEMM (compress/
     # expand = batched matmul) + the flash_attn lane (mla_decode_fused chains
     # compress→expand→flash_attn). x86_mla_compiled lane; f32; on-device fixture.

@@ -5750,6 +5750,121 @@ def _execute_rocm_compiled_ebm_loss(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM energy / gradient-step compute (P7 follow-up) — the tensor-clean
+# tessera.ebm_* graph ops: energy_quadratic (½‖x−y‖² per row), inner_step
+# (y − η·grad), refinement (y − T·η·grad), self_verify (argmin / soft-min over
+# K candidates). They COMPOSE on the device binary + reduce lanes (no new
+# kernel): the diff/square + reductions run on the AVX-512 / gfx1151 kernels,
+# the cheap structure (scalar scale, argmin gather) on the host. f32.
+# compiler_path="x86_ebm_compute_compiled" / "rocm_ebm_compute_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_EBM_COMPUTE_OPS = (
+    "tessera.ebm_energy_quadratic", "tessera.ebm_inner_step",
+    "tessera.ebm_refinement", "tessera.ebm_self_verify",
+)
+
+
+def _ebm_compute_compute(op_name: str, operands: list, kwargs: dict,
+                         target: str, np: Any) -> Any:
+    ops = [np.ascontiguousarray(o, np.float32) for o in operands]
+
+    def sub(a: Any, b: Any) -> Any:
+        return _creal("sub", target, np, a, b)
+
+    def mul(a: Any, b: Any) -> Any:
+        return _creal("mul", target, np, a, b)
+
+    if op_name == "tessera.ebm_energy_quadratic":   # ½·Σ_{>=1}(x−y)²
+        x, y = ops[0], ops[1]
+        if x.shape != y.shape:
+            raise ValueError(
+                f"ebm_energy_quadratic needs matching shapes; got {x.shape}, "
+                f"{y.shape}")
+        d = sub(x, y)
+        sq = mul(d, d)
+        if x.ndim <= 1:
+            return (np.float32(0.5) * np.asarray(sq, np.float32)).astype(
+                np.float32)
+        s = _dev_reduce_axis(sq.reshape(x.shape[0], -1), "sum", -1, target, np)
+        return (np.float32(0.5) * s).astype(np.float32)
+
+    if op_name == "tessera.ebm_inner_step":         # y − η·grad
+        y, grad = ops[0], ops[1]
+        eta = float(kwargs.get("eta", 0.0))
+        scaled = (np.float32(eta) * grad).astype(np.float32)
+        return sub(y, scaled)
+
+    if op_name == "tessera.ebm_refinement":         # y0 − T·η·grad (closed form)
+        y0, grad = ops[0], ops[1]
+        eta = float(kwargs.get("eta", 0.0))
+        T = int(kwargs.get("T", kwargs.get("steps", 0)))
+        if T < 0:
+            raise ValueError(f"ebm_refinement requires T >= 0; got {T}")
+        if T == 0:
+            return np.ascontiguousarray(y0, np.float32)
+        scaled = (np.float32(T) * np.float32(eta) * grad).astype(np.float32)
+        return sub(y0, scaled)
+
+    if op_name == "tessera.ebm_self_verify":        # argmin / soft-min over K
+        energies, candidates = ops[0], ops[1]
+        if energies.ndim != 2:
+            raise ValueError(
+                f"ebm_self_verify needs energies (B, K); got {energies.shape}")
+        beta = kwargs.get("beta")
+        bdim = int(energies.shape[0])
+        if beta is None:                            # hard argmin (indexing)
+            idx = np.argmin(energies, axis=1)
+            return np.ascontiguousarray(
+                candidates[np.arange(bdim), idx], np.float32)
+        beta = float(beta)
+        if beta <= 0.0:
+            raise ValueError(
+                f"ebm_self_verify soft-min requires beta > 0; got {beta}")
+        # softmax(−β·E) over K on the device exp + reduce lanes.
+        neg = (np.float32(-beta) * energies).astype(np.float32)
+        m = neg.max(axis=1, keepdims=True).astype(np.float32)
+        e = _creal("exp", target, np, sub(neg, np.broadcast_to(m, neg.shape)))
+        denom = _dev_reduce_axis(e, "sum", -1, target, np)[:, None]
+        w = (np.asarray(e, np.float32) / denom).astype(np.float32)
+        expand = (slice(None), slice(None)) + (None,) * (candidates.ndim - 2)
+        weighted = (candidates * w[expand]).astype(np.float32)
+        return np.ascontiguousarray(weighted.sum(axis=1), np.float32)
+
+    raise ValueError(f"ebm_compute executor: unknown op {op_name!r}")
+
+
+def _execute_ebm_compute(artifact: RuntimeArtifact, args: Any, target: str,
+                         path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _EBM_COMPUTE_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_EBM_COMPUTE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _ebm_compute_compute(op_name, operands, ops[0].get("kwargs") or {},
+                                target, np)
+
+
+def _execute_x86_compiled_ebm_compute(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` EBM energy / step-compute lane."""
+    return _execute_ebm_compute(artifact, args, "x86", "x86_ebm_compute_compiled")
+
+
+def _execute_rocm_compiled_ebm_compute(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` EBM energy / step-compute lane."""
+    return _execute_ebm_compute(artifact, args, "rocm",
+                                "rocm_ebm_compute_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the
@@ -11094,6 +11209,7 @@ def _executor_table():
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
+        "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
         "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
@@ -11111,6 +11227,7 @@ def _executor_table():
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
         "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
+        "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,

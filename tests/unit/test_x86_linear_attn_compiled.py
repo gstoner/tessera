@@ -80,6 +80,37 @@ def test_linear_attn_with_decay():
     np.testing.assert_allclose(got, np.asarray(ref), rtol=2e-3, atol=2e-3)
 
 
+def test_linear_attn_decay_long_context_finite():
+    """A long run of a small decay underflows cumprod to 0; the c[t]/c[r] ratio
+    would then be inf/NaN and the causal mask's inf*0 would contaminate valid
+    rows. The log-space decay matrix must stay finite (regression)."""
+    rt = _rt_or_skip()
+    s = 1200  # 0.5**1200 underflows float64 cumprod to 0
+    q, k, v = _qkv(1, 1, s, 4, 4)
+    decay = np.full((1, 1, s), 0.5, np.float32)
+    got = _run(rt, "tessera.linear_attn", q, k, v,
+               feature_map="identity", causal=True, decay=decay.tolist())
+    assert np.all(np.isfinite(got)), "decay matrix underflowed to NaN/inf"
+
+
+def test_linear_attn_non_causal_ignores_decay():
+    """The reference non-causal branch folds to a single global φQ @ Σ(φKᵀV)
+    and IGNORES decay — the x86 lane must return the same as no-decay, not
+    silently apply a c[t]/c[r] matrix to the full (unmasked) score matrix."""
+    rt = _rt_or_skip()
+    q, k, v = _qkv(2, 2, 9, 6, 6)
+    decay = (0.7 + 0.2 * _RNG.random((2, 2, 9))).astype(np.float32)
+    with_decay = _run(rt, "tessera.linear_attn", q, k, v,
+                      feature_map="elu", causal=False, decay=decay.tolist())
+    no_decay = _run(rt, "tessera.linear_attn", q, k, v,
+                    feature_map="elu", causal=False)
+    np.testing.assert_allclose(with_decay, no_decay, rtol=1e-6, atol=1e-6)
+    ref = tessera.ops.linear_attn(q, k, v, feature_map="elu", causal=False,
+                                  decay=decay)
+    np.testing.assert_allclose(with_decay, np.asarray(ref),
+                               rtol=1e-3, atol=1e-3)
+
+
 @pytest.mark.parametrize("deg", [2, 3])
 def test_power_attn(deg):
     rt = _rt_or_skip()
@@ -100,7 +131,7 @@ def test_retention_no_decay():
 def test_retention_with_log_g():
     rt = _rt_or_skip()
     q, k, v = _qkv(2, 2, 10, 6, 6)
-    log_g = (-0.1 * _RNG.random((2, 2, 10))).astype(np.float32)  # log-decay <=0
+    log_g = (-0.1 * _RNG.random((2, 2, 10))).astype(np.float32)  # <= 0
     got = _run(rt, "tessera.retention", q, k, v, deg=2,
                log_g=log_g.tolist(), causal=True)
     ref = tessera.ops.retention(q, k, v, deg=2, log_g=log_g, causal=True)

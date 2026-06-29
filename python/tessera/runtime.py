@@ -2666,18 +2666,32 @@ def _linattn_feature_map(x: Any, name: str, np: Any) -> Any:
 def _x86_linear_attn_quad(phi_q: Any, phi_k: Any, v: Any, causal: bool,
                           decay: Any, np: Any) -> Any:
     """O = (φQ·φKᵀ ⊙ causal ⊙ decay) @ V on the AVX-512 batched GEMM.
-    phi_q/phi_k [B,H,S,Dqk]; v [B,H,S,Dv]; decay [B,H,S] or None."""
+    phi_q/phi_k [B,H,S,Dqk]; v [B,H,S,Dv]; decay [B,H,S] or None.
+
+    decay is honored ONLY in the causal path — the reference
+    ``_linear_attn_impl`` non-causal branch folds to a single global
+    ``φQ @ Σ(φKᵀV)`` and ignores decay, so this lane must too.
+    """
     scores = _x86_batched_gemm(phi_q, np.swapaxes(phi_k, -1, -2))  # [B,H,S,S]
     s = int(scores.shape[-1])
-    if causal:
-        scores = scores * np.tril(np.ones((s, s), np.float32))
-    if decay is not None:
-        d = np.asarray(decay, np.float64)                  # [B,H,S]
-        c = np.cumprod(d, axis=-1)                          # prod_{0..t}
-        dm = (c[..., :, None] / c[..., None, :]).astype(np.float32)  # c[t]/c[r]
-        if causal:
-            dm = dm * np.tril(np.ones((s, s), np.float32))
-        scores = scores * dm
+    if not causal:
+        return _x86_batched_gemm(np.ascontiguousarray(scores, np.float32),
+                                 np.ascontiguousarray(v, np.float32))
+    tri = np.tril(np.ones((s, s), bool))
+    if decay is None:
+        scores = scores * tri.astype(np.float32)
+    else:
+        # Decay matrix D[t,r] = prod_{u=r+1..t} decay[u], built in LOG space:
+        # cumprod(decay) underflows to 0 over a long run of small factors, and
+        # the c[t]/c[r] ratio then yields inf/NaN that the tril-multiply turns
+        # into inf*0 = NaN, contaminating even valid earlier rows. cumsum of
+        # logs never underflows; masking the upper triangle to -inf BEFORE exp
+        # makes those entries exp(-inf)=0 cleanly (no overflow, no inf*0).
+        d = np.asarray(decay, np.float64)                       # [B,H,S]
+        ell = np.cumsum(np.log(np.maximum(d, 1e-30)), axis=-1)  # L[t]
+        diff = ell[..., :, None] - ell[..., None, :]            # L[t]-L[r]
+        diff = np.where(tri, diff, -np.inf)
+        scores = scores * np.exp(diff).astype(np.float32)
     return _x86_batched_gemm(np.ascontiguousarray(scores, np.float32),
                              np.ascontiguousarray(v, np.float32))
 

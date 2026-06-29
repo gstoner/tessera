@@ -20,7 +20,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `attn_sliding_window` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `flash_attn` | attention | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `flash_attn` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
@@ -329,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |

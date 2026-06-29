@@ -192,10 +192,16 @@ class TestFlashAttnManifest:
         assert ag.status == "hardware_verified"
         assert set(ag.dtypes) >= {"fp32", "fp16", "bf16"}
 
-    def test_no_x86_fused_attention(self):
-        """x86 doesn't ship a fused attention kernel (only AMX GEMM)."""
+    def test_x86_ships_fused_flash_attn_partner(self):
+        """P10 — x86 now ships an AVX-512 online-softmax flash_attn forward
+        (the partner to the ROCm WMMA flash_attn), so the x86 slot is fused."""
         entries = {e.target: e for e in manifest_for("flash_attn")}
-        assert "x86" not in entries
+        assert "x86" in entries
+        x86 = entries["x86"]
+        assert x86.status == "fused"
+        assert x86.dtypes == ("fp32",)
+        assert x86.execute_compare_fixture == (
+            "tests/unit/test_x86_flash_attn_compiled.py")
 
 
 # ──────────────────────────────────────────────────────────────────────────

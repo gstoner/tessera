@@ -2293,6 +2293,97 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# x86 flash_attn lane (P10) — the AVX-512 PARTNER to the ROCm WMMA flash_attn.
+# FA-style streaming/online softmax (running max/denominator + rescaled
+# accumulator; the S×S score matrix is never materialized). f32 (softmax is f32
+# on every backend). Core MHA path: scale + causal. GQA / sliding-window /
+# logit-softcap / attn_bias / dropout are the ROCm lane's extras — the x86 lane
+# rejects them with a stable diagnostic (Decision #21) rather than silently
+# dropping. compiler_path="x86_flash_attn_compiled". Matches tessera.flash_attn.
+#
+# ONLY tessera.flash_attn (the per-head [..., S, D] contract) is accepted.
+# tessera.multi_head_attention is a DIFFERENT contract — rank-3 [B, S, H*D] +
+# num_heads, needing a split to [B, H, S, D] this kernel does not do — so it is
+# rejected here rather than mis-run as single-head attention over H*D.
+# ─────────────────────────────────────────────────────────────────────────────
+_X86_FA_OPS = ("tessera.flash_attn",)
+
+
+def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
+                                     args: Any) -> Any:
+    """The ``target="x86"`` flash_attn lane (AVX-512 online-softmax FA forward).
+    Q/K/V are ``[..., S, D]`` (leading dims = B*H). f32, scale + causal."""
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_flash_attn_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_f32 missing")
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_FA_OPS:
+        raise ValueError(
+            f"x86_flash_attn_compiled executor handles one of {_X86_FA_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("flash_attn requires Q, K, V operands")
+    # A 4th operand is the additive attn_bias / mask (the Graph IR + Apple path
+    # normalize flash_attn(..., attn_bias=…) into a 4th operand). The x86 lane
+    # does not apply it, so reject rather than silently run un-biased attention.
+    if len(operand_names) > 3:
+        raise ValueError(
+            "x86 flash_attn lane does not support an attn_bias / mask operand "
+            f"(got {len(operand_names)} operands; ROCm-lane feature) — not "
+            "supported on x86_flash_attn_compiled")
+    values = _bind_launch_args(args, arg_names)
+    q = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
+    k = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)
+    v = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), np.float32)
+    if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
+        raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
+    d = int(q.shape[-1])
+    sq, sk = int(q.shape[-2]), int(k.shape[-2])
+    if (int(k.shape[-1]) != d or int(v.shape[-1]) != d
+            or int(v.shape[-2]) != sk or v.shape[:-2] != k.shape[:-2]):
+        raise ValueError(
+            "x86 flash_attn requires K/V to share batch/head + key length and "
+            f"Q's head dim; got Q{q.shape} K{k.shape} V{v.shape}")
+    # GQA (q-heads != kv-heads) and the structured-mask extras are ROCm-lane
+    # features; the x86 core lane names them rather than silently mis-running.
+    if q.shape[:-2] != k.shape[:-2]:
+        raise ValueError(
+            "x86 flash_attn lane handles MHA (matching Q/K batch+head dims); "
+            f"GQA/MQA (Q{q.shape[:-2]} vs K{k.shape[:-2]}) is the ROCm lane — "
+            "not supported on x86_flash_attn_compiled")
+    kwargs = op.get("kwargs") or {}
+    for unsup in ("window", "logit_softcap", "attn_bias", "dropout_p"):
+        val = kwargs.get(unsup)
+        if val:
+            raise ValueError(
+                f"x86 flash_attn lane does not support {unsup!r} (ROCm-lane "
+                f"feature); got {unsup}={val!r} on x86_flash_attn_compiled")
+    causal = 1 if bool(kwargs.get("causal", False)) else 0
+    scale = kwargs.get("scale")
+    scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(d))
+    bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+    qc = q.reshape(bh, sq, d)
+    kc = k.reshape(bh, sk, d)
+    vc = v.reshape(bh, sk, d)
+    o = np.zeros((bh, sq, d), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    fn(qc.ctypes.data_as(cf), kc.ctypes.data_as(cf), vc.ctypes.data_as(cf),
+       ctypes.c_int64(bh), ctypes.c_int64(sq), ctypes.c_int64(sk),
+       ctypes.c_int64(d), ctypes.c_float(scale), ctypes.c_int(causal),
+       o.ctypes.data_as(cf))
+    return o.reshape(q.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED linear_attn lane (2026-06-25) — the quadratic-parallel form
 # O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V, NO softmax (a distinct algorithm from
 # flash_attn). ``runtime.launch()`` of an artifact stamped
@@ -10582,6 +10673,7 @@ def _executor_table():
         "x86_strided_compiled": _execute_x86_compiled_strided,
         "x86_sort_compiled": _execute_x86_compiled_sort,
         "x86_clifford_compiled": _execute_x86_compiled_clifford,
+        "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,

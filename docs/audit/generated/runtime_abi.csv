@@ -610,6 +610,7 @@ x86,tessera_x86_clifford_bilinear_f32,clifford_bilinear,f32,src/compiler/codegen
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_flash_attn_f32,flash_attn,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_gather_f32,gather,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gather_f32.cpp
 x86,tessera_x86_lu_f32,lu,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_lu_qr_f32.cpp
 x86,tessera_x86_moe_f32,moe,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_moe_f32.cpp

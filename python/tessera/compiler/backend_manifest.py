@@ -1525,6 +1525,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
     # `hardware_verified` row — the second op after matmul to execute on ROCm.
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
+    # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
+    # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
+    ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
     # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
     # via runtime.launch(), each compared to a numpy reference on gfx1151. These
     # back the ``compiled`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
@@ -2082,6 +2085,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("bf16",),
         "notes": "AMX BF16 GEMM",
+    },
+    # P10 — flash_attn x86 AVX-512 partner to the ROCm WMMA flash_attn. FA-style
+    # streaming/online-softmax forward (tessera_x86_flash_attn_f32, runtime-
+    # loaded; x86_flash_attn_compiled lane). f32; MHA core path (scale + causal);
+    # validated on-device (execute_compare_fixture).
+    "flash_attn": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 FA-style online-softmax forward "
+                 "(tessera_x86_flash_attn_f32, runtime-loaded; "
+                 "x86_flash_attn_compiled lane; MHA scale+causal; f32)",
     },
     # S2 reduction family — hand-written AVX-512 row-reduction kernel
     # (tessera_x86_avx512_reduce_f32) the runtime ctypes-loads from

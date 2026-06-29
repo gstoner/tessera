@@ -2348,11 +2348,14 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
         raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
     d = int(q.shape[-1])
     sq, sk = int(q.shape[-2]), int(k.shape[-2])
-    if (int(k.shape[-1]) != d or int(v.shape[-1]) != d
-            or int(v.shape[-2]) != sk or v.shape[:-2] != k.shape[:-2]):
+    # K must share Q's head dim (the QK score dot); V's last dim is the value
+    # width and MAY differ (v_head_dim != qk_head_dim) — the output takes V's
+    # width. K/V share batch/head + key length.
+    if (int(k.shape[-1]) != d or int(v.shape[-2]) != sk
+            or v.shape[:-2] != k.shape[:-2]):
         raise ValueError(
-            "x86 flash_attn requires K/V to share batch/head + key length and "
-            f"Q's head dim; got Q{q.shape} K{k.shape} V{v.shape}")
+            "x86 flash_attn requires K to share Q's head dim and K/V to share "
+            f"batch/head + key length; got Q{q.shape} K{k.shape} V{v.shape}")
     # GQA (q-heads != kv-heads) and the structured-mask extras are ROCm-lane
     # features; the x86 core lane names them rather than silently mis-running.
     if q.shape[:-2] != k.shape[:-2]:
@@ -2387,18 +2390,21 @@ def _x86_flash_attn_kernel(q: Any, k: Any, v: Any, scale: float, causal: bool,
     q = np.ascontiguousarray(q, np.float32)
     k = np.ascontiguousarray(k, np.float32)
     v = np.ascontiguousarray(v, np.float32)
+    # `d` is the QK head dim (the score dot); `dv` is the value width (output
+    # width). They differ for MLA configs with v_head_dim != qk_head_dim.
     d, sq, sk = int(q.shape[-1]), int(q.shape[-2]), int(k.shape[-2])
+    dv = int(v.shape[-1])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
     qc = q.reshape(bh, sq, d)
     kc = k.reshape(bh, sk, d)
-    vc = v.reshape(bh, sk, d)
-    o = np.zeros((bh, sq, d), np.float32)
+    vc = v.reshape(bh, sk, dv)
+    o = np.zeros((bh, sq, dv), np.float32)
     cf = ctypes.POINTER(ctypes.c_float)
     fn(qc.ctypes.data_as(cf), kc.ctypes.data_as(cf), vc.ctypes.data_as(cf),
        ctypes.c_int64(bh), ctypes.c_int64(sq), ctypes.c_int64(sk),
-       ctypes.c_int64(d), ctypes.c_float(scale), ctypes.c_int(1 if causal else 0),
-       o.ctypes.data_as(cf))
-    return o.reshape(q.shape)
+       ctypes.c_int64(d), ctypes.c_int64(dv), ctypes.c_float(scale),
+       ctypes.c_int(1 if causal else 0), o.ctypes.data_as(cf))
+    return o.reshape(q.shape[:-1] + (dv,))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2446,11 +2452,12 @@ def _execute_x86_compiled_mla(artifact: RuntimeArtifact, args: Any) -> Any:
     x, w_dkv, w_uk, w_uv, q = ops_in
     c = _x86_batched_gemm(x, w_dkv)           # compress to latent
     kk = _x86_batched_gemm(c, w_uk)           # expand to K
-    vv = _x86_batched_gemm(c, w_uv)           # expand to V
+    vv = _x86_batched_gemm(c, w_uv)           # expand to V (value width may
+    #                                           differ from the QK head dim)
     if q.shape[:-2] != kk.shape[:-2] or int(q.shape[-1]) != int(kk.shape[-1]):
         raise ValueError(
-            "x86 mla_decode_fused: expanded K/V must match q's batch + head "
-            f"dim (single-head MLA); got q{q.shape} K{kk.shape}")
+            "x86 mla_decode_fused: expanded K must match q's batch + head dim "
+            f"(the QK score dot; single-head MLA); got q{q.shape} K{kk.shape}")
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(q.shape[-1]))
     causal = bool(kwargs.get("causal", False))

@@ -62,23 +62,27 @@ inline void axpby_f32(float* acc, float c, float p, const float* v, int64_t d) {
 
 } // namespace
 
-// Q: [bh, sq, d]   K,V: [bh, sk, d]   O: [bh, sq, d]   (row-major).
-// causal != 0 applies the lower-triangular mask aligned to the sequence tail
-// (key j valid iff j <= i + max(sk - sq, 0)), matching the dense reference.
+// Q,K: [bh, s, d]   V: [bh, sk, dv]   O: [bh, sq, dv]   (row-major).
+// `d` is the QK head dim (the score dot product); `dv` is the value width (the
+// accumulator / output width) — these differ for MLA configs with
+// v_head_dim != qk_head_dim, so they are separate parameters. causal != 0
+// applies the lower-triangular mask aligned to the sequence tail (key j valid
+// iff j <= i + max(sk - sq, 0)), matching the dense reference.
 extern "C" void tessera_x86_flash_attn_f32(const float* Q, const float* K,
                                            const float* V, int64_t bh,
                                            int64_t sq, int64_t sk, int64_t d,
-                                           float scale, int causal, float* O) {
+                                           int64_t dv, float scale, int causal,
+                                           float* O) {
     const int64_t off = (sk > sq) ? (sk - sq) : 0;     // causal alignment
     for (int64_t b = 0; b < bh; ++b) {
         const float* Qb = Q + b * sq * d;
         const float* Kb = K + b * sk * d;
-        const float* Vb = V + b * sk * d;
-        float* Ob = O + b * sq * d;
+        const float* Vb = V + b * sk * dv;
+        float* Ob = O + b * sq * dv;
         for (int64_t i = 0; i < sq; ++i) {
             const float* qi = Qb + i * d;
-            float* oi = Ob + i * d;
-            for (int64_t t = 0; t < d; ++t)
+            float* oi = Ob + i * dv;
+            for (int64_t t = 0; t < dv; ++t)
                 oi[t] = 0.0f;
             const int64_t jmax = causal ? (i + off) : (sk - 1);
             float m = -INFINITY, l = 0.0f;
@@ -88,11 +92,11 @@ extern "C" void tessera_x86_flash_attn_f32(const float* Q, const float* K,
                 const float c = (m == -INFINITY) ? 0.0f : std::exp(m - mn);
                 const float p = std::exp(s - mn);
                 l = l * c + p;
-                axpby_f32(oi, c, p, Vb + j * d, d);
+                axpby_f32(oi, c, p, Vb + j * dv, dv);
                 m = mn;
             }
             const float inv = (l > 0.0f) ? (1.0f / l) : 0.0f;
-            for (int64_t t = 0; t < d; ++t)
+            for (int64_t t = 0; t < dv; ++t)
                 oi[t] *= inv;
         }
     }

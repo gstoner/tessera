@@ -96,6 +96,18 @@ def test_cross_attention_unequal_seq():
                                rtol=1e-4, atol=1e-4)
 
 
+def test_distinct_value_width():
+    """V's value width may differ from the QK head dim — the output takes V's
+    width (the dense reference allows V's last dim to be independent)."""
+    rt = _rt_or_skip()
+    q = _RNG.standard_normal((2, 5, 16)).astype(np.float32)
+    k = _RNG.standard_normal((2, 7, 16)).astype(np.float32)
+    v = _RNG.standard_normal((2, 7, 24)).astype(np.float32)   # value width 24
+    got = _run(rt, q, k, v)
+    assert got.shape == (2, 5, 24)
+    np.testing.assert_allclose(got, _ref(q, k, v), rtol=1e-4, atol=1e-4)
+
+
 def test_gqa_rejected_with_stable_diagnostic():
     rt = _rt_or_skip()
     q = _RNG.standard_normal((4, 8, 16)).astype(np.float32)   # 4 q-heads

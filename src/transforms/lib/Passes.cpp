@@ -89,6 +89,9 @@ void registerTesseraPasses() {
   // pipelines below). Standalone form names the target via the `target` option.
   ::mlir::registerPass([]() { return createControlFlowTargetGuardPass(); });
 
+  // ── CF2 — control-flow → scf lowering (control_for → scf.for).
+  ::mlir::registerPass([]() { return createLowerControlFlowToSCFPass(); });
+
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):
@@ -102,8 +105,13 @@ void registerTesseraPasses() {
                "Full Phase 2 lowering chain to x86 AMX/AVX-512 backend",
       [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
-        // CF0: x86 has no device control-flow lowering — reject control_* early
-        // with a stable diagnostic instead of a confusing downstream failure.
+        // CF2: lower tessera.control_for → scf.for FIRST, so a lowerable loop
+        // becomes a portable scf.for and never reaches the guard below; the
+        // executable-payload form is skipped and still guarded.
+        pm.addPass(createLowerControlFlowToSCFPass());
+        // CF0: x86 has no device control-flow lowering — reject the control_*
+        // ops CF2 left with a stable diagnostic instead of a confusing
+        // downstream failure.
         pm.addPass(createControlFlowTargetGuardPass("x86"));
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout *assignment* runs just before legality so
@@ -276,8 +284,8 @@ void registerTesseraPasses() {
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
       [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
-        // CF0: NVIDIA has no device control-flow lowering yet (CF3) — reject
-        // control_* early with a stable diagnostic.
+        // CF2 → CF0: lower control_for to scf.for first; guard what's left.
+        pm.addPass(createLowerControlFlowToSCFPass());
         pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
@@ -345,7 +353,9 @@ void registerTesseraPasses() {
   auto buildCUDA13Pipeline = [](OpPassManager &pm,
                                 const TesseraLoweringPipelineOptions &opts) {
     addGraphIRPreLoweringPasses(pm);
-    // CF0: CUDA 13.3 chain has no device control-flow lowering yet (CF3).
+    // CF2 → CF0: lower control_for to scf.for first; the executable-payload
+    // form is skipped and still guarded (no device control-flow yet — CF3).
+    pm.addPass(createLowerControlFlowToSCFPass());
     pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
     pm.addPass(createDistributionLoweringPass());
     // 2026-06-22: optional layout assignment (see lowerToX86 / opts).

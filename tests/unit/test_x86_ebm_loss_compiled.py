@@ -130,6 +130,6 @@ def test_load_balance(reduction):
     logits = _rn(2, 8, 4)
     probs = np.exp(logits - logits.max(-1, keepdims=True))
     probs = (probs / probs.sum(-1, keepdims=True)).astype(np.float32)
-    got = _run(rt, "tessera.loss.load_balance", probs, reduction=reduction)
+    got = _run(rt, "tessera.loss.load_balance_loss", probs, reduction=reduction)
     ref = losses.load_balance_loss(probs, reduction=reduction)
     np.testing.assert_allclose(got, np.asarray(ref), rtol=1e-4, atol=1e-4)

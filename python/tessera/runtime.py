@@ -5627,7 +5627,7 @@ _EBM_LOSS_OPS = (
     "tessera.loss.score_matching", "tessera.loss.denoising_score_matching",
     "tessera.loss.implicit_score_matching", "tessera.loss.contrastive_divergence",
     "tessera.loss.persistent_cd", "tessera.loss.ddpm_noise_pred",
-    "tessera.loss.vlb", "tessera.loss.load_balance",
+    "tessera.loss.vlb", "tessera.loss.load_balance_loss",
 )
 
 
@@ -5701,7 +5701,7 @@ def _ebm_loss_compute(op_name: str, operands: list, kwargs: dict, target: str,
                      * _dev_reduce_axis(mul(d, d), "sum", -1, target, np))
         return _dev_reduce_all(persample.astype(np.float32), red, target, np)
 
-    if op_name == "tessera.loss.load_balance":
+    if op_name == "tessera.loss.load_balance_loss":
         # Switch-Transformer aux: E·Σ_e f_e·P_e (f = routed fraction, P = mean
         # prob). argmax / one-hot on host; the token-axis means + Σ on device.
         p = ops[0]

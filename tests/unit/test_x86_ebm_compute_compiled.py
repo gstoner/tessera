@@ -106,3 +106,30 @@ def test_self_verify_soft_min():
     got = _run(rt, "tessera.ebm_self_verify", energies, candidates, beta=2.0)
     ref = _self_verify(energies, candidates, beta=2.0)
     np.testing.assert_allclose(got, np.asarray(ref), rtol=1e-4, atol=1e-4)
+
+
+def test_self_verify_rejects_mismatched_candidate_shape():
+    rt = _rt_or_skip()
+    energies = _rn(2, 3)
+    candidates = _rn(2, 4, 5)        # K mismatch (4 vs 3) — must reject
+    res = rt.launch(_art(rt, "tessera.ebm_self_verify", 2, {}),
+                    (energies, candidates))
+    assert res["ok"] is False
+    assert "candidates.shape[:2]" in res.get("reason", "")
+
+
+def test_energy_quadratic_empty_batch():
+    rt = _rt_or_skip()
+    x = np.zeros((0, 3), np.float32)
+    y = np.zeros((0, 3), np.float32)
+    got = _run(rt, "tessera.ebm_energy_quadratic", x, y)
+    assert got.shape == (0,)
+    np.testing.assert_array_equal(got, np.asarray(_energy_quadratic(x, y)))
+
+
+def test_energy_quadratic_zero_event():
+    rt = _rt_or_skip()
+    x = np.zeros((4, 0), np.float32)
+    y = np.zeros((4, 0), np.float32)
+    got = _run(rt, "tessera.ebm_energy_quadratic", x, y)
+    np.testing.assert_array_equal(got, np.asarray(_energy_quadratic(x, y)))

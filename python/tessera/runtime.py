@@ -5785,7 +5785,16 @@ def _ebm_compute_compute(op_name: str, operands: list, kwargs: dict,
         if x.ndim <= 1:
             return (np.float32(0.5) * np.asarray(sq, np.float32)).astype(
                 np.float32)
-        s = _dev_reduce_axis(sq.reshape(x.shape[0], -1), "sum", -1, target, np)
+        bdim = int(x.shape[0])
+        event = int(np.prod(x.shape[1:]))           # explicit trailing product
+        flat = np.ascontiguousarray(sq, np.float32).reshape(bdim, event)
+        if bdim == 0 or event == 0:
+            # Empty microbatch / zero-length event dims: the device reduce
+            # rejects empty axes, so match the numpy reference on the host
+            # (an empty batch -> (0,) energy; a zero-length event -> zeros).
+            s = flat.sum(axis=-1)
+        else:
+            s = _dev_reduce_axis(flat, "sum", -1, target, np)
         return (np.float32(0.5) * s).astype(np.float32)
 
     if op_name == "tessera.ebm_inner_step":         # y − η·grad
@@ -5810,6 +5819,10 @@ def _ebm_compute_compute(op_name: str, operands: list, kwargs: dict,
         if energies.ndim != 2:
             raise ValueError(
                 f"ebm_self_verify needs energies (B, K); got {energies.shape}")
+        if candidates.shape[:2] != energies.shape:
+            raise ValueError(
+                "ebm_self_verify needs candidates.shape[:2] == energies.shape; "
+                f"got energies={energies.shape}, candidates={candidates.shape}")
         beta = kwargs.get("beta")
         bdim = int(energies.shape[0])
         if beta is None:                            # hard argmin (indexing)

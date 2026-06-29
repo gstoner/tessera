@@ -607,6 +607,7 @@ x86,tessera_x86_avx512_where_f32,avx512_where,f32,src/compiler/codegen/tessera_x
 x86,tessera_x86_bitonic_sort_kv_f32,bitonic_sort_kv,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sort_f32.cpp
 x86,tessera_x86_cholesky_f32,cholesky,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp
 x86,tessera_x86_clifford_bilinear_f32,clifford_bilinear,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_clifford_f32.cpp
+x86,tessera_x86_ebm_langevin_philox_f32,ebm_langevin_philox,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ebm_langevin_f32.cpp
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp

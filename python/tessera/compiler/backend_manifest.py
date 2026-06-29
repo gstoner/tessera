@@ -1051,6 +1051,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_ebm_compute_compiled).",
     } for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
                  "ebm_self_verify")},
+    # P7 sampling — EBM Langevin step with on-device Philox noise via the
+    # COMPILER-GENERATED gfx1151 kernel (generate-rocm-ebm-langevin-kernel; one
+    # thread per element; Box-Muller). Executes via rocm_ebm_langevin_compiled.
+    "ebm_langevin_step": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("random", "elementwise"),
+        "notes": "EBM Langevin step ebm_langevin_step — y − η·grad + "
+                 "noise_scale·z with z drawn on-device from Philox-4x32-10 "
+                 "(generate-rocm-ebm-langevin-kernel). Executes via "
+                 "runtime.launch() (rocm_ebm_langevin_compiled).",
+    },
     # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
     # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
     **{op: {
@@ -1696,6 +1707,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_ebm_compute_compiled.py"
        for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
                   "ebm_self_verify")},
+    ("ebm_langevin_step", "x86"):
+        "tests/unit/test_x86_ebm_langevin_compiled.py",
+    ("ebm_langevin_step", "rocm"):
+        "tests/unit/test_rocm_ebm_langevin_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
@@ -2532,6 +2547,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "f32, matches numpy)",
     } for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
                  "ebm_self_verify")},
+    # P7 sampling — EBM Langevin step with on-device Philox noise via the
+    # AVX-512 langevin kernel (Box-Muller; x86_ebm_langevin_compiled lane). f32.
+    "ebm_langevin_step": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 EBM Langevin step ebm_langevin_step "
+                 "(tessera_x86_ebm_langevin_philox_f32, runtime-loaded; y − "
+                 "η·grad + noise_scale·z, z drawn on-device from Philox-4x32-10 "
+                 "Box-Muller; x86_ebm_langevin_compiled lane; f32, matches the "
+                 "numpy reference)",
+    },
     # Low-precision float quantization — quantize/dequantize fp8/fp6/fp4 on the
     # AVX-512 fpquant kernel (per-tensor symmetric grid-snap, fake-quant in f32
     # storage; x86_fpquant_compiled). The lane is f32 in/out (the fpN grid is

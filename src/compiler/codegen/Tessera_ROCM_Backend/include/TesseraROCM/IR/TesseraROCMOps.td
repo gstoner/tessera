@@ -857,6 +857,25 @@ def ROCM_GatherKernelOp : TesseraROCM_Op<"gather"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_EbmLangevinKernelOp : TesseraROCM_Op<"ebm_langevin"> {
+  let summary = "EBM Langevin step with on-device Philox-4x32-10 noise";
+  let description = [{
+    The directive `generate-rocm-ebm-langevin-kernel` expands into a Langevin
+    step gpu kernel that DRAWS its own Gaussian noise from counter-based
+    Philox-4x32-10 (the P6 RNG generator), so the noise is never supplied from
+    the host: one thread per element `i` computes
+    `z = sqrt(-2 ln u0)·cos(2π u1)` (Box-Muller) from the first two Philox
+    outputs for counter `(c0+i, c1, c2, c3)` under key `(k0, k1)` mapped to
+    (0,1) by `(x+0.5)·2^-32`, then `out[i] = y[i] - eta·grad[i] +
+    noise_scale·z`. Mirrors `tessera.ebm.langevin_step_philox`. CPU analog:
+    avx512_ebm_langevin_f32. Args: `(y : memref<?xf32>, grad : memref<?xf32>,
+    n : index, eta f32, noise_scale f32, k0 i32, k1 i32, c0 i32, c1 i32,
+    c2 i32, c3 i32, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
   let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
   let description = [{

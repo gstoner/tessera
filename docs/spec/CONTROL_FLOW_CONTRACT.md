@@ -5,6 +5,10 @@ authority: CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md CF0
 last_updated: 2026-06-29
 ---
 
+<!-- CF1 (2026-06-29): trace-time carry/branch dtype contract + verifier lit
+     coverage; pytree-carry tracing carved out to CF1b. -->
+
+
 # Control-Flow Contract (CF0)
 
 > **Status:** CF0 of `docs/audit/roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md`.
@@ -84,13 +88,19 @@ inside a compiled-backend claim.
   branch runs), not a data-parallel select.
 
 ### Known envelope gaps (documented, not silently wrong)
-- The trace checks carry/branch **shape** equality but not yet **dtype**
-  equality on the for/while/cond paths; the Graph IR verifiers *do* enforce
-  full type match (`control_for` result vs carried iter_arg type,
-  `TesseraOps.cpp:2751`). Tightening the trace-time dtype check to match the
-  verifier is a CF1 follow-up.
+- ~~The trace checks carry/branch **shape** equality but not yet **dtype**
+  equality.~~ **Closed in CF1.** The trace now also enforces carry/branch
+  **dtype** equality on the for/while/scan/cond paths (`record_for_loop` /
+  `record_while` / `record_scan` / `record_cond` in `trace.py`), matching the
+  Graph IR verifiers' full-type match (`control_for` result vs carried iter_arg
+  type, `TesseraOps.cpp:2751`). A body that drifts the carry dtype (e.g. an
+  in-body cast) now fails at trace time with a clear `TesseraTraceError` instead
+  of slipping to the later MLIR verifier. Covered by
+  `tests/unit/test_cf1_control_flow_dtype.py`.
 - Carry is a single `Tracer` under trace — **pytree carries are not yet traced**
-  (they fall back to eager). Multi-tensor device carries are a CF1/CF2 item.
+  (they fall back to eager). Multi-tensor device carries are a **CF1b** item
+  (the structural change: multi-operand control ops + flatten/unflatten +
+  `execute_traced` plumbing).
 
 ---
 
@@ -198,9 +208,11 @@ claim.
 
 ## 7. What CF1–CF4 build on this
 
-- **CF1** — tighten the trace-time dtype check to match the verifiers; add
-  pytree-carry tracing; optional `tessera.control.yield` helper; full verifier
-  lit coverage (positive + negative).
+- **CF1** *(done)* — tightened the trace-time dtype check to match the
+  verifiers; full verifier lit coverage of the payload (carry_arg_index) form +
+  if-payload symmetry (`tests/tessera-ir/control_flow/cf1_control_verifiers.mlir`).
+- **CF1b** — pytree-carry tracing (multi-operand control ops + flatten/unflatten
+  + `execute_traced` plumbing); optional `tessera.control.yield` helper.
 - **CF2** — Schedule/Tile lowering shared by CUDA/ROCm: static-trip loops with
   explicit carry buffers; `while` → bounded loop + device predicate +
   `actual_steps`; `cond` → predicated regions. One backend launch per loop

@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3590** total Python-test references, **867** total lit-fixture references.
+- **3602** total Python-test references, **867** total lit-fixture references.
 - **96** ops have **zero** references in either test surface.
 - **135** ops have ≤1 reference ("thinly tested").
 - **90** ops have ≥10 references ("well tested").
-- **112** ops have at least one associated `pytest.raises` negative test.
+- **113** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -21,7 +21,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `flash_attn` |  105 |   57 |  162 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |  120 |   37 |  157 |  30 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  105 |   20 |  125 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |  102 |   13 |  115 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |  104 |   13 |  117 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   87 |    4 |   91 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   85 |    2 |   87 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   86 |    0 |   86 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
@@ -30,9 +30,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `selective_ssm` |   60 |   10 |   70 |   2 | `bf16`, `fp16`, `fp32` |
 | `gelu` |   46 |   19 |   65 |   1 | `bf16`, `f16`, `f32`, `f64` … |
 | `attn_local_window_2d` |   34 |   25 |   59 |   1 | `fp32` |
+| `cast` |   14 |   40 |   54 |   1 | `fp16`, `fp32` |
 | `grouped_gemm` |   28 |   24 |   52 |   2 | `fp32`, `fp4_e2m1`, `fp8_e4m3`, `fp8_e5m2` … |
 | `linear_attn` |   44 |    8 |   52 |   2 |  |
-| `cast` |   10 |   40 |   50 |   0 | `fp32` |
 | `msa_sparse_attention` |   39 |   11 |   50 |   1 |  |
 | `transpose` |   23 |   27 |   50 |   0 | `bf16`, `f16`, `fp32` |
 | `cholesky` |   19 |   30 |   49 |   0 | `bf16`, `f16`, `f32`, `fp16` … |

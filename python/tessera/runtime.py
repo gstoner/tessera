@@ -5663,6 +5663,148 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Complex arithmetic (P5) — the 9 pointwise complex ops (Visual Complex
+# Analysis) over interleaved-f32 [..., 2] (re = x[...,0], im = x[...,1]). The
+# transcendental / arithmetic FLOP (exp/sin/cos/log/sqrt/atan2 + the real
+# mul/add/sub/div) run on the existing device lanes; host only splits/packs the
+# interleave + the division pole guard — the device-heavy / host-light split
+# LAMB/Muon/norm use. compiler_path="x86_complex_compiled" /
+# "rocm_complex_compiled". f32. Matches tessera.complex.
+# ─────────────────────────────────────────────────────────────────────────────
+_COMPLEX_OPS = ("tessera.complex_mul", "tessera.complex_div",
+                "tessera.complex_conjugate", "tessera.complex_abs",
+                "tessera.complex_arg", "tessera.complex_exp",
+                "tessera.complex_log", "tessera.complex_sqrt",
+                "tessera.complex_pow")
+
+
+def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
+    """One real elementwise op on its device lane: exp/log/sin/cos/sqrt (unary),
+    atan2 (2-ary), add/sub/mul/div (binary). x86 splits transcendental vs unary;
+    rocm's unary lane covers exp/log/sin/cos/sqrt."""
+    aa = tuple(np.ascontiguousarray(a, np.float32) for a in arrs)
+    if op == "atan2":
+        fn = (_execute_x86_compiled_atan2 if target == "x86"
+              else _execute_rocm_compiled_atan2)
+        path, nm, opn = f"{target}_atan2_compiled", ["y", "x"], "tessera.atan2"
+    elif op in ("add", "sub", "mul", "div"):
+        fn = (_execute_x86_compiled_binary if target == "x86"
+              else _execute_rocm_compiled_binary)
+        path, nm, opn = f"{target}_binary_compiled", ["a", "b"], f"tessera.{op}"
+    elif target == "x86" and op in ("exp", "log", "sin", "cos"):
+        fn = _execute_x86_compiled_transcendental
+        path, nm, opn = "x86_transcendental_compiled", ["x"], f"tessera.{op}"
+    elif target == "x86" and op == "sqrt":
+        fn = _execute_x86_compiled_unary
+        path, nm, opn = "x86_unary_compiled", ["x"], "tessera.sqrt"
+    else:  # rocm unary lane (exp/log/sin/cos/sqrt)
+        fn = _execute_rocm_compiled_unary
+        path, nm, opn = "rocm_unary_compiled", ["x"], f"tessera.{op}"
+    names = nm[:len(aa)]
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": path, "arg_names": names,
+        "output_name": "o",
+        "ops": [{"op_name": opn, "result": "o", "operands": names,
+                 "kwargs": {}}]})
+    return np.asarray(fn(art, aa), np.float32)
+
+
+def _complex_compute(op_name: str, operands: list, target: str, np: Any) -> Any:
+    def split(x: Any) -> tuple:
+        x = np.ascontiguousarray(x, np.float32)
+        if x.shape[-1] != 2:
+            raise ValueError(f"complex op expects interleaved [...,2]; got {x.shape}")
+        return x[..., 0].copy(), x[..., 1].copy()
+
+    def pack(re: Any, im: Any) -> Any:
+        re = np.asarray(re, np.float32)
+        im = np.broadcast_to(np.asarray(im, np.float32), re.shape)
+        return np.stack([re, im], axis=-1).astype(np.float32)
+
+    def R(op: str, *xs: Any) -> Any:
+        return _creal(op, target, np, *xs)
+
+    def clog(a: Any, b: Any) -> tuple:
+        mag2 = R("add", R("mul", a, a), R("mul", b, b))
+        safe = np.where(mag2 > 0, mag2, np.float32(1.0)).astype(np.float32)
+        lm = R("log", safe)
+        re = np.where(mag2 > 0, np.float32(0.5) * lm,
+                      np.float32(-np.inf)).astype(np.float32)
+        return re, R("atan2", b, a)
+
+    def cexp(a: Any, b: Any) -> tuple:
+        ea = R("exp", a)
+        return R("mul", ea, R("cos", b)), R("mul", ea, R("sin", b))
+
+    def cmul(a: Any, b: Any, c: Any, d: Any) -> tuple:
+        return (R("sub", R("mul", a, c), R("mul", b, d)),
+                R("add", R("mul", a, d), R("mul", b, c)))
+
+    a, b = split(operands[0])
+    if op_name == "tessera.complex_conjugate":
+        return pack(a, -b)
+    if op_name == "tessera.complex_abs":
+        return R("sqrt", R("add", R("mul", a, a), R("mul", b, b)))
+    if op_name == "tessera.complex_arg":
+        return R("atan2", b, a)
+    if op_name == "tessera.complex_exp":
+        return pack(*cexp(a, b))
+    if op_name == "tessera.complex_log":
+        return pack(*clog(a, b))
+    if op_name == "tessera.complex_sqrt":
+        lr, li = clog(a, b)
+        return pack(*cexp(np.float32(0.5) * lr, np.float32(0.5) * li))
+    if op_name == "tessera.complex_mul":
+        c, d = split(operands[1])
+        return pack(*cmul(a, b, c, d))
+    if op_name == "tessera.complex_pow":
+        c, d = split(operands[1])              # w
+        lr, li = clog(a, b)
+        return pack(*cexp(*cmul(c, d, lr, li)))
+    if op_name == "tessera.complex_div":
+        c, d = split(operands[1])
+        denom = R("add", R("mul", c, c), R("mul", d, d))
+        eps = 1e-12
+        safe = np.where(denom > eps, denom, np.float32(1.0)).astype(np.float32)
+        re = np.where(denom > eps,
+                      R("div", R("add", R("mul", a, c), R("mul", b, d)), safe),
+                      np.inf).astype(np.float32)
+        im = np.where(denom > eps,
+                      R("div", R("sub", R("mul", b, c), R("mul", a, d)), safe),
+                      np.inf).astype(np.float32)
+        return np.stack([re, im], axis=-1).astype(np.float32)
+    raise ValueError(f"complex executor handles {_COMPLEX_OPS}; got {op_name!r}")
+
+
+def _execute_complex(artifact: RuntimeArtifact, args: Any, target: str,
+                     path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _COMPLEX_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_COMPLEX_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _complex_compute(op_name, operands, target, np)
+
+
+def _execute_x86_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` complex-arithmetic lane (9 pointwise ops)."""
+    return _execute_complex(artifact, args, "x86", "x86_complex_compiled")
+
+
+def _execute_rocm_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` complex-arithmetic lane (9 pointwise ops)."""
+    return _execute_complex(artifact, args, "rocm", "rocm_complex_compiled")
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Device RNG (P6) — counter-based Philox-4x32-10. The device kernel generates the
 # uniform[0,1) bits (the RNG core, bit-exact vs tessera.rng_device); the host
 # applies the cheap distribution transform (uniform scale / Box-Muller normal /
@@ -5813,7 +5955,6 @@ def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_rng(artifact, args, _rocm_philox_uniform, "rocm_rng_compiled")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
 # may be None (one-sided). The scalar bound is broadcast to the input shape and
 # the elementwise max (lower) / min (upper) run on the device binary kernel — no
@@ -9818,6 +9959,7 @@ def _executor_table():
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
+        "x86_complex_compiled": _execute_x86_compiled_complex,
         "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
@@ -9852,6 +9994,7 @@ def _executor_table():
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
+        "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,

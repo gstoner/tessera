@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 192 |
-| ``runnable_reference`` | 117 |
+| ``complete`` | 199 |
+| ``runnable_reference`` | 110 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (192)
+## complete (199)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -223,12 +223,19 @@ each row into a single E2E tier.
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
+| ``complex_abs`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_arg`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_conjugate`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_div`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_log`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_pow`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_sqrt`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (117)
+## runnable_reference (110)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -334,13 +341,6 @@ each row into a single E2E tier.
 | ``conv2d`` | stencil | public | public | registered | partial | reference | ready | benchmarked |
 | ``conv3d`` | stencil | public | public | registered | partial | reference | ready | none |
 | ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_abs`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_arg`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_conjugate`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_div`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_log`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_pow`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_sqrt`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_jacobian`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``cross_ratio`` | visual_complex | public | public | registered | partial | reference | ready | none |

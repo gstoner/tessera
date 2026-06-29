@@ -32,7 +32,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `lookahead_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `memory_index_score` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `mla_decode` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `mla_decode_fused` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `mla_decode_fused` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `modified_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `mqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `msa_index_scores` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -190,9 +190,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `factorized_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
 | `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
@@ -329,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |
@@ -343,7 +343,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFNB PPGCpRN· |
+| loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· |
 | loss | 19 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· |
 | model_layer | 1 | PPGCpFN· |
 | moe | 1 | PPGCpFN· |

@@ -232,9 +232,9 @@ kv_cache_read,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 label_smoothed_cross_entropy,8,0,0,8,0,,directly_tested,8 direct test references
 lamb,11,0,0,11,0,,directly_tested,11 direct test references
 laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
-latent_kv_compress,6,19,0,25,0,fp16 fp32,directly_tested,25 direct test references
-latent_kv_expand_k,3,8,0,11,0,fp16 fp32,directly_tested,11 direct test references
-latent_kv_expand_v,2,7,0,9,0,fp16 fp32,directly_tested,9 direct test references
+latent_kv_compress,8,19,0,27,0,fp16 fp32,directly_tested,27 direct test references
+latent_kv_expand_k,5,8,0,13,0,fp16 fp32,directly_tested,13 direct test references
+latent_kv_expand_v,4,7,0,11,0,fp16 fp32,directly_tested,11 direct test references
 layer_norm,25,7,3,32,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,32 direct test references
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 lgamma,3,0,0,3,0,,directly_tested,3 direct test references
@@ -280,7 +280,7 @@ min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
-mla_decode_fused,5,9,1,14,0,,directly_tested,14 direct test references
+mla_decode_fused,9,9,1,18,0,,directly_tested,18 direct test references
 mobius,3,0,0,3,0,,directly_tested,3 direct test references
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references

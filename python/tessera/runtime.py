@@ -2367,9 +2367,27 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
             raise ValueError(
                 f"x86 flash_attn lane does not support {unsup!r} (ROCm-lane "
                 f"feature); got {unsup}={val!r} on x86_flash_attn_compiled")
-    causal = 1 if bool(kwargs.get("causal", False)) else 0
+    causal = bool(kwargs.get("causal", False))
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(d))
+    return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
+
+
+def _x86_flash_attn_kernel(q: Any, k: Any, v: Any, scale: float, causal: bool,
+                           np: Any) -> Any:
+    """Run the AVX-512 online-softmax FA forward on already-validated MHA
+    operands. Q ``[..., Sq, D]``, K/V ``[..., Sk, D]`` (matching leading dims);
+    returns O shaped like Q. f32."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_flash_attn_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_f32 missing")
+    q = np.ascontiguousarray(q, np.float32)
+    k = np.ascontiguousarray(k, np.float32)
+    v = np.ascontiguousarray(v, np.float32)
+    d, sq, sk = int(q.shape[-1]), int(q.shape[-2]), int(k.shape[-2])
     bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
     qc = q.reshape(bh, sq, d)
     kc = k.reshape(bh, sk, d)
@@ -2378,9 +2396,65 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
     cf = ctypes.POINTER(ctypes.c_float)
     fn(qc.ctypes.data_as(cf), kc.ctypes.data_as(cf), vc.ctypes.data_as(cf),
        ctypes.c_int64(bh), ctypes.c_int64(sq), ctypes.c_int64(sk),
-       ctypes.c_int64(d), ctypes.c_float(scale), ctypes.c_int(causal),
+       ctypes.c_int64(d), ctypes.c_float(scale), ctypes.c_int(1 if causal else 0),
        o.ctypes.data_as(cf))
     return o.reshape(q.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# x86 MLA latent-KV lane (P11) — DeepSeek Multi-head Latent Attention building
+# blocks, COMPOSED on the shipped AVX-512 GEMM + the P10 flash_attn lane (no new
+# kernel). latent_kv_compress c = x @ W_dkv; latent_kv_expand_k/v K/V = c @ W_uk
+# /W_uv (all batched GEMMs); mla_decode_fused chains compress → expand → flash_
+# attn. Device does the FLOP-heavy matmuls + attention; host orchestrates the
+# chain. compiler_path="x86_mla_compiled". f32. Matches the numpy MLA reference.
+# ─────────────────────────────────────────────────────────────────────────────
+_X86_MLA_OPS = ("tessera.latent_kv_compress", "tessera.latent_kv_expand_k",
+                "tessera.latent_kv_expand_v", "tessera.mla_decode_fused")
+
+
+def _execute_x86_compiled_mla(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` MLA latent-KV lane (compress / expand_k / expand_v /
+    mla_decode_fused), composed on the AVX-512 GEMM + flash_attn lanes."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_MLA_OPS:
+        raise ValueError(
+            f"x86_mla_compiled executor handles one of {_X86_MLA_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    ops_in = [np.ascontiguousarray(_as_numpy(values[n]), np.float32)
+              for n in operand_names]
+
+    if op_name in ("tessera.latent_kv_compress", "tessera.latent_kv_expand_k",
+                   "tessera.latent_kv_expand_v"):
+        if len(ops_in) != 2:
+            raise ValueError(f"{op_name} needs (x, W) operands; got {len(ops_in)}")
+        return _x86_batched_gemm(ops_in[0], ops_in[1])
+
+    # mla_decode_fused(x, W_dkv, W_uk, W_uv, q)
+    if len(ops_in) != 5:
+        raise ValueError(
+            "mla_decode_fused needs (x, W_dkv, W_uk, W_uv, q) operands; "
+            f"got {len(ops_in)}")
+    x, w_dkv, w_uk, w_uv, q = ops_in
+    c = _x86_batched_gemm(x, w_dkv)           # compress to latent
+    kk = _x86_batched_gemm(c, w_uk)           # expand to K
+    vv = _x86_batched_gemm(c, w_uv)           # expand to V
+    if q.shape[:-2] != kk.shape[:-2] or int(q.shape[-1]) != int(kk.shape[-1]):
+        raise ValueError(
+            "x86 mla_decode_fused: expanded K/V must match q's batch + head "
+            f"dim (single-head MLA); got q{q.shape} K{kk.shape}")
+    scale = kwargs.get("scale")
+    scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(q.shape[-1]))
+    causal = bool(kwargs.get("causal", False))
+    return _x86_flash_attn_kernel(q, kk, vv, scale, causal, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10674,6 +10748,7 @@ def _executor_table():
         "x86_sort_compiled": _execute_x86_compiled_sort,
         "x86_clifford_compiled": _execute_x86_compiled_clifford,
         "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
+        "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,

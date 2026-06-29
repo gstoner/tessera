@@ -192,6 +192,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_flash_attn_compiled": "x86 CPU attention lane — FA-style online-softmax "
                                "flash_attn forward via the AVX-512 kernel "
                                "(MHA scale+causal; the ROCm-WMMA partner). f32",
+    "x86_mla_compiled": "x86 CPU MLA latent-KV lane — DeepSeek "
+                        "latent_kv_compress/expand_k/expand_v/mla_decode_fused "
+                        "composed on the AVX-512 GEMM + flash_attn lanes. f32",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -1047,6 +1050,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "rescaled accumulator; the S×S scores never materialize). MHA, "
                "scale + causal, f32; the AVX-512 partner to the ROCm WMMA "
                "flash_attn. Matches the dense attention reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_mla_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_mla_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_mla_compiled", runtime_status="success",
+        reason="x86 MLA latent-KV lane composes the DeepSeek building blocks on "
+               "the AVX-512 GEMM (latent_kv_compress/expand_k/expand_v = batched "
+               "matmul) + the flash_attn lane (mla_decode_fused chains "
+               "compress→expand→flash_attn). f32, matches the numpy MLA "
+               "reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",

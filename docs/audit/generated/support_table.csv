@@ -16,7 +16,7 @@ linear_attn_state,attention,public,public,registered,complete,partial,reference,
 lookahead_sparse_attention,attention,public,public,registered,complete,partial,reference,ready,none
 memory_index_score,attention,public,public,registered,complete,partial,reference,ready,none
 mla_decode,attention,public,public,registered,complete,partial,fused,ready,none
-mla_decode_fused,attention,public,public,registered,complete,partial,reference,ready,none
+mla_decode_fused,attention,public,public,registered,complete,partial,fused,ready,none
 modified_delta_attention,attention,public,public,registered,complete,partial,reference,ready,none
 mqa_attention,attention,public,public,registered,complete,partial,fused,ready,none
 msa_index_scores,attention,public,public,registered,complete,partial,reference,ready,none
@@ -174,9 +174,9 @@ dequant_matmul,loop_nest,public,public,registered,complete,partial,fused,ready,n
 factorized_matmul,loop_nest,public,public,registered,complete,partial,fused,ready,none
 gemm,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 grouped_gemm,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
-latent_kv_compress,loop_nest,public,public,registered,complete,partial,reference,ready,none
-latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,reference,ready,none
-latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,reference,ready,none
+latent_kv_compress,loop_nest,public,public,registered,complete,partial,fused,ready,none
+latent_kv_expand_k,loop_nest,public,public,registered,complete,partial,fused,ready,none
+latent_kv_expand_v,loop_nest,public,public,registered,complete,partial,fused,ready,none
 matmul,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 moe_swiglu_block,loop_nest,public,public,registered,complete,partial,fused,ready,benchmarked
 quantized_matmul,loop_nest,public,public,registered,complete,partial,reference,ready,none

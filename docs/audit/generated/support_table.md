@@ -133,9 +133,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `memory_index_select_ste` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `msa_select_blocks` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `nonzero` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `scatter` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `scatter_add` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `scatter_reduce` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `scatter` | indexing | public | public | registered | complete | partial | fused | ready | none |
+| `scatter_add` | indexing | public | public | registered | complete | partial | fused | ready | none |
+| `scatter_reduce` | indexing | public | public | registered | complete | partial | fused | ready | none |
 | `select` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `take` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -338,7 +338,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
-| indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | layout_transform | 31 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
 | linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |

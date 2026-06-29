@@ -857,6 +857,24 @@ def ROCM_GatherKernelOp : TesseraROCM_Op<"gather"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_ScatterKernelOp : TesseraROCM_Op<"scatter"> {
+  let summary = "Indexed-store / scatter kernel with atomic reduce (0-reduce)";
+  let description = [{
+    The directive `generate-rocm-scatter-kernel` expands into an indexed-store
+    gpu kernel — the 0-reduce lane (P8), companion to `tessera_rocm.gather`:
+    `out[idx[i]] (op)= src[i]` row-wise. One thread per source element (i, c):
+    target row `idx[i]`, column `c`; `mode = "set"` plain-stores, while
+    `"add"` / `"min"` / `"max"` use `memref.atomic_rmw` so concurrent updates to
+    the same output row reduce correctly (scatter_add / scatter_reduce). The host
+    moves the scatter axis to 0, flattens the trailing dims into a `row_len`-wide
+    row, and preloads `out` with the base tensor. CPU analog: avx512_scatter_f32.
+    Args: `(out : memref<?xf32>, out_rows : index, src : memref<?xf32>,
+      idx : memref<?xi64>, n_idx : index, row_len : index)`.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$mode);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_SortKernelOp : TesseraROCM_Op<"sort"> {
   let summary = "Cooperative bitonic sort kernel (key + index, last-axis rows)";
   let description = [{

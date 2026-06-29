@@ -51,6 +51,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_where_f32.cpp
   src/kernels/avx512_philox_f32.cpp
   src/kernels/avx512_gather_f32.cpp
+  src/kernels/avx512_scatter_f32.cpp
   src/kernels/avx512_sort_f32.cpp
   src/kernels/avx512_clifford_f32.cpp
   src/kernels/avx512_flash_attn_f32.cpp
@@ -158,6 +159,7 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_where_f32.cpp
   src/kernels/avx512_philox_f32.cpp
   src/kernels/avx512_gather_f32.cpp
+  src/kernels/avx512_scatter_f32.cpp
   src/kernels/avx512_sort_f32.cpp
   src/kernels/avx512_clifford_f32.cpp
   src/kernels/avx512_flash_attn_f32.cpp

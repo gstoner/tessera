@@ -195,6 +195,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_mla_compiled": "x86 CPU MLA latent-KV lane — DeepSeek "
                         "latent_kv_compress/expand_k/expand_v/mla_decode_fused "
                         "composed on the AVX-512 GEMM + flash_attn lanes. f32",
+    "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
+                            "scatter_reduce (0-reduce indexed store) via the "
+                            "AVX-512 row-scatter kernel. f32",
+    "rocm_scatter_compiled": "AMD GPU RDNA scatter lane — scatter/scatter_add/"
+                             "scatter_reduce via the COMPILER-GENERATED gfx1151 "
+                             "kernel (one thread per element; atomic_rmw). f32",
     "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
                             "uniform kernel + host transform (uniform/normal/"
                             "dropout). f32",
@@ -1013,6 +1019,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "from numpy shape arithmetic; the device moves the f32 data). "
                "f32, matches numpy.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_scatter_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_scatter_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_scatter_compiled", runtime_status="success",
+        reason="x86 scatter lane realizes scatter/scatter_add/scatter_reduce "
+               "(0-reduce indexed store) via the AVX-512 row-scatter kernel "
+               "(host moves the scatter axis to 0 + flattens rows; the device "
+               "reduces duplicate targets set/add/min/max). f32, matches the "
+               "numpy scatter reference.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_conformal_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_conformal_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1320,6 +1336,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "via the COMPILER-GENERATED gfx1151 masked-gather kernel "
                "(generate-rocm-gather-kernel; host index map). f32, matches "
                "numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_scatter_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_scatter_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_scatter_compiled", runtime_status="success",
+        reason="ROCm scatter lane realizes scatter/scatter_add/scatter_reduce "
+               "(0-reduce indexed store) via the COMPILER-GENERATED gfx1151 "
+               "kernel (generate-rocm-scatter-kernel; one thread per element; "
+               "atomic_rmw for add/min/max). f32, matches the numpy scatter "
+               "reference.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_conformal_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_conformal_compiled",

@@ -1269,6 +1269,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "masked-gather kernel (generate-rocm-gather-kernel; host index "
                  "map). Executes via runtime.launch() (rocm_strided_compiled).",
     } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    # P8 — scatter family (0-reduce indexed store) via the COMPILER-GENERATED
+    # gfx1151 kernel (generate-rocm-scatter-kernel; one thread per element;
+    # atomic_rmw for add/min/max). Executes via rocm_scatter_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("data_movement", "atomics"),
+        "notes": f"Standalone {op} — 0-reduce indexed store realized by the "
+                 "COMPILER-GENERATED gfx1151 kernel (generate-rocm-scatter-"
+                 "kernel; one thread per element; atomic_rmw add/min/max). "
+                 "Executes via runtime.launch() (rocm_scatter_compiled).",
+    } for op in ("scatter", "scatter_add", "scatter_reduce")},
     # P9 — sort / argsort / top_k via the COMPILER-GENERATED cooperative bitonic
     # kernel (generate-rocm-sort-kernel, one block per row; host pads/flips).
     **{op: {
@@ -1528,6 +1539,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
+    # P8 — scatter family (0-reduce indexed store) on x86 + ROCm, each compared
+    # to the numpy scatter reference. Skip-clean w/o the .so / GPU.
+    **{(op, "x86"): "tests/unit/test_x86_scatter_compiled.py"
+       for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{(op, "rocm"): "tests/unit/test_rocm_scatter_compiled.py"
+       for op in ("scatter", "scatter_add", "scatter_reduce")},
     # P11 — x86 MLA latent-KV lane (compress/expand/decode composed on the GEMM +
     # flash_attn lanes), compared to the numpy MLA reference. Skip-clean w/o .so.
     **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
@@ -2113,6 +2130,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "f32)",
     } for op in ("latent_kv_compress", "latent_kv_expand_k",
                  "latent_kv_expand_v", "mla_decode_fused")},
+    # P8 — scatter family (0-reduce indexed store): scatter/scatter_add/
+    # scatter_reduce via the AVX-512 row-scatter kernel (tessera_x86_scatter_f32,
+    # runtime-loaded; x86_scatter_compiled lane). f32; on-device fixture.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — 0-reduce indexed store via the AVX-512 row-scatter "
+                 "kernel (tessera_x86_scatter_f32, runtime-loaded; "
+                 "x86_scatter_compiled lane; f32)",
+    } for op in ("scatter", "scatter_add", "scatter_reduce")},
     # S2 reduction family — hand-written AVX-512 row-reduction kernel
     # (tessera_x86_avx512_reduce_f32) the runtime ctypes-loads from
     # libtessera_x86_elementwise.so and executes (x86_reduce_compiled). f32,

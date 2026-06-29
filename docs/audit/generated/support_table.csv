@@ -117,9 +117,9 @@ memory_index_select,indexing,public,public,registered,complete,partial,reference
 memory_index_select_ste,indexing,public,public,registered,complete,partial,reference,ready,none
 msa_select_blocks,indexing,public,public,registered,complete,partial,reference,ready,none
 nonzero,indexing,public,public,registered,complete,partial,reference,ready,none
-scatter,indexing,public,public,registered,complete,partial,reference,ready,none
-scatter_add,indexing,public,public,registered,complete,partial,reference,ready,none
-scatter_reduce,indexing,public,public,registered,complete,partial,reference,ready,none
+scatter,indexing,public,public,registered,complete,partial,fused,ready,none
+scatter_add,indexing,public,public,registered,complete,partial,fused,ready,none
+scatter_reduce,indexing,public,public,registered,complete,partial,fused,ready,none
 select,indexing,public,public,registered,complete,partial,reference,ready,none
 slice,indexing,public,public,registered,complete,partial,reference,ready,none
 take,indexing,public,public,registered,complete,partial,reference,ready,none

@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 214 |
-| ``runnable_reference`` | 95 |
+| ``complete`` | 217 |
+| ``runnable_reference`` | 92 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (214)
+## complete (217)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -117,6 +117,9 @@ each row into a single E2E tier.
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``scatter`` | indexing | public | public | registered | partial | fused | ready | none |
+| ``scatter_add`` | indexing | public | public | registered | partial | fused | ready | none |
+| ``scatter_reduce`` | indexing | public | public | registered | partial | fused | ready | none |
 | ``cat`` | layout_transform | public | public | registered | partial | fused | ready | none |
 | ``flip`` | layout_transform | public | public | registered | partial | fused | ready | none |
 | ``pad`` | layout_transform | public | public | registered | partial | fused | ready | none |
@@ -250,7 +253,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (95)
+## runnable_reference (92)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -290,9 +293,6 @@ each row into a single E2E tier.
 | ``memory_index_select_ste`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``msa_select_blocks`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``nonzero`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``scatter`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``scatter_add`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``scatter_reduce`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``select`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``slice`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``take`` | indexing | public | public | registered | partial | reference | ready | none |

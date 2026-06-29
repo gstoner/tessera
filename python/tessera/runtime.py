@@ -6315,6 +6315,122 @@ def _execute_x86_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_strided(artifact, args, _x86_gather, "x86_strided_compiled")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Scatter lane (P8) — the 0-reduce / indexed-store companion to the P4 gather
+# lane. scatter (set) / scatter_add (sum) / scatter_reduce (min/max) along an
+# axis with 1-D indices. The host moves the scatter axis to 0 and flattens the
+# trailing dims into a row, preloads `out` with the base tensor, and the device
+# reduces duplicate targets row-wise. x86: tessera_x86_scatter_f32 (sequential,
+# no atomics needed on one thread). ROCm: the COMPILER-GENERATED kernel
+# (generate-rocm-scatter-kernel; one thread per element; atomic_rmw for
+# add/min/max). compiler_path="x86_scatter_compiled" / "rocm_scatter_compiled".
+# f32. Matches numpy scatter / np.add.at / np.minimum.at / np.maximum.at.
+# ─────────────────────────────────────────────────────────────────────────────
+_SCATTER_OPS = ("tessera.scatter", "tessera.scatter_add",
+                "tessera.scatter_reduce")
+_SCATTER_MODE = {"set": 0, "add": 1, "min": 2, "amin": 2, "max": 3, "amax": 3}
+
+
+def _scatter_mode(op_name: str, kwargs: dict) -> int:
+    if op_name == "tessera.scatter":
+        return 0
+    if op_name == "tessera.scatter_add":
+        return 1
+    reduce = str(kwargs.get("reduce", "sum"))
+    if reduce in ("sum", "add"):
+        return 1
+    if reduce in ("min", "amin"):
+        return 2
+    if reduce in ("max", "amax"):
+        return 3
+    raise ValueError(
+        f"scatter_reduce reduce={reduce!r} unsupported on the device lane "
+        "(set/sum/min/max only)")
+
+
+def _scatter_prepare(operands: list, kwargs: dict, np: Any) -> tuple:
+    """Move the scatter axis to 0, flatten trailing dims into a row. Returns
+    (out [out_rows,row_len] preloaded with x, src [n_idx,row_len], idx [n_idx],
+     restore-fn). 1-D index only (the row-scatter case)."""
+    x = np.ascontiguousarray(operands[0], np.float32)
+    idx = np.ascontiguousarray(operands[1], np.int64).reshape(-1)
+    upd = np.ascontiguousarray(operands[2], np.float32)
+    axis = int(kwargs.get("axis", 0)) % x.ndim
+    xm = np.ascontiguousarray(np.moveaxis(x, axis, 0))
+    out_rows = int(xm.shape[0])
+    row_shape = xm.shape[1:]
+    row_len = int(np.prod(row_shape)) if row_shape else 1
+    n_idx = int(idx.shape[0])
+    # Updates BROADCAST to (n_idx, *row_shape) — matching numpy scatter
+    # assignment / np.add.at, which accept e.g. a single (row_len,) or (1,
+    # row_len) row applied across all selected indices, or the full per-index
+    # (n_idx, *row_shape). A full-rank update has the scatter axis moved to 0
+    # first (so its trailing dims line up with row_shape); a lower-rank update
+    # is broadcast directly.
+    um = np.moveaxis(upd, axis, 0) if upd.ndim == x.ndim else upd
+    target = (n_idx,) + tuple(row_shape)
+    try:
+        um = np.broadcast_to(um, target)
+    except ValueError as exc:
+        raise ValueError(
+            f"scatter updates shape {np.asarray(operands[2]).shape} do not "
+            f"broadcast to (n_idx, *row_shape) = {target}") from exc
+    um = np.ascontiguousarray(um, np.float32).reshape(n_idx, row_len)
+    out = xm.reshape(out_rows, row_len).copy()       # preload base
+
+    def restore(flat_out: Any) -> Any:
+        return np.ascontiguousarray(
+            np.moveaxis(flat_out.reshape((out_rows,) + row_shape), 0, axis),
+            np.float32)
+
+    return out, um, idx, out_rows, row_len, restore
+
+
+def _x86_scatter(out: Any, src: Any, idx: Any, out_rows: int, row_len: int,
+                 mode: int, np: Any) -> None:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_scatter_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_scatter_f32 missing")
+    cf = ctypes.POINTER(ctypes.c_float)
+    ci = ctypes.POINTER(ctypes.c_int64)
+    fn(out.ctypes.data_as(cf), ctypes.c_int64(out_rows),
+       src.ctypes.data_as(cf), idx.ctypes.data_as(ci),
+       ctypes.c_int64(int(idx.shape[0])), ctypes.c_int64(row_len),
+       ctypes.c_int(mode))
+
+
+def _execute_scatter(artifact: RuntimeArtifact, args: Any, scatter_fn: Any,
+                     path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SCATTER_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_SCATTER_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) != 3:
+        raise ValueError("scatter needs (x, indices, updates) operands")
+    kwargs = ops[0].get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    mode = _scatter_mode(op_name, kwargs)
+    out, src, idx, out_rows, row_len, restore = _scatter_prepare(
+        operands, kwargs, np)
+    scatter_fn(out, src, idx, out_rows, row_len, mode, np)
+    return restore(out)
+
+
+def _execute_x86_compiled_scatter(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` scatter lane (scatter/scatter_add/scatter_reduce)."""
+    return _execute_scatter(artifact, args, _x86_scatter, "x86_scatter_compiled")
+
+
 _rocm_gather_hsaco_cache: dict[tuple[str], bytes] = {}
 
 
@@ -6384,6 +6500,82 @@ def _rocm_gather(src: Any, idx: Any, out: Any) -> None:
 def _execute_rocm_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` 0-move lane (pad/cat/roll/flip/tile/repeat/stack)."""
     return _execute_strided(artifact, args, _rocm_gather, "rocm_strided_compiled")
+
+
+_rocm_scatter_hsaco_cache: dict[tuple[str, int], bytes] = {}
+_SCATTER_MODE_NAME = {0: "set", 1: "add", 2: "min", 3: "max"}
+
+
+def _build_compiled_scatter_hsaco(mode: int) -> bytes:
+    chip = _rocm_chip()
+    mname = _SCATTER_MODE_NAME[mode]
+    directive = ('module {\n  "tessera_rocm.scatter"() '
+                 f'{{name = "sc", mode = "{mname}"}} : () -> ()\n}}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-scatter-kernel", directive, _rocm_scatter_hsaco_cache,
+        (chip, mode))
+
+
+def _rocm_scatter(out: Any, src: Any, idx: Any, out_rows: int, row_len: int,
+                  mode: int, np: Any) -> None:
+    """Indexed scatter on gfx1151 via the compiler-generated kernel (one thread
+    per element; atomic_rmw for add/min/max). Writes results into ``out``."""
+    n_idx = int(idx.shape[0])
+    n_out = out_rows * row_len
+    n_src = n_idx * row_len
+    out_c = np.ascontiguousarray(out, np.float32)
+    src_c = np.ascontiguousarray(src, np.float32)
+    idx_c = np.ascontiguousarray(idx, np.int64)
+    hsaco = _build_compiled_scatter_hsaco(mode)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm scatter: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm scatter: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sc") != 0:
+        raise RuntimeError("rocm scatter: kernel symbol 'sc' not found")
+    cv = ctypes.c_void_p
+    d_out, d_src, d_idx = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_out), max(4 * n_out, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_src), max(4 * n_src, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_idx), max(8 * n_idx, 8)) != 0):
+        raise RuntimeError("rocm scatter: hipMalloc failed")
+    hip.hipMemcpy(d_out, out_c.ctypes.data_as(cv), 4 * n_out, 1)  # preload base
+    hip.hipMemcpy(d_src, src_c.ctypes.data_as(cv), 4 * n_src, 1)
+    hip.hipMemcpy(d_idx, idx_c.ctypes.data_as(cv), 8 * n_idx, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_out, n_out) + [ctypes.c_int64(out_rows)]
+                   + _mr(d_src, n_src) + _mr(d_idx, n_idx)
+                   + [ctypes.c_int64(n_idx), ctypes.c_int64(row_len)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    total = n_src
+    gx = (total + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_out, d_src, d_idx):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm scatter: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out_c.ctypes.data_as(cv), d_out, 4 * n_out, 2)
+    for d in (d_out, d_src, d_idx):
+        hip.hipFree(d)
+    out[...] = out_c
+
+
+def _execute_rocm_compiled_scatter(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` scatter lane (scatter/scatter_add/scatter_reduce)."""
+    return _execute_scatter(artifact, args, _rocm_scatter, "rocm_scatter_compiled")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10752,6 +10944,7 @@ def _executor_table():
         "x86_conformal_compiled": _execute_x86_compiled_conformal,
         "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_strided_compiled": _execute_x86_compiled_strided,
+        "x86_scatter_compiled": _execute_x86_compiled_scatter,
         "x86_sort_compiled": _execute_x86_compiled_sort,
         "x86_clifford_compiled": _execute_x86_compiled_clifford,
         "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
@@ -10793,6 +10986,7 @@ def _executor_table():
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
+        "rocm_scatter_compiled": _execute_rocm_compiled_scatter,
         "rocm_sort_compiled": _execute_rocm_compiled_sort,
         "rocm_clifford_compiled": _execute_rocm_compiled_clifford,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,

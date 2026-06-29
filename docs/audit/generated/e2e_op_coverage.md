@@ -24,20 +24,21 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 210 |
-| ``runnable_reference`` | 99 |
+| ``complete`` | 214 |
+| ``runnable_reference`` | 95 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (210)
+## complete (214)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``flash_attn`` | attention | public | public | registered | partial | fused | ready | benchmarked |
 | ``gqa_attention`` | attention | public | public | registered | partial | fused | ready | none |
 | ``mla_decode`` | attention | public | public | registered | partial | fused | ready | none |
+| ``mla_decode_fused`` | attention | public | public | registered | partial | fused | ready | none |
 | ``mqa_attention`` | attention | public | public | registered | partial | fused | ready | none |
 | ``multi_head_attention`` | attention | public | public | registered | partial | fused | ready | benchmarked |
 | ``eq`` | comparison | public | public | registered | partial | fused | ready | none |
@@ -142,6 +143,9 @@ each row into a single E2E tier.
 | ``factorized_matmul`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
+| ``latent_kv_compress`` | loop_nest | public | public | registered | partial | fused | ready | none |
+| ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | fused | ready | none |
+| ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | fused | ready | none |
 | ``matmul`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | partial | fused | ready | benchmarked |
 | ``asymmetric_bce`` | loss | public | public | registered | partial | fused | ready | none |
@@ -246,7 +250,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (99)
+## runnable_reference (95)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -264,7 +268,6 @@ each row into a single E2E tier.
 | ``linear_attn_state`` | attention | public | public | registered | partial | reference | ready | none |
 | ``lookahead_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``memory_index_score`` | attention | public | public | registered | partial | reference | ready | none |
-| ``mla_decode_fused`` | attention | public | public | registered | partial | reference | ready | none |
 | ``modified_delta_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``msa_index_scores`` | attention | public | public | registered | partial | reference | ready | none |
 | ``msa_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
@@ -318,9 +321,6 @@ each row into a single E2E tier.
 | ``unsqueeze`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
 | ``view`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
-| ``latent_kv_compress`` | loop_nest | public | public | registered | partial | reference | ready | none |
-| ``latent_kv_expand_k`` | loop_nest | public | public | registered | partial | reference | ready | none |
-| ``latent_kv_expand_v`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``quantized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``ddpm_noise_pred_loss`` | loss | public | public | registered | partial | reference | ready | none |

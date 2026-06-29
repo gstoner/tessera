@@ -1528,6 +1528,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
+    # P11 — x86 MLA latent-KV lane (compress/expand/decode composed on the GEMM +
+    # flash_attn lanes), compared to the numpy MLA reference. Skip-clean w/o .so.
+    **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
+       for op in ("latent_kv_compress", "latent_kv_expand_k",
+                  "latent_kv_expand_v", "mla_decode_fused")},
     # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
     # via runtime.launch(), each compared to a numpy reference on gfx1151. These
     # back the ``compiled`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
@@ -2097,6 +2102,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_flash_attn_f32, runtime-loaded; "
                  "x86_flash_attn_compiled lane; MHA scale+causal; f32)",
     },
+    # P11 — MLA latent-KV building blocks composed on the AVX-512 GEMM (compress/
+    # expand = batched matmul) + the flash_attn lane (mla_decode_fused chains
+    # compress→expand→flash_attn). x86_mla_compiled lane; f32; on-device fixture.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — MLA latent-KV composed on the AVX-512 GEMM "
+                 "(+ flash_attn for mla_decode_fused; x86_mla_compiled lane; "
+                 "f32)",
+    } for op in ("latent_kv_compress", "latent_kv_expand_k",
+                 "latent_kv_expand_v", "mla_decode_fused")},
     # S2 reduction family — hand-written AVX-512 row-reduction kernel
     # (tessera_x86_avx512_reduce_f32) the runtime ctypes-loads from
     # libtessera_x86_elementwise.so and executes (x86_reduce_compiled). f32,

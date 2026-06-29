@@ -239,7 +239,7 @@ layer_norm,25,7,3,32,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,d
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 lgamma,3,0,0,3,0,,directly_tested,3 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
-linear_attn,33,8,2,41,0,,directly_tested,41 direct test references
+linear_attn,40,8,2,48,0,,directly_tested,48 direct test references
 linear_attn_state,5,0,1,5,0,,directly_tested,5 direct test references
 linear_general,15,0,0,15,0,,directly_tested,15 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
@@ -331,7 +331,7 @@ polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 popcount,9,0,0,9,0,,directly_tested,9 direct test references
 pow,5,0,2,5,0,bf16 f32,directly_tested,5 direct test references
-power_attn,6,0,1,6,0,,directly_tested,6 direct test references
+power_attn,8,0,1,8,0,,directly_tested,8 direct test references
 ppo_policy_loss,14,11,1,25,0,bf16 f16 f32 fp16 fp32,directly_tested,25 direct test references
 prod,4,0,0,4,0,,directly_tested,4 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
@@ -352,7 +352,7 @@ relu,105,20,9,125,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,125 dire
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,3,0,0,3,0,,directly_tested,3 direct test references
 reshape,11,15,0,26,0,,directly_tested,26 direct test references
-retention,8,0,2,8,0,,directly_tested,8 direct test references
+retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,74,10,3,84,0,bf16 f16 f32 f64 fp32,directly_tested,84 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references

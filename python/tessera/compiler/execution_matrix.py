@@ -204,6 +204,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_nsa_compiled": "x86 CPU NSA lane — deepseek_sparse_attention: sliding "
                         "+ compressed-block + top-k-block branches on the "
                         "AVX-512 flash_attn kernels, gate blend on host. f32",
+    "x86_linear_attn_compiled": "x86 CPU linear-attention backbone — "
+                                "linear_attn/power_attn/retention via the "
+                                "quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ "
+                                "decay)@V on two AVX-512 batched GEMMs; feature "
+                                "map / mask / decay on host (ROCm-linear_attn "
+                                "partner). f32",
     "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
                             "scatter_reduce (0-reduce indexed store) via the "
                             "AVX-512 row-scatter kernel. f32",
@@ -1168,6 +1174,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "dense flash_attn) — through the learned gate. The attention "
                "FLOPs run on the device kernels; compression / selection / "
                "blend on the host. f32, matches the dense-masked reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_linear_attn_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_linear_attn_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_linear_attn_compiled", runtime_status="success",
+        reason="x86 linear-attention backbone (linear_attn / power_attn / "
+               "retention) runs the quadratic-parallel form O = (φ(Q)·φ(K)ᵀ ⊙ "
+               "causal ⊙ decay) @ V on two AVX-512 batched GEMMs; the feature "
+               "map (elu/relu/identity/polynomial_2 or x^deg), the causal mask, "
+               "and the decay matrix (c[t]/c[r] from cumprod) on the host. The "
+               "AVX-512 partner to the ROCm linear_attn lane. f32, matches the "
+               "numpy recurrence reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",

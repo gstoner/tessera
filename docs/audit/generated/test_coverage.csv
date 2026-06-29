@@ -27,7 +27,7 @@ atan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 atan2,4,0,0,4,0,,directly_tested,4 direct test references
 attn_compressed_blocks,7,2,0,9,0,,directly_tested,9 direct test references
 attn_local_window_2d,34,25,1,59,0,fp32,directly_tested,59 direct test references
-attn_sliding_window,15,2,2,17,0,,directly_tested,17 direct test references
+attn_sliding_window,16,2,2,18,0,,directly_tested,18 direct test references
 attn_top_k_blocks,7,2,1,9,0,,directly_tested,9 direct test references
 autocast,0,0,0,0,1,,structural_only,category default for 'transform'
 avg_pool,2,0,0,2,0,,directly_tested,2 direct test references
@@ -195,7 +195,7 @@ ge,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 gelu,46,19,1,65,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,65 direct test references
 gemm,78,2,7,80,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,80 direct test references
 gguf_export,1,0,0,1,1,,structural_only,category default for 'aot'
-gqa_attention,8,0,2,8,0,,directly_tested,8 direct test references
+gqa_attention,9,0,2,9,0,,directly_tested,9 direct test references
 grad_scaler_step,3,0,0,3,0,,directly_tested,3 direct test references
 group_norm,9,0,0,9,0,,directly_tested,9 direct test references
 grouped_gemm,28,24,2,52,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,52 direct test references

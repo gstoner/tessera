@@ -250,6 +250,12 @@ class TraceBuilder:
         if nxt.shape != init_carry.shape:
             raise TesseraTraceError(
                 "traced fori_loop: body must preserve the carry shape")
+        # CF1: match ControlForOp::verify — the loop result type must equal the
+        # carried iter_arg type (dtype as well as shape, not just shape).
+        if nxt.dtype != init_carry.dtype:
+            raise TesseraTraceError(
+                "traced fori_loop: body must preserve the carry dtype "
+                f"(carry {init_carry.dtype}, body returned {nxt.dtype})")
         res = self._fresh()
         self.body.append(IROp(
             result=res, op_name="tessera.control_for",
@@ -271,6 +277,12 @@ class TraceBuilder:
             raise TesseraTraceError("traced cond: branches must return a Tracer")
         if tval.shape != fval.shape:
             raise TesseraTraceError("traced cond: branches must share a shape")
+        # CF1: match ControlIfOp's merged-result contract — both branches must
+        # yield the same dtype, not just the same shape.
+        if tval.dtype != fval.dtype:
+            raise TesseraTraceError(
+                "traced cond: branches must share a dtype "
+                f"(then {tval.dtype}, else {fval.dtype})")
         res = self._fresh()
         self.body.append(IROp(
             result=res, op_name="tessera.control_if",
@@ -300,6 +312,12 @@ class TraceBuilder:
         if nxt.shape != init.shape:
             raise TesseraTraceError(
                 "traced while_loop: body must preserve the carry shape")
+        # CF1: match ControlWhileOp::verify — the while result type must equal
+        # the carried iter_arg type (dtype as well as shape).
+        if nxt.dtype != init.dtype:
+            raise TesseraTraceError(
+                "traced while_loop: body must preserve the carry dtype "
+                f"(carry {init.dtype}, body returned {nxt.dtype})")
         res = self._fresh()
         self.body.append(IROp(
             result=res, op_name="tessera.control_while",
@@ -337,6 +355,12 @@ class TraceBuilder:
         nxt, y = out
         if nxt.shape != init.shape:
             raise TesseraTraceError("traced scan: body must preserve carry shape")
+        # CF1: the scan carry dtype must be stable across the step (the recurrent
+        # state type is fixed), matching the loop ops' carry-type contract.
+        if nxt.dtype != init.dtype:
+            raise TesseraTraceError(
+                "traced scan: body must preserve carry dtype "
+                f"(carry {init.dtype}, body returned {nxt.dtype})")
         res_c, res_y = self._fresh(), self._fresh()
         ys_shape = (trip, *y.shape)
         self.body.append(IROp(

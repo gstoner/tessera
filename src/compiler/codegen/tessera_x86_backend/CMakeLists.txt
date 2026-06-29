@@ -50,6 +50,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
   src/kernels/avx512_philox_f32.cpp
+  src/kernels/avx512_gather_f32.cpp
   src/kernels/avx512_transcendental_f32.cpp
   src/kernels/avx512_norm_f32.cpp
   src/kernels/avx512_gemm_f32.cpp
@@ -153,6 +154,7 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
   src/kernels/avx512_philox_f32.cpp
+  src/kernels/avx512_gather_f32.cpp
   src/kernels/avx512_transcendental_f32.cpp
   src/kernels/avx512_norm_f32.cpp
   src/kernels/avx512_gemm_f32.cpp

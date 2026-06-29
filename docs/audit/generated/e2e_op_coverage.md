@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 199 |
-| ``runnable_reference`` | 110 |
+| ``complete`` | 206 |
+| ``runnable_reference`` | 103 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (199)
+## complete (206)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -115,6 +115,13 @@ each row into a single E2E tier.
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``cat`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``flip`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``pad`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``repeat`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``roll`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``stack`` | layout_transform | public | public | registered | partial | fused | ready | none |
+| ``tile`` | layout_transform | public | public | registered | partial | fused | ready | none |
 | ``cholesky`` | linalg_decomposition | public | public | registered | partial | fused | ready | none |
 | ``lu`` | linalg_decomposition | public | public | registered | partial | fused | ready | none |
 | ``qr`` | linalg_decomposition | public | public | registered | partial | fused | ready | none |
@@ -235,7 +242,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (110)
+## runnable_reference (103)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -286,29 +293,22 @@ each row into a single E2E tier.
 | ``arange`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``broadcast`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
 | ``cast`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``cat`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``chunk`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``expand`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
 | ``flatten`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
-| ``flip`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``gather`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``masked_fill`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_partition`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_router`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_scatter`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``pack`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``pad`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``permute`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``rearrange`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``repeat`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``reshape`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
-| ``roll`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``rope_merge`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``rope_split`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``split`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
-| ``stack`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``tile`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``tile_view`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``transpose`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``unpack`` | layout_transform | public | public | registered | partial | reference | ready | none |

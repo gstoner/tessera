@@ -1259,6 +1259,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "rocm_unary_compiled tanh kernel (scalar cap on host). "
                  "Executes via runtime.launch() (rocm_softcap_compiled).",
     },
+    # P4 — 0-move / strided-copy lane: pad/cat/roll/flip/tile/repeat/stack via
+    # the gfx1151 masked-gather kernel (host computes the index map; device moves
+    # the f32 data). Executes via rocm_strided_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("layout_transform",),
+        "notes": f"Standalone {op} — 0-move op realized by the gfx1151 "
+                 "masked-gather kernel (generate-rocm-gather-kernel; host index "
+                 "map). Executes via runtime.launch() (rocm_strided_compiled).",
+    } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
     # P6 — device RNG: counter-based Philox-4x32-10 (generate-rocm-philox-kernel)
     # produces the uniform bits; host applies the distribution transform. A
     # SEPARATE deterministic stream from the host numpy-Generator path.
@@ -1550,6 +1560,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("rng_uniform", "rng_normal", "dropout")},
     **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
        for op in ("rng_uniform", "rng_normal", "dropout")},
+    **{(op, "x86"): "tests/unit/test_x86_strided_compiled.py"
+       for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    **{(op, "rocm"): "tests/unit/test_rocm_strided_compiled.py"
+       for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
     ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
     ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
@@ -2124,6 +2138,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_transcendental_compiled AVX-512 tanh kernel "
                  "(scalar cap on host; matches cap*tanh(x/cap))",
     },
+    # P4 — 0-move / strided-copy lane: pad/cat/roll/flip/tile/repeat/stack via
+    # the AVX-512 masked-gather kernel (host index map; device data movement).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — 0-move op realized by the AVX-512 masked-gather "
+                 "kernel (tessera_x86_gather_f32, runtime-loaded; host index "
+                 "map; x86_strided_compiled lane; f32, matches numpy)",
+    } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
     # P6 — device RNG: counter-based Philox-4x32-10 (tessera_x86_philox_uniform_f32)
     # produces the uniform bits; host applies the distribution transform.
     **{op: {

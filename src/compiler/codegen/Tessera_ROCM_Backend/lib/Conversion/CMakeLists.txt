@@ -40,6 +40,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMBitwiseKernel.cpp
   GenerateROCMWhereKernel.cpp
   GenerateROCMPhiloxKernel.cpp
+  GenerateROCMGatherKernel.cpp
   LowerROCMAsyncCopyToLoop.cpp
   Passes.cpp
   LINK_LIBS PUBLIC

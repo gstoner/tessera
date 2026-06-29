@@ -5955,6 +5955,189 @@ def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_rng(artifact, args, _rocm_philox_uniform, "rocm_rng_compiled")
 
 
+# Strided-copy / 0-move lane (P4) — pad / cat / roll / flip / tile / repeat /
+# stack. The host computes the integer index map by running the op's numpy
+# semantics on an arange index grid (shape arithmetic only — never touches the
+# f32 data); the device gather kernel does the actual data movement. A negative
+# index leaves out[i] (pad fill / cat per-input accumulate).
+# compiler_path="x86_strided_compiled" / "rocm_strided_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_STRIDED_OPS = ("tessera.pad", "tessera.cat", "tessera.concat", "tessera.roll",
+                "tessera.flip", "tessera.tile", "tessera.repeat",
+                "tessera.stack")
+
+
+def _strided_compute(op_name: str, operands: list, kwargs: dict,
+                     gather_fn: Any, np: Any) -> Any:
+    """``gather_fn(src_flat, idx_int64, out_flat)`` runs the device gather
+    out[i]=src[idx[i]] (idx<0 leaves out[i]). The index map is pure numpy shape
+    arithmetic on an arange grid, so the f32 data only moves through the kernel.
+    Matches tessera.ops.{pad,cat,roll,flip,tile,repeat,stack}."""
+    if op_name in ("tessera.roll", "tessera.flip", "tessera.tile",
+                   "tessera.repeat"):
+        x = np.ascontiguousarray(operands[0], np.float32)
+        grid = np.arange(x.size).reshape(x.shape)
+        if op_name == "tessera.roll":
+            idx = np.roll(grid, shift=kwargs.get("shift", 0),
+                          axis=kwargs.get("axis"))
+        elif op_name == "tessera.flip":
+            idx = np.flip(grid, axis=kwargs.get("axis"))
+        elif op_name == "tessera.tile":
+            idx = np.tile(grid, kwargs["reps"])
+        else:
+            idx = np.repeat(grid, kwargs["repeats"], axis=kwargs.get("axis"))
+        out = np.zeros(idx.size, np.float32)
+        gather_fn(x.reshape(-1), idx.reshape(-1).astype(np.int64), out)
+        return out.reshape(idx.shape)
+    if op_name == "tessera.pad":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        pad_width = kwargs["pad_width"]
+        mode = str(kwargs.get("mode", "constant"))
+        grid = np.arange(x.size).reshape(x.shape)
+        if mode == "constant":
+            cval = float(kwargs.get("constant_values", 0))
+            idx = np.pad(grid, pad_width, mode="constant", constant_values=-1)
+            out = np.full(idx.size, np.float32(cval), np.float32)
+        else:
+            idx = np.pad(grid, pad_width, mode=mode)
+            out = np.zeros(idx.size, np.float32)
+        gather_fn(x.reshape(-1), idx.reshape(-1).astype(np.int64), out)
+        return out.reshape(idx.shape)
+    # cat / concat / stack — multi-source, one device gather per input
+    axis = int(kwargs.get("axis", 0))
+    if op_name == "tessera.stack":
+        xs = [np.expand_dims(np.ascontiguousarray(o, np.float32), axis)
+              for o in operands]
+    else:
+        xs = [np.ascontiguousarray(o, np.float32) for o in operands]
+    out_shape = list(xs[0].shape)
+    out_shape[axis] = sum(int(x.shape[axis]) for x in xs)
+    total = int(np.prod(out_shape)) if out_shape else 1
+    out = np.zeros(total, np.float32)
+    out_grid = np.arange(total).reshape(out_shape)
+    running = 0
+    for x in xs:
+        sz = int(x.shape[axis])
+        sl = [slice(None)] * len(out_shape)
+        sl[axis] = slice(running, running + sz)
+        sub = out_grid[tuple(sl)].reshape(-1)        # output positions for x
+        idx = np.full(total, -1, np.int64)
+        idx[sub] = np.arange(x.size)
+        gather_fn(x.reshape(-1), idx, out)
+        running += sz
+    return out.reshape(out_shape)
+
+
+def _x86_gather(src: Any, idx: Any, out: Any) -> None:
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    src = np.ascontiguousarray(src, np.float32)
+    idx = np.ascontiguousarray(idx, np.int64)
+    cf = ctypes.POINTER(ctypes.c_float)
+    ci = ctypes.POINTER(ctypes.c_int64)
+    lib.tessera_x86_gather_f32(
+        src.ctypes.data_as(cf), ctypes.c_int64(src.size),
+        idx.ctypes.data_as(ci), ctypes.c_int64(out.size),
+        out.ctypes.data_as(cf))
+
+
+def _execute_strided(artifact: RuntimeArtifact, args: Any, gather_fn: Any,
+                     path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _STRIDED_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_STRIDED_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _strided_compute(op_name, operands, ops[0].get("kwargs") or {},
+                            gather_fn, np)
+
+
+def _execute_x86_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` 0-move lane (pad/cat/roll/flip/tile/repeat/stack)."""
+    return _execute_strided(artifact, args, _x86_gather, "x86_strided_compiled")
+
+
+_rocm_gather_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_gather_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.gather"() {name = "g"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-gather-kernel", directive, _rocm_gather_hsaco_cache,
+        (chip,))
+
+
+def _rocm_gather(src: Any, idx: Any, out: Any) -> None:
+    """Masked gather on gfx1151: out[i] = src[idx[i]] for 0<=idx<src_n, else
+    leaves out[i] (so `out` is preloaded H2D). Writes results back into `out`
+    in place. n = out.size = idx.size; src may be a different length."""
+    import numpy as np
+    src = np.ascontiguousarray(src, np.float32)
+    idx = np.ascontiguousarray(idx, np.int64)
+    out_c = np.ascontiguousarray(out, np.float32)
+    n, sn = int(out_c.size), int(src.size)
+    hsaco = _build_compiled_gather_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm gather: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm gather: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"g") != 0:
+        raise RuntimeError("rocm gather: kernel symbol 'g' not found")
+    cv = ctypes.c_void_p
+    d_src, d_idx, d_out = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_src), max(4 * sn, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_idx), 8 * n) != 0
+            or hip.hipMalloc(ctypes.byref(d_out), 4 * n) != 0):
+        raise RuntimeError("rocm gather: hipMalloc failed")
+    hip.hipMemcpy(d_src, src.ctypes.data_as(cv), 4 * sn, 1)
+    hip.hipMemcpy(d_idx, idx.ctypes.data_as(cv), 8 * n, 1)
+    hip.hipMemcpy(d_out, out_c.ctypes.data_as(cv), 4 * n, 1)  # preload (mask)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_src, sn) + [ctypes.c_int64(sn)] + _mr(d_idx, n)
+                   + _mr(d_out, n) + [ctypes.c_int64(n)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_src, d_idx, d_out):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm gather: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(out_c.ctypes.data_as(cv), d_out, 4 * n, 2)
+    for d in (d_src, d_idx, d_out):
+        hip.hipFree(d)
+    out[...] = out_c.reshape(np.asarray(out).shape)
+
+
+def _execute_rocm_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` 0-move lane (pad/cat/roll/flip/tile/repeat/stack)."""
+    return _execute_strided(artifact, args, _rocm_gather, "rocm_strided_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
 # may be None (one-sided). The scalar bound is broadcast to the input shape and
 # the elementwise max (lower) / min (upper) run on the device binary kernel — no
@@ -9961,6 +10144,7 @@ def _executor_table():
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_complex_compiled": _execute_x86_compiled_complex,
         "x86_rng_compiled": _execute_x86_compiled_rng,
+        "x86_strided_compiled": _execute_x86_compiled_strided,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -9996,6 +10180,7 @@ def _executor_table():
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
+        "rocm_strided_compiled": _execute_rocm_compiled_strided,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,

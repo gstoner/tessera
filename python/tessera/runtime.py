@@ -5803,6 +5803,83 @@ def _execute_rocm_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
     return _execute_complex(artifact, args, "rocm", "rocm_complex_compiled")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Conformal geometry (P5) — mobius / stereographic, composed on the device
+# complex + binary lanes (no new kernel). mobius f(z)=(az+b)/(cz+d) rides the
+# interleaved-f32 complex_mul/complex_div lane; stereographic projects a sphere
+# 3-vector to ℂ via the binary div lane. compiler_path="x86_conformal_compiled"
+# / "rocm_conformal_compiled". f32. Matches tessera.complex.
+# ─────────────────────────────────────────────────────────────────────────────
+_CONFORMAL_OPS = ("tessera.mobius", "tessera.stereographic")
+
+
+def _complex_dev(op_name: str, arrs: list, target: str, np: Any) -> Any:
+    """Run one complex-lane op on the device (interleaved-f32 in/out)."""
+    fn = (_execute_x86_compiled_complex if target == "x86"
+          else _execute_rocm_compiled_complex)
+    names = [f"a{i}" for i in range(len(arrs))]
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": f"{target}_complex_compiled",
+        "arg_names": names, "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": names,
+                 "kwargs": {}}]})
+    return np.asarray(fn(art, tuple(np.ascontiguousarray(a, np.float32)
+                                    for a in arrs)), np.float32)
+
+
+def _conformal_compute(op_name: str, operands: list, kwargs: dict, target: str,
+                       np: Any) -> Any:
+    if op_name == "tessera.mobius":
+        z, a, b, c, d = (np.ascontiguousarray(o, np.float32) for o in operands)
+        az = _complex_dev("tessera.complex_mul", [a, z], target, np)
+        cz = _complex_dev("tessera.complex_mul", [c, z], target, np)
+        num = (az + b).astype(np.float32)          # complex add (interleaved)
+        den = (cz + d).astype(np.float32)
+        return _complex_dev("tessera.complex_div", [num, den], target, np)
+    # stereographic: sphere 3-vector -> ℂ, (x + i·y)/(1 - z); north pole -> inf
+    p = np.ascontiguousarray(operands[0], np.float32)
+    if p.shape[-1] != 3:
+        raise ValueError(f"stereographic expects [...,3]; got {p.shape}")
+    x, y, zc = p[..., 0], p[..., 1], p[..., 2]
+    eps = float(kwargs.get("eps", 1e-12))
+    denom = (np.float32(1.0) - zc).astype(np.float32)
+    near = np.abs(denom) <= np.float32(eps)
+    safe = np.where(near, np.float32(1.0), denom).astype(np.float32)
+    re = _creal("div", target, np, x, safe)        # device binary div
+    im = _creal("div", target, np, y, safe)
+    re = np.where(near, np.float32(np.inf), re).astype(np.float32)
+    im = np.where(near, np.float32(np.inf), im).astype(np.float32)
+    return np.stack([re, im], axis=-1).astype(np.float32)
+
+
+def _execute_conformal(artifact: RuntimeArtifact, args: Any, target: str,
+                       path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CONFORMAL_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_CONFORMAL_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _conformal_compute(op_name, operands, ops[0].get("kwargs") or {},
+                              target, np)
+
+
+def _execute_x86_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` conformal lane (mobius / stereographic)."""
+    return _execute_conformal(artifact, args, "x86", "x86_conformal_compiled")
+
+
+def _execute_rocm_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` conformal lane (mobius / stereographic)."""
+    return _execute_conformal(artifact, args, "rocm", "rocm_conformal_compiled")
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Device RNG (P6) — counter-based Philox-4x32-10. The device kernel generates the
@@ -10143,6 +10220,7 @@ def _executor_table():
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_complex_compiled": _execute_x86_compiled_complex,
+        "x86_conformal_compiled": _execute_x86_compiled_conformal,
         "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_strided_compiled": _execute_x86_compiled_strided,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
@@ -10179,6 +10257,7 @@ def _executor_table():
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
+        "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,

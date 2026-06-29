@@ -281,7 +281,7 @@ min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
 mla_decode_fused,5,9,1,14,0,,directly_tested,14 direct test references
-mobius,1,0,0,1,1,,covered_by_family,category default for 'elementwise'
+mobius,3,0,0,3,0,,directly_tested,3 direct test references
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references
 modified_delta_attention,8,0,0,8,0,f32 fp64,directly_tested,8 direct test references
@@ -429,7 +429,7 @@ state_filter,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_migration,1,0,1,1,1,,structural_only,category default for 'serialization'
 state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,4,0,0,4,0,,directly_tested,4 direct test references
-stereographic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
+stereographic,4,0,0,4,0,,directly_tested,4 direct test references
 stft,7,0,0,7,0,,directly_tested,7 direct test references
 sub,13,4,2,17,0,bf16 f16 f32,directly_tested,17 direct test references
 sum,9,0,2,9,0,bf16 f32,directly_tested,9 direct test references

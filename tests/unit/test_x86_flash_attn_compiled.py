@@ -108,19 +108,98 @@ def test_distinct_value_width():
     np.testing.assert_allclose(got, _ref(q, k, v), rtol=1e-4, atol=1e-4)
 
 
-def test_gqa_rejected_with_stable_diagnostic():
+def _ref_extra(q, k, v, scale=None, causal=False, window=0, softcap=0.0,
+               bias=None):
+    """Dense attention reference with the P10 extras (GQA pre-expanded)."""
+    d = q.shape[-1]
+    sc = scale if scale is not None else 1.0 / np.sqrt(d)
+    s = (q @ np.swapaxes(k, -1, -2)) * sc
+    if softcap > 0:
+        s = softcap * np.tanh(s / softcap)
+    if bias is not None:
+        s = s + bias
+    sq, sk = s.shape[-2], s.shape[-1]
+    off = max(sk - sq, 0)
+    i = np.arange(sq)[:, None]
+    j = np.arange(sk)[None, :]
+    mask = np.zeros((sq, sk), bool)
+    if window > 0:
+        if causal:                         # causal band (i-W, i]
+            mask |= (j > i + off) | (j < i + off - window + 1)
+        else:                              # symmetric local window |i-j| <= W/2
+            mask |= (j > i + off + window // 2) | (j < i + off - window // 2)
+    elif causal:
+        mask |= j > i + off
+    s = np.where(mask, -np.inf, s)
+    s = s - s.max(axis=-1, keepdims=True)
+    w = np.exp(s)
+    w = w / w.sum(axis=-1, keepdims=True)
+    return (w @ v).astype(np.float32)
+
+
+def test_gqa_expands_kv_heads():
+    """GQA: Hq query heads share Hkv<Hq kv heads — the x86 lane expands the kv
+    heads on the host and runs MHA."""
     rt = _rt_or_skip()
-    q = _RNG.standard_normal((4, 8, 16)).astype(np.float32)   # 4 q-heads
-    k = _RNG.standard_normal((2, 8, 16)).astype(np.float32)   # 2 kv-heads
-    v = _RNG.standard_normal((2, 8, 16)).astype(np.float32)
-    res = rt.launch(_art(rt, {}), (q, k, v))
-    assert res["ok"] is False
-    assert "GQA" in res.get("reason", "") or "MHA" in res.get("reason", "")
+    q = _RNG.standard_normal((1, 4, 8, 16)).astype(np.float32)   # 4 q-heads
+    k = _RNG.standard_normal((1, 2, 8, 16)).astype(np.float32)   # 2 kv-heads
+    v = _RNG.standard_normal((1, 2, 8, 16)).astype(np.float32)
+    got = _run(rt, q, k, v, op="tessera.gqa_attention")
+    k_e, v_e = np.repeat(k, 2, axis=1), np.repeat(v, 2, axis=1)
+    np.testing.assert_allclose(got, _ref(q, k_e, v_e), rtol=1e-4, atol=1e-4)
 
 
-def test_attn_bias_operand_rejected_with_stable_diagnostic():
-    """A 4th operand is the additive attn_bias/mask — the x86 lane must reject
-    it (not silently run un-biased attention)."""
+def test_sliding_window():
+    rt = _rt_or_skip()
+    q, k, v = _qkv((3, 12, 24))
+    got = _run(rt, q, k, v, op="tessera.attn_sliding_window",
+               window=4, causal=True)
+    np.testing.assert_allclose(
+        got, _ref_extra(q, k, v, window=4, causal=True), rtol=1e-4, atol=1e-4)
+
+
+def test_sliding_window_non_causal_symmetric():
+    """Non-causal sliding window is a SYMMETRIC local band (|i-j| <= W/2) — it
+    must NOT attend future keys outside the window."""
+    rt = _rt_or_skip()
+    q, k, v = _qkv((2, 16, 16))
+    got = _run(rt, q, k, v, op="tessera.attn_sliding_window",
+               window=6, causal=False)
+    np.testing.assert_allclose(
+        got, _ref_extra(q, k, v, window=6, causal=False), rtol=1e-4, atol=1e-4)
+
+
+def test_attn_bias_rank4():
+    """A rank-4 [B, H, Sq, Sk] additive bias flattens consistently with the
+    [B, H, S, D] Q/K/V."""
+    rt = _rt_or_skip()
+    q = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    k = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    v = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    bias = _RNG.standard_normal((2, 3, 5, 5)).astype(np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["q", "k", "v", "b"], "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": ["q", "k", "v", "b"], "kwargs": {}}]})
+    res = rt.launch(art, (q, k, v, bias))
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]),
+                               _ref_extra(q, k, v, bias=bias),
+                               rtol=1e-4, atol=1e-4)
+
+
+def test_logit_softcap():
+    rt = _rt_or_skip()
+    q, k, v = _qkv((2, 10, 16))
+    got = _run(rt, q, k, v, logit_softcap=30.0, causal=True)
+    np.testing.assert_allclose(
+        got, _ref_extra(q, k, v, softcap=30.0, causal=True), rtol=1e-4, atol=1e-4)
+
+
+def test_attn_bias_operand_applied():
+    """A 4th operand is the additive attn_bias — the x86 lane applies it."""
     rt = _rt_or_skip()
     q, k, v = _qkv((4, 16))
     bias = _RNG.standard_normal((4, 4)).astype(np.float32)
@@ -131,8 +210,10 @@ def test_attn_bias_operand_rejected_with_stable_diagnostic():
         "ops": [{"op_name": "tessera.flash_attn", "result": "o",
                  "operands": ["q", "k", "v", "bias"], "kwargs": {}}]})
     res = rt.launch(art, (q, k, v, bias))
-    assert res["ok"] is False
-    assert "attn_bias" in res.get("reason", "") or "bias" in res.get("reason", "")
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]),
+                               _ref_extra(q, k, v, bias=bias),
+                               rtol=1e-4, atol=1e-4)
 
 
 def test_multi_head_attention_op_rejected():

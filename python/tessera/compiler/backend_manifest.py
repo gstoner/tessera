@@ -1685,6 +1685,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_attention_compiled.py"
        for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
                   "mla_decode")},
+    ("attn_sliding_window", "x86"):
+        "tests/unit/test_x86_flash_attn_compiled.py",
+    ("deepseek_sparse_attention", "x86"):
+        "tests/unit/test_x86_nsa_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
@@ -2488,6 +2492,27 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "kernels; x86_attention_compiled lane; f32)",
     } for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
                  "mla_decode")},
+    # P10 extras — sliding-window attention on the extended AVX-512 flash_attn
+    # kernel (causal band of width W; GQA/softcap/bias also ride this lane).
+    "attn_sliding_window": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 sliding-window attention "
+                 "(tessera_x86_flash_attn_ext_f32; causal band of width W; the "
+                 "online-softmax FA forward with window/softcap/bias support; "
+                 "x86_flash_attn_compiled lane; f32)",
+    },
+    # P11 — NSA (DeepSeek native sparse attention): the sliding / compressed /
+    # top-k branches all run their attention on the AVX-512 flash_attn kernels;
+    # block compression / top-k selection / gather / gate blend on the host.
+    "deepseek_sparse_attention": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 NSA — sliding (windowed FA) + compressed-block (dense "
+                 "FA over mean summaries) + top-k-block (host select/gather + "
+                 "dense FA) branches blended by the gate; x86_nsa_compiled lane; "
+                 "f32, matches the dense-masked reference",
+    },
     # Pointwise regression losses — per-element loss on the AVX-512 loss kernel
     # + none/mean/sum on the reduce kernel (x86_loss_compiled).
     **{op: {

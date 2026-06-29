@@ -17,9 +17,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 |----|--------|---|---|---|---|---|---|---|---|
 | `attn_compressed_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_local_window_2d` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `attn_sliding_window` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `attn_sliding_window` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `flash_attn` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -126,6 +126,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `dynamic_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `dynamic_update_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `gather` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_select` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_update` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `masked_categorical` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -147,7 +148,6 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `expand` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `flatten` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `flip` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
-| `gather` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_partition` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_router` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
@@ -329,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |
@@ -338,8 +338,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
-| indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| layout_transform | 31 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
+| indexing | 16 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| layout_transform | 30 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
 | linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

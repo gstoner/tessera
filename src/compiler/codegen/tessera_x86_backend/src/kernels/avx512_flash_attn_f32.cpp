@@ -101,3 +101,72 @@ extern "C" void tessera_x86_flash_attn_f32(const float* Q, const float* K,
         }
     }
 }
+
+// Extended FA forward (P10 extras): the same online softmax plus
+//   * sliding window  (window > 0): the valid key band is
+//       causal     : keys in (i + off - window, i + off]   (width `window`);
+//       non-causal : keys in [i + off - window/2, i + off + window/2]
+//                    (a SYMMETRIC local window of half-width window/2),
+//     matching the dense attn_sliding_window reference;
+//   * logit soft-cap  (softcap > 0): each scaled score s -> cap·tanh(s/cap)
+//     before the (optional) bias + softmax (Gemma-2 semantics);
+//   * additive bias   (bias != null): a per-(query,key) score bias of shape
+//     [bh_bias, sq, sk] added pre-softmax (bh_bias is bh or 1 — the host
+//     broadcasts; `bias_bh_stride` is sq*sk or 0 for a shared bias).
+// GQA/MQA is handled host-side (kv-head expansion), so the kernel still sees
+// matched bh. causal/window masking is realized by the loop bounds, so masked
+// keys never enter the softmax (no -inf bookkeeping needed).
+extern "C" void tessera_x86_flash_attn_ext_f32(
+        const float* Q, const float* K, const float* V, const float* bias,
+        int64_t bias_bh_stride, int64_t bh, int64_t sq, int64_t sk, int64_t d,
+        int64_t dv, float scale, int causal, int64_t window, float softcap,
+        float* O) {
+    const int64_t off = (sk > sq) ? (sk - sq) : 0;
+    const bool has_cap = softcap > 0.0f;
+    for (int64_t b = 0; b < bh; ++b) {
+        const float* Qb = Q + b * sq * d;
+        const float* Kb = K + b * sk * d;
+        const float* Vb = V + b * sk * dv;
+        const float* Bb = bias ? bias + b * bias_bh_stride : nullptr;
+        float* Ob = O + b * sq * dv;
+        for (int64_t i = 0; i < sq; ++i) {
+            const float* qi = Qb + i * d;
+            float* oi = Ob + i * dv;
+            for (int64_t t = 0; t < dv; ++t)
+                oi[t] = 0.0f;
+            int64_t jmax, jmin;
+            if (window > 0) {
+                if (causal) {                         // causal band (i-W, i]
+                    jmax = i + off;
+                    jmin = i + off - window + 1;
+                } else {                              // symmetric local window
+                    jmax = i + off + window / 2;
+                    jmin = i + off - window / 2;
+                }
+            } else {
+                jmax = causal ? (i + off) : (sk - 1);
+                jmin = 0;
+            }
+            if (jmax > sk - 1) jmax = sk - 1;
+            const int64_t j0 = (jmin > 0) ? jmin : 0;
+            const float* Bi = Bb ? Bb + i * sk : nullptr;
+            float m = -INFINITY, l = 0.0f;
+            for (int64_t j = j0; j <= jmax && j < sk; ++j) {
+                float s = scale * dot_f32(qi, Kb + j * d, d);
+                if (has_cap)
+                    s = softcap * std::tanh(s / softcap);
+                if (Bi)
+                    s += Bi[j];
+                const float mn = (s > m) ? s : m;
+                const float c = (m == -INFINITY) ? 0.0f : std::exp(m - mn);
+                const float p = std::exp(s - mn);
+                l = l * c + p;
+                axpby_f32(oi, c, p, Vb + j * dv, dv);
+                m = mn;
+            }
+            const float inv = (l > 0.0f) ? (1.0f / l) : 0.0f;
+            for (int64_t t = 0; t < dv; ++t)
+                oi[t] *= inv;
+        }
+    }
+}

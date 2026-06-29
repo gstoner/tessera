@@ -24,17 +24,19 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 227 |
-| ``runnable_reference`` | 82 |
+| ``complete`` | 229 |
+| ``runnable_reference`` | 80 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (227)
+## complete (229)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``attn_sliding_window`` | attention | public | public | registered | partial | fused | ready | none |
+| ``deepseek_sparse_attention`` | attention | public | public | registered | partial | fused | ready | none |
 | ``flash_attn`` | attention | public | public | registered | partial | fused | ready | benchmarked |
 | ``gqa_attention`` | attention | public | public | registered | partial | fused | ready | none |
 | ``mla_decode`` | attention | public | public | registered | partial | fused | ready | none |
@@ -263,15 +265,13 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (82)
+## runnable_reference (80)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``attn_compressed_blocks`` | attention | public | public | registered | partial | reference | ready | none |
 | ``attn_local_window_2d`` | attention | public | public | registered | partial | reference | ready | none |
-| ``attn_sliding_window`` | attention | public | public | registered | partial | reference | ready | none |
 | ``attn_top_k_blocks`` | attention | public | public | registered | partial | reference | ready | none |
-| ``deepseek_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``gated_attention`` | attention | public | public | registered | partial | reference | ready | none |
 | ``gated_deltanet`` | attention | public | public | registered | partial | reference | ready | none |
 | ``hybrid_attention`` | attention | public | public | registered | partial | reference | ready | none |
@@ -296,6 +296,7 @@ each row into a single E2E tier.
 | ``fused_epilogue`` | fused_epilogue | public | public | registered | partial | reference | ready | none |
 | ``dynamic_slice`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``dynamic_update_slice`` | indexing | public | public | registered | partial | reference | ready | none |
+| ``gather`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``index_select`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``index_update`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``masked_categorical`` | indexing | public | public | registered | partial | reference | ready | none |
@@ -312,7 +313,6 @@ each row into a single E2E tier.
 | ``chunk`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``expand`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
 | ``flatten`` | layout_transform | public | public | registered | not_applicable | reference | ready | none |
-| ``gather`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``masked_fill`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_partition`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_router`` | layout_transform | public | public | registered | partial | reference | ready | none |

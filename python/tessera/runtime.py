@@ -2297,16 +2297,18 @@ def _execute_rocm_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> A
 # FA-style streaming/online softmax (running max/denominator + rescaled
 # accumulator; the S×S score matrix is never materialized). f32 (softmax is f32
 # on every backend). Core MHA path: scale + causal. GQA / sliding-window /
-# logit-softcap / attn_bias / dropout are the ROCm lane's extras — the x86 lane
-# rejects them with a stable diagnostic (Decision #21) rather than silently
-# dropping. compiler_path="x86_flash_attn_compiled". Matches tessera.flash_attn.
+# P10 extras (now supported, the AVX-512 partner to the ROCm WMMA flash_attn):
+# GQA/MQA (host kv-head expansion), sliding window, logit-softcap, and additive
+# attn_bias all run on the kernel (the basic kernel for plain MHA, the ext kernel
+# for the extras). dropout (an RNG step) is still rejected.
+# compiler_path="x86_flash_attn_compiled".
 #
-# ONLY tessera.flash_attn (the per-head [..., S, D] contract) is accepted.
 # tessera.multi_head_attention is a DIFFERENT contract — rank-3 [B, S, H*D] +
 # num_heads, needing a split to [B, H, S, D] this kernel does not do — so it is
-# rejected here rather than mis-run as single-head attention over H*D.
+# rejected (mis-running it as single-head over H*D would corrupt the output).
 # ─────────────────────────────────────────────────────────────────────────────
-_X86_FA_OPS = ("tessera.flash_attn",)
+_X86_FA_OPS = ("tessera.flash_attn", "tessera.gqa_attention",
+               "tessera.mqa_attention", "tessera.attn_sliding_window")
 
 
 def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
@@ -2332,48 +2334,108 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact,
     operand_names = [str(n) for n in op.get("operands", [])]
     if len(operand_names) < 3:
         raise ValueError("flash_attn requires Q, K, V operands")
-    # A 4th operand is the additive attn_bias / mask (the Graph IR + Apple path
-    # normalize flash_attn(..., attn_bias=…) into a 4th operand). The x86 lane
-    # does not apply it, so reject rather than silently run un-biased attention.
-    if len(operand_names) > 3:
-        raise ValueError(
-            "x86 flash_attn lane does not support an attn_bias / mask operand "
-            f"(got {len(operand_names)} operands; ROCm-lane feature) — not "
-            "supported on x86_flash_attn_compiled")
     values = _bind_launch_args(args, arg_names)
     q = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), np.float32)
     k = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)
     v = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), np.float32)
+    # A 4th operand is the additive attn_bias / mask (the Graph IR + Apple path
+    # normalize flash_attn(..., attn_bias=…) into a 4th operand).
+    bias = (np.ascontiguousarray(_as_numpy(values[operand_names[3]]), np.float32)
+            if len(operand_names) > 3 else None)
     if q.ndim < 2 or k.ndim < 2 or v.ndim < 2:
         raise ValueError("flash_attn Q/K/V must be at least rank 2 ([..., S, D])")
     d = int(q.shape[-1])
     sq, sk = int(q.shape[-2]), int(k.shape[-2])
     # K must share Q's head dim (the QK score dot); V's last dim is the value
-    # width and MAY differ (v_head_dim != qk_head_dim) — the output takes V's
-    # width. K/V share batch/head + key length.
+    # width and MAY differ (v_head_dim != qk_head_dim). K/V share key length +
+    # their own batch/head dims (which differ from Q under GQA).
     if (int(k.shape[-1]) != d or int(v.shape[-2]) != sk
             or v.shape[:-2] != k.shape[:-2]):
         raise ValueError(
             "x86 flash_attn requires K to share Q's head dim and K/V to share "
             f"batch/head + key length; got Q{q.shape} K{k.shape} V{v.shape}")
-    # GQA (q-heads != kv-heads) and the structured-mask extras are ROCm-lane
-    # features; the x86 core lane names them rather than silently mis-running.
+    # GQA / MQA — Hq query heads share Hkv < Hq key/value heads (head axis -3).
+    # Expand K/V kv-heads to match Q's head count on the host, then the kernel
+    # runs ordinary MHA. G == H is plain MHA (no expansion).
     if q.shape[:-2] != k.shape[:-2]:
-        raise ValueError(
-            "x86 flash_attn lane handles MHA (matching Q/K batch+head dims); "
-            f"GQA/MQA (Q{q.shape[:-2]} vs K{k.shape[:-2]}) is the ROCm lane — "
-            "not supported on x86_flash_attn_compiled")
-    kwargs = op.get("kwargs") or {}
-    for unsup in ("window", "logit_softcap", "attn_bias", "dropout_p"):
-        val = kwargs.get(unsup)
-        if val:
+        n_qh = int(q.shape[-3]) if q.ndim >= 3 else 1
+        n_kvh = int(k.shape[-3]) if k.ndim >= 3 else 1
+        if q.shape[:-3] != k.shape[:-3] or n_kvh <= 0 or n_qh % n_kvh:
             raise ValueError(
-                f"x86 flash_attn lane does not support {unsup!r} (ROCm-lane "
-                f"feature); got {unsup}={val!r} on x86_flash_attn_compiled")
+                f"x86 flash_attn GQA needs Q/K to share batch dims and "
+                f"q-heads ({n_qh}) divisible by kv-heads ({n_kvh}); got "
+                f"Q{q.shape} K{k.shape}")
+        ratio = n_qh // n_kvh
+        if ratio != 1:
+            k = np.ascontiguousarray(np.repeat(k, ratio, axis=-3), np.float32)
+            v = np.ascontiguousarray(np.repeat(v, ratio, axis=-3), np.float32)
+    kwargs = op.get("kwargs") or {}
+    if kwargs.get("dropout_p"):
+        raise ValueError(
+            "x86 flash_attn lane does not apply dropout (an RNG step); got "
+            f"dropout_p={kwargs.get('dropout_p')!r}")
     causal = bool(kwargs.get("causal", False))
     scale = kwargs.get("scale")
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(d))
+    window = int(kwargs.get("window") or 0)
+    if window < 0:
+        raise ValueError(f"x86 flash_attn window must be >= 0; got {window}")
+    if op_name == "tessera.attn_sliding_window" and window <= 0:
+        raise ValueError(
+            "tessera.attn_sliding_window requires a positive `window` kwarg")
+    softcap = float(kwargs.get("logit_softcap") or 0.0)
+    if softcap < 0:
+        raise ValueError(f"x86 flash_attn logit_softcap must be >= 0; got {softcap}")
+    if window > 0 or softcap > 0 or bias is not None:
+        return _x86_flash_attn_run(q, k, v, scale, causal, window, softcap,
+                                   bias, np)
     return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
+
+
+def _x86_flash_attn_run(q: Any, k: Any, v: Any, scale: float, causal: bool,
+                        window: int, softcap: float, bias: Any, np: Any) -> Any:
+    """The extended AVX-512 FA forward (sliding window / logit-softcap / additive
+    bias). Operands are already MHA-matched (GQA expanded). bias is None or
+    broadcastable to [bh, Sq, Sk]. Returns O shaped q.shape[:-1] + (dv,)."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_flash_attn_ext_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_flash_attn_ext_f32 missing")
+    d, sq, sk = int(q.shape[-1]), int(q.shape[-2]), int(k.shape[-2])
+    dv = int(v.shape[-1])
+    bh = int(np.prod(q.shape[:-2])) if q.ndim > 2 else 1
+    qc = q.reshape(bh, sq, d)
+    kc = k.reshape(bh, sk, d)
+    vc = v.reshape(bh, sk, dv)
+    o = np.zeros((bh, sq, dv), np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    if bias is not None:
+        # Broadcast the bias to Q's leading (batch/head) dims + (Sq, Sk), then
+        # flatten those leading dims to bh — consistent with the Q/K/V reshape.
+        # Accepts [Sq,Sk] (shared), [B,H,Sq,Sk] (per bh), [B,1,Sq,Sk], etc.
+        lead = q.shape[:-2]
+        try:
+            bc = np.ascontiguousarray(
+                np.broadcast_to(bias, lead + (sq, sk)), np.float32).reshape(
+                bh, sq, sk)
+        except ValueError as exc:
+            raise ValueError(
+                f"x86 flash_attn attn_bias shape {bias.shape} does not "
+                f"broadcast to Q's batch/head + (Sq, Sk) = {lead + (sq, sk)}"
+            ) from exc
+        bptr = bc.ctypes.data_as(cf)
+        bstride = sq * sk
+    else:
+        bptr = cf()                       # NULL
+        bstride = 0
+    fn(qc.ctypes.data_as(cf), kc.ctypes.data_as(cf), vc.ctypes.data_as(cf),
+       bptr, ctypes.c_int64(bstride), ctypes.c_int64(bh), ctypes.c_int64(sq),
+       ctypes.c_int64(sk), ctypes.c_int64(d), ctypes.c_int64(dv),
+       ctypes.c_float(scale), ctypes.c_int(1 if causal else 0),
+       ctypes.c_int64(window), ctypes.c_float(softcap), o.ctypes.data_as(cf))
+    return o.reshape(q.shape[:-1] + (dv,))
 
 
 def _x86_flash_attn_kernel(q: Any, k: Any, v: Any, scale: float, causal: bool,
@@ -2462,6 +2524,114 @@ def _execute_x86_compiled_mla(artifact: RuntimeArtifact, args: Any) -> Any:
     scale = float(scale) if scale is not None else 1.0 / float(np.sqrt(q.shape[-1]))
     causal = bool(kwargs.get("causal", False))
     return _x86_flash_attn_kernel(q, kk, vv, scale, causal, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NSA — DeepSeek native sparse attention (P11) — blends three branches through a
+# learned gate: a sliding-window branch (the P10 window kernel), a
+# compressed-block branch (dense attention over per-block mean summaries), and a
+# top-k block branch (per-query top-k block SELECTION on the host + dense
+# attention over the gathered tokens on the device). The FLOP-heavy attention in
+# every branch runs on the AVX-512 flash_attn kernels; the block compression /
+# top-k selection / gather / gate blend are the cheap host structure. f32,
+# matches tessera.ops.deepseek_sparse_attention. compiler_path=
+# "x86_nsa_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_NSA_OPS = ("tessera.deepseek_sparse_attention",)
+
+
+def _x86_attn_dense(q: Any, k: Any, v: Any, causal: bool, window: int,
+                    np: Any) -> Any:
+    """A dense / windowed attention via the AVX-512 flash_attn kernels."""
+    scale = 1.0 / float(np.sqrt(int(q.shape[-1])))
+    if window and window > 0:
+        return _x86_flash_attn_run(q, k, v, scale, causal, int(window), 0.0,
+                                   None, np)
+    return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
+
+
+def _x86_nsa_topk_block_attn(Q: Any, K: Any, V: Any, top_k: int,
+                             block_size: int, causal: bool, np: Any) -> Any:
+    """NSA top-k branch: per query select the top_k highest-scoring KV blocks
+    (vs the compressed summaries), gather their full tokens, run dense attention
+    over the gathered set. Q/K/V are [B, H, S, D]."""
+    B, H, Sq, D = Q.shape
+    Sk, Dv = int(K.shape[2]), int(V.shape[-1])
+    nb = Sk // block_size
+    Kr = K.reshape(B, H, nb, block_size, D)
+    Vr = V.reshape(B, H, nb, block_size, Dv)
+    Kc = Kr.mean(axis=3)                                   # [B,H,nb,D] summaries
+    scores = np.matmul(Q, np.swapaxes(Kc, -1, -2))         # [B,H,Sq,nb]
+    if causal:
+        q_block = (np.arange(Sq) // block_size)[None, None, :, None]
+        future = np.arange(nb)[None, None, None, :] > q_block
+        scores = np.where(future, -np.inf, scores)
+    k_sel = min(top_k, nb)
+    idx = np.argpartition(-scores, k_sel - 1, axis=-1)[..., :k_sel]
+    idx = np.sort(idx, axis=-1)                            # [B,H,Sq,k_sel]
+    bi = np.arange(B)[:, None, None, None]
+    hi = np.arange(H)[None, :, None, None]
+    Ksel = Kr[bi, hi, idx]            # [B,H,Sq,k_sel,block_size,D]
+    Vsel = Vr[bi, hi, idx]            # [B,H,Sq,k_sel,block_size,Dv]
+    g = k_sel * block_size
+    Qf = np.ascontiguousarray(Q.reshape(B * H * Sq, 1, D), np.float32)
+    Kf = np.ascontiguousarray(Ksel.reshape(B * H * Sq, g, D), np.float32)
+    Vf = np.ascontiguousarray(Vsel.reshape(B * H * Sq, g, Dv), np.float32)
+    Of = _x86_attn_dense(Qf, Kf, Vf, causal=False, window=0, np=np)
+    return Of.reshape(B, H, Sq, Dv)
+
+
+def _x86_nsa_compute(operands: list, kwargs: dict, np: Any) -> Any:
+    Q = np.ascontiguousarray(operands[0], np.float32)
+    K = np.ascontiguousarray(operands[1], np.float32)
+    V = np.ascontiguousarray(operands[2], np.float32)
+    gate = (np.ascontiguousarray(operands[3], np.float32)
+            if len(operands) > 3 and operands[3] is not None else None)
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        raise ValueError("nsa expects rank-4 (B, H, S, D) Q/K/V")
+    window_size = int(kwargs["window_size"])
+    block_size = int(kwargs["block_size"])
+    top_k = int(kwargs["top_k"])
+    causal = bool(kwargs.get("causal", True))
+    if int(K.shape[2]) % block_size:
+        raise ValueError(
+            f"nsa: key length {K.shape[2]} not divisible by block_size "
+            f"{block_size}")
+    nb = int(K.shape[2]) // block_size
+    Kc = K.reshape(K.shape[0], K.shape[1], nb, block_size, K.shape[-1]).mean(3)
+    Vc = V.reshape(V.shape[0], V.shape[1], nb, block_size, V.shape[-1]).mean(3)
+    sliding = _x86_attn_dense(Q, K, V, causal, window_size, np)
+    compressed = _x86_attn_dense(Q, Kc, Vc, False, 0, np)
+    topk = _x86_nsa_topk_block_attn(Q, K, V, top_k, block_size, causal, np)
+    if gate is None:
+        w = np.full(sliding.shape[:-1] + (3,), 1.0 / 3.0, np.float32)
+    else:
+        g = gate.astype(np.float64)
+        e = np.exp(g - g.max(axis=-1, keepdims=True))
+        w = (e / e.sum(axis=-1, keepdims=True)).astype(np.float32)
+    out = (sliding * w[..., 0:1] + compressed * w[..., 1:2]
+           + topk * w[..., 2:3])
+    return np.ascontiguousarray(out, np.float32)
+
+
+def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` NSA (deepseek_sparse_attention) lane."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _NSA_OPS:
+        raise ValueError(
+            f"x86_nsa_compiled executor handles one of {_NSA_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("nsa requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _x86_nsa_compute(operands, ops[0].get("kwargs") or {}, np)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -11380,6 +11550,7 @@ def _executor_table():
         "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
         "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_conv_compiled": _execute_x86_compiled_conv,
+        "x86_nsa_compiled": _execute_x86_compiled_nsa,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,

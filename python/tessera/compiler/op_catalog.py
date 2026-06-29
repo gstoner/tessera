@@ -73,7 +73,7 @@ _SPECS = [
     # Theme 9 — utility tensor ops. `arange` has no differentiable inputs;
     # the rest follow the standard elementwise / shape pattern.
     OpSpec("arange", "tessera.arange", 0, 3, lowering="layout_transform"),
-    OpSpec("gather", "tessera.gather", 2, 2, lowering="layout_transform"),
+    OpSpec("gather", "tessera.gather", 2, 2, lowering="indexing"),
     OpSpec("clip", "tessera.clip", 1, 1),
     OpSpec("masked_fill", "tessera.masked_fill", 2, 2, lowering="layout_transform"),
     OpSpec("adam", "tessera.adam", 4, 4, lowering="functional_optimizer_step"),

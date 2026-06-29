@@ -697,6 +697,26 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── CF0 — control-flow target guard ──────────────────────────────────
+    DiagnosticCode(
+        code="CONTROL_FLOW_UNSUPPORTED_ON_TARGET",
+        pass_origin="ControlFlowTargetGuard",
+        severity="error",
+        summary=(
+            "A tessera.control_{for,if,while,scan} op reached a backend with "
+            "no control-flow lowering (everything but apple_gpu today). Device "
+            "control-flow codegen for CUDA / ROCm lands in CF3 / CF4."
+        ),
+        fix_hint=(
+            "Target apple_gpu (the only backend that lowers control flow "
+            "today), or hoist the loop/branch to the host until CF3/CF4 add "
+            "the CUDA/ROCm control-flow kernels. See "
+            "docs/spec/CONTROL_FLOW_CONTRACT.md §5."
+        ),
+        spec="docs/spec/CONTROL_FLOW_CONTRACT.md §5",
+        sprint="CF0",
+    ),
+
     # ── Queue dialect verifiers (V8) ─────────────────────────────────────
     DiagnosticCode(
         code="QUEUE_CREATE_OPERAND_COUNT",

@@ -19,9 +19,14 @@ _PASSES = (Path(__file__).resolve().parents[2]
 
 def _pipeline_body(src: str, anchor: str) -> str:
     """Return the chunk of Passes.cpp from `anchor` to the next pass-manager
-    builder boundary — enough to check a builder's pass list."""
+    builder boundary — enough to check a builder's pass list.
+
+    Window sized to cover the longest builder's early pass list. Bumped
+    1800 → 2200 when CF0 added createControlFlowTargetGuardPass right after
+    addGraphIRPreLoweringPasses in the x86 builder (it pushed
+    createSymbolicDimEqualityPass to ~char 1900 from the anchor)."""
     i = src.index(anchor)
-    return src[i:i + 1800]
+    return src[i:i + 2200]
 
 
 def test_layout_legality_in_all_three_lowering_pipelines():

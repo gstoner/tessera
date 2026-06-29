@@ -85,6 +85,10 @@ void registerTesseraPasses() {
   // ── Phase 0 production spine — Graph IR → upstream linalg ──────────────────
   ::mlir::registerPass([]() { return createTesseraToLinalgPass(); });
 
+  // ── CF0 — control-flow target guard (standalone + wired into the non-Apple
+  // pipelines below). Standalone form names the target via the `target` option.
+  ::mlir::registerPass([]() { return createControlFlowTargetGuardPass(); });
+
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):
@@ -98,6 +102,9 @@ void registerTesseraPasses() {
                "Full Phase 2 lowering chain to x86 AMX/AVX-512 backend",
       [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
+        // CF0: x86 has no device control-flow lowering — reject control_* early
+        // with a stable diagnostic instead of a confusing downstream failure.
+        pm.addPass(createControlFlowTargetGuardPass("x86"));
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout *assignment* runs just before legality so
         // the verifier validates the assignment + inserted cast{layout} markers.
@@ -269,6 +276,9 @@ void registerTesseraPasses() {
                "Full Phase 3 lowering chain to NVIDIA SM_90 GPU backend",
       [](OpPassManager &pm, const TesseraLoweringPipelineOptions &opts) {
         addGraphIRPreLoweringPasses(pm);
+        // CF0: NVIDIA has no device control-flow lowering yet (CF3) — reject
+        // control_* early with a stable diagnostic.
+        pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
         pm.addPass(createDistributionLoweringPass());
         // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
         if (opts.assignLayouts)
@@ -335,6 +345,8 @@ void registerTesseraPasses() {
   auto buildCUDA13Pipeline = [](OpPassManager &pm,
                                 const TesseraLoweringPipelineOptions &opts) {
     addGraphIRPreLoweringPasses(pm);
+    // CF0: CUDA 13.3 chain has no device control-flow lowering yet (CF3).
+    pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
     pm.addPass(createDistributionLoweringPass());
     // 2026-06-22: optional layout assignment (see lowerToX86 / opts).
     if (opts.assignLayouts)

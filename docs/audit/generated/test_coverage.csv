@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,97,13,8,110,0,bf16 f16 f32 f64 fp32,directly_tested,110 direct test references
+add,102,13,9,115,0,bf16 f16 f32 f64 fp32,directly_tested,115 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -90,7 +90,7 @@ complex_log,2,0,0,2,0,,directly_tested,2 direct test references
 complex_mul,13,0,1,13,0,,directly_tested,13 direct test references
 complex_pow,2,0,0,2,0,,directly_tested,2 direct test references
 complex_sqrt,2,0,0,2,0,,directly_tested,2 direct test references
-cond,14,0,1,14,0,,directly_tested,14 direct test references
+cond,18,0,2,18,0,,directly_tested,18 direct test references
 conformal_energy_on_sphere,2,0,0,2,0,,directly_tested,2 direct test references
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
 constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
@@ -186,7 +186,7 @@ flip,3,0,0,3,0,,directly_tested,3 direct test references
 floor,5,0,1,5,0,bf16 f32 fp32,directly_tested,5 direct test references
 floor_div,3,0,0,3,0,f32,directly_tested,3 direct test references
 focal_loss,8,0,0,8,0,,directly_tested,8 direct test references
-fori_loop,19,0,1,19,0,,directly_tested,19 direct test references
+fori_loop,22,0,2,22,0,,directly_tested,22 direct test references
 fused_epilogue,3,6,1,9,0,,directly_tested,9 direct test references
 gated_attention,8,0,1,8,0,,directly_tested,8 direct test references
 gated_deltanet,25,4,1,29,0,f32 fp64,directly_tested,29 direct test references
@@ -265,7 +265,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
 masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
-matmul,391,203,17,594,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,594 direct test references
+matmul,394,204,18,598,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,598 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references
@@ -385,7 +385,7 @@ rsqrt,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 safetensors_export,1,0,0,1,1,,structural_only,category default for 'aot'
 save_sharded,1,0,1,1,1,,structural_only,category default for 'serialization'
 save_state,6,0,2,6,0,,directly_tested,6 direct test references
-scan,8,0,0,8,0,,directly_tested,8 direct test references
+scan,11,0,1,11,0,,directly_tested,11 direct test references
 scatter,7,0,0,7,0,,directly_tested,7 direct test references
 scatter_add,10,0,0,10,0,,directly_tested,10 direct test references
 scatter_reduce,9,0,0,9,0,,directly_tested,9 direct test references
@@ -471,5 +471,5 @@ vmap,0,0,0,0,1,,structural_only,category default for 'transform'
 wasserstein_distance,6,0,0,6,0,,directly_tested,6 direct test references
 weight_norm,9,0,0,9,0,,directly_tested,9 direct test references
 where,5,0,0,5,0,f32,directly_tested,5 direct test references
-while_loop,4,0,1,4,0,,directly_tested,4 direct test references
+while_loop,7,0,2,7,0,,directly_tested,7 direct test references
 z_loss,7,0,0,7,0,,directly_tested,7 direct test references

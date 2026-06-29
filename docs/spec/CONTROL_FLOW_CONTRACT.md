@@ -9,7 +9,9 @@ last_updated: 2026-06-29
      coverage; pytree-carry tracing carved out to CF1b. -->
 <!-- CF2 (2026-06-29): control_for → scf.for lowering (LowerControlFlowToSCFPass);
      the legacy all-carried form becomes multi-iter_args scf.for, where pytree
-     carries fold in. control_if/while + pipeline wiring → CF2b/CF3/CF4. -->
+     carries fold in. Wired before the CF0 guard in the named pipelines. -->
+<!-- CF2b/CF2c (2026-06-29): control_if → scf.if and control_while → bounded
+     scf.while in the same pass; same payload-skip discipline. -->
 
 
 # Control-Flow Contract (CF0)
@@ -228,9 +230,17 @@ claim.
   trips the guard; the executable-**payload** form (where `@body` is a
   carry-only stub and the real body lives in `body_opcodes`) is **skipped**
   (can't form a correct `func.call` without decoding the payload) and still
-  guarded. **CF2b:** `control_if` → `scf.if`, `control_while` → bounded
-  `scf.while` + `actual_steps`; decoding the payload body into real `scf.for`
-  region ops (CF3/CF4).
+  guarded.
+- **CF2b/CF2c** *(done)* — `control_if` → `scf.if` (flag `[0] > 0` via
+  `tensor.extract` + `arith.cmpf`; branches kept as `func.call`s over the
+  non-flag operands) and `control_while` → **bounded** `scf.while` (loop state
+  `(counter : index, carry)`; the `before` region gates on `(i < max_iters) AND
+  (cond(carry)[0] > 0)`, the `after` region runs the body + increments). Same
+  payload-skip discipline as `control_for`. All three lower through the named
+  `tessera-lower-to-{x86,gpu}` / CUDA13 pipelines before the guard.
+- **CF3/CF4** — decode the executable-payload body into real `scf` region ops,
+  wire the `scf`-bearing IR through to executable CUDA/ROCm device-control
+  kernels, and retire the CF0 guard lane by lane.
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

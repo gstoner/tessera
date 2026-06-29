@@ -1689,6 +1689,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_x86_flash_attn_compiled.py",
     ("deepseek_sparse_attention", "x86"):
         "tests/unit/test_x86_nsa_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py"
+       for op in ("linear_attn", "power_attn", "retention")},
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
@@ -2502,6 +2504,17 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "online-softmax FA forward with window/softcap/bias support; "
                  "x86_flash_attn_compiled lane; f32)",
     },
+    # P10 scan-family — linear-attention backbone (linear_attn / power_attn /
+    # retention) via the quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ decay)@V on
+    # the AVX-512 GEMM; feature map / mask / decay on host (x86_linear_attn_
+    # compiled lane). The AVX-512 partner to the ROCm linear_attn lane.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 {op} — quadratic-parallel linear attention "
+                 "(φ(Q)·φ(K)ᵀ ⊙ causal ⊙ decay)@V on two batched GEMMs; feature "
+                 "map / mask / decay on host; x86_linear_attn_compiled lane; f32",
+    } for op in ("linear_attn", "power_attn", "retention")},
     # P11 — NSA (DeepSeek native sparse attention): the sliding / compressed /
     # top-k branches all run their attention on the AVX-512 flash_attn kernels;
     # block compression / top-k selection / gather / gate blend on the host.

@@ -2633,6 +2633,129 @@ def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
     return _x86_nsa_compute(operands, ops[0].get("kwargs") or {}, np)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Linear-attention backbone (P10 scan-family x86 partners) — the AVX-512 partner
+# to the ROCm linear_attn lane. linear_attn / power_attn / retention all share
+# the `_linear_attn_impl` recurrence, which is mathematically the
+# QUADRATIC-PARALLEL form  O = (φ(Q)·φ(K)ᵀ ⊙ causal ⊙ decay) @ V : two batched
+# GEMMs on the AVX-512 f32 GEMM with the causal mask + per-token decay matrix on
+# the host. The feature map (elu / relu / identity / polynomial_2) and the
+# power/decay parametrics are host structure; power_attn = φ=x^deg,
+# retention = φ=x^deg + multiplicative decay = exp(log_g). f32, matches the numpy
+# reference. compiler_path="x86_linear_attn_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_X86_LINATTN_OPS = ("tessera.linear_attn", "tessera.power_attn",
+                    "tessera.retention")
+_LINATTN_FEATURE_MAPS = ("elu", "relu", "identity", "polynomial_2")
+
+
+def _linattn_feature_map(x: Any, name: str, np: Any) -> Any:
+    if name == "elu":
+        return np.where(x > 0, x + 1.0, np.exp(x)).astype(np.float32)
+    if name == "relu":
+        return np.maximum(x, 0.0).astype(np.float32)
+    if name == "identity":
+        return np.ascontiguousarray(x, np.float32)
+    if name == "polynomial_2":
+        return (x * x).astype(np.float32)
+    raise ValueError(
+        f"linear_attn feature_map must be one of {_LINATTN_FEATURE_MAPS}; "
+        f"got {name!r}")
+
+
+def _x86_linear_attn_quad(phi_q: Any, phi_k: Any, v: Any, causal: bool,
+                          decay: Any, np: Any) -> Any:
+    """O = (φQ·φKᵀ ⊙ causal ⊙ decay) @ V on the AVX-512 batched GEMM.
+    phi_q/phi_k [B,H,S,Dqk]; v [B,H,S,Dv]; decay [B,H,S] or None.
+
+    decay is honored ONLY in the causal path — the reference
+    ``_linear_attn_impl`` non-causal branch folds to a single global
+    ``φQ @ Σ(φKᵀV)`` and ignores decay, so this lane must too.
+    """
+    scores = _x86_batched_gemm(phi_q, np.swapaxes(phi_k, -1, -2))  # [B,H,S,S]
+    s = int(scores.shape[-1])
+    if not causal:
+        return _x86_batched_gemm(np.ascontiguousarray(scores, np.float32),
+                                 np.ascontiguousarray(v, np.float32))
+    tri = np.tril(np.ones((s, s), bool))
+    if decay is None:
+        scores = scores * tri.astype(np.float32)
+    else:
+        # Decay matrix D[t,r] = prod_{u=r+1..t} decay[u], built in LOG space:
+        # cumprod(decay) underflows to 0 over a long run of small factors, and
+        # the c[t]/c[r] ratio then yields inf/NaN that the tril-multiply turns
+        # into inf*0 = NaN, contaminating even valid earlier rows. cumsum of
+        # logs never underflows; masking the upper triangle to -inf BEFORE exp
+        # makes those entries exp(-inf)=0 cleanly (no overflow, no inf*0).
+        d = np.asarray(decay, np.float64)                       # [B,H,S]
+        ell = np.cumsum(np.log(np.maximum(d, 1e-30)), axis=-1)  # L[t]
+        diff = ell[..., :, None] - ell[..., None, :]            # L[t]-L[r]
+        diff = np.where(tri, diff, -np.inf)
+        scores = scores * np.exp(diff).astype(np.float32)
+    return _x86_batched_gemm(np.ascontiguousarray(scores, np.float32),
+                             np.ascontiguousarray(v, np.float32))
+
+
+def _x86_linattn_compute(op_name: str, operands: list, kwargs: dict,
+                         np: Any) -> Any:
+    Q = np.ascontiguousarray(operands[0], np.float32)
+    K = np.ascontiguousarray(operands[1], np.float32)
+    V = np.ascontiguousarray(operands[2], np.float32)
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        raise ValueError("linear_attn family expects rank-4 (B, H, S, D)")
+    causal = bool(kwargs.get("causal", True))
+    decay = None
+
+    if op_name == "tessera.linear_attn":
+        feature_map = str(kwargs.get("feature_map", "elu"))
+        if kwargs.get("decay") is not None:
+            decay = np.asarray(kwargs["decay"], np.float64)
+        phi_q = _linattn_feature_map(Q, feature_map, np)
+        phi_k = _linattn_feature_map(K, feature_map, np)
+    elif op_name == "tessera.power_attn":
+        deg = int(kwargs.get("deg", 2))
+        if deg < 1:
+            raise ValueError(f"power_attn deg must be >= 1; got {deg}")
+        if deg == 2:
+            phi_q = _linattn_feature_map(Q, "polynomial_2", np)
+            phi_k = _linattn_feature_map(K, "polynomial_2", np)
+        else:
+            phi_q = (Q.astype(np.float64) ** deg).astype(np.float32)
+            phi_k = (K.astype(np.float64) ** deg).astype(np.float32)
+    else:  # tessera.retention — φ = x^deg + multiplicative decay = exp(log_g)
+        deg = int(kwargs.get("deg", 2))
+        phi_q = (Q.astype(np.float64) ** deg).astype(np.float32)
+        phi_k = (K.astype(np.float64) ** deg).astype(np.float32)
+        log_g = kwargs.get("log_g")
+        if log_g is not None:
+            decay = np.exp(np.asarray(log_g, np.float64))
+
+    return np.ascontiguousarray(
+        _x86_linear_attn_quad(phi_q, phi_k, V, causal, decay, np), np.float32)
+
+
+def _execute_x86_compiled_linear_attn(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` linear-attention backbone (linear_attn / power_attn
+    / retention) on the AVX-512 GEMM quadratic-parallel form."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_LINATTN_OPS:
+        raise ValueError(
+            f"x86_linear_attn_compiled executor handles one of "
+            f"{_X86_LINATTN_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("linear_attn family requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _x86_linattn_compute(op_name, operands, ops[0].get("kwargs") or {},
+                                np)
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED linear_attn lane (2026-06-25) — the quadratic-parallel form
@@ -11551,6 +11674,7 @@ def _executor_table():
         "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_conv_compiled": _execute_x86_compiled_conv,
         "x86_nsa_compiled": _execute_x86_compiled_nsa,
+        "x86_linear_attn_compiled": _execute_x86_compiled_linear_attn,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,

@@ -27,7 +27,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `hybrid_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `kimi_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `lightning_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `linear_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `linear_attn` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `linear_attn_state` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `lookahead_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `memory_index_score` | attention | public | public | registered | complete | partial | reference | ready | none |
@@ -38,8 +38,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `msa_index_scores` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `msa_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `multi_head_attention` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `power_attn` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `retention` | attention | public | public | registered | complete | partial | reference | ready | none |
+| `power_attn` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `retention` | attention | public | public | registered | complete | partial | fused | ready | none |
 | `varlen_sdpa` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `all_gather` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
@@ -329,7 +329,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFN· PPGCpFN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |

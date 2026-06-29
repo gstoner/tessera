@@ -123,10 +123,13 @@ def _ref_extra(q, k, v, scale=None, causal=False, window=0, softcap=0.0,
     i = np.arange(sq)[:, None]
     j = np.arange(sk)[None, :]
     mask = np.zeros((sq, sk), bool)
-    if causal:
-        mask |= j > i + off
     if window > 0:
-        mask |= j < i + off - window + 1
+        if causal:                         # causal band (i-W, i]
+            mask |= (j > i + off) | (j < i + off - window + 1)
+        else:                              # symmetric local window |i-j| <= W/2
+            mask |= (j > i + off + window // 2) | (j < i + off - window // 2)
+    elif causal:
+        mask |= j > i + off
     s = np.where(mask, -np.inf, s)
     s = s - s.max(axis=-1, keepdims=True)
     w = np.exp(s)
@@ -153,6 +156,38 @@ def test_sliding_window():
                window=4, causal=True)
     np.testing.assert_allclose(
         got, _ref_extra(q, k, v, window=4, causal=True), rtol=1e-4, atol=1e-4)
+
+
+def test_sliding_window_non_causal_symmetric():
+    """Non-causal sliding window is a SYMMETRIC local band (|i-j| <= W/2) — it
+    must NOT attend future keys outside the window."""
+    rt = _rt_or_skip()
+    q, k, v = _qkv((2, 16, 16))
+    got = _run(rt, q, k, v, op="tessera.attn_sliding_window",
+               window=6, causal=False)
+    np.testing.assert_allclose(
+        got, _ref_extra(q, k, v, window=6, causal=False), rtol=1e-4, atol=1e-4)
+
+
+def test_attn_bias_rank4():
+    """A rank-4 [B, H, Sq, Sk] additive bias flattens consistently with the
+    [B, H, S, D] Q/K/V."""
+    rt = _rt_or_skip()
+    q = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    k = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    v = _RNG.standard_normal((2, 3, 5, 8)).astype(np.float32)
+    bias = _RNG.standard_normal((2, 3, 5, 5)).astype(np.float32)
+    art = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_flash_attn_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["q", "k", "v", "b"], "output_name": "o",
+        "ops": [{"op_name": "tessera.flash_attn", "result": "o",
+                 "operands": ["q", "k", "v", "b"], "kwargs": {}}]})
+    res = rt.launch(art, (q, k, v, bias))
+    assert res["ok"] is True, res.get("reason")
+    np.testing.assert_allclose(np.asarray(res["output"]),
+                               _ref_extra(q, k, v, bias=bias),
+                               rtol=1e-4, atol=1e-4)
 
 
 def test_logit_softcap():

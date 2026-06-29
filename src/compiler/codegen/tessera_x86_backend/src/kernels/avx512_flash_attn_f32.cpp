@@ -103,8 +103,11 @@ extern "C" void tessera_x86_flash_attn_f32(const float* Q, const float* K,
 }
 
 // Extended FA forward (P10 extras): the same online softmax plus
-//   * sliding window  (window > 0): query i attends keys in
-//     (i + off - window, i + off]  — a causal band of width `window`;
+//   * sliding window  (window > 0): the valid key band is
+//       causal     : keys in (i + off - window, i + off]   (width `window`);
+//       non-causal : keys in [i + off - window/2, i + off + window/2]
+//                    (a SYMMETRIC local window of half-width window/2),
+//     matching the dense attn_sliding_window reference;
 //   * logit soft-cap  (softcap > 0): each scaled score s -> cap·tanh(s/cap)
 //     before the (optional) bias + softmax (Gemma-2 semantics);
 //   * additive bias   (bias != null): a per-(query,key) score bias of shape
@@ -131,8 +134,20 @@ extern "C" void tessera_x86_flash_attn_ext_f32(
             float* oi = Ob + i * dv;
             for (int64_t t = 0; t < dv; ++t)
                 oi[t] = 0.0f;
-            const int64_t jmax = causal ? (i + off) : (sk - 1);
-            const int64_t jmin = (window > 0) ? (i + off - window + 1) : 0;
+            int64_t jmax, jmin;
+            if (window > 0) {
+                if (causal) {                         // causal band (i-W, i]
+                    jmax = i + off;
+                    jmin = i + off - window + 1;
+                } else {                              // symmetric local window
+                    jmax = i + off + window / 2;
+                    jmin = i + off - window / 2;
+                }
+            } else {
+                jmax = causal ? (i + off) : (sk - 1);
+                jmin = 0;
+            }
+            if (jmax > sk - 1) jmax = sk - 1;
             const int64_t j0 = (jmin > 0) ? jmin : 0;
             const float* Bi = Bb ? Bb + i * sk : nullptr;
             float m = -INFINITY, l = 0.0f;

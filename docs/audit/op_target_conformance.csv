@@ -13,7 +13,7 @@ kv_cache_read,apple_cpu,partial,complete,complete,complete,complete,complete,par
 kv_cache_read,apple_gpu,missing,complete,complete,complete,complete,complete,missing,partial,hardware_smoke
 kv_cache_read,cpu,partial,complete,complete,complete,complete,complete,partial,complete,
 kv_cache_read,nvidia,missing,complete,complete,complete,missing,missing,missing,partial,codegen
-kv_cache_read,rocm,complete,complete,complete,complete,complete,complete,complete,complete,toolchain
+kv_cache_read,rocm,missing,complete,complete,complete,missing,missing,missing,partial,codegen
 matmul,apple_cpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 matmul,apple_gpu,complete,complete,complete,complete,complete,complete,complete,complete,hardware_smoke
 matmul,cpu,partial,complete,complete,complete,complete,complete,partial,complete,

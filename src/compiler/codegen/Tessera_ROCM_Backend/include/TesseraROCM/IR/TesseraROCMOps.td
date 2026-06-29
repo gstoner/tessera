@@ -840,6 +840,23 @@ def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_GatherKernelOp : TesseraROCM_Op<"gather"> {
+  let summary = "Masked strided-copy / gather kernel (0-move lane)";
+  let description = [{
+    The directive `generate-rocm-gather-kernel` expands into a flat masked-gather
+    gpu kernel — the 0-move lane (P4) backing pad / cat / roll / flip / tile /
+    repeat / stack: one thread per output element,
+    `out[i] = (0 <= idx[i] < src_n) ? src[idx[i]] : out[i]`. A negative index
+    leaves `out[i]` unchanged (pad fill / cat per-input accumulate). The host
+    computes the integer index map from the op's numpy semantics on an arange
+    grid; this kernel does the f32 data movement. Args:
+    `(src : memref<?xf32>, src_n : index, idx : memref<?xi64>,
+      out : memref<?xf32>, N : index)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

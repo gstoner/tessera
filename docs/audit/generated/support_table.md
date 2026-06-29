@@ -142,29 +142,29 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `arange` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `broadcast` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `cast` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `cat` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `cat` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `chunk` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `expand` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
 | `flatten` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `flip` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `flip` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `gather` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_partition` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_router` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_scatter` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `pack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `pad` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `pad` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `permute` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `rearrange` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `repeat` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `repeat` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `reshape` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `roll` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `roll` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `rope_merge` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `rope_split` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `split` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `squeeze` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `stack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `tile` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `stack` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `tile` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
 | `tile_view` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `transpose` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `unpack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
@@ -339,7 +339,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| layout_transform | 31 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
+| layout_transform | 31 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
 | linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | linalg_solver | 2 | PPGCpFN· PPGCpFN· |
 | logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

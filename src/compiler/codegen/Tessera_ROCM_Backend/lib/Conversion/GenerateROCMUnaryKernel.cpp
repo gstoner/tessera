@@ -25,6 +25,8 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+
+#include <limits>
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -39,7 +41,8 @@ enum class Un {
   Erf, Tanh, Sigmoid, Log1p, Expm1, Softplus,
   // tail: trig / special / rounding (2026-06-26)
   Cos, Tan, Sinh, Cosh, Asin, Acos, Atan, Erfc,
-  Floor, Ceil, Round, Trunc
+  Floor, Ceil, Round, Trunc,
+  Sin, Lgamma, Digamma
 };
 
 static Value cst(OpBuilder &b, Location loc, Type f32, float v) {
@@ -53,6 +56,8 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
   auto slt = arith::CmpIPredicate::slt;
   auto ogt = arith::CmpFPredicate::OGT;
   auto olt = arith::CmpFPredicate::OLT;
+  auto ole = arith::CmpFPredicate::OLE;
+  auto oeq = arith::CmpFPredicate::OEQ;
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value X = f.getArgument(0), O = f.getArgument(1), N = f.getArgument(2);
@@ -126,6 +131,121 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     Value lp = b.create<math::Log1pOp>(loc, e);
     Value mx = b.create<arith::MaximumFOp>(loc, x, zero);
     y = b.create<arith::AddFOp>(loc, lp, mx);
+    break;
+  }
+  case Un::Sin:
+    y = b.create<math::SinOp>(loc, x);
+    break;
+  case Un::Lgamma: {
+    // ln Γ(x): Numerical Recipes `gammln` — Lanczos g=5 (matches the x86
+    // lgamma512 SIMD core and math.lgamma). Valid for x > 0; reflection for
+    // x < 0.5 via ln Γ(x) = ln(π) - ln|sin(πx)| - ln Γ(1-x).
+    static const float kCof[6] = {
+        76.18009172947146f,    -86.50532032941677f,    24.01409824083091f,
+        -1.231739572450155f,    0.1208650973866179e-2f, -0.5395239384953e-5f};
+    Value half = cst(b, loc, f32, 0.5f);
+    Value isRefl = b.create<arith::CmpFOp>(loc, olt, x, half);
+    // xc = x>=0.5 ? x : 1-x   (the Lanczos arg, always >= 0.5)
+    Value oneMinusX = b.create<arith::SubFOp>(loc, one, x);
+    Value xc = b.create<arith::SelectOp>(loc, isRefl, oneMinusX, x);
+    // ser = 1.000000000190015 + Σ cof[j]/(xc+1+j)
+    Value ser = cst(b, loc, f32, 1.000000000190015f);
+    Value yk = xc;
+    for (int j = 0; j < 6; ++j) {
+      yk = b.create<arith::AddFOp>(loc, yk, one);
+      Value term = b.create<arith::DivFOp>(loc, cst(b, loc, f32, kCof[j]), yk);
+      ser = b.create<arith::AddFOp>(loc, ser, term);
+    }
+    // tmp = (xc+5.5) - (xc+0.5)*log(xc+5.5)
+    Value tmp = b.create<arith::AddFOp>(loc, xc, cst(b, loc, f32, 5.5f));
+    Value lt = b.create<math::LogOp>(loc, tmp);
+    Value xcHalf = b.create<arith::AddFOp>(loc, xc, half);
+    tmp = b.create<arith::SubFOp>(loc, tmp,
+                                  b.create<arith::MulFOp>(loc, xcHalf, lt));
+    // core = -tmp + log(√(2π) * ser / xc)   == lnΓ(xc)
+    Value sp = cst(b, loc, f32, 2.5066282746310005f);
+    Value arg = b.create<arith::DivFOp>(
+        loc, b.create<arith::MulFOp>(loc, sp, ser), xc);
+    Value core = b.create<arith::AddFOp>(
+        loc, b.create<arith::NegFOp>(loc, tmp), b.create<math::LogOp>(loc, arg));
+    // reflected = ln(π) - ln|sin(πx)| - core
+    Value pi = cst(b, loc, f32, 3.14159265358979324f);
+    Value sinPiX = b.create<math::SinOp>(loc, b.create<arith::MulFOp>(loc, pi, x));
+    Value lnAbsSin = b.create<math::LogOp>(loc, b.create<math::AbsFOp>(loc, sinPiX));
+    Value reflected = b.create<arith::SubFOp>(
+        loc,
+        b.create<arith::SubFOp>(loc, b.create<math::LogOp>(loc, pi), lnAbsSin),
+        core);
+    Value yl = b.create<arith::SelectOp>(loc, isRefl, reflected, core);
+    // Poles at non-positive integers: lnΓ has a pole (+inf), but the reflection
+    // sin(πx) with an f32 π is not exactly 0 there, so it would return finite
+    // garbage. Detect x<=0 AND exactly integer and force +inf (matching
+    // std::lgamma at the poles). Exact (oeq) test — a near-integer like -1.00005
+    // is NOT a pole.
+    Value zeroL = cst(b, loc, f32, 0.0f);
+    Value isNonPos = b.create<arith::CmpFOp>(loc, ole, x, zeroL);
+    Value rnd = b.create<math::RoundOp>(loc, x);
+    Value frac = b.create<math::AbsFOp>(loc, b.create<arith::SubFOp>(loc, x, rnd));
+    Value isInt = b.create<arith::CmpFOp>(loc, oeq, frac, zeroL);
+    Value isPole = b.create<arith::AndIOp>(loc, isNonPos, isInt);
+    Value inf = cst(b, loc, f32, std::numeric_limits<float>::infinity());
+    y = b.create<arith::SelectOp>(loc, isPole, inf, yl);
+    break;
+  }
+  case Un::Digamma: {
+    // ψ(x): recurrence to xx>=8 then the asymptotic series (matches the x86
+    // digamma512 core and tessera.ops.digamma). For x<=0, reflect via
+    // ψ(x) = ψ(1-x) - π/tan(πx); non-positive integers (poles) return NaN.
+    Value zero = cst(b, loc, f32, 0.0f);
+    Value eight = cst(b, loc, f32, 8.0f);
+    Value pi = cst(b, loc, f32, 3.14159265358979324f);
+    Value isRefl = b.create<arith::CmpFOp>(loc, ole, x, zero);
+    Value oneMinusX = b.create<arith::SubFOp>(loc, one, x);
+    Value xw = b.create<arith::SelectOp>(loc, isRefl, oneMinusX, x);  // > 0
+    // recurrence: 8 unrolled masked steps reach xx>=8 for any xw>0.
+    Value result = zero;
+    Value xx = xw;
+    for (int k = 0; k < 8; ++k) {
+      Value m = b.create<arith::CmpFOp>(loc, olt, xx, eight);
+      Value recip = b.create<arith::DivFOp>(loc, one, xx);
+      Value rsub = b.create<arith::SubFOp>(loc, result, recip);
+      result = b.create<arith::SelectOp>(loc, m, rsub, result);
+      Value xinc = b.create<arith::AddFOp>(loc, xx, one);
+      xx = b.create<arith::SelectOp>(loc, m, xinc, xx);
+    }
+    Value inv = b.create<arith::DivFOp>(loc, one, xx);
+    Value inv2 = b.create<arith::MulFOp>(loc, inv, inv);
+    Value inv4 = b.create<arith::MulFOp>(loc, inv2, inv2);
+    Value inv6 = b.create<arith::MulFOp>(loc, inv4, inv2);
+    Value inv8 = b.create<arith::MulFOp>(loc, inv4, inv4);
+    // log(xx) - inv/2 - inv2/12 + inv4/120 - inv6/252 + inv8/240
+    Value core = b.create<arith::AddFOp>(loc, result, b.create<math::LogOp>(loc, xx));
+    auto fma = [&](Value acc, float c, Value t, bool add) {
+      Value term = b.create<arith::MulFOp>(loc, cst(b, loc, f32, c), t);
+      return add ? b.create<arith::AddFOp>(loc, acc, term).getResult()
+                 : b.create<arith::SubFOp>(loc, acc, term).getResult();
+    };
+    core = fma(core, 0.5f, inv, false);
+    core = fma(core, 1.0f / 12.0f, inv2, false);
+    core = fma(core, 1.0f / 120.0f, inv4, true);
+    core = fma(core, 1.0f / 252.0f, inv6, false);
+    core = fma(core, 1.0f / 240.0f, inv8, true);
+    // reflection: ψ(x) = core(1-x) - π/tan(πx)
+    Value tanPiX = b.create<math::TanOp>(loc, b.create<arith::MulFOp>(loc, pi, x));
+    Value reflected = b.create<arith::SubFOp>(
+        loc, core, b.create<arith::DivFOp>(loc, pi, tanPiX));
+    Value yv = b.create<arith::SelectOp>(loc, isRefl, reflected, core);
+    // Pole at non-positive integer -> NaN. EXACT integer test (frac == 0): a
+    // negative non-integer like -1.00005 is finite (very large), not a pole —
+    // a broad 1e-4 window would wrongly NaN a whole fp32 band around each pole.
+    // f32 integers are exactly representable, so round() of an integer-valued
+    // float is exact and frac is exactly 0.
+    Value rnd = b.create<math::RoundOp>(loc, x);
+    Value frac = b.create<math::AbsFOp>(loc, b.create<arith::SubFOp>(loc, x, rnd));
+    Value isInt = b.create<arith::CmpFOp>(loc, oeq, frac, zero);
+    Value isPole = b.create<arith::AndIOp>(loc, isRefl, isInt);
+    Value nan = cst(b, loc, f32, std::numeric_limits<float>::quiet_NaN());
+    y = b.create<arith::SelectOp>(loc, isPole, nan, yv);
     break;
   }
   case Un::Cos:
@@ -218,6 +338,7 @@ struct GenerateROCMUnaryKernelPass
                   .Case("log1p", Un::Log1p)
                   .Case("expm1", Un::Expm1)
                   .Case("softplus", Un::Softplus)
+                  .Case("sin", Un::Sin)
                   .Case("cos", Un::Cos)
                   .Case("tan", Un::Tan)
                   .Case("sinh", Un::Sinh)
@@ -230,12 +351,15 @@ struct GenerateROCMUnaryKernelPass
                   .Case("ceil", Un::Ceil)
                   .Case("round", Un::Round)
                   .Case("trunc", Un::Trunc)
+                  .Case("lgamma", Un::Lgamma)
+                  .Case("digamma", Un::Digamma)
                   .Default(Un::Exp);
       static const llvm::StringSet<> kValid = {
           "exp",  "log",     "sqrt",  "rsqrt", "reciprocal", "abs",  "neg",
           "sign", "erf",     "tanh",  "sigmoid", "log1p",    "expm1",
-          "softplus", "cos", "tan",   "sinh",  "cosh", "asin", "acos",
-          "atan", "erfc",    "floor", "ceil",  "round", "trunc"};
+          "softplus", "sin", "cos", "tan",   "sinh",  "cosh", "asin", "acos",
+          "atan", "erfc",    "floor", "ceil",  "round", "trunc", "lgamma",
+          "digamma"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-unary-kernel: unknown kind '")
             << kindStr << "' (exp/log/sqrt/rsqrt/reciprocal/abs/neg/sign/erf/"

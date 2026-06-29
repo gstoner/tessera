@@ -53,27 +53,27 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
 | `einsum` | contraction | public | public | registered | complete | partial | fused | ready | none |
 | `acos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `add` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `add` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `atan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `atan2` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `clip` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `atan2` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `clip` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `cos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `cosh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `digamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `digamma` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `erf` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `erfc` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `exp` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `expm1` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `floor_div` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `floor_div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `gelu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `lgamma` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `lgamma` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `log` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `log1p` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `mod` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `mul` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `popcount` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `mod` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `popcount` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `pow` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `rsqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
@@ -81,9 +81,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `sigmoid` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `silu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `silu_mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `sin` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `sin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sinh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `softcap` | elementwise | public | public | registered | complete | partial | reference | ready | none |
+| `softcap` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `softplus` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
 | `sub` | elementwise | public | public | registered | complete | partial | fused | ready | none |
@@ -100,11 +100,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `adafactor` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `adam` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `adamw` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `lion` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `momentum` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `sgd` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
+| `adam` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `adamw` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `lion` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `momentum` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
+| `sgd` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
 | `fused_epilogue` | fused_epilogue | public | public | registered | complete | partial | reference | ready | none |
 | `clifford_codiff` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_conjugate` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -219,20 +219,20 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `moe` | moe | public | public | registered | complete | partial | fused | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
-| `group_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `instance_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `group_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
+| `instance_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
 | `rmsnorm` | normalization | public | public | registered | complete | partial | fused | ready | benchmarked |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `weight_norm` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `abs` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `weight_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
+| `abs` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `ceil` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `clamp` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `clamp` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `floor` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `isfinite` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
-| `isinf` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
-| `isnan` | numeric_helper | public | public | registered | complete | partial | reference | ready | none |
+| `isfinite` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
+| `isinf` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
+| `isnan` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `maximum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `minimum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
 | `reciprocal` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
@@ -251,9 +251,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `quantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `quantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
 | `quantize_nvfp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dropout` | random_mask | public | public | registered | complete | partial | reference | ready | none |
-| `rng_normal` | random_source | public | public | registered | complete | partial | reference | ready | none |
-| `rng_uniform` | random_source | public | public | registered | complete | partial | reference | ready | none |
+| `dropout` | random_mask | public | public | registered | complete | partial | fused | ready | none |
+| `rng_normal` | random_source | public | public | registered | complete | partial | fused | ready | none |
+| `rng_uniform` | random_source | public | public | registered | complete | partial | fused | ready | none |
 | `amax` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `amin` | reduction | public | public | registered | complete | partial | fused | ready | none |
 | `argmax` | reduction | public | public | registered | complete | partial | fused | ready | none |
@@ -305,15 +305,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `conv2d` | stencil | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `conv3d` | stencil | public | public | registered | complete | partial | reference | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_abs` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_arg` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_div` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_abs` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_arg` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_div` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `complex_exp` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_log` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_log` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_pow` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `complex_pow` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
 | `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `conformal_jacobian` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `cross_ratio` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -333,9 +333,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | contraction | 1 | PPGCpFN· |
-| elementwise | 37 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| elementwise | 37 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 6 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
+| functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | fused_epilogue | 1 | PPGCpRN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 15 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
@@ -348,13 +348,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | model_layer | 1 | PPGCpFN· |
 | moe | 1 | PPGCpFN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 6 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· |
-| numeric_helper | 15 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
+| normalization | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpFN· |
+| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | position_encoding | 2 | PPGCpFN· PPGCpRN· |
 | projection | 1 | PPGCpFN· |
 | quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| random_mask | 1 | PPGCpRN· |
-| random_source | 2 | PPGCpRN· PPGCpRN· |
+| random_mask | 1 | PPGCpFN· |
+| random_source | 2 | PPGCpFN· PPGCpFN· |
 | reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rotary_embedding | 1 | PPGCpFN· |
@@ -366,7 +366,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | state_space | 1 | PPGCpFN· |
 | state_update | 3 | PPGCpRN· PPGCpRN· PPGCpFN· |
 | stencil | 2 | PPGCpRNB PPGCpRN· |
-| visual_complex | 20 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
+| visual_complex | 20 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPnCFFN· PPGCpFN· PPnCFFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

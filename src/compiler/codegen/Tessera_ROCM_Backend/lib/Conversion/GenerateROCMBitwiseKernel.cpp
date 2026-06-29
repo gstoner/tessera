@@ -6,17 +6,19 @@
 // integers:
 //
 //   and = a & b    or = a | b    xor = a ^ b    (binary)
-//   not = ~a                                     (unary)
+//   not = ~a       popcount = number of set bits in a   (unary)
 //
 // Unlike the logical lane, operands are NOT normalized — the op acts on the full
-// integer bit pattern. `not` is `a ^ -1` (all ones). `not` takes one operand;
-// the rest take two. N is a runtime index arg. Validated vs numpy on gfx1151.
+// integer bit pattern. `not` is `a ^ -1` (all ones); `popcount` is `math.ctpop`
+// (RDNA v_bcnt). `not`/`popcount` take one operand; the rest take two. N is a
+// runtime index arg. Validated vs numpy on gfx1151.
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
@@ -32,17 +34,19 @@ namespace {
 
 static constexpr int64_t BD = 256;
 
-enum class Bw { And, Or, Xor, Not };
+enum class Bw { And, Or, Xor, Not, Popcount };
+
+static bool isUnaryBw(Bw bw) { return bw == Bw::Not || bw == Bw::Popcount; }
 
 void emitBitwiseBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Bw bw) {
   Type i32 = b.getIntegerType(32);
-  bool isNot = (bw == Bw::Not);
+  bool unary = isUnaryBw(bw);
   auto slt = arith::CmpIPredicate::slt;
 
   b.setInsertionPointToStart(&f.getBody().front());
   Value A = f.getArgument(0);
   Value O, N;
-  if (isNot) {
+  if (unary) {
     O = f.getArgument(1);
     N = f.getArgument(2);
   } else {
@@ -61,7 +65,9 @@ void emitBitwiseBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Bw bw) {
 
   Value a = b.create<memref::LoadOp>(loc, A, ValueRange{gid});
   Value y;
-  if (isNot) {
+  if (bw == Bw::Popcount) {
+    y = b.create<math::CtPopOp>(loc, a);   // number of set bits (RDNA v_bcnt)
+  } else if (bw == Bw::Not) {
     Value negOne = b.create<arith::ConstantOp>(loc, i32,
                                                b.getI32IntegerAttr(-1));
     y = b.create<arith::XOrIOp>(loc, a, negOne);   // ~a
@@ -93,7 +99,7 @@ struct GenerateROCMBitwiseKernelPass
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
-                    memref::MemRefDialect>();
+                    math::MathDialect, memref::MemRefDialect>();
   }
 
   void runOnOperation() override {
@@ -117,11 +123,13 @@ struct GenerateROCMBitwiseKernelPass
                   .Case("or", Bw::Or)
                   .Case("xor", Bw::Xor)
                   .Case("not", Bw::Not)
+                  .Case("popcount", Bw::Popcount)
                   .Default(Bw::And);
-      static const llvm::StringSet<> kValid = {"and", "or", "xor", "not"};
+      static const llvm::StringSet<> kValid = {"and", "or", "xor", "not",
+                                               "popcount"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-bitwise-kernel: unknown kind '")
-            << kindStr << "' (and/or/xor/not)";
+            << kindStr << "' (and/or/xor/not/popcount)";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());
@@ -134,11 +142,12 @@ struct GenerateROCMBitwiseKernelPass
       Type idxTy = b.getIndexType();
       Type i32 = b.getIntegerType(32);
       auto memTy = MemRefType::get({ShapedType::kDynamic}, i32);
-      // not: (A, O : memref<?xi32>, N : index); else (A, B, O, N)
+      // unary (not/popcount): (A, O : memref<?xi32>, N : index);
+      // binary: (A, B, O, N)
+      bool unary = (kindStr == "not" || kindStr == "popcount");
       FunctionType fnTy =
-          (kindStr == "not")
-              ? b.getFunctionType({memTy, memTy, idxTy}, {})
-              : b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
+          unary ? b.getFunctionType({memTy, memTy, idxTy}, {})
+                : b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());

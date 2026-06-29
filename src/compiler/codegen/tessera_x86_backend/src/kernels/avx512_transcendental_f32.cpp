@@ -27,6 +27,7 @@
 #include <immintrin.h>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace {
 
@@ -49,6 +50,28 @@ constexpr int kAsin = 14;
 constexpr int kAcos = 15;
 constexpr int kAtan = 16;
 constexpr int kErfc = 17;
+constexpr int kSin = 18;
+constexpr int kLgamma = 19;
+constexpr int kDigamma = 20;
+
+// ψ(x) = d/dx ln Γ(x). Scalar reference (also the n%16 tail + the x<=0
+// reflection lanes) — matches tessera.ops.digamma's _digamma_scalar exactly:
+// recurrence up to x>=8 then the asymptotic series; reflection for x<=0; poles
+// at non-positive integers return NaN.
+inline double digamma_d(double x) {
+    constexpr double kPi = 3.14159265358979323846;
+    if (x <= 0.0) {
+        if (std::fabs(x - std::round(x)) < 1e-12)
+            return std::numeric_limits<double>::quiet_NaN();
+        return digamma_d(1.0 - x) - kPi / std::tan(kPi * x);
+    }
+    double result = 0.0;
+    while (x < 8.0) { result -= 1.0 / x; x += 1.0; }
+    double inv = 1.0 / x, inv2 = inv * inv;
+    return result + std::log(x) - 0.5 * inv - inv2 / 12.0
+           + inv2 * inv2 / 120.0 - inv2 * inv2 * inv2 / 252.0
+           + inv2 * inv2 * inv2 * inv2 / 240.0;
+}
 
 constexpr float kSqrt2OverPi = 0.7978845608028654f;  // √(2/π)
 constexpr float kGeluC = 0.044715f;
@@ -69,6 +92,7 @@ inline float scalar_transcendental(float v, int kind) {
                            std::fmax(v, 0.0f);
     case kExpm1:    return std::exp(v) - 1.0f;
     case kLog1p:    return std::log1p(v);
+    case kSin:      return std::sin(v);
     case kCos:      return std::cos(v);
     case kTan:      return std::tan(v);
     case kSinh:     return std::sinh(v);
@@ -77,6 +101,8 @@ inline float scalar_transcendental(float v, int kind) {
     case kAcos:     return std::acos(v);
     case kAtan:     return std::atan(v);
     case kErfc:     return std::erfc(v);
+    case kLgamma:   return std::lgamma(v);
+    case kDigamma:  return static_cast<float>(digamma_d(v));
     default:        return v;
     }
 }
@@ -150,6 +176,93 @@ inline __m512 tanh512(__m512 x) {
     return _mm512_div_ps(_mm512_sub_ps(a, one), _mm512_add_ps(a, one));
 }
 
+// ── ln Γ(x): Numerical Recipes `gammln` — Lanczos g=5 approximation ───────────
+// Valid for x > 0; the SIMD series is accurate to ~1e-6 (f32). Reflection /
+// non-positive lanes (x < 0.5) fall back to scalar std::lgamma (the exact libm
+// reference for those rarer args) — the same SIMD-core + scalar-edge split the
+// sin lane uses for large arguments (trigCorrectLarge). Matches math.lgamma.
+inline __m512 lgamma512(__m512 x) {
+    static const float cof[6] = {
+        76.18009172947146f,    -86.50532032941677f,    24.01409824083091f,
+        -1.231739572450155f,    0.1208650973866179e-2f, -0.5395239384953e-5f};
+    const __m512 half = _mm512_set1_ps(0.5f);
+    __m512 y = x;
+    __m512 ser = _mm512_set1_ps(1.000000000190015f);
+    for (int j = 0; j < 6; ++j) {
+        y = _mm512_add_ps(y, _mm512_set1_ps(1.0f));      // ++y, starting x+1
+        ser = _mm512_add_ps(ser, _mm512_div_ps(_mm512_set1_ps(cof[j]), y));
+    }
+    __m512 tmp = _mm512_add_ps(x, _mm512_set1_ps(5.5f));
+    tmp = _mm512_sub_ps(tmp, _mm512_mul_ps(_mm512_add_ps(x, half), log512(tmp)));
+    const __m512 sqrt2pi = _mm512_set1_ps(2.5066282746310005f);
+    __m512 lg = _mm512_add_ps(
+        _mm512_sub_ps(_mm512_setzero_ps(), tmp),
+        log512(_mm512_div_ps(_mm512_mul_ps(sqrt2pi, ser), x)));
+    // Scalar std::lgamma for the reflection lanes (x < 0.5) AND any non-finite
+    // lane: the SIMD Lanczos evaluates inf - inf*log(inf) = NaN at +inf, but
+    // std::lgamma(+inf)=+inf / lgamma(NaN)=NaN, so the vector and tail paths
+    // would otherwise disagree by block alignment for non-finite inputs.
+    const __m512 kInf = _mm512_set1_ps(std::numeric_limits<float>::infinity());
+    __mmask16 nonfinite = _mm512_cmp_ps_mask(_mm512_abs_ps(x), kInf, _CMP_NLT_UQ);
+    __mmask16 special = _mm512_cmp_ps_mask(x, half, _CMP_LT_OQ) | nonfinite;
+    if (special) {
+        float vx[16], vr[16];
+        _mm512_storeu_ps(vx, x);
+        _mm512_storeu_ps(vr, lg);
+        for (int i = 0; i < 16; ++i)
+            if (special & (1u << i)) vr[i] = std::lgamma(vx[i]);
+        lg = _mm512_loadu_ps(vr);
+    }
+    return lg;
+}
+
+// ── ψ(x) = digamma — recurrence to x>=8 + asymptotic series ───────────────────
+// SIMD core for x > 0 (8 masked recurrence steps reach x>=8 for any x>0, then
+// the asymptotic expansion). x <= 0 lanes (reflection / poles) fall back to the
+// scalar digamma_d. Matches tessera.ops.digamma.
+inline __m512 digamma512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    const __m512 eight = _mm512_set1_ps(8.0f);
+    __m512 result = _mm512_setzero_ps();
+    __m512 xx = x;
+    for (int k = 0; k < 8; ++k) {
+        __mmask16 m = _mm512_cmp_ps_mask(xx, eight, _CMP_LT_OQ);
+        __m512 recip = _mm512_div_ps(one, xx);
+        result = _mm512_mask_sub_ps(result, m, result, recip);  // -= 1/xx
+        xx = _mm512_mask_add_ps(xx, m, xx, one);                 // xx += 1
+    }
+    __m512 inv = _mm512_div_ps(one, xx);
+    __m512 inv2 = _mm512_mul_ps(inv, inv);
+    __m512 inv4 = _mm512_mul_ps(inv2, inv2);
+    __m512 inv6 = _mm512_mul_ps(inv4, inv2);
+    __m512 inv8 = _mm512_mul_ps(inv4, inv4);
+    // log(xx) - inv/2 - inv2/12 + inv4/120 - inv6/252 + inv8/240
+    __m512 r = log512(xx);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(0.5f), inv, r);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(1.0f / 12.0f), inv2, r);
+    r = _mm512_fmadd_ps(_mm512_set1_ps(1.0f / 120.0f), inv4, r);
+    r = _mm512_fnmadd_ps(_mm512_set1_ps(1.0f / 252.0f), inv6, r);
+    r = _mm512_fmadd_ps(_mm512_set1_ps(1.0f / 240.0f), inv8, r);
+    result = _mm512_add_ps(result, r);
+    // Scalar digamma_d for x <= 0 (reflection / poles) AND any non-finite lane:
+    // log512 does not preserve +inf (returns ~88.7), so without this the vector
+    // path would return a finite value for ψ(+inf) while the tail/reference give
+    // +inf — a block-alignment-dependent disagreement.
+    const __m512 kInf = _mm512_set1_ps(std::numeric_limits<float>::infinity());
+    __mmask16 nonfinite = _mm512_cmp_ps_mask(_mm512_abs_ps(x), kInf, _CMP_NLT_UQ);
+    __mmask16 special =
+        _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_LE_OQ) | nonfinite;
+    if (special) {
+        float vx[16], vr[16];
+        _mm512_storeu_ps(vx, x);
+        _mm512_storeu_ps(vr, result);
+        for (int i = 0; i < 16; ++i)
+            if (special & (1u << i)) vr[i] = static_cast<float>(digamma_d(vx[i]));
+        result = _mm512_loadu_ps(vr);
+    }
+    return result;
+}
+
 inline __m512 sigmoid512(__m512 x) {
     const __m512 one = _mm512_set1_ps(1.0f);
     __m512 e = exp512(_mm512_sub_ps(_mm512_setzero_ps(), x));
@@ -218,6 +331,30 @@ inline void sincos512(__m512 x, __m512* sptr, __m512* cptr) {
     c = _mm512_mask_sub_ps(c, _knot_mask16(cos_keep), _mm512_setzero_ps(), c);
     *sptr = s;
     *cptr = c;
+}
+
+// sincos512's f32 4/π reduction loses precision for large |x| (catastrophic
+// cancellation in `ax - y*DP` once ax exceeds f32's ~24-bit window), so the SIMD
+// trig result diverges from libm there while the scalar n%16 tail stays accurate
+// — making the result both wrong and block-size-dependent. Past this magnitude
+// we recompute the offending lanes with libm (the SIMD fast path still covers
+// the common small-argument case). Threshold is conservative (Cephes sincosf is
+// good well past π·2^11); the slow path is rare. kind: 0=sin, 1=cos, 2=tan.
+constexpr float kTrigReduceLimit = 8192.0f;  // 2^13
+inline __m512 trigCorrectLarge(__m512 v, __m512 simd, int kind) {
+    __mmask16 big = _mm512_cmp_ps_mask(_mm512_abs_ps(v),
+                                       _mm512_set1_ps(kTrigReduceLimit),
+                                       _CMP_GT_OQ);
+    if (!big) return simd;  // common case: every lane in range
+    float vv[16], rr[16];
+    _mm512_storeu_ps(vv, v);
+    _mm512_storeu_ps(rr, simd);
+    for (int i = 0; i < 16; ++i)
+        if (big & (1u << i))
+            rr[i] = (kind == 0) ? std::sin(vv[i])
+                    : (kind == 1) ? std::cos(vv[i])
+                                  : std::tan(vv[i]);
+    return _mm512_loadu_ps(rr);
 }
 
 // Cephes asinf: poly on [0, 0.5]; |x|>0.5 maps via x = √(0.5(1-|x|)).
@@ -292,6 +429,8 @@ inline __m512 apply512(__m512 v, int kind) {
                              _mm512_add_ps(one, t));
     }
     case kErf:     return erf512(v);
+    case kLgamma:  return lgamma512(v);
+    case kDigamma: return digamma512(v);
     case kSoftplus: {
         // log1p(exp(-|x|)) + max(x, 0)  — overflow-stable
         __m512 ax = _mm512_abs_ps(v);
@@ -301,15 +440,20 @@ inline __m512 apply512(__m512 v, int kind) {
     }
     case kExpm1:   return _mm512_sub_ps(exp512(v), one);
     case kLog1p:   return log512(_mm512_add_ps(one, v));
+    case kSin: {
+        __m512 s, c;
+        sincos512(v, &s, &c);
+        return trigCorrectLarge(v, s, 0);
+    }
     case kCos: {
         __m512 s, c;
         sincos512(v, &s, &c);
-        return c;
+        return trigCorrectLarge(v, c, 1);
     }
     case kTan: {
         __m512 s, c;
         sincos512(v, &s, &c);
-        return _mm512_div_ps(s, c);
+        return trigCorrectLarge(v, _mm512_div_ps(s, c), 2);
     }
     case kSinh: {
         // 0.5 (e^x - e^-x)

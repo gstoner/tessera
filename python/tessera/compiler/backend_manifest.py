@@ -951,6 +951,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
                  "Executes via runtime.launch() (rocm_norm_compiled).",
     },
+    # P5 — group/instance/weight norm composed on the gfx1151 layer_norm (row
+    # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("normalization",),
+        "notes": f"Standalone {op} — composed on the gfx1151 layer_norm / reduce "
+                 "kernels (no new kernel; host reshape/affine). Executes via "
+                 "runtime.launch() (rocm_normcompose_compiled).",
+    } for op in ("group_norm", "instance_norm", "weight_norm")},
     "gelu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
@@ -1099,6 +1108,34 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "routing resolved on host) on gfx1151. Executes via "
                  "runtime.launch() (rocm_moe_compiled).",
     },
+    # Optimizer steps (P3) — fused per-parameter update on gfx1151
+    # (rocm_optimizer_compiled). adafactor (factored moments) is a follow-up.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer",),
+        "notes": f"Optimizer {op} — direct fused per-parameter update kernel "
+                 "(generate-rocm-optimizer-kernel, kind StrAttr-selected, one "
+                 "thread per element; host computes the 1-β^t bias correction) on "
+                 "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    # P3 tail — LAMB: device adam update + a per-tensor trust ratio ‖p‖/‖update‖
+    # on host (the reduction the elementwise lane can't do).
+    "lamb": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer",),
+        "notes": "Optimizer lamb — gfx1151 adam kernel (lr=1/wd=0) + host "
+                 "layer-wise trust ratio ‖p‖/‖update‖. Executes via "
+                 "runtime.launch() (rocm_lamb_compiled).",
+    },
+    # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from a gfx1151
+    # device SVD (host does the small U@Vh + momentum/sgd). <2-D normalizes.
+    "muon": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer",),
+        "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
+                 "gfx1151 SVD kernel (rocm_linalg svd); host U@Vh + sgd. Executes "
+                 "via runtime.launch() (rocm_muon_compiled).",
+    },
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
     "selective_ssm": {
@@ -1148,9 +1185,28 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel (generate-rocm-unary-kernel). Executes via "
                  "runtime.launch() (rocm_unary_compiled).",
     } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
-                 "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                 "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
+                 "abs", "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
+                 "softplus", "sin", "cos", "tan", "sinh", "cosh", "asin", "acos",
                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
+    # P2e — lgamma: ln Γ(x) via an MLIR-built Lanczos g=5 series + reflection
+    # (no math.lgamma exists). fp32 only (the series is f32-tuned).
+    "lgamma": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise lgamma — MLIR-built Lanczos g=5 series "
+                 "(generate-rocm-unary-kernel; reflection via math.sin for "
+                 "x<0.5). Executes via runtime.launch() (rocm_unary_compiled).",
+    },
+    # P2e — digamma: ψ(x) via an MLIR-built recurrence + asymptotic series
+    # (no math.digamma); reflection (math.tan) + pole->NaN for x<=0. fp32 only.
+    "digamma": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise digamma — MLIR-built recurrence + "
+                 "asymptotic series (generate-rocm-unary-kernel; reflection via "
+                 "math.tan, poles->NaN for x<=0). Executes via runtime.launch() "
+                 "(rocm_unary_compiled).",
+    },
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
     # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
     # Executes via runtime.launch() (rocm_binary_compiled). f32/f16/bf16, f32
@@ -1161,7 +1217,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "notes": f"Standalone elementwise binary {op} — flat 2-operand "
                  "per-element kernel (generate-rocm-binary-kernel). Executes via "
                  "runtime.launch() (rocm_binary_compiled).",
-    } for op in ("sub", "div", "pow", "maximum", "minimum")},
+    } for op in ("sub", "div", "pow", "maximum", "minimum",
+                 "add", "mul", "mod", "floor_div")},
     # S2 comparison family — flat 2-operand per-element kernel
     # (generate-rocm-compare-kernel) with boolean (i8 0/1) output, NaN semantics
     # matching numpy. Executes via runtime.launch() (rocm_compare_compiled).
@@ -1173,6 +1230,54 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "per-element kernel (generate-rocm-compare-kernel), bool output. "
                  "Executes via runtime.launch() (rocm_compare_compiled).",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # P2b — unary predicate family (isnan/isinf/isfinite), f32 in / i8 bool out
+    # (generate-rocm-predicate-kernel). Executes via rocm_predicate_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone unary predicate {op} — flat per-element kernel "
+                 "(generate-rocm-predicate-kernel), bool output. Executes via "
+                 "runtime.launch() (rocm_predicate_compiled).",
+    } for op in ("isnan", "isinf", "isfinite")},
+    # P2c — clamp/clip composed on the gfx1151 binary max/min lane (no new
+    # kernel; scalar bounds broadcast on host). Executes via rocm_clamp_compiled.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": f"Standalone {op} — min(max(x, lo), hi) composed on the "
+                 "rocm_binary_compiled max/min kernel (either bound optional). "
+                 "Executes via runtime.launch() (rocm_clamp_compiled).",
+    } for op in ("clamp", "clip")},
+    # (complex_* ops route through complex_manifest_for() — their compiled
+    # device-lane status is emitted there, not in this generic _ROCM table.)
+    # P2e — softcap composed on the gfx1151 unary tanh lane (no new kernel;
+    # scalar cap broadcast on host). Executes via rocm_softcap_compiled.
+    "softcap": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone softcap — cap*tanh(x/cap) composed on the "
+                 "rocm_unary_compiled tanh kernel (scalar cap on host). "
+                 "Executes via runtime.launch() (rocm_softcap_compiled).",
+    },
+    # P6 — device RNG: counter-based Philox-4x32-10 (generate-rocm-philox-kernel)
+    # produces the uniform bits; host applies the distribution transform. A
+    # SEPARATE deterministic stream from the host numpy-Generator path.
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("random",),
+        "notes": f"Standalone {op} — Philox-4x32-10 uniform RNG kernel "
+                 "(generate-rocm-philox-kernel) + host transform. Executes via "
+                 "runtime.launch() (rocm_rng_compiled).",
+    } for op in ("rng_uniform", "rng_normal", "dropout")},
+    # P2e — atan2 composed on the gfx1151 unary atan lane (no new kernel;
+    # quadrant/sign logic on host). Executes via rocm_atan2_compiled.
+    "atan2": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone atan2 — quadrant-aware atan2(y, x) composed on the "
+                 "rocm_unary_compiled atan kernel (sign/quadrant on host). "
+                 "Executes via runtime.launch() (rocm_atan2_compiled).",
+    },
     # S2 logical family — flat elementwise kernel over i8 booleans
     # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
     # normalized via != 0 (numpy semantics). Executes via runtime.launch()
@@ -1195,6 +1300,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(generate-rocm-bitwise-kernel) over i32 integers. Executes via "
                  "runtime.launch() (rocm_bitwise_compiled).",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # P2e — popcount: set-bit count per i32 element, unary, on the bitwise lane
+    # via math.ctpop (RDNA v_bcnt). Executes via runtime.launch().
+    "popcount": {
+        "dtypes": ("int32",),
+        "feature_flags": ("elementwise",),
+        "notes": "Standalone elementwise popcount — flat per-element set-bit "
+                 "count (generate-rocm-bitwise-kernel, math.ctpop / v_bcnt) over "
+                 "i32 integers. Executes via runtime.launch() "
+                 "(rocm_bitwise_compiled).",
+    },
     # Ternary select where(cond,a,b)=cond?a:b — flat 3-operand elementwise
     # kernel (generate-rocm-where-kernel). cond i8 normalized != 0, a/b/out
     # float. Executes via runtime.launch() (rocm_where_compiled).
@@ -1412,12 +1527,48 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "floor", "ceil", "round", "trunc")},
     **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py"
        for op in ("sub", "div", "maximum", "minimum")},
+    # P2a — binary arithmetic completion (add/mul/mod/floor_div) + abs alias.
+    **{(op, "x86"): "tests/unit/test_x86_elementwise_p2_compiled.py"
+       for op in ("add", "mul", "mod", "floor_div", "abs")},
+    **{(op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
+       for op in ("add", "mul", "mod", "floor_div", "abs")},
+    **{(op, "x86"): "tests/unit/test_x86_clamp_compiled.py"
+       for op in ("clamp", "clip")},
+    **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py"
+       for op in ("clamp", "clip")},
+    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+       for op in ("complex_mul", "complex_div", "complex_conjugate",
+                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                  "complex_sqrt", "complex_pow")},
+    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+       for op in ("complex_mul", "complex_div", "complex_conjugate",
+                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
+                  "complex_sqrt", "complex_pow")},
+    ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
+    ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "dropout")},
+    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "dropout")},
+    ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
+    ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
+    ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
+    ("sin", "rocm"): "tests/unit/test_rocm_sin_compiled.py",
+    ("lgamma", "x86"): "tests/unit/test_x86_lgamma_compiled.py",
+    ("lgamma", "rocm"): "tests/unit/test_rocm_lgamma_compiled.py",
+    ("digamma", "x86"): "tests/unit/test_x86_digamma_compiled.py",
+    ("digamma", "rocm"): "tests/unit/test_rocm_digamma_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
+       for op in ("isnan", "isinf", "isfinite")},
+    **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
+       for op in ("isnan", "isinf", "isfinite")},
     **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
        for op in ("eq", "ne", "lt", "le", "gt", "ge")},
     **{(op, "x86"): "tests/unit/test_x86_logical_compiled.py"
        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     **{(op, "x86"): "tests/unit/test_x86_bitwise_compiled.py"
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    ("popcount", "x86"): "tests/unit/test_x86_popcount_compiled.py",
     ("where", "x86"): "tests/unit/test_x86_where_compiled.py",
     ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
@@ -1471,6 +1622,14 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
     ("moe", "rocm"): "tests/unit/test_rocm_moe_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_optimizer_compiled.py"
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
+       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
+    ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
+    ("muon", "x86"): "tests/unit/test_x86_muon_compiled.py",
+    ("muon", "rocm"): "tests/unit/test_rocm_muon_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
        for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
@@ -1482,6 +1641,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("svd", "rocm"): "tests/unit/test_rocm_svd_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_normcompose_compiled.py"
+       for op in ("group_norm", "instance_norm", "weight_norm")},
+    **{(op, "rocm"): "tests/unit/test_rocm_normcompose_compiled.py"
+       for op in ("group_norm", "instance_norm", "weight_norm")},
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
@@ -1516,6 +1679,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
     **{(op, "rocm"): "tests/unit/test_rocm_bitwise_compiled.py"
        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    ("popcount", "rocm"): "tests/unit/test_rocm_popcount_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
@@ -1911,17 +2075,19 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "notes": f"AVX-512 unary {op} (tessera_x86_avx512_unary_f32, direct "
                  "intrinsic; runtime-loaded; x86_unary_compiled lane)",
-    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
+    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "abs", "sign",
                  "floor", "ceil", "round", "trunc")},
     # S2 binary-arithmetic direct-intrinsic subset — hand-written AVX-512 kernel
     # (tessera_x86_avx512_binary_f32) the runtime ctypes-loads and executes
     # (x86_binary_compiled). f32; `pow` is transcendental → numpy-reference.
+    # P2a adds add/mul (arithmetic) + mod/floor_div (floor-based, numpy semantics).
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
                  "intrinsic; runtime-loaded; x86_binary_compiled lane)",
-    } for op in ("sub", "div", "maximum", "minimum")},
+    } for op in ("sub", "div", "maximum", "minimum",
+                 "add", "mul", "mod", "floor_div")},
     # S2 comparison family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_compare_f32) the runtime ctypes-loads and executes
     # (x86_compare_compiled). f32 in, bool out; NaN semantics match numpy.
@@ -1931,6 +2097,53 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
                  "runtime-loaded; x86_compare_compiled lane; bool output)",
     } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    # P2b — unary predicate family (isnan/isinf/isfinite), AVX-512 kernel
+    # (tessera_x86_avx512_predicate_f32; x86_predicate_compiled). f32 in, bool out.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 predicate {op} (tessera_x86_avx512_predicate_f32, "
+                 "runtime-loaded; x86_predicate_compiled lane; bool output)",
+    } for op in ("isnan", "isinf", "isfinite")},
+    # P2c — clamp/clip composed on the AVX-512 binary max/min kernel (no new
+    # kernel; scalar bounds broadcast on host; x86_clamp_compiled lane).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
+                 "AVX-512 max/min kernel (either bound optional; matches np.clip)",
+    } for op in ("clamp", "clip")},
+    # (complex_* ops route through complex_manifest_for() — their fused
+    # device-lane status is emitted there, not in this generic _X86 table.)
+    # P2e — softcap composed on the AVX-512 transcendental tanh kernel (no new
+    # kernel; scalar cap broadcast on host; x86_softcap_compiled lane).
+    "softcap": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "softcap — cap*tanh(x/cap) composed on the "
+                 "x86_transcendental_compiled AVX-512 tanh kernel "
+                 "(scalar cap on host; matches cap*tanh(x/cap))",
+    },
+    # P6 — device RNG: counter-based Philox-4x32-10 (tessera_x86_philox_uniform_f32)
+    # produces the uniform bits; host applies the distribution transform.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} — Philox-4x32-10 uniform RNG kernel "
+                 "(tessera_x86_philox_uniform_f32, runtime-loaded) + host "
+                 "transform; x86_rng_compiled lane; bit-exact vs "
+                 "tessera.rng_device (a deterministic stream, distinct from the "
+                 "host numpy-Generator path)",
+    } for op in ("rng_uniform", "rng_normal", "dropout")},
+    # P2e — atan2 composed on the AVX-512 transcendental atan kernel (no new
+    # kernel; quadrant/sign logic on host; x86_atan2_compiled lane).
+    "atan2": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "atan2 — quadrant-aware atan2(y, x) composed on the "
+                 "x86_transcendental_compiled AVX-512 atan kernel "
+                 "(sign/quadrant on host; matches np.arctan2)",
+    },
     # S2 logical family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes
     # (x86_logical_compiled). i8 bool in/out; inputs normalized via != 0.
@@ -1949,6 +2162,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": f"AVX-512 bitwise {op} (tessera_x86_avx512_bitwise_i32, "
                  "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
     } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    # P2e — popcount: set-bit count per i32, unary, on the bitwise lane via the
+    # AVX-512 VPOPCNTDQ instruction (_mm512_popcnt_epi32).
+    "popcount": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("int32",),
+        "notes": "Standalone elementwise popcount — set-bit count per i32 "
+                 "element via AVX-512 VPOPCNTDQ (tessera_x86_avx512_bitwise_i32, "
+                 "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
+    },
     # Ternary select where(cond,a,b) — hand-written AVX-512 kernel
     # (tessera_x86_avx512_where_f32, _mm512_cmpneq_epi8_mask +
     # _mm512_mask_blend_ps) the runtime ctypes-loads (x86_where_compiled).
@@ -1973,8 +2195,28 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
                  "erf; f32, matches numpy 2e-5)",
     } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                 "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
-                 "asin", "acos", "atan", "erfc")},
+                 "softplus", "expm1", "log1p", "sin", "cos", "tan", "sinh",
+                 "cosh", "asin", "acos", "atan", "erfc")},
+    # P2e — lgamma: ln Γ(x) via the AVX-512 NR-Lanczos g=5 SIMD core (positive
+    # domain) + std::lgamma fallback for reflection lanes (x<0.5).
+    "lgamma": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 lgamma — NR-Lanczos g=5 SIMD core "
+                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+                 "x86_transcendental_compiled lane; std::lgamma fallback for "
+                 "x<0.5; f32, matches math.lgamma rel 1e-4)",
+    },
+    # P2e — digamma: ψ(x) AVX-512 recurrence + asymptotic SIMD core (x>0) +
+    # scalar digamma_d fallback for x<=0 (reflection / poles).
+    "digamma": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 digamma — recurrence + asymptotic SIMD core "
+                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+                 "x86_transcendental_compiled lane; scalar fallback for x<=0; "
+                 "f32, matches tessera.ops.digamma rel 1e-4)",
+    },
     # Transcendental-backed BINARY ops — pow(a,b) (positive base) and
     # silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply); share the exp/log/sigmoid
     # cores. Runtime ctypes-loads them (x86_binary_math_compiled lane).
@@ -2003,6 +2245,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "(tessera_x86_avx512_layernorm_f32, runtime-loaded; "
                  "x86_norm_compiled lane; f32, matches numpy 2e-5)",
     },
+    # P5 — group/instance/weight norm composed on the AVX-512 layer_norm (row
+    # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"{op} composed on the AVX-512 layer_norm / reduce kernels "
+                 "(no new kernel; host reshape/affine; x86_normcompose_compiled "
+                 "lane; f32, matches nn.functional)",
+    } for op in ("group_norm", "instance_norm", "weight_norm")},
     "softmax": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
@@ -2170,6 +2421,32 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "notes": "MoE compute (moe) — AVX-512 routed per-token expert GEMV kernel "
                  "(top-1; routing resolved on host, out_dim vectorized); "
                  "x86_moe_compiled lane; f32, matches numpy",
+    },
+    # Optimizer steps (P3) — fused per-parameter update, AVX-512
+    # (x86_optimizer_compiled). adafactor (factored moments) is a follow-up.
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
+                 "(state m/v in-place; host computes the 1-β^t bias correction); "
+                 "x86_optimizer_compiled lane; f32, matches the optim.py reference",
+    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    # P3 tail — LAMB: AVX-512 adam update + host per-tensor trust ratio.
+    "lamb": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Optimizer lamb — AVX-512 adam kernel (lr=1/wd=0) + host "
+                 "layer-wise trust ratio ‖p‖/‖update‖; x86_lamb_compiled lane; "
+                 "f32, matches optim.lamb",
+    },
+    # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from the AVX-512
+    # device SVD (host does U@Vh + momentum/sgd). <2-D normalizes.
+    "muon": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
+                 "AVX-512 SVD kernel; host U@Vh + sgd; x86_muon_compiled lane; "
+                 "f32, matches optim.muon",
     },
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).
@@ -2915,6 +3192,15 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
     #   complex_conjugate, complex_abs, conformal_jacobian, laplacian_2d
 )
 
+# P5 (2026-06-28) — the 9 pointwise complex ops that now ship a REAL device lane
+# (interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
+# binary / atan2 kernels; runtime x86_complex_compiled / rocm_complex_compiled).
+# complex_manifest_for() emits these as fused (x86) / compiled (rocm).
+_COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
+    "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
+    "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
+})
+
 
 # E3 (2026-05-20) — every M7 Visual Complex op (4 fused + 16 long-tail)
 # routes through ``complex_manifest_for``.  The 16 long-tail ops don't
@@ -2997,6 +3283,14 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     in_long_tail = op_name in _M7_LONG_TAIL
     if not (in_fused or in_long_tail):
         return []
+    # P5 (2026-06-28): the 9 pointwise complex ops now ship REAL device lanes —
+    # interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
+    # binary / atan2 kernels (runtime x86_complex_compiled / rocm_complex_compiled).
+    # Emit them as fused (x86) / compiled (rocm) HERE — manifest_for() routes all
+    # complex_* ops through this function before the generic _X86_KERNELS /
+    # _ROCM_COMPILED tables, so the compiled status must live here to be seen by
+    # support / conformance / gating.
+    _complex_compiled = op_name in _COMPLEX_DEVICE_COMPILED
     entries: list[BackendKernelEntry] = []
     # CPU targets — Python reference always available for the entire
     # M7 surface (the numpy code in ``tessera.complex.*`` runs on
@@ -3015,10 +3309,15 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     ))
     entries.append(BackendKernelEntry(
         target="x86",
-        status=_REFERENCE_STATUS,
+        status=_FUSED_KERNEL_STATUS if _complex_compiled else _REFERENCE_STATUS,
         dtypes=("fp32",),
-        feature_flags=("complex_namespace", "numpy_reference"),
-        notes="Python complex reference (tessera.complex.*)",
+        feature_flags=(("complex_namespace", "interleaved_f32", "avx512")
+                       if _complex_compiled
+                       else ("complex_namespace", "numpy_reference")),
+        notes=("interleaved-f32 complex op composed on the AVX-512 "
+               "transcendental/unary/binary/atan2 kernels "
+               "(x86_complex_compiled lane)" if _complex_compiled
+               else "Python complex reference (tessera.complex.*)"),
     ))
     entries.append(BackendKernelEntry(
         target="apple_cpu",
@@ -3080,20 +3379,36 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             cuda_arch_min=arch_min,
             nvcc_version_min="13.3",
         ))
-    # ROCm — planned slot, gated on Phase H.
-    entries.append(BackendKernelEntry(
-        target="rocm",
-        status=_PLANNED_STATUS,
-        dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
-        feature_flags=("complex_namespace", "mfma"),
-        notes=(
-            "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
-            "Today: this op runs only via the Python reference path "
-            "(fp32-only); fp16/bf16 lanes land with the Phase H "
-            "kernel work."
-        ),
-        hipcc_version_min="7.2.4",
-    ))
+    # ROCm — the 9 pointwise ops ship a compiled device lane (interleaved-f32
+    # composed on the gfx1151 unary/binary/atan2 kernels, rocm_complex_compiled);
+    # the long-tail stays planned (Phase H).
+    if _complex_compiled:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_COMPILED_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("complex_namespace", "interleaved_f32", "hip_runtime"),
+            notes=(
+                "interleaved-f32 complex op composed on the gfx1151 "
+                "unary/binary/atan2 kernels (rocm_complex_compiled lane)"
+            ),
+            execute_compare_fixture="tests/unit/test_rocm_complex_compiled.py",
+            hipcc_version_min="7.2.4",
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_PLANNED_STATUS,
+            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+            feature_flags=("complex_namespace", "mfma"),
+            notes=(
+                "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
+                "Today: this op runs only via the Python reference path "
+                "(fp32-only); fp16/bf16 lanes land with the Phase H "
+                "kernel work."
+            ),
+            hipcc_version_min="7.2.4",
+        ))
     return entries
 
 

@@ -2886,6 +2886,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, c_f32, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_compare_f32":
             [c_f32, c_f32, i64, c_i8, ctypes.c_int],
+        "tessera_x86_avx512_predicate_f32":
+            [c_f32, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_logical_i8":
             [c_i8, c_i8, i64, c_i8, ctypes.c_int],
         "tessera_x86_avx512_bitwise_i32":
@@ -2943,6 +2945,11 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             [c_f32, i64, i64, i64, c_f32, c_f32, c_f32],
         "tessera_x86_moe_f32":
             [c_f32, c_f32, c_i32, i64, i64, i64, c_f32],
+        "tessera_x86_optimizer_f32":
+            [c_f32, c_f32, c_f32, c_f32, i64, ctypes.c_int,
+             ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+             ctypes.c_float, ctypes.c_float, ctypes.c_float,
+             c_f32, c_f32, c_f32],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -3239,6 +3246,9 @@ _X86_TRANSCENDENTAL_OPS = {
     "tessera.acos": 15,
     "tessera.atan": 16,
     "tessera.erfc": 17,
+    "tessera.sin": 18,
+    "tessera.lgamma": 19,  # ln Γ(x) — NR Lanczos g=5 SIMD core
+    "tessera.digamma": 20,  # ψ(x) — recurrence + asymptotic series
 }
 
 
@@ -3398,6 +3408,123 @@ def _execute_x86_compiled_norm(artifact: RuntimeArtifact, args: Any) -> Any:
         xc.ctypes.data_as(cf), ctypes.c_int64(m), ctypes.c_int64(k),
         ctypes.c_float(eps), out.ctypes.data_as(cf))
     return out.reshape(x.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Composed normalization (P5) — group_norm / instance_norm / weight_norm built
+# on the existing device lanes (no new kernels): group/instance normalize is a
+# row-wise mean/var normalize, which IS the layer_norm kernel applied to a
+# reshaped [rows, cols] view (device); weight_norm is a row sum-of-squares on
+# the device reduce lane + a host divide. The reshape/affine structure runs on
+# host — the same device-heavy / host-light split LAMB/Muon use. These device
+# ops are UNWEIGHTED (like rmsnorm/layer_norm); the affine composes separately
+# through ops.mul/ops.add. compiler_path="x86_normcompose_compiled" /
+# "rocm_normcompose_compiled". f32. Matches nn.functional.{group,instance,
+# weight}_norm (weight=bias=None).
+# ─────────────────────────────────────────────────────────────────────────────
+_NORM_COMPOSE_OPS = ("tessera.group_norm", "tessera.instance_norm",
+                     "tessera.weight_norm")
+
+
+def _device_layernorm_rows(x2d: Any, eps: float, target: str, np: Any) -> Any:
+    fn = (_execute_x86_compiled_norm if target == "x86"
+          else _execute_rocm_compiled_norm)
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": f"{target}_norm_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.layer_norm", "result": "o",
+                 "operands": ["x"], "kwargs": {"eps": eps}}]})
+    return np.asarray(fn(art, (np.ascontiguousarray(x2d, np.float32),)),
+                      np.float32)
+
+
+def _device_reduce_sum_rows(x2d: Any, target: str, np: Any) -> Any:
+    fn = (_execute_x86_compiled_reduce if target == "x86"
+          else _execute_rocm_compiled_reduce)
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": f"{target}_reduce_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.sum", "result": "o", "operands": ["x"],
+                 "kwargs": {"axis": -1}}]})
+    return np.asarray(fn(art, (np.ascontiguousarray(x2d, np.float32),)),
+                      np.float32)
+
+
+def _norm_compose_compute(op_name: str, x: Any, kwargs: dict, target: str,
+                          np: Any) -> Any:
+    x = np.ascontiguousarray(x, np.float32)
+    if op_name == "tessera.instance_norm":
+        if x.ndim < 3:
+            raise ValueError(f"instance_norm expects rank>=3; got {x.shape}")
+        eps = float(kwargs.get("eps", 1e-5))
+        n, c = int(x.shape[0]), int(x.shape[1])
+        rows = x.reshape(n * c, -1)
+        return _device_layernorm_rows(rows, eps, target, np).reshape(x.shape)
+    if op_name == "tessera.group_norm":
+        if x.ndim < 2:
+            raise ValueError(f"group_norm expects rank>=2; got {x.shape}")
+        ng = int(kwargs["num_groups"])
+        eps = float(kwargs.get("eps", 1e-5))
+        n, c = int(x.shape[0]), int(x.shape[1])
+        if c % ng != 0:
+            raise ValueError(f"channels {c} not divisible by num_groups {ng}")
+        rows = x.reshape(n * ng, -1)
+        return _device_layernorm_rows(rows, eps, target, np).reshape(x.shape)
+    if op_name == "tessera.weight_norm":
+        axis = int(kwargs.get("axis", 0))
+        axis = axis if axis >= 0 else x.ndim + axis
+        eps = float(kwargs.get("eps", 1e-12))
+        wt = np.moveaxis(x, axis, 0)
+        flat = np.ascontiguousarray(wt.reshape(int(wt.shape[0]), -1), np.float32)
+        sumsq = _device_reduce_sum_rows(flat * flat, target, np).reshape(-1)
+        norm = np.sqrt(sumsq + np.float32(eps)).astype(np.float32)
+        out = (flat / norm[:, None]).reshape(wt.shape)
+        return np.ascontiguousarray(np.moveaxis(out, 0, axis), np.float32)
+    raise ValueError(f"norm-compose executor handles {_NORM_COMPOSE_OPS}; "
+                     f"got {op_name!r}")
+
+
+def _execute_norm_compose(artifact: RuntimeArtifact, args: Any, target: str,
+                          path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _NORM_COMPOSE_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_NORM_COMPOSE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    # group_norm/instance_norm accept optional weight/bias operands in the
+    # catalog, but this device lane (like the rmsnorm/layer_norm device ops) is
+    # UNWEIGHTED — the affine composes separately through ops.mul/ops.add. Reject
+    # an artifact that carries affine operands rather than silently returning the
+    # unweighted result (Decision #21: stable diagnostic, never silently wrong).
+    if len(operand_names) > 1:
+        raise ValueError(
+            f"{path} is an UNWEIGHTED normalize lane for {op_name}; it takes a "
+            f"single input operand but got {len(operand_names)} "
+            f"({operand_names!r}). Compose the per-channel weight/bias affine "
+            f"separately via ops.mul / ops.add.")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _norm_compose_compute(op_name, x, ops[0].get("kwargs") or {},
+                                 target, np)
+
+
+def _execute_x86_compiled_normcompose(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` group/instance/weight-norm lane (composed)."""
+    return _execute_norm_compose(artifact, args, "x86",
+                                 "x86_normcompose_compiled")
+
+
+def _execute_rocm_compiled_normcompose(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` group/instance/weight-norm lane (composed)."""
+    return _execute_norm_compose(artifact, args, "rocm",
+                                 "rocm_normcompose_compiled")
 
 
 def _execute_x86_compiled_softmax(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -4745,6 +4872,228 @@ def _execute_x86_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fused optimizer steps (S-series `functional_optimizer_step`, P3) — a single
+# flat per-parameter update kernel parameterized by optimizer `kind`. The pytree
+# orchestration + the bias-correction scalars (1-β^t) are host-side; the kernel
+# is pure elementwise. State (m,v) is in/out. compiler_path="x86_optimizer_
+# compiled" / "rocm_optimizer_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+# op_name -> (kind_str, kind_int, state-buffer names in return order)
+_OPTIMIZER_OPS: dict[str, tuple[str, int, tuple[str, ...]]] = {
+    "tessera.sgd": ("sgd", 0, ()),
+    "tessera.momentum": ("momentum", 1, ("v",)),
+    "tessera.adam": ("adam", 2, ("m", "v")),
+    "tessera.adamw": ("adamw", 3, ("m", "v")),
+    "tessera.lion": ("lion", 4, ("m",)),
+    "tessera.nesterov": ("nesterov", 5, ("v",)),  # look-ahead momentum
+}
+
+
+def _optimizer_bind(op: dict, values: dict) -> tuple:
+    """Unpack [p, g] + state extras (m/v) named by kwargs["extras"]."""
+    names = [str(nm) for nm in op.get("operands", [])]
+    extras = list((op.get("kwargs") or {}).get("extras", []))
+    ev = {kk: values[names[2 + i]] for i, kk in enumerate(extras)}
+    return values[names[0]], values[names[1]], ev.get("m"), ev.get("v")
+
+
+def _optimizer_compute(op_name: str, p: Any, g: Any, m: Any, v: Any,
+                       kwargs: dict, run_kernel: Any, np: Any) -> Any:
+    """Run one optimizer step over a single parameter tensor. ``run_kernel(kind,
+    p, g, m, v, n, lr, b1, b2, eps, wd, b1c, b2c)`` does the device update and
+    returns (p_out, m_out, v_out). Returns (p_new, *state) per the op's kind."""
+    _, kind, state_names = _OPTIMIZER_OPS[op_name]
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    shape = p.shape
+    pf = p.reshape(-1)
+    gf = g.reshape(-1)
+    n = int(pf.size)
+    mf = (np.ascontiguousarray(m, np.float32).reshape(-1) if m is not None
+          else np.zeros(n, np.float32))
+    vf = (np.ascontiguousarray(v, np.float32).reshape(-1) if v is not None
+          else np.zeros(n, np.float32))
+    lr = float(kwargs.get("lr", 1e-3))
+    beta1 = float(kwargs.get("beta1", kwargs.get("momentum", 0.9)))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1e-8))
+    wd = float(kwargs.get("weight_decay", 0.0))
+    step = int(kwargs.get("step", 1))
+    b1c = 1.0 - beta1 ** step if kind in (2, 3) else 1.0
+    b2c = 1.0 - beta2 ** step if kind in (2, 3) else 1.0
+    p_out, m_out, v_out = run_kernel(kind, pf, gf, mf, vf, n, lr, beta1, beta2,
+                                     eps, wd, b1c, b2c)
+    out = [p_out.reshape(shape)]
+    for sn in state_names:
+        out.append((m_out if sn == "m" else v_out).reshape(shape))
+    return tuple(out) if len(out) > 1 else out[0]
+
+
+def _x86_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                          lr: float, b1: float, b2: float, eps: float, wd: float,
+                          b1c: float, b2c: float) -> tuple:
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    p_out = np.zeros(n, np.float32)
+    m_out = np.zeros(n, np.float32)
+    v_out = np.zeros(n, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_optimizer_f32(
+        p.ctypes.data_as(cf), g.ctypes.data_as(cf), m.ctypes.data_as(cf),
+        v.ctypes.data_as(cf), ctypes.c_int64(n), ctypes.c_int(kind),
+        ctypes.c_float(lr), ctypes.c_float(b1), ctypes.c_float(b2),
+        ctypes.c_float(eps), ctypes.c_float(wd), ctypes.c_float(b1c),
+        ctypes.c_float(b2c), p_out.ctypes.data_as(cf), m_out.ctypes.data_as(cf),
+        v_out.ctypes.data_as(cf))
+    return p_out, m_out, v_out
+
+
+def _execute_x86_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` optimizer lane: sgd / momentum / adam / adamw / lion
+    per-parameter update on the AVX-512 fused kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPTIMIZER_OPS:
+        raise ValueError(
+            f"x86_optimizer_compiled executor handles one of "
+            f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
+                              _x86_optimizer_kernel, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LAMB — layer-wise adaptive moments (P3 optimizer tail). LAMB is the device
+# adam update (the FLOP-heavy elementwise m/v step, run with lr=1 / wd=0 on the
+# fused optimizer kernel) followed by a PER-TENSOR trust ratio ‖p‖/‖update‖ that
+# the elementwise lane cannot compute — that reduction + the final scaling run on
+# host. compiler_path="x86_lamb_compiled" / "rocm_lamb_compiled". f32. Matches
+# tessera.optim.lamb.
+# ─────────────────────────────────────────────────────────────────────────────
+_LAMB_OPS = ("tessera.lamb",)
+
+
+def _lamb_compute(p: Any, g: Any, m: Any, v: Any, kwargs: dict,
+                  run_kernel: Any, np: Any) -> tuple:
+    """One LAMB step over a single parameter tensor. ``run_kernel`` is the fused
+    optimizer device kernel; kind 2 (adam) with lr=1/wd=0 yields the adam update,
+    then the host applies the layer-wise trust ratio. Returns (p_new, m, v)."""
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    shape = p.shape
+    pf = p.reshape(-1)
+    gf = g.reshape(-1)
+    n = int(pf.size)
+    mf = (np.ascontiguousarray(m, np.float32).reshape(-1) if m is not None
+          else np.zeros(n, np.float32))
+    vf = (np.ascontiguousarray(v, np.float32).reshape(-1) if v is not None
+          else np.zeros(n, np.float32))
+    lr = float(kwargs.get("lr", 1e-3))
+    beta1 = float(kwargs.get("beta1", 0.9))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1e-6))
+    wd = float(kwargs.get("weight_decay", 0.0))
+    step = int(kwargs.get("step", 1))
+    b1c = 1.0 - beta1 ** step
+    b2c = 1.0 - beta2 ** step
+    # device adam update (lr=1, wd=0): next_p = p - adam_update; m/v advanced.
+    next_p, m_out, v_out = run_kernel(2, pf, gf, mf, vf, n, 1.0, beta1, beta2,
+                                      eps, 0.0, b1c, b2c)
+    update = (pf - next_p) + wd * pf
+    p_norm = float(np.linalg.norm(pf))
+    u_norm = float(np.linalg.norm(update))
+    trust = 1.0 if (p_norm == 0.0 or u_norm == 0.0) else p_norm / u_norm
+    p_new = pf - np.float32(lr * trust) * update
+    return (p_new.reshape(shape), m_out.reshape(shape), v_out.reshape(shape))
+
+
+def _execute_lamb(artifact: RuntimeArtifact, args: Any, run_kernel: Any,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _LAMB_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_LAMB_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _lamb_compute(p, g, m, v, ops[0].get("kwargs") or {}, run_kernel, np)
+
+
+def _execute_x86_compiled_lamb(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` LAMB lane: AVX-512 adam kernel + host trust ratio."""
+    return _execute_lamb(artifact, args, _x86_optimizer_kernel,
+                         "x86_lamb_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Muon — momentum + orthogonalized update (P3 optimizer tail). The orthogonal
+# polar factor U·Vh of the momentum matrix is computed from a DEVICE SVD (the
+# FLOP-heavy linalg op, on the x86/gfx1151 one-sided-Jacobi kernel); the small
+# U@Vh product + the momentum / sgd elementwise steps run on host — the same
+# device-heavy / host-light split LAMB uses. <2-D params normalize instead.
+# compiler_path="x86_muon_compiled" / "rocm_muon_compiled". f32. Matches
+# tessera.optim.muon.
+# ─────────────────────────────────────────────────────────────────────────────
+_MUON_OPS = ("tessera.muon",)
+
+
+def _muon_compute(p: Any, g: Any, v: Any, kwargs: dict, svd_mn_fn: Any,
+                  np: Any) -> tuple:
+    """One Muon step over a single parameter. ``svd_mn_fn(A)→(U,S,Vh)`` is the
+    m≥n device SVD kernel. Returns (p_new, new_velocity)."""
+    p = np.ascontiguousarray(p, np.float32)
+    g = np.ascontiguousarray(g, np.float32)
+    momentum = float(kwargs.get("momentum", 0.95))
+    lr = float(kwargs.get("lr", 1e-3))
+    v_arr = (np.ascontiguousarray(v, np.float32) if v is not None
+             else np.zeros_like(p))
+    new_v = (momentum * v_arr + g).astype(np.float32)
+    if new_v.ndim < 2:
+        update = new_v / (float(np.linalg.norm(new_v)) + 1e-12)
+    else:
+        mat = new_v.reshape(int(new_v.shape[0]), -1)
+        u, _s, vh = _svd_via(mat, lambda A: svd_mn_fn(A, np), np)  # device SVD
+        update = (np.asarray(u) @ np.asarray(vh)).reshape(new_v.shape)
+    p_new = (p - np.float32(lr) * update.astype(np.float32)).astype(np.float32)
+    return (p_new, new_v)
+
+
+def _execute_muon(artifact: RuntimeArtifact, args: Any, svd_mn_fn: Any,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _MUON_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_MUON_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    names = [str(nm) for nm in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    p = values[names[0]]
+    g = values[names[1]]
+    v = values[names[2]] if len(names) > 2 else None
+    return _muon_compute(p, g, v, op.get("kwargs") or {}, svd_mn_fn, np)
+
+
+def _execute_x86_compiled_muon(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` Muon lane: AVX-512 SVD orthogonalization + host."""
+    return _execute_muon(artifact, args, _x86_svd_mn, "x86_muon_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # State-space model (S-series `state_space`) — Mamba2 selective scan. A single
 # fused sequential scan over S, vectorized over the state dim N, maintaining the
 # (B,D,N) state in place. compiler_path="x86_selective_ssm_compiled" /
@@ -5262,6 +5611,8 @@ _X86_BINARY_OPS = {
     "tessera.sub": 0, "tessera.subtract": 0,
     "tessera.div": 1, "tessera.divide": 1,
     "tessera.maximum": 2, "tessera.minimum": 3,
+    "tessera.add": 4, "tessera.mul": 5, "tessera.multiply": 5,
+    "tessera.mod": 6, "tessera.floor_div": 7, "tessera.floor_divide": 7,
 }
 
 
@@ -5309,6 +5660,458 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
         ac.ctypes.data_as(cf), bc.ctypes.data_as(cf), ctypes.c_int64(n),
         out.ctypes.data_as(cf), ctypes.c_int(kind))
     return out.reshape(a.shape)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Complex arithmetic (P5) — the 9 pointwise complex ops (Visual Complex
+# Analysis) over interleaved-f32 [..., 2] (re = x[...,0], im = x[...,1]). The
+# transcendental / arithmetic FLOP (exp/sin/cos/log/sqrt/atan2 + the real
+# mul/add/sub/div) run on the existing device lanes; host only splits/packs the
+# interleave + the division pole guard — the device-heavy / host-light split
+# LAMB/Muon/norm use. compiler_path="x86_complex_compiled" /
+# "rocm_complex_compiled". f32. Matches tessera.complex.
+# ─────────────────────────────────────────────────────────────────────────────
+_COMPLEX_OPS = ("tessera.complex_mul", "tessera.complex_div",
+                "tessera.complex_conjugate", "tessera.complex_abs",
+                "tessera.complex_arg", "tessera.complex_exp",
+                "tessera.complex_log", "tessera.complex_sqrt",
+                "tessera.complex_pow")
+
+
+def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
+    """One real elementwise op on its device lane: exp/log/sin/cos/sqrt (unary),
+    atan2 (2-ary), add/sub/mul/div (binary). x86 splits transcendental vs unary;
+    rocm's unary lane covers exp/log/sin/cos/sqrt."""
+    aa = tuple(np.ascontiguousarray(a, np.float32) for a in arrs)
+    if op == "atan2":
+        fn = (_execute_x86_compiled_atan2 if target == "x86"
+              else _execute_rocm_compiled_atan2)
+        path, nm, opn = f"{target}_atan2_compiled", ["y", "x"], "tessera.atan2"
+    elif op in ("add", "sub", "mul", "div"):
+        fn = (_execute_x86_compiled_binary if target == "x86"
+              else _execute_rocm_compiled_binary)
+        path, nm, opn = f"{target}_binary_compiled", ["a", "b"], f"tessera.{op}"
+    elif target == "x86" and op in ("exp", "log", "sin", "cos"):
+        fn = _execute_x86_compiled_transcendental
+        path, nm, opn = "x86_transcendental_compiled", ["x"], f"tessera.{op}"
+    elif target == "x86" and op == "sqrt":
+        fn = _execute_x86_compiled_unary
+        path, nm, opn = "x86_unary_compiled", ["x"], "tessera.sqrt"
+    else:  # rocm unary lane (exp/log/sin/cos/sqrt)
+        fn = _execute_rocm_compiled_unary
+        path, nm, opn = "rocm_unary_compiled", ["x"], f"tessera.{op}"
+    names = nm[:len(aa)]
+    art = RuntimeArtifact(metadata={
+        "target": target, "compiler_path": path, "arg_names": names,
+        "output_name": "o",
+        "ops": [{"op_name": opn, "result": "o", "operands": names,
+                 "kwargs": {}}]})
+    return np.asarray(fn(art, aa), np.float32)
+
+
+def _complex_compute(op_name: str, operands: list, target: str, np: Any) -> Any:
+    def split(x: Any) -> tuple:
+        x = np.ascontiguousarray(x, np.float32)
+        if x.shape[-1] != 2:
+            raise ValueError(f"complex op expects interleaved [...,2]; got {x.shape}")
+        return x[..., 0].copy(), x[..., 1].copy()
+
+    def pack(re: Any, im: Any) -> Any:
+        re = np.asarray(re, np.float32)
+        im = np.broadcast_to(np.asarray(im, np.float32), re.shape)
+        return np.stack([re, im], axis=-1).astype(np.float32)
+
+    def R(op: str, *xs: Any) -> Any:
+        return _creal(op, target, np, *xs)
+
+    def clog(a: Any, b: Any) -> tuple:
+        mag2 = R("add", R("mul", a, a), R("mul", b, b))
+        safe = np.where(mag2 > 0, mag2, np.float32(1.0)).astype(np.float32)
+        lm = R("log", safe)
+        re = np.where(mag2 > 0, np.float32(0.5) * lm,
+                      np.float32(-np.inf)).astype(np.float32)
+        return re, R("atan2", b, a)
+
+    def cexp(a: Any, b: Any) -> tuple:
+        ea = R("exp", a)
+        return R("mul", ea, R("cos", b)), R("mul", ea, R("sin", b))
+
+    def cmul(a: Any, b: Any, c: Any, d: Any) -> tuple:
+        return (R("sub", R("mul", a, c), R("mul", b, d)),
+                R("add", R("mul", a, d), R("mul", b, c)))
+
+    a, b = split(operands[0])
+    if op_name == "tessera.complex_conjugate":
+        return pack(a, -b)
+    if op_name == "tessera.complex_abs":
+        return R("sqrt", R("add", R("mul", a, a), R("mul", b, b)))
+    if op_name == "tessera.complex_arg":
+        return R("atan2", b, a)
+    if op_name == "tessera.complex_exp":
+        return pack(*cexp(a, b))
+    if op_name == "tessera.complex_log":
+        return pack(*clog(a, b))
+    if op_name == "tessera.complex_sqrt":
+        lr, li = clog(a, b)
+        return pack(*cexp(np.float32(0.5) * lr, np.float32(0.5) * li))
+    if op_name == "tessera.complex_mul":
+        c, d = split(operands[1])
+        return pack(*cmul(a, b, c, d))
+    if op_name == "tessera.complex_pow":
+        c, d = split(operands[1])              # w
+        lr, li = clog(a, b)
+        return pack(*cexp(*cmul(c, d, lr, li)))
+    if op_name == "tessera.complex_div":
+        c, d = split(operands[1])
+        denom = R("add", R("mul", c, c), R("mul", d, d))
+        eps = 1e-12
+        safe = np.where(denom > eps, denom, np.float32(1.0)).astype(np.float32)
+        re = np.where(denom > eps,
+                      R("div", R("add", R("mul", a, c), R("mul", b, d)), safe),
+                      np.inf).astype(np.float32)
+        im = np.where(denom > eps,
+                      R("div", R("sub", R("mul", b, c), R("mul", a, d)), safe),
+                      np.inf).astype(np.float32)
+        return np.stack([re, im], axis=-1).astype(np.float32)
+    raise ValueError(f"complex executor handles {_COMPLEX_OPS}; got {op_name!r}")
+
+
+def _execute_complex(artifact: RuntimeArtifact, args: Any, target: str,
+                     path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _COMPLEX_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_COMPLEX_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _complex_compute(op_name, operands, target, np)
+
+
+def _execute_x86_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` complex-arithmetic lane (9 pointwise ops)."""
+    return _execute_complex(artifact, args, "x86", "x86_complex_compiled")
+
+
+def _execute_rocm_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` complex-arithmetic lane (9 pointwise ops)."""
+    return _execute_complex(artifact, args, "rocm", "rocm_complex_compiled")
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Device RNG (P6) — counter-based Philox-4x32-10. The device kernel generates the
+# uniform[0,1) bits (the RNG core, bit-exact vs tessera.rng_device); the host
+# applies the cheap distribution transform (uniform scale / Box-Muller normal /
+# dropout mask). A SEPARATE deterministic stream from tessera.rng (host
+# numpy-Generator). compiler_path="x86_rng_compiled" / "rocm_rng_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_RNG_OPS = ("tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout")
+
+
+def _rng_compute(op_name: str, operands: list, kwargs: dict,
+                 uniform_fn: Any, np: Any) -> Any:
+    """``uniform_fn(seed, counter_base, n)`` returns n device Philox uniforms in
+    [0,1). Host transforms mirror tessera.rng_device exactly."""
+    seed = int(kwargs.get("seed", 0))
+    cbase = int(kwargs.get("counter_base", 0))
+    if op_name == "tessera.dropout":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        p = float(kwargs.get("p", 0.5))
+        if not bool(kwargs.get("training", True)) or p <= 0.0:
+            return x.copy()
+        u = uniform_fn(seed, cbase, int(x.size)).reshape(x.shape)
+        scale = np.float32(0.0) if p >= 1.0 else np.float32(1.0 / (1.0 - p))
+        return (x * (u >= np.float32(p)).astype(np.float32) * scale).astype(
+            np.float32)
+    shape = tuple(int(d) for d in kwargs.get("shape", ()))
+    n = int(np.prod(shape)) if shape else 1
+    if op_name == "tessera.rng_uniform":
+        # Accept both the public-API names (lo/hi, used by tessera.ops.rng_uniform
+        # + the CPU reference) and the low/high aliases.
+        lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
+        hi = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        out = np.float32(lo) + np.float32(hi - lo) * uniform_fn(seed, cbase, n)
+        return out.reshape(shape).astype(np.float32)
+    # rng_normal — Box-Muller from two Philox halves (mirrors rng_device.normal)
+    mean = float(kwargs.get("mean", 0.0))
+    std = float(kwargs.get("std", 1.0))
+    m = (n + 1) // 2
+    u1 = np.clip(uniform_fn(seed, cbase, m), np.float32(1e-7), np.float32(1.0))
+    u2 = uniform_fn(seed, cbase + (m + 3) // 4 + 1, m)
+    r = np.sqrt(-2.0 * np.log(u1)).astype(np.float32)
+    theta = np.float32(2.0 * np.pi) * u2
+    z = np.empty(2 * m, np.float32)
+    z[0::2] = r * np.cos(theta)
+    z[1::2] = r * np.sin(theta)
+    return (np.float32(mean) + np.float32(std) * z[:n]).reshape(shape).astype(
+        np.float32)
+
+
+def _x86_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
+    import numpy as np
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    out = np.zeros(int(n), np.float32)
+    lib.tessera_x86_philox_uniform_f32(
+        ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_int64(int(n)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    return out
+
+
+def _execute_rng(artifact: RuntimeArtifact, args: Any, uniform_fn: Any,
+                 path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _RNG_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_RNG_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _rng_compute(op_name, operands, ops[0].get("kwargs") or {},
+                        uniform_fn, np)
+
+
+def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
+    return _execute_rng(artifact, args, _x86_philox_uniform, "x86_rng_compiled")
+
+
+_rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_philox_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.philox"() {name = "ph"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-philox-kernel", directive, _rocm_philox_hsaco_cache,
+        (chip,))
+
+
+def _rocm_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
+    """n device Philox-4x32-10 uniforms in [0,1) on gfx1151 (compiler-generated
+    kernel, HIP-launched). Bit-identical to the x86 / numpy reference."""
+    import numpy as np
+    n = int(n)
+    hsaco = _build_compiled_philox_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm philox: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm philox: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"ph") != 0:
+        raise RuntimeError("rocm philox: kernel symbol 'ph' not found")
+    o = np.zeros(n, np.float32)
+    do = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(do), 4 * n) != 0:
+        raise RuntimeError("rocm philox: hipMalloc failed")
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    s = int(seed) & 0xFFFFFFFFFFFFFFFF
+    cb = int(counter_base) & 0xFFFFFFFFFFFFFFFF
+    launch_args = _mr(do, n) + [
+        ctypes.c_int64(n),
+        ctypes.c_uint32(s & 0xFFFFFFFF), ctypes.c_uint32((s >> 32) & 0xFFFFFFFF),
+        ctypes.c_uint32(cb & 0xFFFFFFFF), ctypes.c_uint32((cb >> 32) & 0xFFFFFFFF)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    nblocks = (n + 3) // 4
+    gx = (nblocks + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        hip.hipFree(do)
+        raise RuntimeError(f"rocm philox: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, 4 * n, 2)
+    hip.hipFree(do)
+    return o
+
+
+def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
+    return _execute_rng(artifact, args, _rocm_philox_uniform, "rocm_rng_compiled")
+
+
+# clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
+# may be None (one-sided). The scalar bound is broadcast to the input shape and
+# the elementwise max (lower) / min (upper) run on the device binary kernel — no
+# new kernel. compiler_path="x86_clamp_compiled" / "rocm_clamp_compiled". f32.
+# ─────────────────────────────────────────────────────────────────────────────
+_CLAMP_OPS = ("tessera.clamp", "tessera.clip")
+
+
+def _clamp_compute(x: Any, kwargs: dict, binary_exec: Any, np: Any) -> Any:
+    """clip(x, [lo, hi]) = min(max(x, lo), hi) with either bound optional.
+    ``binary_exec(op_name, a, b)`` runs the device elementwise binary kernel."""
+    lo = kwargs.get("min_val", kwargs.get("min"))
+    hi = kwargs.get("max_val", kwargs.get("max"))
+    out = np.ascontiguousarray(x, np.float32)
+    if lo is not None:
+        bound = np.full(out.shape, np.float32(lo), np.float32)
+        out = np.asarray(binary_exec("tessera.maximum", out, bound), np.float32)
+    if hi is not None:
+        bound = np.full(out.shape, np.float32(hi), np.float32)
+        out = np.asarray(binary_exec("tessera.minimum", out, bound), np.float32)
+    return out
+
+
+def _x86_binary_exec(op_name: str, a: Any, b: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_binary_compiled",
+        "arg_names": ["a", "b"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["a", "b"],
+                 "kwargs": {}}]})
+    return _execute_x86_compiled_binary(art, (a, b))
+
+
+def _execute_x86_compiled_clamp(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` clamp lane: clamp / clip composed on the AVX-512
+    binary max/min kernel (scalar bounds broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CLAMP_OPS:
+        raise ValueError(
+            f"x86_clamp_compiled executor handles one of {_CLAMP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _clamp_compute(x, ops[0].get("kwargs") or {}, _x86_binary_exec, np)
+
+
+_SOFTCAP_OPS = ("tessera.softcap",)
+
+
+def _softcap_compute(x: Any, kwargs: dict, tanh_exec: Any, np: Any) -> Any:
+    """Gemma-style logit soft-cap: ``cap * tanh(x / cap)`` smoothly bounds x to
+    ``(-cap, cap)``. The transcendental tanh runs on the device lane via
+    ``tanh_exec(t)``; the two scalar scales (÷cap, ×cap) broadcast on host —
+    the same host-scalar / device-FLOP split the clamp lane uses for its
+    bounds."""
+    cap = kwargs.get("cap")
+    if cap is None:
+        raise ValueError("softcap requires a `cap` keyword")
+    cap = float(cap)
+    if cap <= 0.0:
+        raise ValueError(f"softcap cap must be positive; got {cap}")
+    xs = np.ascontiguousarray(x, np.float32) / np.float32(cap)
+    t = np.asarray(tanh_exec(xs), np.float32)
+    return (np.float32(cap) * t).astype(np.float32)
+
+
+_ATAN2_OPS = ("tessera.atan2",)
+
+
+def _atan2_compute(y: Any, x: Any, atan_exec: Any, np: Any) -> Any:
+    """atan2(y, x) = angle of the point (x, y) in (-pi, pi], matching
+    np.arctan2. The device lane computes the first-quadrant magnitude
+    ``atan(|y| / |x|)`` (the transcendental FLOP); the quadrant placement and
+    the on-axis special cases are cheap host sign logic — the same host-
+    structure / device-FLOP split the softcap lane uses."""
+    y = np.ascontiguousarray(y, np.float32)
+    x = np.ascontiguousarray(x, np.float32)
+    if y.shape != x.shape:
+        y, x = np.broadcast_arrays(y, x)
+        y = np.ascontiguousarray(y, np.float32)
+        x = np.ascontiguousarray(x, np.float32)
+    ax = np.abs(x)
+    ay = np.abs(y)
+    # First-quadrant magnitude in [0, pi/2]. Where |x|==0 the ratio is set to 0
+    # and the angle forced to pi/2 (vertical) after the device call.
+    safe = ax > 0
+    ratio = np.where(safe, ay / np.where(safe, ax, np.float32(1.0)),
+                     np.float32(0.0)).astype(np.float32)
+    core = np.asarray(atan_exec(ratio), np.float32)
+    core = np.where(safe, core, np.float32(np.pi / 2.0)).astype(np.float32)
+    # Reflect across the y-axis for x<0, then across the x-axis for y<0.
+    res = np.where(x < 0, np.float32(np.pi) - core, core)
+    res = np.where(y < 0, -res, res).astype(np.float32)
+    # numpy convention: atan2(0, 0) == 0 (the |x|==0 path forced pi/2 above).
+    res = np.where((x == 0) & (y == 0), np.float32(0.0), res)
+    return res.astype(np.float32)
+
+
+def _x86_atan_exec(x: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_transcendental_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.atan", "result": "o", "operands": ["x"],
+                 "kwargs": {}}]})
+    return _execute_x86_compiled_transcendental(art, (x,))
+
+
+def _execute_x86_compiled_atan2(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` atan2 lane: quadrant-aware atan2(y, x) composed on
+    the AVX-512 transcendental atan kernel (sign/quadrant logic on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ATAN2_OPS:
+        raise ValueError(
+            f"x86_atan2_compiled executor handles one of {_ATAN2_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("atan2 requires two operands (y, x)")
+    values = _bind_launch_args(args, arg_names)
+    y = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[operand_names[1]])
+    return _atan2_compute(y, x, _x86_atan_exec, np)
+
+
+def _x86_tanh_exec(x: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_transcendental_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": "tessera.tanh", "result": "o", "operands": ["x"],
+                 "kwargs": {}}]})
+    return _execute_x86_compiled_transcendental(art, (x,))
+
+
+def _execute_x86_compiled_softcap(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` softcap lane: ``cap * tanh(x / cap)`` composed on
+    the AVX-512 transcendental tanh kernel (scalar cap broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SOFTCAP_OPS:
+        raise ValueError(
+            f"x86_softcap_compiled executor handles one of {_SOFTCAP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _softcap_compute(x, ops[0].get("kwargs") or {}, _x86_tanh_exec, np)
 
 
 def _execute_x86_compiled_where(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -5417,6 +6220,48 @@ def _execute_x86_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
     return out.reshape(a.shape).astype(np.bool_)
 
 
+#: op_name -> predicate kind index. Must match avx512_predicate_f32.cpp.
+_X86_PREDICATE_OPS = {
+    "tessera.isnan": 0, "tessera.isinf": 1, "tessera.isfinite": 2,
+}
+
+
+def _execute_x86_compiled_predicate(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` predicate lane: isnan / isinf / isfinite on the
+    AVX-512 unary predicate kernel (f32 → numpy bool_), any shape."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _X86_PREDICATE_OPS:
+        raise ValueError(
+            "x86_predicate_compiled executor handles exactly one of "
+            f"{tuple(_X86_PREDICATE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    kind = _X86_PREDICATE_OPS[op_name]
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("predicate requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    if x.dtype != np.float32:
+        raise ValueError(f"x86 predicate lane handles f32 only; got {x.dtype}")
+    n = int(np.prod(x.shape)) if x.ndim else 1
+    if n <= 0:
+        return np.zeros(x.shape, dtype=np.bool_)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    out = np.zeros(n, dtype=np.uint8)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_predicate_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(n),
+        out.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(kind))
+    return out.reshape(x.shape).astype(np.bool_)
+
+
 #: op_name -> (logical kind index, operand count). Must match avx512_logical_i8.
 _X86_LOGICAL_OPS = {
     "tessera.logical_and": (0, 2), "tessera.logical_or": (1, 2),
@@ -5478,6 +6323,7 @@ def _execute_x86_compiled_logical(artifact: RuntimeArtifact, args: Any) -> Any:
 _X86_BITWISE_OPS = {
     "tessera.bitwise_and": (0, 2), "tessera.bitwise_or": (1, 2),
     "tessera.bitwise_xor": (2, 2), "tessera.bitwise_not": (3, 1),
+    "tessera.popcount": (4, 1),  # VPOPCNTDQ; set-bit count per i32 lane (unary)
 }
 
 
@@ -6078,11 +6924,14 @@ _ROCM_UNARY_OPS: dict[str, str] = {
     "tessera.log1p": "log1p", "tessera.expm1": "expm1",
     "tessera.softplus": "softplus",
     # tail: trig / special / rounding (2026-06-26)
+    "tessera.sin": "sin",
     "tessera.cos": "cos", "tessera.tan": "tan", "tessera.sinh": "sinh",
     "tessera.cosh": "cosh", "tessera.asin": "asin", "tessera.acos": "acos",
     "tessera.atan": "atan", "tessera.erfc": "erfc",
     "tessera.floor": "floor", "tessera.ceil": "ceil", "tessera.round": "round",
     "tessera.trunc": "trunc",
+    "tessera.lgamma": "lgamma",  # MLIR-built Lanczos g=5 (no math.lgamma)
+    "tessera.digamma": "digamma",  # MLIR recurrence + asymptotic series
 }
 
 
@@ -6192,6 +7041,9 @@ _ROCM_BINARY_OPS: dict[str, str] = {
     "tessera.div": "div", "tessera.divide": "div",
     "tessera.pow": "pow", "tessera.power": "pow",
     "tessera.maximum": "maximum", "tessera.minimum": "minimum",
+    "tessera.add": "add", "tessera.mul": "mul", "tessera.multiply": "mul",
+    "tessera.mod": "mod", "tessera.floor_div": "floor_div",
+    "tessera.floor_divide": "floor_div",
 }
 
 
@@ -6293,6 +7145,82 @@ def _execute_rocm_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     for dev in (da, db, do):
         hip.hipFree(dev)
     return o.reshape(a.shape)
+
+
+def _rocm_binary_exec(op_name: str, a: Any, b: Any) -> Any:
+    art = RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_binary_compiled",
+        "arg_names": ["a", "b"], "output_name": "o",
+        "ops": [{"op_name": op_name, "result": "o", "operands": ["a", "b"],
+                 "kwargs": {}}]})
+    return _execute_rocm_compiled_binary(art, (a, b))
+
+
+def _execute_rocm_compiled_clamp(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` clamp lane: clamp / clip composed on the gfx1151
+    binary max/min kernel (scalar bounds broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _CLAMP_OPS:
+        raise ValueError(
+            f"rocm_clamp_compiled executor handles one of {_CLAMP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _clamp_compute(x, ops[0].get("kwargs") or {}, _rocm_binary_exec, np)
+
+
+def _rocm_tanh_exec(x: Any) -> Any:
+    import numpy as np
+    return _rocm_unary_t(x, "tanh", np)
+
+
+def _rocm_atan_exec(x: Any) -> Any:
+    import numpy as np
+    return _rocm_unary_t(x, "atan", np)
+
+
+def _execute_rocm_compiled_atan2(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` atan2 lane: quadrant-aware atan2(y, x) composed on
+    the gfx1151 unary atan kernel (sign/quadrant logic on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ATAN2_OPS:
+        raise ValueError(
+            f"rocm_atan2_compiled executor handles one of {_ATAN2_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 2:
+        raise ValueError("atan2 requires two operands (y, x)")
+    values = _bind_launch_args(args, arg_names)
+    y = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[operand_names[1]])
+    return _atan2_compute(y, x, _rocm_atan_exec, np)
+
+
+def _execute_rocm_compiled_softcap(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` softcap lane: ``cap * tanh(x / cap)`` composed on
+    the gfx1151 unary tanh kernel (scalar cap broadcast on host). f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SOFTCAP_OPS:
+        raise ValueError(
+            f"rocm_softcap_compiled executor handles one of {_SOFTCAP_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _softcap_compute(x, ops[0].get("kwargs") or {}, _rocm_tanh_exec, np)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6436,6 +7364,66 @@ def _build_compiled_compare_hsaco(kind: str, dtype: str = "f32") -> bytes:
     return _build_rocm_elementwise_hsaco(
         "generate-rocm-compare-kernel", directive, _rocm_compare_hsaco_cache,
         (chip, kind, dtype))
+
+
+_rocm_predicate_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_ROCM_PREDICATE_OPS = {
+    "tessera.isnan": "isnan", "tessera.isinf": "isinf",
+    "tessera.isfinite": "isfinite",
+}
+
+
+def _rocm_predicate(x: Any, kind: str, np: Any) -> Any:
+    """isnan/isinf/isfinite over f32 input on the gfx1151 predicate kernel,
+    returning numpy bool_ (one thread per element)."""
+    shape = np.asarray(x).shape
+    if int(np.prod(shape)) == 0:
+        # Empty input: nothing to launch (a 0-sized grid is undefined) — return
+        # the empty bool result, mirroring the x86 predicate lane's short-circuit.
+        return np.zeros(shape, dtype=np.bool_)
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.predicate"() {name = "pr", '
+                 f'kind = "{kind}"}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-predicate-kernel", directive, _rocm_predicate_hsaco_cache,
+        (chip, kind))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm predicate: hipInit failed")
+    xc = np.ascontiguousarray(x, np.float32).reshape(-1)
+    n = int(xc.size)
+    out = np.zeros(n, np.uint8)
+    d_x = _rocm_dev_in(hip, xc, 4 * n)
+    d_o = _rocm_dev_in(hip, out, n)
+    try:
+        _rocm_sparse_launch(hsaco, b"pr", [(d_x, n), (d_o, n)], [n], n)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, n, 2)
+    finally:
+        for d in (d_x, d_o):
+            hip.hipFree(d)
+    return out.reshape(np.asarray(x).shape).astype(np.bool_)
+
+
+def _execute_rocm_compiled_predicate(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` predicate lane: isnan / isinf / isfinite on the
+    COMPILER-GENERATED gfx1151 predicate kernel. f32 in / bool out."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _ROCM_PREDICATE_OPS:
+        raise ValueError(
+            "rocm_predicate_compiled executor handles exactly one of "
+            f"{tuple(_ROCM_PREDICATE_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("predicate requires one operand")
+    values = _bind_launch_args(args, arg_names)
+    x = _as_numpy(values[operand_names[0]])
+    return _rocm_predicate(x, _ROCM_PREDICATE_OPS[op_name], np)
 
 
 def _execute_rocm_compiled_compare(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -6660,6 +7648,7 @@ _rocm_bitwise_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _ROCM_BITWISE_OPS: dict[str, tuple[str, int]] = {
     "tessera.bitwise_and": ("and", 2), "tessera.bitwise_or": ("or", 2),
     "tessera.bitwise_xor": ("xor", 2), "tessera.bitwise_not": ("not", 1),
+    "tessera.popcount": ("popcount", 1),  # math.ctpop (RDNA v_bcnt); unary
 }
 
 
@@ -8061,6 +9050,107 @@ def _execute_rocm_compiled_moe(artifact: RuntimeArtifact, args: Any) -> Any:
     return _rocm_moe(x, experts, route, scores, np)
 
 
+_rocm_opt_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_OPTIMIZER_KIND_STR = {0: "sgd", 1: "momentum", 2: "adam", 3: "adamw", 4: "lion",
+                       5: "nesterov"}
+
+
+def _rocm_optimizer_kernel(kind: int, p: Any, g: Any, m: Any, v: Any, n: int,
+                           lr: float, b1: float, b2: float, eps: float,
+                           wd: float, b1c: float, b2c: float) -> tuple:
+    """One fused optimizer step over a flat parameter array on the gfx1151
+    kernel (kind StrAttr-selected). Returns (p_out, m_out, v_out). f32."""
+    import numpy as np
+    chip = _rocm_chip()
+    kstr = _OPTIMIZER_KIND_STR[kind]
+    directive = ('module {\n  "tessera_rocm.optimizer"() {name = "op", '
+                 f'kind = "{kstr}"}} : () -> ()\n}}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-optimizer-kernel", directive, _rocm_opt_hsaco_cache,
+        (chip, kstr))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm optimizer: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm optimizer: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"op") != 0:
+        raise RuntimeError("rocm optimizer: kernel symbol 'op' not found")
+    pf = np.ascontiguousarray(p, np.float32).reshape(-1)
+    gf = np.ascontiguousarray(g, np.float32).reshape(-1)
+    mf = np.ascontiguousarray(m, np.float32).reshape(-1)
+    vf = np.ascontiguousarray(v, np.float32).reshape(-1)
+    p_out = np.zeros(n, np.float32)
+    m_out = np.zeros(n, np.float32)
+    v_out = np.zeros(n, np.float32)
+    d_p = _rocm_dev_in(hip, pf, 4 * n)
+    d_g = _rocm_dev_in(hip, gf, 4 * n)
+    d_m = _rocm_dev_in(hip, mf, 4 * n)
+    d_v = _rocm_dev_in(hip, vf, 4 * n)
+    d_po = _rocm_dev_in(hip, p_out, 4 * n)
+    d_mo = _rocm_dev_in(hip, m_out, 4 * n)
+    d_vo = _rocm_dev_in(hip, v_out, 4 * n)
+
+    def _mr(dev):
+        return [ctypes.c_void_p(dev.value), ctypes.c_void_p(dev.value),
+                ctypes.c_int64(0), ctypes.c_int64(n), ctypes.c_int64(1)]
+
+    launch_args: list = []
+    for dev in (d_p, d_g, d_m, d_v, d_po, d_mo, d_vo):
+        launch_args += _mr(dev)
+    launch_args.append(ctypes.c_int64(n))
+    launch_args += [ctypes.c_float(x) for x in
+                    (lr, b1, b2, eps, wd, b1c, b2c)]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    try:
+        rc = hip.hipModuleLaunchKernel(fn, gx, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                       0, None, arr, None)
+        if rc != 0:
+            raise RuntimeError(f"rocm optimizer: launch failed rc={rc}")
+        hip.hipDeviceSynchronize()
+        for host, dev in ((p_out, d_po), (m_out, d_mo), (v_out, d_vo)):
+            hip.hipMemcpy(host.ctypes.data_as(ctypes.c_void_p), dev, 4 * n, 2)
+    finally:
+        for dev in (d_p, d_g, d_m, d_v, d_po, d_mo, d_vo):
+            hip.hipFree(dev)
+    return p_out, m_out, v_out
+
+
+def _execute_rocm_compiled_optimizer(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` optimizer lane: sgd / momentum / adam / adamw / lion
+    per-parameter update on the COMPILER-GENERATED gfx1151 kernel. f32."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _OPTIMIZER_OPS:
+        raise ValueError(
+            f"rocm_optimizer_compiled executor handles one of "
+            f"{tuple(_OPTIMIZER_OPS)}; got {[o.get('op_name') for o in ops]!r}")
+    values = _bind_launch_args(args, arg_names)
+    p, g, m, v = _optimizer_bind(ops[0], values)
+    return _optimizer_compute(op_name, p, g, m, v, ops[0].get("kwargs") or {},
+                              _rocm_optimizer_kernel, np)
+
+
+def _execute_rocm_compiled_lamb(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` LAMB lane: gfx1151 adam kernel + host trust ratio."""
+    return _execute_lamb(artifact, args, _rocm_optimizer_kernel,
+                         "rocm_lamb_compiled")
+
+
+def _execute_rocm_compiled_muon(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` Muon lane: gfx1151 SVD orthogonalization + host."""
+    return _execute_muon(artifact, args, _rocm_svd_mn, "rocm_muon_compiled")
+
+
 def _execute_rocm_compiled_state_space(artifact: RuntimeArtifact,
                                        args: Any) -> Any:
     """The ``target="rocm"`` state-space lane: selective_ssm (Mamba2) on the
@@ -8842,6 +9932,10 @@ def _executor_table():
         "rocm_unary_compiled":  _execute_rocm_compiled_unary,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
+        "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
+        "rocm_clamp_compiled": _execute_rocm_compiled_clamp,
+        "rocm_softcap_compiled": _execute_rocm_compiled_softcap,
+        "rocm_atan2_compiled": _execute_rocm_compiled_atan2,
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
@@ -8864,6 +9958,12 @@ def _executor_table():
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
+        "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
+        "x86_complex_compiled": _execute_x86_compiled_complex,
+        "x86_rng_compiled": _execute_x86_compiled_rng,
+        "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
+        "x86_lamb_compiled": _execute_x86_compiled_lamb,
+        "x86_muon_compiled": _execute_x86_compiled_muon,
         "x86_selective_ssm_compiled": _execute_x86_compiled_state_space,
         "x86_linalg_compiled": _execute_x86_compiled_linalg,
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
@@ -8873,7 +9973,11 @@ def _executor_table():
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
+        "x86_clamp_compiled": _execute_x86_compiled_clamp,
+        "x86_softcap_compiled": _execute_x86_compiled_softcap,
+        "x86_atan2_compiled": _execute_x86_compiled_atan2,
         "x86_compare_compiled": _execute_x86_compiled_compare,
+        "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
@@ -8889,6 +9993,12 @@ def _executor_table():
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
+        "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
+        "rocm_complex_compiled": _execute_rocm_compiled_complex,
+        "rocm_rng_compiled": _execute_rocm_compiled_rng,
+        "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
+        "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
+        "rocm_muon_compiled": _execute_rocm_compiled_muon,
         "rocm_selective_ssm_compiled": _execute_rocm_compiled_state_space,
         "rocm_linalg_compiled": _execute_rocm_compiled_linalg,
         "rocm_alibi_compiled":  _execute_rocm_compiled_alibi,

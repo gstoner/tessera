@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 165 |
-| ``runnable_reference`` | 144 |
+| ``complete`` | 199 |
+| ``runnable_reference`` | 110 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
 | **total** | **309** |
 
-## complete (165)
+## complete (199)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -47,25 +47,36 @@ each row into a single E2E tier.
 | ``ne`` | comparison | public | public | registered | partial | fused | ready | none |
 | ``einsum`` | contraction | public | public | registered | partial | fused | ready | none |
 | ``acos`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``add`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``asin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``atan`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``atan2`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``clip`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cos`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``cosh`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``digamma`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``erf`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``erfc`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``exp`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``expm1`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``floor_div`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``gelu`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``lgamma`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``log`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``log1p`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``mod`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``mul`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``popcount`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``pow`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``relu`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``rsqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sigmoid`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``silu`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``silu_mul`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``sin`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sinh`` | elementwise | public | public | registered | partial | fused | ready | none |
+| ``softcap`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``softplus`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sqrt`` | elementwise | public | public | registered | partial | fused | ready | none |
 | ``sub`` | elementwise | public | public | registered | partial | fused | ready | none |
@@ -81,6 +92,11 @@ each row into a single E2E tier.
 | ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``adam`` | functional_optimizer_step | public | public | registered | partial | fused | ready | none |
+| ``adamw`` | functional_optimizer_step | public | public | registered | partial | fused | ready | none |
+| ``lion`` | functional_optimizer_step | public | public | registered | partial | fused | ready | none |
+| ``momentum`` | functional_optimizer_step | public | public | registered | partial | fused | ready | none |
+| ``sgd`` | functional_optimizer_step | public | public | registered | partial | fused | ready | none |
 | ``clifford_codiff`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_conjugate`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_exp`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
@@ -133,11 +149,19 @@ each row into a single E2E tier.
 | ``z_loss`` | loss | public | public | registered | partial | fused | ready | none |
 | ``linear_general`` | model_layer | public | public | registered | partial | fused | ready | none |
 | ``moe`` | moe | public | public | registered | partial | fused | ready | none |
+| ``group_norm`` | normalization | public | public | registered | partial | fused | ready | none |
+| ``instance_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``layer_norm`` | normalization | public | public | registered | partial | fused | ready | none |
 | ``rmsnorm`` | normalization | public | public | registered | partial | fused | ready | benchmarked |
+| ``weight_norm`` | normalization | public | public | registered | partial | fused | ready | none |
+| ``abs`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``absolute`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``ceil`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``clamp`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``floor`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isfinite`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isinf`` | numeric_helper | public | public | registered | partial | fused | ready | none |
+| ``isnan`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``maximum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``minimum`` | numeric_helper | public | public | registered | partial | fused | ready | none |
 | ``reciprocal`` | numeric_helper | public | public | registered | partial | fused | ready | none |
@@ -155,6 +179,9 @@ each row into a single E2E tier.
 | ``quantize_fp6`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``quantize_fp8`` | quantize | public | public | registered | partial | fused | ready | none |
 | ``quantize_nvfp4`` | quantize | public | public | registered | partial | fused | ready | none |
+| ``dropout`` | random_mask | public | public | registered | partial | fused | ready | none |
+| ``rng_normal`` | random_source | public | public | registered | partial | fused | ready | none |
+| ``rng_uniform`` | random_source | public | public | registered | partial | fused | ready | none |
 | ``amax`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``amin`` | reduction | public | public | registered | partial | fused | ready | none |
 | ``argmax`` | reduction | public | public | registered | partial | fused | ready | none |
@@ -196,12 +223,19 @@ each row into a single E2E tier.
 | ``sum`` | stable_reduction | public | public | registered | partial | fused | ready | none |
 | ``selective_ssm`` | state_space | public | public | registered | partial | fused | ready | none |
 | ``kv_cache_read`` | state_update | public | public | registered | partial | fused | ready | none |
+| ``complex_abs`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_arg`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_conjugate`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_div`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_log`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_pow`` | visual_complex | public | public | registered | partial | fused | ready | none |
+| ``complex_sqrt`` | visual_complex | public | public | registered | partial | fused | ready | none |
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (144)
+## runnable_reference (110)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -231,24 +265,8 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``add`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``atan2`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``clip`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``digamma`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``floor_div`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``lgamma`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``mod`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``mul`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``popcount`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``sin`` | elementwise | public | public | registered | partial | reference | ready | none |
-| ``softcap`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``adam`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``adamw`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``lion`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``momentum`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``sgd`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
 | ``fused_epilogue`` | fused_epilogue | public | public | registered | partial | reference | ready | none |
 | ``dynamic_slice`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``dynamic_update_slice`` | indexing | public | public | registered | partial | reference | ready | none |
@@ -311,19 +329,8 @@ each row into a single E2E tier.
 | ``vlb_loss`` | loss | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
-| ``group_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``instance_norm`` | normalization | public | public | registered | partial | reference | ready | none |
 | ``rmsnorm_safe`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``weight_norm`` | normalization | public | public | registered | partial | reference | ready | none |
-| ``abs`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``clamp`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isfinite`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isinf`` | numeric_helper | public | public | registered | partial | reference | ready | none |
-| ``isnan`` | numeric_helper | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
-| ``dropout`` | random_mask | public | public | registered | partial | reference | ready | none |
-| ``rng_normal`` | random_source | public | public | registered | partial | reference | ready | none |
-| ``rng_uniform`` | random_source | public | public | registered | partial | reference | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``argsort`` | sort | public | public | registered | partial | reference | ready | none |
 | ``sort`` | sort | public | public | registered | partial | reference | ready | none |
@@ -334,13 +341,6 @@ each row into a single E2E tier.
 | ``conv2d`` | stencil | public | public | registered | partial | reference | ready | benchmarked |
 | ``conv3d`` | stencil | public | public | registered | partial | reference | ready | none |
 | ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_abs`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_arg`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_conjugate`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_div`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_log`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_pow`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``complex_sqrt`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``conformal_jacobian`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``cross_ratio`` | visual_complex | public | public | registered | partial | reference | ready | none |

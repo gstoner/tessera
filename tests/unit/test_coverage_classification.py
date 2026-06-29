@@ -141,14 +141,21 @@ def test_covered_by_family_bucket_has_substantial_size() -> None:
     real `x86:fused` slots with on-device fixtures).  The guard exists to
     catch an *accidental* default reclassification into
     ``needs_direct_test`` — so the real signal is ``needs_direct_test``
-    staying small (asserted separately), not this floor.  Floor at 50."""
+    staying small (asserted separately), not this floor.  Floor at 30.
+
+    2026-06-28: lowered 50 -> 30. The S-series device-lane push (P2-P6:
+    softcap/atan2/popcount/lgamma/digamma, lamb/muon/nesterov, group/instance/
+    weight norm, complex arithmetic, Philox RNG) earned direct device tests for
+    many family-covered ops, legitimately shrinking the bucket to 47 while
+    ``needs_direct_test`` stayed at 2 — exactly the expected drift. More P7-P14
+    device lanes will shrink it further; the guard tracks ``needs_direct_test``."""
     summary = classification_summary()
     family = summary[COVERED_BY_FAMILY]
-    assert family >= 50, (
-        f"`covered_by_family` bucket shrank to {family} (baseline ~99).  "
-        f"Did a category default get accidentally reclassified? (Check that "
-        f"`needs_direct_test` stayed small — a shrink driven by ops gaining "
-        f"direct device tests is expected.)"
+    assert family >= 30, (
+        f"`covered_by_family` bucket shrank to {family} (baseline ~99, "
+        f"floor 30).  Did a category default get accidentally reclassified? "
+        f"(Check that `needs_direct_test` stayed small — a shrink driven by "
+        f"ops gaining direct device tests is expected.)"
     )
 
 

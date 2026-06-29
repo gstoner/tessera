@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3272** total Python-test references, **825** total lit-fixture references.
-- **103** ops have **zero** references in either test surface.
-- **166** ops have ≤1 reference ("thinly tested").
-- **74** ops have ≥10 references ("well tested").
+- **3428** total Python-test references, **866** total lit-fixture references.
+- **99** ops have **zero** references in either test surface.
+- **150** ops have ≤1 reference ("thinly tested").
+- **84** ops have ≥10 references ("well tested").
 - **111** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -21,8 +21,8 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `flash_attn` |  100 |   57 |  157 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |  120 |   37 |  157 |  30 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  105 |   20 |  125 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |   95 |   13 |  108 |   8 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |   85 |    4 |   89 |   7 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |   97 |   13 |  110 |   8 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |   87 |    4 |   91 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   85 |    2 |   87 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   86 |    0 |   86 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `rmsnorm` |   74 |   10 |   84 |   3 | `bf16`, `f16`, `f32`, `f64` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **166** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **150** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -51,7 +51,6 @@ These **166** ops have at most one test reference across the whole test surface.
 | `axis_index` |    0 |    0 |    0 |
 | `axis_name` |    0 |    0 |    0 |
 | `axis_size` |    0 |    0 |    0 |
-| `broadcast` |    1 |    0 |    1 |
 | `calibration_observer` |    0 |    0 |    0 |
 | `centralize_grad` |    1 |    0 |    1 |
 | `chained_schedule` |    1 |    0 |    1 |
@@ -72,11 +71,6 @@ These **166** ops have at most one test reference across the whole test surface.
 | `clifford_reverse` |    1 |    0 |    1 |
 | `clifford_vec_deriv` |    0 |    0 |    0 |
 | `clifford_wedge` |    1 |    0 |    1 |
-| `complex_arg` |    0 |    0 |    0 |
-| `complex_div` |    1 |    0 |    1 |
-| `complex_log` |    0 |    0 |    0 |
-| `complex_pow` |    0 |    0 |    0 |
-| `complex_sqrt` |    0 |    0 |    0 |
 | `conformal_jacobian` |    0 |    0 |    0 |
 | `cosine_warmup_lr` |    1 |    0 |    1 |
 | `cross_ratio` |    0 |    0 |    0 |
@@ -104,8 +98,14 @@ These **166** ops have at most one test reference across the whole test surface.
 | `dz` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_sample` |    0 |    0 |    0 |
 | `ebm_bivector_langevin_step` |    0 |    0 |    0 |
+| `ebm_decode_init` |    0 |    0 |    0 |
+| `ebm_energy` |    0 |    0 |    0 |
+| `ebm_langevin_step` |    0 |    0 |    0 |
+| `ebm_partition_ais` |    0 |    0 |    0 |
+| `ebm_partition_exact` |    0 |    0 |    0 |
+| `ebm_partition_monte_carlo` |    0 |    0 |    0 |
 
-_(106 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(90 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 
 ## Headline
 
-**166** ops have ≤1 direct test reference.  They break down as:
+**150** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   55 | Tested via a parent op or family wrapper |
-| `structural_only`        |  105 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   47 | Tested via a parent op or family wrapper |
+| `structural_only`        |   97 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -147,7 +147,7 @@ These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested 
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 55 ops
+## `covered_by_family` — 47 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -167,11 +167,6 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `clifford_reverse` | category default for 'geometric_algebra' |
 | `clifford_vec_deriv` | category default for 'geometric_algebra' |
 | `clifford_wedge` | category default for 'geometric_algebra' |
-| `complex_arg` | category default for 'elementwise' |
-| `complex_div` | category default for 'elementwise' |
-| `complex_log` | category default for 'elementwise' |
-| `complex_pow` | category default for 'elementwise' |
-| `complex_sqrt` | category default for 'elementwise' |
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
 | `cross_ratio` | category default for 'elementwise' |
 | `dbar` | exercised by complex differential tests |
@@ -179,14 +174,19 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `denoising_score_matching_loss` | category default for 'loss' |
 | `dz` | exercised by complex differential tests |
 | `ebm_decode_init` | scaffold for ebm decode tests |
-| `floor_div` | category default for 'elementwise' |
 | `implicit_score_matching_loss` | category default for 'loss' |
 | `is_concyclic` | category default for 'elementwise' |
-| `lgamma` | category default for 'elementwise' |
+| `mobius` | category default for 'elementwise' |
+| `mobius_from_three_points` | category default for 'elementwise' |
+| `persistent_cd_loss` | category default for 'loss' |
+| `rng_bernoulli` | category default for 'rng' |
+| `rng_beta` | category default for 'rng' |
+| `rng_categorical` | category default for 'rng' |
+| `rng_clone` | category default for 'rng' |
 
-_(25 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+_(17 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
 
-## `structural_only` — 105 ops
+## `structural_only` — 97 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -199,7 +199,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `axis_index` | category default for 'transform' |
 | `axis_name` | category default for 'transform' |
 | `axis_size` | category default for 'transform' |
-| `broadcast` | unclassified — defaults to structural_only |
 | `calibration_observer` | stateful observer; tested via fake_quantize loop |
 | `centralize_grad` | category default for 'grad_transform' |
 | `chained_schedule` | category default for 'schedule' |
@@ -222,5 +221,6 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_prefetch` | category default for 'data' |
 | `dataset_repeat` | category default for 'data' |
 | `dataset_shuffle` | category default for 'data' |
+| `dataset_zip` | category default for 'data' |
 
-_(75 additional structural ops omitted.)_
+_(67 additional structural ops omitted.)_

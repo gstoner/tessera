@@ -51,6 +51,8 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMLuKernelPass(); });
   registerPass([]() { return createGenerateROCMQrKernelPass(); });
   registerPass([]() { return createGenerateROCMSvdKernelPass(); });
+  registerPass([]() { return createGenerateROCMOptimizerKernelPass(); });
+  registerPass([]() { return createGenerateROCMPredicateKernelPass(); });
   registerPass([]() { return createGenerateROCMMoeKernelPass(); });
   registerPass([]() { return createGenerateROCMAlibiKernelPass(); });
   registerPass([]() { return createGenerateROCMDeltaNetKernelPass(); });
@@ -66,6 +68,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMLogicalKernelPass(); });
   registerPass([]() { return createGenerateROCMBitwiseKernelPass(); });
   registerPass([]() { return createGenerateROCMWhereKernelPass(); });
+  registerPass([]() { return createGenerateROCMPhiloxKernelPass(); });
   registerPass([]() { return createLowerROCMAsyncCopyToLoopPass(); });
   PassPipelineRegistration<> pipeline(
       "tessera-rocm-backend",

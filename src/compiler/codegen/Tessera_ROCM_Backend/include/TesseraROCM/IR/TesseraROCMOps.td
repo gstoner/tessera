@@ -501,6 +501,31 @@ def ROCM_MoeKernelOp : TesseraROCM_Op<"moe"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
+  let summary = "Unary predicate (isnan/isinf/isfinite) gpu kernel";
+  let description = [{
+    `generate-rocm-predicate-kernel` expands into a flat per-element unary
+    predicate over f32 input with i8 (0/1) bool output; the `kind` StrAttr selects
+    isnan (x!=x) / isinf (|x|==inf) / isfinite (ordered & |x|<inf). One thread per
+    element. CPU analog: avx512_predicate_f32.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_OptimizerKernelOp : TesseraROCM_Op<"optimizer"> {
+  let summary = "Fused per-parameter optimizer-step gpu kernel";
+  let description = [{
+    `generate-rocm-optimizer-kernel` expands into a fused per-parameter update
+    (one thread per element); the `kind` StrAttr selects sgd/momentum/adam/adamw/
+    lion at codegen. p/g/m/v in, p_out/m_out/v_out out; lr/β1/β2/eps/wd + the
+    host-computed bias-correction scalars (b1c,b2c) are f32 args. sqrt via
+    math→ROCDL. All f32. CPU analog: avx512_optimizer_f32.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
   let summary = "ALiBi positional-bias generator kernel";
   let description = [{
@@ -796,6 +821,22 @@ def ROCM_WhereKernelOp : TesseraROCM_Op<"where"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
+  let summary = "Counter-based Philox-4x32-10 uniform RNG kernel";
+  let description = [{
+    The directive `generate-rocm-philox-kernel` expands into a flat counter-based
+    RNG gpu kernel: one thread per counter block `b` writes 4 uniform-f32 in
+    [0,1) to `out[4b..4b+3]` from Philox-4x32-10 (Salmon et al. 2011 — the
+    JAX / cuRAND algorithm) keyed by `(seed_lo, seed_hi)` with counter
+    `(cbase+b, 0, 0, 0)`. Bit-identical to the x86 kernel + the
+    `tessera.rng_device` numpy reference. Args:
+    `(out : memref<?xf32>, N : index, seed_lo i32, seed_hi i32,
+      cbase_lo i32, cbase_hi i32)`.
+  }];
+  let arguments = (ins StrAttr:$name);
   let assemblyFormat = "attr-dict";
 }
 

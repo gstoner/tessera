@@ -166,6 +166,25 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "direct-intrinsic subset sub/div/maximum/minimum "
                             "(NaN-propagating max/min), 16 f32 lanes/__m512. `pow` "
                             "is transcendental → numpy-reference. f32 only",
+    "x86_predicate_compiled": "x86 CPU unary predicate (isnan / isinf / "
+                            "isfinite) — the hand-written AVX-512 kernel "
+                            "(tessera_x86_avx512_predicate_f32; mask -> 0/1 "
+                            "bytes), runtime-loaded. f32 in, bool out",
+    "x86_complex_compiled": "x86 CPU complex arithmetic (9 pointwise ops) — "
+                            "interleaved-f32 composed on AVX-512 transcendental/"
+                            "unary/binary/atan2 kernels. f32",
+    "x86_clamp_compiled": "x86 CPU clamp / clip — min(max(x, lo), hi) composed on "
+                            "the AVX-512 binary max/min kernel (either bound "
+                            "optional; scalar bounds broadcast on host). f32",
+    "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
+                            "uniform kernel + host transform (uniform/normal/"
+                            "dropout). f32",
+    "x86_softcap_compiled": "x86 CPU softcap — cap*tanh(x/cap) composed on the "
+                            "AVX-512 transcendental tanh kernel (scalar cap "
+                            "broadcast on host). f32",
+    "x86_atan2_compiled": "x86 CPU atan2 — quadrant-aware atan2(y, x) composed "
+                            "on the AVX-512 transcendental atan kernel "
+                            "(sign/quadrant on host). f32",
     "x86_compare_compiled": "x86 CPU flat 2-operand elementwise comparison — the "
                             "hand-written AVX-512 kernel (tessera_x86_avx512_"
                             "compare_f32) the Python runtime ctypes-loads from "
@@ -209,6 +228,27 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "it — the S2 binary-arithmetic family (sub/div/pow/"
                             "maximum/minimum), one thread per element, dispatched "
                             "by op name; f32/f16/bf16 storage, f32 compute",
+    "rocm_predicate_compiled": "AMD GPU RDNA unary predicate (isnan / isinf / "
+                            "isfinite) kernel the Tessera compiler GENERATES "
+                            "(generate-rocm-predicate-kernel, kind StrAttr → ROCDL "
+                            "→ hsaco), then HIP launches — one thread per element. "
+                            "f32 in, i8/bool out",
+    "rocm_complex_compiled": "AMD GPU RDNA complex arithmetic (9 pointwise ops) "
+                            "— interleaved-f32 composed on gfx1151 unary/binary/"
+                            "atan2 kernels. f32",
+    "rocm_clamp_compiled": "AMD GPU RDNA clamp / clip — min(max(x, lo), hi) "
+                            "composed on the rocm_binary_compiled max/min kernel "
+                            "(either bound optional; scalar bounds broadcast on "
+                            "host). f32",
+    "rocm_rng_compiled": "AMD GPU RDNA device RNG — COMPILER-GENERATED gfx1151 "
+                            "Philox-4x32-10 uniform kernel + host transform "
+                            "(uniform/normal/dropout). f32",
+    "rocm_softcap_compiled": "AMD GPU RDNA softcap — cap*tanh(x/cap) composed on "
+                            "the rocm_unary_compiled tanh kernel (scalar cap "
+                            "broadcast on host). f32",
+    "rocm_atan2_compiled": "AMD GPU RDNA atan2 — quadrant-aware atan2(y, x) "
+                            "composed on the rocm_unary_compiled atan kernel "
+                            "(sign/quadrant on host). f32",
     "rocm_compare_compiled": "AMD GPU RDNA flat 2-operand elementwise comparison "
                             "kernel the Tessera compiler GENERATES (generate-rocm-"
                             "compare-kernel -> ROCDL -> hsaco, in-process via "
@@ -292,6 +332,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_moe_compiled": "x86 CPU mixture-of-experts compute (moe) — AVX-512 "
                             "routed per-token expert GEMV kernel (top-1; routing "
                             "resolved on host, out_dim vectorized). f32",
+    "x86_optimizer_compiled": "x86 CPU optimizer steps (sgd / momentum / adam / "
+                            "adamw / lion) — AVX-512 fused per-parameter update "
+                            "kernel (kind-selected; m/v state in-place; host "
+                            "computes the 1-β^t bias correction). f32",
+    "x86_normcompose_compiled": "x86 CPU group/instance/weight norm — composed "
+                            "on the AVX-512 layer_norm + reduce kernels (host "
+                            "reshape/divide). f32",
+    "x86_lamb_compiled": "x86 CPU LAMB — AVX-512 adam kernel (lr=1/wd=0) + host "
+                            "per-tensor trust ratio ‖p‖/‖update‖. f32",
+    "x86_muon_compiled": "x86 CPU Muon — AVX-512 SVD U·Vh orthogonalization of "
+                            "the momentum matrix + host U@Vh/sgd. f32",
     "x86_selective_ssm_compiled": "x86 CPU Mamba2 selective_ssm — AVX-512 fused "
                             "selective-scan kernel (single pass over S, "
                             "vectorized over the state dim N, exp via the Cephes "
@@ -400,11 +451,25 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "wise CSR SpMM, sampled dense-dense SDDMM that skips "
                             "masked-zero entries) then HIP-launched; bsmm via the "
                             "WMMA matmul (bf16). f32",
+    "rocm_optimizer_compiled": "AMD GPU RDNA optimizer steps (sgd / momentum / "
+                            "adam / adamw / lion) — COMPILER-GENERATED gfx1151 "
+                            "fused per-parameter update kernel (generate-rocm-"
+                            "optimizer-kernel, kind StrAttr-selected; host "
+                            "computes the 1-β^t bias correction). f32",
+    "rocm_lamb_compiled": "AMD GPU RDNA LAMB — COMPILER-GENERATED gfx1151 adam "
+                            "kernel (lr=1/wd=0) + host per-tensor trust ratio "
+                            "‖p‖/‖update‖. f32",
+    "rocm_muon_compiled": "AMD GPU RDNA Muon — gfx1151 SVD U·Vh "
+                            "orthogonalization of the momentum matrix + host "
+                            "U@Vh/sgd. f32",
     "rocm_moe_compiled": "AMD GPU RDNA mixture-of-experts compute (moe) — "
                             "COMPILER-GENERATED gfx1151 kernel (generate-rocm-moe-"
                             "kernel: routed per-token expert GEMV, one thread per "
                             "(token, out-col); routing resolved on host) HIP-"
                             "launched. f32",
+    "rocm_normcompose_compiled": "AMD GPU RDNA group/instance/weight norm — "
+                            "composed on the gfx1151 layer_norm + reduce kernels "
+                            "(host reshape/divide). f32",
     "rocm_selective_ssm_compiled": "AMD GPU RDNA Mamba2 selective_ssm — COMPILER-"
                             "GENERATED gfx1151 selective-scan kernel (generate-"
                             "rocm-selective-ssm-kernel, one thread per (b,d) "
@@ -682,6 +747,42 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "resolved on host, the expert matmuls vectorized over out_dim. "
                "f32, matches numpy.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_optimizer_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_optimizer_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_optimizer_compiled", runtime_status="success",
+        reason="x86 optimizer lane runs sgd / momentum / adam / adamw / lion as a "
+               "fused per-parameter update on the AVX-512 kernel (kind-selected; "
+               "m/v state updated in place; the 1-β^t bias correction computed on "
+               "host from the step). f32, matches the optim.py reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_normcompose_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_normcompose_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_normcompose_compiled", runtime_status="success",
+        reason="x86 group/instance/weight-norm lane composed on the AVX-512 "
+               "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
+               "host does the reshape / per-axis divide. f32, matches "
+               "nn.functional.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_lamb_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_lamb_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_lamb_compiled", runtime_status="success",
+        reason="x86 LAMB lane runs the AVX-512 adam kernel (lr=1/wd=0) then "
+               "applies the per-tensor trust ratio ‖p‖/‖update‖ on host (the "
+               "reduction the elementwise lane can't do). f32, matches "
+               "optim.lamb.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_muon_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_muon_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_muon_compiled", runtime_status="success",
+        reason="x86 Muon lane orthogonalizes the momentum matrix via the "
+               "AVX-512 one-sided-Jacobi SVD kernel (U·Vh polar factor); the "
+               "small U@Vh + momentum/sgd run on host. <2-D params normalize. "
+               "f32, matches optim.muon.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_selective_ssm_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_selective_ssm_compiled",
         execution_kind="native_cpu", executable=True,
@@ -835,6 +936,58 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "libtessera_x86_elementwise.so and calls "
                "tessera_x86_avx512_binary_f32. `pow` stays numpy-reference. "
                "f32 only.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_clamp_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_clamp_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_clamp_compiled", runtime_status="success",
+        reason="x86 clamp lane runs clamp / clip as min(max(x, lo), hi) composed "
+               "on the AVX-512 binary max/min kernel (either bound optional; the "
+               "scalar bounds are broadcast on host). f32, matches np.clip.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_complex_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_complex_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_complex_compiled", runtime_status="success",
+        reason="x86 complex-arithmetic lane (9 pointwise ops) over "
+               "interleaved-f32 [...,2] composed on the AVX-512 transcendental / "
+               "unary / binary / atan2 kernels; host packs the interleave. f32, "
+               "matches tessera.complex.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_softcap_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_softcap_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_softcap_compiled", runtime_status="success",
+        reason="x86 softcap lane runs cap*tanh(x/cap) composed on the AVX-512 "
+               "transcendental tanh kernel (scalar cap broadcast on host). "
+               "f32, matches cap*tanh(x/cap).",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_rng_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_rng_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_rng_compiled", runtime_status="success",
+        reason="x86 RNG lane runs counter-based Philox-4x32-10 on the AVX-512 "
+               "kernel for the uniform bits; host applies the distribution "
+               "transform (uniform scale / Box-Muller normal / dropout mask). "
+               "f32, bit-exact vs tessera.rng_device.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_atan2_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_atan2_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_atan2_compiled", runtime_status="success",
+        reason="x86 atan2 lane runs quadrant-aware atan2(y, x) composed on the "
+               "AVX-512 transcendental atan kernel (sign/quadrant logic on "
+               "host). f32, matches np.arctan2.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_predicate_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_predicate_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_predicate_compiled", runtime_status="success",
+        reason="x86 predicate artifact runs the hand-written AVX-512 unary "
+               "predicate kernel (isnan = x!=x, isinf = |x|==inf, isfinite = "
+               "ordered & |x|<inf; mask -> 0/1 bytes): the Python runtime "
+               "ctypes-loads libtessera_x86_elementwise.so and calls "
+               "tessera_x86_avx512_predicate_f32. f32 in, bool out.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_compare_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_compare_compiled",
@@ -1034,6 +1187,58 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Dispatched by op name.",
         execution_mode="hip_runtime"),
     # Comparison eq/ne/lt/le/gt/ge — flat 2-operand elementwise, bool output.
+    ("rocm", "rocm_clamp_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_clamp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_clamp_compiled", runtime_status="success",
+        reason="ROCm clamp lane runs clamp / clip as min(max(x, lo), hi) composed "
+               "on the COMPILER-GENERATED gfx1151 binary max/min kernel (either "
+               "bound optional; scalar bounds broadcast on host). f32, matches "
+               "np.clip.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_complex_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_complex_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_complex_compiled", runtime_status="success",
+        reason="ROCm complex-arithmetic lane (9 pointwise ops) over "
+               "interleaved-f32 [...,2] composed on the gfx1151 unary / binary / "
+               "atan2 kernels; host packs the interleave. f32, matches "
+               "tessera.complex.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_softcap_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_softcap_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_softcap_compiled", runtime_status="success",
+        reason="ROCm softcap lane runs cap*tanh(x/cap) composed on the "
+               "COMPILER-GENERATED gfx1151 unary tanh kernel (scalar cap "
+               "broadcast on host). f32, matches cap*tanh(x/cap).",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_rng_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_rng_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_rng_compiled", runtime_status="success",
+        reason="ROCm RNG lane runs counter-based Philox-4x32-10 on the "
+               "COMPILER-GENERATED gfx1151 kernel (generate-rocm-philox-kernel) "
+               "for the uniform bits; host applies the distribution transform. "
+               "f32, bit-exact vs tessera.rng_device.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_atan2_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_atan2_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_atan2_compiled", runtime_status="success",
+        reason="ROCm atan2 lane runs quadrant-aware atan2(y, x) composed on the "
+               "COMPILER-GENERATED gfx1151 unary atan kernel (sign/quadrant "
+               "logic on host). f32, matches np.arctan2.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_predicate_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_predicate_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_predicate_compiled", runtime_status="success",
+        reason="ROCm predicate artifact runs the COMPILER-GENERATED unary "
+               "predicate kernel (isnan/isinf/isfinite, kind StrAttr-selected, one "
+               "thread per element): tessera-opt generates generate-rocm-predicate-"
+               "kernel -> ROCDL -> hsaco, then HIP launches it. f32 in, bool out.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_compare_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_compare_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1108,6 +1313,33 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
                "the WMMA matmul (bf16). f32, matches numpy.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_optimizer_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_optimizer_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_optimizer_compiled", runtime_status="success",
+        reason="ROCm optimizer lane runs sgd / momentum / adam / adamw / lion as "
+               "a fused per-parameter update on the COMPILER-GENERATED gfx1151 "
+               "kernel (generate-rocm-optimizer-kernel, kind StrAttr-selected, "
+               "one thread per element; the 1-β^t bias correction computed on "
+               "host) HIP-launched. f32, matches the optim.py reference.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_lamb_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_lamb_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_lamb_compiled", runtime_status="success",
+        reason="ROCm LAMB lane runs the COMPILER-GENERATED gfx1151 adam kernel "
+               "(lr=1/wd=0) then applies the per-tensor trust ratio "
+               "‖p‖/‖update‖ on host. f32, matches optim.lamb.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_muon_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_muon_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_muon_compiled", runtime_status="success",
+        reason="ROCm Muon lane orthogonalizes the momentum matrix via the "
+               "gfx1151 SVD kernel (U·Vh polar factor); the small U@Vh + "
+               "momentum/sgd run on host. <2-D params normalize. f32, matches "
+               "optim.muon.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_moe_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_moe_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1116,6 +1348,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "(top-1) on the COMPILER-GENERATED gfx1151 kernel (generate-rocm-"
                "moe-kernel: one thread per (token, out-col); routing resolved on "
                "host) HIP-launched. f32, matches numpy.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_normcompose_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_normcompose_compiled", runtime_status="success",
+        reason="ROCm group/instance/weight-norm lane composed on the gfx1151 "
+               "layer_norm (row mean/var) + reduce (sum-of-squares) kernels; "
+               "host does the reshape / per-axis divide. f32, matches "
+               "nn.functional.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_selective_ssm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_selective_ssm_compiled",

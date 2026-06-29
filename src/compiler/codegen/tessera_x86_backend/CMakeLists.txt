@@ -25,6 +25,7 @@ if (TESSERA_ENABLE_AVX512)
   try_add_flag("-mavx512vl" HAS_AVX512VL)
   try_add_flag("-mavx512vnni" HAS_AVX512VNNI)
   try_add_flag("-mavx512bf16" HAS_AVX512BF16)
+  try_add_flag("-mavx512vpopcntdq" HAS_AVX512VPOPCNTDQ)  # popcount lane
 endif()
 
 if (TESSERA_ENABLE_AMX)
@@ -48,6 +49,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_scan_f32.cpp
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
+  src/kernels/avx512_philox_f32.cpp
   src/kernels/avx512_transcendental_f32.cpp
   src/kernels/avx512_norm_f32.cpp
   src/kernels/avx512_gemm_f32.cpp
@@ -62,6 +64,8 @@ add_library(tessera_x86_backend
   src/kernels/avx512_lu_qr_f32.cpp
   src/kernels/avx512_svd_f32.cpp
   src/kernels/avx512_moe_f32.cpp
+  src/kernels/avx512_optimizer_f32.cpp
+  src/kernels/avx512_predicate_f32.cpp
   src/kernels/epilogue.cpp
   src/runtime/amx_runtime.cpp
 )
@@ -148,6 +152,7 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_scan_f32.cpp
   src/kernels/avx512_argreduce_f32.cpp
   src/kernels/avx512_where_f32.cpp
+  src/kernels/avx512_philox_f32.cpp
   src/kernels/avx512_transcendental_f32.cpp
   src/kernels/avx512_norm_f32.cpp
   src/kernels/avx512_gemm_f32.cpp
@@ -162,4 +167,6 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_lu_qr_f32.cpp
   src/kernels/avx512_svd_f32.cpp
   src/kernels/avx512_moe_f32.cpp
+  src/kernels/avx512_optimizer_f32.cpp
+  src/kernels/avx512_predicate_f32.cpp
 )

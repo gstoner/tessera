@@ -32,15 +32,21 @@ func.func @if_lower(%flag: tensor<1xf32>, %x: tensor<1x8xf32>)
 func.func private @wb(%c: tensor<1x4xf32>) -> tensor<1x4xf32>
 func.func private @wc(%c: tensor<1x4xf32>) -> tensor<1xf32>
 
-// State is (counter : index, carry); the before region gates on
-// `(i < max_iters) AND (cond(carry)[0] > 0)`; the after region runs the body and
-// increments. The op result is the final carry (while result #1).
+// State is (counter : index, carry); the before region SHORT-CIRCUITS the
+// bound — it checks `i < max_iters` first and only calls @cond inside the
+// then-branch of an scf.if, so @cond is never evaluated at i == max_iters. The
+// after region runs the body and increments. Op result is the carry (#1).
 // CHECK-LABEL: func.func @while_lower
 // CHECK:       %[[W:.*]]:2 = scf.while (%[[I:.*]] = %{{.*}}, %[[C:.*]] = %{{.*}}) : (index, tensor<1x4xf32>) -> (index, tensor<1x4xf32>)
-// CHECK:         func.call @wc(%[[C]])
-// CHECK:         %[[P:.*]] = arith.cmpf ogt
 // CHECK:         %[[LT:.*]] = arith.cmpi ult, %[[I]], %{{.*}}
-// CHECK:         %[[CONT:.*]] = arith.andi %[[P]], %[[LT]]
+// CHECK:         %[[CONT:.*]] = scf.if %[[LT]] -> (i1) {
+// CHECK:           func.call @wc(%[[C]])
+// CHECK:           arith.cmpf ogt
+// CHECK:           scf.yield %{{.*}} : i1
+// CHECK:         } else {
+// CHECK:           %[[F:.*]] = arith.constant false
+// CHECK:           scf.yield %[[F]] : i1
+// CHECK:         }
 // CHECK:         scf.condition(%[[CONT]]) %[[I]], %[[C]]
 // CHECK:       } do {
 // CHECK:         func.call @wb(%{{.*}})

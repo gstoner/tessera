@@ -234,8 +234,11 @@ claim.
 - **CF2b/CF2c** *(done)* — `control_if` → `scf.if` (flag `[0] > 0` via
   `tensor.extract` + `arith.cmpf`; branches kept as `func.call`s over the
   non-flag operands) and `control_while` → **bounded** `scf.while` (loop state
-  `(counter : index, carry)`; the `before` region gates on `(i < max_iters) AND
-  (cond(carry)[0] > 0)`, the `after` region runs the body + increments). Same
+  `(counter : index, carry)`; the `before` region checks `i < max_iters` first
+  and **short-circuits** — `cond(carry)` is evaluated only inside the
+  then-branch of an `scf.if`, so an always-true condition runs at most
+  `max_iters` times and never at `i == max_iters`; the `after` region runs the
+  body + increments). Same
   payload-skip discipline as `control_for`. All three lower through the named
   `tessera-lower-to-{x86,gpu}` / CUDA13 pipelines before the guard.
 - **CF3/CF4** — decode the executable-payload body into real `scf` region ops,

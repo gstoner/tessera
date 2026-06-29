@@ -323,13 +323,30 @@ struct LowerControlFlowToSCF
       b.setInsertionPointToStart(before);
       Value i = before->getArgument(0);
       Value c = before->getArgument(1);
-      auto condCall = func::CallOp::create(b, loc, condSym.getValue(),
-                                           TypeRange{predTy}, ValueRange{c});
-      Value p = extractPredicateI1(b, loc, condCall.getResult(0));
       Value within = arith::CmpIOp::create(b, loc, arith::CmpIPredicate::ult, i,
                                            maxV);
-      Value cont = arith::AndIOp::create(b, loc, p, within);
-      scf::ConditionOp::create(b, loc, cont, ValueRange{i, c});
+      Type i1Ty = b.getI1Type();
+      // SHORT-CIRCUIT the bound: only evaluate @cond when still within
+      // max_iters, so an always-true condition is invoked at most max_iters
+      // times (never the extra time at i == max_iters). arith.andi is eager, so
+      // the bound check must gate the @cond call via an scf.if, not an &&.
+      auto contIf = scf::IfOp::create(b, loc, TypeRange{i1Ty}, within,
+                                      /*withElseRegion=*/true);
+      {
+        OpBuilder::InsertionGuard g2(b);
+        b.setInsertionPointToStart(contIf.thenBlock());
+        auto condCall = func::CallOp::create(b, loc, condSym.getValue(),
+                                             TypeRange{predTy}, ValueRange{c});
+        Value p = extractPredicateI1(b, loc, condCall.getResult(0));
+        scf::YieldOp::create(b, loc, ValueRange{p});
+      }
+      {
+        OpBuilder::InsertionGuard g2(b);
+        b.setInsertionPointToStart(contIf.elseBlock());
+        Value f = arith::ConstantOp::create(b, loc, b.getBoolAttr(false));
+        scf::YieldOp::create(b, loc, ValueRange{f});
+      }
+      scf::ConditionOp::create(b, loc, contIf.getResult(0), ValueRange{i, c});
     }
     {
       OpBuilder::InsertionGuard g(b);

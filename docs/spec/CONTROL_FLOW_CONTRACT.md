@@ -1,3 +1,10 @@
+---
+status: Normative (CF0 slice)
+classification: Spec
+authority: CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md CF0
+last_updated: 2026-06-29
+---
+
 # Control-Flow Contract (CF0)
 
 > **Status:** CF0 of `docs/audit/roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md`.

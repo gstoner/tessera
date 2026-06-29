@@ -18,6 +18,9 @@ add_library(TesseraPasses
   # (docs/spec/PRODUCTION_COMPILER_PLAN.md).
   TesseraToLinalgPass.cpp
 
+  # CF0 — control-flow target guard (CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN)
+  ControlFlowTargetGuardPass.cpp
+
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp
 

@@ -265,6 +265,17 @@ std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 // tessera.binding). Registered standalone as `--tessera-ir-contracts`.
 std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
 
+// ── CF0 — ControlFlowTargetGuardPass ─────────────────────────────────────
+// Rejects tessera.control_{for,if,while,scan} on any backend without a
+// control-flow lowering (everything but apple_gpu today) with a stable
+// CONTROL_FLOW_UNSUPPORTED_ON_TARGET diagnostic (Decision #21). `target` names
+// the backend in the message only. Wired into the non-Apple lowering pipelines;
+// CF3/CF4 replace it with executable CUDA/ROCm control-flow kernels. See
+// docs/spec/CONTROL_FLOW_CONTRACT.md §5. Standalone:
+// `--tessera-control-flow-target-guard=target=<name>`.
+std::unique_ptr<mlir::Pass>
+createControlFlowTargetGuardPass(llvm::StringRef target = "this backend");
+
 // ── 2026-06-23 — TileBarrierReuseLegalityPass (C2, TIRx review) ──────────
 // "Barriers are a layout-reuse correctness property." For a buffer carrying the
 // C1 #tile.layout attribute, two writes to overlapping storage-axis (m/tlane/

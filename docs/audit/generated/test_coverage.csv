@@ -205,7 +205,7 @@ gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 huber_loss,8,0,0,8,0,f32,directly_tested,8 direct test references
 hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
 ifft,6,0,0,6,0,fp32,directly_tested,6 direct test references
-image_normalize,4,0,1,4,0,,directly_tested,4 direct test references
+image_normalize,6,0,1,6,0,,directly_tested,6 direct test references
 image_resize,6,0,1,6,0,,directly_tested,6 direct test references
 implicit_score_matching_loss,2,0,0,2,0,,directly_tested,2 direct test references
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

@@ -981,6 +981,22 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     # spatial axes the rule is "shard with halo width = kernel-1"
     # which is the same halo machinery stencils use.  4 entries.
     "pooling":             "complete",
+    # vision (P14, 2026-06-29): VLM preprocessing (resize / crop / normalize /
+    # interpolate) is batch-parallel — every op acts per-image, so a partition
+    # spec on the batch axis N shards trivially (no cross-shard reduction); a
+    # spec on the channel axis is preserved by per-channel normalize/affine.
+    # Spatial resampling is local within each shard.  4 entries.
+    "vision":              "complete",
+    # diffusion (P14, 2026-06-29): the EDM σ-conditioning ops (edm_loss_weight
+    # w(σ), edm_precondition c_skip/c_out/c_in/c_noise) are elementwise in σ, so
+    # any partition spec is preserved with no cross-shard reduction.  2 entries.
+    "diffusion":           "complete",
+    # diffusion_schedule (P14, 2026-06-29): the schedule GENERATORS
+    # (karras_sigma_schedule, equiprob_band_partition) produce a deterministic
+    # 1-D schedule from scalar config — there is no sharded input tensor to
+    # propagate a partition spec through (the schedule is replicated on every
+    # rank), so sharding is not_applicable.  2 entries.
+    "diffusion_schedule":  "not_applicable",
 
     # tensor_algebra (Sprint #12, 2026-05-22): promoted to complete.
     # Every layout-shape op (reshape, permute, broadcast, cat, stack,
@@ -1140,6 +1156,13 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     "pooling":             "complete",
     "stencil":             "complete",   # spatial dims independent across batch
     "vision":              "complete",   # VLM preprocessing — batch over N
+    # diffusion (P14): EDM σ-conditioning is elementwise — the mapped axis is
+    # broadcast-preserved, identical to the elementwise batching rule.
+    "diffusion":           "complete",
+    # diffusion_schedule (P14): the schedule generators produce a deterministic
+    # 1-D schedule from scalar config — there is no data tensor with a mapped
+    # axis to vmap over, so batching is not_applicable.
+    "diffusion_schedule":  "not_applicable",
     "sort":                "complete",   # sort along inner axis, batch outer
     "grad_transform":      "complete",   # per-parameter
     # — Trickier: state interactions / routing / control flow —
@@ -1341,6 +1364,14 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # resample-transpose (resize/interpolate), zero-pad (center_crop), 1/std
     # scale (image_normalize) — so the transpose rule is defined.
     "vision":              "complete",
+    # diffusion (transpose, P14): the EDM σ-conditioning ops are smooth
+    # elementwise functions of σ — like the elementwise category, the autodiff
+    # transpose rule is defined (linear in the cotangent per element).
+    "diffusion":           "complete",
+    # diffusion_schedule (transpose, P14): the schedule generators map scalar
+    # config to a deterministic discretization — there is no linear primal to
+    # transpose (the σ grid is a non-differentiable schedule).  N/A.
+    "diffusion_schedule":  "not_applicable",
     # pooling (transpose, 2026-06-02): max/min/adaptive pool are nonlinear
     # (they select an argmax/argmin element), so the category default is
     # N/A — their backward is the registered VJP (unpool-with-indices),

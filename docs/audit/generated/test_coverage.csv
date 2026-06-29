@@ -154,14 +154,14 @@ ebm_bivector_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs r
 ebm_bivector_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_decode_init,0,0,0,0,1,,covered_by_family,scaffold for ebm decode tests
 ebm_energy,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_energy_quadratic,4,0,0,4,0,,directly_tested,4 direct test references
-ebm_inner_step,3,0,0,3,0,,directly_tested,3 direct test references
+ebm_energy_quadratic,9,0,0,9,0,,directly_tested,9 direct test references
+ebm_inner_step,5,0,0,5,0,,directly_tested,5 direct test references
 ebm_langevin_step,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_ais,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_exact,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 ebm_partition_monte_carlo,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-ebm_refinement,3,0,0,3,0,,directly_tested,3 direct test references
-ebm_self_verify,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
+ebm_refinement,6,0,0,6,0,,directly_tested,6 direct test references
+ebm_self_verify,6,0,0,6,0,,directly_tested,6 direct test references
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 edm_loss_weight,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only

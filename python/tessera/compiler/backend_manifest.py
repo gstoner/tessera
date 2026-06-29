@@ -1040,6 +1040,9 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "implicit_score_matching_loss", "contrastive_divergence_loss",
                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
                  "load_balance_loss")},
+    # (EBM energy/step-compute + Langevin ops route through ebm_manifest_for() —
+    # their compiled ROCm status is emitted there, not in this generic table,
+    # since manifest_for() returns via ebm_manifest_for for every ebm_* name.)
     # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
     # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
     **{op: {
@@ -1682,6 +1685,13 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
                   "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
                   "load_balance_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_ebm_compute_compiled.py"
+       for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
+                  "ebm_self_verify")},
+    ("ebm_langevin_step", "x86"):
+        "tests/unit/test_x86_ebm_langevin_compiled.py",
+    ("ebm_langevin_step", "rocm"):
+        "tests/unit/test_rocm_ebm_langevin_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
@@ -1748,6 +1758,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
                   "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
                   "load_balance_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_ebm_compute_compiled.py"
+       for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
+                  "ebm_self_verify")},
     **{(op, "rocm"): "tests/unit/test_rocm_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
@@ -2504,6 +2517,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "implicit_score_matching_loss", "contrastive_divergence_loss",
                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
                  "load_balance_loss")},
+    # (EBM energy/step-compute + Langevin ops route through ebm_manifest_for() —
+    # their fused x86 status is emitted there, not in this generic table.)
     # Low-precision float quantization — quantize/dequantize fp8/fp6/fp4 on the
     # AVX-512 fpquant kernel (per-tensor symmetric grid-snap, fake-quant in f32
     # storage; x86_fpquant_compiled). The lane is f32 in/out (the fpN grid is
@@ -3237,15 +3252,38 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
 )
 
 
+# P7 follow-up — EBM ops with a native x86 + ROCm device lane: the energy /
+# step-compute ops (composed on the device binary + reduce lanes) and the
+# Langevin sampling step (on-device Philox noise). For these, x86 = fused and
+# ROCm = compiled (with the numerical fixture) instead of reference / Phase-H.
+# Routed through ebm_manifest_for (NOT the generic _X86_KERNELS / _ROCM_COMPILED
+# tables, which manifest_for never reaches for ebm_* names).
+_EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
+    "ebm_energy_quadratic": ("tests/unit/test_x86_ebm_compute_compiled.py",
+                             "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py",
+                       "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py",
+                       "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_self_verify": ("tests/unit/test_x86_ebm_compute_compiled.py",
+                        "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_langevin_step": ("tests/unit/test_x86_ebm_langevin_compiled.py",
+                          "tests/unit/test_rocm_ebm_langevin_compiled.py"),
+}
+
+
 def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for an ``ebm_*`` primitive.
 
     Status semantics:
       - ``x86`` + ``apple_cpu``: ``reference`` (Python implementation
-        in ``tessera.ebm.*`` runs on every CPU host).
+        in ``tessera.ebm.*`` runs on every CPU host), EXCEPT the P7
+        device-lane ops (``_EBM_DEVICE_COMPILED``) whose x86 slot is
+        ``fused`` (native AVX-512 compute / Langevin kernels).
       - ``apple_gpu``: ``fused`` for primitives in
         ``_EBM_APPLE_GPU_FUSED``; ``planned`` for everything else.
-      - ``nvidia_sm90`` + ``rocm``: ``planned`` (Phase G / H gating).
+      - ``nvidia_sm90``: ``planned`` (Phase G).  ``rocm``: ``compiled``
+        for the P7 device-lane ops, else ``planned`` (Phase H).
 
     The benchmark driver uses this to label each EBM row's backend
     column instead of carrying a row-local ``python_reference_only``
@@ -3254,15 +3292,29 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if op_name not in _EBM_PRIMITIVES:
         return []
     entries: list[BackendKernelEntry] = []
+    device = _EBM_DEVICE_COMPILED.get(op_name)
 
-    # CPU targets — Python reference path on every host.
-    entries.append(BackendKernelEntry(
-        target="x86",
-        status=_REFERENCE_STATUS,
-        dtypes=_EBM_CPU_DTYPES,
-        feature_flags=("ebm_namespace", "numpy_reference"),
-        notes="Python EBM reference (tessera.ebm.*)",
-    ))
+    # CPU targets — Python reference path on every host; the P7 device-lane ops
+    # carry a native AVX-512 x86 kernel (fused) instead.
+    if device is not None:
+        entries.append(BackendKernelEntry(
+            target="x86",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("ebm_namespace", "avx512"),
+            notes="AVX-512 EBM device lane — diff/square/reduce (compute) or "
+                  "Philox Box-Muller (langevin) on the runtime-loaded kernels "
+                  "(x86_ebm_compute_compiled / x86_ebm_langevin_compiled)",
+            execute_compare_fixture=device[0],
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="x86",
+            status=_REFERENCE_STATUS,
+            dtypes=_EBM_CPU_DTYPES,
+            feature_flags=("ebm_namespace", "numpy_reference"),
+            notes="Python EBM reference (tessera.ebm.*)",
+        ))
     entries.append(BackendKernelEntry(
         target="apple_cpu",
         status=_REFERENCE_STATUS,
@@ -3296,7 +3348,7 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
             ),
         ))
 
-    # NVIDIA / ROCm — both planned, gated on Phase G / H.
+    # NVIDIA — planned, gated on Phase G.
     entries.append(BackendKernelEntry(
         target="nvidia_sm90",
         status=_PLANNED_STATUS,
@@ -3304,13 +3356,28 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         feature_flags=("ebm_namespace",),
         notes="Gated on Phase G",
     ))
-    entries.append(BackendKernelEntry(
-        target="rocm",
-        status=_PLANNED_STATUS,
-        dtypes=_EBM_PLANNED_GPU_DTYPES,
-        feature_flags=("ebm_namespace",),
-        notes="Gated on Phase H",
-    ))
+    # ROCm — compiled device lane for the P7 ops, else planned (Phase H).
+    if device is not None:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_COMPILED_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("ebm_namespace", "hip_runtime"),
+            notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
+                  "reduce (compute) or Philox Box-Muller (langevin); executes "
+                  "via runtime.launch() (rocm_ebm_compute_compiled / "
+                  "rocm_ebm_langevin_compiled)",
+            execute_compare_fixture=device[1],
+            hipcc_version_min="7.2.4",
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_PLANNED_STATUS,
+            dtypes=_EBM_PLANNED_GPU_DTYPES,
+            feature_flags=("ebm_namespace",),
+            notes="Gated on Phase H",
+        ))
 
     return entries
 

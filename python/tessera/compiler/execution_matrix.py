@@ -343,6 +343,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "load_balance: diff/square + reductions on the "
                              "AVX-512 binary + reduce kernels, host structure. "
                              "f32",
+    "x86_ebm_compute_compiled": "x86 CPU EBM compute — energy_quadratic / "
+                                "inner_step / refinement / self_verify: "
+                                "diff/square/reduce on the AVX-512 binary + "
+                                "reduce kernels, scalar scale / argmin gather on "
+                                "the host. f32",
+    "x86_ebm_langevin_compiled": "x86 CPU EBM Langevin sampling — y − η·grad + "
+                                 "noise_scale·z with z drawn on-device from "
+                                 "Philox-4x32-10 Box-Muller (AVX-512 kernel). "
+                                 "f32",
     "x86_rl_loss_compiled": "x86 CPU RL policy loss — ppo / cispo / grpo core "
                             "surrogate on the AVX-512 policy-loss kernel "
                             "(tessera_x86_avx512_policy_loss_f32, ratio=exp(ln-"
@@ -547,6 +556,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "load_balance) — diff/square + reductions on the "
                             "gfx1151 binary + reduce kernels, host structure. "
                             "ROCm mirror of x86_ebm_loss. f32",
+    "rocm_ebm_compute_compiled": "AMD GPU RDNA EBM compute (energy_quadratic / "
+                            "inner_step / refinement / self_verify) — "
+                            "diff/square/reduce on the gfx1151 binary + reduce "
+                            "kernels, host structure. ROCm mirror of "
+                            "x86_ebm_compute. f32",
+    "rocm_ebm_langevin_compiled": "AMD GPU RDNA EBM Langevin sampling — y − "
+                            "η·grad + noise_scale·z with z drawn on-device from "
+                            "Philox-4x32-10 Box-Muller via the COMPILER-"
+                            "GENERATED gfx1151 kernel. f32",
     "rocm_fpquant_compiled": "AMD GPU RDNA low-precision float quantize "
                             "(quantize/dequantize fp8 / fp6 / fp4) — grid-snap on "
                             "generate-rocm-fpquant-kernel (log2/exp2/roundeven) + "
@@ -747,6 +765,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "reductions run on the AVX-512 binary + reduce kernels, the "
                "cheap structure (argmax/one-hot/scalar scale) on the host. f32, "
                "matches the numpy loss reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_ebm_compute_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_ebm_compute_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_ebm_compute_compiled", runtime_status="success",
+        reason="x86 EBM compute artifact runs energy_quadratic / inner_step / "
+               "refinement / self_verify: the diff/square and reductions run on "
+               "the AVX-512 binary + reduce kernels, the cheap structure (scalar "
+               "scale, argmin gather) on the host. f32, matches the numpy "
+               "tessera.ebm reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_ebm_langevin_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_ebm_langevin_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_ebm_langevin_compiled", runtime_status="success",
+        reason="x86 EBM Langevin sampling artifact runs y − η·grad + "
+               "noise_scale·z where z is Box-Muller Gaussian noise drawn "
+               "ON-DEVICE from counter-based Philox-4x32-10 (the AVX-512 "
+               "langevin kernel; counter (c0+i,…); the noise never round-trips "
+               "the host). f32, matches tessera.ebm.langevin_step_philox.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_rl_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rl_loss_compiled",
@@ -1593,6 +1631,26 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "ddpm_noise_pred / vlb / load_balance: the diff/square and "
                "reductions run on the gfx1151 binary + reduce kernels, the "
                "structure on the host. ROCm mirror of x86_ebm_loss. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_ebm_compute_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_ebm_compute_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_ebm_compute_compiled", runtime_status="success",
+        reason="ROCm EBM compute artifact runs energy_quadratic / inner_step / "
+               "refinement / self_verify: the diff/square and reductions run on "
+               "the gfx1151 binary + reduce kernels, the structure on the host. "
+               "ROCm mirror of x86_ebm_compute. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_ebm_langevin_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_ebm_langevin_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_ebm_langevin_compiled", runtime_status="success",
+        reason="ROCm EBM Langevin sampling artifact runs y − η·grad + "
+               "noise_scale·z where z is Box-Muller Gaussian noise drawn "
+               "ON-DEVICE from counter-based Philox-4x32-10 via the "
+               "COMPILER-GENERATED gfx1151 kernel "
+               "(generate-rocm-ebm-langevin-kernel). f32, matches "
+               "tessera.ebm.langevin_step_philox.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_fpquant_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_fpquant_compiled",

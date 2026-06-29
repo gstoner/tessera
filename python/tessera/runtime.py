@@ -5750,6 +5750,300 @@ def _execute_rocm_compiled_ebm_loss(artifact: RuntimeArtifact, args: Any) -> Any
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# EBM energy / gradient-step compute (P7 follow-up) — the tensor-clean
+# tessera.ebm_* graph ops: energy_quadratic (½‖x−y‖² per row), inner_step
+# (y − η·grad), refinement (y − T·η·grad), self_verify (argmin / soft-min over
+# K candidates). They COMPOSE on the device binary + reduce lanes (no new
+# kernel): the diff/square + reductions run on the AVX-512 / gfx1151 kernels,
+# the cheap structure (scalar scale, argmin gather) on the host. f32.
+# compiler_path="x86_ebm_compute_compiled" / "rocm_ebm_compute_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_EBM_COMPUTE_OPS = (
+    "tessera.ebm_energy_quadratic", "tessera.ebm_inner_step",
+    "tessera.ebm_refinement", "tessera.ebm_self_verify",
+)
+
+
+def _ebm_compute_compute(op_name: str, operands: list, kwargs: dict,
+                         target: str, np: Any) -> Any:
+    ops = [np.ascontiguousarray(o, np.float32) for o in operands]
+
+    def sub(a: Any, b: Any) -> Any:
+        return _creal("sub", target, np, a, b)
+
+    def mul(a: Any, b: Any) -> Any:
+        return _creal("mul", target, np, a, b)
+
+    if op_name == "tessera.ebm_energy_quadratic":   # ½·Σ_{>=1}(x−y)²
+        x, y = ops[0], ops[1]
+        if x.shape != y.shape:
+            raise ValueError(
+                f"ebm_energy_quadratic needs matching shapes; got {x.shape}, "
+                f"{y.shape}")
+        d = sub(x, y)
+        sq = mul(d, d)
+        if x.ndim <= 1:
+            return (np.float32(0.5) * np.asarray(sq, np.float32)).astype(
+                np.float32)
+        bdim = int(x.shape[0])
+        event = int(np.prod(x.shape[1:]))           # explicit trailing product
+        flat = np.ascontiguousarray(sq, np.float32).reshape(bdim, event)
+        if bdim == 0 or event == 0:
+            # Empty microbatch / zero-length event dims: the device reduce
+            # rejects empty axes, so match the numpy reference on the host
+            # (an empty batch -> (0,) energy; a zero-length event -> zeros).
+            s = flat.sum(axis=-1)
+        else:
+            s = _dev_reduce_axis(flat, "sum", -1, target, np)
+        return (np.float32(0.5) * s).astype(np.float32)
+
+    if op_name == "tessera.ebm_inner_step":         # y − η·grad
+        y, grad = ops[0], ops[1]
+        eta = float(kwargs.get("eta", 0.0))
+        scaled = (np.float32(eta) * grad).astype(np.float32)
+        return sub(y, scaled)
+
+    if op_name == "tessera.ebm_refinement":         # y0 − T·η·grad (closed form)
+        y0, grad = ops[0], ops[1]
+        eta = float(kwargs.get("eta", 0.0))
+        T = int(kwargs.get("T", kwargs.get("steps", 0)))
+        if T < 0:
+            raise ValueError(f"ebm_refinement requires T >= 0; got {T}")
+        if T == 0:
+            return np.ascontiguousarray(y0, np.float32)
+        scaled = (np.float32(T) * np.float32(eta) * grad).astype(np.float32)
+        return sub(y0, scaled)
+
+    if op_name == "tessera.ebm_self_verify":        # argmin / soft-min over K
+        energies, candidates = ops[0], ops[1]
+        if energies.ndim != 2:
+            raise ValueError(
+                f"ebm_self_verify needs energies (B, K); got {energies.shape}")
+        if candidates.shape[:2] != energies.shape:
+            raise ValueError(
+                "ebm_self_verify needs candidates.shape[:2] == energies.shape; "
+                f"got energies={energies.shape}, candidates={candidates.shape}")
+        beta = kwargs.get("beta")
+        bdim = int(energies.shape[0])
+        if beta is None:                            # hard argmin (indexing)
+            idx = np.argmin(energies, axis=1)
+            return np.ascontiguousarray(
+                candidates[np.arange(bdim), idx], np.float32)
+        beta = float(beta)
+        if beta <= 0.0:
+            raise ValueError(
+                f"ebm_self_verify soft-min requires beta > 0; got {beta}")
+        # softmax(−β·E) over K on the device exp + reduce lanes.
+        neg = (np.float32(-beta) * energies).astype(np.float32)
+        m = neg.max(axis=1, keepdims=True).astype(np.float32)
+        e = _creal("exp", target, np, sub(neg, np.broadcast_to(m, neg.shape)))
+        denom = _dev_reduce_axis(e, "sum", -1, target, np)[:, None]
+        w = (np.asarray(e, np.float32) / denom).astype(np.float32)
+        expand = (slice(None), slice(None)) + (None,) * (candidates.ndim - 2)
+        weighted = (candidates * w[expand]).astype(np.float32)
+        return np.ascontiguousarray(weighted.sum(axis=1), np.float32)
+
+    raise ValueError(f"ebm_compute executor: unknown op {op_name!r}")
+
+
+def _execute_ebm_compute(artifact: RuntimeArtifact, args: Any, target: str,
+                         path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _EBM_COMPUTE_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_EBM_COMPUTE_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _ebm_compute_compute(op_name, operands, ops[0].get("kwargs") or {},
+                                target, np)
+
+
+def _execute_x86_compiled_ebm_compute(artifact: RuntimeArtifact,
+                                      args: Any) -> Any:
+    """The ``target="x86"`` EBM energy / step-compute lane."""
+    return _execute_ebm_compute(artifact, args, "x86", "x86_ebm_compute_compiled")
+
+
+def _execute_rocm_compiled_ebm_compute(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="rocm"`` EBM energy / step-compute lane."""
+    return _execute_ebm_compute(artifact, args, "rocm",
+                                "rocm_ebm_compute_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EBM Langevin step with on-device Philox noise (P7 sampling) — the sampling
+# half of the EBM follow-up. out = y − η·grad + noise_scale·z where z is
+# Box-Muller Gaussian noise DRAWN ON-DEVICE from counter-based Philox-4x32-10
+# (the P6 generator), so the noise is never supplied from the host. Byte-for-
+# byte mirrors tessera.ebm.langevin_step_philox (counter (c0+i,c1,c2,c3); the
+# (x+0.5)·2⁻³² uniform map; first Box-Muller lobe). x86: the AVX-512 langevin
+# kernel; ROCm: the COMPILER-GENERATED kernel (generate-rocm-ebm-langevin-
+# kernel). compiler_path="x86_ebm_langevin_compiled" / "rocm_ebm_langevin_
+# compiled". f32, matches the numpy reference.
+# ─────────────────────────────────────────────────────────────────────────────
+_EBM_LANGEVIN_OPS = ("tessera.ebm.langevin_step",)
+
+
+def _ebm_langevin_params(kwargs: dict, np: Any) -> tuple:
+    """Extract (eta, noise_scale, k0, k1, c0, c1, c2, c3) from the op kwargs."""
+    eta = float(kwargs.get("eta", 0.0))
+    noise_scale = float(kwargs.get("noise_scale", 0.0))
+    if noise_scale < 0.0:
+        raise ValueError(
+            f"ebm langevin requires noise_scale >= 0; got {noise_scale}")
+    key = np.asarray(kwargs.get("key", (0, 0)), np.uint32).reshape(-1)
+    ctr = np.asarray(kwargs.get("counter", (0, 0, 0, 0)), np.uint32).reshape(-1)
+    if key.size < 2 or ctr.size < 4:
+        raise ValueError(
+            "ebm langevin requires key (2x u32) + counter (4x u32) kwargs")
+    return (eta, noise_scale, int(key[0]), int(key[1]),
+            int(ctr[0]), int(ctr[1]), int(ctr[2]), int(ctr[3]))
+
+
+def _x86_ebm_langevin(y: Any, grad: Any, eta: float, noise_scale: float,
+                      k0: int, k1: int, c0: int, c1: int, c2: int, c3: int,
+                      np: Any) -> Any:
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    fn = getattr(lib, "tessera_x86_ebm_langevin_philox_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_ebm_langevin_philox_f32 missing")
+    yc = np.ascontiguousarray(y, np.float32).reshape(-1)
+    gc = np.ascontiguousarray(grad, np.float32).reshape(-1)
+    out = np.zeros(yc.size, np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    u32 = ctypes.c_uint32
+    fn(yc.ctypes.data_as(cf), gc.ctypes.data_as(cf), ctypes.c_int64(yc.size),
+       ctypes.c_float(eta), ctypes.c_float(noise_scale),
+       u32(k0 & 0xFFFFFFFF), u32(k1 & 0xFFFFFFFF), u32(c0 & 0xFFFFFFFF),
+       u32(c1 & 0xFFFFFFFF), u32(c2 & 0xFFFFFFFF), u32(c3 & 0xFFFFFFFF),
+       out.ctypes.data_as(cf))
+    return out.reshape(np.asarray(y).shape)
+
+
+def _ebm_langevin_compute(operands: list, kwargs: dict, langevin_fn: Any,
+                          np: Any) -> Any:
+    if len(operands) < 2:
+        raise ValueError("ebm langevin needs (y, grad) operands")
+    y = np.ascontiguousarray(operands[0], np.float32)
+    grad = np.ascontiguousarray(operands[1], np.float32)
+    if y.shape != grad.shape:
+        raise ValueError(
+            f"ebm langevin needs matching shapes; got {y.shape}, {grad.shape}")
+    eta, ns, k0, k1, c0, c1, c2, c3 = _ebm_langevin_params(kwargs, np)
+    return langevin_fn(y, grad, eta, ns, k0, k1, c0, c1, c2, c3, np)
+
+
+def _execute_ebm_langevin(artifact: RuntimeArtifact, args: Any,
+                          langevin_fn: Any, path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _EBM_LANGEVIN_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_EBM_LANGEVIN_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _ebm_langevin_compute(operands, ops[0].get("kwargs") or {},
+                                 langevin_fn, np)
+
+
+def _execute_x86_compiled_ebm_langevin(artifact: RuntimeArtifact,
+                                       args: Any) -> Any:
+    """The ``target="x86"`` EBM Langevin sampling lane (device Philox noise)."""
+    return _execute_ebm_langevin(artifact, args, _x86_ebm_langevin,
+                                 "x86_ebm_langevin_compiled")
+
+
+_rocm_ebm_langevin_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_ebm_langevin_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.ebm_langevin"() {name = "lv"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-ebm-langevin-kernel", directive,
+        _rocm_ebm_langevin_hsaco_cache, (chip,))
+
+
+def _rocm_ebm_langevin(y: Any, grad: Any, eta: float, noise_scale: float,
+                       k0: int, k1: int, c0: int, c1: int, c2: int, c3: int,
+                       np: Any) -> Any:
+    """Langevin step + on-device Philox noise on gfx1151 (compiler-generated)."""
+    yc = np.ascontiguousarray(y, np.float32).reshape(-1)
+    gc = np.ascontiguousarray(grad, np.float32).reshape(-1)
+    n = int(yc.size)
+    hsaco = _build_compiled_ebm_langevin_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_langevin: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm ebm_langevin: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"lv") != 0:
+        raise RuntimeError("rocm ebm_langevin: kernel symbol 'lv' not found")
+    cv = ctypes.c_void_p
+    d_y, d_g, d_o = cv(), cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_y), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_g), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_o), max(4 * n, 4)) != 0):
+        raise RuntimeError("rocm ebm_langevin: hipMalloc failed")
+    hip.hipMemcpy(d_y, yc.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_g, gc.ctypes.data_as(cv), 4 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    i32 = ctypes.c_int32
+    launch_args = (_mr(d_y, n) + _mr(d_g, n) + [ctypes.c_int64(n)]
+                   + [ctypes.c_float(eta), ctypes.c_float(noise_scale)]
+                   + [i32(k0 & 0xFFFFFFFF), i32(k1 & 0xFFFFFFFF),
+                      i32(c0 & 0xFFFFFFFF), i32(c1 & 0xFFFFFFFF),
+                      i32(c2 & 0xFFFFFFFF), i32(c3 & 0xFFFFFFFF)]
+                   + _mr(d_o, n))
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    gx = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(fn, max(gx, 1), 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_y, d_g, d_o):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm ebm_langevin: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    out = np.zeros(n, np.float32)
+    hip.hipMemcpy(out.ctypes.data_as(cv), d_o, 4 * n, 2)
+    for d in (d_y, d_g, d_o):
+        hip.hipFree(d)
+    return out.reshape(np.asarray(y).shape)
+
+
+def _execute_rocm_compiled_ebm_langevin(artifact: RuntimeArtifact,
+                                        args: Any) -> Any:
+    """The ``target="rocm"`` EBM Langevin sampling lane (device Philox noise)."""
+    return _execute_ebm_langevin(artifact, args, _rocm_ebm_langevin,
+                                 "rocm_ebm_langevin_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # x86 low-precision float quantization lane — quantize/dequantize fp8 / fp6 /
 # fp4. Per-tensor symmetric: scale = amax/max_normal (floored), grid-snap on the
 # AVX-512 fpquant kernel, rescale. dequantize is the fp32 passthrough (the
@@ -11094,6 +11388,8 @@ def _executor_table():
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
+        "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
+        "x86_ebm_langevin_compiled": _execute_x86_compiled_ebm_langevin,
         "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
@@ -11111,6 +11407,8 @@ def _executor_table():
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
         "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
+        "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
+        "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,

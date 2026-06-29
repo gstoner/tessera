@@ -604,6 +604,7 @@ x86,tessera_x86_avx512_transcendental_f32,avx512_transcendental,f32,src/compiler
 x86,tessera_x86_avx512_unary_f32,avx512_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_avx512_vnni_gemm_u8s8_s32,avx512_vnni_gemm_u8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp
 x86,tessera_x86_avx512_where_f32,avx512_where,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_where_f32.cpp
+x86,tessera_x86_bitonic_sort_kv_f32,bitonic_sort_kv,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sort_f32.cpp
 x86,tessera_x86_cholesky_f32,cholesky,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp

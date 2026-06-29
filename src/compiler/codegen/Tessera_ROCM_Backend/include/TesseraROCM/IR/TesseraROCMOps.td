@@ -857,6 +857,25 @@ def ROCM_GatherKernelOp : TesseraROCM_Op<"gather"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SortKernelOp : TesseraROCM_Op<"sort"> {
+  let summary = "Cooperative bitonic sort kernel (key + index, last-axis rows)";
+  let description = [{
+    The directive `generate-rocm-sort-kernel` expands into a cooperative bitonic
+    sort gpu kernel — the sort lane (P9) backing sort / argsort / top_k. One
+    block sorts one row of `pn` (power-of-two) f32 keys ascending, carrying the
+    parallel i64 index array so the same compare-exchange schedule realizes
+    argsort / top_k; the host pads each row to `pn` with +INF sentinels and
+    flips the result for descending (matching the numpy reference). The bitonic
+    network is data-independent — the same schedule as the x86 AVX-512 kernel —
+    with a `gpu.barrier` between stages. The host passes `nstages = log2(pn)`
+    so the kernel runs the schedule as two nested `scf.for` loops (no in-kernel
+    log2). Grid = one block per row. Args:
+    `(keys : memref<?xf32>, idx : memref<?xi64>, pn : index, nstages : index)`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

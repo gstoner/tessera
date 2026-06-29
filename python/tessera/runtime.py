@@ -6215,6 +6215,189 @@ def _execute_rocm_compiled_strided(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sort lane (P9) — sort / argsort / top_k via a data-independent BITONIC sort
+# network (the GPU-friendly choice; identical schedule on x86 + ROCm). The host
+# moves the sort axis last, pads each row to a power of two with +INF sentinels,
+# runs the device key+index bitonic sort ASCENDING, then trims/flips host-side
+# (matching the numpy reference's flip semantics for descending). x86 lane:
+# tessera_x86_bitonic_sort_kv_f32 (AVX-512 wide stages + scalar tail). ROCm lane:
+# the COMPILER-GENERATED cooperative bitonic kernel (generate-rocm-sort-kernel,
+# one block per row). top_k returns (values, indices). f32. Matches numpy.
+# compiler_path="x86_sort_compiled" / "rocm_sort_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_SORT_OPS = ("tessera.sort", "tessera.argsort", "tessera.top_k")
+
+
+def _next_pow2(n: int) -> int:
+    p = 1
+    while p < n:
+        p <<= 1
+    return p
+
+
+def _sort_rows_kv(values_2d: Any, sort_kv_fn: Any, np: Any) -> tuple:
+    """Sort each row of ``values_2d`` (rows, L) ASCENDING via the device key+
+    index bitonic kernel. Returns (keys (rows,L), idx (rows,L) int64)."""
+    rows, L = int(values_2d.shape[0]), int(values_2d.shape[1])
+    pn = _next_pow2(L)
+    keys = np.empty((rows, pn), np.float32)
+    keys[:, :L] = values_2d
+    if pn > L:                                   # +INF pads sort to the end
+        keys[:, L:] = np.float32(np.inf)
+    idx = np.empty((rows, pn), np.int64)
+    idx[:, :L] = np.arange(L, dtype=np.int64)[None, :]
+    if pn > L:
+        idx[:, L:] = np.arange(L, pn, dtype=np.int64)[None, :]  # trimmed away
+    sort_kv_fn(keys, idx, rows, pn)              # in-place per-row ascending sort
+    return keys[:, :L].copy(), idx[:, :L].copy()
+
+
+def _sort_compute(op_name: str, operands: list, kwargs: dict, target: str,
+                  np: Any) -> Any:
+    x = np.ascontiguousarray(operands[0], np.float32)
+    if x.ndim == 0:
+        x = x.reshape(1)
+    axis = int(kwargs.get("axis", -1)) % x.ndim
+    moved = np.ascontiguousarray(np.moveaxis(x, axis, -1))
+    shp = moved.shape
+    L = int(shp[-1])
+    flat = moved.reshape(-1, L)
+    sort_kv_fn = _x86_sort_kv if target == "x86" else _rocm_sort
+    keys, idx = _sort_rows_kv(flat, sort_kv_fn, np)   # ascending
+
+    if op_name == "tessera.top_k":
+        k = int(kwargs["k"])
+        if not (1 <= k <= L):
+            raise ValueError(f"top_k: k={k} out of [1, {L}]")
+        # largest k, descending: ascending tail reversed.
+        topv = keys[:, L - k:][:, ::-1]
+        topi = idx[:, L - k:][:, ::-1]
+        out_shape = shp[:-1] + (k,)
+        vals = np.moveaxis(topv.reshape(out_shape), -1, axis)
+        inds = np.moveaxis(topi.reshape(out_shape), -1, axis)
+        return (np.ascontiguousarray(vals, np.float32),
+                np.ascontiguousarray(inds, np.int64))
+
+    descending = bool(kwargs.get("descending", False))
+    if op_name == "tessera.sort":
+        vals = keys[:, ::-1] if descending else keys
+        out = np.moveaxis(vals.reshape(shp), -1, axis)
+        return np.ascontiguousarray(out, np.float32)
+    # tessera.argsort
+    inds = idx[:, ::-1] if descending else idx
+    out = np.moveaxis(inds.reshape(shp), -1, axis)
+    return np.ascontiguousarray(out, np.int64)
+
+
+def _x86_sort_kv(keys: Any, idx: Any, rows: int, pn: int) -> None:
+    """Per-row in-place ascending bitonic sort of (keys, idx) on the AVX-512
+    kernel. ``keys`` is C-contiguous (rows, pn) f32; ``idx`` (rows, pn) i64."""
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    ci = ctypes.POINTER(ctypes.c_int64)
+    fn = getattr(lib, "tessera_x86_bitonic_sort_kv_f32", None)
+    if fn is None:
+        raise _RocmCompiledUnavailable("tessera_x86_bitonic_sort_kv_f32 missing")
+    for r in range(rows):
+        fn(keys[r].ctypes.data_as(cf), idx[r].ctypes.data_as(ci),
+           ctypes.c_int64(pn), ctypes.c_int(0))
+
+
+def _execute_sort(artifact: RuntimeArtifact, args: Any, target: str,
+                  path: str) -> Any:
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _SORT_OPS:
+        raise ValueError(
+            f"{path} executor handles one of {_SORT_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _sort_compute(op_name, operands, ops[0].get("kwargs") or {},
+                         target, np)
+
+
+def _execute_x86_compiled_sort(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` sort lane (sort / argsort / top_k)."""
+    return _execute_sort(artifact, args, "x86", "x86_sort_compiled")
+
+
+_rocm_sort_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _build_compiled_sort_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = ('module {\n  "tessera_rocm.sort"() {name = "s"} '
+                 ': () -> ()\n}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-sort-kernel", directive, _rocm_sort_hsaco_cache,
+        (chip,))
+
+
+def _rocm_sort(keys: Any, idx: Any, rows: int, pn: int) -> None:
+    """Per-row ascending bitonic sort on gfx1151 via the compiler-generated
+    cooperative kernel (one block per row). Sorts (keys, idx) in place."""
+    import numpy as np
+    keys_c = np.ascontiguousarray(keys, np.float32)
+    idx_c = np.ascontiguousarray(idx, np.int64)
+    n = rows * pn
+    nstages = int(pn).bit_length() - 1            # log2(pn)
+    hsaco = _build_compiled_sort_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm sort: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm sort: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"s") != 0:
+        raise RuntimeError("rocm sort: kernel symbol 's' not found")
+    cv = ctypes.c_void_p
+    d_keys, d_idx = cv(), cv()
+    if (hip.hipMalloc(ctypes.byref(d_keys), max(4 * n, 4)) != 0
+            or hip.hipMalloc(ctypes.byref(d_idx), max(8 * n, 8)) != 0):
+        raise RuntimeError("rocm sort: hipMalloc failed")
+    hip.hipMemcpy(d_keys, keys_c.ctypes.data_as(cv), 4 * n, 1)
+    hip.hipMemcpy(d_idx, idx_c.ctypes.data_as(cv), 8 * n, 1)
+
+    def _mr(p, size):
+        return [cv(p.value), cv(p.value), ctypes.c_int64(0),
+                ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(d_keys, n) + _mr(d_idx, n)
+                   + [ctypes.c_int64(pn), ctypes.c_int64(nstages)])
+    arr = (cv * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), cv)
+    rc = hip.hipModuleLaunchKernel(fn, rows, 1, 1, _GRID_BLOCKDIM, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        for d in (d_keys, d_idx):
+            hip.hipFree(d)
+        raise RuntimeError(f"rocm sort: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(keys_c.ctypes.data_as(cv), d_keys, 4 * n, 2)
+    hip.hipMemcpy(idx_c.ctypes.data_as(cv), d_idx, 8 * n, 2)
+    for d in (d_keys, d_idx):
+        hip.hipFree(d)
+    keys[...] = keys_c
+    idx[...] = idx_c
+
+
+def _execute_rocm_compiled_sort(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="rocm"`` sort lane (sort / argsort / top_k)."""
+    return _execute_sort(artifact, args, "rocm", "rocm_sort_compiled")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # clamp / clip (P2c) — compose on the device binary max/min lane. Either bound
 # may be None (one-sided). The scalar bound is broadcast to the input shape and
 # the elementwise max (lower) / min (upper) run on the device binary kernel — no
@@ -10223,6 +10406,7 @@ def _executor_table():
         "x86_conformal_compiled": _execute_x86_compiled_conformal,
         "x86_rng_compiled": _execute_x86_compiled_rng,
         "x86_strided_compiled": _execute_x86_compiled_strided,
+        "x86_sort_compiled": _execute_x86_compiled_sort,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,
@@ -10260,6 +10444,7 @@ def _executor_table():
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,
         "rocm_rng_compiled": _execute_rocm_compiled_rng,
         "rocm_strided_compiled": _execute_rocm_compiled_strided,
+        "rocm_sort_compiled": _execute_rocm_compiled_sort,
         "rocm_normcompose_compiled": _execute_rocm_compiled_normcompose,
         "rocm_lamb_compiled": _execute_rocm_compiled_lamb,
         "rocm_muon_compiled": _execute_rocm_compiled_muon,

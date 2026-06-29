@@ -275,9 +275,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
 | `rope` | rotary_embedding | public | public | registered | complete | partial | fused | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
-| `argsort` | sort | public | public | registered | complete | partial | reference | ready | none |
-| `sort` | sort | public | public | registered | complete | partial | reference | ready | none |
-| `top_k` | sort | public | public | registered | complete | partial | reference | ready | none |
+| `argsort` | sort | public | public | registered | complete | partial | fused | ready | none |
+| `sort` | sort | public | public | registered | complete | partial | fused | ready | none |
+| `top_k` | sort | public | public | registered | complete | partial | fused | ready | none |
 | `bsmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
 | `sddmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
 | `spmm_coo` | sparse | public | public | registered | complete | partial | fused | ready | none |
@@ -359,7 +359,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | rotary_embedding | 1 | PPGCpFN· |
 | segment_reduce | 1 | PPGCpRN· |
-| sort | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
+| sort | 3 | PPGCpFN· PPGCpFN· PPGCpFN· |
 | sparse | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | spectral | 9 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
 | stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |

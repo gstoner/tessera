@@ -280,7 +280,7 @@ min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
-mla_decode_fused,9,9,1,18,0,,directly_tested,18 direct test references
+mla_decode_fused,11,9,1,20,0,,directly_tested,20 direct test references
 mobius,3,0,0,3,0,,directly_tested,3 direct test references
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references

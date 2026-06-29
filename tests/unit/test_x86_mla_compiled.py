@@ -77,6 +77,23 @@ def test_mla_decode_fused():
     np.testing.assert_allclose(got, np.asarray(ref), rtol=1e-4, atol=1e-4)
 
 
+def test_mla_decode_fused_distinct_value_width():
+    """MLA config with v_head_dim != qk_head_dim — V (W_uv) expands to a
+    different width than K (W_uk); the output takes V's width."""
+    rt = _rt_or_skip()
+    B, S = 2, 6
+    qk_dim, v_dim = HD, HD + 8        # distinct value width
+    x = _RNG.standard_normal((B, S, HID)).astype(np.float32)
+    w_dkv = _RNG.standard_normal((HID, LAT)).astype(np.float32)
+    w_uk = _RNG.standard_normal((LAT, qk_dim)).astype(np.float32)
+    w_uv = _RNG.standard_normal((LAT, v_dim)).astype(np.float32)
+    q = _RNG.standard_normal((B, S, qk_dim)).astype(np.float32)
+    got = _run(rt, "tessera.mla_decode_fused", x, w_dkv, w_uk, w_uv, q)
+    ref = tessera.ops.mla_decode_fused(x, w_dkv, w_uk, w_uv, q)
+    assert got.shape == (B, S, v_dim)
+    np.testing.assert_allclose(got, np.asarray(ref), rtol=1e-4, atol=1e-4)
+
+
 def test_mla_decode_fused_causal():
     rt = _rt_or_skip()
     B, S = 2, 7

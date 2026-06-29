@@ -2742,6 +2742,19 @@ _CLIFFORD_PRIMITIVES = (
 _CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
                                   "clifford_norm_squared"})
 
+# P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops with a native x86 + ROCm device
+# lane: the table-driven Cl(3,0) bilinear products (geometric_product / wedge /
+# left_contraction) plus inner + rotor_sandwich, which compose on the same
+# bilinear kernel. x86 = fused (tessera_x86_clifford_bilinear_f32); ROCm =
+# compiled (generate-rocm-clifford-kernel). The rest stay reference/planned.
+_CLIFFORD_DEVICE_COMPILED = frozenset({
+    "clifford_geometric_product",
+    "clifford_wedge",
+    "clifford_left_contraction",
+    "clifford_inner",
+    "clifford_rotor_sandwich",
+})
+
 
 def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     """Return the backend manifest entries for a `clifford_*` primitive.
@@ -2758,15 +2771,29 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if op_name not in _CLIFFORD_PRIMITIVES and op_name not in _CLIFFORD_FUSION_OPS:
         return []
     entries: list[BackendKernelEntry] = []
+    _device = op_name in _CLIFFORD_DEVICE_COMPILED
 
-    # x86 — reference status (the Python GA ops run on every CPU target).
-    entries.append(BackendKernelEntry(
-        target="x86",
-        status=_REFERENCE_STATUS,
-        dtypes=_CLIFFORD_CPU_DTYPES,
-        feature_flags=("clifford_dialect", "numpy_reference"),
-        notes="Python GA reference path; GA8 unrolled arith.mulf via ExpandProductTable lit-tested",
-    ))
+    # x86 — native AVX-512 bilinear lane (P12) for the table-driven products;
+    # Python GA reference for the rest.
+    if _device:
+        entries.append(BackendKernelEntry(
+            target="x86",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("clifford_dialect", "cayley_table", "avx512"),
+            notes="Cl(3,0) bilinear product on the AVX-512 kernel "
+                  "(tessera_x86_clifford_bilinear_f32; blade-major [8,n]; "
+                  "compile-time Cayley table; x86_clifford_compiled lane)",
+            execute_compare_fixture="tests/unit/test_x86_clifford_compiled.py",
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="x86",
+            status=_REFERENCE_STATUS,
+            dtypes=_CLIFFORD_CPU_DTYPES,
+            feature_flags=("clifford_dialect", "numpy_reference"),
+            notes="Python GA reference path; GA8 unrolled arith.mulf via ExpandProductTable lit-tested",
+        ))
 
     # Apple CPU — reference status, same Python path as x86. The
     # Accelerate hand-off for matmul-flavored GA ops (geo_product
@@ -2813,14 +2840,29 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
     ))
 
-    # ROCm — planned, gated on Phase H.
-    entries.append(BackendKernelEntry(
-        target="rocm",
-        status=_PLANNED_STATUS,
-        dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
-        feature_flags=("clifford_dialect", "mfma"),
-        notes="Gated on Phase H",
-    ))
+    # ROCm — native compiled bilinear lane (P12) for the table-driven products;
+    # planned (Phase H) for the rest.
+    if _device:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_COMPILED_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("clifford_dialect", "cayley_table", "hip_runtime"),
+            notes="Cl(3,0) bilinear product on the COMPILER-GENERATED gfx1151 "
+                  "kernel (generate-rocm-clifford-kernel; one thread per batch "
+                  "element; triples unrolled at generation time; "
+                  "rocm_clifford_compiled lane)",
+            execute_compare_fixture="tests/unit/test_rocm_clifford_compiled.py",
+            hipcc_version_min="7.2.4",
+        ))
+    else:
+        entries.append(BackendKernelEntry(
+            target="rocm",
+            status=_PLANNED_STATUS,
+            dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
+            feature_flags=("clifford_dialect", "mfma"),
+            notes="Gated on Phase H",
+        ))
 
     return entries
 

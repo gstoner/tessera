@@ -876,6 +876,25 @@ def ROCM_SortKernelOp : TesseraROCM_Op<"sort"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_CliffordKernelOp : TesseraROCM_Op<"clifford"> {
+  let summary = "Table-driven geometric-algebra bilinear product kernel (Cl(3,0))";
+  let description = [{
+    The directive `generate-rocm-clifford-kernel` expands into a table-driven
+    geometric-algebra bilinear-product gpu kernel — the GA lane (P12) backing
+    geometric_product / wedge / left_contraction on Cl(3,0) (8 blades). A
+    multivector product is a structured bilinear form driven by a compile-time
+    Cayley table: `out[k] = Σ sign·a[i]·b[j]`. One thread per batch element
+    loads the 8 blade coefficients of `a` and `b` and accumulates the 8 output
+    blades by the (sign, i, j -> k) triples for `kind` (0 = geometric_product,
+    1 = wedge, 2 = left_contraction), unrolled at generation time so the table
+    is a true compile-time constant. Layout is batch-major ([n, 8]). CPU analog:
+    avx512_clifford_f32. Args:
+    `(A : memref<?xf32>, B : memref<?xf32>, n : index, out : memref<?xf32>)`.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_BufferLoadOp : TesseraROCM_Op<"buffer_load", [MemoryEffects<[MemRead]>]> {
   let summary = "AMD buffer load with native out-of-bounds handling";
   let description = [{

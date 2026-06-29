@@ -2518,6 +2518,113 @@ def _execute_x86_compiled_mla(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# NSA — DeepSeek native sparse attention (P11) — blends three branches through a
+# learned gate: a sliding-window branch (the P10 window kernel), a
+# compressed-block branch (dense attention over per-block mean summaries), and a
+# top-k block branch (per-query top-k block SELECTION on the host + dense
+# attention over the gathered tokens on the device). The FLOP-heavy attention in
+# every branch runs on the AVX-512 flash_attn kernels; the block compression /
+# top-k selection / gather / gate blend are the cheap host structure. f32,
+# matches tessera.ops.deepseek_sparse_attention. compiler_path=
+# "x86_nsa_compiled".
+# ─────────────────────────────────────────────────────────────────────────────
+_NSA_OPS = ("tessera.deepseek_sparse_attention",)
+
+
+def _x86_attn_dense(q: Any, k: Any, v: Any, causal: bool, window: int,
+                    np: Any) -> Any:
+    """A dense / windowed attention via the AVX-512 flash_attn kernels."""
+    scale = 1.0 / float(np.sqrt(int(q.shape[-1])))
+    if window and window > 0:
+        return _x86_flash_attn_run(q, k, v, scale, causal, int(window), 0.0,
+                                   None, np)
+    return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
+
+
+def _x86_nsa_topk_block_attn(Q: Any, K: Any, V: Any, top_k: int,
+                             block_size: int, causal: bool, np: Any) -> Any:
+    """NSA top-k branch: per query select the top_k highest-scoring KV blocks
+    (vs the compressed summaries), gather their full tokens, run dense attention
+    over the gathered set. Q/K/V are [B, H, S, D]."""
+    B, H, Sq, D = Q.shape
+    Sk, Dv = int(K.shape[2]), int(V.shape[-1])
+    nb = Sk // block_size
+    Kr = K.reshape(B, H, nb, block_size, D)
+    Vr = V.reshape(B, H, nb, block_size, Dv)
+    Kc = Kr.mean(axis=3)                                   # [B,H,nb,D] summaries
+    scores = np.matmul(Q, np.swapaxes(Kc, -1, -2))         # [B,H,Sq,nb]
+    if causal:
+        q_block = (np.arange(Sq) // block_size)[None, None, :, None]
+        future = np.arange(nb)[None, None, None, :] > q_block
+        scores = np.where(future, -np.inf, scores)
+    k_sel = min(top_k, nb)
+    idx = np.argpartition(-scores, k_sel - 1, axis=-1)[..., :k_sel]
+    idx = np.sort(idx, axis=-1)                            # [B,H,Sq,k_sel]
+    bi = np.arange(B)[:, None, None, None]
+    hi = np.arange(H)[None, :, None, None]
+    Ksel = Kr[bi, hi, idx]            # [B,H,Sq,k_sel,block_size,D]
+    Vsel = Vr[bi, hi, idx]            # [B,H,Sq,k_sel,block_size,Dv]
+    g = k_sel * block_size
+    Qf = np.ascontiguousarray(Q.reshape(B * H * Sq, 1, D), np.float32)
+    Kf = np.ascontiguousarray(Ksel.reshape(B * H * Sq, g, D), np.float32)
+    Vf = np.ascontiguousarray(Vsel.reshape(B * H * Sq, g, Dv), np.float32)
+    Of = _x86_attn_dense(Qf, Kf, Vf, causal=False, window=0, np=np)
+    return Of.reshape(B, H, Sq, Dv)
+
+
+def _x86_nsa_compute(operands: list, kwargs: dict, np: Any) -> Any:
+    Q = np.ascontiguousarray(operands[0], np.float32)
+    K = np.ascontiguousarray(operands[1], np.float32)
+    V = np.ascontiguousarray(operands[2], np.float32)
+    gate = (np.ascontiguousarray(operands[3], np.float32)
+            if len(operands) > 3 and operands[3] is not None else None)
+    if Q.ndim != 4 or K.ndim != 4 or V.ndim != 4:
+        raise ValueError("nsa expects rank-4 (B, H, S, D) Q/K/V")
+    window_size = int(kwargs["window_size"])
+    block_size = int(kwargs["block_size"])
+    top_k = int(kwargs["top_k"])
+    causal = bool(kwargs.get("causal", True))
+    if int(K.shape[2]) % block_size:
+        raise ValueError(
+            f"nsa: key length {K.shape[2]} not divisible by block_size "
+            f"{block_size}")
+    nb = int(K.shape[2]) // block_size
+    Kc = K.reshape(K.shape[0], K.shape[1], nb, block_size, K.shape[-1]).mean(3)
+    Vc = V.reshape(V.shape[0], V.shape[1], nb, block_size, V.shape[-1]).mean(3)
+    sliding = _x86_attn_dense(Q, K, V, causal, window_size, np)
+    compressed = _x86_attn_dense(Q, Kc, Vc, False, 0, np)
+    topk = _x86_nsa_topk_block_attn(Q, K, V, top_k, block_size, causal, np)
+    if gate is None:
+        w = np.full(sliding.shape[:-1] + (3,), 1.0 / 3.0, np.float32)
+    else:
+        g = gate.astype(np.float64)
+        e = np.exp(g - g.max(axis=-1, keepdims=True))
+        w = (e / e.sum(axis=-1, keepdims=True)).astype(np.float32)
+    out = (sliding * w[..., 0:1] + compressed * w[..., 1:2]
+           + topk * w[..., 2:3])
+    return np.ascontiguousarray(out, np.float32)
+
+
+def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
+    """The ``target="x86"`` NSA (deepseek_sparse_attention) lane."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _NSA_OPS:
+        raise ValueError(
+            f"x86_nsa_compiled executor handles one of {_NSA_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    operand_names = [str(n) for n in ops[0].get("operands", [])]
+    if len(operand_names) < 3:
+        raise ValueError("nsa requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    operands = [_as_numpy(values[n]) for n in operand_names]
+    return _x86_nsa_compute(operands, ops[0].get("kwargs") or {}, np)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED linear_attn lane (2026-06-25) — the quadratic-parallel form
 # O = (φ(Q)φ(K)ᵀ ⊙ causal) @ V, NO softmax (a distinct algorithm from
 # flash_attn). ``runtime.launch()`` of an artifact stamped
@@ -11433,6 +11540,7 @@ def _executor_table():
         "x86_flash_attn_compiled": _execute_x86_compiled_flash_attn,
         "x86_mla_compiled": _execute_x86_compiled_mla,
         "x86_conv_compiled": _execute_x86_compiled_conv,
+        "x86_nsa_compiled": _execute_x86_compiled_nsa,
         "x86_normcompose_compiled": _execute_x86_compiled_normcompose,
         "x86_lamb_compiled": _execute_x86_compiled_lamb,
         "x86_muon_compiled": _execute_x86_compiled_muon,

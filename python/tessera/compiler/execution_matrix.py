@@ -201,6 +201,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_conv_compiled": "AMD GPU RDNA convolution lane — conv2d/conv3d via "
                           "im2col (host) + the COMPILER-GENERATED WMMA GEMM "
                           "(f16/bf16 storage, f32 accumulate). f16",
+    "x86_nsa_compiled": "x86 CPU NSA lane — deepseek_sparse_attention: sliding "
+                        "+ compressed-block + top-k-block branches on the "
+                        "AVX-512 flash_attn kernels, gate blend on host. f32",
     "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
                             "scatter_reduce (0-reduce indexed store) via the "
                             "AVX-512 row-scatter kernel. f32",
@@ -1153,6 +1156,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "only), the FLOP-heavy GEMM runs on the AVX-512 f32 kernel, and "
                "bias / groups / activation finish on the host. f32, matches the "
                "conv reference.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_nsa_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_nsa_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_nsa_compiled", runtime_status="success",
+        reason="x86 NSA (deepseek_sparse_attention) blends three branches — "
+               "sliding-window (the AVX-512 windowed flash_attn), "
+               "compressed-block (dense flash_attn over per-block mean "
+               "summaries), and top-k-block (host top-k block select + gather + "
+               "dense flash_attn) — through the learned gate. The attention "
+               "FLOPs run on the device kernels; compression / selection / "
+               "blend on the host. f32, matches the dense-masked reference.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_atan2_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_atan2_compiled",

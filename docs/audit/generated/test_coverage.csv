@@ -133,7 +133,7 @@ dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
 dct,8,0,1,8,0,fp32,directly_tested,8 direct test references
 ddpm_noise_pred_loss,3,0,0,3,0,,directly_tested,3 direct test references
-deepseek_sparse_attention,12,5,0,17,0,,directly_tested,17 direct test references
+deepseek_sparse_attention,17,5,0,22,0,,directly_tested,22 direct test references
 denoising_score_matching_loss,3,0,0,3,0,,directly_tested,3 direct test references
 depthwise_conv1d,10,0,1,10,0,,directly_tested,10 direct test references
 dequant_grouped_gemm,0,4,0,4,0,,directly_tested,4 direct test references

@@ -222,9 +222,15 @@ validateElementwiseWhile(Operation *op, SymbolTable &symTab) {
     return {};
   Type carryTy = op->getOperand(0).getType();
   FunctionType bf = bodyF.getFunctionType(), cf = condF.getFunctionType();
-  // body: (carry)->carry; cond: (carry)->pred; carry == op operand == op result.
+  // body: (carry)->carry; cond: (carry)->carry-shaped pred. The kernel
+  // scalarizes the predicate PER element (cond_scalar(c) > 0 per thread), so
+  // @cond's result must be the carry shape — a predicate that reduces the carry
+  // to a shape-(1) tensor (which the portable SCF lowering broadcasts via
+  // element 0) must NOT take this per-element path. Require cf result == carry;
+  // otherwise leave the op for the SCF lowering / guard.
   if (bf.getInput(0) != carryTy || bf.getResult(0) != carryTy ||
-      op->getResult(0).getType() != carryTy || cf.getInput(0) != carryTy)
+      op->getResult(0).getType() != carryTy || cf.getInput(0) != carryTy ||
+      cf.getResult(0) != carryTy)
     return {};
   return {bodyF, condF};
 }

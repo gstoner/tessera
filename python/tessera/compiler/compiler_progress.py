@@ -91,8 +91,8 @@ def _primitive_axis_rows() -> list[ProgressRow]:
     rows = s_series_status.tally_by_category()
     out: list[ProgressRow] = []
     for axis in s_series_status.DASHBOARD_AXES:
-        open_n = sum(int(r[f"{axis}_open"]) for r in rows)
-        complete_n = sum(int(r[f"{axis}_complete"]) for r in rows)
+        open_n = sum(int(str(r[f"{axis}_open"])) for r in rows)
+        complete_n = sum(int(str(r[f"{axis}_complete"])) for r in rows)
         total = open_n + complete_n
         out.append(
             ProgressRow(
@@ -214,7 +214,7 @@ def _pathway_rows(
     rocm_rows: list[dict[str, str]],
     nvidia_rows: list[dict[str, str]],
 ) -> list[ProgressRow]:
-    specs = (
+    specs: tuple[tuple[str, str, str, list[dict[str, str]], str], ...] = (
         (
             "Apple CPU",
             "apple_cpu",
@@ -315,13 +315,20 @@ def collect_rows() -> list[ProgressRow]:
     from . import runtime_abi_audit
     from . import verifier_coverage
 
+    def _csv_of(name: str) -> list[dict[str, str]]:
+        # The CSV-gated docs accessed here always carry a render_csv; assert it
+        # so the (Optional) callable is non-None for the type checker.
+        doc = gd.get(name)
+        assert doc.render_csv is not None, f"{name} has no render_csv"
+        return _read_csv(doc.render_csv())
+
     support_rows = _read_csv(audit.render_csv())
-    runtime_rows = _read_csv(gd.get("runtime_execution_matrix").render_csv())
+    runtime_rows = _csv_of("runtime_execution_matrix")
     verifier_rows = _read_csv(verifier_coverage.render_csv())
-    test_rows = _read_csv(gd.get("test_coverage").render_csv())
-    surface_rows = _read_csv(gd.get("surface_status").render_csv())
+    test_rows = _csv_of("test_coverage")
+    surface_rows = _csv_of("surface_status")
     runtime_abi_rows = _read_csv(runtime_abi_audit.render_csv())
-    apple_rows = _read_csv(gd.get("apple_target_map").render_csv())
+    apple_rows = _csv_of("apple_target_map")
     rocm_rows = _read_csv(gpu_target_map.render_csv("rocm"))
     nvidia_rows = _read_csv(gpu_target_map.render_csv("nvidia_sm90"))
 

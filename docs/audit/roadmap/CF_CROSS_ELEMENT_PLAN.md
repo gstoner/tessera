@@ -84,12 +84,21 @@ in-register reductions). `eps` baked from the op attr. Proven on gfx1151 by
 `tests/unit/test_rocm_control_for_norm_exec.py` (looped rmsnorm/layer_norm vs the
 same numpy formula applied iteratively).
 
-### CF4d-3 — WMMA single-tile matmul
-Body `matmul(carry, W)` where carry is a **16×16 tile** (one RDNA3.5 WMMA
-`16×16×16`). Reuses the `GenerateWMMAGemmKernel` fragment machinery; the only
-new piece is the **accumulator→input fragment shuffle through LDS** between
-iterations (D-fragment f32 → write LDS → read back as the A-fragment f16). One
-wave, no global sync.
+### CF4d-3 — WMMA single-tile matmul *(done, ROCm/gfx1151)*
+Body `matmul(carry, W)` where carry and W are **16×16 f16 tiles** (one RDNA3.5
+WMMA `16×16×16`) → `GenerateROCMControlForWmmaKernel`
+(`--generate-rocm-control-for-wmma-kernel`), one wave. Emits the
+`rocdl.wmma.f32.16x16x16.f16` intrinsic directly. The new piece vs CF4d-1/2 is
+the **accumulator→input fragment shuffle through LDS** between iterations: the
+WMMA result is a `vector<8xf32>` accumulator fragment, written back to LDS in
+LOGICAL `[row][col]` order (`acc c[e] → lds[(2e+lhi)*16 + lane]`) and re-read as
+the `vector<16xf16>` A-fragment (`a[i] = lds[lane*16 + i]`); the B-fragment
+(`b[i] = W[i*16 + lane]`) is loop-invariant. Because both the store and load
+index the matrix logically, the LDS is a plain 16×16 f16 matrix and the handoff
+is layout-correct. Proven on gfx1151 by
+`tests/unit/test_rocm_control_for_wmma_exec.py` (`carry @ W^it`, it=1/2/3,
+mirroring the per-iteration f16 truncation; f16 tolerance). Larger carries are
+multi-tile (grid-wide barrier) — CF4d-4.
 
 ### CF4d-4 — multi-tile (cooperative kernel)
 Carry larger than one tile/workgroup → iteration N+1 needs **all** of N's tiles,

@@ -32,7 +32,7 @@ current set registered in `tools/tessera-opt/tessera-opt.cpp` is:
 | `tessera-lower-to-apple_cpu-runtime` | Apple Silicon CPU (Accelerate cblas_sgemm + BNNS f16/bf16) | 8.2 | ✅ executable runtime |
 | `tessera-lower-to-apple_gpu` | Apple Silicon GPU (artifact) | 8.1 | ✅ lit-testable |
 | `tessera-lower-to-apple_gpu-runtime` | Apple Silicon GPU (MPS, MPSGraph, custom MSL, additive Metal 4 lanes, and packaged-kernel ABI validation) | 8.3 → Metal 4 + PK1–PK7 | ✅ executable runtime on capable Darwin hosts |
-| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H/I batch 3) |
+| `tessera-nvidia-pipeline-{sm90,sm100,sm120}` | NVIDIA target-specific composition | 3+ | 🟡 G-5 named alias (Sprint G/H batch 3) |
 | `tessera-spectral-pipeline` | Spectral solver end-to-end | 5 | ✅ via `ts-spectral-opt` |
 | `tpp-space-time` | Tensor Parallel Primitives | 5 | ✅ via `tessera-opt` (4/4 lit fixtures) |
 

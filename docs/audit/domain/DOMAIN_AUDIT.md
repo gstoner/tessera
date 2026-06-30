@@ -147,7 +147,7 @@ autodiff domain audit material.
   (`tests/unit/test_lsa_fused_gpu_kernel.py`). **All four originally-deferred LSA
   gaps are now closed** (KV tiering, prefetch overlap, indexer training, fused
   kernel). Scope lock + decisions: `archive/lsa_scope.md`. `backend_kernel` for
-  the registered primitives stays `partial` (the per-target Phase G/H/I gate —
+  the registered primitives stays `partial` (the per-target Phase G/H gate —
   the Apple fused kernel is one target).
 - CorrDiff analysis clarified compiler vs library/runtime ownership.
 - Sharding partial audit classified open buckets instead of leaving a vague

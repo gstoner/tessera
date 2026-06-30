@@ -25,7 +25,7 @@ x86 AMX/AVX512, Apple M-series CPU/GPU.
 **Execution reality:** the **x86 AMX/AVX512** backend and **Apple CPU
 (Accelerate) + GPU (MPS/MSL/MPSGraph)** backends execute natively today. NVIDIA
 and ROCm are toolchain-pinned Target IR + lit fixtures with native execution
-**hardware-gated** (Phase G/H/I). Other backends produce IR/artifacts until a
+**hardware-gated** (Phase G/H). Other backends produce IR/artifacts until a
 hardware-gated proof row says otherwise. See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
 
@@ -62,7 +62,7 @@ PTX/HIP/Metal source.
 | 1–6 | ✅ Complete | Python frontend → C++ lowering → NVIDIA backend IR → distributed training → solver passes/autotuner → runtime wrapper + CUDA/HIP backends |
 | 7 | 🟢 Lit-verified | Neighbors (halo/stencil) dialect; real HW gated on Phase G/H |
 | 8 | 🟢 Apple operational | Hardware-free Target IR; `@jit(target="rocm"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph) execute natively |
-| S-series | 🟢 In progress | Standalone-compiler track — primitive contract registry + S2–S15 Python reference surface + reasoning-model attention/RL; `backend_kernel` axis is the long-pole gate (Phase G/H/I) |
+| S-series | 🟢 In progress | Standalone-compiler track — primitive contract registry + S2–S15 Python reference surface + reasoning-model attention/RL; `backend_kernel` axis is the long-pole gate (Phase G/H) |
 | RubinCPX | ✅ Built | `tessera.target.cpx` dialect + 4 passes + `tessera-cpx-opt` driver |
 
 Per-phase deliverables and the open-work priority queue live in

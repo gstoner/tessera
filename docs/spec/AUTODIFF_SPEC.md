@@ -35,7 +35,7 @@ last_updated: 2026-05-09
 | `jax.vmap`-style batched transforms | **✅ Phase F6 landed** — `tessera.autodiff.vmap` + `tessera.control.{vmap, pmap}`. |
 | Backward through `flash_attn`, attention family | **✅ Phase F3 landed** — `custom_rule`-registered VJP+JVP; reasoning-model variants (`deepseek_sparse_attention`, `lightning_attention`, `kimi_delta_attention`, etc.) also shipped. |
 | Backward through spectral, MoE, selective_ssm, sparse, linalg | **Mixed** — `fft`/`ifft`/`rfft`/`irfft`/`moe`/`selective_ssm` shipped (Phase F3); long-tail (`stft`/`istft`/`dct`/`spectral_*`, `spmm_*`/`sddmm`/`bsmm`, `cholesky`/`qr`/`svd`/`tri_solve`) tracked at `docs/audit/coverage/COVERAGE_AUDIT.md`. |
-| Custom CUDA / Metal adjoint kernels | **Pending Phase G/H/I** — autodiff contract is numpy-reference complete; hardware kernels arrive with each backend. |
+| Custom CUDA / Metal adjoint kernels | **Pending Phase G/H** — autodiff contract is numpy-reference complete; hardware kernels arrive with each backend. |
 | Custom-primitive registration API | **✅ Sprint S13 landed** — `tessera.custom.custom_vjp`/`custom_jvp`/`custom_batching`/`custom_lowering`. |
 
 ## Surface

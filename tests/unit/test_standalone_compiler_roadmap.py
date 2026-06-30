@@ -114,7 +114,7 @@ def test_primitive_coverage_imports_existing_ops_as_partial_entries():
     # `sharding_rule` for the matmul / gemm / batched_gemm core via
     # the Megatron-style column-parallel + row-parallel decomposition.
     # The only remaining gate is `backend_kernel`, which stays open
-    # until Phase G/H/I hardware lanes light up.
+    # until Phase G/H hardware lanes light up.
     assert matmul.contract_status["lowering_rule"] == "complete"
     assert matmul.contract_status["vjp"] == "complete"
     assert matmul.contract_status["jvp"] == "complete"

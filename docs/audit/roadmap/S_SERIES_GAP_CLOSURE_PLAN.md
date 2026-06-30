@@ -9,7 +9,7 @@ plan_state: open
 > **Scope:** drive the remaining S-series primitives to **real, on-device-validated
 > execution on the two devices this repo can prove on today — x86 AVX-512 and
 > AMD ROCm gfx1151 (RDNA 3.5 WMMA)**. NVIDIA SM_90/100/120 and Apple are gated to
-> their own hardware (Phase G/H/I) and tracked separately.
+> their own hardware (Phase G/H) and tracked separately.
 >
 > **Counts are dashboard-owned** (Decision #25/#26). The numbers below are
 > planning approximations; the truth is in `docs/audit/generated/` —

@@ -32,7 +32,7 @@ The manifest does NOT change any axis values in the primitive coverage
 registry by itself.  Sprint E-3 attaches it as
 ``metadata["backend_kernel_manifest"] = [entry_dict, ...]`` for the
 dashboard to surface.  The ``backend_kernel`` contract axis stays at
-``partial``/``planned`` until real GPU execution lights up (Phase G/H/I).
+``partial``/``planned`` until real GPU execution lights up (Phase G/H).
 """
 
 from __future__ import annotations
@@ -562,7 +562,7 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
     EVERY declared target is ``hardware_verified``.  This makes
     ``backend_kernel`` a *computed* property of the manifest rather
     than a hand-flipped status field — closing the definition gap
-    that the V8 Phase G/H/I audit doc surfaced.
+    that the V8 Phase G/H audit doc surfaced.
 
     Returns False (the registry stays ``partial``) if any target row
     is below ``hardware_verified``.  An empty tuple returns False

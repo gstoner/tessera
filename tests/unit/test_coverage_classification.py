@@ -13,7 +13,7 @@ This gate pins the per-bucket counts so we notice when:
   * A category gets recategorized without revisiting the override
     list (``structural_only`` or ``covered_by_family`` shrinks).
   * The hardware-gated set grows past the documented 4 Langevin
-    samplers (a real Phase G/H/I device test ought to flip them
+    samplers (a real Phase G/H device test ought to flip them
     *out* of the bucket, not add new ones).
 
 Also drift-gates the on-disk dashboard at
@@ -120,7 +120,7 @@ def test_actionable_bucket_does_not_explode() -> None:
 
 def test_hardware_gated_bucket_stable() -> None:
     """At Audit-D-2 landing, 4 Langevin samplers are hardware-gated.
-    Cap at 12 — Phase G/H/I should eventually *shrink* this bucket
+    Cap at 12 — Phase G/H should eventually *shrink* this bucket
     (real device tests flip ops out of it)."""
     summary = classification_summary()
     gated = summary[HARDWARE_GATED]

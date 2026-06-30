@@ -1,4 +1,4 @@
-"""Sprint G-5 / G-6/G-7/G-8 / G-9 / H-2 / H-6/H-7/H-8 / H-8 — Phase G/H/I Lane 2.
+"""Sprint G-5 / G-6/G-7/G-8 / G-9 / H-2 / H-6/H-7/H-8 / H-8 — Phase G/H Lane 2.
 
 Hardware-free guards for the toolchain detection + compile-only
 validation infrastructure landed 2026-05-11:

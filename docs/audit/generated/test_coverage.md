@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **474** ops in `primitive_coverage` registry.
-- **3603** total Python-test references, **874** total lit-fixture references.
+- **3602** total Python-test references, **870** total lit-fixture references.
 - **96** ops have **zero** references in either test surface.
 - **135** ops have ≤1 reference ("thinly tested").
 - **90** ops have ≥10 references ("well tested").
@@ -17,13 +17,13 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  394 |  206 |  600 |  18 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  394 |  205 |  599 |  18 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  105 |   57 |  162 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |  120 |   37 |  157 |  30 | `bf16`, `f16`, `f32`, `fp16` … |
 | `relu` |  105 |   20 |  125 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |  105 |   15 |  120 |  10 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |  104 |   13 |  117 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |   87 |    4 |   91 |   7 | `bf16`, `f16`, `f32`, `f64` … |
-| `silu` |   85 |    4 |   89 |   5 | `bf16`, `f16`, `f32`, `f64` … |
+| `silu` |   85 |    3 |   88 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |   86 |    0 |   86 |   7 | `f32`, `fp16`, `fp32`, `fp4_e2m1` … |
 | `rmsnorm` |   74 |   11 |   85 |   3 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
@@ -124,7 +124,7 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 | `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
 | `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
-| `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
+| `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
@@ -138,7 +138,7 @@ These **2** ops are real primitives with ≤1 direct test reference.  Each is a 
 
 ## Hardware-gated ops
 
-These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested with execute-and-compare on this Mac.
+These **4** ops need real device hardware (Phase G/H).  They cannot be tested with execute-and-compare on this Mac.
 
 | Op | reason |
 |----|--------|

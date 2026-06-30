@@ -6,9 +6,9 @@ Reference date for staleness: **2026-06-29**.
 
 ## Headline
 
-- **92** docs catalogued across the canonical doc tree.
-- **91** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **54** updated within the last 30 days.
+- **93** docs catalogued across the canonical doc tree.
+- **92** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **55** updated within the last 30 days.
 - **0** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -28,6 +28,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `CLIFFORD_SPEC.md` | - | 2026-05-17 | 43 | ✓ |
 | `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 4 | ✓ |
 | `CONFORMANCE.md` | Normative | 2026-06-11 | 18 | ✓ |
+| `CONTROL_FLOW_CONTRACT.md` | - | 2026-06-29 | 0 | ✓ |
 | `EBM_SPEC.md` | - | 2026-05-16 | 44 | ✓ |
 | `GA_EBM_EXECUTION_STATUS.md` | - | 2026-05-17 | 43 | ✓ |
 | `GRAPH_IR_SPEC.md` | Normative | 2026-05-22 | 38 | ✓ |

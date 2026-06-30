@@ -8,7 +8,7 @@ ebm sampling family.
   * ``ebm_partition_ais``      — annealed importance sampling
   * ``ebm_partition_monte_carlo`` — Monte Carlo estimator
 
-4 ops stay at `partial` (Bucket C — manifold-bound, Phase G/H/I gate):
+4 ops stay at `partial` (Bucket C — manifold-bound, Phase G/H gate):
   * ``ebm_bivector_langevin_sample``
   * ``ebm_bivector_langevin_step``
   * ``ebm_sphere_langevin_sample``
@@ -286,7 +286,7 @@ def test_sprint_20e_manifold_langevin_stays_partial() -> None:
     """The 4 manifold Langevin ops live on non-Euclidean manifolds
     (Spin(p,q) bivector subspace, unit sphere).  Their sharding
     requires GA-aware halo exchange that hasn't shipped — keep at
-    partial pending Phase G/H/I."""
+    partial pending Phase G/H."""
     entries = all_primitive_coverages()
     failures: list[tuple[str, str]] = []
     for name in _SPRINT_20E_BUCKET_C:
@@ -297,5 +297,5 @@ def test_sprint_20e_manifold_langevin_stays_partial() -> None:
             failures.append((name, str(actual)))
     assert not failures, (
         "manifold Langevin ops must stay at partial/planned (Bucket C "
-        f"— Phase G/H/I manifold halo gate); got {failures}."
+        f"— Phase G/H manifold halo gate); got {failures}."
     )

@@ -49,7 +49,7 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
   recognized but return unsupported/unimplemented behavior rather than fake
   success.
 - **Toolchain pins:** CUDA, NCCL, and ROCm pins agree in generated dashboards.
-- **Hardware frontier framing:** archived Phase G/H/I material establishes that
+- **Hardware frontier framing:** archived Phase G/H material establishes that
   backend-kernel completion requires real device proof.
 - **C-ABI GPU launch bridge (G7, 2026-06-10):** `tsrLaunchKernel` no longer
   dead-ends at `UNIMPLEMENTED` for GPU artifact kernels. A pluggable launcher

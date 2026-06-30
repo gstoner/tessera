@@ -14,7 +14,7 @@ from the primitive_coverage registry by
   4. The known structural invariants hold:
        - ``lowering_rule`` aggregate open == 0  (Sprint A1+ closure).
        - ``backend_kernel`` aggregate open == aggregate total (Phase
-         G/H/I universal gate).
+         G/H universal gate).
        - Every priority-≤50 category is the high-use S-series surface
          the audit promises to prioritise (S2/S5/S7/S10/S11/M6/M7).
 """
@@ -165,7 +165,7 @@ def test_dashboard_calls_out_phase_g_gate_explicitly() -> None:
     backend_kernel is universally open — so future readers don't see
     "backend_kernel is universally open" and panic."""
     text = render_markdown()
-    assert "Phase G/H/I" in text
+    assert "Phase G/H" in text
     assert "lowering_rule` is closed" in text
 
 

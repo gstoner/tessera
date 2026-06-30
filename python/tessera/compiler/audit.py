@@ -300,7 +300,7 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
     # Prefer the most concrete evidence: a fused manifest entry beats
     # a registry "partial" because the registry's backend_kernel axis
     # is intentionally the long-pole gate (Decision #25) and stays
-    # `partial` until Phase G/H/I lights up distributed runtime.
+    # `partial` until Phase G/H lights up distributed runtime.
     backend_name = _backend_lookup_name(op_name)
     if (backend_name in bm._CLIFFORD_APPLE_GPU_FUSED or
             backend_name in bm._EBM_APPLE_GPU_FUSED or

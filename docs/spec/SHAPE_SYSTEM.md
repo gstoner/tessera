@@ -424,7 +424,7 @@ it is enforced today vs. where it is a gap. The legend:
 | Reshape / Transpose / Concat / Slice / Reduce shape rules | MLIR-PASS | 8 per-op rules in `ShapeInferencePass.cpp` (inferReshape, inferTranspose, inferConcat, inferSlice, inferReduce) | **MLIR-VERIFIER** for per-op verifiers; inference handles correctness today |
 | Tile fragment size legality (WGMMA/MFMA/TCgen05) | MLIR-PASS + lit | FA-4 Tile IR lowering tests under `tests/tessera-ir/phase3/cuda13/`; lit FileCheck on emitted PTX | **MLIR-VERIFIER** — `tile.mma` / `tile.wgmma` ODS verifiers do not enforce fragment-size legality per target; relies on the lowering pass to gate |
 | Shared-memory bank/vector alignment | structural verifier (lit) | Tile IR lowering tests for `tile.alloc_shared` | **MLIR-PASS** — no dedicated alignment legality pass; falls out of lowering failure if violated |
-| Async copy / TMA / mbarrier memory-model legality | PY-VERIFIER + lit | `compiler/memory_verifier.py` (Sprint M4 + M5); `tests/unit/test_memory_verifier.py` (46 tests) | None — memory-model verifier covers the Tile IR layer; backend lowering is Phase G/H/I |
+| Async copy / TMA / mbarrier memory-model legality | PY-VERIFIER + lit | `compiler/memory_verifier.py` (Sprint M4 + M5); `tests/unit/test_memory_verifier.py` (46 tests) | None — memory-model verifier covers the Tile IR layer; backend lowering is Phase G/H |
 | Runtime shape witnesses | RT-WITNESS | `shape.py::RuntimeShapeWitness`; `JitFn.__call__` re-runs ConstraintSolver | None — the witness contract IS the runtime check |
 
 ### 11.2 Summary of gaps

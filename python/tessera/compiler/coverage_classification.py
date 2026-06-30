@@ -21,7 +21,7 @@ modeled on the sharding-audit triage:
   * ``covered_by_family``   — alias or variant; parent op's tests cover it
   * ``structural_only``     — metadata/registration op; direct test not meaningful
   * ``needs_direct_test``   — real primitive; **actionable test debt**
-  * ``hardware_gated``      — blocked on real device hardware (Phase G/H/I)
+  * ``hardware_gated``      — blocked on real device hardware (Phase G/H)
   * ``deprecated_or_internal`` — should not count as public test debt
 
 The classifier is rules-based (per-category default + per-name overrides)
@@ -60,7 +60,7 @@ COVERED_BY_FAMILY = "covered_by_family"
 STRUCTURAL_ONLY = "structural_only"
 #: Real primitive without direct test — actionable test debt.
 NEEDS_DIRECT_TEST = "needs_direct_test"
-#: Blocked on real device hardware (Phase G/H/I).
+#: Blocked on real device hardware (Phase G/H).
 HARDWARE_GATED = "hardware_gated"
 #: Deprecated / internal helper; not public test debt.
 DEPRECATED_OR_INTERNAL = "deprecated_or_internal"
@@ -185,7 +185,7 @@ _CATEGORY_DEFAULT_BUCKET: dict[str, str] = {
 # the category defaults are wrong and should be revisited.
 
 _NAME_OVERRIDES: dict[str, tuple[str, str]] = {
-    # ── hardware_gated: Phase G/H/I device-required ────────────────────
+    # ── hardware_gated: Phase G/H device-required ────────────────────
     "ebm_bivector_langevin_sample": (
         HARDWARE_GATED, "manifold Langevin needs real GPU mesh (Phase G)"
     ),
@@ -394,7 +394,7 @@ def render_classification_dashboard() -> str:
     )
     lines.append(
         f"| `hardware_gated`         | {summary[HARDWARE_GATED]:>4} "
-        f"| Blocked on real device hardware (Phase G/H/I) |"
+        f"| Blocked on real device hardware (Phase G/H) |"
     )
     lines.append(
         f"| `deprecated_or_internal` | {summary[DEPRECATED_OR_INTERNAL]:>4} "
@@ -429,7 +429,7 @@ def render_classification_dashboard() -> str:
     lines.append("")
     lines.append(
         f"These **{len(gated)}** ops need real device hardware "
-        f"(Phase G/H/I).  They cannot be tested with execute-and-"
+        f"(Phase G/H).  They cannot be tested with execute-and-"
         f"compare on this Mac."
     )
     lines.append("")

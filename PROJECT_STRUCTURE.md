@@ -414,5 +414,5 @@ Remaining build-system work:
 - Continue validating MLIR dialect registration and TableGen targets for each
   component in a full monorepo build when LLVM/MLIR are available.
 - Expand CI beyond the CPU spine once CUDA/HIP/NCCL execution paths are real and
-  deterministic enough for automated validation (Phase G/H/I — see
+  deterministic enough for automated validation (Phase G/H — see
   `docs/audit/backend/BACKEND_AUDIT.md`).

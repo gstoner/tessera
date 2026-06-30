@@ -237,7 +237,7 @@ def test_factorized_matmul_stays_partial_under_mock_mesh() -> None:
     actual = entries["factorized_matmul"].contract_status.get("sharding_rule")
     assert actual in ("partial", "planned"), (
         f"factorized_matmul sharding_rule must stay at `partial` "
-        f"(Phase G/H/I gate — SVD truncation needs real distributed "
+        f"(Phase G/H gate — SVD truncation needs real distributed "
         f"validation), but registry shows {actual!r}.  See "
         "test_factorized_matmul_truncation_is_not_compositional."
     )

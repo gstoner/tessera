@@ -1,5 +1,5 @@
 scope,item,status,ready,total,open,detail,source,next_action
-overall,End-to-end optimizing compiler,mixed,9,23,14,"closed=9, mixed=14, open=0, primary_open=backend_kernel, Direct test evidence, Target IR native/fused codegen",docs/audit/generated/compiler_progress.csv,Drive the largest open-work rows without collapsing backend promotion into all-up compiler status.
+overall,End-to-end optimizing compiler,mixed,10,23,13,"closed=10, mixed=13, open=0, primary_open=backend_kernel, Direct test evidence, Target IR native/fused codegen",docs/audit/generated/compiler_progress.csv,Drive the largest open-work rows without collapsing backend promotion into all-up compiler status.
 phase,Public Python API,closed,311,311,0,public=311,docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Frontend capture,closed,311,311,0,public=311,docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Graph IR registration,closed,311,311,0,"not_applicable=32, registered=279",docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
@@ -8,9 +8,9 @@ phase,Tile IR,mixed,39,311,272,"fused=32, not_applicable=7, partial=272",docs/au
 phase,Target IR native/fused codegen,mixed,232,311,79,"fused=232, reference=79",docs/audit/generated/support_table.csv,Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes.
 phase,Runtime dispatch readiness,closed,311,311,0,"fused=6, ready=305",docs/audit/generated/support_table.csv,Keep this layer drift-gated through support_table.csv.
 phase,Benchmark evidence,mixed,39,311,272,"benchmarked=39, none=272",docs/audit/generated/support_table.csv,Attach benchmarks to native/hardware-promoted rows first.
-primitive_axis,batching_rule,mixed,470,476,6,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,Close the small remaining transform-rule tail.
-primitive_axis,transpose_rule,mixed,474,476,2,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,No action unless this row reopens.
-primitive_axis,sharding_rule,mixed,433,476,43,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,"Prioritize model-facing collectives, layout, memory, and optimizer rows."
+primitive_axis,batching_rule,mixed,472,476,4,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,Close the small remaining transform-rule tail.
+primitive_axis,transpose_rule,closed,476,476,0,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,No action unless this row reopens.
+primitive_axis,sharding_rule,mixed,435,476,41,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,"Prioritize model-facing collectives, layout, memory, and optimizer rows."
 primitive_axis,lowering_rule,closed,476,476,0,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,No action unless this row reopens.
 primitive_axis,backend_kernel,mixed,7,476,469,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md,Promote by backend/pathway; do not treat every target as an all-up compiler veto.
 integration,Verifier coverage,mixed,123,170,47,"no_verifier=47, real=123",docs/audit/generated/verifier_coverage.csv,"Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes."

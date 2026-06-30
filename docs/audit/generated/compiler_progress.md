@@ -11,7 +11,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `End-to-end optimizing compiler` | mixed | 9 | 23 | 14 | closed=9, mixed=14, open=0, primary_open=backend_kernel, Direct test evidence, Target IR native/fused codegen | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
+| `End-to-end optimizing compiler` | mixed | 10 | 23 | 13 | closed=10, mixed=13, open=0, primary_open=backend_kernel, Direct test evidence, Target IR native/fused codegen | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
 
 ## Compiler Phase And IR State
 
@@ -30,9 +30,9 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `batching_rule` | mixed | 470 | 476 | 6 | primitive contract axis; open means partial or planned, not necessarily missing API support | Close the small remaining transform-rule tail. |
-| `transpose_rule` | mixed | 474 | 476 | 2 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `sharding_rule` | mixed | 433 | 476 | 43 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
+| `batching_rule` | mixed | 472 | 476 | 4 | primitive contract axis; open means partial or planned, not necessarily missing API support | Close the small remaining transform-rule tail. |
+| `transpose_rule` | closed | 476 | 476 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `sharding_rule` | mixed | 435 | 476 | 41 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
 | `lowering_rule` | closed | 476 | 476 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `backend_kernel` | mixed | 7 | 476 | 469 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 

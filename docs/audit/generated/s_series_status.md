@@ -14,9 +14,9 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 6 | 470 |
-| `transpose_rule` | 2 | 474 |
-| `sharding_rule` | 43 | 433 |
+| `batching_rule` | 4 | 472 |
+| `transpose_rule` | 0 | 476 |
+| `sharding_rule` | 41 | 435 |
 | `lowering_rule` | 0 | 476 |
 | `backend_kernel` | 469 | 7 |
 
@@ -58,7 +58,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | M6 | `ebm` | 14 | — | — | 6 | — | 14 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
-| other | `acceptance_verification` | 2 | 2 | 2 | 2 | — | 2 |
+| other | `acceptance_verification` | 2 | — | — | — | — | 2 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | — | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 274 | 6 | 2 | 23 | 274 |
+| other | 274 | 4 | 0 | 21 | 274 |
 
 ## Closure trajectory
 

@@ -101,19 +101,23 @@ def _compile_to_hsaco(k: int, it: int, kind: str) -> bytes:
 
 def _launch(hip, hsaco, carry):
     k = carry.size
+    # Discovery gate: hipInit / hipModuleLoadData failing means no usable AMD GPU
+    # here → return None so the caller skips. PAST a successful module load the
+    # device works, so symbol lookup / alloc / launch / sync failures are REAL
+    # failures of this generated kernel and must fail the test, not be laundered
+    # into a skip.
     if hip.hipInit(0) != 0:
         return None
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         return None
     fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(
-            ctypes.byref(fn), mod, b"tessera_control_for_norm_0") != 0:
-        return None
+    assert hip.hipModuleGetFunction(
+        ctypes.byref(fn), mod, b"tessera_control_for_norm_0") == 0, \
+        "kernel symbol tessera_control_for_norm_0 not found in module"
     dc, do = ctypes.c_void_p(), ctypes.c_void_p()
     for d in (dc, do):
-        if hip.hipMalloc(ctypes.byref(d), k * 4) != 0:
-            return None
+        assert hip.hipMalloc(ctypes.byref(d), k * 4) == 0, "hipMalloc failed"
     hip.hipMemcpy(dc, carry.ctypes.data_as(ctypes.c_void_p), k * 4, 1)
 
     def memref(p):
@@ -128,10 +132,12 @@ def _launch(hip, hsaco, carry):
     launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
                        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
                           ctypes.c_void_p])
-    if launch(fn, 1, 1, 1, BD, 1, 1, 0, None, arr, None) != 0:
-        return None
-    if hip.hipDeviceSynchronize() != 0:
-        return None
+    rc = launch(fn, 1, 1, 1, BD, 1, 1, 0, None, arr, None)
+    assert rc == 0, (
+        f"hipModuleLaunchKernel failed (rc={rc}) for k={k} — kernel failed to "
+        "launch on a working GPU")
+    rc = hip.hipDeviceSynchronize()
+    assert rc == 0, f"hipDeviceSynchronize failed (rc={rc}) for k={k} — crashed"
     out = np.zeros(k, dtype=np.float32)
     hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), do, k * 4, 2)
     for d in (dc, do):
@@ -160,7 +166,8 @@ def test_control_for_norm_executes_on_gfx1151(kind, k, it):
     carry = (rng.standard_normal((1, k)) * 3.0).astype(np.float32)
     out = _launch(hip, _compile_to_hsaco(k, it, kind), carry)
     if out is None:
-        pytest.skip("no usable AMD GPU (hipModuleLoadData / launch unavailable)")
+        # Only pre-launch discovery failed; a launch/sync failure raises.
+        pytest.skip("no usable AMD GPU (hipInit / hipModuleLoadData failed)")
     fn = _rmsnorm if kind == "rmsnorm" else _layer_norm
     ref = carry.ravel().astype(np.float64)
     for _ in range(it):

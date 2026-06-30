@@ -69,3 +69,20 @@ func.func @h(%init: tensor<8x8xf32>) -> tensor<8x8xf32> {
   } : (tensor<8x8xf32>) -> tensor<8x8xf32>
   return %r : tensor<8x8xf32>
 }
+
+// -----
+// ─── a rank>1 carry is NOT lowered — the kernel ABI is a flat memref<?xf32> ──
+func.func @r2_body(%c: tensor<1x8xf32>) -> tensor<1x8xf32> {
+  %0 = "tessera.add"(%c, %c) : (tensor<1x8xf32>, tensor<1x8xf32>) -> tensor<1x8xf32>
+  return %0 : tensor<1x8xf32>
+}
+
+// CHECK-NOT:   gpu.func
+// CHECK:       tessera.control_for
+func.func @r2(%init: tensor<1x8xf32>) -> tensor<1x8xf32> {
+  %r = "tessera.control_for"(%init) {
+    body = @r2_body, start = 0 : i64, stop = 4 : i64, step = 1 : i64,
+    carry_arg_index = 0 : i64
+  } : (tensor<1x8xf32>) -> tensor<1x8xf32>
+  return %r : tensor<1x8xf32>
+}

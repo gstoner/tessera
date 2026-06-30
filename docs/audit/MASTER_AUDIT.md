@@ -1,11 +1,11 @@
 ---
-last_updated: 2026-06-25
+last_updated: 2026-06-30
 audit_role: root
 ---
 
 # Tessera Audit Master
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-30
 
 > **Reconciled 2026-06-24 (hardware bring-up):** the Runtime/backend + NVIDIA +
 > ROCm rows were refreshed against merged reality — they had drifted badly behind
@@ -36,7 +36,7 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 
 | Area | Current state | Still open |
 |---|---|---|
-| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, 9 dashboards are CSV-canonical, and the surface (6→1) + test-coverage (2→1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, and optional dashboard consolidation (target maps, e2e/s_series rollups). (COMPILER_AUDIT Phase 1 closed 2026-06-22 — effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
+| Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, the compiler-progress rollup is CSV-canonical, and the surface (6->1) + test-coverage (2->1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, Tile IR/native Target IR long tail, and per-backend promotion. (COMPILER_AUDIT Phase 1 closed 2026-06-22: effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
 | Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm gfx1151 executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()` (see ROCm row below); NVIDIA has its first executable lane — sm_120 `mma.sync` matmul hardware-verified on an RTX 5070 Ti (#106). | NVIDIA execution is one op × one arch (sm_120) so far; ROCm is RDNA-only (CDNA/MI300 unproven); MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. Row authority: `generated/runtime_execution_matrix.md`. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
 | NVIDIA (Phase G) | CUDA 13.3 pinned; **sm_120 `mma.sync` matmul is hardware-verified end-to-end on a real RTX 5070 Ti (consumer Blackwell)** — `emit_mma_sync_matmul_ptx` → PTX → assemble → CUDA launch bridge (`tsrRegisterGpuLauncher`) → execute-and-compare (#106). | One op (matmul) × one arch (sm_120). Hopper sm_90 / datacenter sm_100 unproven (sm_90a WGMMA emit won't run on sm_120 and vice-versa); the rest of the op surface is artifact_only; broaden coverage + add the flash-attn family. |
@@ -49,6 +49,7 @@ never copies their numbers (a copied count silently goes stale; per Decision
 #25/#26 the generated docs under `generated/` are the source of truth, drift-
 gated by `scripts/check_generated_docs.sh`). For live figures, read:
 
+- [`generated/compiler_progress.md`](generated/compiler_progress.md) — all-up compiler progress, phase/IR state, primitive contract state, integration evidence, codegen pathways, and open-work summary.
 - [`generated/runtime_abi.md`](generated/runtime_abi.md) — C ABI symbol totals + Apple symbol/family counts.
 - [`generated/runtime_execution_matrix.md`](generated/runtime_execution_matrix.md) — executable rows per target (Apple CPU/GPU, native CPU, JIT CPU numpy).
 - [`op_target_conformance.md`](op_target_conformance.md) — complete/partial/missing op×target cells.

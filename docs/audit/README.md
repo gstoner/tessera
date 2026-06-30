@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-26
+last_updated: 2026-06-30
 audit_role: index
 ---
 
@@ -15,6 +15,8 @@ with [MASTER_AUDIT.md](MASTER_AUDIT.md).
 ## Authority Rules
 
 - Start with [MASTER_AUDIT.md](MASTER_AUDIT.md) for all-up status.
+- Start with [generated/compiler_progress.md](generated/compiler_progress.md)
+  for the generated compiler-progress dashboard and open-work summary.
 - Start with the theme audit doc for focused status.
 - Treat generated dashboards as count/status truth.
 - Treat `archive/` content as provenance and historical context, not as the
@@ -74,6 +76,7 @@ and gates and are excluded from this contract.
 | [README.md](README.md) | Folder map and authority rules. |
 | [op_target_conformance.md](op_target_conformance.md) | Drift-gated op-by-target conformance dashboard. |
 | [standalone_primitive_coverage.md](standalone_primitive_coverage.md) | Drift-gated standalone primitive coverage dashboard. |
+| [generated/compiler_progress.md](generated/compiler_progress.md) | Generated all-up compiler-progress dashboard: phase/IR state, primitives, integration, backend/codegen pathways, and open work. |
 | [generated/](generated/) | Script/test-owned generated dashboards. |
 
 ## Themes
@@ -88,6 +91,7 @@ and gates and are excluded from this contract.
 | Coverage | [coverage/COVERAGE_AUDIT.md](coverage/COVERAGE_AUDIT.md) | Primitive, op, examples, KV-cache, and support coverage. |
 | Domain roadmaps | [domain/DOMAIN_AUDIT.md](domain/DOMAIN_AUDIT.md) | GA/EBM, attention variants, CorrDiff/SciML, sharding, and autodiff crosscuts. |
 | Roadmap | [roadmap/ROADMAP_AUDIT.md](roadmap/ROADMAP_AUDIT.md) | Execution roadmap, deferred items, and sprint plans. |
+| Generated compiler progress | [generated/compiler_progress.md](generated/compiler_progress.md) | All-up compiler-progress rollup and open-work summary. |
 | Generated dashboards | [generated/](generated/) | Script/test-owned dashboards. |
 
 ## Archive Map

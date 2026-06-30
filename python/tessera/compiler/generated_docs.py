@@ -78,6 +78,16 @@ def _r_support_table_csv() -> str:
     return audit.render_csv()
 
 
+def _r_compiler_progress() -> str:
+    from . import compiler_progress
+    return compiler_progress.render_markdown()
+
+
+def _r_compiler_progress_csv() -> str:
+    from . import compiler_progress
+    return compiler_progress.render_csv()
+
+
 def _r_conformance() -> str:
     from . import conformance_matrix
     return conformance_matrix.render_markdown()
@@ -369,6 +379,13 @@ class GeneratedDoc:
 
 
 REGISTRY: tuple[GeneratedDoc, ...] = (
+    # ── All-up compiler progress rollup ──
+    GeneratedDoc(
+        "compiler_progress", "compiler_progress",
+        _GEN / "compiler_progress.md", _r_compiler_progress,
+        csv_path=_GEN / "compiler_progress.csv",
+        render_csv=_r_compiler_progress_csv,
+    ),
     # ── Op / primitive coverage ──
     GeneratedDoc(
         "support_table", "op_coverage", _GEN / "support_table.md", _r_support_table,

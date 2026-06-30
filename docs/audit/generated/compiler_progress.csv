@@ -1,0 +1,32 @@
+scope,item,status,ready,total,open,detail,source
+overall,End-to-end optimizing compiler,mixed,1855,2472,617,"compiler pipeline is live, but native codegen, verifier proof, and per-backend promotion remain independent axes",docs/audit/generated/support_table.csv
+phase,Public Python API,closed,309,309,0,public=309,docs/audit/generated/support_table.csv
+phase,Frontend capture,closed,309,309,0,public=309,docs/audit/generated/support_table.csv
+phase,Graph IR registration,closed,309,309,0,"not_applicable=32, registered=277",docs/audit/generated/support_table.csv
+phase,Schedule IR,closed,309,309,0,"complete=307, not_applicable=2",docs/audit/generated/support_table.csv
+phase,Tile IR,mixed,39,309,270,"fused=32, not_applicable=7, partial=270",docs/audit/generated/support_table.csv
+phase,Target IR native/fused codegen,mixed,232,309,77,"fused=232, reference=77",docs/audit/generated/support_table.csv
+phase,Runtime dispatch readiness,closed,309,309,0,"fused=6, ready=303",docs/audit/generated/support_table.csv
+phase,Benchmark evidence,mixed,39,309,270,"benchmarked=39, none=270",docs/audit/generated/support_table.csv
+primitive_axis,batching_rule,mixed,470,474,4,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+primitive_axis,transpose_rule,closed,474,474,0,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+primitive_axis,sharding_rule,mixed,433,474,41,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+primitive_axis,lowering_rule,closed,474,474,0,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+primitive_axis,backend_kernel,mixed,7,474,467,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+integration,Verifier coverage,mixed,120,167,47,"no_verifier=47, real=120",docs/audit/generated/verifier_coverage.csv
+integration,Direct test evidence,mixed,339,474,135,"covered_by_family=40, directly_tested=339, hardware_gated=4, needs_direct_test=2, structural_only=89",docs/audit/generated/test_coverage.csv
+integration,Runtime execution matrix,closed,116,116,0,"apple_cpu=2, apple_gpu=2, cpu=2, nvidia_sm120=1, rocm=55, x86=54",docs/audit/generated/runtime_execution_matrix.csv
+integration,Runtime ABI symbols,mixed,387,640,253,"apple=557, nvidia=5, rocm=10, x86=68",docs/audit/generated/runtime_abi.csv
+integration,Audited repo surfaces,mixed,31,58,27,"archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10",docs/audit/generated/surface_status.csv
+codegen_pathway,Apple CPU,closed,56,56,0,"runtime: apple_cpu=2; target_map: fused=2, reference=52",docs/audit/generated/apple_target_map.csv
+codegen_pathway,Apple GPU,mixed,55,56,1,"runtime: apple_gpu=2; target_map: absent=1, fused=43, hardware_verified=10",docs/audit/generated/apple_target_map.csv
+codegen_pathway,x86 / CPU,closed,2,2,0,runtime: cpu=2,docs/audit/generated/runtime_execution_matrix.csv
+codegen_pathway,ROCm / HIP,mixed,84,87,3,"runtime: rocm=55; target_map: artifact_only=3, compiled=27, hardware_verified=2",docs/audit/generated/rocm_target_map.csv
+codegen_pathway,CUDA / NVIDIA,mixed,1,36,35,runtime: nvidia_sm120=1; target_map: artifact_only=35,docs/audit/generated/nvidia_sm90_target_map.csv
+open_work,Target IR native/fused codegen,mixed,232,309,77,"fused=232, reference=77",docs/audit/generated/support_table.csv
+open_work,backend_kernel,mixed,7,474,467,"primitive contract axis; open means partial or planned, not necessarily missing API support",docs/audit/generated/s_series_status.md
+open_work,Verifier coverage,mixed,120,167,47,"no_verifier=47, real=120",docs/audit/generated/verifier_coverage.csv
+open_work,Direct test evidence,mixed,339,474,135,"covered_by_family=40, directly_tested=339, hardware_gated=4, needs_direct_test=2, structural_only=89",docs/audit/generated/test_coverage.csv
+open_work,Audited repo surfaces,mixed,31,58,27,"archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10",docs/audit/generated/surface_status.csv
+open_work,ROCm target-map native promotion,mixed,29,32,3,"artifact_only=3, compiled=27, hardware_verified=2",docs/audit/generated/rocm_target_map.csv
+open_work,CUDA target-map native promotion,open,0,35,35,artifact_only=35,docs/audit/generated/nvidia_sm90_target_map.csv

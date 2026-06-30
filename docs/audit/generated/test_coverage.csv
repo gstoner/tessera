@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,107,21,10,128,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,128 direct test references
+add,107,22,10,129,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,129 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -235,7 +235,7 @@ laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
 latent_kv_compress,8,19,0,27,0,fp16 fp32,directly_tested,27 direct test references
 latent_kv_expand_k,5,8,0,13,0,fp16 fp32,directly_tested,13 direct test references
 latent_kv_expand_v,4,7,0,11,0,fp16 fp32,directly_tested,11 direct test references
-layer_norm,25,7,3,32,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,32 direct test references
+layer_norm,25,8,3,33,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,33 direct test references
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 lgamma,3,0,0,3,0,,directly_tested,3 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
@@ -354,7 +354,7 @@ repeat,3,0,0,3,0,,directly_tested,3 direct test references
 reshape,11,15,1,26,0,,directly_tested,26 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
-rmsnorm,74,11,3,85,0,bf16 f16 f32 f64 fp32,directly_tested,85 direct test references
+rmsnorm,74,12,3,86,0,bf16 f16 f32 f64 fp32,directly_tested,86 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'

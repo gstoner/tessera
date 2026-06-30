@@ -63,6 +63,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlIfNormKernelPass();
 // CF4e-2 — linear SSM scan (h_t = h_{t-1}@W + x_t; GEMV body + W capture +
 // per-step xs) → cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlScanGemvKernelPass();
+// CF4e-3 — nonlinear RNN-cell scan (h_t = tanh(h@W + x@U + b); two GEMV
+// captures + bias + tanh + per-step xs) → cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlScanRnnKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

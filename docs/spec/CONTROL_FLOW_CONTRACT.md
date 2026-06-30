@@ -322,8 +322,39 @@ claim.
   the per-step xs. Reuses the CF4d-1 cooperative-workgroup GEMV substrate (h in
   LDS, barrier per step) with the CF4e-1 stacked-ys streaming. Proven on gfx1151 by
   `tests/unit/test_rocm_control_scan_gemv_exec.py` (carry + stacked ys bit-exact vs
-  the numpy recurrence). The full nonlinear cell `h = act(h@W + x@U + b)` (two
-  captures + activation) layers on this same substrate next.
+  the numpy recurrence).
+- **CF4e-3** *(nonlinear RNN-cell scan done, ROCm/gfx1151)* — the full Elman/GRU-
+  style recurrent cell as a scan: `h_t = tanh(h_{t-1} @ W + x_t @ U + b)`,
+  `y_t = h_t` (1×K carry, two K×K captures `W`/`U`, a 1×K bias `b`, per-step `x_t`).
+  `GenerateROCMControlScanRnnKernel` (`--generate-rocm-control-scan-rnn-kernel`)
+  fuses the **two GEMVs** — `h@W` over the LDS carry and `x@U` over the per-step
+  input — into one per-step reduction, then `+ b`, `tanh`, the barrier handoff and
+  stacked-ys store. Builds directly on the CF4e-2 capture substrate (`control_scan`
+  already carries variadic captures); the new piece is the second GEMV (over `x_t`)
+  + bias + activation. Proven on gfx1151 by
+  `tests/unit/test_rocm_control_scan_rnn_exec.py` (carry + stacked ys bit-exact vs
+  the numpy `tanh(h@W + x@U + b)` recurrence). This is a real recurrent cell —
+  RNN/GRU hidden-state evolution — running as one device dispatch.
+- **Cross-element `control_while` (power iteration) — deferred, by design.** A
+  matmul-body while (`h = h @ W` until convergence — power iteration / fixed-point
+  solvers) does NOT fit `control_while`'s current model, for two structural
+  reasons, so it is deferred rather than shipped contrived (cf. the CF4d-5
+  grid.sync deferral):
+  1. **Continuation semantics.** `control_while`'s `cond` is `(carry) -> pred`
+     evaluated **per element**, with per-element freezing once the predicate goes
+     false (CF4c-cont / CF2c). A cross-element body couples every element each step
+     (`h @ W` mixes all of `h`), so it needs **uniform** continuation — all
+     elements stop together on a workgroup-wide *reduction* of the carry
+     (`Σ h > eps`, `‖h‖ < eps`), not a per-element predicate. That is a different
+     while semantics than the op encodes; bolting it on needs a new
+     attribute/marker or a new op.
+  2. **Capture threading.** The matmul body needs the `W` capture, but CF2's
+     `lowerControlWhile` passes only the carry to `@body`/`@cond` (CF4c-cont
+     requires *no* captures) — so the capture plumbing the scan path gained in
+     CF4e-2 does not exist on the while path.
+  Both are real op-model extensions, and power iteration is weakly motivated
+  versus the recurrent cells already covered (CF4d-1..4, CF4e-1..3). Revisit when
+  a workload demands a data-dependent cross-element loop bound.
 - **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
   cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
   lane by lane.

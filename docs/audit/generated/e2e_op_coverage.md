@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 232 |
-| ``runnable_reference`` | 79 |
+| ``runnable_reference`` | 81 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 0 |
 | ``planned`` | 0 |
-| **total** | **311** |
+| **total** | **313** |
 
 ## complete (232)
 
@@ -268,7 +268,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
 
-## runnable_reference (79)
+## runnable_reference (81)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -340,6 +340,8 @@ each row into a single E2E tier.
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | none |
+| ``cache_commit`` | state_update | public | public | registered | partial | reference | ready | none |
+| ``cache_rollback`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |

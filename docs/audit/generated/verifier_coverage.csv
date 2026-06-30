@@ -19,7 +19,9 @@ src/compiler/ir/TesseraOps.td,AttnSlidingWindowOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnTopKBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,BatchedGemmOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastOp,1,1,real
+src/compiler/ir/TesseraOps.td,CacheCommitOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,CachePageLookupOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,CacheRollbackOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,CastOp,1,1,real
 src/compiler/ir/TesseraOps.td,CholeskyOp,1,1,real
 src/compiler/ir/TesseraOps.td,CholeskySolveOp,1,1,real

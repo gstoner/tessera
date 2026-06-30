@@ -144,6 +144,10 @@ _OP_EFFECTS.update({
     "kv_cache_create": Effect.state,
     "kv_cache_read": Effect.state,
     "kv_cache_write": Effect.state,
+    # SD1-3 speculative-decode cache cursor ops — typed state effect (the
+    # IR-visible form of advance_kv / advance_ssm; no hidden Python mutation).
+    "cache_commit": Effect.state,
+    "cache_rollback": Effect.state,
     "all_to_all": Effect.collective,
     "await": Effect.collective,
     "send": Effect.collective,

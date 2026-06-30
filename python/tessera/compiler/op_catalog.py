@@ -189,6 +189,10 @@ _SPECS = [
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
     OpSpec("kv_cache_read", "tessera.kv_cache.read", 2, 2, effect="state", lowering="state_update"),
+    # SD1-3 — speculative-decode cache cursor ops (typed state effect, no device
+    # kernel; ride KVCacheHandle.trim / SSMStateHandle.rollback).
+    OpSpec("cache_commit", "tessera.cache.commit", 2, 2, effect="state", lowering="state_update"),
+    OpSpec("cache_rollback", "tessera.cache.rollback", 2, 2, effect="state", lowering="state_update"),
     # SD1 — speculative-decode acceptance. spec_accept is a pure verifier
     # (draft/target → [path, length, bonus]); the cache commit/rollback live on
     # the state-effecting kv/ssm handles.
@@ -487,7 +491,11 @@ def normalize_op_name(name: str) -> str:
             return name.removeprefix(prefix)
     if name.startswith("tessera."):
         tail = name.removeprefix("tessera.")
-        if tail.startswith("kv_cache."):
+        # Dotted stateful-cache graph names map to their underscore public specs
+        # (kv_cache.append → kv_cache_append; cache.commit → cache_commit), so
+        # get_op_spec resolves them and downstream effect inference sees the state
+        # write rather than defaulting a lowered graph name to pure.
+        if tail.startswith("kv_cache.") or tail.startswith("cache."):
             return tail.replace(".", "_")
         return tail
     return name

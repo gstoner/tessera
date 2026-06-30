@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 472 |
-| `transpose_rule` | 0 | 476 |
-| `sharding_rule` | 41 | 435 |
-| `lowering_rule` | 0 | 476 |
-| `backend_kernel` | 469 | 7 |
+| `batching_rule` | 6 | 472 |
+| `transpose_rule` | 0 | 478 |
+| `sharding_rule` | 43 | 435 |
+| `lowering_rule` | 0 | 478 |
+| `backend_kernel` | 471 | 7 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
-| `cpu` | 283 | 0 | 283 | 0 | 193 |
-| `x86` | 245 | 214 | 31 | 0 | 231 |
-| `apple_cpu` | 315 | 2 | 313 | 0 | 161 |
-| `apple_gpu` | 71 | 45 | 1 | 25 | 405 |
-| `rocm` | 248 | 213 | 0 | 35 | 228 |
-| `nvidia_sm80` | 54 | 0 | 0 | 54 | 422 |
-| `nvidia_sm90` | 86 | 0 | 0 | 86 | 390 |
-| `nvidia_sm100` | 54 | 0 | 0 | 54 | 422 |
-| `nvidia_sm120` | 54 | 1 | 0 | 53 | 422 |
+| `cpu` | 285 | 0 | 285 | 0 | 193 |
+| `x86` | 245 | 214 | 31 | 0 | 233 |
+| `apple_cpu` | 317 | 2 | 315 | 0 | 161 |
+| `apple_gpu` | 71 | 45 | 1 | 25 | 407 |
+| `rocm` | 248 | 213 | 0 | 35 | 230 |
+| `nvidia_sm80` | 54 | 0 | 0 | 54 | 424 |
+| `nvidia_sm90` | 86 | 0 | 0 | 86 | 392 |
+| `nvidia_sm100` | 54 | 0 | 0 | 54 | 424 |
+| `nvidia_sm120` | 54 | 1 | 0 | 53 | 424 |
 
 ## Per-category breakdown
 
@@ -97,7 +97,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
 | other | `state_space` | 1 | — | — | 1 | — | 1 |
 | other | `state_tree` | 10 | — | — | — | — | 10 |
-| other | `state_update` | 4 | 1 | — | — | — | 4 |
+| other | `state_update` | 6 | 3 | — | 2 | — | 6 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
 | other | `transform` | 11 | — | — | — | — | 11 |
 | other | `vision` | 4 | — | — | — | — | 4 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 274 | 4 | 0 | 21 | 274 |
+| other | 276 | 6 | 0 | 23 | 276 |
 
 ## Closure trajectory
 

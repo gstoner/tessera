@@ -4460,12 +4460,24 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def cache_commit(cache, accepted_length):
         """SD1-3 speculative-decode commit (Graph IR op ``tessera.cache.commit``):
         advance a cache handle's cursor to keep ``accepted_length`` tokens — the
-        accepted prefix stays, the rejected draft tail is dropped. Delegates to
-        ``tessera.speculative.advance_kv`` (the canonical KV cursor trim). A typed
-        state effect at the IR level (no hidden Python mutation). Returns the
-        handle for chaining."""
-        from .speculative import advance_kv
-        return advance_kv(cache, int(accepted_length))
+        accepted prefix stays, the rejected draft tail is dropped. A typed state
+        effect at the IR level (no hidden Python mutation). Returns the handle for
+        chaining. Supports both handle families:
+
+          * KV (``KVCacheHandle``, has ``current_seq``) → ``advance_kv`` trims to
+            keep the first ``accepted_length`` tokens;
+          * SSM (``SSMStateHandle``, has ``count``/``rollback``) → rewinds the ring
+            buffer to keep the first ``accepted_length`` replay tokens
+            (``rollback(count - accepted_length)``), the SSM analogue of the trim.
+        """
+        n = int(accepted_length)
+        if hasattr(cache, "current_seq"):          # KVCacheHandle
+            from .speculative import advance_kv
+            return advance_kv(cache, n)
+        if hasattr(cache, "count") and hasattr(cache, "rollback"):  # SSMStateHandle
+            return cache.rollback(max(0, int(cache.count) - n))
+        raise TypeError(
+            "cache_commit needs a KV (current_seq) or SSM (count/rollback) handle")
 
     def cache_rollback(cache, num_rejected):
         """SD1-3 speculative-decode rollback (Graph IR op

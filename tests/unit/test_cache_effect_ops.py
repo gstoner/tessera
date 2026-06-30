@@ -47,6 +47,18 @@ def test_cache_ops_registered_and_dispatchable():
         assert hasattr(tessera.ops, name)
 
 
+def test_dotted_graph_names_resolve_to_state_spec():
+    # Regression (review): once lowered to the Graph IR name, get_op_spec must
+    # still resolve the dotted cache.* ops to their state specs, so downstream
+    # effect inference (canonical_compile._op_effect) sees the write, not pure.
+    from tessera.compiler.op_catalog import get_op_spec
+    from tessera.compiler.canonical_compile import _op_effect
+    for g in ("tessera.cache.commit", "tessera.cache.rollback"):
+        spec = get_op_spec(g)
+        assert spec is not None and spec.effect == "state", g
+        assert _op_effect(g, {}) == "state", g
+
+
 # ── (2) faithful KV cursor behavior ─────────────────────────────────────────
 def _kv(seq):
     from tessera.cache import KVCacheHandle
@@ -74,16 +86,29 @@ def test_cache_rollback_rewinds_rejected_on_kv():
 
 
 # ── (2) faithful SSM cursor behavior ────────────────────────────────────────
-def test_cache_rollback_rewinds_rejected_on_ssm():
+def _ssm():
     from tessera.cache import SSMStateHandle
     h = SSMStateHandle(batch=1, num_channels=3, state_dim=2,
                        a=np.ones((3, 2), np.float32))
     for _ in range(5):
         h.append(np.ones((1, 3)), np.ones((1, 3)), np.ones((1, 2)))
     assert h.count == 5
+    return h
+
+
+def test_cache_rollback_rewinds_rejected_on_ssm():
+    h = _ssm()
     # rollback(num_rejected) == handle.rollback — the SSM speculative undo.
     tessera.ops.cache_rollback(h, 2)
     assert h.count == 3
+
+
+def test_cache_commit_keeps_accepted_prefix_on_ssm():
+    # Regression (review): cache_commit must support SSM handles (not just KV) —
+    # keep the first accepted_length replay tokens via the ring-buffer rewind.
+    h = _ssm()
+    tessera.ops.cache_commit(h, 2)  # keep first 2 → rollback(5-2)
+    assert h.count == 2
 
 
 def test_cache_rollback_requires_a_cursor_handle():

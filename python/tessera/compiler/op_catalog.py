@@ -491,7 +491,11 @@ def normalize_op_name(name: str) -> str:
             return name.removeprefix(prefix)
     if name.startswith("tessera."):
         tail = name.removeprefix("tessera.")
-        if tail.startswith("kv_cache."):
+        # Dotted stateful-cache graph names map to their underscore public specs
+        # (kv_cache.append → kv_cache_append; cache.commit → cache_commit), so
+        # get_op_spec resolves them and downstream effect inference sees the state
+        # write rather than defaulting a lowered graph name to pure.
+        if tail.startswith("kv_cache.") or tail.startswith("cache."):
             return tail.replace(".", "_")
         return tail
     return name

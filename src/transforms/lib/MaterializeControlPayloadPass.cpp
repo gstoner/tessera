@@ -191,8 +191,12 @@ struct MaterializeControlPayload
         st.addOperands(valueMap.lookup(p.b));
       st.addTypes(p.resTy);
       if (p.name == "tessera.matmul") {
-        st.addAttribute("transpose_a", b.getBoolAttr(p.iattr & 1));
-        st.addAttribute("transpose_b", b.getBoolAttr(p.iattr & 2));
+        // The Tessera dialect spells these transposeA/transposeB (camelCase);
+        // emitting transpose_a/_b would be ignored by the lowerings
+        // (TesseraOps.td MatmulOp / TesseraToLinalg), so a transposed decoded
+        // matmul would run as untransposed and mismatch the inferred shape.
+        st.addAttribute("transposeA", b.getBoolAttr(p.iattr & 1));
+        st.addAttribute("transposeB", b.getBoolAttr(p.iattr & 2));
       } else if (p.name == "tessera.rmsnorm" ||
                  p.name == "tessera.layer_norm") {
         st.addAttribute("eps", b.getF64FloatAttr(p.eps));

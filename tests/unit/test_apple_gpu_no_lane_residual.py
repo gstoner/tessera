@@ -104,6 +104,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Attention/rope variants without a dedicated lane yet.
         "alibi", "ntk_rope", "rope_merge", "rope_split", "varlen_sdpa",
         "laplacian_2d",
+        # Speculative-decode acceptance (SD1; verification ops — ROCm-native
+        # kernels, no Apple GPU dispatch lane).
+        "spec_accept", "spec_accept_sample",
         # Misc.
         "conv3d_ndhwc", "einsum", "fused_epilogue",
     }

@@ -242,9 +242,23 @@ Acceptance:
   CUDA native `spec_accept` proof stays artifact-only here (no NVIDIA HW); the
   distribution-preserving **Leviathan / rejection-sampling** form (per-token
   `min(1, p_t/p_q)` acceptance + residual bonus, with RNG) is **SD1-2**.
-- **SD1-2+ (open):** Leviathan rejection-sampling `spec_accept`;
-  `cache_commit`/`cache_rollback` typed effects over the KV/SSM handles;
-  `target_verify` I/O contract; the Gumiho serial-draft backend loop (now
+- **SD1-2 (Leviathan rejection-sampling spec_accept) — done, ROCm/gfx1151.** New
+  op `Tessera_SpecAcceptSampleOp` (`[Pure]`, ODS + verifier): the
+  distribution-preserving linear-chain verify. Per position accept
+  `accept_u[i]·p_draft ≤ p_target`; on first reject draw a corrected token from the
+  residual `normalize(relu(target−draft))`, on full accept a bonus from
+  `target_probs`'s extra row. **RNG is explicit** — `accept_u`/`resid_u` are op
+  operands (CF0 contract), and the categorical draw is **CDF inversion** (not
+  numpy `rng.choice`), so the op is a deterministic, device-bit-exact function.
+  `GenerateROCMSpecAcceptSampleKernel`
+  (`--generate-rocm-spec-accept-sample-kernel`) lowers it to one single-thread
+  `gpu.func` (serial accept loop + CDF-inversion categorical), proven bit-exact on
+  gfx1151 by `tests/unit/test_rocm_spec_accept_sample_exec.py` (random
+  rejection-sampling + full-accept). `op_catalog`/`tessera.ops`
+  registration + `PYTHON_API_SPEC` updated. The tree (multi-path) rejection form
+  is a later follow-up.
+- **SD1-3+ (open):** `cache_commit`/`cache_rollback` typed effects over the KV/SSM
+  handles; `target_verify` I/O contract; the Gumiho serial-draft backend loop (now
   unblocked — the CF3/CF4 control-flow substrate landed, #224–#246).
 
 ## DS1 - DSpark Library Contract

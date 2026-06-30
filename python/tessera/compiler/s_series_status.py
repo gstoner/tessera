@@ -28,6 +28,7 @@ from .primitive_coverage import (
     PrimitiveCoverage,
     all_primitive_coverages,
 )
+from . import backend_manifest as _backend_manifest
 
 
 # Per the user direction (2026-05-22), prioritise the high-use S2/S5/
@@ -83,6 +84,21 @@ DASHBOARD_AXES: tuple[str, ...] = (
 # and ``not_applicable`` are closed; ``unknown`` ⇒ entry missing the
 # axis, which we surface as a separate column for honesty.
 OPEN_STATUSES: frozenset[str] = frozenset({"partial", "planned"})
+
+# Per-target native proof statuses.  These mean "this architecture has a real
+# backend path", not "every declared backend for the primitive is complete".
+NATIVE_BACKEND_STATUSES: frozenset[str] = frozenset({
+    "hardware_verified",
+    "compiled",
+    "fused",
+    "packaged",
+})
+
+OPEN_BACKEND_STATUSES: frozenset[str] = frozenset({
+    "artifact_only",
+    "compileable",
+    "planned",
+})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,6 +161,55 @@ def tally_by_category(
     return rows
 
 
+def tally_backend_by_target(
+    cov: dict[str, PrimitiveCoverage] | None = None,
+) -> list[dict[str, object]]:
+    """Return one row per backend target from ``BackendKernelEntry`` rows.
+
+    This is the architecture-specific view the primitive-level
+    ``backend_kernel`` axis intentionally cannot express.  The registry axis is
+    still useful as a conservative compatibility flag; this target tally is the
+    status users should read when asking "is S-series done on ROCm/x86/etc.?"
+    """
+    if cov is None:
+        cov = all_primitive_coverages()
+
+    targets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    total = len(cov)
+    for op_name in sorted(cov):
+        seen: set[str] = set()
+        for entry in _backend_manifest.manifest_for(op_name):
+            target = entry.target
+            seen.add(target)
+            row = targets[target]
+            row["declared"] += 1
+            if entry.status in NATIVE_BACKEND_STATUSES:
+                row["native_proven"] += 1
+            elif entry.status == "reference":
+                row["reference"] += 1
+            elif entry.status in OPEN_BACKEND_STATUSES:
+                row["open"] += 1
+            else:
+                row["other"] += 1
+        for target in seen:
+            targets[target]["_seen"] += 1
+
+    rows: list[dict[str, object]] = []
+    for target, counts in targets.items():
+        declared = counts.get("declared", 0)
+        rows.append({
+            "target": target,
+            "declared": declared,
+            "native_proven": counts.get("native_proven", 0),
+            "reference": counts.get("reference", 0),
+            "open": counts.get("open", 0),
+            "other": counts.get("other", 0),
+            "missing": total - declared,
+        })
+    rows.sort(key=lambda r: _target_sort_key(str(r["target"])))
+    return rows
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Render
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +260,31 @@ def render_markdown(
         )
     lines.append("")
 
+    # Section 2b: backend proof by architecture.  This is the honest "S-series
+    # done per target" view; the raw backend_kernel axis above remains a
+    # conservative registry compatibility flag.
+    target_rows = tally_backend_by_target()
+    lines.append("## Backend Proof By Target")
+    lines.append("")
+    lines.append(
+        "The registry-level `backend_kernel` axis is deliberately conservative "
+        "and should not be read as an all-up veto.  Per-architecture completion "
+        "comes from `BackendKernelEntry` rows: `hardware_verified`, `compiled`, "
+        "`fused`, and `packaged` count as native proof for that target; "
+        "`reference` is correct execution without a native kernel; "
+        "`artifact_only` / `compileable` / `planned` remain open for that target."
+    )
+    lines.append("")
+    lines.append("| Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |")
+    lines.append("|---|---:|---:|---:|---:|---:|")
+    for row in target_rows:
+        lines.append(
+            f"| `{row['target']}` | {row['declared']} | "
+            f"{row['native_proven']} | {row['reference']} | "
+            f"{row['open']} | {row['missing']} |"
+        )
+    lines.append("")
+
     # Section 3: per-category table sorted by priority.
     lines.append("## Per-category breakdown")
     lines.append("")
@@ -240,7 +330,7 @@ def render_markdown(
     lines.append("## Closure trajectory")
     lines.append("")
     lines.append("* `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.")
-    lines.append("* `backend_kernel` is the **universal Phase G/H gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/backend/BACKEND_AUDIT.md`.")
+    lines.append("* `backend_kernel` is a conservative registry-level compatibility axis, not the architecture completion signal.  Read **Backend Proof By Target** for ROCm/x86/Apple/NVIDIA status.")
     lines.append("* `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.")
     lines.append("")
     return "\n".join(lines)
@@ -282,6 +372,22 @@ def _sprint_sort_key(s: str) -> tuple[int, str]:
     if s.startswith("M") and s[1:].isdigit():
         return (1, s)
     return (2, s)
+
+
+def _target_sort_key(target: str) -> tuple[int, str]:
+    order = {
+        "cpu": 0,
+        "x86": 1,
+        "apple_cpu": 2,
+        "apple_gpu": 3,
+        "rocm": 4,
+        "nvidia_sm80": 5,
+        "nvidia_sm90": 6,
+        "nvidia_sm100": 7,
+        "nvidia_sm120": 8,
+        "metalium": 9,
+    }
+    return (order.get(target, 100), target)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

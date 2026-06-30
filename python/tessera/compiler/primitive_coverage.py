@@ -863,6 +863,9 @@ _EXPLICIT_SEMANTIC_NAMES: frozenset[str] = frozenset(_EXISTING_CONTRACT_OVERRIDE
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
+    # SD1 speculative-decode acceptance: verification ops, not a
+    # differentiable/batchable/shardable tensor map.
+    "acceptance_verification": "not_applicable",
     # — Pointwise / elementwise families: every axis trivially shardable —
     "elementwise":         "complete",
     "scalar_math":         "complete",
@@ -1123,6 +1126,9 @@ def _sharding_rule_for_category(category: str | None, current: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
+    # SD1 speculative-decode acceptance: verification ops, not a
+    # differentiable/batchable/shardable tensor map.
+    "acceptance_verification": "not_applicable",
     # — Trivially batches over any added vmap axis —
     "elementwise":         "complete",
     "scalar_math":         "complete",
@@ -1299,6 +1305,9 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
 }
 
 _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
+    # SD1 speculative-decode acceptance: verification ops, not a
+    # differentiable/batchable/shardable tensor map.
+    "acceptance_verification": "not_applicable",
     # — Differentiable elementwise: Jacobian is diagonal, transpose = same —
     "elementwise":         "complete",
     "scalar_math":         "complete",

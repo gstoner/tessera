@@ -14,11 +14,27 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 5 | 470 |
-| `transpose_rule` | 1 | 474 |
-| `sharding_rule` | 42 | 433 |
-| `lowering_rule` | 0 | 475 |
-| `backend_kernel` | 468 | 7 |
+| `batching_rule` | 4 | 472 |
+| `transpose_rule` | 0 | 476 |
+| `sharding_rule` | 41 | 435 |
+| `lowering_rule` | 0 | 476 |
+| `backend_kernel` | 469 | 7 |
+
+## Backend Proof By Target
+
+The registry-level `backend_kernel` axis is deliberately conservative and should not be read as an all-up veto.  Per-architecture completion comes from `BackendKernelEntry` rows: `hardware_verified`, `compiled`, `fused`, and `packaged` count as native proof for that target; `reference` is correct execution without a native kernel; `artifact_only` / `compileable` / `planned` remain open for that target.
+
+| Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
+|---|---:|---:|---:|---:|---:|
+| `cpu` | 283 | 0 | 283 | 0 | 193 |
+| `x86` | 245 | 214 | 31 | 0 | 231 |
+| `apple_cpu` | 315 | 2 | 313 | 0 | 161 |
+| `apple_gpu` | 71 | 45 | 1 | 25 | 405 |
+| `rocm` | 248 | 213 | 0 | 35 | 228 |
+| `nvidia_sm80` | 54 | 0 | 0 | 54 | 422 |
+| `nvidia_sm90` | 86 | 0 | 0 | 86 | 390 |
+| `nvidia_sm100` | 54 | 0 | 0 | 54 | 422 |
+| `nvidia_sm120` | 54 | 1 | 0 | 53 | 422 |
 
 ## Per-category breakdown
 
@@ -42,7 +58,7 @@
 | M6 | `ebm` | 14 | — | — | 6 | — | 14 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
-| other | `acceptance_verification` | 1 | 1 | 1 | 1 | — | 1 |
+| other | `acceptance_verification` | 2 | — | — | — | — | 2 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | — | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
@@ -97,10 +113,10 @@
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 273 | 5 | 1 | 22 | 273 |
+| other | 274 | 4 | 0 | 21 | 274 |
 
 ## Closure trajectory
 
 * `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.
-* `backend_kernel` is the **universal Phase G/H gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/backend/BACKEND_AUDIT.md`.
+* `backend_kernel` is a conservative registry-level compatibility axis, not the architecture completion signal.  Read **Backend Proof By Target** for ROCm/x86/Apple/NVIDIA status.
 * `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.

@@ -4408,6 +4408,55 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # dispatchable (keeps the OP_SPECS ↔ registry invariant; SD1).
     references["spec_accept"] = spec_accept
 
+    def spec_accept_sample(draft, target_probs, draft_probs, accept_u, resid_u):
+        """SD1-2 distribution-preserving (Leviathan) rejection-sampling acceptance
+        (Graph IR op ``tessera.spec_accept_sample``). Per drafted position the
+        draft token is accepted iff ``accept_u[i]*p_draft <= p_target`` (the
+        division-free ``accept_u[i] <= min(1, p_target/p_draft)``); on the first
+        reject a corrected token is drawn from the residual
+        ``normalize(relu(target-draft))`` by CDF inversion of ``resid_u``; a fully
+        accepted chain draws a bonus from ``target_probs``'s extra row. RNG is
+        explicit (the uniforms are inputs). Returns ``(D+2)`` i32
+        ``[accepted, t0, …, t_D]`` (``accepted+1`` valid tokens). Mirrors
+        ``dflash.py:dflash_speculative_verify`` under CDF-inversion sampling."""
+        import numpy as _np
+        d = _np.asarray(draft).reshape(-1)
+        tp = _np.asarray(target_probs, dtype=_np.float64)
+        dp = _np.asarray(draft_probs, dtype=_np.float64)
+        au = _np.asarray(accept_u, dtype=_np.float64).reshape(-1)
+        ru = float(_np.asarray(resid_u).reshape(-1)[0])
+        D = d.shape[0]
+
+        def _cdf(u, w):
+            s = float(w.sum())
+            if s <= 0.0:
+                return int(_np.argmax(w))
+            tgt, cum = u * s, 0.0
+            for k in range(len(w)):
+                cum += float(w[k])
+                if cum > tgt:
+                    return k
+            return len(w) - 1
+
+        out = _np.zeros(D + 2, dtype=_np.int32)
+        accepted, done = 0, False
+        for i in range(D):
+            tok = int(d[i])
+            pd, pt = float(dp[i, tok]), float(tp[i, tok])
+            if pd > 0.0 and au[i] * pd <= pt:
+                out[1 + i] = tok
+                accepted += 1
+            else:
+                out[1 + i] = _cdf(ru, _np.maximum(tp[i] - dp[i], 0.0))
+                done = True
+                break
+        if not done:
+            out[1 + D] = _cdf(ru, tp[D])
+        out[0] = accepted
+        return out
+
+    references["spec_accept_sample"] = spec_accept_sample
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -4415,6 +4464,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     _ns = types.SimpleNamespace(
         varlen_sdpa=varlen_sdpa,
         spec_accept=spec_accept,
+        spec_accept_sample=spec_accept_sample,
         paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,

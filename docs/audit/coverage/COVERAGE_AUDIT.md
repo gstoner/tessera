@@ -45,12 +45,16 @@ material.
 
 ## Still Open
 
-- **Backend-kernel proof is open on every S-series primitive** — a universal
-  Phase-G/H gate (each entry needs *all* declared targets to ship real
-  kernels; gated on NVIDIA/ROCm hardware). Live open/complete counts:
-  [`generated/s_series_status.md`](../generated/s_series_status.md).
-- **Long-tail transform axes** — `batching_rule` and `transpose_rule` are now
-  closed; `sharding_rule` is the remaining increment (2026-06-02).
+- **Backend-kernel proof is now reported per architecture.** The raw
+  registry-level `backend_kernel` axis remains conservative for compatibility,
+  but it is no longer the completion signal for ROCm/x86/Apple/NVIDIA. Read the
+  **Backend Proof By Target** table in
+  [`generated/s_series_status.md`](../generated/s_series_status.md): native proof
+  comes from `hardware_verified`, `compiled`, `fused`, or `packaged`
+  `BackendKernelEntry` rows on that target.
+- **Long-tail transform axes** — `lowering_rule` is closed; `batching_rule` and
+  `transpose_rule` have only a small reopened tail, while `sharding_rule` is the
+  remaining substantive increment (2026-06-02).
   `batching_rule` closed for the textbook-batchable families (collective /
   recurrent / state_space / linalg decomposition+solver / sparse /
   segment_reduce) — only the genuinely mesh-aware ones (moe / moe_transport /

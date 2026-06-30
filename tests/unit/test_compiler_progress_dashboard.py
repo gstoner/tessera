@@ -17,6 +17,7 @@ def test_compiler_progress_csv_exposes_required_scopes() -> None:
         "integration",
         "codegen_pathway",
         "open_work",
+        "dashboard_map",
     } <= scopes
 
 
@@ -37,3 +38,10 @@ def test_compiler_progress_keeps_backend_axis_separate_from_all_up_status() -> N
     assert "A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not all green." in md
     assert "`backend_kernel`" in md
     assert "## Open Work Summary" in md
+    assert "## Dashboard Map" in md
+
+
+def test_compiler_progress_csv_includes_next_action() -> None:
+    rows = list(csv.DictReader(io.StringIO(compiler_progress.render_csv())))
+    assert "next_action" in rows[0]
+    assert all(r["next_action"] for r in rows if r["scope"] == "open_work")

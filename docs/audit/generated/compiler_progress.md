@@ -9,32 +9,32 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 ## Overall
 
-| Item | Status | Ready | Total | Open | Detail |
-|---|---|---:|---:|---:|---|
-| `End-to-end optimizing compiler` | mixed | 1855 | 2472 | 617 | compiler pipeline is live, but native codegen, verifier proof, and per-backend promotion remain independent axes |
+| Item | Status | Ready | Total | Open | Detail | Next |
+|---|---|---:|---:|---:|---|---|
+| `End-to-end optimizing compiler` | mixed | 10 | 23 | 13 | closed=10, mixed=13, open=0, primary_open=backend_kernel, Direct test evidence, Target IR native/fused codegen | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
 
 ## Compiler Phase And IR State
 
-| Item | Status | Ready | Total | Open | Detail |
-|---|---|---:|---:|---:|---|
-| `Public Python API` | closed | 309 | 309 | 0 | public=309 |
-| `Frontend capture` | closed | 309 | 309 | 0 | public=309 |
-| `Graph IR registration` | closed | 309 | 309 | 0 | not_applicable=32, registered=277 |
-| `Schedule IR` | closed | 309 | 309 | 0 | complete=307, not_applicable=2 |
-| `Tile IR` | mixed | 39 | 309 | 270 | fused=32, not_applicable=7, partial=270 |
-| `Target IR native/fused codegen` | mixed | 232 | 309 | 77 | fused=232, reference=77 |
-| `Runtime dispatch readiness` | closed | 309 | 309 | 0 | fused=6, ready=303 |
-| `Benchmark evidence` | mixed | 39 | 309 | 270 | benchmarked=39, none=270 |
+| Item | Status | Ready | Total | Open | Detail | Next |
+|---|---|---:|---:|---:|---|---|
+| `Public Python API` | closed | 309 | 309 | 0 | public=309 | Keep this layer drift-gated through support_table.csv. |
+| `Frontend capture` | closed | 309 | 309 | 0 | public=309 | Keep this layer drift-gated through support_table.csv. |
+| `Graph IR registration` | closed | 309 | 309 | 0 | not_applicable=32, registered=277 | Keep this layer drift-gated through support_table.csv. |
+| `Schedule IR` | closed | 309 | 309 | 0 | complete=307, not_applicable=2 | Keep this layer drift-gated through support_table.csv. |
+| `Tile IR` | mixed | 39 | 309 | 270 | fused=32, not_applicable=7, partial=270 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
+| `Target IR native/fused codegen` | mixed | 232 | 309 | 77 | fused=232, reference=77 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
+| `Runtime dispatch readiness` | closed | 309 | 309 | 0 | fused=6, ready=303 | Keep this layer drift-gated through support_table.csv. |
+| `Benchmark evidence` | mixed | 39 | 309 | 270 | benchmarked=39, none=270 | Attach benchmarks to native/hardware-promoted rows first. |
 
 ## Primitive Contract State
 
-| Item | Status | Ready | Total | Open | Detail |
-|---|---|---:|---:|---:|---|
-| `batching_rule` | mixed | 470 | 474 | 4 | primitive contract axis; open means partial or planned, not necessarily missing API support |
-| `transpose_rule` | closed | 474 | 474 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support |
-| `sharding_rule` | mixed | 433 | 474 | 41 | primitive contract axis; open means partial or planned, not necessarily missing API support |
-| `lowering_rule` | closed | 474 | 474 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support |
-| `backend_kernel` | mixed | 7 | 474 | 467 | primitive contract axis; open means partial or planned, not necessarily missing API support |
+| Item | Status | Ready | Total | Open | Detail | Next |
+|---|---|---:|---:|---:|---|---|
+| `batching_rule` | mixed | 470 | 474 | 4 | primitive contract axis; open means partial or planned, not necessarily missing API support | Close the small remaining transform-rule tail. |
+| `transpose_rule` | closed | 474 | 474 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `sharding_rule` | mixed | 433 | 474 | 41 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
+| `lowering_rule` | closed | 474 | 474 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `backend_kernel` | mixed | 7 | 474 | 467 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 
 ## Compiler Integration Evidence
 
@@ -48,13 +48,13 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 ## Code Generation Pathways
 
-| Item | Status | Ready | Total | Open | Detail |
-|---|---|---:|---:|---:|---|
-| `Apple CPU` | closed | 56 | 56 | 0 | runtime: apple_cpu=2; target_map: fused=2, reference=52 |
-| `Apple GPU` | mixed | 55 | 56 | 1 | runtime: apple_gpu=2; target_map: absent=1, fused=43, hardware_verified=10 |
-| `x86 / CPU` | closed | 2 | 2 | 0 | runtime: cpu=2 |
-| `ROCm / HIP` | mixed | 84 | 87 | 3 | runtime: rocm=55; target_map: artifact_only=3, compiled=27, hardware_verified=2 |
-| `CUDA / NVIDIA` | mixed | 1 | 36 | 35 | runtime: nvidia_sm120=1; target_map: artifact_only=35 |
+| Item | Status | Ready | Total | Open | Detail | Next |
+|---|---|---:|---:|---:|---|---|
+| `Apple CPU` | closed | 56 | 56 | 0 | runtime: apple_cpu=2; target_map: fused=2, reference=52 | Keep as regression baseline for CPU value-call/runtime ABI. |
+| `Apple GPU` | mixed | 55 | 56 | 1 | runtime: apple_gpu=2; target_map: absent=1, fused=43, hardware_verified=10 | Close the remaining absent target-map lane or document why it is host-only. |
+| `x86 / CPU` | closed | 2 | 2 | 0 | runtime: cpu=2 | Keep native CPU and numpy reference lanes separate in runtime proofs. |
+| `ROCm / HIP` | mixed | 84 | 87 | 3 | runtime: rocm=55; target_map: artifact_only=3, compiled=27, hardware_verified=2 | Close the artifact-only target-map tail and preserve CDNA as hardware-gated. |
+| `CUDA / NVIDIA` | mixed | 1 | 36 | 35 | runtime: nvidia_sm120=1; target_map: artifact_only=35 | Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention. |
 
 ## Open Work Summary
 

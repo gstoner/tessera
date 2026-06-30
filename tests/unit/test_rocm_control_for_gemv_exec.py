@@ -98,20 +98,24 @@ def _compile_to_hsaco(k: int, it: int) -> bytes:
 def _launch(hip, hsaco, carry, W):
     """Run @tessera_control_for_gemv_0(CARRY, W, OUT, K). Returns OUT, or None."""
     k = carry.size
+    # Discovery gate: hipInit / hipModuleLoadData failing means no usable AMD GPU
+    # here → return None so the caller skips. PAST a successful module load the
+    # device works, so symbol lookup / alloc / launch / sync failures are REAL
+    # failures of this generated kernel and must fail the test, not be laundered
+    # into a skip.
     if hip.hipInit(0) != 0:
         return None
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         return None
     fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(
-            ctypes.byref(fn), mod, b"tessera_control_for_gemv_0") != 0:
-        return None
+    assert hip.hipModuleGetFunction(
+        ctypes.byref(fn), mod, b"tessera_control_for_gemv_0") == 0, \
+        "kernel symbol tessera_control_for_gemv_0 not found in module"
     dc, dw, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-    if (hip.hipMalloc(ctypes.byref(dc), k * 4) != 0
-            or hip.hipMalloc(ctypes.byref(dw), k * k * 4) != 0
-            or hip.hipMalloc(ctypes.byref(do), k * 4) != 0):
-        return None
+    assert (hip.hipMalloc(ctypes.byref(dc), k * 4) == 0
+            and hip.hipMalloc(ctypes.byref(dw), k * k * 4) == 0
+            and hip.hipMalloc(ctypes.byref(do), k * 4) == 0), "hipMalloc failed"
     hip.hipMemcpy(dc, carry.ctypes.data_as(ctypes.c_void_p), k * 4, 1)
     hip.hipMemcpy(dw, W.ctypes.data_as(ctypes.c_void_p), k * k * 4, 1)
 
@@ -129,10 +133,12 @@ def _launch(hip, hsaco, carry, W):
                        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
                           ctypes.c_void_p])
     # one workgroup (single carry), BD threads.
-    if launch(fn, 1, 1, 1, BD, 1, 1, 0, None, arr, None) != 0:
-        return None
-    if hip.hipDeviceSynchronize() != 0:
-        return None
+    rc = launch(fn, 1, 1, 1, BD, 1, 1, 0, None, arr, None)
+    assert rc == 0, (
+        f"hipModuleLaunchKernel failed (rc={rc}) for k={k} — kernel failed to "
+        "launch on a working GPU")
+    rc = hip.hipDeviceSynchronize()
+    assert rc == 0, f"hipDeviceSynchronize failed (rc={rc}) for k={k} — crashed"
     out = np.zeros(k, dtype=np.float32)
     hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), do, k * 4, 2)
     for d in (dc, dw, do):
@@ -153,7 +159,8 @@ def test_control_for_gemv_executes_on_gfx1151(k, it):
     W = (rng.standard_normal((k, k)) / np.sqrt(k)).astype(np.float32)
     out = _launch(hip, _compile_to_hsaco(k, it), carry, W)
     if out is None:
-        pytest.skip("no usable AMD GPU (hipModuleLoadData / launch unavailable)")
+        # Only pre-launch discovery failed; a launch/sync failure raises.
+        pytest.skip("no usable AMD GPU (hipInit / hipModuleLoadData failed)")
     ref = carry.copy()
     for _ in range(it):
         ref = ref @ W            # carry @ W^it

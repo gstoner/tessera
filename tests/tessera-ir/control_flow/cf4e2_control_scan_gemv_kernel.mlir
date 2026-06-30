@@ -29,12 +29,12 @@ func.func @sb(%h: tensor<1x4xf32>, %x: tensor<1x4xf32>, %w: tensor<4x4xf32>)
 // CHECK:           memref.store
 // CHECK:           gpu.barrier
 // CHECK:         gpu.return
-func.func @f(%init: tensor<1x4xf32>, %xs: tensor<3x4xf32>, %W: tensor<4x4xf32>)
-    -> (tensor<1x4xf32>, tensor<3x4xf32>) {
+func.func @f(%init: tensor<1x4xf32>, %xs: tensor<3x1x4xf32>, %W: tensor<4x4xf32>)
+    -> (tensor<1x4xf32>, tensor<3x1x4xf32>) {
   %c, %ys = "tessera.control_scan"(%init, %xs, %W) {
     body = @sb, trip = 3 : i64, carry_arg_index = 0 : i64
-  } : (tensor<1x4xf32>, tensor<3x4xf32>, tensor<4x4xf32>) -> (tensor<1x4xf32>, tensor<3x4xf32>)
-  return %c, %ys : tensor<1x4xf32>, tensor<3x4xf32>
+  } : (tensor<1x4xf32>, tensor<3x1x4xf32>, tensor<4x4xf32>) -> (tensor<1x4xf32>, tensor<3x1x4xf32>)
+  return %c, %ys : tensor<1x4xf32>, tensor<3x1x4xf32>
 }
 
 // -----
@@ -48,10 +48,10 @@ func.func @sb2(%h: tensor<1x4xf32>, %x: tensor<1x4xf32>)
 // CHECK-LABEL: func.func @g
 // CHECK:       tessera.control_scan
 // CHECK-NOT:   gpu.func
-func.func @g(%init: tensor<1x4xf32>, %xs: tensor<3x4xf32>)
-    -> (tensor<1x4xf32>, tensor<3x4xf32>) {
+func.func @g(%init: tensor<1x4xf32>, %xs: tensor<3x1x4xf32>)
+    -> (tensor<1x4xf32>, tensor<3x1x4xf32>) {
   %c, %ys = "tessera.control_scan"(%init, %xs) {
     body = @sb2, trip = 3 : i64, carry_arg_index = 0 : i64
-  } : (tensor<1x4xf32>, tensor<3x4xf32>) -> (tensor<1x4xf32>, tensor<3x4xf32>)
-  return %c, %ys : tensor<1x4xf32>, tensor<3x4xf32>
+  } : (tensor<1x4xf32>, tensor<3x1x4xf32>) -> (tensor<1x4xf32>, tensor<3x1x4xf32>)
+  return %c, %ys : tensor<1x4xf32>, tensor<3x1x4xf32>
 }

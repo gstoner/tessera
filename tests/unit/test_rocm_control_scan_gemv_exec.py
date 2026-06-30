@@ -71,7 +71,9 @@ def _extract_hsaco(s: str) -> bytes:
 def _src(k: int, trip: int) -> str:
     h = f"tensor<1x{k}xf32>"
     w = f"tensor<{k}x{k}xf32>"
-    xs = f"tensor<{trip}x{k}xf32>"
+    # xs/ys keep the body's per-step element shape (1×K): (trip, 1, K), i.e.
+    # (trip, *y.shape) per the control_scan contract.
+    xs = f"tensor<{trip}x1x{k}xf32>"
     return f"""
 func.func @sb(%h: {h}, %x: {h}, %w: {w}) -> ({h}, {h}) {{
   %m = "tessera.matmul"(%h, %w) : ({h}, {w}) -> {h}

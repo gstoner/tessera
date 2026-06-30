@@ -57,10 +57,20 @@ static bool is2D(Type t, int64_t d0, int64_t d1) {
   return r && r.getRank() == 2 && r.getDimSize(0) == d0 &&
          r.getDimSize(1) == d1 && r.getElementType().isF32();
 }
+// The scan stream / stacked output keep the body's per-step element shape: with
+// a 1×K carry/y, `xs`/`ys` are `(trip, 1, K)` — i.e. `(trip, *y.shape)` per the
+// control_scan contract, NOT a flattened `(trip, K)`. The kernel's row-major
+// flattening (`t*K + tid`) is identical since the middle dim is 1.
+static bool is3D(Type t, int64_t d0, int64_t d1, int64_t d2) {
+  auto r = dyn_cast<RankedTensorType>(t);
+  return r && r.getRank() == 3 && r.getDimSize(0) == d0 &&
+         r.getDimSize(1) == d1 && r.getDimSize(2) == d2 &&
+         r.getElementType().isF32();
+}
 
 // control_scan with one capture W whose body is the linear SSM step
-// `(h, x, W) -> (h@W + x, same)`. operands = [init(1×K), xs(T×K), W(K×K)];
-// results = [carry(1×K), ys(T×K)]. Fills K, trip. Returns the body, or null.
+// `(h, x, W) -> (h@W + x, same)`. operands = [init(1×K), xs(trip×1×K), W(K×K)];
+// results = [carry(1×K), ys(trip×1×K)]. Fills K, trip. Returns the body, or null.
 static func::FuncOp validateScanGemv(Operation *op, SymbolTable &symTab,
                                      int64_t &K, int64_t &trip) {
   auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
@@ -78,10 +88,10 @@ static func::FuncOp validateScanGemv(Operation *op, SymbolTable &symTab,
       !initT.getElementType().isF32())
     return nullptr;
   K = initT.getDimSize(1);
-  if (!is2D(op->getOperand(1).getType(), trip, K) ||  // xs: T×K
-      !is2D(op->getOperand(2).getType(), K, K) ||      // W: K×K
-      !is1xK(op->getResult(0).getType(), K) ||
-      !is2D(op->getResult(1).getType(), trip, K))
+  if (!is3D(op->getOperand(1).getType(), trip, 1, K) ||  // xs: trip×1×K
+      !is2D(op->getOperand(2).getType(), K, K) ||         // W: K×K
+      !is1xK(op->getResult(0).getType(), K) ||            // carry: 1×K
+      !is3D(op->getResult(1).getType(), trip, 1, K))      // ys: trip×1×K
     return nullptr;
   if (K <= 0 || K > BD)
     return nullptr;

@@ -45,6 +45,8 @@ std::unique_ptr<mlir::Pass> createGenerateROCMScanKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMUnaryKernelPass();
 // CF4b — elementwise-body tessera.control_for → one device control-flow kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForKernelPass();
+// CF4d-1 — GEMV-recurrence control_for → cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlForGemvKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

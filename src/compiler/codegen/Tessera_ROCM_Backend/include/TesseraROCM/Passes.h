@@ -66,6 +66,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlScanGemvKernelPass();
 // CF4e-3 — nonlinear RNN-cell scan (h_t = tanh(h@W + x@U + b); two GEMV
 // captures + bias + tanh + per-step xs) → cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlScanRnnKernelPass();
+// CF4f — cross-element control_while (power iteration h=h@W while Sum h>eps;
+// GEMV body + W capture + uniform reduction cond) → cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlWhileGemvKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

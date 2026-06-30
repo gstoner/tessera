@@ -73,6 +73,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMControlIfNormKernelPass(); });
   registerPass([]() { return createGenerateROCMControlScanGemvKernelPass(); });
   registerPass([]() { return createGenerateROCMControlScanRnnKernelPass(); });
+  registerPass([]() { return createGenerateROCMControlWhileGemvKernelPass(); });
   registerPass([]() { return createGenerateROCMBinaryKernelPass(); });
   registerPass([]() { return createGenerateROCMCompareKernelPass(); });
   registerPass([]() { return createGenerateROCMLogicalKernelPass(); });

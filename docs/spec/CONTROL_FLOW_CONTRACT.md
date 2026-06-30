@@ -249,10 +249,19 @@ claim.
   to `scf.for` with a *real* device body. Unknown opcodes / unresolvable shapes
   are left untouched (two-phase: validate before mutating). `control_if`/`while`
   payloads → CF4a follow-up.
-- **CF4b/CF3** — wire the decoded `scf`-bearing loop through to an **executable**
-  ROCm device-control kernel on gfx1151 (the ROCm `gpu`→`convert-scf-to-cf`→
-  `convert-gpu-to-rocdl`→hsaco chain already runs `scf` in kernels), then mirror
-  on CUDA; retire the CF0 guard lane by lane.
+- **CF4b** *(done, ROCm/gfx1151)* — `GenerateROCMControlForKernel`
+  (`--generate-rocm-control-for-kernel`) lowers an **elementwise-body**
+  `control_for` (1-D f32 carry, no captures) to **one** `gpu.func`: grid over the
+  carry's elements, each thread runs the loop's `scf.for` (K iterations) with the
+  body translated to scalar `arith`/`math`. The whole loop is a single dispatch,
+  not one launch per iteration. The chain `generate → convert-scf-to-cf →
+  convert-gpu-to-rocdl → rocdl-attach-target{gfx1151} → gpu-module-to-binary →
+  hsaco` runs via `hipModuleLaunchKernel` and is **proven on gfx1151** by
+  `tests/unit/test_rocm_control_for_exec.py` (`add(c,c)` × K = element·2^K, exact
+  for K=1/4/10). Non-elementwise bodies (matmul/softmax/norm) and captures are
+  left for the guard / CF4c.
+- **CF4c / CF3** — cross-element bodies (matmul/norm), `control_if`/`while`
+  device kernels, and the CUDA mirror; retire the CF0 guard lane by lane.
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

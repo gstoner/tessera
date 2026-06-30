@@ -294,8 +294,23 @@ Acceptance:
   (`autoregressive_decode`) — speculation changes only the number of target calls,
   never the output. The fully-device-executed loop (with the draft/target *models*
   as device kernels) is the DS/DK-track integration.
-- **SD1-4+ (open):** `target_verify` I/O contract; fully-device-executed Gumiho
-  loop with the draft/target models as device kernels (DS/DK-track integration).
+- **SD1-4 (target_verify I/O contract) — done.** New Graph IR op
+  `Tessera_TargetVerifyOp` (`target_verify`, `[Pure]`, ODS + verifier): the
+  input/output contract for the target-scoring step. Given the verified-position
+  context `tokens` (current committed token + `D` draft tokens, `S = D+1`
+  positions) and the composed target model's raw `logits` (`S × V`), it emits the
+  contract-shaped per-position target log-probs `S × V` (`log_softmax` over the
+  vocab) — exactly what `spec_accept`/`spec_accept_sample` consume (the verify
+  output for a `D`-token draft has the bonus row built in). It's a **composed model
+  call**, not a fused kernel: the op pins the `(S × V)` batching shapes so the
+  target scoring is explicit enough to batch/fuse, but the target model is
+  external; a fused target-verify kernel is a later DK-track concern. `op_catalog`
+  (reusing the `acceptance_verification` category), `tessera.ops` registration
+  (`log_softmax` reference), `PYTHON_API_SPEC`, and `_NO_LANE_BARE` updated; proven
+  by `tests/unit/test_target_verify_contract.py` (log-softmax contract +
+  feeds-spec_accept_sample shape) + the verifier lit fixture.
+- **SD1-4+ (open):** fully-device-executed Gumiho loop with the draft/target
+  models as device kernels (DS/DK-track integration).
 
 ## DS1 - DSpark Library Contract
 

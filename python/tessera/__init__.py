@@ -4524,6 +4524,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     references["spec_accept_tree_sample"] = spec_accept_tree_sample
 
+    def target_verify(tokens, logits):
+        """SD1-4 speculative-decode target verification I/O contract (Graph IR op
+        ``tessera.target_verify``). Given the verified-position context ``tokens``
+        (current committed token + the D draft tokens; ``S = D+1`` positions) and
+        the (composed, external) target model's raw ``logits`` at those positions
+        (``S × V``), returns the contract-shaped per-position target log-probs
+        ``S × V`` (a ``log_softmax`` over the vocab) — exactly what
+        ``spec_accept`` / ``spec_accept_sample`` consume. A composed model call,
+        not a fused kernel; the op pins the (S × V) batching contract."""
+        import numpy as _np
+        lg = _np.asarray(logits, dtype=_np.float64)
+        if lg.ndim != 2:
+            raise ValueError("logits must be S x V")
+        if _np.asarray(tokens).reshape(-1).shape[0] != lg.shape[0]:
+            raise ValueError("tokens length must equal logits rows (S)")
+        m = lg.max(axis=-1, keepdims=True)
+        return (lg - m - _np.log(_np.exp(lg - m).sum(axis=-1, keepdims=True))
+                ).astype(_np.float32)
+
+    references["target_verify"] = target_verify
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -4535,6 +4556,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         cache_commit=cache_commit,
         cache_rollback=cache_rollback,
         spec_accept_tree_sample=spec_accept_tree_sample,
+        target_verify=target_verify,
         paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,

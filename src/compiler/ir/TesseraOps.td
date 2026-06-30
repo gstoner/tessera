@@ -2415,3 +2415,31 @@ def Tessera_SpecAcceptTreeSampleOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+def Tessera_TargetVerifyOp : Op<
+  Tessera_Dialect, "target_verify",
+  [Pure]
+> {
+  let summary = "Speculative-decode target verification: I/O contract for the target scoring (SD1-4)";
+  let description = [{
+    SD1-4 — the **input/output contract** for the speculative-decode target
+    verification step. `target_verify` "runs the target model over the current
+    token plus the draft prefix": given the verified-position context `tokens`
+    (the current committed token followed by the `D` draft tokens, `S = D+1`
+    positions) and the target model's raw `logits` at those positions (`S × V`),
+    it emits the contract-shaped per-position target log-probabilities
+    `target_logprobs` (`S × V`, a `log_softmax` over the vocab `V`) — exactly the
+    `(prefix_len+1) × V` tensor that `spec_accept` / `spec_accept_sample` consume.
+
+    This is a **composed model call**, not a fused kernel: the op pins the
+    batching shapes (S positions × V vocab) so the target scoring is explicit
+    enough to batch and fuse, but the target model itself is external. `[Pure]`
+    (a function of the tokens + logits). A fused target-verify kernel is a later
+    DK-track concern.
+  }];
+  let arguments = (ins AnyType:$tokens, AnyType:$logits);
+  let results = (outs AnyType:$target_logprobs);  // tensor<SxVxf32>
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

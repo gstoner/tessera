@@ -203,6 +203,10 @@ _SPECS = [
     # Tree (multi-path) Leviathan rejection acceptance — device form of
     # speculative.batch_verify. (target_lp, draft_lp, accept_u) -> [path, length].
     OpSpec("spec_accept_tree_sample", "tessera.spec_accept_tree_sample", 3, 3, lowering="acceptance_verification"),
+    # SD1-4 — speculative-decode target-verification I/O contract: (tokens, logits)
+    # -> S×V log-probs. A composed-call marker (pure), reuses the verification
+    # category (no fused kernel — that's a DK-track concern).
+    OpSpec("target_verify", "tessera.target_verify", 2, 2, lowering="acceptance_verification"),
     # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
     OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),

@@ -2279,3 +2279,32 @@ def Tessera_ControlScanOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+def Tessera_SpecAcceptOp : Op<
+  Tessera_Dialect, "spec_accept",
+  [Pure]
+> {
+  let summary = "Speculative-decode acceptance: greedy longest-prefix path + bonus (SD1)";
+  let description = [{
+    Greedy (argmax-match) speculative-decode verification over a tree of draft
+    paths — SD1's standalone `spec_accept` primitive. For each path `p` the
+    accepted length is the run of leading positions where `draft[p,i] ==
+    target[p,i]`; the op selects the path with the **longest** accepted prefix
+    (first wins ties) and returns the packed `tensor<3xi32>`
+    `[accepted_path_idx, accepted_prefix_length, bonus_token]`, where the bonus is
+    `target[path, length]` — the corrected/next token at the first divergence.
+    `draft` is `P×D` and `target` is `P×(D+1)` (one extra column) so the bonus is
+    always defined, even when a whole path of length `D` is accepted.
+
+    Deterministic — a pure function of `draft`/`target`, no RNG, no cache
+    mutation. It mirrors the `tessera.speculative` greedy reference
+    (`_ref_spec_accept` / `dflash_linear_verify`, generalized to multi-path); the
+    distribution-preserving Leviathan / rejection-sampling form (with RNG and a
+    residual bonus) is the SD1-2 follow-up.
+  }];
+  let arguments = (ins AnyType:$draft, AnyType:$target);
+  let results = (outs AnyType:$result);  // tensor<3xi32>: [path, length, bonus]
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 4 | 470 |
-| `transpose_rule` | 0 | 474 |
-| `sharding_rule` | 41 | 433 |
-| `lowering_rule` | 0 | 474 |
-| `backend_kernel` | 467 | 7 |
+| `batching_rule` | 5 | 470 |
+| `transpose_rule` | 1 | 474 |
+| `sharding_rule` | 42 | 433 |
+| `lowering_rule` | 0 | 475 |
+| `backend_kernel` | 468 | 7 |
 
 ## Per-category breakdown
 
@@ -42,6 +42,7 @@
 | M6 | `ebm` | 14 | — | — | 6 | — | 14 |
 | S15 | `data` | 11 | — | — | — | — | 11 |
 | S15 | `tokenizer` | 5 | — | — | — | — | 5 |
+| other | `acceptance_verification` | 1 | 1 | 1 | 1 | — | 1 |
 | other | `aot` | 6 | — | — | — | — | 6 |
 | other | `collective` | 10 | — | — | — | — | 10 |
 | other | `conformance` | 4 | — | — | — | — | 4 |
@@ -96,7 +97,7 @@
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 16 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 272 | 4 | 0 | 21 | 272 |
+| other | 273 | 5 | 1 | 22 | 273 |
 
 ## Closure trajectory
 

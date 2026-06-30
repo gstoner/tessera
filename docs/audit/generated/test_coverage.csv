@@ -414,6 +414,7 @@ softmax,120,38,30,158,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,10,0,0,10,0,,directly_tested,10 direct test references
+spec_accept,1,10,0,11,0,,directly_tested,11 direct test references
 spectral_conv,7,0,0,7,0,fp32,directly_tested,7 direct test references
 spectral_filter,5,0,0,5,0,fp32,directly_tested,5 direct test references
 spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references

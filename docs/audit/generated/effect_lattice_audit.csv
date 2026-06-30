@@ -270,6 +270,7 @@ softmax,pure,pure,1,1,1
 softmax_safe,pure,,1,1,1
 softplus,pure,,1,0,0
 sort,pure,,1,0,0
+spec_accept,pure,,1,0,0
 spectral_conv,pure,,1,1,0
 spectral_filter,pure,,1,1,0
 split,pure,,1,0,0

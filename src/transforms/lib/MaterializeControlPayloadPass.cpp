@@ -110,66 +110,33 @@ struct MaterializeControlPayload
     return "tessera-materialize-control-payload";
   }
   StringRef getDescription() const override {
-    return "CF4a: decode the tessera.control_for op-list payload "
-           "(body_opcodes/...) into a real @body func.func of tessera.* ops, so "
-           "the LowerControlFlowToSCF pass can lower the loop. control_if/while "
-           "payloads → CF4a follow-up.";
+    return "CF4a: decode the tessera.control_{for,if} op-list payload "
+           "(body_opcodes/then_opcodes/...) into real @body / @then / @else "
+           "func.funcs of tessera.* ops, so LowerControlFlowToSCF can lower the "
+           "op. control_while payload → CF4a follow-up.";
   }
 
-  // Returns true on a successful decode (op rewritten to @body-call form), false
-  // if the form is left untouched (no payload, or an unsupported op/shape).
-  bool materializeControlFor(Operation *op, SymbolTable &symTab) {
-    auto opcodesA = op->getAttrOfType<DenseI32ArrayAttr>("body_opcodes");
-    if (!opcodesA)
-      return false;  // not a payload form
-    auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
-    auto carryIdxA = op->getAttrOfType<IntegerAttr>("carry_arg_index");
-    if (!bodySym || !carryIdxA)
-      return false;
-
-    auto in0A = op->getAttrOfType<DenseI32ArrayAttr>("body_in0");
-    auto in1A = op->getAttrOfType<DenseI32ArrayAttr>("body_in1");
-    auto iattrA = op->getAttrOfType<DenseI32ArrayAttr>("body_iattr");
-    auto fattrA = op->getAttrOfType<DenseF32ArrayAttr>("body_fattr");
-    auto outIdA = op->getAttrOfType<IntegerAttr>("body_out_id");
-    if (!in0A || !outIdA)
-      return false;
-
-    ArrayRef<int32_t> codes = opcodesA.asArrayRef();
-    ArrayRef<int32_t> in0 = in0A.asArrayRef();
-    ArrayRef<int32_t> in1 = in1A ? in1A.asArrayRef() : ArrayRef<int32_t>();
-    ArrayRef<int32_t> iattr = iattrA ? iattrA.asArrayRef() : ArrayRef<int32_t>();
-    ArrayRef<float> fattr = fattrA ? fattrA.asArrayRef() : ArrayRef<float>();
-
-    auto stub = dyn_cast_or_null<func::FuncOp>(
-        symTab.lookupNearestSymbolFrom(op, bodySym.getAttr()));
-    if (!stub)
-      return false;
-
-    int64_t n = static_cast<int64_t>(op->getNumOperands());
-    int64_t carryIdx = carryIdxA.getInt();
-    if (carryIdx < 0 || carryIdx >= n)
-      return false;
-    Type carryTy = op->getOperand(carryIdx).getType();
-
-    // ── Phase 1: validate + infer types WITHOUT mutating anything. Only after
-    // the whole body decodes cleanly do we touch the stub (so a bail on an
-    // unknown opcode / unresolvable shape never leaves a half-built func). ──
-    llvm::DenseMap<int32_t, Type> typeMap;
-    for (int64_t k = 0; k < n; ++k)
-      typeMap[static_cast<int32_t>(k)] = op->getOperand(k).getType();
-    typeMap[static_cast<int32_t>(n)] = carryTy;  // live carry
-
-    SmallVector<PlannedOp> plan;
-    plan.reserve(codes.size());
+  // ── Two-phase op-list decode, shared by every control construct. ──
+  //
+  // Phase 1 (validate + infer): walk the op-list against `seedTypes` (tensor-id
+  // → Type for the pre-bound ids: operands / carry), where body op j binds id
+  // `baseId + j`. Fails (no mutation) on an unknown opcode, an unresolvable
+  // operand id, or an out-id type != `resultTy`. Returns the plan on success.
+  bool validateOpList(ArrayRef<int32_t> codes, ArrayRef<int32_t> in0,
+                      ArrayRef<int32_t> in1, ArrayRef<int32_t> iattr,
+                      ArrayRef<float> fattr, int32_t outId,
+                      const llvm::DenseMap<int32_t, Type> &seedTypes,
+                      int32_t baseId, Type resultTy,
+                      SmallVectorImpl<PlannedOp> &plan) {
+    llvm::DenseMap<int32_t, Type> typeMap = seedTypes;
+    auto typeOf = [&](int32_t id) -> Type {
+      auto it = typeMap.find(id);
+      return it == typeMap.end() ? Type() : it->second;
+    };
     for (size_t j = 0; j < codes.size(); ++j) {
       OpInfo info;
       if (!opForCode(codes[j], info))
-        return false;  // unknown opcode → leave the payload for the guard
-      auto typeOf = [&](int32_t id) -> Type {
-        auto it = typeMap.find(id);
-        return it == typeMap.end() ? Type() : it->second;
-      };
+        return false;
       int32_t aId = in0[j];
       Type aTy = typeOf(aId);
       if (!aTy)
@@ -187,20 +154,21 @@ struct MaterializeControlPayload
       if (!resTy)
         return false;
       float eps = j < fattr.size() ? fattr[j] : 1e-5f;
-      int32_t resultId = static_cast<int32_t>(n + 1 + j);
+      int32_t resultId = baseId + static_cast<int32_t>(j);
       typeMap[resultId] = resTy;
       plan.push_back({info.name, aId, bId, ia, eps, resTy, resultId});
     }
-    int32_t outId = static_cast<int32_t>(outIdA.getInt());
     Type outTy = typeMap.lookup(outId);
-    if (!outTy || outTy != carryTy)
-      return false;  // body output must be the next carry
+    return outTy && outTy == resultTy;
+  }
 
-    // ── Phase 2: validated — materialize the stub and emit the body. ──
-    SmallVector<Type> argTys(op->getOperandTypes().begin(),
-                             op->getOperandTypes().end());
+  // Phase 2: materialize `stub` as (argTys) -> resultTy and emit the validated
+  // plan. `idToArg` maps a pre-bound tensor-id to its materialized arg index.
+  void emitOpList(func::FuncOp stub, ArrayRef<Type> argTys,
+                  const llvm::DenseMap<int32_t, int> &idToArg,
+                  ArrayRef<PlannedOp> plan, int32_t outId, Type resultTy) {
     OpBuilder b(stub);
-    stub.setType(b.getFunctionType(argTys, {carryTy}));
+    stub.setType(b.getFunctionType(argTys, {resultTy}));
     stub.getBody().getBlocks().clear();
     Block *entry = b.createBlock(&stub.getBody());
     SmallVector<Location> argLocs(argTys.size(), stub.getLoc());
@@ -209,10 +177,8 @@ struct MaterializeControlPayload
     Location loc = stub.getLoc();
 
     llvm::DenseMap<int32_t, Value> valueMap;
-    for (int64_t k = 0; k < n; ++k)
-      valueMap[static_cast<int32_t>(k)] = entry->getArgument(k);
-    valueMap[static_cast<int32_t>(n)] = entry->getArgument(carryIdx);
-
+    for (auto &kv : idToArg)
+      valueMap[kv.first] = entry->getArgument(kv.second);
     for (const PlannedOp &p : plan) {
       OperationState st(loc, p.name);
       st.addOperands(valueMap.lookup(p.a));
@@ -229,10 +195,129 @@ struct MaterializeControlPayload
       valueMap[p.resultId] = b.create(st)->getResult(0);
     }
     func::ReturnOp::create(b, loc, valueMap.lookup(outId));
+  }
 
-    // The op is now an ordinary @body-call control_for: drop the payload attrs.
+  static ArrayRef<int32_t> i32(DenseI32ArrayAttr a) {
+    return a ? a.asArrayRef() : ArrayRef<int32_t>();
+  }
+  static ArrayRef<float> f32(DenseF32ArrayAttr a) {
+    return a ? a.asArrayRef() : ArrayRef<float>();
+  }
+
+  // control_for: ids 0..n-1 = operands, id n = live carry, body op j = id n+1+j.
+  // @body takes ALL operands (id k<n → arg k; live carry id n → arg
+  // carry_arg_index — consistent because CF2 passes the iter_arg there).
+  bool materializeControlFor(Operation *op, SymbolTable &symTab) {
+    auto opcodesA = op->getAttrOfType<DenseI32ArrayAttr>("body_opcodes");
+    auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
+    auto carryIdxA = op->getAttrOfType<IntegerAttr>("carry_arg_index");
+    auto outIdA = op->getAttrOfType<IntegerAttr>("body_out_id");
+    auto in0A = op->getAttrOfType<DenseI32ArrayAttr>("body_in0");
+    if (!opcodesA || !bodySym || !carryIdxA || !outIdA || !in0A)
+      return false;
+    auto stub = dyn_cast_or_null<func::FuncOp>(
+        symTab.lookupNearestSymbolFrom(op, bodySym.getAttr()));
+    if (!stub)
+      return false;
+    int64_t n = static_cast<int64_t>(op->getNumOperands());
+    int64_t carryIdx = carryIdxA.getInt();
+    if (carryIdx < 0 || carryIdx >= n)
+      return false;
+    Type carryTy = op->getOperand(carryIdx).getType();
+    int32_t outId = static_cast<int32_t>(outIdA.getInt());
+
+    llvm::DenseMap<int32_t, Type> seedTypes;
+    llvm::DenseMap<int32_t, int> idToArg;
+    for (int64_t k = 0; k < n; ++k) {
+      seedTypes[k] = op->getOperand(k).getType();
+      idToArg[k] = static_cast<int>(k);
+    }
+    seedTypes[n] = carryTy;
+    idToArg[n] = static_cast<int>(carryIdx);
+
+    SmallVector<PlannedOp> plan;
+    if (!validateOpList(opcodesA.asArrayRef(), in0A.asArrayRef(),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("body_in1")),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("body_iattr")),
+                        f32(op->getAttrOfType<DenseF32ArrayAttr>("body_fattr")),
+                        outId, seedTypes, static_cast<int32_t>(n + 1), carryTy,
+                        plan))
+      return false;
+    SmallVector<Type> argTys(op->getOperandTypes().begin(),
+                             op->getOperandTypes().end());
+    emitOpList(stub, argTys, idToArg, plan, outId, carryTy);
     for (StringRef k : {"body_opcodes", "body_in0", "body_in1", "body_iattr",
                         "body_fattr", "body_out_id"})
+      op->removeAttr(k);
+    return true;
+  }
+
+  // control_if: ids 0..n-1 = operands, each branch op j = id n+j (no carry).
+  // CF2's lowerControlIf calls the branches with the NON-flag operands, so the
+  // materialized @then/@else take the non-flag operands and a payload id k maps
+  // to arg (k < flag ? k : k-1). A branch that references the flag id is left
+  // for the guard. Both branches are validated before EITHER is materialized.
+  bool materializeControlIf(Operation *op, SymbolTable &symTab) {
+    auto thenCodes = op->getAttrOfType<DenseI32ArrayAttr>("then_opcodes");
+    auto elseCodes = op->getAttrOfType<DenseI32ArrayAttr>("else_opcodes");
+    auto thenSym = op->getAttrOfType<FlatSymbolRefAttr>("then_branch");
+    auto elseSym = op->getAttrOfType<FlatSymbolRefAttr>("else_branch");
+    auto flagA = op->getAttrOfType<IntegerAttr>("flag_arg_index");
+    auto thenOut = op->getAttrOfType<IntegerAttr>("then_out_id");
+    auto elseOut = op->getAttrOfType<IntegerAttr>("else_out_id");
+    auto thenIn0 = op->getAttrOfType<DenseI32ArrayAttr>("then_in0");
+    auto elseIn0 = op->getAttrOfType<DenseI32ArrayAttr>("else_in0");
+    if (!thenCodes || !elseCodes || !thenSym || !elseSym || !flagA ||
+        !thenOut || !elseOut || !thenIn0 || !elseIn0 || op->getNumResults() != 1)
+      return false;
+    auto thenStub = dyn_cast_or_null<func::FuncOp>(
+        symTab.lookupNearestSymbolFrom(op, thenSym.getAttr()));
+    auto elseStub = dyn_cast_or_null<func::FuncOp>(
+        symTab.lookupNearestSymbolFrom(op, elseSym.getAttr()));
+    if (!thenStub || !elseStub)
+      return false;
+    int64_t n = static_cast<int64_t>(op->getNumOperands());
+    int64_t flag = flagA.getInt();
+    if (flag < 0 || flag >= n)
+      return false;
+    Type resultTy = op->getResult(0).getType();
+
+    // Seed every NON-flag operand id; a reference to the flag id fails to
+    // resolve (intentional — the flag isn't a branch arg).
+    llvm::DenseMap<int32_t, Type> seedTypes;
+    llvm::DenseMap<int32_t, int> idToArg;
+    SmallVector<Type> argTys;
+    for (int64_t k = 0; k < n; ++k) {
+      if (k == flag)
+        continue;
+      seedTypes[k] = op->getOperand(k).getType();
+      idToArg[k] = static_cast<int>(argTys.size());
+      argTys.push_back(op->getOperand(k).getType());
+    }
+
+    int32_t tOut = static_cast<int32_t>(thenOut.getInt());
+    int32_t eOut = static_cast<int32_t>(elseOut.getInt());
+    SmallVector<PlannedOp> thenPlan, elsePlan;
+    if (!validateOpList(thenCodes.asArrayRef(), thenIn0.asArrayRef(),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("then_in1")),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("then_iattr")),
+                        f32(op->getAttrOfType<DenseF32ArrayAttr>("then_fattr")),
+                        tOut, seedTypes, static_cast<int32_t>(n), resultTy,
+                        thenPlan))
+      return false;
+    if (!validateOpList(elseCodes.asArrayRef(), elseIn0.asArrayRef(),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("else_in1")),
+                        i32(op->getAttrOfType<DenseI32ArrayAttr>("else_iattr")),
+                        f32(op->getAttrOfType<DenseF32ArrayAttr>("else_fattr")),
+                        eOut, seedTypes, static_cast<int32_t>(n), resultTy,
+                        elsePlan))
+      return false;
+
+    emitOpList(thenStub, argTys, idToArg, thenPlan, tOut, resultTy);
+    emitOpList(elseStub, argTys, idToArg, elsePlan, eOut, resultTy);
+    for (StringRef k : {"then_opcodes", "then_in0", "then_in1", "then_iattr",
+                        "then_fattr", "then_out_id", "else_opcodes", "else_in0",
+                        "else_in1", "else_iattr", "else_fattr", "else_out_id"})
       op->removeAttr(k);
     return true;
   }
@@ -240,13 +325,18 @@ struct MaterializeControlPayload
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SymbolTable symTab(module);
-    SmallVector<Operation *> fors;
+    SmallVector<Operation *> ctrl;
     module.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.control_for")
-        fors.push_back(op);
+      StringRef nm = op->getName().getStringRef();
+      if (nm == "tessera.control_for" || nm == "tessera.control_if")
+        ctrl.push_back(op);
     });
-    for (Operation *op : fors)
-      (void)materializeControlFor(op, symTab);
+    for (Operation *op : ctrl) {
+      if (op->getName().getStringRef() == "tessera.control_for")
+        (void)materializeControlFor(op, symTab);
+      else
+        (void)materializeControlIf(op, symTab);
+    }
   }
 };
 

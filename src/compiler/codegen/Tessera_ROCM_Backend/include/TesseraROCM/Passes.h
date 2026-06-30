@@ -57,6 +57,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlForWmmaTileKernelPass();
 // CF4e-1 — elementwise-body control_scan (per-step xs in, stacked ys out) →
 // one per-thread device kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlScanKernelPass();
+// CF4d-if — cross-element control_if (rmsnorm/layer_norm branches) →
+// cooperative-workgroup kernel; uniform flag selects the norm.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlIfNormKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

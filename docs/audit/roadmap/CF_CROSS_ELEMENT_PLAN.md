@@ -134,6 +134,22 @@ required (`grid.sync` + `hipLaunchCooperativeKernel`). This is the only step tha
 needs true cross-workgroup sync; deferred until a real workload demands carries
 that large.
 
+### CF4d-if — cross-element control_if *(done, ROCm/gfx1151)*
+The cross-element family extends past `control_for`: a `control_if` whose **both
+branches are a norm** — `O = flag>0 ? rmsnorm(x) : layer_norm(x)` over a 1×K carry
+— is a divergent branch between two *reductions*, so it can't be the per-thread
+elementwise `control_if` (CF4c). `GenerateROCMControlIfNormKernel`
+(`--generate-rocm-control-if-norm-kernel`) reuses the CF4d-2 cooperative-norm
+substrate: x lives in LDS, the **shape-(1) flag is read once and is uniform across
+the workgroup**, so the divergence is a single uniform `scf.if` selecting which
+cooperative norm every thread computes (only the taken norm's reduction runs — a
+true divergent branch, not a data-parallel blend). No loop, no LDS write-back:
+read the LDS carry, write O. Each branch's kind (rmsnorm/layer_norm) + eps is
+parsed and baked. Proven on gfx1151 by
+`tests/unit/test_rocm_control_if_norm_exec.py` (flag>0 → rmsnorm, flag<0 →
+layer_norm, bit-exact). Non-norm branches (elementwise) are left for the CF4c
+elementwise `control_if` / the guard.
+
 ## Validation discipline (every step)
 - A hardware-free **lit** fixture (`// REQUIRES: tessera-rocm-backend`) checking
   the emitted `gpu.func` structure (LDS attribution, barriers, the loop).

@@ -28,6 +28,7 @@ class ProgressRow:
     open: int
     detail: str
     source: str
+    next_action: str = ""
 
 
 def _read_csv(text: str) -> list[dict[str, str]]:
@@ -80,9 +81,18 @@ def _phase_rows(support_rows: list[dict[str, str]]) -> list[ProgressRow]:
                 open=total - ready,
                 detail=_breakdown(support_rows, field),
                 source="docs/audit/generated/support_table.csv",
+                next_action=_phase_next_action(item),
             )
         )
     return out
+
+
+def _phase_next_action(item: str) -> str:
+    return {
+        "Tile IR": "Close partial Tile IR rows or explicitly classify them as fused/not-applicable.",
+        "Target IR native/fused codegen": "Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes.",
+        "Benchmark evidence": "Attach benchmarks to native/hardware-promoted rows first.",
+    }.get(item, "Keep this layer drift-gated through support_table.csv.")
 
 
 def _primitive_axis_rows() -> list[ProgressRow]:
@@ -107,9 +117,18 @@ def _primitive_axis_rows() -> list[ProgressRow]:
                     "not necessarily missing API support"
                 ),
                 source="docs/audit/generated/s_series_status.md",
+                next_action=_primitive_axis_next_action(axis),
             )
         )
     return out
+
+
+def _primitive_axis_next_action(axis: str) -> str:
+    return {
+        "backend_kernel": "Promote by backend/pathway; do not treat every target as an all-up compiler veto.",
+        "sharding_rule": "Prioritize model-facing collectives, layout, memory, and optimizer rows.",
+        "batching_rule": "Close the small remaining transform-rule tail.",
+    }.get(axis, "No action unless this row reopens.")
 
 
 def _verifier_row(verifier_rows: list[dict[str, str]]) -> ProgressRow:
@@ -124,6 +143,7 @@ def _verifier_row(verifier_rows: list[dict[str, str]]) -> ProgressRow:
         open=total - ready,
         detail=_breakdown(verifier_rows, "impl_status"),
         source="docs/audit/generated/verifier_coverage.csv",
+        next_action="Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes.",
     )
 
 
@@ -139,6 +159,7 @@ def _test_row(test_rows: list[dict[str, str]]) -> ProgressRow:
         open=total - ready,
         detail=_breakdown(test_rows, "bucket"),
         source="docs/audit/generated/test_coverage.csv",
+        next_action="Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof.",
     )
 
 
@@ -154,6 +175,7 @@ def _runtime_row(runtime_rows: list[dict[str, str]]) -> ProgressRow:
         open=total - ready,
         detail=_breakdown(runtime_rows, "target"),
         source="docs/audit/generated/runtime_execution_matrix.csv",
+        next_action="Add rows only when a launch path actually executes.",
     )
 
 
@@ -169,6 +191,7 @@ def _surface_row(surface_rows: list[dict[str, str]]) -> ProgressRow:
         open=total - ready,
         detail=_breakdown(surface_rows, "status"),
         source="docs/audit/generated/surface_status.csv",
+        next_action="Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces.",
     )
 
 
@@ -188,6 +211,7 @@ def _abi_row(runtime_abi_rows: list[dict[str, str]]) -> ProgressRow:
         open=total - ready,
         detail=_breakdown(runtime_abi_rows, "backend"),
         source="docs/audit/generated/runtime_abi.csv",
+        next_action="Reduce stub-only ABI rows where a backend claims native execution.",
     )
 
 
@@ -274,9 +298,20 @@ def _pathway_rows(
                 open=open_n,
                 detail=detail,
                 source=source,
+                next_action=_pathway_next_action(item),
             )
         )
     return out
+
+
+def _pathway_next_action(item: str) -> str:
+    return {
+        "Apple CPU": "Keep as regression baseline for CPU value-call/runtime ABI.",
+        "Apple GPU": "Close the remaining absent target-map lane or document why it is host-only.",
+        "x86 / CPU": "Keep native CPU and numpy reference lanes separate in runtime proofs.",
+        "ROCm / HIP": "Close the artifact-only target-map tail and preserve CDNA as hardware-gated.",
+        "CUDA / NVIDIA": "Promote artifact-only rows with execute-and-compare, starting from sm_120 matmul adjacency and attention.",
+    }[item]
 
 
 def _target_map_open_rows(
@@ -303,9 +338,137 @@ def _target_map_open_rows(
                 open=total - ready,
                 detail=_breakdown(rows, "status"),
                 source=source,
+                next_action=(
+                    "Promote artifact_only rows with hardware execute-and-compare "
+                    "or move them to an explicit hardware-gated bucket."
+                ),
             )
         )
     return out
+
+
+def _dashboard_map_rows() -> list[ProgressRow]:
+    entries = (
+        (
+            "compiler_progress",
+            "primary",
+            "Reader-facing all-up rollup: phase/IR state, primitive axes, integration evidence, codegen pathways, and open work.",
+            "docs/audit/generated/compiler_progress.md",
+            "Start here for compiler-progress status.",
+        ),
+        (
+            "support_table",
+            "drilldown",
+            "Per-op phase support across API/frontend/Graph/Schedule/Tile/Target/runtime/bench.",
+            "docs/audit/generated/support_table.csv",
+            "Use when an open phase row needs the actual op list.",
+        ),
+        (
+            "s_series_status",
+            "drilldown",
+            "Primitive contract axes by category; owns batching/transpose/sharding/lowering/backend-kernel status.",
+            "docs/audit/generated/s_series_status.md",
+            "Use for primitive-contract promotion planning.",
+        ),
+        (
+            "standalone_primitive_coverage",
+            "companion",
+            "Historical primitive registry snapshot and S-series grouping; not the all-up completion gate.",
+            "docs/audit/standalone_primitive_coverage.md",
+            "Keep for primitive vocabulary/history; avoid using it as the primary progress summary.",
+        ),
+        (
+            "op_target_conformance",
+            "drilldown",
+            "Op-by-target conformance cells; useful for target-specific holes, not overall compiler health.",
+            "docs/audit/op_target_conformance.csv",
+            "Use after a backend/pathway row points at a target-specific gap.",
+        ),
+        (
+            "runtime_execution_matrix",
+            "primary_evidence",
+            "Executable compiler paths and launch outcomes by target.",
+            "docs/audit/generated/runtime_execution_matrix.csv",
+            "Use for native execution claims.",
+        ),
+        (
+            "target_maps",
+            "drilldown",
+            "Apple/ROCm/CUDA native/artifact status per backend op family.",
+            "docs/audit/generated/*_target_map.csv",
+            "Use for backend promotion queues.",
+        ),
+        (
+            "verifier_coverage",
+            "integration",
+            "ODS/C++ verifier implementation coverage.",
+            "docs/audit/generated/verifier_coverage.csv",
+            "Use for IR legality hardening work.",
+        ),
+        (
+            "test_coverage",
+            "integration",
+            "Direct, structural, family, and hardware-gated test evidence by op.",
+            "docs/audit/generated/test_coverage.csv",
+            "Use for proof-quality triage.",
+        ),
+        (
+            "runtime_abi",
+            "integration",
+            "C ABI symbols and implementation/stub split.",
+            "docs/audit/generated/runtime_abi.csv",
+            "Use when runtime/backend claims need symbol-level evidence.",
+        ),
+        (
+            "surface_status",
+            "integration",
+            "Examples, benchmarks, research, tools, and tests surface status.",
+            "docs/audit/generated/surface_status.csv",
+            "Use to find runnable proof surfaces and stale scaffolds.",
+        ),
+        (
+            "contract_consumers / effect_lattice / tsol",
+            "specialized",
+            "Focused contract-pass, effect-system, and TSOL views.",
+            "docs/audit/generated/",
+            "Use only when the specialized subsystem is the question.",
+        ),
+    )
+    return [
+        ProgressRow(
+            scope="dashboard_map",
+            item=item,
+            status=status,
+            ready=0,
+            total=0,
+            open=0,
+            detail=detail,
+            source=source,
+            next_action=next_action,
+        )
+        for item, status, detail, source, next_action in entries
+    ]
+
+
+def _overall_row(rows: list[ProgressRow], open_work: list[ProgressRow]) -> ProgressRow:
+    counts = Counter(r.status for r in rows)
+    closed = counts.get("closed", 0)
+    total = len(rows)
+    largest = ", ".join(r.item for r in sorted(open_work, key=lambda r: -r.open)[:3])
+    return ProgressRow(
+        scope="overall",
+        item="End-to-end optimizing compiler",
+        status=_status(closed, total),
+        ready=closed,
+        total=total,
+        open=total - closed,
+        detail=(
+            f"closed={closed}, mixed={counts.get('mixed', 0)}, "
+            f"open={counts.get('open', 0)}, primary_open={largest}"
+        ),
+        source="docs/audit/generated/compiler_progress.csv",
+        next_action="Drive the largest open-work rows without collapsing backend promotion into all-up compiler status.",
+    )
 
 
 def collect_rows() -> list[ProgressRow]:
@@ -353,6 +516,7 @@ def collect_rows() -> list[ProgressRow]:
             open=row.open,
             detail=row.detail,
             source=row.source,
+            next_action=row.next_action,
         )
 
     open_work = [
@@ -364,25 +528,17 @@ def collect_rows() -> list[ProgressRow]:
         *_target_map_open_rows(rocm_rows, nvidia_rows),
     ]
 
+    dashboard_map = _dashboard_map_rows()
+    summary_rows = [*phase, *primitive, *integration, *pathways]
+
     return [
-        ProgressRow(
-            scope="overall",
-            item="End-to-end optimizing compiler",
-            status="mixed",
-            ready=sum(r.ready for r in phase),
-            total=sum(r.total for r in phase),
-            open=sum(r.open for r in phase),
-            detail=(
-                "compiler pipeline is live, but native codegen, verifier proof, "
-                "and per-backend promotion remain independent axes"
-            ),
-            source="docs/audit/generated/support_table.csv",
-        ),
+        _overall_row(summary_rows, open_work),
         *phase,
         *primitive,
         *integration,
         *pathways,
         *open_work,
+        *dashboard_map,
     ]
 
 
@@ -391,9 +547,33 @@ def render_csv(rows: list[ProgressRow] | None = None) -> str:
         rows = collect_rows()
     buf = _io.StringIO()
     writer = _csv.writer(buf, lineterminator="\n")
-    writer.writerow(("scope", "item", "status", "ready", "total", "open", "detail", "source"))
+    writer.writerow(
+        (
+            "scope",
+            "item",
+            "status",
+            "ready",
+            "total",
+            "open",
+            "detail",
+            "source",
+            "next_action",
+        )
+    )
     for r in rows:
-        writer.writerow((r.scope, r.item, r.status, r.ready, r.total, r.open, r.detail, r.source))
+        writer.writerow(
+            (
+                r.scope,
+                r.item,
+                r.status,
+                r.ready,
+                r.total,
+                r.open,
+                r.detail,
+                r.source,
+                r.next_action,
+            )
+        )
     return buf.getvalue()
 
 
@@ -411,6 +591,7 @@ def _md_table(rows: list[ProgressRow], columns: tuple[str, ...]) -> list[str]:
             "Open": str(r.open),
             "Detail": r.detail.replace("|", "\\|"),
             "Source": f"`{r.source}`",
+            "Next": r.next_action.replace("|", "\\|"),
         }
         lines.append("| " + " | ".join(values[c] for c in columns) + " |")
     return lines
@@ -436,7 +617,12 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
         "## Overall",
         "",
     ]
-    lines.extend(_md_table(by_scope.get("overall", []), ("Item", "Status", "Ready", "Total", "Open", "Detail")))
+    lines.extend(
+        _md_table(
+            by_scope.get("overall", []),
+            ("Item", "Status", "Ready", "Total", "Open", "Detail", "Next"),
+        )
+    )
     lines.extend(
         [
             "",
@@ -444,7 +630,12 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
             "",
         ]
     )
-    lines.extend(_md_table(by_scope.get("phase", []), ("Item", "Status", "Ready", "Total", "Open", "Detail")))
+    lines.extend(
+        _md_table(
+            by_scope.get("phase", []),
+            ("Item", "Status", "Ready", "Total", "Open", "Detail", "Next"),
+        )
+    )
     lines.extend(
         [
             "",
@@ -452,7 +643,12 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
             "",
         ]
     )
-    lines.extend(_md_table(by_scope.get("primitive_axis", []), ("Item", "Status", "Ready", "Total", "Open", "Detail")))
+    lines.extend(
+        _md_table(
+            by_scope.get("primitive_axis", []),
+            ("Item", "Status", "Ready", "Total", "Open", "Detail", "Next"),
+        )
+    )
     lines.extend(
         [
             "",
@@ -460,7 +656,12 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
             "",
         ]
     )
-    lines.extend(_md_table(by_scope.get("integration", []), ("Item", "Status", "Ready", "Total", "Open", "Detail")))
+    lines.extend(
+        _md_table(
+            by_scope.get("integration", []),
+            ("Item", "Status", "Ready", "Total", "Open", "Detail", "Next"),
+        )
+    )
     lines.extend(
         [
             "",
@@ -468,7 +669,12 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
             "",
         ]
     )
-    lines.extend(_md_table(by_scope.get("codegen_pathway", []), ("Item", "Status", "Ready", "Total", "Open", "Detail")))
+    lines.extend(
+        _md_table(
+            by_scope.get("codegen_pathway", []),
+            ("Item", "Status", "Ready", "Total", "Open", "Detail", "Next"),
+        )
+    )
     lines.extend(
         [
             "",
@@ -477,7 +683,20 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
         ]
     )
     open_rows = sorted(by_scope.get("open_work", []), key=lambda r: (-r.open, r.item))
-    lines.extend(_md_table(open_rows, ("Item", "Status", "Open", "Detail", "Source")))
+    lines.extend(_md_table(open_rows, ("Item", "Status", "Open", "Detail", "Next", "Source")))
+    lines.extend(
+        [
+            "",
+            "## Dashboard Map",
+            "",
+        ]
+    )
+    lines.extend(
+        _md_table(
+            by_scope.get("dashboard_map", []),
+            ("Item", "Status", "Detail", "Next", "Source"),
+        )
+    )
     lines.extend(
         [
             "",

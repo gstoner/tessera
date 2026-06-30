@@ -72,10 +72,17 @@ gpu.func @ctrl_for_gemv(%CARRY, %W, %OUT: memref<?xf32>, %K: index) kernel {
 Numeric proof on gfx1151: `carry @ W^max_iters` vs numpy. Single-tile (K ≤ BD),
 one workgroup, no global sync. This establishes the cooperative substrate.
 
-### CF4d-2 — norm-in-loop
-Body `rmsnorm(carry)` / `layer_norm(carry)`: a workgroup reduction
-(`Σ carry²` / mean+var) in LDS, then a normalize pass, looped. Reuses the
-`GenerateROCMNormKernel` reduction structure inside the control loop.
+### CF4d-2 — norm-in-loop *(done, ROCm/gfx1151)*
+Body `rmsnorm(carry)` / `layer_norm(carry)` over a 1xK carry →
+`GenerateROCMControlForNormKernel` (`--generate-rocm-control-for-norm-kernel`),
+the same cooperative substrate as CF4d-1: carry in LDS, `gpu.barrier` per
+iteration. Because K ≤ BD (one element per thread), each thread reads the K LDS
+values and computes the statistic in-register, then normalizes its own element —
+no inter-thread reduction op, just the barrier handoff. `rmsnorm`:
+`x / √(mean(x²) + eps)`; `layer_norm`: `(x − μ) / √(mean((x−μ)²) + eps)` (two
+in-register reductions). `eps` baked from the op attr. Proven on gfx1151 by
+`tests/unit/test_rocm_control_for_norm_exec.py` (looped rmsnorm/layer_norm vs the
+same numpy formula applied iteratively).
 
 ### CF4d-3 — WMMA single-tile matmul
 Body `matmul(carry, W)` where carry is a **16×16 tile** (one RDNA3.5 WMMA

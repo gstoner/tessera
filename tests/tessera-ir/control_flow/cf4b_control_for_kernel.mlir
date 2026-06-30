@@ -60,8 +60,11 @@ func.func @mm_body(%c: tensor<8x8xf32>) -> tensor<8x8xf32> {
   return %0 : tensor<8x8xf32>
 }
 
-// CHECK-NOT:   gpu.func
 // CHECK:       tessera.control_for
+// A trailing CHECK-NOT (after the last positive match) is what actually proves
+// no kernel was emitted — emitKernel APPENDS the gpu.module after the func, so a
+// CHECK-NOT placed only *before* control_for would miss a regressed kernel.
+// CHECK-NOT:   gpu.func
 func.func @h(%init: tensor<8x8xf32>) -> tensor<8x8xf32> {
   %r = "tessera.control_for"(%init) {
     body = @mm_body, start = 0 : i64, stop = 2 : i64, step = 1 : i64,
@@ -77,8 +80,8 @@ func.func @r2_body(%c: tensor<1x8xf32>) -> tensor<1x8xf32> {
   return %0 : tensor<1x8xf32>
 }
 
-// CHECK-NOT:   gpu.func
 // CHECK:       tessera.control_for
+// CHECK-NOT:   gpu.func
 func.func @r2(%init: tensor<1x8xf32>) -> tensor<1x8xf32> {
   %r = "tessera.control_for"(%init) {
     body = @r2_body, start = 0 : i64, stop = 4 : i64, step = 1 : i64,

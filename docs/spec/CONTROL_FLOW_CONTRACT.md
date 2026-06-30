@@ -247,8 +247,15 @@ claim.
   a real `@body` `func.func` of `tessera.*` ops (opcode table + tensor-id map +
   result-type inference), then strips the payload attrs — so CF2 lowers the loop
   to `scf.for` with a *real* device body. Unknown opcodes / unresolvable shapes
-  are left untouched (two-phase: validate before mutating). `control_if`/`while`
-  payloads → CF4a follow-up.
+  are left untouched (two-phase: validate before mutating).
+- **CF4a-cont** *(control_if done)* — the same decoder materializes the
+  `control_if` `then_opcodes`/`else_opcodes` payload into real `@then`/`@else`
+  funcs. `control_if`'s op-list ids are `0..n-1` = operands, branch op j = id
+  `n+j` (no carry); CF2 calls the branches with the **non-flag** operands, so the
+  materialized branches take the non-flag operands and a payload id `k` maps to
+  arg `(k < flag ? k : k-1)`. A branch referencing the flag id is left untouched;
+  both branches validate before either is materialized. `control_while` payload
+  (carry + cond pred-type) → follow-up.
 - **CF4b** *(done, ROCm/gfx1151)* — `GenerateROCMControlForKernel`
   (`--generate-rocm-control-for-kernel`) lowers an **elementwise-body**
   `control_for` (1-D f32 carry, no captures) to **one** `gpu.func`: grid over the

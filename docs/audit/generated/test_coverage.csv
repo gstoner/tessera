@@ -300,7 +300,7 @@ msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,39,11,1,50,0,,directly_tested,50 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
-mul,87,4,7,91,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,91 direct test references
+mul,87,5,7,92,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,92 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -402,7 +402,7 @@ sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,6,0,0,6,0,bf16 f16 f32 fp32,directly_tested,6 direct test references
 sigmoid_safe,6,0,0,6,0,,directly_tested,6 direct test references
 sign,5,0,1,5,0,bf16 f32,directly_tested,5 direct test references
-silu,85,4,5,89,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,89 direct test references
+silu,85,5,5,90,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,90 direct test references
 silu_mul,15,13,1,28,0,bf16 fp32,directly_tested,28 direct test references
 simple_rnn_cell,5,0,0,5,0,,directly_tested,5 direct test references
 sin,3,0,0,3,0,,directly_tested,3 direct test references

@@ -11403,7 +11403,7 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
         g = np.asarray(gate).astype(np.float32)
         act = str(kwargs.get("gate_activation", "sigmoid"))
         if act == "sigmoid":
-            g = 1.0 / (1.0 + np.exp(-g))
+            g = (1.0 / (1.0 + np.exp(-g))).astype(np.float32)
         elif act not in ("identity", "none"):
             raise ValueError(
                 "gate_activation must be 'sigmoid', 'identity', or 'none'")

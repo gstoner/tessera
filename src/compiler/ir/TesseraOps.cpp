@@ -3079,6 +3079,35 @@ LogicalResult SpecAcceptSampleOp::verify() {
   return success();
 }
 
+LogicalResult SpecAcceptTreeSampleOp::verify() {
+  auto tlpT = dyn_cast<RankedTensorType>(getTargetLogProbs().getType());
+  auto dlpT = dyn_cast<RankedTensorType>(getDraftLogProbs().getType());
+  auto auT = dyn_cast<RankedTensorType>(getAcceptU().getType());
+  auto resT = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!tlpT || !dlpT || !auT || !resT)
+    return emitOpError("all operands and the result must be ranked tensors");
+  // target/draft log-probs and accept_u are all P x D f32.
+  if (tlpT.getRank() != 2 || !tlpT.getElementType().isF32())
+    return emitOpError("target_log_probs must be rank-2 P x D f32");
+  int64_t P = tlpT.getDimSize(0), D = tlpT.getDimSize(1);
+  if (P <= 0 || D <= 0)
+    return emitOpError("num_paths and depth must be positive");
+  auto sameShapeF32 = [&](RankedTensorType t) {
+    return t.getRank() == 2 && t.getElementType().isF32() &&
+           t.getDimSize(0) == P && t.getDimSize(1) == D;
+  };
+  if (!sameShapeF32(dlpT))
+    return emitOpError("draft_log_probs must match target_log_probs (P x D f32)");
+  if (!sameShapeF32(auT))
+    return emitOpError("accept_u must match target_log_probs (P x D f32)");
+  // result packs [accepted_path_idx, accepted_prefix_length].
+  if (resT.getRank() != 1 || !resT.getElementType().isInteger(32) ||
+      resT.getDimSize(0) != 2)
+    return emitOpError("result must be tensor<2xi32> "
+                       "([accepted_path_idx, accepted_prefix_length])");
+  return success();
+}
+
 // ── MoR (mixture-of-recursions) ──────────────────────────────────────────────
 LogicalResult MorRouterOp::verify() {
   return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());

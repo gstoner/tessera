@@ -75,6 +75,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptKernelPass();
 // SD1-2 — tessera.spec_accept_sample (Leviathan rejection sampling, explicit
 // uniforms + CDF-inversion categorical) → single-thread kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptSampleKernelPass();
+// SD1 — tessera.spec_accept_tree_sample (tree Leviathan rejection) →
+// cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptTreeSampleKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

@@ -255,8 +255,7 @@ Acceptance:
   `gpu.func` (serial accept loop + CDF-inversion categorical), proven bit-exact on
   gfx1151 by `tests/unit/test_rocm_spec_accept_sample_exec.py` (random
   rejection-sampling + full-accept). `op_catalog`/`tessera.ops`
-  registration + `PYTHON_API_SPEC` updated. The tree (multi-path) rejection form
-  is a later follow-up.
+  registration + `PYTHON_API_SPEC` updated.
 - **SD1-3 (cache_commit/cache_rollback typed effects) — done.** New Graph IR ops
   `Tessera_CacheCommitOp` (`cache.commit`) + `Tessera_CacheRollbackOp`
   (`cache.rollback`), both `MemoryEffects<[MemWrite]>` (NOT `[Pure]`) — the
@@ -273,9 +272,30 @@ Acceptance:
   CF0's "cache mutation only through typed cache handles" + "speculative rollback
   via cursor/state handles" an **IR-visible typed effect**. No device kernel
   (cursor ops).
-- **SD1-4+ (open):** `target_verify` I/O contract; the Gumiho serial-draft backend
-  loop (now unblocked — the CF3/CF4 control-flow substrate landed, #224–#246); the
-  tree (multi-path) rejection-sampling form.
+- **Tree (multi-path) rejection-sampling — done, ROCm/gfx1151.** New op
+  `Tessera_SpecAcceptTreeSampleOp` (`[Pure]`) — the device form of
+  `speculative.batch_verify`. Over `P` draft paths each `D` deep, accept the draft
+  token at `(p,i)` iff `accept_u[p,i] ≤ exp(target_log_probs[p,i] −
+  draft_log_probs[p,i])`; pick the longest-accepted-prefix path (first wins ties)
+  → `[accepted_path_idx, accepted_prefix_length]`. Explicit-`u` (deterministic);
+  `GenerateROCMSpecAcceptTreeSampleKernel`
+  (`--generate-rocm-spec-accept-tree-sample-kernel`) lowers it to one
+  cooperative-workgroup `gpu.func` (thread/path exp-accept length + argmax), proven
+  bit-exact on gfx1151 by `tests/unit/test_rocm_spec_accept_tree_sample_exec.py`.
+  Generalizes the linear `spec_accept_sample` to a tree and the greedy
+  `spec_accept` to the stochastic rule.
+- **Gumiho serial-draft loop — done (reference + composition).**
+  `speculative.gumiho_serial_draft` composes the SD1 primitive chain — draft →
+  `target_verify` → `spec_accept` → `cache_commit` — into ONE bounded decode loop
+  (the kind that lowers to one `control_scan` device dispatch, CF4e, rather than
+  one launch per token). The greedy invariant is proven in
+  `tests/unit/test_gumiho_serial_draft.py`: for ANY draft model the emitted
+  sequence is identical to plain autoregressive decode with the target
+  (`autoregressive_decode`) — speculation changes only the number of target calls,
+  never the output. The fully-device-executed loop (with the draft/target *models*
+  as device kernels) is the DS/DK-track integration.
+- **SD1-4+ (open):** `target_verify` I/O contract; fully-device-executed Gumiho
+  loop with the draft/target models as device kernels (DS/DK-track integration).
 
 ## DS1 - DSpark Library Contract
 
@@ -482,4 +502,3 @@ Acceptance:
 - Whether top-k/block selection for sparse attention is fused immediately.
   Recommended: keep selection separate until block-sparse kernels pass dense
   equivalence and decode parity.
-

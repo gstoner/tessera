@@ -274,6 +274,7 @@ softplus,pure,,1,0,0
 sort,pure,,1,0,0
 spec_accept,pure,,1,0,0
 spec_accept_sample,pure,,1,0,0
+spec_accept_tree_sample,pure,,1,0,0
 spectral_conv,pure,,1,1,0
 spectral_filter,pure,,1,1,0
 split,pure,,1,0,0

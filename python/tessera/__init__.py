@@ -4529,19 +4529,21 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         ``tessera.target_verify``). Given the verified-position context ``tokens``
         (current committed token + the D draft tokens; ``S = D+1`` positions) and
         the (composed, external) target model's raw ``logits`` at those positions
-        (``S × V``), returns the contract-shaped per-position target log-probs
-        ``S × V`` (a ``log_softmax`` over the vocab) — exactly what
-        ``spec_accept`` / ``spec_accept_sample`` consume. A composed model call,
-        not a fused kernel; the op pins the (S × V) batching contract."""
+        (``S × V``), returns the contract-shaped per-position target
+        **probabilities** ``S × V`` (a ``softmax`` over the vocab) — exactly the
+        ``target_probs`` operand ``spec_accept_sample`` consumes (its accept ratio
+        and residual read probabilities, not log-probs). Callers that want
+        log-probs (``spec_accept_tree_sample`` / ``batch_verify``) take ``log`` of
+        the result. A composed model call, not a fused kernel; the op pins the
+        (S × V) batching contract."""
         import numpy as _np
         lg = _np.asarray(logits, dtype=_np.float64)
         if lg.ndim != 2:
             raise ValueError("logits must be S x V")
         if _np.asarray(tokens).reshape(-1).shape[0] != lg.shape[0]:
             raise ValueError("tokens length must equal logits rows (S)")
-        m = lg.max(axis=-1, keepdims=True)
-        return (lg - m - _np.log(_np.exp(lg - m).sum(axis=-1, keepdims=True))
-                ).astype(_np.float32)
+        e = _np.exp(lg - lg.max(axis=-1, keepdims=True))
+        return (e / e.sum(axis=-1, keepdims=True)).astype(_np.float32)
 
     references["target_verify"] = target_verify
 

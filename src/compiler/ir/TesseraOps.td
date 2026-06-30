@@ -2427,9 +2427,13 @@ def Tessera_TargetVerifyOp : Op<
     token plus the draft prefix": given the verified-position context `tokens`
     (the current committed token followed by the `D` draft tokens, `S = D+1`
     positions) and the target model's raw `logits` at those positions (`S × V`),
-    it emits the contract-shaped per-position target log-probabilities
-    `target_logprobs` (`S × V`, a `log_softmax` over the vocab `V`) — exactly the
-    `(prefix_len+1) × V` tensor that `spec_accept` / `spec_accept_sample` consume.
+    it emits the contract-shaped per-position target **probabilities**
+    `target_probs` (`S × V`, a `softmax` over the vocab `V`) — exactly the
+    `(prefix_len+1) × V` *probability* tensor that `spec_accept_sample` consumes as
+    its `target_probs` operand (the accept ratio `accept_u·p_draft ≤ p_target` and
+    the residual `relu(p_target − p_draft)` read probabilities, not log-probs).
+    Callers that want log-probs (e.g. `spec_accept_tree_sample` /
+    `speculative.batch_verify`) take the log of the result.
 
     This is a **composed model call**, not a fused kernel: the op pins the
     batching shapes (S positions × V vocab) so the target scoring is explicit
@@ -2438,7 +2442,7 @@ def Tessera_TargetVerifyOp : Op<
     DK-track concern.
   }];
   let arguments = (ins AnyType:$tokens, AnyType:$logits);
-  let results = (outs AnyType:$target_logprobs);  // tensor<SxVxf32>
+  let results = (outs AnyType:$target_probs);  // tensor<SxVxf32>
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;

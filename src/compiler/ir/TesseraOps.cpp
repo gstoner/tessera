@@ -3111,9 +3111,9 @@ LogicalResult SpecAcceptTreeSampleOp::verify() {
 LogicalResult TargetVerifyOp::verify() {
   auto tokT = dyn_cast<RankedTensorType>(getTokens().getType());
   auto logT = dyn_cast<RankedTensorType>(getLogits().getType());
-  auto outT = dyn_cast<RankedTensorType>(getTargetLogprobs().getType());
+  auto outT = dyn_cast<RankedTensorType>(getTargetProbs().getType());
   if (!tokT || !logT || !outT)
-    return emitOpError("tokens, logits, and target_logprobs must be ranked "
+    return emitOpError("tokens, logits, and target_probs must be ranked "
                        "tensors");
   // tokens: rank-1 i32 (S = prefix_len+1 verified positions).
   if (tokT.getRank() != 1 || !tokT.getElementType().isInteger(32))
@@ -3121,7 +3121,7 @@ LogicalResult TargetVerifyOp::verify() {
   int64_t S = tokT.getDimSize(0);
   if (S <= 0)
     return emitOpError("S (number of verified positions) must be positive");
-  // logits / target_logprobs: S x V f32 — one distribution per position.
+  // logits / target_probs: S x V f32 — one distribution per position.
   if (logT.getRank() != 2 || !logT.getElementType().isF32() ||
       logT.getDimSize(0) != S)
     return emitOpError("logits must be S x V f32 (S=") << S << ")";
@@ -3130,7 +3130,7 @@ LogicalResult TargetVerifyOp::verify() {
     return emitOpError("vocab size V must be positive");
   if (outT.getRank() != 2 || !outT.getElementType().isF32() ||
       outT.getDimSize(0) != S || outT.getDimSize(1) != V)
-    return emitOpError("target_logprobs must match logits shape (S x V f32)");
+    return emitOpError("target_probs must match logits shape (S x V f32)");
   return success();
 }
 

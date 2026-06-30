@@ -19,7 +19,7 @@ func.func @bad_logits_rows(%t: tensor<3xi32>, %l: tensor<2x4xf32>) -> tensor<3x4
 
 // -----
 func.func @bad_result(%t: tensor<3xi32>, %l: tensor<3x4xf32>) -> tensor<3x5xf32> {
-  // expected-error @+1 {{target_logprobs must match logits shape (S x V f32)}}
+  // expected-error @+1 {{target_probs must match logits shape (S x V f32)}}
   %r = "tessera.target_verify"(%t, %l) : (tensor<3xi32>, tensor<3x4xf32>) -> tensor<3x5xf32>
   return %r : tensor<3x5xf32>
 }

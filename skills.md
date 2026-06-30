@@ -242,7 +242,7 @@ to Tessera's current state:
 
 ---
 
-## Graphify scope in this repo — empirical (2026-05-31)
+## Graphify scope in this repo — empirical (2026-06-29)
 
 Graphify ships grammars for 19 languages (Python, JavaScript, TypeScript,
 Ruby, PHP, Lua, PowerShell, Go, Rust, C, C++, Zig, Swift, Objective-C,
@@ -252,32 +252,35 @@ own README / install output.
 **Critical distinction:** the grammar set is the *upper bound* on what
 graphify CAN parse. The actual contents of ``graphify-out/graph.json``
 are what graphify queries traverse. Always verify the latter before
-assuming the former.
+assuming the former — and re-verify after a rebuild, because the answer
+*changes between rebuilds* (see the `.mm` reversal below).
 
 ### What Tessera's graph actually indexes today
 
-Empirically confirmed by ``graphify query`` probes against the current
-index:
+Empirically confirmed by counting nodes in the current
+`graphify-out/graph.json` (rebuilt 2026-06-28, ~48.4K nodes). Counts are
+node-level, not file-level:
 
 | Surface | In graph? | Notes |
 |---------|-----------|-------|
-| Python (`python/tessera/`) | ✅ Yes | Full coverage — primary use case |
-| C++ (`*.cpp` in `src/compiler/`, `tools/`, etc.) | ✅ Yes | Indexed; symbols like `ErrorReporter.cpp::PyLoc` surface |
-| C++ headers (`*.h` in `src/`) | ⚠️ Mixed | Some headers indexed; coverage spotty |
-| Objective-C++ (`*.mm`) | ❌ **Not in graph** | `apple_gpu_runtime.mm` (13K LOC, the entire Apple GPU runtime) does NOT appear in any graphify query result. Use direct `rg` / Read. |
-| MLIR TableGen (`*.td`) | ❌ Not in graph | Grammar not supported |
-| MLIR / lit fixtures (`*.mlir`) | ❌ Not in graph | Grammar not supported |
-| CMake (`CMakeLists.txt`) | ❌ Not in graph | Grammar not supported |
-| Markdown (`*.md` in `docs/`) | ⚠️ Partial | Some headings/sections appear as nodes; not a code-symbol graph |
+| Python (`python/tessera/`) | ✅ Yes | Full coverage — primary use case. ~33.8K `.py` nodes. |
+| C++ (`*.cpp` / `*.cc`) | ✅ Yes | ~5.9K `.cpp` + `.cc` nodes; symbols like `ErrorReporter.cpp::PyLoc` surface. |
+| C++ headers (`*.h` / `*.hpp`) | ⚠️ Mixed | ~390 nodes — indexed but spotty; many are under `archive/`. |
+| Objective-C++ (`*.mm`) | ⚠️ **Sparse (changed)** | Now present, but barely: only ~5 `.mm` nodes total. `apple_gpu_runtime.mm` surfaces as a file node plus a handful of symbols (`TesseraMlpkgPipeline`, `NSObject`, `NSString`); `metal_command_buffer_probe.mm` adds one. Deep runtime internals (`MetalDeviceContext`, dispatchers) do **not** surface. Was ❌ on 2026-05-31. |
+| MLIR TableGen (`*.td`) | ❌ Not in graph | 0 nodes. |
+| MLIR / lit fixtures (`*.mlir`) | ❌ Not in graph | 0 nodes. |
+| CMake (`CMakeLists.txt`) | ❌ Not in graph | 0 nodes. |
+| Markdown (`*.md`) | ✅ Heavily indexed | ~7.6K document nodes (now substantial, not "some headings"); still concept/section nodes, not a code-symbol graph. |
 
 ### Implications for tool choice
 
 * **Python / `.cpp`** — graphify FIRST. `codegraph_context "how does X
   work"` returns a scoped subgraph in one call; vastly cheaper than
   ripgrep + Read across thousands of files.
-* **`.mm` (Apple GPU runtime)** — direct `rg` / Read. The runtime is a
-  single 13K-line file; grep is the right tool. Don't waste a graphify
-  call expecting `MetalDeviceContext` to surface — it won't.
+* **`.mm` (Apple GPU runtime)** — graphify now returns the file node and
+  a few top-level symbols, but for any real work on the 13K-line runtime
+  it's too sparse to rely on. Use direct `rg` / Read; don't expect
+  `MetalDeviceContext` or dispatcher internals to surface.
 * **`.td` (ODS)** — direct Read with line-number anchors from
   `src/compiler/ir/TesseraOps.td`.
 * **MLIR `.mlir` lit fixtures** — direct Read; the file count is small
@@ -286,19 +289,24 @@ index:
 
 ### Verification recipe (copy-paste, ~5s)
 
-Before assuming graphify covers a file, probe:
+Before assuming graphify covers a file, count its nodes in the graph:
 
-    graphify query "<symbol or topic likely in that file>"
+    python3 - <<'PY'
+    import json
+    nodes = json.load(open('graphify-out/graph.json'))['nodes']
+    target = 'apple_gpu_runtime.mm'   # ← change to the file you care about
+    hits = [n for n in nodes if target in (n.get('source_file') or '')]
+    print(f'{target}: {len(hits)} nodes')
+    PY
 
-If results all point to other files / no hit for the target file, the
-file isn't in the graph. Switch to `rg` for that surface.
+If the count is 0 (or, for a large file, only 1–2), switch to `rg` for
+that surface. `graphify query "<symbol>"` is a quicker but coarser check.
 
-### Lesson learned (2026-05-31)
+### Lesson learned (updated 2026-06-29)
 
-I previously assumed `.mm` was out of graphify's scope (correctly, as it
-turns out — but for the wrong reason). When corrected that Objective-C
-is on graphify's grammar list, I conceded the wrong concession.
-**Empirical answer**: the graph in *this* repo doesn't include `.mm`
-regardless of grammar availability. The lesson is to verify against
-the actual graph, not the grammar list. ``graphify query`` is the
-fastest check.
+The 2026-05-31 note declared `.mm` flatly "not in graph." One rebuild
+later it is — sparsely. The point stands and is *sharper* now: graph
+membership is a property of the **current index**, not of grammar
+support, and it drifts every time the graph is rebuilt. Verify against
+the live `graph.json`, re-verify after a rebuild, and don't carry a
+prior run's verdict forward as fact.

@@ -38,6 +38,7 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMControlForGemvKernel.cpp
   GenerateROCMControlForNormKernel.cpp
   GenerateROCMControlForWmmaKernel.cpp
+  GenerateROCMControlForWmmaTileKernel.cpp
   GenerateROCMBinaryKernel.cpp
   GenerateROCMCompareKernel.cpp
   GenerateROCMLogicalKernel.cpp

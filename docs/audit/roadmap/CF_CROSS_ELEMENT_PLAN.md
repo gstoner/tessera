@@ -98,12 +98,41 @@ index the matrix logically, the LDS is a plain 16×16 f16 matrix and the handoff
 is layout-correct. Proven on gfx1151 by
 `tests/unit/test_rocm_control_for_wmma_exec.py` (`carry @ W^it`, it=1/2/3,
 mirroring the per-iteration f16 truncation; f16 tolerance). Larger carries are
-multi-tile (grid-wide barrier) — CF4d-4.
+multi-tile — CF4d-4 (one workgroup) / CF4d-5 (multi-workgroup).
 
-### CF4d-4 — multi-tile (cooperative kernel)
-Carry larger than one tile/workgroup → iteration N+1 needs **all** of N's tiles,
-so a **grid-wide barrier** is required (`grid.sync` / cooperative-launch). This
-is the only step that needs cross-workgroup sync; deferred until CF4d-1..3 land.
+### CF4d-4 — multi-tile, one workgroup *(done, ROCm/gfx1151)*
+Carry is an **M×K tile grid** (M, K multiples of 16) and W is **K×K**, both f16 →
+`GenerateROCMControlForWmmaTileKernel`
+(`--generate-rocm-control-for-wmma-tile-kernel`). The CF4d-3 insight that makes
+this cheap *without* a grid-wide barrier: a multi-tile carry still fits in **one
+workgroup's LDS** (e.g. 64×64 f16 = 8 KB ≪ 64 KB), so we launch **one workgroup
+of MT·KT waves** — each wave owns one 16×16 output tile `(ti, tj)` and
+accumulates it over the shared-K dimension,
+`D[ti][tj] = Σ_tk carry[ti][tk] @ W[tk][tj]`, chaining KT WMMA ops into one
+accumulator fragment. The whole carry lives in LDS as a plain M×K f16 matrix; per
+control-loop iteration every wave reads its row-block, a **workgroup barrier**
+fences all old-carry reads, each wave writes its output tile back to LDS, a
+second barrier publishes the new carry. Two barriers, **no cross-workgroup
+sync** — the B-fragments are loop-invariant (W fixed) so they're built once up
+front. Proven on gfx1151 by `tests/unit/test_rocm_control_for_wmma_tile_exec.py`
+(32×32 it=1/2/3, plus asymmetric 16×32 / 32×16 and the 8-wave-ceiling 64×32 /
+32×64).
+
+**On-device envelope (measured):** one workgroup must be co-resident on a single
+WGP, so the tile grid is bounded by how many of *this* kernel's waves fit there —
+not the 1024-thread/workgroup hardware max. The WMMA accumulator + A/B fragments
+push VGPR/wave high enough that gfx1151 holds **8 waves (256 threads)** per WGP;
+9+ waves fail to launch (`hipErrorLaunchFailure`, confirmed on-device). The pass
+therefore **caps `MAX_WAVES = 8`** and leaves larger carries untouched — it never
+emits a kernel that can't launch on the target (Decision #21). That covers up to
+a 4×2 / 2×4 / 2×2 tile carry (e.g. 64×32, 32×64, 32×32).
+
+### CF4d-5 — multi-workgroup (grid.sync frontier)
+Carry exceeding one WGP's wave capacity (>8 tiles here) → iteration N+1 needs
+**all** of N's tiles across **multiple workgroups**, so a **grid-wide barrier** is
+required (`grid.sync` + `hipLaunchCooperativeKernel`). This is the only step that
+needs true cross-workgroup sync; deferred until a real workload demands carries
+that large.
 
 ## Validation discipline (every step)
 - A hardware-free **lit** fixture (`// REQUIRES: tessera-rocm-backend`) checking

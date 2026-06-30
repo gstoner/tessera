@@ -51,6 +51,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlForGemvKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForNormKernelPass();
 // CF4d-3 — single-tile WMMA matmul recurrence control_for → one-wave kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForWmmaKernelPass();
+// CF4d-4 — multi-tile WMMA matmul recurrence control_for → one-workgroup
+// (MT*KT waves) kernel; workgroup barrier handoff, no grid.sync.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlForWmmaTileKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

@@ -2992,6 +2992,24 @@ LogicalResult ControlWhileOp::verify() {
   return success();
 }
 
+LogicalResult ControlScanOp::verify() {
+  if (getTrip() <= 0)
+    return emitOpError("trip must be positive");
+  if (getCarryArgIndex() != 0)
+    return emitOpError("carry_arg_index must be 0 (init is the scan carry)");
+  // The carry is shape-stable across steps.
+  if (getCarryOut().getType() != getInit().getType())
+    return emitOpError("scan carry_out type must match the init carry type");
+  // ys is the stacked per-step output: its leading dim is the trip count (when
+  // statically known).
+  if (auto ysT = dyn_cast<RankedTensorType>(getYs().getType()))
+    if (ysT.getRank() >= 1 && !ysT.isDynamicDim(0) &&
+        ysT.getDimSize(0) != static_cast<int64_t>(getTrip()))
+      return emitOpError("ys leading dim must equal trip (")
+             << getTrip() << "), got " << ysT.getDimSize(0);
+  return verifyControlPayload(getOperation(), "body");
+}
+
 // ── MoR (mixture-of-recursions) ──────────────────────────────────────────────
 LogicalResult MorRouterOp::verify() {
   return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());

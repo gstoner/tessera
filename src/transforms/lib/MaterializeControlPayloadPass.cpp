@@ -276,6 +276,12 @@ struct MaterializeControlPayload
         symTab.lookupNearestSymbolFrom(op, elseSym.getAttr()));
     if (!thenStub || !elseStub)
       return false;
+    // If both arms resolve to the SAME stub, materializing the second branch
+    // would overwrite the first's body — both arms would then call one body,
+    // silently changing the branch semantics. Leave such a payload for the
+    // guard rather than emit a wrong lowering.
+    if (thenStub == elseStub)
+      return false;
     int64_t n = static_cast<int64_t>(op->getNumOperands());
     int64_t flag = flagA.getInt();
     if (flag < 0 || flag >= n)

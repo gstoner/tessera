@@ -58,3 +58,25 @@ func.func @g(%flag: tensor<8xf32>, %x: tensor<8xf32>) -> tensor<8xf32> {
   } : (tensor<8xf32>, tensor<8xf32>) -> tensor<8xf32>
   return %r : tensor<8xf32>
 }
+
+// -----
+// ─── then_branch == else_branch (SHARED stub) is left untouched ─────────────
+// Materializing the second arm would overwrite the first's body, so both arms
+// would call one body — a silent semantic change. Leave it for the guard.
+func.func private @shared()
+
+// CHECK-LABEL: func.func @s
+// CHECK:       tessera.control_if
+// CHECK-SAME:  then_opcodes
+func.func @s(%flag: tensor<1xf32>, %x: tensor<8xf32>) -> tensor<8xf32> {
+  %r = "tessera.control_if"(%flag, %x) {
+    then_branch = @shared, else_branch = @shared, flag_arg_index = 0 : i64,
+    then_opcodes = array<i32: 23>, then_in0 = array<i32: 1>,
+    then_in1 = array<i32: -1>, then_iattr = array<i32: 0>,
+    then_fattr = array<f32: 1.0e-05>, then_out_id = 2 : i64,
+    else_opcodes = array<i32: 20>, else_in0 = array<i32: 1>,
+    else_in1 = array<i32: -1>, else_iattr = array<i32: 0>,
+    else_fattr = array<f32: 1.0e-05>, else_out_id = 2 : i64
+  } : (tensor<1xf32>, tensor<8xf32>) -> tensor<8xf32>
+  return %r : tensor<8xf32>
+}

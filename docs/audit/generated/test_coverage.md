@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **478** ops in `primitive_coverage` registry.
-- **3631** total Python-test references, **950** total lit-fixture references.
+- **3632** total Python-test references, **950** total lit-fixture references.
 - **96** ops have **zero** references in either test surface.
-- **136** ops have ≤1 reference ("thinly tested").
+- **135** ops have ≤1 reference ("thinly tested").
 - **92** ops have ≥10 references ("well tested").
-- **118** ops have at least one associated `pytest.raises` negative test.
+- **119** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **136** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **135** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -51,7 +51,6 @@ These **136** ops have at most one test reference across the whole test surface.
 | `axis_index` |    0 |    0 |    0 |
 | `axis_name` |    0 |    0 |    0 |
 | `axis_size` |    0 |    0 |    0 |
-| `cache_commit` |    1 |    0 |    1 |
 | `calibration_observer` |    0 |    0 |    0 |
 | `centralize_grad` |    1 |    0 |    1 |
 | `chained_schedule` |    1 |    0 |    1 |
@@ -104,8 +103,9 @@ These **136** ops have at most one test reference across the whole test surface.
 | `ebm_partition_exact` |    0 |    0 |    0 |
 | `ebm_partition_monte_carlo` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
+| `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 
-_(76 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(75 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,23 +117,22 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**136** ops have ≤1 direct test reference.  They break down as:
+**135** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
 | `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    3 | **Actionable test debt** — real primitive without direct test |
+| `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
 
-These **3** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **2** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
-| `cache_commit` |   1 |   0 | category default for 'state_update' |
 | `perceiver_resampler` |   1 |   0 | category default for 'attention' |
 | `pixel_shuffle` |   1 |   0 | category default for 'layout_transform' |
 

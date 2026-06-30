@@ -254,8 +254,16 @@ claim.
   `n+j` (no carry); CF2 calls the branches with the **non-flag** operands, so the
   materialized branches take the non-flag operands and a payload id `k` maps to
   arg `(k < flag ? k : k-1)`. A branch referencing the flag id is left untouched;
-  both branches validate before either is materialized. `control_while` payload
-  (carry + cond pred-type) → follow-up.
+  both branches validate before either is materialized.
+- **CF4a-cont-2** *(control_while done)* — the same decoder materializes the
+  `control_while` `body_opcodes`/`cond_opcodes` payload. Its ids are `0..n-1` =
+  operands, id `n` = live carry, body & cond op j = id `n+1+j`; CF2 calls
+  `@body`/`@cond` with only the carry, so both materialize as single-arg funcs
+  (id `n` → arg 0). `@body` is `(carry)->carry` (out-type checked == carry);
+  `@cond` is `(carry)->pred` with the **predicate type inferred** from the cond
+  op-list (`validateOpList` gains a null-`resultTy` infer mode). `@body` and
+  `@cond` must be distinct symbols. So **all three control payloads now decode**
+  → CF2 → `scf.{for,if,while}`.
 - **CF4b** *(done, ROCm/gfx1151)* — `GenerateROCMControlForKernel`
   (`--generate-rocm-control-for-kernel`) lowers an **elementwise-body**
   `control_for` (1-D f32 carry, no captures) to **one** `gpu.func`: grid over the

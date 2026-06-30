@@ -17,7 +17,7 @@ func.func private @loop_body(tensor<1x8xf32>) -> tensor<1x8xf32>
 
 // The stub @loop_body is rewritten to take all operands and run the real body.
 // CHECK-LABEL: func.func private @loop_body(%arg0: tensor<1x8xf32>, %arg1: tensor<8x8xf32>) -> tensor<1x8xf32>
-// CHECK:       %[[MM:.*]] = tessera.matmul %arg0, %arg1 {transpose_a = false, transpose_b = false}
+// CHECK:       %[[MM:.*]] = tessera.matmul %arg0, %arg1 :
 // CHECK:       %[[S:.*]] = tessera.silu %[[MM]]
 // CHECK:       return %[[S]]
 // CHECK-LABEL: func.func @f
@@ -68,5 +68,24 @@ func.func @h(%init: tensor<1x8xf32>) -> tensor<1x8xf32> {
     body_in1 = array<i32: -1>, body_iattr = array<i32: 0>,
     body_fattr = array<f32: 1.0e-05>, body_out_id = 2 : i64
   } : (tensor<1x8xf32>) -> tensor<1x8xf32>
+  return %r : tensor<1x8xf32>
+}
+
+// -----
+// ─── a matmul body with body_iattr transpose bits decodes to the dialect's
+//     camelCase transposeA/transposeB (NOT transpose_a/_b, which the lowerings
+//     ignore). carry (1x8) @ w^T (w stored 8x8) = (1x8) via transposeB.
+func.func private @tbody(tensor<1x8xf32>) -> tensor<1x8xf32>
+
+// CHECK-LABEL: func.func private @tbody(%arg0: tensor<1x8xf32>, %arg1: tensor<8x8xf32>) -> tensor<1x8xf32>
+// CHECK:       tessera.matmul %arg0, %arg1 {transposeB = true}
+func.func @t(%init: tensor<1x8xf32>, %w: tensor<8x8xf32>) -> tensor<1x8xf32> {
+  %r = "tessera.control_for"(%init, %w) {
+    body = @tbody, start = 0 : i64, stop = 4 : i64, step = 1 : i64,
+    carry_arg_index = 0 : i64,
+    body_opcodes = array<i32: 0>, body_in0 = array<i32: 2>,
+    body_in1 = array<i32: 1>, body_iattr = array<i32: 2>,
+    body_fattr = array<f32: 1.0e-05>, body_out_id = 3 : i64
+  } : (tensor<1x8xf32>, tensor<8x8xf32>) -> tensor<1x8xf32>
   return %r : tensor<1x8xf32>
 }

@@ -17,6 +17,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 |----|--------|---|---|---|---|---|---|---|---|
 | `spec_accept` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
 | `spec_accept_sample` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
+| `target_verify` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
 | `attn_compressed_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_local_window_2d` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_sliding_window` | attention | public | public | registered | complete | partial | fused | ready | none |
@@ -333,7 +334,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| acceptance_verification | 2 | PPGCpRN· PPGCpRN· |
+| acceptance_verification | 3 | PPGCpRN· PPGCpRN· PPGCpRN· |
 | attention | 26 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFN· PPGCpFN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
 | comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |

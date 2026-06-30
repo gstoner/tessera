@@ -107,6 +107,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Speculative-decode acceptance (SD1; verification ops — ROCm-native
         # kernels, no Apple GPU dispatch lane).
         "spec_accept", "spec_accept_sample",
+        # SD1-4 target verification I/O contract — a composed model call (no
+        # dedicated Apple GPU lane; fusion is a DK-track concern).
+        "target_verify",
         # Misc.
         "conv3d_ndhwc", "einsum", "fused_epilogue",
     }

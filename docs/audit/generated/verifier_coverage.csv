@@ -155,6 +155,7 @@ src/compiler/ir/TesseraOps.td,SqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SubOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SwigluFusedOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,TanhOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,TargetVerifyOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
 src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real

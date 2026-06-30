@@ -200,6 +200,10 @@ _SPECS = [
     # SD1-2 — distribution-preserving (Leviathan) rejection-sampling acceptance.
     # Pure given the explicit uniforms (accept_u, resid_u); CDF-inversion sampler.
     OpSpec("spec_accept_sample", "tessera.spec_accept_sample", 5, 5, lowering="acceptance_verification"),
+    # SD1-4 — speculative-decode target-verification I/O contract: (tokens, logits)
+    # -> S×V log-probs. A composed-call marker (pure), reuses the verification
+    # category (no fused kernel — that's a DK-track concern).
+    OpSpec("target_verify", "tessera.target_verify", 2, 2, lowering="acceptance_verification"),
     # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
     OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),

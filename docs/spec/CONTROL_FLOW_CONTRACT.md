@@ -241,9 +241,18 @@ claim.
   body + increments). Same
   payload-skip discipline as `control_for`. All three lower through the named
   `tessera-lower-to-{x86,gpu}` / CUDA13 pipelines before the guard.
-- **CF3/CF4** — decode the executable-payload body into real `scf` region ops,
-  wire the `scf`-bearing IR through to executable CUDA/ROCm device-control
-  kernels, and retire the CF0 guard lane by lane.
+- **CF4a** *(done)* — `MaterializeControlPayloadPass`
+  (`--tessera-materialize-control-payload`) decodes the frontend's
+  executable-payload op-list (`body_opcodes`/`body_in0`/…) on `control_for` into
+  a real `@body` `func.func` of `tessera.*` ops (opcode table + tensor-id map +
+  result-type inference), then strips the payload attrs — so CF2 lowers the loop
+  to `scf.for` with a *real* device body. Unknown opcodes / unresolvable shapes
+  are left untouched (two-phase: validate before mutating). `control_if`/`while`
+  payloads → CF4a follow-up.
+- **CF4b/CF3** — wire the decoded `scf`-bearing loop through to an **executable**
+  ROCm device-control kernel on gfx1151 (the ROCm `gpu`→`convert-scf-to-cf`→
+  `convert-gpu-to-rocdl`→hsaco chain already runs `scf` in kernels), then mirror
+  on CUDA; retire the CF0 guard lane by lane.
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

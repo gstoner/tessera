@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,109,24,10,133,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,133 direct test references
+add,110,26,10,136,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,136 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -265,7 +265,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,4,0,0,4,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,4 direct test references
 masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
-matmul,397,218,18,615,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,615 direct test references
+matmul,398,219,18,617,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,617 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references

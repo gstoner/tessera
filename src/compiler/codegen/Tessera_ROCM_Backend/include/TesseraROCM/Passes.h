@@ -60,6 +60,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlScanKernelPass();
 // CF4d-if — cross-element control_if (rmsnorm/layer_norm branches) →
 // cooperative-workgroup kernel; uniform flag selects the norm.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlIfNormKernelPass();
+// CF4e-2 — linear SSM scan (h_t = h_{t-1}@W + x_t; GEMV body + W capture +
+// per-step xs) → cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMControlScanGemvKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

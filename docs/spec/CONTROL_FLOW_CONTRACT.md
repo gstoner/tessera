@@ -311,8 +311,19 @@ claim.
   stacked ys output** is exactly what scan adds over `control_for`; the whole trip
   is one dispatch. Proven on gfx1151 by `tests/unit/test_rocm_control_scan_exec.py`
   (running-sum `carry+xt` and gated `tanh(carry+xt)` bodies, carry **and** stacked
-  ys bit-exact). Cross-element scan bodies (matmul/norm — true linear-attention /
-  SSM scan) and captures are left for a future cooperative scan kernel / the guard.
+  ys bit-exact).
+- **CF4e-2** *(linear SSM scan done, ROCm/gfx1151)* — the scan op gains a variadic
+  `captures` operand (loop-invariant weights/biases the body closes over, distinct
+  from the per-step `xs`), so the body is `(carry, xt, captures...) -> (carry', y)`.
+  `GenerateROCMControlScanGemvKernel` (`--generate-rocm-control-scan-gemv-kernel`)
+  lowers the canonical **linear state-space / linear-attention state update**
+  `h_t = h_{t-1} @ W + x_t`, `y_t = h_t` (1×K carry, K×K capture `W`, per-step
+  `x_t`) — a GEMV body (a reduction over the carry, so cross-element) + a capture +
+  the per-step xs. Reuses the CF4d-1 cooperative-workgroup GEMV substrate (h in
+  LDS, barrier per step) with the CF4e-1 stacked-ys streaming. Proven on gfx1151 by
+  `tests/unit/test_rocm_control_scan_gemv_exec.py` (carry + stacked ys bit-exact vs
+  the numpy recurrence). The full nonlinear cell `h = act(h@W + x@U + b)` (two
+  captures + activation) layers on this same substrate next.
 - **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
   cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
   lane by lane.

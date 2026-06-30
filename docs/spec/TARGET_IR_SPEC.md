@@ -84,7 +84,7 @@ op, it must emit a **stable diagnostic** naming the op and target —
 never silently no-op. Per-target KV-cache coverage matrix is in
 `docs/audit/coverage/COVERAGE_AUDIT.md`.
 
-### Sprint G/H/I batch 3 hardware-free pre-work (2026-05-11)
+### Sprint G/H batch 3 hardware-free pre-work (2026-05-11)
 
 The G-5 / H-2 / G-6/7/8 / H-6/7/8 / G-9 / H-8 pre-work landed
 hardware-free toolchain pins, lit fixtures, and pre-execution validators

@@ -26,7 +26,7 @@ Proof shape:
      `gated_attention`, `hybrid_attention`, `gated_deltanet`,
      `kimi_delta_attention`, `modified_delta_attention`) stays at
      `partial` because their target-specific fused kernels need real
-     hardware to validate (Bucket C / Phase G/H/I gate).
+     hardware to validate (Bucket C / Phase G/H gate).
 
 The mock-mesh harness (`tessera.testing.mock_collective.MockRankGroup`)
 is a thread-based in-process simulator — no NCCL/MPI dependency. See
@@ -154,7 +154,7 @@ _STANDARD_ATTN_NAMES = frozenset({
     "retention",
 })
 
-# Reasoning-model fused attention family (Bucket C — Phase G/H/I gate)
+# Reasoning-model fused attention family (Bucket C — Phase G/H gate)
 # Their sharding is the fused-kernel's sharding; promotion requires real
 # hardware (target-specific fused kernels need backend verification).
 _REASONING_FUSED_ATTN_NAMES = frozenset({
@@ -194,7 +194,7 @@ def test_reasoning_fused_attention_family_sharding_stays_partial() -> None:
     fused kernels that need real hardware to validate.  Sprint #20a
     splits them out into `_ATTN_REASONING_FUSED_HARDENED` so the standard
     family can promote while this group stays at `partial` — honest
-    Phase G/H/I gating."""
+    Phase G/H gating."""
     entries = all_primitive_coverages()
     failures: list[tuple[str, str]] = []
     for name in _REASONING_FUSED_ATTN_NAMES:
@@ -205,6 +205,6 @@ def test_reasoning_fused_attention_family_sharding_stays_partial() -> None:
             failures.append((name, str(actual)))
     assert not failures, (
         "reasoning-model fused attention family must stay at "
-        "`partial`/`planned` for sharding_rule until Phase G/H/I "
+        "`partial`/`planned` for sharding_rule until Phase G/H "
         f"backend validation lands; got: {failures}"
     )

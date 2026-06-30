@@ -411,7 +411,7 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #   - `vjp`/`jvp` → "not_applicable" for state-effect or non-differentiable
 #     ops (KV cache writes, RNG samplers, structural ops).
 #   - `backend_kernel` stays `partial` until each backend ships a real
-#     hardware kernel — that's Phase G/H/I work.
+#     hardware kernel — that's Phase G/H work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # ── KV cache state-effect ops ────────────────────────────────────────
     # `append` concatenates K/V slices along the sequence axis;
@@ -535,7 +535,7 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
 # (proven by tests/unit/test_attention_sharding_mock_mesh.py via
 # TP-by-head MockRankGroup proof) while the reasoning-model fused
 # family stays at `partial` (their target-specific fused kernels need
-# Phase G/H/I backend validation):
+# Phase G/H backend validation):
 #
 #   _ATTN_STANDARD_HARDENED       — sharding_rule = complete (Bucket B closed)
 #   _ATTN_REASONING_FUSED_HARDENED — sharding_rule = partial (Bucket C gated)
@@ -626,7 +626,7 @@ _GA_DIFFERENTIAL_SHARDING_NAMES: frozenset[str] = frozenset({
 # replicated, all_gather along the row axis recovers the output.
 # Proven by tests/unit/test_segment_sparse_sharding_mock_mesh.py.
 # spmm_coo is intentionally NOT in this set — its hash-shard requires
-# real distributed execution to validate (Bucket C, Phase G/H/I gate).
+# real distributed execution to validate (Bucket C, Phase G/H gate).
 _SPARSE_CSR_SHARDING_NAMES: frozenset[str] = frozenset({
     "spmm_csr",
     "sddmm",
@@ -645,7 +645,7 @@ _SPARSE_CSR_SHARDING_NAMES: frozenset[str] = frozenset({
 # The 4 manifold Langevin ops (bivector / sphere sample+step) stay at
 # partial because they live on non-Euclidean manifolds (Spin(p,q)
 # bivector subspace; unit sphere) — sharding requires GA-aware halo
-# exchange that hasn't shipped (Bucket C, Phase G/H/I gate).
+# exchange that hasn't shipped (Bucket C, Phase G/H gate).
 _EBM_SAMPLING_SHARDING_NAMES: frozenset[str] = frozenset({
     "ebm_inner_step",
     "ebm_langevin_step",
@@ -671,7 +671,7 @@ for _name in (
 ):
     _EXISTING_CONTRACT_OVERRIDES[_name] = _ATTN_STANDARD_HARDENED
 
-# Reasoning-model attention family — Bucket C (Phase G/H/I gate). Each
+# Reasoning-model attention family — Bucket C (Phase G/H gate). Each
 # has a dedicated ODS op in TesseraOps.td and a corresponding pass in
 # src/transforms/lib/AttentionFamilyPasses.cpp; their sharding rule is
 # tied to the target-specific fused kernel and stays at `partial` until
@@ -3671,7 +3671,7 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     #   "planned"  — no manifest, or every manifest slot is itself
     #                `planned`/`artifact_only` (no executable code path).
     #                `artifact_only` means Target IR ships but cannot
-    #                execute (Phase G/H/I gate) — labeling that as
+    #                execute (Phase G/H gate) — labeling that as
     #                `partial` would be misleading.
     #   "partial"  — at least one manifest slot ships an executable
     #                implementation: `fused`, `compileable`, or
@@ -3681,7 +3681,7 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     #                (every catalog op has at least a numpy reference);
     #                python_primitive rows with the same shape now
     #                label consistently.
-    #   "complete" — every documented target ships (universal Phase G/H/I
+    #   "complete" — every documented target ships (universal Phase G/H
     #                gate; the s_series_status drift test
     #                ``test_backend_kernel_is_universal_phase_g_gate``
     #                enforces that this stays universally open until the

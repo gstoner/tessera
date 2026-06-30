@@ -4350,7 +4350,7 @@ def vjp_cummin(dout, x, *, axis=-1, **_):
 # flagged in `docs/audit/coverage/COVERAGE_AUDIT.md`. Organized by family.
 #
 # All implementations are pure-numpy reference; backend-specific kernels
-# arrive with each Phase G/H/I integration.
+# arrive with each Phase G/H integration.
 # ─────────────────────────────────────────────────────────────────────────────
 
 

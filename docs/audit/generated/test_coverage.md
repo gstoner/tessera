@@ -124,7 +124,7 @@ Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are th
 | `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
 | `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
-| `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H/I) |
+| `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
@@ -138,7 +138,7 @@ These **2** ops are real primitives with ≤1 direct test reference.  Each is a 
 
 ## Hardware-gated ops
 
-These **4** ops need real device hardware (Phase G/H/I).  They cannot be tested with execute-and-compare on this Mac.
+These **4** ops need real device hardware (Phase G/H).  They cannot be tested with execute-and-compare on this Mac.
 
 | Op | reason |
 |----|--------|

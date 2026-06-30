@@ -70,7 +70,7 @@ S_SERIES_PRIORITY: dict[str, tuple[str, int]] = {
 
 # The five contract axes we audit in this dashboard.  Order matters —
 # left-to-right reflects "most likely to be closable without hardware"
-# (batching) → "Phase G/H/I universal gate" (backend_kernel).
+# (batching) → "Phase G/H universal gate" (backend_kernel).
 DASHBOARD_AXES: tuple[str, ...] = (
     "batching_rule",
     "transpose_rule",
@@ -240,7 +240,7 @@ def render_markdown(
     lines.append("## Closure trajectory")
     lines.append("")
     lines.append("* `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.")
-    lines.append("* `backend_kernel` is the **universal Phase G/H/I gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/backend/BACKEND_AUDIT.md`.")
+    lines.append("* `backend_kernel` is the **universal Phase G/H gate** — every category has open entries here by design.  Promotions happen alongside hardware enablement per `docs/audit/backend/BACKEND_AUDIT.md`.")
     lines.append("* `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.")
     lines.append("")
     return "\n".join(lines)

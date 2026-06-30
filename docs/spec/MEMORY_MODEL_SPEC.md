@@ -290,7 +290,7 @@ deterministic mesh-reduction enforcement for native collectives.
 | Scoped atomic attribute validation (Sprint M5) | structural verifier | `_verify_atomic` validates 9 ops × 5 orders × 6 scopes per §3 + §5; `MEM_ATOMIC_INVALID_{OP,ORDER,SCOPE}`; tests in `test_memory_verifier.py` |
 | Fence scope attribute validation (Sprint M5) | structural verifier | `_verify_fence` validates the 6 canonical scopes per §3; `MEM_FENCE_INVALID_SCOPE`; tests in `test_memory_verifier.py` |
 | Deterministic profile reduction enforcement (Sprint M5) | structural verifier | `_verify_atomic` + `_function_is_deterministic` reject float atomic reductions under `deterministic=True` per §7; `MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION`; tests in `test_memory_verifier.py` |
-| Backend lowering of atomics to PTX/HIP/Metal | planned | NVIDIA `atom.*` / `red.*` + ROCm flat/global/LDS atomics + Apple atomic intrinsics — Phase G/H/I gate |
+| Backend lowering of atomics to PTX/HIP/Metal | planned | NVIDIA `atom.*` / `red.*` + ROCm flat/global/LDS atomics + Apple atomic intrinsics — Phase G/H gate |
 | Device-wide fence target capability gating | planned | add target capability checks + diagnostics for legality of `fence.device()` on each backend |
 | Complete happens-before race checking | planned | requires dataflow analysis; add Graph/Schedule/Tile verifier tests for illegal aliasing patterns |
 | Deterministic native mesh reductions (collective execution) | planned | add native NCCL/RCCL acceptance tests that verify stable reduction tree under `deterministic=True` |

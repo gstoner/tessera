@@ -46,7 +46,7 @@ material.
 ## Still Open
 
 - **Backend-kernel proof is open on every S-series primitive** — a universal
-  Phase-G/H/I gate (each entry needs *all* declared targets to ship real
+  Phase-G/H gate (each entry needs *all* declared targets to ship real
   kernels; gated on NVIDIA/ROCm hardware). Live open/complete counts:
   [`generated/s_series_status.md`](../generated/s_series_status.md).
 - **Long-tail transform axes** — `batching_rule` and `transpose_rule` are now

@@ -311,7 +311,7 @@ lands.
 
 **Locally provable now** (Apple GPU + `MockRankGroup` + evaluator oracles): A, B, C, D, F
 fully; E's rewrite + numeric equivalence via mock ranks. **Hardware-gated** (Phase
-G/H/I): only real multi-GPU TP throughput and NVIDIA/ROCm kernel rungs — every pass's
+G/H): only real multi-GPU TP throughput and NVIDIA/ROCm kernel rungs — every pass's
 *correctness* is provable here.
 
 Every workstream lands its oracle into `evaluator.py` so "the pass consumes the contract

@@ -248,6 +248,6 @@ def test_spmm_coo_stays_partial_phase_g_gate() -> None:
     actual = entries["spmm_coo"].contract_status.get("sharding_rule")
     assert actual in ("partial", "planned"), (
         f"spmm_coo sharding_rule must stay at partial/planned (Phase "
-        f"G/H/I gate — hash-sharded COO needs real distributed "
+        f"G/H gate — hash-sharded COO needs real distributed "
         f"execution), got {actual!r}."
     )

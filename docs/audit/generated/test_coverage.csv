@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,106,17,10,123,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,123 direct test references
+add,106,18,10,124,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,124 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -348,7 +348,7 @@ rearrange,2,0,0,2,0,,directly_tested,2 direct test references
 reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 reduce,86,0,7,86,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
-relu,106,22,9,128,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,128 direct test references
+relu,106,23,9,129,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,129 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,3,0,0,3,0,,directly_tested,3 direct test references
 reshape,11,15,0,26,0,,directly_tested,26 direct test references

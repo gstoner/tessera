@@ -74,3 +74,27 @@ func.func @h(%flag: tensor<1xf32>, %x: tensor<8xf32>) -> tensor<8xf32> {
   } : (tensor<1xf32>, tensor<8xf32>) -> tensor<8xf32>
   return %r : tensor<8xf32>
 }
+
+// -----
+// ─── an EXTRA non-flag operand the (X,FLAG,O,N) kernel can't realize → skip ──
+// control_if(%flag, %x, %w): the flat kernel would ignore %w, so the op is left
+// for the SCF lowering / guard.
+func.func @tb3(%x: tensor<8xf32>) -> tensor<8xf32> {
+  %0 = "tessera.relu"(%x) : (tensor<8xf32>) -> tensor<8xf32>
+  return %0 : tensor<8xf32>
+}
+func.func @eb3(%x: tensor<8xf32>) -> tensor<8xf32> {
+  %0 = "tessera.add"(%x, %x) : (tensor<8xf32>, tensor<8xf32>) -> tensor<8xf32>
+  return %0 : tensor<8xf32>
+}
+
+// CHECK-LABEL: func.func @k
+// CHECK:       tessera.control_if
+// CHECK-NOT:   gpu.func
+func.func @k(%flag: tensor<1xf32>, %x: tensor<8xf32>, %w: tensor<8xf32>)
+    -> tensor<8xf32> {
+  %r = "tessera.control_if"(%flag, %x, %w) {
+    then_branch = @tb3, else_branch = @eb3, flag_arg_index = 0 : i64
+  } : (tensor<1xf32>, tensor<8xf32>, tensor<8xf32>) -> tensor<8xf32>
+  return %r : tensor<8xf32>
+}

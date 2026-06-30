@@ -156,13 +156,24 @@ static func::FuncOp validateElementwiseBody(Operation *forOp,
   return isElementwiseFunc(fn, /*nInputs=*/1) ? fn : nullptr;
 }
 
-// @then / @else of a control_if: both single-arg (the non-flag data operand)
-// elementwise rank-1 f32 funcs, distinct symbols. Returns them, or {null,null}.
+// @then / @else of a control_if, validated against the (X, FLAG, O, N) kernel
+// ABI this pass emits. Requires: distinct symbols; both single-arg elementwise
+// rank-1 f32 funcs; the OP itself has exactly the flag + ONE non-flag data
+// operand and a single result; and the data-operand / result types match the
+// branch signature. Anything else (extra operands, a result the branches don't
+// produce) is left for the SCF lowering / guard, since the flat kernel could
+// not realize it. Returns {then, else}, or {null, null}.
 static std::pair<func::FuncOp, func::FuncOp>
 validateElementwiseIf(Operation *op, SymbolTable &symTab) {
   auto thenSym = op->getAttrOfType<FlatSymbolRefAttr>("then_branch");
   auto elseSym = op->getAttrOfType<FlatSymbolRefAttr>("else_branch");
-  if (!thenSym || !elseSym)
+  auto flagA = op->getAttrOfType<IntegerAttr>("flag_arg_index");
+  if (!thenSym || !elseSym || !flagA)
+    return {};
+  int64_t n = static_cast<int64_t>(op->getNumOperands());
+  int64_t flag = flagA.getInt();
+  // Exactly the flag + one data operand, one result.
+  if (n != 2 || flag < 0 || flag >= n || op->getNumResults() != 1)
     return {};
   auto t = dyn_cast_or_null<func::FuncOp>(
       symTab.lookupNearestSymbolFrom(op, thenSym.getAttr()));
@@ -171,6 +182,14 @@ validateElementwiseIf(Operation *op, SymbolTable &symTab) {
   if (!t || !e || t == e)  // shared stub → leave for the materialize/guard
     return {};
   if (!isElementwiseFunc(t, /*nInputs=*/1) || !isElementwiseFunc(e, 1))
+    return {};
+  // The branch signature must realize the op: the non-flag data operand feeds
+  // the branch input, and the op result is the branch result.
+  Type dataTy = op->getOperand(flag == 0 ? 1 : 0).getType();
+  Type resTy = op->getResult(0).getType();
+  FunctionType tf = t.getFunctionType(), ef = e.getFunctionType();
+  if (tf.getInput(0) != dataTy || ef.getInput(0) != dataTy ||
+      tf.getResult(0) != resTy || ef.getResult(0) != resTy)
     return {};
   return {t, e};
 }

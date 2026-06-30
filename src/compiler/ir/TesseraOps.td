@@ -2238,3 +2238,38 @@ def Tessera_ControlWhileOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+def Tessera_ControlScanOp : Op<
+  Tessera_Dialect, "control_scan",
+  [Pure]
+> {
+  let summary = "Bounded scan: stream xs[t], carry a state, stack ys[t] (4th control primitive)";
+  let description = [{
+    `(carry, ys) = scan(body, init, xs)`: for `t in 0..trip-1`,
+    `(carry, y) = body(carry, xs[t])` and `ys[t] = y`. Unlike `control_for`, scan
+    CONSUMES a per-step input slice `xs[t]` and PRODUCES a stacked per-step output
+    `ys` (shape `(trip, *y.shape)`) alongside the final carry — the streaming I/O
+    a sequence recurrence (RNN/SSM/linear-attention) needs. The carry init is
+    operand `carry_arg_index` (0); `xs` is the remaining operand. The body is
+    serialized to the run_graph_scan op-list ABI as the executable payload
+    (operand ids `0..n-1`; carry id = `n`; per-step `xt` id = `n+1`; body op j →
+    `n+2+j`; `body_out_id`/`y_out_id` pick the next carry / per-step y), so the
+    lowered Target op is self-contained + dispatchable. Optional payload: omit for
+    IR-only.
+  }];
+  let arguments = (ins AnyType:$init, AnyType:$xs,
+                       FlatSymbolRefAttr:$body,
+                       I64Attr:$trip,
+                       I64Attr:$carry_arg_index,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_opcodes,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in0,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_in1,
+                       OptionalAttr<DenseI32ArrayAttr>:$body_iattr,
+                       OptionalAttr<DenseF32ArrayAttr>:$body_fattr,
+                       OptionalAttr<I64Attr>:$body_out_id,
+                       OptionalAttr<I64Attr>:$y_out_id);
+  let results = (outs AnyType:$carry_out, AnyType:$ys);
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

@@ -40,7 +40,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail |
 |---|---|---:|---:|---:|---|
-| `Verifier coverage` | mixed | 120 | 167 | 47 | no_verifier=47, real=120 |
+| `Verifier coverage` | mixed | 121 | 168 | 47 | no_verifier=47, real=121 |
 | `Direct test evidence` | mixed | 339 | 474 | 135 | covered_by_family=40, directly_tested=339, hardware_gated=4, needs_direct_test=2, structural_only=89 |
 | `Runtime execution matrix` | closed | 116 | 116 | 0 | apple_cpu=2, apple_gpu=2, cpu=2, nvidia_sm120=1, rocm=55, x86=54 |
 | `Runtime ABI symbols` | mixed | 387 | 640 | 253 | apple=557, nvidia=5, rocm=10, x86=68 |
@@ -63,7 +63,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `backend_kernel` | mixed | 467 | primitive contract axis; open means partial or planned, not necessarily missing API support | `docs/audit/generated/s_series_status.md` |
 | `Direct test evidence` | mixed | 135 | covered_by_family=40, directly_tested=339, hardware_gated=4, needs_direct_test=2, structural_only=89 | `docs/audit/generated/test_coverage.csv` |
 | `Target IR native/fused codegen` | mixed | 77 | fused=232, reference=77 | `docs/audit/generated/support_table.csv` |
-| `Verifier coverage` | mixed | 47 | no_verifier=47, real=120 | `docs/audit/generated/verifier_coverage.csv` |
+| `Verifier coverage` | mixed | 47 | no_verifier=47, real=121 | `docs/audit/generated/verifier_coverage.csv` |
 | `CUDA target-map native promotion` | open | 35 | artifact_only=35 | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | `docs/audit/generated/surface_status.csv` |
 | `ROCm target-map native promotion` | mixed | 3 | artifact_only=3, compiled=27, hardware_verified=2 | `docs/audit/generated/rocm_target_map.csv` |

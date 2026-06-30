@@ -2,7 +2,7 @@
 status: Normative (CF0 slice)
 classification: Spec
 authority: CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md CF0
-last_updated: 2026-06-29
+last_updated: 2026-06-30
 ---
 
 <!-- CF1 (2026-06-29): trace-time carry/branch dtype contract + verifier lit
@@ -12,6 +12,10 @@ last_updated: 2026-06-29
      carries fold in. Wired before the CF0 guard in the named pipelines. -->
 <!-- CF2b/CF2c (2026-06-29): control_if → scf.if and control_while → bounded
      scf.while in the same pass; same payload-skip discipline. -->
+<!-- CF4e-1 (2026-06-30): control_scan promoted to a first-class Graph IR op
+     (ODS + verifier) and lowered to a per-thread ROCm device kernel
+     (GenerateROCMControlScanKernel) — the 4th primitive now executes on gfx1151
+     (elementwise body; per-step xs in, stacked ys out). §4 + §7 updated. -->
 
 
 # Control-Flow Contract (CF0)
@@ -140,7 +144,7 @@ the loop accordingly — tracked with the effect work, not assumed here.
 |---|---|---|---|---|
 | **Apple GPU** | ✅ `ControlForToAppleGPU` | ✅ (`control_if` lowering) | ✅ `ControlWhileToAppleGPU` | ✅ `run_graph_scan_f32` |
 | **CUDA (NVIDIA)** | ❌ none | ❌ none | ❌ none | ❌ none |
-| **ROCm (AMD)** | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ❌ none |
+| **ROCm (AMD)** | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ✅ CF4e-1 rank-1 elementwise proof |
 | **x86** | ❌ none (eager host loop) | ❌ none | ❌ none | ❌ none |
 
 Apple is the only backend with device control-flow lowering today (Phase-G/H);
@@ -295,6 +299,20 @@ claim.
   (`add(c,c)`×`max` with `cond=sigmoid` → `c·2^max`; with `cond=relu` → early
   stop `x>0 ? x·2^max : x`). **All three control constructs now execute on
   device.**
+- **CF4e-1** *(control_scan done, ROCm/gfx1151)* — the 4th control primitive now
+  executes on device. `tessera.control_scan` is promoted to a first-class Graph IR
+  op (ODS + verifier in `TesseraOps.{td,cpp}`: operands `(init, xs)`, results
+  `(carry_out, ys)`, `trip`/`carry_arg_index` + optional run_graph_scan payload),
+  and `GenerateROCMControlScanKernel` (`--generate-rocm-control-scan-kernel`)
+  lowers an **elementwise-body** scan `(carry, y) = body(carry, xs[t]); ys[t] = y`
+  (carry/xt rank-1 f32 width K; xs/ys are T×K) to one per-thread `gpu.func`:
+  thread g owns carry element g and runs the trip loop locally, reading
+  `xs[t*N+g]`, updating the carry, writing `ys[t*N+g]`. The per-step **xs input +
+  stacked ys output** is exactly what scan adds over `control_for`; the whole trip
+  is one dispatch. Proven on gfx1151 by `tests/unit/test_rocm_control_scan_exec.py`
+  (running-sum `carry+xt` and gated `tanh(carry+xt)` bodies, carry **and** stacked
+  ys bit-exact). Cross-element scan bodies (matmul/norm — true linear-attention /
+  SSM scan) and captures are left for a future cooperative scan kernel / the guard.
 - **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
   cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
   lane by lane.

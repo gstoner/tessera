@@ -6,7 +6,7 @@ adafactor,4,0,0,4,0,fp32 fp64,directly_tested,4 direct test references
 adam,11,5,0,16,0,fp32 fp64,directly_tested,16 direct test references
 adamw,10,2,0,12,0,fp32 fp64,directly_tested,12 direct test references
 adaptive_pool,4,0,0,4,0,,directly_tested,4 direct test references
-add,107,22,10,129,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,129 direct test references
+add,109,24,10,133,0,bf16 f16 f32 f64 fp16 fp32,directly_tested,133 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,3,0,0,3,0,bf16 f16 f32,directly_tested,3 direct test references
 all_gather,1,2,0,3,0,fp32,directly_tested,3 direct test references
@@ -410,7 +410,7 @@ sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,5,0,0,5,0,f32,directly_tested,5 direct test references
 softcap,9,0,1,9,0,,directly_tested,9 direct test references
-softmax,120,37,30,157,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,157 direct test references
+softmax,120,38,30,158,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,158 direct test references
 softmax_safe,6,4,1,10,0,bf16,directly_tested,10 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,10,0,0,10,0,,directly_tested,10 direct test references
@@ -437,7 +437,7 @@ svd,10,5,0,15,0,bf16 f16 f32 fp16 fp32,directly_tested,15 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-tanh,6,0,1,6,0,bf16 f16 f32,directly_tested,6 direct test references
+tanh,7,0,1,7,0,bf16 f16 f32,directly_tested,7 direct test references
 tile,3,0,0,3,0,,directly_tested,3 direct test references
 tile_view,2,0,0,2,0,,directly_tested,2 direct test references
 tiny_attention_conformance,0,0,0,0,1,,structural_only,category default for 'conformance'

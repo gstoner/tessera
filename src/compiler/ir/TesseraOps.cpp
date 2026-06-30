@@ -3040,6 +3040,45 @@ LogicalResult SpecAcceptOp::verify() {
   return success();
 }
 
+LogicalResult SpecAcceptSampleOp::verify() {
+  auto draftT = dyn_cast<RankedTensorType>(getDraft().getType());
+  auto tpT = dyn_cast<RankedTensorType>(getTargetProbs().getType());
+  auto dpT = dyn_cast<RankedTensorType>(getDraftProbs().getType());
+  auto auT = dyn_cast<RankedTensorType>(getAcceptU().getType());
+  auto ruT = dyn_cast<RankedTensorType>(getResidU().getType());
+  auto resT = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!draftT || !tpT || !dpT || !auT || !ruT || !resT)
+    return emitOpError("all operands and the result must be ranked tensors");
+  if (draftT.getRank() != 1 || !draftT.getElementType().isInteger(32))
+    return emitOpError("draft must be rank-1 i32 (the D draft token ids)");
+  int64_t D = draftT.getDimSize(0);
+  if (D <= 0)
+    return emitOpError("depth (draft length) must be positive");
+  // draft_probs is D×V, target_probs is (D+1)×V — same vocab V.
+  if (dpT.getRank() != 2 || !dpT.getElementType().isF32() ||
+      dpT.getDimSize(0) != D)
+    return emitOpError("draft_probs must be D x V f32 (D=") << D << ")";
+  int64_t V = dpT.getDimSize(1);
+  if (V <= 0)
+    return emitOpError("vocab size must be positive");
+  if (tpT.getRank() != 2 || !tpT.getElementType().isF32() ||
+      tpT.getDimSize(0) != D + 1 || tpT.getDimSize(1) != V)
+    return emitOpError("target_probs must be (D+1) x V f32 (one extra bonus row)");
+  if (auT.getRank() != 1 || !auT.getElementType().isF32() ||
+      auT.getDimSize(0) != D)
+    return emitOpError("accept_u must be rank-1 f32 of length D (one per position)");
+  if (ruT.getRank() != 1 || !ruT.getElementType().isF32() ||
+      ruT.getDimSize(0) != 1)
+    return emitOpError("resid_u must be tensor<1xf32> (one categorical-draw uniform)");
+  // result is (D+2) i32: [accepted_prefix_length, t0, ..., t_D].
+  if (resT.getRank() != 1 || !resT.getElementType().isInteger(32) ||
+      resT.getDimSize(0) != D + 2)
+    return emitOpError("result must be tensor<(D+2)xi32> "
+                       "([accepted, t0..t_D]); expected ")
+           << (D + 2);
+  return success();
+}
+
 // ── MoR (mixture-of-recursions) ──────────────────────────────────────────────
 LogicalResult MorRouterOp::verify() {
   return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());

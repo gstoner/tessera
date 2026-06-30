@@ -13,8 +13,8 @@ from the primitive_coverage registry by
      contract the support_table drift gate uses).
   4. The known structural invariants hold:
        - ``lowering_rule`` aggregate open == 0  (Sprint A1+ closure).
-       - ``backend_kernel`` aggregate open == aggregate total (Phase
-         G/H universal gate).
+       - architecture-specific backend proof is rendered separately from the
+         conservative registry-level ``backend_kernel`` axis.
        - Every priority-≤50 category is the high-use S-series surface
          the audit promises to prioritise (S2/S5/S7/S10/S11/M6/M7).
 """
@@ -30,6 +30,7 @@ from tessera.compiler.s_series_status import (
     DASHBOARD_AXES,
     S_SERIES_PRIORITY,
     render_markdown,
+    tally_backend_by_target,
     tally_by_category,
 )
 from tessera.compiler.primitive_coverage import all_primitive_coverages
@@ -99,33 +100,21 @@ def test_lowering_rule_is_closed_project_wide() -> None:
     )
 
 
-def test_backend_kernel_is_universal_phase_g_gate() -> None:
-    """Per CLAUDE.md + the audit doc, backend_kernel is open on
-    every entry by design — promotion happens with hardware
-    enablement.  This invariant prevents a silent partial-promotion
-    that would split the Phase G gate apart."""
-    rows = tally_by_category()
-    for row in rows:
-        # Either all entries in this category are open on backend, OR
-        # the category is documented as "not_applicable" (e.g., pure
-        # Python schedules + tokenizers).  We allow up to 1
-        # documented exception per category.
-        open_n = int(row["backend_kernel_open"])
-        total = int(row["total"])
-        if open_n < total:
-            # Some category entries are not_applicable for backend
-            # (e.g., pytrees, AOT, serialization).  Don't reject that
-            # — just ensure we're not accidentally promoting real
-            # backend rows to "complete" without hardware.
-            cat = str(row["category"])
-            assert cat in {
-                "aot", "conformance", "data", "tokenizer", "schedule",
-                "autodiff_transform", "control_flow", "grad_transform",
-                "pytree", "state",
-            } or open_n > 0, (
-                f"category {cat!r} has backend rows marked complete "
-                f"without Phase G enablement"
-            )
+def test_backend_status_is_reported_per_target() -> None:
+    """Architecture-specific proof must not be hidden behind the conservative
+    registry-level backend_kernel rollup."""
+    text = render_markdown()
+    assert "## Backend Proof By Target" in text
+    assert "`rocm`" in text
+    assert "`x86`" in text
+    assert "Native proven" in text
+    assert "not the architecture completion signal" in text
+
+
+def test_backend_target_tally_has_native_proof_for_rocm_and_x86() -> None:
+    rows = {str(r["target"]): r for r in tally_backend_by_target()}
+    assert int(rows["rocm"]["native_proven"]) > 0
+    assert int(rows["x86"]["native_proven"]) > 0
 
 
 def test_priority_50_or_below_anchors_high_use_surface() -> None:
@@ -160,12 +149,11 @@ def test_aggregate_counts_in_rendered_dashboard() -> None:
         )
 
 
-def test_dashboard_calls_out_phase_g_gate_explicitly() -> None:
-    """The closure-trajectory note must explicitly explain why
-    backend_kernel is universally open — so future readers don't see
-    "backend_kernel is universally open" and panic."""
+def test_dashboard_calls_out_backend_target_view_explicitly() -> None:
+    """The closure-trajectory note must point readers at the per-target view so
+    future readers don't misread backend_kernel as 'ROCm is missing everything'."""
     text = render_markdown()
-    assert "Phase G/H" in text
+    assert "Backend Proof By Target" in text
     assert "lowering_rule` is closed" in text
 
 

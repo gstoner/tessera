@@ -141,7 +141,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 19 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 0 | ✓ |
 | `roadmap/CONTRACT_PASS_PLAN.md` | - | 2026-06-20 | 10 | ✓ |
-| `roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md` | - | 2026-06-28 | 2 | ✓ |
+| `roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md` | - | 2026-06-30 | 0 | ✓ |
 | `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-06-26 | 4 | ✓ |
 | `roadmap/REPLAYSSM_PLAN.md` | - | 2026-06-15 | 15 | ✓ |
 | `roadmap/ROADMAP_AUDIT.md` | - | 2026-06-26 | 4 | ✓ |

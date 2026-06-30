@@ -2308,3 +2308,41 @@ def Tessera_SpecAcceptOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+def Tessera_SpecAcceptSampleOp : Op<
+  Tessera_Dialect, "spec_accept_sample",
+  [Pure]
+> {
+  let summary = "Speculative-decode acceptance: distribution-preserving rejection sampling (SD1-2)";
+  let description = [{
+    Distribution-preserving (Leviathan) speculative-decode verification of a
+    LINEAR draft chain — SD1-2. Per drafted position `i` the draft token `d_i` is
+    accepted iff `accept_u[i] <= min(1, p_target/p_draft)` (with `p_draft > 0`); on
+    the first rejection a corrected token is drawn from the residual
+    `normalize(relu(p_target[i] - p_draft[i]))`; if the whole chain is accepted a
+    bonus token is drawn from `target_probs`'s extra row. The marginal of every
+    emitted token equals the target distribution.
+
+    **RNG is explicit (CF0 contract).** The two uniform streams are op operands —
+    `accept_u` (one per position, the per-token accept draw) and `resid_u` (one
+    uniform for the single categorical draw that occurs, residual-on-reject or
+    bonus-on-full-accept). The categorical draw is **CDF inversion**: the smallest
+    `k` with `cumsum(weights)[k] > u·Σweights`. This makes the op a deterministic,
+    device-bit-exact function of its inputs (it does NOT reproduce numpy's
+    `Generator.choice` algorithm — the caller draws the uniforms; the op defines
+    the inversion). Mirrors `python/tessera/dflash.py:dflash_speculative_verify` /
+    `speculative.py:rejection_verify_chain` under CDF-inversion sampling.
+
+    Shapes: `draft` `D` i32; `target_probs` `(D+1)×V` f32; `draft_probs` `D×V` f32;
+    `accept_u` `D` f32; `resid_u` `1` f32. Result is `(D+2)` i32:
+    `[accepted_prefix_length, t0, t1, …, t_D]` — `accepted` accepted draft tokens
+    at `t[0..accepted-1]` then one corrected/bonus token at `t[accepted]`
+    (`accepted+1` valid tokens; trailing slots are 0).
+  }];
+  let arguments = (ins AnyType:$draft, AnyType:$target_probs,
+                       AnyType:$draft_probs, AnyType:$accept_u, AnyType:$resid_u);
+  let results = (outs AnyType:$result);  // tensor<(D+2)xi32>: [accepted, tokens...]
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

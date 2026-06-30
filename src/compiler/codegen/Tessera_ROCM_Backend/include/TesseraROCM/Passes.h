@@ -72,6 +72,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlWhileGemvKernelPass();
 // SD1 — tessera.spec_accept (greedy longest-prefix path + bonus) →
 // cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptKernelPass();
+// SD1-2 — tessera.spec_accept_sample (Leviathan rejection sampling, explicit
+// uniforms + CDF-inversion categorical) → single-thread kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptSampleKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

@@ -200,6 +200,9 @@ _SPECS = [
     # SD1-2 — distribution-preserving (Leviathan) rejection-sampling acceptance.
     # Pure given the explicit uniforms (accept_u, resid_u); CDF-inversion sampler.
     OpSpec("spec_accept_sample", "tessera.spec_accept_sample", 5, 5, lowering="acceptance_verification"),
+    # Tree (multi-path) Leviathan rejection acceptance — device form of
+    # speculative.batch_verify. (target_lp, draft_lp, accept_u) -> [path, length].
+    OpSpec("spec_accept_tree_sample", "tessera.spec_accept_tree_sample", 3, 3, lowering="acceptance_verification"),
     # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
     OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),

@@ -106,7 +106,7 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "laplacian_2d",
         # Speculative-decode acceptance (SD1; verification ops — ROCm-native
         # kernels, no Apple GPU dispatch lane).
-        "spec_accept", "spec_accept_sample",
+        "spec_accept", "spec_accept_sample", "spec_accept_tree_sample",
         # Misc.
         "conv3d_ndhwc", "einsum", "fused_epilogue",
     }

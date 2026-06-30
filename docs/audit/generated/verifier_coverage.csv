@@ -150,6 +150,7 @@ src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftplusOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SpecAcceptOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpecAcceptSampleOp,1,1,real
+src/compiler/ir/TesseraOps.td,SpecAcceptTreeSampleOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpectralConvOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SubOp,0,0,no_verifier

@@ -4496,6 +4496,34 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     references["cache_commit"] = cache_commit
     references["cache_rollback"] = cache_rollback
 
+    def spec_accept_tree_sample(target_log_probs, draft_log_probs, accept_u):
+        """SD1 tree (multi-path) Leviathan rejection acceptance (Graph IR op
+        ``tessera.spec_accept_tree_sample``) — the device form of
+        ``tessera.speculative.batch_verify``. Over P paths each D deep, accept the
+        draft token at ``(p, i)`` iff ``accept_u[p,i] <= exp(target_log_probs[p,i]
+        - draft_log_probs[p,i])``; each path's accepted prefix is the leading run
+        of accepts; returns ``[accepted_path_idx, accepted_prefix_length]`` for the
+        longest-prefix path (first wins ties). RNG is explicit (``accept_u``)."""
+        import numpy as _np
+        tlp = _np.asarray(target_log_probs, dtype=_np.float32)
+        dlp = _np.asarray(draft_log_probs, dtype=_np.float32)
+        au = _np.asarray(accept_u, dtype=_np.float32)
+        accept = au <= _np.exp(tlp - dlp)
+        P = tlp.shape[0]
+        best_p, best_len = 0, -1
+        for p in range(P):
+            length = 0
+            for ok in accept[p]:
+                if bool(ok):
+                    length += 1
+                else:
+                    break
+            if length > best_len:
+                best_len, best_p = length, p
+        return _np.array([best_p, best_len], dtype=_np.int32)
+
+    references["spec_accept_tree_sample"] = spec_accept_tree_sample
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -4506,6 +4534,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         spec_accept_sample=spec_accept_sample,
         cache_commit=cache_commit,
         cache_rollback=cache_rollback,
+        spec_accept_tree_sample=spec_accept_tree_sample,
         paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,

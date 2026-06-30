@@ -2383,3 +2383,35 @@ def Tessera_SpecAcceptSampleOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+def Tessera_SpecAcceptTreeSampleOp : Op<
+  Tessera_Dialect, "spec_accept_tree_sample",
+  [Pure]
+> {
+  let summary = "Speculative-decode acceptance: tree (multi-path) Leviathan rejection sampling (SD1)";
+  let description = [{
+    The **tree (multi-path)** distribution-preserving (Leviathan) form of
+    speculative-decode acceptance — the device form of
+    `tessera.speculative.batch_verify`. Over a draft tree of `P` paths each `D`
+    deep, the draft token at `(p, i)` is accepted iff
+    `accept_u[p,i] <= exp(target_log_probs[p,i] - draft_log_probs[p,i])` (the
+    division-free `accept_u <= min(1, p_target/p_draft)`). Each path's accepted
+    prefix is the run of leading accepts; the op selects the path with the
+    **longest** accepted prefix (first wins ties) and returns the packed
+    `tensor<2xi32>` `[accepted_path_idx, accepted_prefix_length]` — the caller
+    advances the cache by the accepted prefix (`cache.commit`).
+
+    `target_log_probs` / `draft_log_probs` are `P × D` (the log-prob of each path's
+    chosen draft token under the target / draft at each step); `accept_u` is the
+    explicit per-`(path, step)` uniform (CF0: RNG through explicit operands, so the
+    op is deterministic + device-bit-exact). This generalizes the linear
+    `spec_accept_sample` to a tree and the greedy multi-path `spec_accept` to the
+    stochastic Leviathan rule.
+  }];
+  let arguments = (ins AnyType:$target_log_probs, AnyType:$draft_log_probs,
+                       AnyType:$accept_u);
+  let results = (outs AnyType:$result);  // tensor<2xi32>: [path_idx, prefix_length]
+  let assemblyFormat =
+      "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}

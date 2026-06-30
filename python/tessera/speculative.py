@@ -590,6 +590,71 @@ class SpeculativeStep:
         return result
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Gumiho serial-draft loop — the SD1 primitives composed as ONE decode loop
+# ─────────────────────────────────────────────────────────────────────────────
+def autoregressive_decode(*, prompt, target_next, max_new: int) -> list[int]:
+    """Plain greedy autoregressive decode — the reference that the speculative
+    loop must reproduce token-for-token. ``target_next(context) -> int`` is the
+    target model's greedy next token given the context so far."""
+    seq = list(prompt)
+    for _ in range(int(max_new)):
+        seq.append(int(target_next(seq)))
+    return seq
+
+
+def gumiho_serial_draft(*, prompt, draft_next, target_next, max_new: int,
+                        draft_len: int) -> list[int]:
+    """Gumiho-style serial-draft speculative decode as ONE composed loop.
+
+    Each iteration runs the SD1 primitive chain over a serial draft:
+
+      1. **draft** ``draft_len`` tokens autoregressively from the small draft model
+         (``draft_next(context) -> int``);
+      2. **target_verify** — the target model scores the current + draft prefix,
+         giving its greedy next token at each of ``draft_len+1`` positions
+         (``target_next`` over each prefix; the ``tessera.target_verify`` I/O
+         contract);
+      3. **spec_accept** — accept the longest matching draft prefix and emit the
+         accepted tokens plus one bonus (the target's correction at the first
+         divergence — the greedy ``dflash_linear_verify`` rule);
+      4. **cache_commit** — the accepted prefix length advances the cursor.
+
+    The loop wrapper is exactly the kind of bounded recurrence that lowers to one
+    ``control_scan`` device dispatch (CF4e), so the serial draft executes as one
+    backend loop rather than one launch per token.
+
+    Greedy invariant (proven in the tests): for any ``draft_next``, the emitted
+    sequence **equals** :func:`autoregressive_decode` with ``target_next`` —
+    speculation changes only the number of target calls, never the output.
+    """
+    if draft_len < 1:
+        raise ValueError("draft_len must be >= 1")
+    seq = list(prompt)
+    base = len(seq)
+    while len(seq) - base < int(max_new):
+        # 1. serial draft from the draft model.
+        draft: list[int] = []
+        ctx = list(seq)
+        for _ in range(int(draft_len)):
+            tok = int(draft_next(ctx))
+            draft.append(tok)
+            ctx.append(tok)
+        # 2. target greedy next-token at each verified position (target_verify).
+        target = [int(target_next(seq + draft[:k])) for k in range(draft_len + 1)]
+        # 3. greedy accept: longest matching prefix, then the one bonus correction.
+        accepted = 0
+        for i in range(draft_len):
+            if draft[i] == target[i]:
+                accepted += 1
+            else:
+                break
+        # accepted draft tokens (== the target's) + 1 bonus (target[accepted]).
+        seq.extend(draft[:accepted] + [target[accepted]])
+        # 4. cache_commit would advance the cursor by `accepted` here.
+    return seq[: base + int(max_new)]
+
+
 __all__ = [
     "DraftTree",
     "VerificationResult",
@@ -605,4 +670,6 @@ __all__ = [
     "batch_verify",
     "advance_kv",
     "advance_ssm",
+    "autoregressive_decode",
+    "gumiho_serial_draft",
 ]

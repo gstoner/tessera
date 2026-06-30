@@ -266,11 +266,11 @@ std::unique_ptr<mlir::Pass> createLayoutAssignmentPass();
 std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
 
 // ── CF0 — ControlFlowTargetGuardPass ─────────────────────────────────────
-// Rejects tessera.control_{for,if,while,scan} on any backend without a
-// control-flow lowering (everything but apple_gpu today) with a stable
+// Rejects tessera.control_{for,if,while,scan} forms that remain outside the
+// selected backend's supported control-flow envelope with a stable
 // CONTROL_FLOW_UNSUPPORTED_ON_TARGET diagnostic (Decision #21). `target` names
-// the backend in the message only. Wired into the non-Apple lowering pipelines;
-// CF3/CF4 replace it with executable CUDA/ROCm control-flow kernels. See
+// the backend in the message only; envelope-specific lowerings should run before
+// this guard so only leftover unsupported forms are rejected. See
 // docs/spec/CONTROL_FLOW_CONTRACT.md §5. Standalone:
 // `--tessera-control-flow-target-guard=target=<name>`.
 std::unique_ptr<mlir::Pass>

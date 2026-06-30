@@ -1,6 +1,6 @@
 // CF0 — control-flow target guard diagnostic (Decision #21).
 // docs/spec/CONTROL_FLOW_CONTRACT.md §5: a tessera.control_* op on any backend
-// without a control-flow lowering (everything but apple_gpu) must fail loudly
+// without lowering for that specific form/envelope must fail loudly
 // with a stable CONTROL_FLOW_UNSUPPORTED_ON_TARGET diagnostic, never silently
 // fall through to a host loop inside an executable-backend claim.
 //

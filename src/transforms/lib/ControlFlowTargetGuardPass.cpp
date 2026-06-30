@@ -4,20 +4,19 @@
 // the contract in docs/spec/CONTROL_FLOW_CONTRACT.md §5.
 //
 // The Graph IR control-flow ops (`tessera.control_for` / `control_if` /
-// `control_while` / `control_scan`) lower to device code on Apple GPU today
-// (ControlForToAppleGPU / ControlWhileToAppleGPU + run_graph_scan_f32). No other
-// backend has a control-flow lowering yet — CF3 (CUDA) and CF4 (ROCm) build
-// them. Until then, a control-flow program targeting CUDA / ROCm / x86 hit NO
-// lowering pattern AND no diagnostic: it would fall through to a confusing
-// downstream failure or — worse — a silent host-loop fallback inside an
-// "executable backend" claim.
+// `control_while` / `control_scan`) have target-specific executable envelopes.
+// Apple GPU has its Target-IR path; ROCm CF4 covers a narrow elementwise rank-1
+// control_for/if/while subset. Forms outside a backend's envelope still need a
+// stable diagnostic instead of falling through to a confusing downstream failure
+// or a silent host-loop fallback inside an "executable backend" claim.
 //
 // Per Decision #21 (unsupported lowering must emit a STABLE diagnostic naming
 // the op and the target, never silently no-op), this guard walks for the four
 // control ops and fails loudly with a fixed diagnostic code. It is wired into
 // every non-Apple lowering pipeline; the `target` option only names the backend
-// in the message (detection is target-independent). When CF3/CF4 land real
-// kernels, drop the guard from that backend's pipeline.
+// in the message (detection is target-independent). Backends with partial
+// control-flow support should run their envelope-specific lowering before this
+// guard so only leftover unsupported forms are rejected.
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -57,10 +56,9 @@ struct ControlFlowTargetGuard
     return "tessera-control-flow-target-guard";
   }
   StringRef getDescription() const override {
-    return "CF0: reject tessera.control_{for,if,while,scan} on backends without "
-           "a control-flow lowering (everything but apple_gpu today) with a "
-           "stable CONTROL_FLOW_UNSUPPORTED_ON_TARGET diagnostic (Decision "
-           "#21); CF3/CF4 replace it with executable CUDA/ROCm kernels.";
+    return "CF0: reject tessera.control_{for,if,while,scan} forms that remain "
+           "outside the selected backend's control-flow envelope with a stable "
+           "CONTROL_FLOW_UNSUPPORTED_ON_TARGET diagnostic (Decision #21).";
   }
 
   void runOnOperation() override {
@@ -72,9 +70,9 @@ struct ControlFlowTargetGuard
         return;
       op->emitOpError("CONTROL_FLOW_UNSUPPORTED_ON_TARGET: '")
           << name << "' is not yet executable on target '" << target
-          << "'; device control-flow lowering for this backend lands in "
-             "CF3 (CUDA) / CF4 (ROCm). Only apple_gpu lowers control flow "
-             "today (see docs/spec/CONTROL_FLOW_CONTRACT.md).";
+          << "' for this control-flow form/envelope; use a target-supported "
+             "subset or hoist the loop/branch to the host "
+             "(see docs/spec/CONTROL_FLOW_CONTRACT.md).";
       anyError = true;
     });
     if (anyError)

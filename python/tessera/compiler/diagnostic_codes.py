@@ -704,13 +704,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary=(
             "A tessera.control_{for,if,while,scan} op reached a backend with "
-            "no control-flow lowering (everything but apple_gpu today). Device "
-            "control-flow codegen for CUDA / ROCm lands in CF3 / CF4."
+            "no lowering for this control-flow form/envelope. Some targets "
+            "support only narrow executable subsets; unsupported forms must "
+            "fail before backend codegen."
         ),
         fix_hint=(
-            "Target apple_gpu (the only backend that lowers control flow "
-            "today), or hoist the loop/branch to the host until CF3/CF4 add "
-            "the CUDA/ROCm control-flow kernels. See "
+            "Use a target-supported control-flow envelope (for example the "
+            "CF4 ROCm elementwise rank-1 control_for/if/while kernels), or "
+            "hoist this loop/branch to the host. See "
             "docs/spec/CONTROL_FLOW_CONTRACT.md §5."
         ),
         spec="docs/spec/CONTROL_FLOW_CONTRACT.md §5",

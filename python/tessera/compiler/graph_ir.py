@@ -1732,23 +1732,40 @@ def _struct_result_type(op_name: str, in_type: Optional[IRType],
         if axes is None:
             out = [d for d in dims if d != 1]
         else:
-            al = [axes] if isinstance(axes, int) else list(axes)
-            drop = {a % len(dims) for a in al}
+            al = _normalize_axes(axes, len(dims), opname="squeeze")
+            for a in al:
+                if dims[a] != 1:
+                    raise ValueError(
+                        "squeeze axes must select size-1 dimensions; "
+                        f"axis {a} has size {dims[a]}")
+            drop = set(al)
             out = [d for i, d in enumerate(dims) if i not in drop]
         return tensor_ir_type(tuple(out), dtype, layout=layout)
     if op_name == "tessera.unsqueeze":
         axes = kwargs.get("axes")
         if axes is None:
             return None
-        al = sorted([axes] if isinstance(axes, int) else list(axes))
+        raw = [axes] if isinstance(axes, int) else list(axes)
+        out_rank = len(dims) + len(raw)
+        al = sorted(_normalize_axes(raw, out_rank, opname="unsqueeze"))
         out = list(dims)
         for a in al:
-            out.insert(a if a >= 0 else len(out) + 1 + a, 1)
+            out.insert(a, 1)
         return tensor_ir_type(tuple(out), dtype, layout=layout)
     if op_name == "tessera.permute":
         perm = kwargs.get("perm")
-        if not isinstance(perm, (list, tuple)) or len(perm) != len(dims):
+        if not isinstance(perm, (list, tuple)):
             return None
+        if len(perm) != len(dims):
+            raise ValueError(
+                f"permute perm length must match rank {len(dims)}, "
+                f"got {len(perm)}")
+        if not all(isinstance(p, int) for p in perm):
+            raise ValueError("permute perm must contain integer axes")
+        if sorted(perm) != list(range(len(dims))):
+            raise ValueError(
+                f"permute perm must be a full permutation of rank {len(dims)}, "
+                f"got {list(perm)}")
         return tensor_ir_type(tuple(dims[p] for p in perm), dtype, layout=layout)
     if op_name == "tessera.flatten":
         start = int(kwargs.get("start", 0))
@@ -1763,6 +1780,26 @@ def _struct_result_type(op_name: str, in_type: Optional[IRType],
         return tensor_ir_type(tuple(dims[:start] + [prod] + dims[end + 1:]),
                               dtype, layout=layout)
     return None
+
+
+def _normalize_axes(value: Any, rank: int, *, opname: str) -> list[int]:
+    if isinstance(value, int):
+        axes = [value]
+    elif isinstance(value, (list, tuple)) and all(
+            isinstance(a, int) for a in value):
+        axes = list(value)
+    else:
+        raise ValueError(f"{opname} axes must be an int or list of ints")
+    out: list[int] = []
+    for axis in axes:
+        a = axis if axis >= 0 else rank + axis
+        if not (0 <= a < rank):
+            raise ValueError(
+                f"{opname} axis {axis} out of range for rank {rank}")
+        if a in out:
+            raise ValueError(f"{opname} axes must be unique, got {axes}")
+        out.append(a)
+    return out
 
 
 def _parse_mlir_tensor_type(text: str) -> IRType:

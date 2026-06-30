@@ -90,3 +90,26 @@ func.func @r2(%init: tensor<1x8xf32>) -> tensor<1x8xf32> {
   } : (tensor<1x8xf32>) -> tensor<1x8xf32>
   return %r : tensor<1x8xf32>
 }
+
+// -----
+// ─── carry_arg_index != 0 is a valid IR form, but not this flat kernel ABI ───
+// The ROCm CF4b kernel ABI is (X, O, N), so it can only realize the no-capture
+// form where operand 0 is the carried value. A richer control_for with an
+// invariant operand before the carry must be left for SCF / a future ABI instead
+// of silently running the kernel over operand 0.
+func.func @carry1_body(%c: tensor<8xf32>) -> tensor<8xf32> {
+  %0 = "tessera.add"(%c, %c) : (tensor<8xf32>, tensor<8xf32>) -> tensor<8xf32>
+  return %0 : tensor<8xf32>
+}
+
+// CHECK-LABEL: func.func @carry1
+// CHECK:       tessera.control_for
+// CHECK-NOT:   gpu.func
+func.func @carry1(%unused: tensor<8xf32>, %carry: tensor<8xf32>)
+    -> tensor<8xf32> {
+  %r = "tessera.control_for"(%unused, %carry) {
+    body = @carry1_body, start = 0 : i64, stop = 4 : i64, step = 1 : i64,
+    carry_arg_index = 1 : i64
+  } : (tensor<8xf32>, tensor<8xf32>) -> tensor<8xf32>
+  return %r : tensor<8xf32>
+}

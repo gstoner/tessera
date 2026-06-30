@@ -18,7 +18,7 @@ src/compiler/ir/TesseraOps.td,AttnLocalWindow2DOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnSlidingWindowOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnTopKBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,BatchedGemmOp,1,1,real
-src/compiler/ir/TesseraOps.td,BroadcastOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,BroadcastOp,1,1,real
 src/compiler/ir/TesseraOps.td,CachePageLookupOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,CastOp,1,1,real
 src/compiler/ir/TesseraOps.td,CholeskyOp,1,1,real
@@ -54,10 +54,10 @@ src/compiler/ir/TesseraOps.td,EBMPartitionExactOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMRefinementOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSelfVerifyOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSphereLangevinStepOp,1,1,real
-src/compiler/ir/TesseraOps.td,ExpandOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,ExpandOp,1,1,real
 src/compiler/ir/TesseraOps.td,FFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,FlashAttnOp,1,1,real
-src/compiler/ir/TesseraOps.td,FlattenOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,FlattenOp,1,1,real
 src/compiler/ir/TesseraOps.td,FusedEpilogueOp,1,1,real
 src/compiler/ir/TesseraOps.td,GQAAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedAttentionOp,1,1,real
@@ -113,7 +113,7 @@ src/compiler/ir/TesseraOps.td,NeighborsPipelineConfigOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,NeighborsStencilApplyOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,NeighborsStencilDefineOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,NeighborsTopologyCreateOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,PermuteOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,PermuteOp,1,1,real
 src/compiler/ir/TesseraOps.td,PowerAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,QROp,1,1,real
 src/compiler/ir/TesseraOps.td,QuantizeFP4Op,1,1,real
@@ -146,13 +146,13 @@ src/compiler/ir/TesseraOps.td,SoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftplusOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SpectralConvOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,SqueezeOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,SqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SubOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,SwigluFusedOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,TanhOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
-src/compiler/ir/TesseraOps.td,UnsqueezeOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,VarlenSdpaOp,1,1,real
 src/compiler/ir/TesseraOps.td,ViewOp,1,1,real
 src/compiler/ir/TesseraOps.td,WriteRowOp,0,0,no_verifier

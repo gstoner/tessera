@@ -140,28 +140,29 @@ the loop accordingly — tracked with the effect work, not assumed here.
 |---|---|---|---|---|
 | **Apple GPU** | ✅ `ControlForToAppleGPU` | ✅ (`control_if` lowering) | ✅ `ControlWhileToAppleGPU` | ✅ `run_graph_scan_f32` |
 | **CUDA (NVIDIA)** | ❌ none | ❌ none | ❌ none | ❌ none |
-| **ROCm (AMD)** | ❌ none | ❌ none | ❌ none | ❌ none |
+| **ROCm (AMD)** | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ✅ narrow CF4 rank-1 elementwise proof | ❌ none |
 | **x86** | ❌ none (eager host loop) | ❌ none | ❌ none | ❌ none |
 
 Apple is the only backend with device control-flow lowering today (Phase-G/H);
-it is the **research lane** per the acceleration plan. The portable closure
-path (CF3 CUDA, CF4 ROCm) is greenfield.
+it is the **research lane** per the acceleration plan. ROCm now has CF4 proof
+kernels for the no-capture rank-1 elementwise `control_for` / `control_if` /
+`control_while` envelope; CUDA and the broader ROCm closure remain greenfield.
 
 ---
 
 ## 5. The CF0 diagnostic gap (the deliverable)
 
-**A `control_*` op targeting CUDA or ROCm hits no lowering pattern and no
+**A `control_*` form/envelope that a target cannot lower must fail with a stable
 diagnostic.** The ROCm backend already owns the Decision #21 pattern for
 contracts a target cannot lower — `op->emitError("ROCm lowering does not support
 TMEM operations")` (`TileToROCM.cpp:343`), `tessera.target.diagnostic` for
-KV-cache (`Tessera_ROCM_Backend/README.md`) — but control flow is **not wired
-into it**. Per Decision #21 (unsupported lowering must emit a stable diagnostic
-naming the op and the target, never silently no-op), CF0 adds:
+KV-cache (`Tessera_ROCM_Backend/README.md`). Per Decision #21 (unsupported
+lowering must emit a stable diagnostic naming the op and the target, never
+silently no-op), CF0 adds:
 
 > `CONTROL_FLOW_UNSUPPORTED_ON_TARGET: '<op>' is not yet executable on target
-> '<target>'; device control-flow lowering for this backend lands in CF3 (CUDA)
-> / CF4 (ROCm). Only apple_gpu lowers control flow today.`
+> '<target>'; no lowering exists for this control-flow form/envelope on this
+> target.`
 
 for `control_for` / `control_if` / `control_while` / `control_scan`, implemented
 as `ControlFlowTargetGuardPass`
@@ -173,18 +174,18 @@ as `ControlFlowTargetGuardPass`
   `tests/tessera-ir/control_flow/cf0_target_guard.mlir` to assert the diagnostic
   for every target including `rocm`, mirroring
   `Tessera_ROCM_Backend/test/rocm/unsupported_tile_features.mlir`.
-- **Wired into the Graph-IR lowering pipelines that lack control lowering:**
+- **Wired into the Graph-IR lowering pipelines that lack a lowering for the
+  selected control-flow form/envelope:**
   `tessera-lower-to-x86` (target `x86`), `tessera-lower-to-gpu` and
   `tessera-nvidia-pipeline*` (target `nvidia_sm90`), right after
-  `addGraphIRPreLoweringPasses` so a control-flow program fails before any
-  confusing downstream pass. The ROCm pipeline (`tessera-lower-to-rocm`)
-  consumes *ROCm Target IR* — Graph-IR `control_*` ops never reach it directly
-  today, so its guard attaches when CF4 adds the ROCm Graph-IR entry; the
-  standalone pass + lit fixture cover the ROCm diagnostic until then.
+  `addGraphIRPreLoweringPasses` so an unsupported control-flow program fails
+  before any confusing downstream pass. ROCm CF4 handles the narrow no-capture
+  rank-1 elementwise proof kernels; the guard remains the contract for
+  everything outside that envelope and for targets without a device lowering.
 
-This guarantees that until CF3/CF4 land real kernels, a control-flow program on
-those targets fails loudly at compile time rather than producing an
-executable-backend claim that silently fell back to a host loop.
+This guarantees that unsupported control-flow forms fail loudly at compile time
+rather than producing an executable-backend claim that silently fell back to a
+host loop.
 
 ---
 
@@ -201,12 +202,12 @@ trace-time rejection (`TesseraTraceError`), proven by a test.
 | `scan` body changes carry shape | `trace.py:338` | "body must preserve carry shape" |
 | `cond` branches return different shapes | `trace.py:272` | "branches must share a shape" |
 | `cond`/`scan`/loop body returns a non-Tracer (host object capture / data-dependent value) | `trace.py:248/270/334` | "must return a Tracer" |
-| `control_*` op lowered to CUDA/ROCm | CF0 diagnostic (§5) | "not yet supported on target '<t>'" |
+| `control_*` form/envelope lowered to an unsupported target path | CF0 diagnostic (§5) | "no lowering for this form/envelope on target '<t>'" |
 
 Acceptance: the eager reference behavior is unchanged (existing
 `control.py`-level tests remain the oracle), and the JIT/trace path either emits
-a first-class `control_*` op (Apple) or produces the §5 diagnostic
-(CUDA/ROCm) — never a silent host-loop fallback inside an executable backend
+a first-class `control_*` op for a supported device lowering or produces the §5
+diagnostic — never a silent host-loop fallback inside an executable backend
 claim.
 
 ---
@@ -297,6 +298,6 @@ claim.
 - **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
   cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
   lane by lane.
-- **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
-  control-flow kernels (scan/for/while/cond proofs) validated against the §1
-  eager reference.
+- **CF3 / broader CF4** — retire the §5 diagnostic lane by lane as executable
+  CUDA / ROCm control-flow kernels (scan/for/while/cond proofs) are validated
+  against the §1 eager reference.

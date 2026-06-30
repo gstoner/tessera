@@ -13,6 +13,8 @@ The fix binds the trailing positional arg as a discardable attribute via
 
 from __future__ import annotations
 
+import pytest
+
 from tessera import ops
 from tessera.compiler.graph_ir import GraphIRBuilder
 
@@ -137,6 +139,14 @@ def _static_squeeze_fn(x: "tensor<1x3x1x4xf32>"):
     return ops.squeeze(x, (0, 2))
 
 
+def _bad_static_squeeze_fn(x: "tensor<2x3xf32>"):
+    return ops.squeeze(x, (0,))
+
+
+def _bad_static_permute_fn(x: "tensor<2x3xf32>"):
+    return ops.permute(x, (2, 0))
+
+
 def test_static_shape_result_types_derived_from_attr():
     """The result type must come from the shape/axes attr, NOT the input type —
     otherwise a static reshape emits `<in> -> <in>` and the identity folder
@@ -150,3 +160,13 @@ def test_static_shape_result_types_derived_from_attr():
     # squeeze on static 1x3x1x4 with axes [0,2] -> 3x4 (not the input type)
     sl = _op_line(_emit(_static_squeeze_fn), "tessera.squeeze")
     assert "-> tensor<3x4xf32>" in sl, sl
+
+
+def test_static_squeeze_rejects_non_unit_axis():
+    with pytest.raises(ValueError, match="size-1 dimensions"):
+        _emit(_bad_static_squeeze_fn)
+
+
+def test_static_permute_rejects_non_permutation():
+    with pytest.raises(ValueError, match="full permutation"):
+        _emit(_bad_static_permute_fn)

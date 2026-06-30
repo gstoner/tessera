@@ -6,6 +6,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 
 #include <algorithm>
@@ -2256,6 +2257,201 @@ static OpFoldResult foldStructuralIdentity(Operation *op, Value x, Value y) {
   if (!rt || !rt.hasStaticShape())
     return {};
   return x;
+}
+
+static bool dimCompat(int64_t a, int64_t b) {
+  return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+}
+
+static LogicalResult parseAxes(Operation *op, StringRef attrName, int64_t rank,
+                               SmallVectorImpl<int64_t> &axes) {
+  auto attr = op->getAttrOfType<ArrayAttr>(attrName);
+  if (!attr) {
+    if (op->hasAttr(attrName))
+      return op->emitOpError() << attrName
+                               << " must be an array of integer axes";
+    return success();
+  }
+  for (Attribute item : attr) {
+    auto intAttr = dyn_cast<IntegerAttr>(item);
+    if (!intAttr)
+      return op->emitOpError() << attrName << " must contain integer axes";
+    int64_t raw = intAttr.getInt();
+    int64_t axis = raw >= 0 ? raw : rank + raw;
+    if (axis < 0 || axis >= rank)
+      return op->emitOpError()
+             << attrName << " axis " << raw << " out of range for rank "
+             << rank;
+    if (llvm::is_contained(axes, axis))
+      return op->emitOpError() << attrName << " axes must be unique";
+    axes.push_back(axis);
+  }
+  return success();
+}
+
+static LogicalResult verifyShape(Operation *op, ArrayRef<int64_t> expected,
+                                 RankedTensorType outTy, StringRef what) {
+  if (outTy.getRank() != static_cast<int64_t>(expected.size()))
+    return op->emitOpError()
+           << what << " result rank mismatch: expected " << expected.size()
+           << " but got " << outTy.getRank();
+  for (auto [i, want] : llvm::enumerate(expected)) {
+    int64_t got = outTy.getDimSize(i);
+    if (!dimCompat(want, got))
+      return op->emitOpError()
+             << what << " result dimension " << i << " mismatch: expected "
+             << want << " but got " << got;
+  }
+  return success();
+}
+
+LogicalResult SqueezeOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  SmallVector<int64_t> axes;
+  if (failed(parseAxes(getOperation(), "axes", inTy.getRank(), axes)))
+    return failure();
+  if (!getOperation()->getAttr("axes")) {
+    for (auto [i, dim] : llvm::enumerate(inTy.getShape()))
+      if (dim == 1)
+        axes.push_back(i);
+  }
+  SmallVector<int64_t> expected;
+  for (auto [i, dim] : llvm::enumerate(inTy.getShape())) {
+    if (llvm::is_contained(axes, static_cast<int64_t>(i))) {
+      if (!ShapedType::isDynamic(dim) && dim != 1)
+        return emitOpError()
+               << "squeeze axes must select size-1 dimensions; axis " << i
+               << " has size " << dim;
+      continue;
+    }
+    expected.push_back(dim);
+  }
+  return verifyShape(getOperation(), expected, outTy, "squeeze");
+}
+
+LogicalResult UnsqueezeOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  SmallVector<int64_t> axes;
+  if (failed(parseAxes(getOperation(), "axes", outTy.getRank(), axes)))
+    return failure();
+  if (outTy.getRank() != inTy.getRank() + static_cast<int64_t>(axes.size()))
+    return emitOpError()
+           << "unsqueeze result rank must equal input rank plus inserted axes";
+  SmallVector<int64_t> sortedAxes(axes.begin(), axes.end());
+  llvm::sort(sortedAxes);
+  SmallVector<int64_t> expected;
+  int64_t inIdx = 0;
+  for (int64_t i = 0, e = outTy.getRank(); i < e; ++i) {
+    if (llvm::is_contained(sortedAxes, i)) {
+      expected.push_back(1);
+      continue;
+    }
+    expected.push_back(inTy.getDimSize(inIdx++));
+  }
+  return verifyShape(getOperation(), expected, outTy, "unsqueeze");
+}
+
+static LogicalResult verifyBroadcastLike(Operation *op, RankedTensorType inTy,
+                                         RankedTensorType outTy,
+                                         StringRef name) {
+  if (inTy.getRank() > outTy.getRank())
+    return op->emitOpError()
+           << name << " result rank must be >= input rank";
+  int64_t offset = outTy.getRank() - inTy.getRank();
+  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
+    int64_t inDim = inTy.getDimSize(i);
+    int64_t outDim = outTy.getDimSize(i + offset);
+    if (!ShapedType::isDynamic(inDim) && inDim != 1 &&
+        !dimCompat(inDim, outDim))
+      return op->emitOpError()
+             << name << " cannot broadcast input dimension " << i << " ("
+             << inDim << ") to result dimension " << (i + offset) << " ("
+             << outDim << ")";
+  }
+  return success();
+}
+
+LogicalResult ExpandOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  return verifyBroadcastLike(getOperation(), inTy, outTy, "expand");
+}
+
+LogicalResult BroadcastOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  return verifyBroadcastLike(getOperation(), inTy, outTy, "broadcast");
+}
+
+LogicalResult PermuteOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  auto permAttr = getOperation()->getAttrOfType<ArrayAttr>("perm");
+  SmallVector<int64_t> perm;
+  if (!permAttr && getOperation()->hasAttr("perm"))
+    return parseAxes(getOperation(), "perm", inTy.getRank(), perm);
+  if (!permAttr)
+    return success();
+  if (permAttr.size() != static_cast<size_t>(inTy.getRank()))
+    return emitOpError()
+           << "perm length must match input rank " << inTy.getRank();
+  if (failed(parseAxes(getOperation(), "perm", inTy.getRank(), perm)))
+    return failure();
+  SmallVector<int64_t> sorted(perm.begin(), perm.end());
+  llvm::sort(sorted);
+  for (auto [i, axis] : llvm::enumerate(sorted))
+    if (axis != static_cast<int64_t>(i))
+      return emitOpError() << "perm must be a full permutation of input axes";
+  SmallVector<int64_t> expected;
+  for (int64_t axis : perm)
+    expected.push_back(inTy.getDimSize(axis));
+  return verifyShape(getOperation(), expected, outTy, "permute");
+}
+
+LogicalResult FlattenOp::verify() {
+  auto inTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inTy || !outTy)
+    return success();
+  int64_t rank = inTy.getRank();
+  int64_t start = 0;
+  int64_t end = rank - 1;
+  if (auto attr = getOperation()->getAttrOfType<IntegerAttr>("start"))
+    start = attr.getInt();
+  if (auto attr = getOperation()->getAttrOfType<IntegerAttr>("end"))
+    end = attr.getInt();
+  start = start >= 0 ? start : rank + start;
+  end = end >= 0 ? end : rank + end;
+  if (start < 0 || end < start || end >= rank)
+    return emitOpError() << "flatten start/end out of range";
+  SmallVector<int64_t> expected;
+  for (int64_t i = 0; i < start; ++i)
+    expected.push_back(inTy.getDimSize(i));
+  int64_t product = 1;
+  bool dynamic = false;
+  for (int64_t i = start; i <= end; ++i) {
+    int64_t dim = inTy.getDimSize(i);
+    if (ShapedType::isDynamic(dim))
+      dynamic = true;
+    else
+      product *= dim;
+  }
+  expected.push_back(dynamic ? ShapedType::kDynamic : product);
+  for (int64_t i = end + 1; i < rank; ++i)
+    expected.push_back(inTy.getDimSize(i));
+  return verifyShape(getOperation(), expected, outTy, "flatten");
 }
 
 OpFoldResult SqueezeOp::fold(FoldAdaptor) {

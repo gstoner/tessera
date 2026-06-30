@@ -145,15 +145,28 @@ static bool isElementwiseFunc(func::FuncOp fn, unsigned nInputs) {
   return true;
 }
 
-// @body of a control_for: a single-arg (carry-only) elementwise rank-1 f32 func.
+// @body of a control_for: this flat (X, O, N) kernel ABI can only realize the
+// no-capture form where operand 0 is the carry. The generic control_for op may
+// use carry_arg_index to select a later operand and treat earlier operands as
+// loop-invariant captures; leave those richer forms for SCF / a future ABI so we
+// never compile a kernel over the wrong buffer.
 static func::FuncOp validateElementwiseBody(Operation *forOp,
                                             SymbolTable &symTab) {
   auto bodySym = forOp->getAttrOfType<FlatSymbolRefAttr>("body");
-  if (!bodySym)
+  auto carryA = forOp->getAttrOfType<IntegerAttr>("carry_arg_index");
+  if (!bodySym || !carryA || carryA.getInt() != 0 ||
+      forOp->getNumOperands() != 1 || forOp->getNumResults() != 1)
     return nullptr;
   auto fn = dyn_cast_or_null<func::FuncOp>(
       symTab.lookupNearestSymbolFrom(forOp, bodySym.getAttr()));
-  return isElementwiseFunc(fn, /*nInputs=*/1) ? fn : nullptr;
+  if (!isElementwiseFunc(fn, /*nInputs=*/1))
+    return nullptr;
+  Type carryTy = forOp->getOperand(0).getType();
+  FunctionType ft = fn.getFunctionType();
+  if (forOp->getResult(0).getType() != carryTy ||
+      ft.getInput(0) != carryTy || ft.getResult(0) != carryTy)
+    return nullptr;
+  return fn;
 }
 
 // @then / @else of a control_if, validated against the (X, FLAG, O, N) kernel

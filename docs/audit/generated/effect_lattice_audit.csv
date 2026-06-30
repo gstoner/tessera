@@ -32,6 +32,8 @@ bitwise_or,pure,,1,0,0
 bitwise_xor,pure,,1,0,0
 broadcast,pure,,1,0,0
 bsmm,pure,,1,0,0
+cache_commit,state,,1,0,0
+cache_rollback,state,,1,0,0
 cast,pure,pure,1,0,0
 cat,pure,,1,0,0
 ceil,pure,,1,0,0

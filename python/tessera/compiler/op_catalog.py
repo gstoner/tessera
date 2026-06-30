@@ -189,6 +189,10 @@ _SPECS = [
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
     OpSpec("kv_cache_read", "tessera.kv_cache.read", 2, 2, effect="state", lowering="state_update"),
+    # SD1-3 — speculative-decode cache cursor ops (typed state effect, no device
+    # kernel; ride KVCacheHandle.trim / SSMStateHandle.rollback).
+    OpSpec("cache_commit", "tessera.cache.commit", 2, 2, effect="state", lowering="state_update"),
+    OpSpec("cache_rollback", "tessera.cache.rollback", 2, 2, effect="state", lowering="state_update"),
     # SD1 — speculative-decode acceptance. spec_accept is a pure verifier
     # (draft/target → [path, length, bonus]); the cache commit/rollback live on
     # the state-effecting kv/ssm handles.

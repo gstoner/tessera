@@ -257,9 +257,25 @@ Acceptance:
   rejection-sampling + full-accept). `op_catalog`/`tessera.ops`
   registration + `PYTHON_API_SPEC` updated. The tree (multi-path) rejection form
   is a later follow-up.
-- **SD1-3+ (open):** `cache_commit`/`cache_rollback` typed effects over the KV/SSM
-  handles; `target_verify` I/O contract; the Gumiho serial-draft backend loop (now
-  unblocked — the CF3/CF4 control-flow substrate landed, #224–#246).
+- **SD1-3 (cache_commit/cache_rollback typed effects) — done.** New Graph IR ops
+  `Tessera_CacheCommitOp` (`cache.commit`) + `Tessera_CacheRollbackOp`
+  (`cache.rollback`), both `MemoryEffects<[MemWrite]>` (NOT `[Pure]`) — the
+  `EffectLattice` classifies a region using them as **`state`**, not pure, so a
+  speculative loop that mutates the cache is compiler-visible. `cache.commit`
+  advances the KV/SSM cursor to keep the accepted prefix (the IR form of
+  `speculative.advance_kv`); `cache.rollback` rewinds rejected drafts
+  (`SSMStateHandle.rollback` / `KVCacheHandle.trim`, the IR form of `advance_ssm`).
+  The handle is threaded value-to-value (`cache → updated`) so the mutation is
+  linear. `op_catalog` (`effect="state"`), `tessera.ops` registration, `effects.py`
+  (`Effect.state`), `PYTHON_API_SPEC`, and the `_NO_LANE_BARE` residual updated;
+  proven by `tests/unit/test_cache_effect_ops.py` (EffectLattice → `state`; the
+  cursor refs match `advance_kv`/`advance_ssm` on real KV + SSM handles). This makes
+  CF0's "cache mutation only through typed cache handles" + "speculative rollback
+  via cursor/state handles" an **IR-visible typed effect**. No device kernel
+  (cursor ops).
+- **SD1-4+ (open):** `target_verify` I/O contract; the Gumiho serial-draft backend
+  loop (now unblocked — the CF3/CF4 control-flow substrate landed, #224–#246); the
+  tree (multi-path) rejection-sampling form.
 
 ## DS1 - DSpark Library Contract
 

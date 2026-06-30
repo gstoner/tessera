@@ -4457,6 +4457,33 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
     references["spec_accept_sample"] = spec_accept_sample
 
+    def cache_commit(cache, accepted_length):
+        """SD1-3 speculative-decode commit (Graph IR op ``tessera.cache.commit``):
+        advance a cache handle's cursor to keep ``accepted_length`` tokens — the
+        accepted prefix stays, the rejected draft tail is dropped. Delegates to
+        ``tessera.speculative.advance_kv`` (the canonical KV cursor trim). A typed
+        state effect at the IR level (no hidden Python mutation). Returns the
+        handle for chaining."""
+        from .speculative import advance_kv
+        return advance_kv(cache, int(accepted_length))
+
+    def cache_rollback(cache, num_rejected):
+        """SD1-3 speculative-decode rollback (Graph IR op
+        ``tessera.cache.rollback``): rewind a cache handle's cursor over the last
+        ``num_rejected`` draft tokens — ``SSMStateHandle.rollback`` (ring-buffer
+        cursor rewind, the SSM speculative undo) or ``KVCacheHandle.trim`` (KV).
+        A typed state effect at the IR level. Returns the handle for chaining."""
+        n = int(num_rejected)
+        if hasattr(cache, "rollback"):
+            return cache.rollback(n)
+        if hasattr(cache, "trim"):
+            return cache.trim(n)
+        raise TypeError(
+            "cache_rollback needs a handle with .rollback (SSM) or .trim (KV)")
+
+    references["cache_commit"] = cache_commit
+    references["cache_rollback"] = cache_rollback
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
@@ -4465,6 +4492,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         varlen_sdpa=varlen_sdpa,
         spec_accept=spec_accept,
         spec_accept_sample=spec_accept_sample,
+        cache_commit=cache_commit,
+        cache_rollback=cache_rollback,
         paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,

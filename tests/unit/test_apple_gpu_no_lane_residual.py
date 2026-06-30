@@ -120,6 +120,9 @@ _NO_LANE_DOTTED: frozenset[str] = frozenset(
     ".".join(seg)
     for seg in {
         ("kv_cache", "append"), ("kv_cache", "prune"), ("kv_cache", "read"),
+        # SD1-3 speculative-decode cache cursor ops (state-effect handle ops, no
+        # Apple GPU dispatch lane).
+        ("cache", "commit"), ("cache", "rollback"),
         ("ebm", "langevin_step"),
         ("rl", "cispo_policy_loss"), ("rl", "grpo_policy_loss"),
         ("rl", "normalize_group_advantages"), ("rl", "ppo_policy_loss"),

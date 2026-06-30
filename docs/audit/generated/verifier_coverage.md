@@ -9,8 +9,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `real` | 123 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 47 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 170 | |
+| `no_verifier` | 49 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| **Total** | 172 | |
 
 ## Per-dialect details
 
@@ -38,7 +38,9 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
 | `BroadcastOp` | `real` |
+| `CacheCommitOp` | `no_verifier` |
 | `CachePageLookupOp` | `no_verifier` |
+| `CacheRollbackOp` | `no_verifier` |
 | `CastOp` | `real` |
 | `CholeskyOp` | `real` |
 | `CholeskySolveOp` | `real` |

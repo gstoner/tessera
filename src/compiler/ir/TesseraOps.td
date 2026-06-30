@@ -1985,6 +1985,43 @@ def Tessera_KVCachePruneOp : Op<Tessera_Dialect, "kv_cache.prune", [MemoryEffect
   let hasVerifier = 1;
 }
 
+def Tessera_CacheCommitOp : Op<
+  Tessera_Dialect, "cache.commit", [MemoryEffects<[MemWrite]>]
+> {
+  let summary = "Commit an accepted speculative prefix — advance the cache cursor (SD1-3)";
+  let description = [{
+    Speculative-decode commit: advance a KV/SSM cache handle's cursor to keep
+    exactly `accepted_length` tokens — the accepted prefix becomes part of the
+    sequence and the rejected draft tail is discarded. This is the IR-visible,
+    **typed-effect** form of `tessera.speculative.advance_kv`: it carries
+    `MemoryEffects<[MemWrite]>` (the `EffectLattice` classifies it as `state`, not
+    `pure`), so the speculative loop lowers WITHOUT hidden Python cache mutation
+    (CF0: "cache mutation only through typed cache handles"). The handle is
+    threaded value-to-value (`cache → updated`) so the mutation is linear.
+  }];
+  let arguments = (ins Tessera_KVCacheType:$cache, Index:$accepted_length);
+  let results = (outs Tessera_KVCacheType:$updated);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+def Tessera_CacheRollbackOp : Op<
+  Tessera_Dialect, "cache.rollback", [MemoryEffects<[MemWrite]>]
+> {
+  let summary = "Roll back rejected speculative drafts — rewind the cache cursor (SD1-3)";
+  let description = [{
+    Speculative-decode rollback: rewind a KV/SSM cache handle's cursor over the
+    last `num_rejected` draft tokens (KV: trim; SSM/ReplaySSM: ring-buffer cursor
+    rewind, no per-position snapshot). The IR-visible, **typed-effect** form of
+    the speculative rollback that `tessera.speculative.advance_ssm` /
+    `KVCacheHandle.trim` perform — `MemoryEffects<[MemWrite]>`, classified `state`
+    by the `EffectLattice` (CF0: "speculative rollback via cursor/state handles,
+    not implicit Python state"). The handle is threaded `cache → updated`.
+  }];
+  let arguments = (ins Tessera_KVCacheType:$cache, Index:$num_rejected);
+  let results = (outs Tessera_KVCacheType:$updated);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", [MemoryEffects<[MemRead]>]> {
   let summary = "Lookup a logical page in a stateful cache";
   let arguments = (ins Tessera_KVCacheType:$cache, Index:$position);

@@ -130,8 +130,12 @@ static func::FuncOp validateElementwiseBody(Operation *forOp,
   FunctionType ft = fn.getFunctionType();
   if (ft.getNumInputs() != 1 || ft.getNumResults() != 1)
     return nullptr;  // captures → not the elementwise first cut
+  // The emitted kernel ABI is a flat memref<?xf32> (one element per thread), so
+  // the carry must be a RANK-1 f32 tensor. A rank>1 carry (e.g. tensor<1x8xf32>)
+  // would not match the flat descriptor — leave it for the guard / a future
+  // multi-dim lowering rather than emit a mismatched kernel.
   auto ct = dyn_cast<RankedTensorType>(ft.getInput(0));
-  if (!ct || !ct.getElementType().isF32())
+  if (!ct || ct.getRank() != 1 || !ct.getElementType().isF32())
     return nullptr;
   for (Operation &o : fn.getBody().front()) {
     if (isa<func::ReturnOp>(o))

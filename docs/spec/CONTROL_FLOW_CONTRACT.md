@@ -275,9 +275,20 @@ claim.
   f32, elementwise (shared/non-elementwise branches are left for the guard). The
   `(X, FLAG, O, N)` kernel runs on gfx1151 — proven by
   `tests/unit/test_rocm_control_if_exec.py` (`flag>0 → relu(x)`, `flag<0 → 2x`).
-- **CF4c-cont / CF3** — `control_while` device kernel (per-thread bounded
-  `scf.while`), cross-element bodies (matmul/norm), and the CUDA mirror; retire
-  the CF0 guard lane by lane.
+- **CF4c-cont** *(control_while done, ROCm/gfx1151)* — the same kernel-gen
+  lowers an elementwise-body `control_while` to one `gpu.func`: grid over the
+  carry elements; per thread a **bounded `scf.while`** over `(counter, carry)` —
+  `while (i < max_iters AND cond(c) > 0) { c = body(c); i++ }`, with the cond
+  **short-circuited** behind the bound (evaluated only inside an `scf.if`, like
+  CF2c). `@body` is `(carry)->carry`, `@cond` is `(carry)->pred`, both single-arg
+  rank-1 f32 elementwise; exactly one carry operand (no captures). The `(X, O, N)`
+  kernel runs on gfx1151 — proven by `tests/unit/test_rocm_control_while_exec.py`
+  (`add(c,c)`×`max` with `cond=sigmoid` → `c·2^max`; with `cond=relu` → early
+  stop `x>0 ? x·2^max : x`). **All three control constructs now execute on
+  device.**
+- **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
+  cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
+  lane by lane.
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

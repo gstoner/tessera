@@ -4,6 +4,7 @@
 // the shape-(1) flag selects the branch. (On-device execution on gfx1151 is
 // proven by tests/unit/test_rocm_control_if_exec.py.)
 //
+// REQUIRES: tessera-rocm-backend
 // RUN: tessera-opt %s -split-input-file --generate-rocm-control-for-kernel \
 // RUN:   --allow-unregistered-dialect | FileCheck %s
 

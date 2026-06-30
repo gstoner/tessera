@@ -194,6 +194,47 @@ validateElementwiseIf(Operation *op, SymbolTable &symTab) {
   return {t, e};
 }
 
+// @body / @cond of a control_while, validated against the (X, O, N) kernel ABI.
+// Requires: exactly ONE carry operand (carry_arg_index = 0, no captures — CF2's
+// lowerControlWhile passes only the carry) and one result; max_iters > 0; @body
+// is (carry)->carry, @cond is (carry)->pred — both single-arg elementwise rank-1
+// f32 — and the carry / result types match. Anything else is left for the SCF
+// lowering / guard. Returns {body, cond}, or {null, null}.
+static std::pair<func::FuncOp, func::FuncOp>
+validateElementwiseWhile(Operation *op, SymbolTable &symTab) {
+  auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
+  auto condSym = op->getAttrOfType<FlatSymbolRefAttr>("cond");
+  auto carryA = op->getAttrOfType<IntegerAttr>("carry_arg_index");
+  auto maxA = op->getAttrOfType<IntegerAttr>("max_iters");
+  if (!bodySym || !condSym || !carryA || !maxA)
+    return {};
+  if (op->getNumOperands() != 1 || carryA.getInt() != 0 ||
+      op->getNumResults() != 1 || maxA.getInt() <= 0)
+    return {};
+  auto bodyF = dyn_cast_or_null<func::FuncOp>(
+      symTab.lookupNearestSymbolFrom(op, bodySym.getAttr()));
+  auto condF = dyn_cast_or_null<func::FuncOp>(
+      symTab.lookupNearestSymbolFrom(op, condSym.getAttr()));
+  if (!bodyF || !condF)
+    return {};
+  if (!isElementwiseFunc(bodyF, /*nInputs=*/1) ||
+      !isElementwiseFunc(condF, /*nInputs=*/1))
+    return {};
+  Type carryTy = op->getOperand(0).getType();
+  FunctionType bf = bodyF.getFunctionType(), cf = condF.getFunctionType();
+  // body: (carry)->carry; cond: (carry)->carry-shaped pred. The kernel
+  // scalarizes the predicate PER element (cond_scalar(c) > 0 per thread), so
+  // @cond's result must be the carry shape — a predicate that reduces the carry
+  // to a shape-(1) tensor (which the portable SCF lowering broadcasts via
+  // element 0) must NOT take this per-element path. Require cf result == carry;
+  // otherwise leave the op for the SCF lowering / guard.
+  if (bf.getInput(0) != carryTy || bf.getResult(0) != carryTy ||
+      op->getResult(0).getType() != carryTy || cf.getInput(0) != carryTy ||
+      cf.getResult(0) != carryTy)
+    return {};
+  return {bodyF, condF};
+}
+
 struct GenerateROCMControlForKernelPass
     : public PassWrapper<GenerateROCMControlForKernelPass,
                          OperationPass<ModuleOp>> {
@@ -359,24 +400,134 @@ struct GenerateROCMControlForKernelPass
     return true;
   }
 
+  // control_while → one gpu.func: grid over the carry elements; per thread, a
+  // bounded scf.while over (counter, carry):
+  //   x = X[gid];
+  //   while (i < max_iters AND cond_scalar(c) > 0) { c = body_scalar(c); i++ }
+  //   O[gid] = c.
+  // The bound is short-circuited (cond is evaluated only inside an scf.if gated
+  // by i < max_iters, so @cond never runs past the bound — matching CF2c).
+  bool emitWhileKernel(Operation *whileOp, func::FuncOp bodyF, func::FuncOp condF,
+                       ModuleOp module, unsigned idx) {
+    auto maxA = whileOp->getAttrOfType<IntegerAttr>("max_iters");
+    if (!maxA)
+      return false;
+
+    OpBuilder b(module.getBodyRegion());
+    b.setInsertionPointToEnd(module.getBody());
+    Location loc = whileOp->getLoc();
+    std::string kname = ("tessera_control_while_" + Twine(idx)).str();
+
+    Type f32 = b.getF32Type();
+    Type idxTy = b.getIndexType();
+    Type i1Ty = b.getI1Type();
+    auto memTy = MemRefType::get({ShapedType::kDynamic}, f32);
+
+    auto gpuMod = gpu::GPUModuleOp::create(b, loc, kname + "_mod");
+    b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
+    auto fnTy = b.getFunctionType({memTy, memTy, idxTy}, {});
+    auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
+    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+
+    OpBuilder kb(gpuFunc.getContext());
+    kb.setInsertionPointToStart(&gpuFunc.getBody().front());
+    Value X = gpuFunc.getArgument(0), O = gpuFunc.getArgument(1),
+          N = gpuFunc.getArgument(2);
+    Value bid = gpu::BlockIdOp::create(kb, loc, gpu::Dimension::x);
+    Value tid = gpu::ThreadIdOp::create(kb, loc, gpu::Dimension::x);
+    Value bd = arith::ConstantIndexOp::create(kb, loc, BD);
+    Value gid = arith::AddIOp::create(
+        kb, loc, arith::MulIOp::create(kb, loc, bid, bd), tid);
+    Value inb = arith::CmpIOp::create(kb, loc, arith::CmpIPredicate::slt, gid, N);
+    auto bounds = scf::IfOp::create(kb, loc, inb, /*withElse=*/false);
+    kb.setInsertionPointToStart(bounds.thenBlock());
+
+    Value x0 = memref::LoadOp::create(kb, loc, X, ValueRange{gid});
+    Value i0 = arith::ConstantIndexOp::create(kb, loc, 0);
+    Value c1 = arith::ConstantIndexOp::create(kb, loc, 1);
+    Value maxV = arith::ConstantIndexOp::create(kb, loc, maxA.getInt());
+    SmallVector<Type> stateTys{idxTy, f32};
+    SmallVector<Location> locs(stateTys.size(), loc);
+    auto whileK = scf::WhileOp::create(kb, loc, stateTys, ValueRange{i0, x0});
+    bool ok = true;
+    {
+      OpBuilder::InsertionGuard g(kb);
+      Block *before = kb.createBlock(&whileK.getBefore());
+      before->addArguments(stateTys, locs);
+      kb.setInsertionPointToStart(before);
+      Value i = before->getArgument(0), c = before->getArgument(1);
+      Value within =
+          arith::CmpIOp::create(kb, loc, arith::CmpIPredicate::ult, i, maxV);
+      auto contIf = scf::IfOp::create(kb, loc, TypeRange{i1Ty}, within,
+                                      /*withElseRegion=*/true);
+      {
+        OpBuilder::InsertionGuard g2(kb);
+        kb.setInsertionPointToStart(contIf.thenBlock());
+        Value p = emitScalarBody(kb, loc, condF, {c});
+        if (!p)
+          ok = false;
+        else {
+          Value pred = arith::CmpFOp::create(kb, loc, arith::CmpFPredicate::OGT,
+                                              p, cstF32(kb, loc, 0.0f));
+          scf::YieldOp::create(kb, loc, ValueRange{pred});
+        }
+      }
+      {
+        OpBuilder::InsertionGuard g2(kb);
+        kb.setInsertionPointToStart(contIf.elseBlock());
+        Value f = arith::ConstantOp::create(kb, loc, kb.getBoolAttr(false));
+        scf::YieldOp::create(kb, loc, ValueRange{f});
+      }
+      scf::ConditionOp::create(kb, loc, contIf.getResult(0), ValueRange{i, c});
+    }
+    {
+      OpBuilder::InsertionGuard g(kb);
+      Block *after = kb.createBlock(&whileK.getAfter());
+      after->addArguments(stateTys, locs);
+      kb.setInsertionPointToStart(after);
+      Value i = after->getArgument(0), c = after->getArgument(1);
+      Value c2 = emitScalarBody(kb, loc, bodyF, {c});
+      if (!c2)
+        ok = false;
+      else {
+        Value i2 = arith::AddIOp::create(kb, loc, i, c1);
+        scf::YieldOp::create(kb, loc, ValueRange{i2, c2});
+      }
+    }
+    if (!ok)
+      return false;
+    memref::StoreOp::create(kb, loc, whileK.getResult(1), O, ValueRange{gid});
+
+    kb.setInsertionPointToEnd(&gpuFunc.getBody().front());
+    gpu::ReturnOp::create(kb, loc);
+    whileOp->setAttr("tessera.rocm_kernel", b.getStringAttr(kname));
+    return true;
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SymbolTable symTab(module);
     SmallVector<Operation *> ctrl;
     module.walk([&](Operation *op) {
       StringRef nm = op->getName().getStringRef();
-      if (nm == "tessera.control_for" || nm == "tessera.control_if")
+      if (nm == "tessera.control_for" || nm == "tessera.control_if" ||
+          nm == "tessera.control_while")
         ctrl.push_back(op);
     });
     unsigned idx = 0;
     for (Operation *op : ctrl) {
-      if (op->getName().getStringRef() == "tessera.control_for") {
+      StringRef nm = op->getName().getStringRef();
+      if (nm == "tessera.control_for") {
         if (func::FuncOp body = validateElementwiseBody(op, symTab))
           (void)emitKernel(op, body, module, idx++);
-      } else {  // tessera.control_if
+      } else if (nm == "tessera.control_if") {
         auto [t, e] = validateElementwiseIf(op, symTab);
         if (t && e)
           (void)emitIfKernel(op, t, e, module, idx++);
+      } else {  // tessera.control_while
+        auto [bodyF, condF] = validateElementwiseWhile(op, symTab);
+        if (bodyF && condF)
+          (void)emitWhileKernel(op, bodyF, condF, module, idx++);
       }
     }
   }

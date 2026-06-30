@@ -119,8 +119,16 @@ Finished:
 
 Still needs work:
 
-- Nothing open on the Apple compiler track. (Real-hardware NVIDIA/ROCm
-  execution proof remains the cross-backend gate — see those tracks.)
+- Nothing open on the Apple compiler track. The "pipeline-reachability design
+  fork" (prepass-as-live-path vs `target_ir_artifact`) is **decided** — the
+  prepass is the canonical live path; the `per_op_metal` general residency gate
+  (2026-06-17) routes any multi-op program whose ops all have an Apple GPU lane
+  to `metal_runtime`. The only residual is enumerable, not architectural: a
+  multi-op program demotes to artifact iff it contains an op with no Apple GPU
+  lane, a set frozen by `tests/unit/test_apple_gpu_no_lane_residual.py` (each
+  entry a reviewable "add a lane" vs "intentionally host-only" call). (Real-
+  hardware NVIDIA/ROCm execution proof remains the cross-backend gate — see those
+  tracks.)
 
 Closed 2026-06-02 → 2026-06-09: binding specs/descriptors for all kernel
 families; descriptor-driven dispatch (single-source envelope in

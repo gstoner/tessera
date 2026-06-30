@@ -350,29 +350,39 @@ pointwise,gated_matmul}`).
 > `target_ir_artifact` lane remains for programs neither a known_chain nor wholly
 > pointwise/gated.
 >
-> **⚠️ Pipeline-reachability finding (2026-06-16, from validating the gated path
-> end-to-end).** The synthesized-fusion prepass (`_apple_gpu_try_synthesized_fusion`,
-> runtime.py) — where **every** region discoverer lives (matmul-epilogue, norm_chain,
-> attention, **pointwise**, gated) — is only reached when the **compile-time canonical
-> analysis** (`canonical_compile.py`) marks a program `canonical_program_executable`
-> and routes it to `compiler_path == "apple_gpu_mps"`. That happens for single
-> supported ops and recognized `known_chain`s (e.g. `matmul→gelu`, the DAG-shaped
-> `_match_swiglu_at`). A multi-op program that is *not* a single recognized chain —
-> a bare pointwise DAG `gelu(add(mul))`, **or the gate `mul(silu(matmul),matmul)`** —
-> is marked non-executable and routed to `target_ir_artifact`, which produces
-> **correct** numerics but **bypasses the prepass entirely** (the synthesized kernels
-> never run). So today the region synthesizers are proven in isolation (direct prepass
-> tests + the M5 Evaluator) and fire for gates *embedded in* an MPS-routed program,
-> but a gate-shaped (or pointwise-shaped) standalone `@jit` does **not** reach them.
-> **Closure (scoped next action):** teach the canonical analysis to recognize the
-> gate DAG (`matmul,silu,matmul,mul` sharing A — a `_match_gated_matmul_at` mirroring
-> `_match_swiglu_at`) so the program flips to `apple_gpu_mps` and the prepass runs the
-> gated kernel; then a public `@jit(target="apple_gpu")` e2e can assert
-> `execution_mode=="metal_runtime"`. This is a compile-time change with drift guards
-> (`test_fusion_intent_emitter`, `test_canonical_compile`) and a real design question
-> attached: *is the runtime prepass meant to be the live path for arbitrary multi-op
-> programs, or is `target_ir_artifact` the intended future and the prepass a
-> transitional lane?* — decide before broadening the recognizer beyond the gate.
+> **✅ Pipeline-reachability — RESOLVED (design question decided; no fork left).**
+> The earlier framing — *"is the runtime prepass the live path for arbitrary
+> multi-op programs, or is `target_ir_artifact` the intended future and the prepass
+> transitional?"* — is **answered: the prepass IS the canonical live path.** Two
+> general (non-bespoke) routing predicates in `driver._apple_gpu_chain_kind` close
+> what used to be the gap, so this is no longer a recognizer treadmill:
+> 1. **Pointwise DAG** (2026-06-16): a ≥2-op plan where every op is in
+>    `fusion.is_pointwise_op`'s vocabulary → `"pointwise"` → `apple_gpu_mps`. One
+>    predicate, single source of truth shared by the router and the prepass
+>    discoverer (no drift).
+> 2. **General residency gate `per_op_metal`** (2026-06-17, *after* this plan's
+>    prior edit — which is why the note above read as more open than it was): a
+>    ≥2-op plan where **every** op has an Apple GPU dispatch lane
+>    (`lane_for(op) is not None`) → `apple_gpu_mps` / `metal_runtime`. The prepass
+>    fuses what it can; the rest run per-op on Metal. This keeps mixed
+>    compute+structural programs (`matmul→transpose→gelu`) GPU-resident instead of
+>    demoting the whole program to artifact just because the chain isn't a named
+>    fusion.
+>
+> **The residual is now concrete and enumerable, not an abstract fork:** a multi-op
+> program demotes to `target_ir_artifact` **iff it contains ≥1 op with no Apple GPU
+> lane** (`lane_for(op) is None`). That set — currently the catalog ops with no lane
+> (optimizers, collectives, RNG, quant pack/unpack, complex/conformal geometry,
+> dense+sparse linalg solves, structural/view/gather-scatter ops, KV-cache, MoE/MoR
+> routing, RL losses, a few rope/attention variants) — is **frozen by
+> `tests/unit/test_apple_gpu_no_lane_residual.py`** (golden set + bidirectional
+> lane contract + the routing-consequence assertion that pairing matmul with any
+> residual op yields `None`/artifact, and a laned pair yields `per_op_metal`). Each
+> entry is a reviewable *"add a lane"* vs *"intentionally host/numpy-only"* decision;
+> drift fails the gate. Per-fixture proofs that gated + pointwise standalone `@jit`
+> programs reach `metal_runtime`: `test_fusion_synthesis.py`
+> (`test_public_jit_{gate,pointwise_dag}_routes_to_apple_gpu_mps_metal_runtime`),
+> `test_apple_gpu_per_op_metal.py`.
 
 Open work, by leverage:
 

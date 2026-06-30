@@ -116,8 +116,36 @@ static bool isElementwiseName(StringRef name) {
          name == "tessera.gelu";
 }
 
-// Validate that @body is a single-arg (carry-only, no captures), f32, fully
-// elementwise function. Returns the body func on success, null otherwise.
+// A defined func is a "scalarizable elementwise body" iff it takes exactly
+// `nInputs` rank-1 f32 tensors, returns one rank-1 f32 tensor, and every op is
+// elementwise (translatable by scalarOp). The emitted kernel ABI is a flat
+// memref<?xf32>, hence the rank-1 requirement (a rank>1 carry would not match
+// the flat descriptor — left for the guard / a future multi-dim lowering).
+static bool isElementwiseFunc(func::FuncOp fn, unsigned nInputs) {
+  if (!fn || fn.isExternal())
+    return false;
+  FunctionType ft = fn.getFunctionType();
+  if (ft.getNumInputs() != nInputs || ft.getNumResults() != 1)
+    return false;
+  auto rank1F32 = [](Type t) {
+    auto r = dyn_cast<RankedTensorType>(t);
+    return r && r.getRank() == 1 && r.getElementType().isF32();
+  };
+  for (Type t : ft.getInputs())
+    if (!rank1F32(t))
+      return false;
+  if (!rank1F32(ft.getResult(0)))
+    return false;
+  for (Operation &o : fn.getBody().front()) {
+    if (isa<func::ReturnOp>(o))
+      continue;
+    if (!isElementwiseName(o.getName().getStringRef()))
+      return false;  // matmul / softmax / norm / unknown → not elementwise
+  }
+  return true;
+}
+
+// @body of a control_for: a single-arg (carry-only) elementwise rank-1 f32 func.
 static func::FuncOp validateElementwiseBody(Operation *forOp,
                                             SymbolTable &symTab) {
   auto bodySym = forOp->getAttrOfType<FlatSymbolRefAttr>("body");
@@ -125,25 +153,45 @@ static func::FuncOp validateElementwiseBody(Operation *forOp,
     return nullptr;
   auto fn = dyn_cast_or_null<func::FuncOp>(
       symTab.lookupNearestSymbolFrom(forOp, bodySym.getAttr()));
-  if (!fn || fn.isExternal())
-    return nullptr;
-  FunctionType ft = fn.getFunctionType();
-  if (ft.getNumInputs() != 1 || ft.getNumResults() != 1)
-    return nullptr;  // captures → not the elementwise first cut
-  // The emitted kernel ABI is a flat memref<?xf32> (one element per thread), so
-  // the carry must be a RANK-1 f32 tensor. A rank>1 carry (e.g. tensor<1x8xf32>)
-  // would not match the flat descriptor — leave it for the guard / a future
-  // multi-dim lowering rather than emit a mismatched kernel.
-  auto ct = dyn_cast<RankedTensorType>(ft.getInput(0));
-  if (!ct || ct.getRank() != 1 || !ct.getElementType().isF32())
-    return nullptr;
-  for (Operation &o : fn.getBody().front()) {
-    if (isa<func::ReturnOp>(o))
-      continue;
-    if (!isElementwiseName(o.getName().getStringRef()))
-      return nullptr;  // matmul / softmax / norm / unknown → not elementwise
-  }
-  return fn;
+  return isElementwiseFunc(fn, /*nInputs=*/1) ? fn : nullptr;
+}
+
+// @then / @else of a control_if, validated against the (X, FLAG, O, N) kernel
+// ABI this pass emits. Requires: distinct symbols; both single-arg elementwise
+// rank-1 f32 funcs; the OP itself has exactly the flag + ONE non-flag data
+// operand and a single result; and the data-operand / result types match the
+// branch signature. Anything else (extra operands, a result the branches don't
+// produce) is left for the SCF lowering / guard, since the flat kernel could
+// not realize it. Returns {then, else}, or {null, null}.
+static std::pair<func::FuncOp, func::FuncOp>
+validateElementwiseIf(Operation *op, SymbolTable &symTab) {
+  auto thenSym = op->getAttrOfType<FlatSymbolRefAttr>("then_branch");
+  auto elseSym = op->getAttrOfType<FlatSymbolRefAttr>("else_branch");
+  auto flagA = op->getAttrOfType<IntegerAttr>("flag_arg_index");
+  if (!thenSym || !elseSym || !flagA)
+    return {};
+  int64_t n = static_cast<int64_t>(op->getNumOperands());
+  int64_t flag = flagA.getInt();
+  // Exactly the flag + one data operand, one result.
+  if (n != 2 || flag < 0 || flag >= n || op->getNumResults() != 1)
+    return {};
+  auto t = dyn_cast_or_null<func::FuncOp>(
+      symTab.lookupNearestSymbolFrom(op, thenSym.getAttr()));
+  auto e = dyn_cast_or_null<func::FuncOp>(
+      symTab.lookupNearestSymbolFrom(op, elseSym.getAttr()));
+  if (!t || !e || t == e)  // shared stub → leave for the materialize/guard
+    return {};
+  if (!isElementwiseFunc(t, /*nInputs=*/1) || !isElementwiseFunc(e, 1))
+    return {};
+  // The branch signature must realize the op: the non-flag data operand feeds
+  // the branch input, and the op result is the branch result.
+  Type dataTy = op->getOperand(flag == 0 ? 1 : 0).getType();
+  Type resTy = op->getResult(0).getType();
+  FunctionType tf = t.getFunctionType(), ef = e.getFunctionType();
+  if (tf.getInput(0) != dataTy || ef.getInput(0) != dataTy ||
+      tf.getResult(0) != resTy || ef.getResult(0) != resTy)
+    return {};
+  return {t, e};
 }
 
 struct GenerateROCMControlForKernelPass
@@ -155,13 +203,33 @@ struct GenerateROCMControlForKernelPass
     return "generate-rocm-control-for-kernel";
   }
   StringRef getDescription() const final {
-    return "CF4b: lower an elementwise-body tessera.control_for to a single "
-           "gpu.func device kernel (grid over carry elements; per-thread "
-           "scf.for) for the ROCm gfx1151 control-flow proof.";
+    return "CF4b/CF4c: lower an elementwise-body tessera.control_for / "
+           "control_if to a single gpu.func device kernel (grid over the data "
+           "elements; per-thread scf.for / scf.if) for the ROCm gfx1151 "
+           "control-flow proof.";
   }
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
                     math::MathDialect, memref::MemRefDialect, func::FuncDialect>();
+  }
+
+  // Translate a single-result elementwise body func to scalar at the current
+  // insertion point: map body args to `inputs`, emit each op via scalarOp,
+  // return the return-operand scalar (null if any op can't translate).
+  Value emitScalarBody(OpBuilder &kb, Location loc, func::FuncOp body,
+                       ArrayRef<Value> inputs) {
+    llvm::DenseMap<Value, Value> smap;
+    for (unsigned i = 0; i < inputs.size(); ++i)
+      smap[body.getArgument(i)] = inputs[i];
+    for (Operation &o : body.getBody().front()) {
+      if (auto ret = dyn_cast<func::ReturnOp>(o))
+        return smap.lookup(ret.getOperand(0));
+      Value s = scalarOp(kb, loc, &o, smap);
+      if (!s)
+        return Value();
+      smap[o.getResult(0)] = s;
+    }
+    return Value();
   }
 
   // Re-validate by actually walking + translating (the probe above is a name
@@ -211,21 +279,9 @@ struct GenerateROCMControlForKernelPass
       OpBuilder::InsertionGuard g(kb);
       kb.setInsertionPointToStart(forK.getBody());
       // Per-iteration: translate @body's ops to scalar over the carry.
-      llvm::DenseMap<Value, Value> smap;
-      smap[body.getArgument(0)] = forK.getRegionIterArg(0);
-      Value out;
-      for (Operation &o : body.getBody().front()) {
-        if (auto ret = dyn_cast<func::ReturnOp>(o)) {
-          out = smap.lookup(ret.getOperand(0));
-          break;
-        }
-        Value s = scalarOp(kb, loc, &o, smap);
-        if (!s)
-          return false;  // shouldn't happen post-validation; bail safely
-        smap[o.getResult(0)] = s;
-      }
+      Value out = emitScalarBody(kb, loc, body, {forK.getRegionIterArg(0)});
       if (!out)
-        return false;
+        return false;  // shouldn't happen post-validation; bail safely
       scf::YieldOp::create(kb, loc, ValueRange{out});
     }
     memref::StoreOp::create(kb, loc, forK.getResult(0), O, ValueRange{gid});
@@ -239,20 +295,89 @@ struct GenerateROCMControlForKernelPass
     return true;
   }
 
+  // control_if → one gpu.func: grid over the data elements; per thread,
+  //   x = X[gid]; r = (FLAG[0] > 0) ? then_scalar(x) : else_scalar(x); O[gid]=r.
+  // The flag is a shape-(1) selector for all threads. (X, FLAG, O, N) ABI.
+  bool emitIfKernel(Operation *ifOp, func::FuncOp thenB, func::FuncOp elseB,
+                    ModuleOp module, unsigned idx) {
+    OpBuilder b(module.getBodyRegion());
+    b.setInsertionPointToEnd(module.getBody());
+    Location loc = ifOp->getLoc();
+    std::string kname = ("tessera_control_if_" + Twine(idx)).str();
+
+    Type f32 = b.getF32Type();
+    Type idxTy = b.getIndexType();
+    auto memTy = MemRefType::get({ShapedType::kDynamic}, f32);
+
+    auto gpuMod = gpu::GPUModuleOp::create(b, loc, kname + "_mod");
+    b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
+    auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
+    auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnTy);
+    gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
+
+    OpBuilder kb(gpuFunc.getContext());
+    kb.setInsertionPointToStart(&gpuFunc.getBody().front());
+    Value X = gpuFunc.getArgument(0), FLAG = gpuFunc.getArgument(1),
+          O = gpuFunc.getArgument(2), N = gpuFunc.getArgument(3);
+    Value bid = gpu::BlockIdOp::create(kb, loc, gpu::Dimension::x);
+    Value tid = gpu::ThreadIdOp::create(kb, loc, gpu::Dimension::x);
+    Value bd = arith::ConstantIndexOp::create(kb, loc, BD);
+    Value gid = arith::AddIOp::create(
+        kb, loc, arith::MulIOp::create(kb, loc, bid, bd), tid);
+    Value inb = arith::CmpIOp::create(kb, loc, arith::CmpIPredicate::slt, gid, N);
+    auto bounds = scf::IfOp::create(kb, loc, inb, /*withElse=*/false);
+    kb.setInsertionPointToStart(bounds.thenBlock());
+
+    Value x = memref::LoadOp::create(kb, loc, X, ValueRange{gid});
+    Value z0 = arith::ConstantIndexOp::create(kb, loc, 0);
+    Value f = memref::LoadOp::create(kb, loc, FLAG, ValueRange{z0});
+    Value sel = arith::CmpFOp::create(kb, loc, arith::CmpFPredicate::OGT, f,
+                                      cstF32(kb, loc, 0.0f));
+    auto pick = scf::IfOp::create(kb, loc, TypeRange{f32}, sel,
+                                  /*withElseRegion=*/true);
+    {
+      OpBuilder::InsertionGuard g(kb);
+      kb.setInsertionPointToStart(pick.thenBlock());
+      Value r = emitScalarBody(kb, loc, thenB, {x});
+      if (!r)
+        return false;
+      scf::YieldOp::create(kb, loc, ValueRange{r});
+    }
+    {
+      OpBuilder::InsertionGuard g(kb);
+      kb.setInsertionPointToStart(pick.elseBlock());
+      Value r = emitScalarBody(kb, loc, elseB, {x});
+      if (!r)
+        return false;
+      scf::YieldOp::create(kb, loc, ValueRange{r});
+    }
+    memref::StoreOp::create(kb, loc, pick.getResult(0), O, ValueRange{gid});
+
+    kb.setInsertionPointToEnd(&gpuFunc.getBody().front());
+    gpu::ReturnOp::create(kb, loc);
+    ifOp->setAttr("tessera.rocm_kernel", b.getStringAttr(kname));
+    return true;
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SymbolTable symTab(module);
-    SmallVector<Operation *> fors;
+    SmallVector<Operation *> ctrl;
     module.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera.control_for")
-        fors.push_back(op);
+      StringRef nm = op->getName().getStringRef();
+      if (nm == "tessera.control_for" || nm == "tessera.control_if")
+        ctrl.push_back(op);
     });
     unsigned idx = 0;
-    for (Operation *op : fors) {
-      func::FuncOp body = validateElementwiseBody(op, symTab);
-      if (!body)
-        continue;  // not the elementwise first cut — leave it
-      (void)emitKernel(op, body, module, idx++);
+    for (Operation *op : ctrl) {
+      if (op->getName().getStringRef() == "tessera.control_for") {
+        if (func::FuncOp body = validateElementwiseBody(op, symTab))
+          (void)emitKernel(op, body, module, idx++);
+      } else {  // tessera.control_if
+        auto [t, e] = validateElementwiseIf(op, symTab);
+        if (t && e)
+          (void)emitIfKernel(op, t, e, module, idx++);
+      }
     }
   }
 };

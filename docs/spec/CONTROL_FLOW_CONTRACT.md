@@ -267,8 +267,17 @@ claim.
   `tests/unit/test_rocm_control_for_exec.py` (`add(c,c)` × K = element·2^K, exact
   for K=1/4/10). Non-elementwise bodies (matmul/softmax/norm) and captures are
   left for the guard / CF4c.
-- **CF4c / CF3** — cross-element bodies (matmul/norm), `control_if`/`while`
-  device kernels, and the CUDA mirror; retire the CF0 guard lane by lane.
+- **CF4c** *(control_if done, ROCm/gfx1151)* — the same
+  `GenerateROCMControlForKernel` lowers an elementwise-branch `control_if` to one
+  `gpu.func`: grid over the data elements; per thread, `r = (FLAG[0] > 0) ?
+  then_scalar(x) : else_scalar(x)` (a per-thread `scf.if`, branch selected once
+  by the shape-(1) flag). `@then`/`@else` must be distinct, single-arg, rank-1
+  f32, elementwise (shared/non-elementwise branches are left for the guard). The
+  `(X, FLAG, O, N)` kernel runs on gfx1151 — proven by
+  `tests/unit/test_rocm_control_if_exec.py` (`flag>0 → relu(x)`, `flag<0 → 2x`).
+- **CF4c-cont / CF3** — `control_while` device kernel (per-thread bounded
+  `scf.while`), cross-element bodies (matmul/norm), and the CUDA mirror; retire
+  the CF0 guard lane by lane.
 - **CF3 / CF4** — replace the §5 diagnostic with executable CUDA / ROCm
   control-flow kernels (scan/for/while/cond proofs) validated against the §1
   eager reference.

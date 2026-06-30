@@ -633,18 +633,28 @@ def gumiho_serial_draft(*, prompt, draft_next, target_next, max_new: int,
     seq = list(prompt)
     base = len(seq)
     while len(seq) - base < int(max_new):
-        # 1. serial draft from the draft model.
+        # Clamp the speculation depth to the remaining token budget. One iteration
+        # emits at most `step_len + 1` tokens (the accepted draft prefix + one
+        # bonus), so `step_len = min(draft_len, remaining - 1)` keeps the emit
+        # within budget AND — the point of the clamp — never drafts or scores a
+        # context longer than necessary. Without it a max_new=1 / draft_len=4 call
+        # would draft 4 tokens and call target_next on 5 over-long speculative
+        # contexts even though only one token is wanted, tripping a production
+        # target model that enforces the generation / context limit.
+        remaining = int(max_new) - (len(seq) - base)
+        step_len = min(int(draft_len), remaining - 1)
+        # 1. serial draft from the draft model (step_len tokens).
         draft: list[int] = []
         ctx = list(seq)
-        for _ in range(int(draft_len)):
+        for _ in range(step_len):
             tok = int(draft_next(ctx))
             draft.append(tok)
             ctx.append(tok)
         # 2. target greedy next-token at each verified position (target_verify).
-        target = [int(target_next(seq + draft[:k])) for k in range(draft_len + 1)]
+        target = [int(target_next(seq + draft[:k])) for k in range(step_len + 1)]
         # 3. greedy accept: longest matching prefix, then the one bonus correction.
         accepted = 0
-        for i in range(draft_len):
+        for i in range(step_len):
             if draft[i] == target[i]:
                 accepted += 1
             else:

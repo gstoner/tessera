@@ -64,3 +64,33 @@ def test_gumiho_rejects_bad_draft_len():
     with pytest.raises(ValueError):
         gumiho_serial_draft(prompt=[0], draft_next=lambda s: 0,
                             target_next=lambda s: 0, max_new=4, draft_len=0)
+
+
+@pytest.mark.parametrize("max_new,draft_len", [(1, 4), (2, 8), (3, 5), (7, 3)])
+def test_gumiho_clamps_draft_verify_to_the_budget(max_new, draft_len):
+    # Regression (review): a production target_next that enforces the requested
+    # generation/context limit must never be called on an over-long speculative
+    # context. The loop clamps the per-iteration depth to the remaining budget, so
+    # neither model ever sees a context longer than prompt + max_new - 1.
+    V = 16
+    target = _target(V)
+    prompt = [2]
+    budget_ctx = len(prompt) + max_new - 1
+
+    def guarded(model, key):
+        def fn(seq):
+            assert len(seq) <= budget_ctx, (
+                f"{key}_next called on context len {len(seq)} > budget "
+                f"{budget_ctx}")
+            return model(seq)
+        return fn
+
+    out = gumiho_serial_draft(
+        prompt=prompt,
+        draft_next=guarded(lambda s: (int(s[-1]) + 1) % V, "draft"),
+        target_next=guarded(target, "target"),
+        max_new=max_new, draft_len=draft_len)
+    assert len(out) == len(prompt) + max_new
+    # still AR-equivalent under the clamp.
+    assert out == autoregressive_decode(prompt=prompt, target_next=target,
+                                        max_new=max_new)

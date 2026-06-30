@@ -2256,8 +2256,14 @@ def Tessera_ControlScanOp : Op<
     `n+2+j`; `body_out_id`/`y_out_id` pick the next carry / per-step y), so the
     lowered Target op is self-contained + dispatchable. Optional payload: omit for
     IR-only.
+
+    `captures` are loop-invariant operands (weight matrices, biases) the body
+    closes over — distinct from the per-step `xs` stream. The body signature is
+    `(carry, xt, captures...) -> (carry', y)`. With captures the recurrence is a
+    real cell, e.g. the linear state-space update `h_t = h_{t-1} @ W + x_t`.
   }];
   let arguments = (ins AnyType:$init, AnyType:$xs,
+                       Variadic<AnyType>:$captures,
                        FlatSymbolRefAttr:$body,
                        I64Attr:$trip,
                        I64Attr:$carry_arg_index,

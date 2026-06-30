@@ -154,3 +154,16 @@ func.func @scan_ys_trip_mismatch(%init: tensor<4xf32>, %xs: tensor<3x4xf32>)
   } : (tensor<4xf32>, tensor<3x4xf32>) -> (tensor<4xf32>, tensor<5x4xf32>)
   return %c, %ys : tensor<4xf32>, tensor<5x4xf32>
 }
+
+// -----
+// ─── control_scan with a loop-invariant capture (W) — positive (CF4e-2) ─────
+func.func private @sbody()
+// CHECK-LABEL: func.func @scan_capture_ok
+func.func @scan_capture_ok(%init: tensor<1x4xf32>, %xs: tensor<3x1x4xf32>,
+    %W: tensor<4x4xf32>) -> (tensor<1x4xf32>, tensor<3x1x4xf32>) {
+  %c, %ys = "tessera.control_scan"(%init, %xs, %W) {
+    body = @sbody, trip = 3 : i64, carry_arg_index = 0 : i64
+  } : (tensor<1x4xf32>, tensor<3x1x4xf32>, tensor<4x4xf32>)
+      -> (tensor<1x4xf32>, tensor<3x1x4xf32>)
+  return %c, %ys : tensor<1x4xf32>, tensor<3x1x4xf32>
+}

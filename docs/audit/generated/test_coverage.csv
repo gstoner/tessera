@@ -235,7 +235,7 @@ laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
 latent_kv_compress,8,19,0,27,0,fp16 fp32,directly_tested,27 direct test references
 latent_kv_expand_k,5,8,0,13,0,fp16 fp32,directly_tested,13 direct test references
 latent_kv_expand_v,4,7,0,11,0,fp16 fp32,directly_tested,11 direct test references
-layer_norm,25,8,3,33,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,33 direct test references
+layer_norm,26,9,3,35,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,35 direct test references
 le,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 lgamma,3,0,0,3,0,,directly_tested,3 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
@@ -348,13 +348,13 @@ rearrange,2,0,0,2,0,,directly_tested,2 direct test references
 reciprocal,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 reduce,86,0,7,86,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,86 direct test references
 reduce_scatter,0,4,0,4,0,,directly_tested,4 direct test references
-relu,106,26,9,132,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,132 direct test references
+relu,106,28,9,134,0,bf16 f16 f32 f64 fp32 fp8_e4m3 int8,directly_tested,134 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,3,0,0,3,0,,directly_tested,3 direct test references
 reshape,11,15,1,26,0,,directly_tested,26 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
-rmsnorm,74,12,3,86,0,bf16 f16 f32 f64 fp32,directly_tested,86 direct test references
+rmsnorm,75,13,3,88,0,bf16 f16 f32 f64 fp32,directly_tested,88 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
 rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'

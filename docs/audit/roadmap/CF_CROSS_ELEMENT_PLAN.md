@@ -1,8 +1,7 @@
 ---
-status: Active plan
-classification: Roadmap
-authority: CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md (CF4d extension)
 last_updated: 2026-06-30
+audit_role: plan
+plan_state: open
 ---
 
 # Cross-Element Control-Flow Device Kernels (CF4d) — Plan

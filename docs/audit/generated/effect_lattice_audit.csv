@@ -292,6 +292,7 @@ svd,pure,,1,0,0
 take,pure,,1,0,0
 tan,pure,,1,0,0
 tanh,pure,,1,0,0
+target_verify,pure,,1,0,0
 tile,pure,,1,0,0
 tile_view,pure,,1,0,0
 top_k,pure,,1,0,0

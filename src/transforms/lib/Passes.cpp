@@ -92,6 +92,9 @@ void registerTesseraPasses() {
   // ── CF2 — control-flow → scf lowering (control_for → scf.for).
   ::mlir::registerPass([]() { return createLowerControlFlowToSCFPass(); });
 
+  // ── CF4a — decode the control_for op-list payload into a real @body func.
+  ::mlir::registerPass([]() { return createMaterializeControlPayloadPass(); });
+
   // Full Phase 2 lowering chain: Graph IR → x86 CPU calls.
   //
   // Pass order (normative — matches docs/spec/LOWERING_PIPELINE_SPEC.md §2.1):

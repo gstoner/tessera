@@ -22,6 +22,8 @@ add_library(TesseraPasses
   ControlFlowTargetGuardPass.cpp
   # CF2 — control-flow → scf lowering (control_for → scf.for)
   LowerControlFlowToSCFPass.cpp
+  # CF4a — decode the control_for op-list payload into a real @body func
+  MaterializeControlPayloadPass.cpp
 
   # Phase 3 GPU / FA-4 Tile IR lowering
   TileIRLoweringPass.cpp

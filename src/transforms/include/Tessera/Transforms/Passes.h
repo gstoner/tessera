@@ -286,6 +286,16 @@ createControlFlowTargetGuardPass(llvm::StringRef target = "this backend");
 // `--tessera-control-flow-to-scf`.
 std::unique_ptr<mlir::Pass> createLowerControlFlowToSCFPass();
 
+// ── CF4a — MaterializeControlPayloadPass ─────────────────────────────────
+// Decodes the executable-payload op-list (body_opcodes/body_in0/...) the
+// frontend emits on tessera.control_for into a real @body func.func of
+// tessera.* ops, then strips the payload attrs — so LowerControlFlowToSCFPass
+// can lower the loop (it skips the carry-only-stub payload form). The
+// prerequisite for an executable device body (CF4b ROCm). control_if/while
+// payloads → CF4a follow-up. Standalone:
+// `--tessera-materialize-control-payload`.
+std::unique_ptr<mlir::Pass> createMaterializeControlPayloadPass();
+
 // ── 2026-06-23 — TileBarrierReuseLegalityPass (C2, TIRx review) ──────────
 // "Barriers are a layout-reuse correctness property." For a buffer carrying the
 // C1 #tile.layout attribute, two writes to overlapping storage-axis (m/tlane/

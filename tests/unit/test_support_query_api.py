@@ -6,6 +6,9 @@ Locks the public query API:
     table renders.
   * :func:`tier(op)` is the best-tier-across-targets rollup.
   * :func:`tier(op, target=...)` is the per-target view.
+  * :func:`is_compiler_supported(op, target=...)` is True for
+    artifact/reference/native compiler support, including
+    hardware-gated targets.
   * :func:`is_native_supported(op, target=...)` is True iff the op
     has a fused kernel + ready runtime on that target.
 
@@ -22,6 +25,7 @@ from tessera.compiler import (
     OpSupport,
     TargetSupport,
     Tier,
+    is_compiler_supported,
     is_native_supported,
     known_targets,
     support,
@@ -72,6 +76,11 @@ class TestSupportShape:
         info = support("matmul")
         ts = info.for_target("apple_gpu")
         assert ts.target == "apple_gpu"
+
+    def test_for_target_accepts_target_aliases(self) -> None:
+        info = support("matmul")
+        assert info.for_target("apple").target == "apple_gpu"
+        assert info.for_target("macos_gpu").target == "apple_gpu"
 
     def test_for_target_raises_on_unknown_target(self) -> None:
         info = support("matmul")
@@ -147,6 +156,20 @@ class TestIsNativeSupported:
             assert is_native_supported("cross_ratio", target=target) is False, target
 
 
+class TestIsCompilerSupported:
+    def test_artifact_only_backend_counts_as_compiler_supported(self) -> None:
+        assert tier("matmul", target="nvidia_sm90") is Tier.ARTIFACT_ONLY
+        assert is_compiler_supported("matmul", target="nvidia_sm90") is True
+        assert is_native_supported("matmul", target="nvidia_sm90") is False
+
+    def test_alias_target_counts_as_compiler_supported(self) -> None:
+        assert is_compiler_supported("matmul", target="apple") is True
+
+    def test_unknown_target_raises(self) -> None:
+        with pytest.raises(KeyError):
+            is_compiler_supported("matmul", target="not_a_real_target")
+
+
 class TestNoParallelRegistryDrift:
     """The whole point of this module is to be a *derived* surface
     over the audit table.  This test asserts the derivation is
@@ -177,3 +200,4 @@ class TestNoParallelRegistryDrift:
         apple_gpu_row = info.for_target("apple_gpu")
         # Per audit + backend_manifest._COMPLEX_APPLE_GPU_FUSED
         assert apple_gpu_row.target_ir == "fused"
+        assert apple_gpu_row.runtime == "fused"

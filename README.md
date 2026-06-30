@@ -379,10 +379,10 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Daily edit-loop sanity check (~9,560 fast tests, < 512 MB RAM)
+# Daily edit-loop sanity check (~13,088 fast tests, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
-# Full Python suite including heavy benchmarks (~10,340 collected)
+# Full Python suite including heavy benchmarks (~13,866 collected)
 pytest tests/unit/ -q
 
 # GA + EBM native Apple GPU health check; skip-recording on non-Darwin

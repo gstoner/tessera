@@ -14,7 +14,7 @@ per-op proof.  This module surfaces the actual numbers:
   * "Thinly-tested" op set — ops with ``tests=complete`` but zero
     or one reference across the whole test surface.
 
-The dashboard at ``docs/audit/generated/test_coverage_by_op.md``
+The by-op section in ``docs/audit/generated/test_coverage.md``
 surfaces:
 
   * Headline counts (ops with 0 refs, 1 ref, ≥2 refs, ≥10 refs).
@@ -23,7 +23,8 @@ surfaces:
   * Per-op-family rollups so structural ops (transpose, reshape,
     cast, pack, unpack) aren't lumped with compute ops.
 
-Drift gates at ``tests/unit/test_test_coverage_audit.py``:
+Drift gates at ``tests/unit/test_test_coverage_audit.py`` and the
+fleet-wide generated-doc registry:
 
   * Total reference count floor (catches a regression where a
     sweep accidentally deletes tests).
@@ -31,6 +32,8 @@ Drift gates at ``tests/unit/test_test_coverage_audit.py``:
     flash_attn, softmax) so a major rewrite doesn't silently
     drop their coverage.
   * Dashboard ↔ live data sync.
+  * Canonical generated artifact drift via
+    ``tests/unit/test_generated_docs_registry.py``.
 
 Honest scope note: this audit measures **reference counts**, not
 **numerical coverage quality**.  A single test that exercises ``matmul``
@@ -512,11 +515,9 @@ def render_dashboard() -> str:
         "Generated from "
         "`python/tessera/compiler/test_coverage_audit.py`.  "
         "Don't edit by hand — regenerate via "
-        "`python -c \"from tessera.compiler.test_coverage_audit "
-        "import render_dashboard; "
-        "open('docs/audit/generated/test_coverage_by_op.md', 'w')"
-        ".write(render_dashboard())\"`.  "
-        "Drift gated by `tests/unit/test_test_coverage_audit.py`."
+        "`python -m tessera.compiler.generated_docs --write test_coverage`.  "
+        "Drift gated by `tests/unit/test_generated_docs_registry.py` "
+        "and `tests/unit/test_test_coverage_audit.py`."
     )
     lines.append("")
     lines.append(
@@ -606,9 +607,12 @@ def render_dashboard() -> str:
 
 
 def write_dashboard(path: Path | None = None) -> Path:
-    target = path or (
-        _REPO_ROOT / "docs" / "audit" / "generated" / "test_coverage_by_op.md"
-    )
+    if path is None:
+        from . import generated_docs as gd
+
+        gd.write(gd.get("test_coverage"))
+        return gd.get("test_coverage").md_path
+    target = path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_dashboard())
     return target

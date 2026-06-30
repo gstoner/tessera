@@ -1,6 +1,6 @@
 # Test Coverage by Op Family
 
-Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by hand — regenerate via `python -c "from tessera.compiler.test_coverage_audit import render_dashboard; open('docs/audit/generated/test_coverage_by_op.md', 'w').write(render_dashboard())"`.  Drift gated by `tests/unit/test_test_coverage_audit.py`.
+Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by hand — regenerate via `python -m tessera.compiler.generated_docs --write test_coverage`.  Drift gated by `tests/unit/test_generated_docs_registry.py` and `tests/unit/test_test_coverage_audit.py`.
 
 **Honest scope note:** this audit measures *reference counts*, not numerical coverage quality.  A single test that exercises an op across 5 shapes × 3 dtypes counts as one reference but covers more ground than 5 happy-path tests.  Use the thin-coverage list as a starting point for triage, not a hard verdict.
 
@@ -111,9 +111,9 @@ _(75 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for 
 
 ## Test Coverage Classification — Thinly-Tested Ops
 
-Generated from `python/tessera/compiler/coverage_classification.py`.  Don't edit by hand — regenerate via `python -c "from tessera.compiler.coverage_classification import write_dashboard; write_dashboard()"`.  Drift gated by `tests/unit/test_coverage_classification.py`.
+Generated from `python/tessera/compiler/coverage_classification.py`.  Don't edit by hand — regenerate via `python -m tessera.compiler.generated_docs --write test_coverage`.  Drift gated by `tests/unit/test_generated_docs_registry.py` and `tests/unit/test_coverage_classification.py`.
 
-Companion to `test_coverage_by_op.md`.  That dashboard says **which** ops are thinly tested; this one says **why** and **what to do about it**.
+Companion section to the by-op coverage table above: that section says **which** ops are thinly tested; this one says **why** and **what to do about it**.
 
 ## Headline
 

@@ -9,8 +9,11 @@ them to learn the audit table's row shape):
     + per-target breakdown.
   * :func:`tier(op_name, target=None)` → :class:`Tier` rollup —
     "is this op ready?" answered as one enum value.
+  * :func:`is_compiler_supported(op_name, target=...)` → ``bool``
+    convenience predicate for "does this target have at least a
+    compiler artifact / reference path?".
   * :func:`is_native_supported(op_name, target=...)` → ``bool``
-    convenience predicate.
+    convenience predicate for native execution readiness.
 
 Design notes
 ------------
@@ -50,6 +53,7 @@ Examples
 
     compiler.tier("matmul")                # Tier.NATIVE_READY
     compiler.tier("matmul", target="apple_gpu")  # Tier.NATIVE_READY
+    compiler.is_compiler_supported("matmul", target="nvidia_sm90")  # True
     compiler.is_native_supported("matmul", target="apple_gpu")  # True
     compiler.is_native_supported("complex_log", target="apple_gpu")  # False
 """
@@ -161,7 +165,13 @@ class OpSupport:
         """Return the row for one target.  Raises :class:`KeyError`
         for unknown targets."""
 
-        target = _cap.normalize_target(target) if target in _cap.TARGET_CAPABILITIES else target
+        try:
+            target = _cap.normalize_target(target)
+        except (TypeError, ValueError) as exc:
+            raise KeyError(
+                f"no support entry for op={self.op_name!r} on target={target!r}; "
+                f"known targets: {tuple(ts.target for ts in self.targets)!r}"
+            ) from exc
         for ts in self.targets:
             if ts.target == target:
                 return ts
@@ -259,6 +269,15 @@ def _per_target_rows(op_name: str) -> tuple[TargetSupport, ...]:
     # Honor M7 alias map — ``mobius`` / ``stereographic`` look up the
     # ``complex_*`` entries in the backend manifest.
     backend_name = _audit._backend_lookup_name(op_name)
+    spec = _audit.OP_SPECS.get(op_name)
+    graph_name = spec.graph_name if spec is not None else f"tessera.{op_name}"
+    runtime_lookup_names = tuple(dict.fromkeys((
+        graph_name,
+        f"tessera.{op_name}",
+        op_name,
+        f"tessera.{backend_name}",
+        backend_name,
+    )))
 
     # Collect every target the manifest knows about for this op.
     manifest_entries = _bm.manifest_for(backend_name)
@@ -270,9 +289,13 @@ def _per_target_rows(op_name: str) -> tuple[TargetSupport, ...]:
         # Pull the per-target runtime claim from the capability registry.
         # Mirrors _axis_runtime in audit.py but resolves per-target
         # rather than picking the best across targets.
-        op_caps = (
-            target_cap.supported_ops.get(f"tessera.{op_name}")
-            or target_cap.supported_ops.get(op_name)
+        op_caps = next(
+            (
+                target_cap.supported_ops[name]
+                for name in runtime_lookup_names
+                if name in target_cap.supported_ops
+            ),
+            None,
         )
         if op_caps is not None:
             runtime = op_caps.runtime_status
@@ -347,6 +370,22 @@ def is_native_supported(op_name: str, *, target: str) -> bool:
     return tier(op_name, target=target) is Tier.NATIVE_READY
 
 
+def is_compiler_supported(
+    op_name: str,
+    *,
+    target: str,
+    min_tier: Tier = Tier.ARTIFACT_ONLY,
+) -> bool:
+    """True iff ``target`` has at least ``min_tier`` support for ``op_name``.
+
+    This deliberately answers a different question than
+    :func:`is_native_supported`: artifact-only backends should show up as
+    compiler-supported even when execution is hardware-gated.
+    """
+
+    return tier(op_name, target=target).is_at_least(min_tier)
+
+
 def known_targets() -> tuple[str, ...]:
     """The set of targets the query API knows about.
 
@@ -361,6 +400,7 @@ __all__ = [
     "OpSupport",
     "TargetSupport",
     "Tier",
+    "is_compiler_supported",
     "is_native_supported",
     "known_targets",
     "support",

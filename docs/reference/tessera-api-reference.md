@@ -136,10 +136,13 @@ info.for_target("cpu").tier                   # Tier.REFERENCE_ONLY
 
 ts.compiler.tier("matmul")               # best-tier rollup
 ts.compiler.tier("matmul", target="apple_gpu")  # per-target
+ts.compiler.is_compiler_supported("matmul", target="nvidia_sm90")  # True
 ts.compiler.is_native_supported("matmul", target="apple_gpu")  # True
 ```
 
 Tier values: `NATIVE_READY` / `REFERENCE_ONLY` / `ARTIFACT_ONLY` / `PLANNED`.
+Use `is_compiler_supported` for artifact/reference/native compiler support;
+use `is_native_supported` only for native execution readiness.
 
 ## Region Privileges
 

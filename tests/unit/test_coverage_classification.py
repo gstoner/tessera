@@ -1,6 +1,6 @@
 """Audit-D-2 (2026-05-22) — drift gate for the thin-op classification.
 
-The audit at ``test_coverage_by_op.md`` flagged 207 ops with ≤1 direct
+The by-op section in ``test_coverage.md`` flags ops with ≤1 direct
 test reference.  The classifier at
 ``python/tessera/compiler/coverage_classification.py`` sorts them into
 five buckets: ``covered_by_family``, ``structural_only``,
@@ -16,8 +16,8 @@ This gate pins the per-bucket counts so we notice when:
     samplers (a real Phase G/H device test ought to flip them
     *out* of the bucket, not add new ones).
 
-Also drift-gates the on-disk dashboard at
-``docs/audit/generated/test_coverage_classification.md``.
+Also guards the classification section in
+``docs/audit/generated/test_coverage.md``.
 """
 
 from __future__ import annotations

@@ -17,9 +17,9 @@ The reuse story is identical to the four sibling surface manifests:
 * The audit walker re-runs every ``runnable`` row in CI via
   ``surface_audit --surface=tests --check``; ``scaffold`` / ``broken``
   / ``archived`` rows are NOT executed and must carry a ``reason``.
-* The drift gate at ``tests/unit/test_tests_manifest.py`` re-renders
-  ``docs/audit/generated/tests_status.md`` and fails CI if it
-  diverges.
+* The drift gate at ``tests/unit/test_surface_audit.py`` checks the
+  consolidated ``docs/audit/generated/surface_status.csv`` artifact,
+  which includes the tests surface.
 
 Apple plan + test-tree review (2026-05-20).
 """
@@ -51,8 +51,8 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "--collect-only --no-header"
         ),
         notes=(
-            "Daily edit-loop Python suite.  Collected today: ~4,748 "
-            "fast tests, 777 slow-marked deselected, 5,525 total.  "
+            "Daily edit-loop Python suite.  Collected today: 13,088 "
+            "fast tests, 778 slow-marked deselected, 13,866 total.  "
             "Smoke = collect-only so the manifest check stays under "
             "a second; the real exec runs via "
             "``scripts/validate.sh`` and ``release_gate.py``."
@@ -68,7 +68,7 @@ _ENTRIES: tuple[SurfaceEntry, ...] = (
             "--collect-only --no-header"
         ),
         notes=(
-            "The ``-m slow`` partition — 777 tests dominated by "
+            "The ``-m slow`` partition — 778 tests dominated by "
             "``test_benchmark_gemm.py``, ``test_benchmark_compiler_contract.py``, "
             "``test_operator_benchmarks_contract.py``.  Status is "
             "``compile_only`` because the audit runs the collect-only "
@@ -259,8 +259,9 @@ _SURFACE_INTRO = (
     "--check`` — runs every ``runnable`` smoke + every "
     "``compile_only`` collect-only smoke; ``scaffold`` / ``broken`` "
     "/ ``archived`` rows are not executed.\n"
-    "* ``tests/unit/test_tests_manifest.py`` — drift gate that "
-    "fails CI when the on-disk doc diverges from the renderer."
+    "* ``tests/unit/test_surface_audit.py`` — drift gate that "
+    "fails CI when the consolidated surface-status artifact diverges "
+    "from the renderer."
 )
 
 

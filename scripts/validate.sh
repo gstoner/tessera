@@ -99,7 +99,8 @@ fi
 echo "==> Public-doc claim_lint"
 "$PYTHON" -m tessera.compiler.audit claim_lint
 
-# Four-surface audit (Option A → Phase B follow-up, 2026-05-19).
+# Five-surface audit (Option A → Phase B follow-up, 2026-05-19;
+# tests surface added 2026-05-20).
 # Each surface declares its entry points in a per-surface manifest:
 #   * python/tessera/compiler/examples_manifest.py
 #   * python/tessera/compiler/benchmarks_manifest.py

@@ -357,15 +357,15 @@ def render_classification_dashboard() -> str:
         "Generated from "
         "`python/tessera/compiler/coverage_classification.py`.  "
         "Don't edit by hand — regenerate via "
-        "`python -c \"from tessera.compiler.coverage_classification "
-        "import write_dashboard; write_dashboard()\"`.  "
-        "Drift gated by `tests/unit/test_coverage_classification.py`."
+        "`python -m tessera.compiler.generated_docs --write test_coverage`.  "
+        "Drift gated by `tests/unit/test_generated_docs_registry.py` "
+        "and `tests/unit/test_coverage_classification.py`."
     )
     lines.append("")
     lines.append(
-        "Companion to `test_coverage_by_op.md`.  That dashboard says "
-        "**which** ops are thinly tested; this one says **why** and "
-        "**what to do about it**."
+        "Companion section to the by-op coverage table above: that "
+        "section says **which** ops are thinly tested; this one says "
+        "**why** and **what to do about it**."
     )
     lines.append("")
 
@@ -487,10 +487,12 @@ def render_classification_dashboard() -> str:
 
 
 def write_dashboard(path: Path | None = None) -> Path:
-    target = path or (
-        _REPO_ROOT / "docs" / "audit" / "generated"
-        / "test_coverage_classification.md"
-    )
+    if path is None:
+        from . import generated_docs as gd
+
+        gd.write(gd.get("test_coverage"))
+        return gd.get("test_coverage").md_path
+    target = path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_classification_dashboard())
     return target

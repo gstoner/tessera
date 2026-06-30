@@ -145,7 +145,7 @@ jobs:
           PYTHONPATH: python
         run: python -m tessera.compiler.audit claim_lint
 
-      # Four-surface audit (examples / benchmarks / research / tools).
+      # Five-surface audit (examples / benchmarks / research / tools / tests).
       # Each surface declares its entry points in
       # python/tessera/compiler/<surface>_manifest.py.  Drift gates on
       # the generated dashboards live in tests/unit/test_surface_audit.py
@@ -170,6 +170,11 @@ jobs:
         env:
           PYTHONPATH: python
         run: python -m tessera.cli.surface_audit --surface=tools --check
+
+      - name: Surface audit (tests)
+        env:
+          PYTHONPATH: python
+        run: python -m tessera.cli.surface_audit --surface=tests --check
 
       - name: Surface README claim_lint (all surfaces)
         env:

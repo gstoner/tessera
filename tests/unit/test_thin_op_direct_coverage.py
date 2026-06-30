@@ -8,7 +8,7 @@ catching the case where a primitive silently breaks at the
 ``tessera.X(...)`` call boundary.
 
 Once a row passes here it gets pulled out of the "thinly tested"
-bucket in ``test_coverage_by_op.md`` on the next audit regeneration.
+bucket in ``test_coverage.md`` on the next audit regeneration.
 
 Honest scope note (carries over from the audit): a single happy-path
 test does not prove an op is numerically correct across all shapes/

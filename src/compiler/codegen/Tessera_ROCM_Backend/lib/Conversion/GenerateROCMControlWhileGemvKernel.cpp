@@ -121,19 +121,34 @@ static bool validateWhileGemv(Operation *op, SymbolTable &symTab, int64_t &K,
     if (!ret || ret.getNumOperands() != 1 || ret.getOperand(0) != it->getResult(0))
       return false;
   }
-  // cond @c: (h) -> reduce(h){kind="sum"} ; return.
+  // cond @c: (h) -> reduce(h){kind="sum", axis=1} ; return. The kernel computes
+  // Σ_k lds[k] — the WHOLE-carry sum (reduce over the K dim of the 1×K carry,
+  // yielding a SINGLE element). Require exactly that: axis must be 1 and the
+  // reduce result a single element, so a reduce over the other axis (axis=0 →
+  // 1×K, K predicate elements) or any multi-element reduce — whose per-element
+  // stopping would silently disagree with the kernel's total-sum loop — is left
+  // for the guard / SCF instead of being lowered to the wrong cond.
+  auto singleElemF32 = [](Type t) {
+    auto r = dyn_cast<RankedTensorType>(t);
+    return r && r.getElementType().isF32() && r.hasStaticShape() &&
+           r.getNumElements() == 1;
+  };
   FunctionType cf = condF.getFunctionType();
-  if (cf.getNumInputs() != 1 || cf.getNumResults() != 1 || !is1xK(cf.getInput(0), K))
+  if (cf.getNumInputs() != 1 || cf.getNumResults() != 1 ||
+      !is1xK(cf.getInput(0), K) || !singleElemF32(cf.getResult(0)))
     return false;
   {
     Block &blk = condF.getBody().front();
     auto it = blk.begin();
     if (it == blk.end() || it->getName().getStringRef() != "tessera.reduce" ||
         it->getNumOperands() != 1 || it->getOperand(0) != blk.getArgument(0) ||
-        it->getNumResults() != 1)
+        it->getNumResults() != 1 || !singleElemF32(it->getResult(0).getType()))
       return false;
     auto kind = it->getAttrOfType<StringAttr>("kind");
     if (!kind || kind.getValue() != "sum")
+      return false;
+    auto axis = it->getAttrOfType<IntegerAttr>("axis");
+    if (!axis || axis.getInt() != 1)  // must reduce the K dim → whole-carry sum
       return false;
     auto ret = dyn_cast<func::ReturnOp>(std::next(it));
     if (!ret || ret.getNumOperands() != 1 || ret.getOperand(0) != it->getResult(0))

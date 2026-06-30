@@ -335,26 +335,29 @@ claim.
   `tests/unit/test_rocm_control_scan_rnn_exec.py` (carry + stacked ys bit-exact vs
   the numpy `tanh(h@W + x@U + b)` recurrence). This is a real recurrent cell —
   RNN/GRU hidden-state evolution — running as one device dispatch.
-- **Cross-element `control_while` (power iteration) — deferred, by design.** A
-  matmul-body while (`h = h @ W` until convergence — power iteration / fixed-point
-  solvers) does NOT fit `control_while`'s current model, for two structural
-  reasons, so it is deferred rather than shipped contrived (cf. the CF4d-5
-  grid.sync deferral):
-  1. **Continuation semantics.** `control_while`'s `cond` is `(carry) -> pred`
-     evaluated **per element**, with per-element freezing once the predicate goes
-     false (CF4c-cont / CF2c). A cross-element body couples every element each step
-     (`h @ W` mixes all of `h`), so it needs **uniform** continuation — all
-     elements stop together on a workgroup-wide *reduction* of the carry
-     (`Σ h > eps`, `‖h‖ < eps`), not a per-element predicate. That is a different
-     while semantics than the op encodes; bolting it on needs a new
-     attribute/marker or a new op.
-  2. **Capture threading.** The matmul body needs the `W` capture, but CF2's
-     `lowerControlWhile` passes only the carry to `@body`/`@cond` (CF4c-cont
-     requires *no* captures) — so the capture plumbing the scan path gained in
-     CF4e-2 does not exist on the while path.
-  Both are real op-model extensions, and power iteration is weakly motivated
-  versus the recurrent cells already covered (CF4d-1..4, CF4e-1..3). Revisit when
-  a workload demands a data-dependent cross-element loop bound.
+- **CF4f** *(cross-element `control_while` done, ROCm/gfx1151)* — power iteration /
+  fixed-point: `h = h @ W` **while `Σh > eps`**, bounded by `max_iters`, over a 1×K
+  carry and a K×K capture `W`. Both the body (a GEMV) and the continuation cond
+  (`Σh`) are reductions over the whole carry, so this is not the per-thread
+  elementwise `control_while` (CF4c-cont). `GenerateROCMControlWhileGemvKernel`
+  (`--generate-rocm-control-while-gemv-kernel`) generates the kernel **directly**
+  (not via CF2's SCF lowering), which dissolves the two reasons this was initially
+  deferred:
+  1. **Uniform continuation.** A matmul body couples every element each step, so
+     the loop can't freeze elements independently. The kernel makes the carry live
+     in LDS and has **every thread compute the same `Σ_k lds[k]` reduction and the
+     same predicate** (`i < max ∧ Σ > eps`) — so the whole workgroup loops the same
+     number of times. That uniformity is exactly what makes the per-iteration
+     `gpu.barrier`s safe (a divergent per-element cond would deadlock the barrier).
+  2. **Capture threading.** The pass reads the `control_while` op directly and
+     wires `W` as a kernel arg (like CF4d-1), so the `W` capture the elementwise
+     while-path lacks is threaded here.
+  `cond` is `reduce(h){kind="sum"}`; `eps` rides the discardable
+  `tessera.while_cond_eps` attr (no change to the shared `control_while` ODS).
+  Proven on gfx1151 by `tests/unit/test_rocm_control_while_gemv_exec.py` —
+  bit-exact for BOTH an early stop (`Σh` drops below `eps` before `max_iters`) and
+  a run to `max_iters`. The cross-element control-flow track now has no remaining
+  deferrals.
 - **CF3 / cross-element** — `control_while` payload decode (CF4a-cont-2),
   cross-element bodies (matmul/norm), and the CUDA mirror; retire the CF0 guard
   lane by lane.

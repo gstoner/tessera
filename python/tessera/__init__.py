@@ -4379,12 +4379,42 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # test_operator_registry_foundation consistent with its OP_SPECS entry).
     references["varlen_sdpa"] = varlen_sdpa
 
+    def spec_accept(draft, target):
+        """SD1 greedy speculative-decode acceptance (Graph IR op
+        ``tessera.spec_accept``). ``draft`` is P×D and ``target`` is P×(D+1)
+        integer token ids; returns ``[accepted_path_idx, accepted_prefix_length,
+        bonus_token]`` (i32) — the longest-accepted-prefix path (first wins ties),
+        the run-length of leading ``draft[p,i] == target[p,i]`` matches, and the
+        bonus ``target[path, length]``. Mirrors the ``tessera.speculative`` greedy
+        reference (``_ref_spec_accept`` / ``dflash_linear_verify``)."""
+        import numpy as _np
+        d = _np.asarray(draft)
+        t = _np.asarray(target)
+        P, depth = d.shape
+        bp, bl, bb = 0, -1, 0
+        for p in range(P):
+            length = 0
+            for i in range(depth):
+                if int(d[p, i]) == int(t[p, i]):
+                    length += 1
+                else:
+                    break
+            if length > bl:
+                bl, bp = length, p
+                bb = int(t[p, length])
+        return _np.array([bp, bl, bb], dtype=_np.int32)
+
+    # Register spec_accept so it appears in tessera.ops.registry.list() and is
+    # dispatchable (keeps the OP_SPECS ↔ registry invariant; SD1).
+    references["spec_accept"] = spec_accept
+
     for op_name, fn in references.items():
         _register_reference(op_name, fn, backend="numpy")
         _register_lowering(op_name, lambda *args, _op=op_name, **kwargs: {"op": _op, "status": "artifact_only"}, backend="graph_ir")
 
     _ns = types.SimpleNamespace(
         varlen_sdpa=varlen_sdpa,
+        spec_accept=spec_accept,
         paged_attention=paged_attention,
         clifford_geometric_product=_clifford_ops_mod.clifford_geometric_product,
         clifford_wedge=_clifford_ops_mod.clifford_wedge,

@@ -69,6 +69,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlScanRnnKernelPass();
 // CF4f — cross-element control_while (power iteration h=h@W while Sum h>eps;
 // GEMV body + W capture + uniform reduction cond) → cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlWhileGemvKernelPass();
+// SD1 — tessera.spec_accept (greedy longest-prefix path + bonus) →
+// cooperative-workgroup kernel.
+std::unique_ptr<mlir::Pass> createGenerateROCMSpecAcceptKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMBinaryKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCompareKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLogicalKernelPass();

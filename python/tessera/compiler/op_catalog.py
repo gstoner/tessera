@@ -189,6 +189,10 @@ _SPECS = [
     OpSpec("kv_cache_append", "tessera.kv_cache.append", 3, 3, effect="state", lowering="state_update"),
     OpSpec("kv_cache_prune", "tessera.kv_cache.prune", 1, 1, effect="state", lowering="state_update"),
     OpSpec("kv_cache_read", "tessera.kv_cache.read", 2, 2, effect="state", lowering="state_update"),
+    # SD1 — speculative-decode acceptance. spec_accept is a pure verifier
+    # (draft/target → [path, length, bonus]); the cache commit/rollback live on
+    # the state-effecting kv/ssm handles.
+    OpSpec("spec_accept", "tessera.spec_accept", 2, 2, lowering="acceptance_verification"),
     # Theme 10 — fp8 quantize/dequantize ops. Per-tensor symmetric.
     OpSpec("quantize_fp8", "tessera.quantize_fp8", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp8", "tessera.dequantize_fp8", 2, 2, lowering="quantize"),

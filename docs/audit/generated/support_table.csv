@@ -1,4 +1,5 @@
 op,family,api,frontend,graph_ir,schedule_ir,tile_ir,target_ir,runtime,bench
+spec_accept,acceptance_verification,public,public,registered,complete,partial,reference,ready,none
 attn_compressed_blocks,attention,public,public,registered,complete,partial,reference,ready,none
 attn_local_window_2d,attention,public,public,registered,complete,partial,reference,ready,none
 attn_sliding_window,attention,public,public,registered,complete,partial,fused,ready,none

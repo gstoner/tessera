@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-28
+last_updated: 2026-06-30
 audit_role: plan
 plan_state: open
 ---
@@ -225,6 +225,27 @@ Acceptance:
 - Existing `tessera.speculative` tests become the reference oracle.
 - CUDA and ROCm each provide one native `spec_accept` proof.
 - Gumiho serial draft can execute as one backend loop once CF3/CF4 are present.
+
+### Status
+
+- **SD1-1 (spec_accept standalone op + ROCm proof) — done, ROCm/gfx1151.**
+  `spec_accept` is now a first-class Graph IR op (`Tessera_SpecAcceptOp`, `[Pure]`,
+  ODS + verifier): `draft P×D i32`, `target P×(D+1) i32` →
+  `tensor<3xi32> [accepted_path_idx, accepted_prefix_length, bonus_token]`. The
+  **greedy** (argmax-match) longest-prefix form is the small standalone op the
+  plan asks for first; `GenerateROCMSpecAcceptKernel`
+  (`--generate-rocm-spec-accept-kernel`) lowers it to one cooperative-workgroup
+  `gpu.func` (thread/path match-length into LDS, barrier, thread-0 argmax + bonus)
+  and executes bit-exact on gfx1151 vs the `tessera.speculative` greedy reference
+  (`_ref_spec_accept`), proven by `tests/unit/test_rocm_spec_accept_exec.py`
+  (`op_catalog` + the auto-generated coverage row updated per Decision #24). The
+  CUDA native `spec_accept` proof stays artifact-only here (no NVIDIA HW); the
+  distribution-preserving **Leviathan / rejection-sampling** form (per-token
+  `min(1, p_t/p_q)` acceptance + residual bonus, with RNG) is **SD1-2**.
+- **SD1-2+ (open):** Leviathan rejection-sampling `spec_accept`;
+  `cache_commit`/`cache_rollback` typed effects over the KV/SSM handles;
+  `target_verify` I/O contract; the Gumiho serial-draft backend loop (now
+  unblocked — the CF3/CF4 control-flow substrate landed, #224–#246).
 
 ## DS1 - DSpark Library Contract
 

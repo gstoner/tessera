@@ -5,7 +5,7 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**182/474 primitives are accelerator-proven on Apple GPU today.** Of the 320 accelerator-relevant primitives (proven + eligible + special), **126 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**182/475 primitives are accelerator-proven on Apple GPU today.** Of the 320 accelerator-relevant primitives (proven + eligible + special), **126 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
@@ -15,12 +15,13 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `eligible` | 126 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
-| `host` | 144 | structural / orchestration / shape — accelerator not-applicable |
+| `host` | 145 | structural / orchestration / shape — accelerator not-applicable |
 
 ## By category
 
 | Category | n | proven | eligible | class |
 |----------|--:|-------:|---------:|-------|
+| `acceptance_verification` | 1 | 0 | 0 | `host` |
 | `aot` | 6 | 0 | 0 | `host` |
 | `attention` | 28 | 23 | 5 | `eligible` |
 | `collective` | 10 | 0 | 0 | `multi_device` |

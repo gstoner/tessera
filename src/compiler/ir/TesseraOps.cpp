@@ -3010,6 +3010,36 @@ LogicalResult ControlScanOp::verify() {
   return verifyControlPayload(getOperation(), "body");
 }
 
+LogicalResult SpecAcceptOp::verify() {
+  auto draftT = dyn_cast<RankedTensorType>(getDraft().getType());
+  auto targetT = dyn_cast<RankedTensorType>(getTarget().getType());
+  auto resT = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!draftT || !targetT || !resT)
+    return emitOpError("draft, target, and result must be ranked tensors");
+  if (draftT.getRank() != 2 || targetT.getRank() != 2)
+    return emitOpError("draft and target must be rank-2 (num_paths x depth)");
+  if (!draftT.getElementType().isInteger(32) ||
+      !targetT.getElementType().isInteger(32) ||
+      !resT.getElementType().isInteger(32))
+    return emitOpError("draft, target, and result must be i32 (token ids)");
+  // draft is P x D ; target is P x (D+1) (one extra bonus column).
+  int64_t P = draftT.getDimSize(0), D = draftT.getDimSize(1);
+  if (P <= 0 || D <= 0)
+    return emitOpError("num_paths and depth must be positive");
+  if (targetT.getDimSize(0) != P)
+    return emitOpError("draft and target must have the same num_paths (")
+           << P << "), got target " << targetT.getDimSize(0);
+  if (targetT.getDimSize(1) != D + 1)
+    return emitOpError("target depth must be draft depth + 1 (the bonus column): "
+                       "expected ")
+           << (D + 1) << ", got " << targetT.getDimSize(1);
+  // result packs [path_idx, prefix_length, bonus_token].
+  if (resT.getRank() != 1 || resT.getDimSize(0) != 3)
+    return emitOpError("result must be tensor<3xi32> "
+                       "([path_idx, prefix_length, bonus_token])");
+  return success();
+}
+
 // ── MoR (mixture-of-recursions) ──────────────────────────────────────────────
 LogicalResult MorRouterOp::verify() {
   return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());

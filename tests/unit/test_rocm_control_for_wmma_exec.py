@@ -100,19 +100,23 @@ def _compile_to_hsaco(it: int) -> bytes:
 def _launch(hip, hsaco, carry, W):
     n2 = N * N
     nb = n2 * 2  # f16
+    # Discovery gate: hipInit / hipModuleLoadData failing means no usable AMD GPU
+    # here → return None so the caller skips. PAST a successful module load the
+    # device works, so symbol lookup / alloc / launch / sync failures are REAL
+    # failures of this generated kernel and must fail the test, not be laundered
+    # into a skip.
     if hip.hipInit(0) != 0:
         return None
     mod = ctypes.c_void_p()
     if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
         return None
     fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(
-            ctypes.byref(fn), mod, b"tessera_control_for_wmma_0") != 0:
-        return None
+    assert hip.hipModuleGetFunction(
+        ctypes.byref(fn), mod, b"tessera_control_for_wmma_0") == 0, \
+        "kernel symbol tessera_control_for_wmma_0 not found in module"
     dc, dw, do = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
     for d in (dc, dw, do):
-        if hip.hipMalloc(ctypes.byref(d), nb) != 0:
-            return None
+        assert hip.hipMalloc(ctypes.byref(d), nb) == 0, "hipMalloc failed"
     hip.hipMemcpy(dc, carry.ctypes.data_as(ctypes.c_void_p), nb, 1)
     hip.hipMemcpy(dw, W.ctypes.data_as(ctypes.c_void_p), nb, 1)
 
@@ -128,10 +132,12 @@ def _launch(hip, hsaco, carry, W):
     launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
                        + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
                           ctypes.c_void_p])
-    if launch(fn, 1, 1, 1, WAVE, 1, 1, 0, None, arr, None) != 0:  # one wave
-        return None
-    if hip.hipDeviceSynchronize() != 0:
-        return None
+    rc = launch(fn, 1, 1, 1, WAVE, 1, 1, 0, None, arr, None)  # one wave
+    assert rc == 0, (
+        f"hipModuleLaunchKernel failed (rc={rc}) — kernel failed to launch on a "
+        "working GPU")
+    rc = hip.hipDeviceSynchronize()
+    assert rc == 0, f"hipDeviceSynchronize failed (rc={rc}) — kernel crashed"
     out = np.zeros(n2, dtype=np.float16)
     hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), do, nb, 2)
     for d in (dc, dw, do):
@@ -152,7 +158,8 @@ def test_control_for_wmma_executes_on_gfx1151(it):
     W = (rng.standard_normal((N, N)) / np.sqrt(N)).astype(np.float16)
     out = _launch(hip, _compile_to_hsaco(it), carry, W)
     if out is None:
-        pytest.skip("no usable AMD GPU (hipModuleLoadData / launch unavailable)")
+        # Only pre-launch discovery failed; a launch/sync failure raises.
+        pytest.skip("no usable AMD GPU (hipInit / hipModuleLoadData failed)")
     # Mirror the kernel: f32-accumulate matmul, carry cast back to f16 each step.
     ref = carry.copy()
     for _ in range(it):

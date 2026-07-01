@@ -409,8 +409,10 @@ the **kernel** approach (if any), **dependencies**, **validation**, and the hone
 
 **The gap is ONLY real-hardware execution.** A `fused`/`hardware_verified`
 `backend_kernel` requires a **real multi-accelerator mesh** (≥2 GPUs + NCCL/RCCL,
-or multi-node) — absent on this single-gfx1151 box. RCCL on a 1-GPU host degrades
-to a local copy and proves nothing.
+or multi-node). The current gfx1151 machine is real ROCm hardware and proves the
+single-GPU Navi/Wave32 lane; it does not prove multi-accelerator collectives.
+RCCL on a 1-GPU host degrades to a local copy and proves nothing about mesh
+transport.
 
 **Foundation work (doable now, no extra HW):**
 - Keep the contract honest: `backend_kernel = partial` (single-rank reference +

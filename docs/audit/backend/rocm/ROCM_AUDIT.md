@@ -542,12 +542,16 @@ become the on-silicon **oracle** the compiled path validates against.
     recurrent DeltaNet family now have ROCm compiled rows. The remaining DK2
     work is performance promotion: cooperative tiled sparse flash attention and
     larger GPU-resident top-k selection, not dashboard classification.
-- **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
-  table + FP4/FP6; no device available. The named ROCm sub-arches
-  (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic
-  `rocm` lane covers execution via HIPRTC for the live device, and gfx1151 (the
-  box's own arch) is listed there too so the classification is total (no silent
-  `lookup() -> None`).
+- **Named-arch verification stays on the Navi / Wave32 ladder first, not CDNA.**
+  The current live proof point is real gfx1151 hardware (RDNA 3.5 / Navi-class
+  Wave32 WMMA). The next ROCm arch-promotion order is gfx1150/1151 coverage,
+  then gfx1200, then gfx1250/1251 so feature gates stay in the same Wave32
+  family before any CDNA MFMA detour. CDNA (MI300X / MI325X) remains supported
+  in the target tables as a distinct MFMA/FP4/FP6 family, but it is no longer the
+  gate for calling the ROCm lane complete on the hardware we actually have.
+  Newer-feature validation is gated only on those newer Navi devices appearing:
+  gfx115x has WMMA f16/bf16/iu8/iu4 and intentionally lacks the RDNA4+/gfx125x
+  FP8/BF8 and expanded WMMA forms.
 - **flash_attn KV-tile pipelining — parked (measured low-value).** The FA
   kernels are occupancy/LDS-bound, not staging-bound, so double-buffered KV
   staging is unlikely to pay on this APU; the runnable `async_copy` that would

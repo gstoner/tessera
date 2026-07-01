@@ -103,7 +103,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_refinement` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
-| `adafactor` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
+| `adafactor` | functional_optimizer_step | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `adam` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
 | `adamw` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
 | `lion` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
@@ -137,14 +137,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `memory_index_select` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `memory_index_select_ste` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `msa_select_blocks` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `nonzero` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `nonzero` | indexing | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `scatter` | indexing | public | public | registered | complete | fused | compiled | ready | none |
 | `scatter_add` | indexing | public | public | registered | complete | fused | compiled | ready | none |
 | `scatter_reduce` | indexing | public | public | registered | complete | fused | compiled | ready | none |
 | `select` | indexing | public | public | registered | complete | fused | compiled | ready | none |
 | `slice` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `take` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `arange` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `arange` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `broadcast` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `cast` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `cat` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
@@ -153,9 +153,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `flatten` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `flip` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
-| `mor_partition` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `mor_router` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `mor_scatter` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `mor_partition` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `mor_router` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `mor_scatter` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `pack` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `pad` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `permute` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
@@ -278,7 +278,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `normalize_group_advantages` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
 | `ppo_policy_loss` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
 | `rope` | rotary_embedding | public | public | registered | complete | fused | hardware_verified | ready | none |
-| `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
+| `segment_reduce` | segment_reduce | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `argsort` | sort | public | public | registered | complete | fused | compiled | ready | none |
 | `sort` | sort | public | public | registered | complete | fused | compiled | ready | none |
 | `top_k` | sort | public | public | registered | complete | fused | compiled | ready | none |
@@ -303,14 +303,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `softmax_safe` | stable_reduction | public | public | registered | complete | fused | hardware_verified | ready | none |
 | `sum` | stable_reduction | public | public | registered | complete | fused | compiled | ready | benchmarked |
 | `selective_ssm` | state_space | public | public | registered | complete | fused | compiled | ready | none |
-| `cache_commit` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `cache_rollback` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
+| `cache_commit` | state_update | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `cache_rollback` | state_update | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `kv_cache_append` | state_update | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `kv_cache_prune` | state_update | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `kv_cache_read` | state_update | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `conv2d` | stencil | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
 | `conv3d` | stencil | public | public | registered | complete | fused | compiled | ready | none |
-| `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `check_cauchy_riemann` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `complex_abs` | visual_complex | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `complex_arg` | visual_complex | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `complex_conjugate` | visual_complex | public | public | registered | complete | fused | fused | ready | benchmarked |
@@ -320,15 +320,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `complex_pow` | visual_complex | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `complex_sqrt` | visual_complex | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `conformal_jacobian` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `cross_ratio` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `dbar` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `dz` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `is_concyclic` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `laplacian_2d` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `conformal_jacobian` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `cross_ratio` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `dbar` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `dz` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `is_concyclic` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `laplacian_2d` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `mobius` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `mobius_from_three_points` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
+| `mobius_from_three_points` | visual_complex | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `stereographic` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 
 ## Summary by family
@@ -342,11 +342,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | contraction | 1 | PPGCFCN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 6 | PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| functional_optimizer_step | 6 | PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
-| indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 30 | PPGCpRN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· |
+| indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
+| layout_transform | 30 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· |
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
@@ -365,15 +365,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rl_loss | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rotary_embedding | 1 | PPGCFHN· |
-| segment_reduce | 1 | PPGCpRN· |
+| segment_reduce | 1 | PPGCnnN· |
 | sort | 3 | PPGCFCN· PPGCFCN· PPGCFCN· |
 | sparse | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | spectral | 9 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | stable_reduction | 7 | PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFHNB PPGCFHN· PPGCFCNB |
 | state_space | 1 | PPGCFCN· |
-| state_update | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFFNB |
+| state_update | 5 | PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFFNB |
 | stencil | 2 | PPGCFHNB PPGCFCN· |
-| visual_complex | 20 | PPGCpRN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPnCFFNB PPGCFFNB PPnCFFNB PPGCFFNB PPGCFFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFNB PPGCpRN· PPnCFFNB |
+| visual_complex | 20 | PPGCnnN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPnCFFNB PPGCFFNB PPnCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPnCFFNB PPGCnnN· PPnCFFNB |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 

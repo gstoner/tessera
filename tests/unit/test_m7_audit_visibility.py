@@ -119,13 +119,13 @@ class TestM7BackendAlias:
                 f"got {row.cells['target_ir'].status!r}"
             )
 
-    def test_non_aliased_m7_ops_report_reference(self) -> None:
+    def test_non_aliased_m7_ops_report_terminal_not_applicable(self) -> None:
         """E3 (2026-05-20): the M7 long-tail ops have no fused MSL
         kernel today, but they're not overclaimed as ``fused`` either.
-        After E3 they read as ``target_ir=reference`` — the CPU
-        manifest (x86 + apple_cpu) ships the Python reference path,
-        and apple_gpu / nvidia_sm90+ / rocm have ``planned`` slots
-        reserved for the M7 kernel follow-up.
+        For the single-GPU closeout they read as
+        ``target_ir=not_applicable`` — an intentional reference/domain
+        composition, while apple_gpu / nvidia_sm90+ / rocm keep
+        ``planned`` manifest slots reserved for the M7 kernel follow-up.
         """
 
         from tessera.compiler.audit import support_row_for
@@ -133,13 +133,18 @@ class TestM7BackendAlias:
 
         for op_name in ("cross_ratio", "dz", "laplacian_2d"):
             row = support_row_for(op_name)
-            # Reference status comes from x86/apple_cpu CPU entries.
-            assert row.cells["target_ir"].status == "reference", (
+            assert row.cells["tile_ir"].status == "not_applicable", (
+                f"{op_name} reports tile_ir="
+                f"{row.cells['tile_ir'].status!r}; expected "
+                "'not_applicable' for the single-GPU reference/domain "
+                "composition terminal state."
+            )
+            assert row.cells["target_ir"].status == "not_applicable", (
                 f"{op_name} reports target_ir="
                 f"{row.cells['target_ir'].status!r}; expected "
-                f"'reference' (the M7 long-tail runs via Python "
-                f"reference on CPU; native-kernel slots are reserved "
-                f"as planned on the GPU targets)."
+                f"'not_applicable' (the M7 long-tail runs via Python "
+                f"reference/domain composition; native-kernel slots are "
+                f"reserved as planned on the GPU targets)."
             )
             # The manifest must carry planned slots for the GPU
             # targets so Phase G / H / M7-follow-up knows where to

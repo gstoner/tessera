@@ -369,6 +369,18 @@ def ROCM_FpQuantKernelOp : TesseraROCM_Op<"fpquant"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_DequantGemmKernelOp : TesseraROCM_Op<"dequant_gemm"> {
+  let summary = "Fused packed-code dequantize-into-GEMM kernel";
+  let description = [{
+    The directive `generate-rocm-dequant-gemm-kernel` expands into the DK4
+    packed-weight dequantize-into-GEMM kernel. It consumes f32 activations,
+    packed int4 or int8 weight codes, per-group f32 scales, and emits f32
+    accumulators without materializing a full dequantized weight matrix.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_DftKernelOp : TesseraROCM_Op<"dft"> {
   let summary = "Direct DFT (one-thread-per-bin) gpu kernel";
   let description = [{
@@ -602,6 +614,71 @@ def ROCM_RopeKernelOp : TesseraROCM_Op<"rope"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_DSparkDraftBlockKernelOp : TesseraROCM_Op<"dspark_draft_block"> {
+  let summary = "DSpark fused draft-block decode kernel";
+  let description = [{
+    The directive `generate-rocm-dspark-draft-block-kernel` expands into the
+    DS2 fused draft-block kernel for the vanilla DSpark contract. The generated
+    kernel consumes target hidden states, previous tokens, anchor positions, and
+    DSpark draft-head weights; it emits logits, confidence logits, greedy draft
+    tokens, and per-step hidden states with the same ABI as
+    `tessera.stdlib.dspark.draft_block_forward`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_MLAAbsorbDecodeKernelOp : TesseraROCM_Op<"mla_absorb_decode"> {
+  let summary = "Absorbed-latent MLA decode kernel";
+  let description = [{
+    The directive `generate-rocm-mla-absorb-decode-kernel` expands into the DK1
+    native ROCm proof for `stdlib.attention.mla_decode_step`'s absorbed path.
+    The generated kernel consumes preprojected/scaled query nope+rope slices,
+    compressed latent cache `c`, rope-key cache, and MLA up-projection weights;
+    it emits decode output without materializing per-head K/V.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_BlockSparseAttentionKernelOp : TesseraROCM_Op<"block_sparse_attention"> {
+  let summary = "Selected-block sparse attention decode kernel";
+  let description = [{
+    The directive `generate-rocm-block-sparse-attn-kernel` expands into the DK2
+    selected-block sparse attention proof. It consumes Q/K/V, explicit selected
+    KV block ids in `B,Hkv,Sq,top_k` layout, and query positions, then computes
+    exact causal GQA attention over only those selected blocks. This is the
+    shared ROCm lowering target for MSA and DSA/NSA selected-block layouts.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_BlockSparseAttentionTiledKernelOp : TesseraROCM_Op<"block_sparse_attention_tiled"> {
+  let summary = "Row-tiled selected-block sparse attention decode kernel";
+  let description = [{
+    The directive `generate-rocm-block-sparse-attn-kernel` also expands this
+    row-tiled DK2 promotion form: one workgroup owns each `(B,Hq,Sq)` query row
+    and threads cover value lanes. It preserves the same selected-block ABI as
+    `block_sparse_attention`.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_BlockSparseTopKSelectKernelOp : TesseraROCM_Op<"block_sparse_topk_select"> {
+  let summary = "GPU-resident sparse-attention block top-k selection";
+  let description = [{
+    The directive `generate-rocm-block-sparse-topk-kernel` expands into a DK2
+    MSA/NSA selector. It consumes Index Branch scores, query positions, block
+    size, top-k, causal, and force-local flags, then writes deterministic
+    selected block ids in `B,Hkv,Sq,top_k` layout for the tiled sparse-attention
+    kernel.
+  }];
+  let arguments = (ins StrAttr:$name);
   let assemblyFormat = "attr-dict";
 }
 

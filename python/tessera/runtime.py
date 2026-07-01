@@ -1142,6 +1142,356 @@ def _execute_cpu_native_or_jit(artifact, args):
         return _execute_jit_cpu_artifact(artifact, args), "reference_cpu"
 
 
+_rocm_dspark_draft_block_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _execute_rocm_dspark_draft_block_reference(artifact: RuntimeArtifact, args: Any) -> Any:
+    """DS2 executor for ``rocm_dspark_draft_block_compiled``.
+
+    Attempts the compiler-generated fused ROCm draft-block kernel first.  When
+    ROCm is unavailable in the current environment, it falls back to the DS1
+    NumPy oracle and reports ``reference_cpu`` so hardware-free tests still pin
+    the ABI.
+    """
+    import numpy as np
+
+    from .stdlib import dspark
+
+    metadata = artifact.metadata or {}
+    if isinstance(args, Mapping):
+        values = dict(args)
+    else:
+        arg_names = list(metadata.get("arg_names") or [
+            "target_hidden", "prev_tokens", "anchors", "weights",
+        ])
+        values = _bind_launch_args(args, arg_names)
+    try:
+        target_hidden = values["target_hidden"]
+        prev_tokens = values["prev_tokens"]
+        anchors = values["anchors"]
+        weights = values["weights"]
+    except KeyError as exc:
+        raise ValueError(f"missing DSpark draft-block argument {exc.args[0]!r}") from exc
+
+    if not isinstance(weights, dspark.DSparkWeights):
+        if not isinstance(weights, Mapping):
+            raise TypeError("weights must be DSparkWeights or a mapping of weight arrays")
+        weights = dspark.DSparkWeights(**weights)
+
+    cfg_meta = dict(metadata.get("dspark_config") or {})
+    if "num_anchors" not in cfg_meta:
+        cfg_meta["num_anchors"] = int(np.asarray(anchors).reshape(-1).shape[0])
+    if "block_size" not in cfg_meta:
+        cfg_meta["block_size"] = int(metadata.get("block_size", 0))
+    if "vocab_size" not in cfg_meta:
+        cfg_meta["vocab_size"] = int(np.asarray(weights.token_embedding).shape[0])
+    if int(cfg_meta["block_size"]) <= 0:
+        raise ValueError("dspark_config.block_size must be provided and positive")
+    cfg = dspark.DSparkConfig(**cfg_meta)
+    try:
+        return (
+            _rocm_dspark_draft_block_native(
+                target_hidden, prev_tokens, anchors, weights, cfg, np),
+            "native_gpu",
+        )
+    except _RocmCompiledUnavailable:
+        pass
+
+    out = dspark.draft_block_forward(target_hidden, prev_tokens, anchors, weights, cfg)
+    return ({
+        "logits": out.logits,
+        "confidence_logits": out.confidence_logits,
+        "tokens": out.tokens,
+        "hidden": out.hidden,
+    }, "reference_cpu")
+
+
+def _rocm_dspark_draft_block_native(target_hidden: Any, prev_tokens: Any,
+                                    anchors: Any, weights: Any, cfg: Any,
+                                    np: Any) -> dict[str, Any]:
+    """Run the generated DS2 fused draft-block kernel on ROCm. f32/i64 ABI."""
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.dspark_draft_block"() {name = "ds"} : () -> ()\n'
+        '}\n')
+    hsaco = _build_rocm_elementwise_hsaco(
+        "generate-rocm-dspark-draft-block-kernel", directive,
+        _rocm_dspark_draft_block_hsaco_cache, (chip,))
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm dspark draft-block: hipInit failed")
+
+    th = np.ascontiguousarray(_as_numpy(target_hidden), dtype=np.float32)
+    pt = np.ascontiguousarray(_as_numpy(prev_tokens).reshape(-1), dtype=np.int64)
+    anc = np.ascontiguousarray(_as_numpy(anchors).reshape(-1), dtype=np.int64)
+    emb = np.ascontiguousarray(_as_numpy(weights.token_embedding), dtype=np.float32)
+    hp = np.ascontiguousarray(_as_numpy(weights.hidden_proj), dtype=np.float32)
+    tp = np.ascontiguousarray(_as_numpy(weights.token_proj), dtype=np.float32)
+    op = np.ascontiguousarray(_as_numpy(weights.out_proj), dtype=np.float32)
+    cp = np.ascontiguousarray(_as_numpy(weights.confidence_proj), dtype=np.float32)
+    has_markov = weights.markov is not None
+    mk = np.ascontiguousarray(
+        np.zeros((1, emb.shape[1]), dtype=np.float32)
+        if weights.markov is None else _as_numpy(weights.markov),
+        dtype=np.float32,
+    )
+
+    if th.ndim != 3:
+        raise ValueError("target_hidden must be (B, S, H)")
+    B, S, H = map(int, th.shape)
+    A = int(cfg.num_anchors)
+    D = int(cfg.block_size)
+    V = int(cfg.vocab_size)
+    if pt.shape != (B,):
+        raise ValueError("prev_tokens must be (B,)")
+    if anc.shape != (A,):
+        raise ValueError("anchors must be (num_anchors,)")
+    if emb.shape != (V, H):
+        raise ValueError("token_embedding must be (V, H)")
+    if hp.shape != (H, H) or tp.shape != (H, H):
+        raise ValueError("hidden_proj/token_proj must be (H, H)")
+    if op.shape != (H, V) or cp.shape != (H,):
+        raise ValueError("out_proj/confidence_proj shapes do not match cfg")
+    if has_markov and mk.shape != (V, H):
+        raise ValueError("markov must be (V, H)")
+
+    logits = np.zeros((B, A, D, V), dtype=np.float32)
+    conf = np.zeros((B, A, D), dtype=np.float32)
+    tokens = np.zeros((B, A, D), dtype=np.int64)
+    hidden = np.zeros((B, A, D, H), dtype=np.float32)
+
+    f32_arrays = [th.reshape(-1), emb.reshape(-1), hp.reshape(-1), tp.reshape(-1),
+                  op.reshape(-1), cp.reshape(-1), mk.reshape(-1),
+                  logits.reshape(-1), conf.reshape(-1), hidden.reshape(-1)]
+    i64_arrays = [pt, anc, tokens.reshape(-1)]
+    devs: list[Any] = []
+    try:
+        d_th = _rocm_dev_in(hip, f32_arrays[0], 4 * f32_arrays[0].size); devs.append(d_th)
+        d_pt = _rocm_dev_in(hip, i64_arrays[0], 8 * i64_arrays[0].size); devs.append(d_pt)
+        d_anc = _rocm_dev_in(hip, i64_arrays[1], 8 * i64_arrays[1].size); devs.append(d_anc)
+        d_emb = _rocm_dev_in(hip, f32_arrays[1], 4 * f32_arrays[1].size); devs.append(d_emb)
+        d_hp = _rocm_dev_in(hip, f32_arrays[2], 4 * f32_arrays[2].size); devs.append(d_hp)
+        d_tp = _rocm_dev_in(hip, f32_arrays[3], 4 * f32_arrays[3].size); devs.append(d_tp)
+        d_op = _rocm_dev_in(hip, f32_arrays[4], 4 * f32_arrays[4].size); devs.append(d_op)
+        d_cp = _rocm_dev_in(hip, f32_arrays[5], 4 * f32_arrays[5].size); devs.append(d_cp)
+        d_mk = _rocm_dev_in(hip, f32_arrays[6], 4 * f32_arrays[6].size); devs.append(d_mk)
+        d_logits = _rocm_dev_in(hip, f32_arrays[7], 4 * f32_arrays[7].size); devs.append(d_logits)
+        d_conf = _rocm_dev_in(hip, f32_arrays[8], 4 * f32_arrays[8].size); devs.append(d_conf)
+        d_tokens = _rocm_dev_in(hip, i64_arrays[2], 8 * i64_arrays[2].size); devs.append(d_tokens)
+        d_hidden = _rocm_dev_in(hip, f32_arrays[9], 4 * f32_arrays[9].size); devs.append(d_hidden)
+        _rocm_sparse_launch(
+            hsaco, b"ds",
+            [(d_th, th.size), (d_pt, pt.size), (d_anc, anc.size),
+             (d_emb, emb.size), (d_hp, hp.size), (d_tp, tp.size),
+             (d_op, op.size), (d_cp, cp.size), (d_mk, mk.size),
+             (d_logits, logits.size), (d_conf, conf.size),
+             (d_tokens, tokens.size), (d_hidden, hidden.size)],
+            [B, S, H, A, D, V, 1 if has_markov else 0],
+            B * A)
+        hip.hipMemcpy(logits.ctypes.data_as(ctypes.c_void_p), d_logits,
+                      4 * logits.size, 2)
+        hip.hipMemcpy(conf.ctypes.data_as(ctypes.c_void_p), d_conf,
+                      4 * conf.size, 2)
+        hip.hipMemcpy(tokens.ctypes.data_as(ctypes.c_void_p), d_tokens,
+                      8 * tokens.size, 2)
+        hip.hipMemcpy(hidden.ctypes.data_as(ctypes.c_void_p), d_hidden,
+                      4 * hidden.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+
+    return {
+        "logits": logits,
+        "confidence_logits": conf,
+        "tokens": tokens,
+        "hidden": hidden,
+    }
+
+
+def _execute_rocm_dequant_gemm_reference(artifact: RuntimeArtifact, args: Any) -> Any:
+    """DK4 transition executor for ``rocm_dequant_gemm_compiled``.
+
+    Runs the packed-weight NumPy oracle while preserving the runtime ABI and
+    reporting ``reference_cpu``.  Native promotion replaces this body with the
+    fused HIP dequant-into-GEMM kernel, not a different user contract.
+    """
+    import numpy as np
+
+    from .stdlib import quant
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or ["x", "packed_w"])
+    values = dict(args) if isinstance(args, Mapping) else _bind_launch_args(args, arg_names)
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else "tessera.dequant_matmul"
+    if op_name == "tessera.dequant_matmul":
+        try:
+            return (
+                _rocm_dequant_matmul_native(values["x"], values["packed_w"], np),
+                "native_gpu",
+            )
+        except _RocmCompiledUnavailable:
+            pass
+        try:
+            return (
+                quant.dequant_matmul(values["x"], values["packed_w"], backend="reference"),
+                "reference_cpu",
+            )
+        except KeyError as exc:
+            raise ValueError(f"missing dequant_matmul argument {exc.args[0]!r}") from exc
+    if op_name == "tessera.dequant_grouped_gemm":
+        try:
+            return (
+                _rocm_dequant_grouped_gemm_native(
+                    values["x"], values["packed_experts"], values["group_sizes"], np),
+                "native_gpu",
+            )
+        except _RocmCompiledUnavailable:
+            pass
+        try:
+            return (
+                quant.dequant_grouped_gemm(
+                    values["x"], values["packed_experts"], values["group_sizes"],
+                    backend="reference"),
+                "reference_cpu",
+            )
+        except KeyError as exc:
+            raise ValueError(
+                f"missing dequant_grouped_gemm argument {exc.args[0]!r}") from exc
+    raise ValueError(
+        "rocm_dequant_gemm_compiled executor handles tessera.dequant_matmul "
+        f"or tessera.dequant_grouped_gemm; got {op_name!r}")
+
+
+_rocm_dequant_gemm_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_dequant_gemm_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.dequant_gemm"() {name = "dq"} : () -> ()\n'
+        '}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-dequant-gemm-kernel", directive,
+        _rocm_dequant_gemm_hsaco_cache, (chip,))
+
+
+def _rocm_dequant_matmul_native(x: Any, packed_w: Any, np: Any) -> Any:
+    """Run DK4 packed int4/int8 dequantize-into-GEMM on ROCm. f32 accumulate."""
+    scheme = packed_w.scheme
+    if scheme.dtype not in ("int4", "int8"):
+        raise _RocmCompiledUnavailable(
+            f"rocm dequant_gemm native handles int4/int8; got {scheme.dtype!r}")
+    xa = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+    if xa.ndim != 2:
+        raise _RocmCompiledUnavailable("rocm dequant_gemm native handles rank-2 x")
+    K, N = map(int, packed_w.shape)
+    M = int(xa.shape[0])
+    if int(xa.shape[1]) != K:
+        raise ValueError(f"dequant_matmul: x last dim {xa.shape[1]} != weight K {K}")
+    g = int(scheme.group_size if scheme.group_size is not None else K)
+    if K % g != 0:
+        raise ValueError(f"dequant_matmul: K={K} must be divisible by group_size={g}")
+    if scheme.dtype == "int4":
+        codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.uint8)).view(np.int8)
+        mode = 4
+    else:
+        codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.int8))
+        mode = 8
+    scales = np.ascontiguousarray(np.asarray(packed_w.scales, dtype=np.float32))
+    if scales.shape != (K // g, N):
+        raise ValueError(f"scales must be ({K // g}, {N}); got {scales.shape}")
+
+    hsaco = _rocm_dequant_gemm_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm dequant_gemm: hipInit failed")
+    out = np.zeros((M, N), dtype=np.float32)
+    devs: list[Any] = []
+    try:
+        d_x = _rocm_dev_in(hip, xa.reshape(-1), 4 * xa.size); devs.append(d_x)
+        d_c = _rocm_dev_in(hip, codes.reshape(-1), codes.size); devs.append(d_c)
+        d_s = _rocm_dev_in(hip, scales.reshape(-1), 4 * scales.size); devs.append(d_s)
+        d_o = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size); devs.append(d_o)
+        _rocm_sparse_launch(
+            hsaco, b"dq",
+            [(d_x, xa.size), (d_c, codes.size), (d_s, scales.size), (d_o, out.size)],
+            [M, K, N, g, mode],
+            M * N)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 4 * out.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    return out
+
+
+def _rocm_dequant_grouped_gemm_native(x: Any, packed_experts: Any,
+                                      group_sizes: Any, np: Any) -> Any:
+    xa = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+    experts = list(packed_experts)
+    gs = np.asarray(group_sizes, dtype=np.int64).reshape(-1)
+    if gs.shape[0] != len(experts):
+        raise ValueError(f"group_sizes has {gs.shape[0]} groups but {len(experts)} experts")
+    if not experts:
+        raise ValueError("packed_experts must be non-empty")
+    N = int(experts[0].shape[1])
+    out = np.zeros((int(xa.shape[0]), N), dtype=np.float32)
+    off = 0
+    for e, packed in enumerate(experts):
+        n = int(gs[e])
+        if n:
+            out[off:off + n] = _rocm_dequant_matmul_native(xa[off:off + n], packed, np)
+        off += n
+    return out
+
+
+def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) -> Any:
+    """DK3 transition executor for ``rocm_moe_transport_compiled``.
+
+    This pins the MoE transport/runtime ABI against the stdlib oracle while the
+    native ROCm gather/scatter and grouped-GEMM transport kernels are promoted.
+    """
+    from .stdlib import moe
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or ["x", "plan"])
+    values = dict(args) if isinstance(args, Mapping) else _bind_launch_args(args, arg_names)
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+
+    if op_name == "tessera.moe_dispatch":
+        try:
+            return moe.dispatch(values["x"], values["plan"])
+        except KeyError as exc:
+            raise ValueError(f"missing moe_dispatch argument {exc.args[0]!r}") from exc
+    if op_name == "tessera.moe_combine":
+        try:
+            return moe.combine(values["partials"], values["plan"])
+        except KeyError as exc:
+            raise ValueError(f"missing moe_combine argument {exc.args[0]!r}") from exc
+    if op_name == "tessera.grouped_swiglu":
+        try:
+            return moe.grouped_swiglu(
+                values["x_packed"],
+                values["w_gate"],
+                values["w_up"],
+                values["w_down"],
+                values["group_sizes"],
+            )
+        except KeyError as exc:
+            raise ValueError(f"missing grouped_swiglu argument {exc.args[0]!r}") from exc
+    raise ValueError(
+        "rocm_moe_transport_compiled executor handles tessera.moe_dispatch, "
+        "tessera.moe_combine, or tessera.grouped_swiglu; "
+        f"got {op_name!r}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm WMMA GEMM executor (Strix Halo bring-up, 2026-06-22).
 #
@@ -10544,12 +10894,337 @@ def _rocm_sparse_launch(hsaco: bytes, sym: bytes, buffers: list,
     hip.hipDeviceSynchronize()
 
 
+def _rocm_sparse_launch_custom(hsaco: bytes, sym: bytes, buffers: list,
+                               scalars: list, grid_x: int,
+                               block_x: int) -> None:
+    """Launch a generated sparse kernel with explicit grid/block geometry."""
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm sparse: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, sym) != 0:
+        raise RuntimeError(f"rocm sparse: kernel symbol {sym!r} not found")
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args: list = []
+    for dev, size in buffers:
+        launch_args += _mr(dev, size)
+    launch_args += [ctypes.c_int64(s) for s in scalars]
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    rc = hip.hipModuleLaunchKernel(fn, grid_x, 1, 1, block_x, 1, 1,
+                                   0, None, arr, None)
+    if rc != 0:
+        raise RuntimeError(f"rocm sparse: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+
+
 def _rocm_dev_in(hip: Any, host: Any, nbytes: int) -> Any:
     d = ctypes.c_void_p()
     if hip.hipMalloc(ctypes.byref(d), nbytes) != 0:
         raise RuntimeError("rocm sparse: hipMalloc failed")
     hip.hipMemcpy(d, host.ctypes.data_as(ctypes.c_void_p), nbytes, 1)
     return d
+
+
+_rocm_block_sparse_attn_hsaco_cache: dict[tuple[str, bool], bytes] = {}
+_rocm_block_sparse_topk_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_block_sparse_attn_hsaco(*, tiled: bool = True) -> bytes:
+    chip = _rocm_chip()
+    op = "block_sparse_attention_tiled" if tiled else "block_sparse_attention"
+    name = "bsat" if tiled else "bsa"
+    directive = (
+        'module {\n'
+        f'  "tessera_rocm.{op}"() {{name = "{name}"}} : () -> ()\n'
+        '}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-block-sparse-attn-kernel", directive,
+        _rocm_block_sparse_attn_hsaco_cache, (chip, bool(tiled)))
+
+
+def _rocm_block_sparse_topk_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.block_sparse_topk_select"() {name = "btopk"} : () -> ()\n'
+        '}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-block-sparse-topk-kernel", directive,
+        _rocm_block_sparse_topk_hsaco_cache, (chip,))
+
+
+def _rocm_block_sparse_topk_select_native(scores: Any, np: Any, *,
+                                          top_k: int, block_size: int,
+                                          causal: bool = True,
+                                          force_local_block: bool = True,
+                                          q_positions: Any = None) -> Any:
+    sc = np.ascontiguousarray(np.asarray(scores, dtype=np.float32))
+    if sc.ndim != 4:
+        raise ValueError("block sparse top-k scores must be (B,Hkv,Sq,num_blocks)")
+    B, Hkv, Sq, Nb = map(int, sc.shape)
+    if not (1 <= int(top_k) <= Nb):
+        raise ValueError(f"top_k={top_k} must be in [1, num_blocks={Nb}]")
+    qpos = (np.arange(Sq, dtype=np.int64) if q_positions is None
+            else np.asarray(q_positions, dtype=np.int64).reshape(-1))
+    if qpos.shape[0] != Sq:
+        raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+
+    hsaco = _rocm_block_sparse_topk_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm block_sparse_topk: hipInit failed")
+    out = np.zeros((B, Hkv, Sq, int(top_k)), dtype=np.int64)
+    devs: list[Any] = []
+    try:
+        d_s = _rocm_dev_in(hip, sc.reshape(-1), 4 * sc.size); devs.append(d_s)
+        d_qp = _rocm_dev_in(hip, qpos.reshape(-1), 8 * qpos.size); devs.append(d_qp)
+        d_o = _rocm_dev_in(hip, out.reshape(-1), 8 * out.size); devs.append(d_o)
+        _rocm_sparse_launch(
+            hsaco, b"btopk",
+            [(d_s, sc.size), (d_qp, qpos.size), (d_o, out.size)],
+            [B, Hkv, Sq, Nb, int(top_k), int(block_size),
+             1 if causal else 0, 1 if force_local_block else 0],
+            B * Hkv * Sq)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 8 * out.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    return out
+
+
+def _rocm_selected_block_attention_native(Q: Any, K: Any, V: Any,
+                                          selected_block_ids: Any, np: Any, *,
+                                          block_size: int, causal: bool = True,
+                                          q_positions: Any = None,
+                                          scale: Any = None,
+                                          tiled: bool = True) -> Any:
+    """Run DK2 selected-block sparse attention on ROCm.
+
+    The runtime pre-scales Q so the generated kernel can keep an integer-only
+    ABI while preserving stdlib attention numerics.
+    """
+    if scale is not None:
+        sc = float(scale)
+    else:
+        sc = None
+    q = np.ascontiguousarray(_as_numpy(Q), dtype=np.float32)
+    k = np.ascontiguousarray(_as_numpy(K), dtype=np.float32)
+    v = np.ascontiguousarray(_as_numpy(V), dtype=np.float32)
+    sel = np.ascontiguousarray(np.asarray(selected_block_ids, dtype=np.int64))
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("selected-block attention expects rank-4 Q/K/V")
+    B, Hq, Sq, D = map(int, q.shape)
+    Bk, Hkv, Sk, Dk = map(int, k.shape)
+    Bv, Hkv_v, Sk_v, Dv = map(int, v.shape)
+    if (B, Hkv, Sk) != (Bv, Hkv_v, Sk_v) or B != Bk or D != Dk:
+        raise ValueError(f"Q/K/V shape mismatch: Q={q.shape} K={k.shape} V={v.shape}")
+    if Hkv == 0 or Hq % Hkv:
+        raise ValueError(f"GQA requires Hq % Hkv == 0; got Hq={Hq}, Hkv={Hkv}")
+    if block_size <= 0:
+        raise ValueError("block_size must be > 0")
+    if sel.ndim != 4 or sel.shape[:3] != (B, Hkv, Sq):
+        raise ValueError(
+            f"selected_block_ids must be (B,Hkv,Sq,Ksel); got {sel.shape}")
+    Ksel = int(sel.shape[3])
+    num_blocks = (Sk + int(block_size) - 1) // int(block_size)
+    if np.any(sel < 0) or np.any(sel >= num_blocks):
+        raise ValueError(
+            f"selected_block_ids entries must be in [0, num_blocks={num_blocks})")
+    qpos = (np.arange(Sq, dtype=np.int64) if q_positions is None
+            else np.asarray(q_positions, dtype=np.int64).reshape(-1))
+    if qpos.shape[0] != Sq:
+        raise ValueError(f"q_positions length {qpos.shape[0]} must equal Sq={Sq}")
+    q_scale = np.float32((1.0 / np.sqrt(D)) if sc is None else sc)
+    q = np.ascontiguousarray(q * q_scale, dtype=np.float32)
+
+    use_tiled = bool(tiled) and Dv <= 256
+    hsaco = _rocm_block_sparse_attn_hsaco(tiled=use_tiled)
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm block_sparse_attention: hipInit failed")
+    out = np.zeros((B, Hq, Sq, Dv), dtype=np.float32)
+    devs: list[Any] = []
+    try:
+        d_q = _rocm_dev_in(hip, q.reshape(-1), 4 * q.size); devs.append(d_q)
+        d_k = _rocm_dev_in(hip, k.reshape(-1), 4 * k.size); devs.append(d_k)
+        d_v = _rocm_dev_in(hip, v.reshape(-1), 4 * v.size); devs.append(d_v)
+        d_sel = _rocm_dev_in(hip, sel.reshape(-1), 8 * sel.size); devs.append(d_sel)
+        d_qpos = _rocm_dev_in(hip, qpos.reshape(-1), 8 * qpos.size); devs.append(d_qpos)
+        d_o = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size); devs.append(d_o)
+        buffers = [(d_q, q.size), (d_k, k.size), (d_v, v.size), (d_sel, sel.size),
+                   (d_qpos, qpos.size), (d_o, out.size)]
+        scalars = [B, Hq, Hkv, Sq, Sk, D, Dv, int(block_size), Ksel,
+                   1 if causal else 0]
+        if use_tiled:
+            _rocm_sparse_launch_custom(hsaco, b"bsat", buffers, scalars,
+                                       B * Hq * Sq, max(1, Dv))
+        else:
+            _rocm_sparse_launch(hsaco, b"bsa", buffers, scalars, out.size)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o, 4 * out.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    return out
+
+
+def _dsa_selected_block_ids(Q: Any, K: Any, np: Any, *, top_k_blocks: int,
+                            block_size: int, causal: bool,
+                            q_positions: Any = None) -> Any:
+    from .stdlib import attention as _attn
+
+    q = np.asarray(Q)
+    k = np.asarray(K)
+    pad = (-int(k.shape[2])) % int(block_size)
+    if pad:
+        k = np.concatenate(
+            [k, np.zeros(k.shape[:2] + (pad, k.shape[3]), dtype=k.dtype)],
+            axis=2)
+    scores = _attn.dsa_block_index(q, k, block_size=block_size)
+    keep = _attn.dsa_select_blocks(
+        scores, top_k=min(int(top_k_blocks), scores.shape[-1]),
+        block_size=block_size, causal=causal, q_positions=q_positions)
+    B, Hkv, Sq, nb = keep.shape
+    ksel = min(nb, int(top_k_blocks) + (1 if causal else 0))
+    sel = np.zeros((B, Hkv, Sq, ksel), dtype=np.int64)
+    for b in range(B):
+        for h in range(Hkv):
+            for s in range(Sq):
+                ids = np.flatnonzero(keep[b, h, s])
+                if ids.size == 0:
+                    ids = np.array([min(nb - 1, int((q_positions[s] if q_positions is not None else s) // block_size))])
+                ids = ids[:ksel]
+                sel[b, h, s, :ids.size] = ids
+                if ids.size < ksel:
+                    sel[b, h, s, ids.size:] = ids[-1]
+    return sel
+
+
+def _execute_rocm_compiled_sparse_attention(artifact: RuntimeArtifact,
+                                            args: Any) -> Any:
+    """DK2 ROCm selected-block sparse attention lane.
+
+    Handles MSA's explicit `selected_block_ids` ABI plus DSA selected-block
+    normalization. Hardware-free runs fall back to stdlib references and report
+    `reference_cpu`; ROCm hardware runs report `native_gpu`.
+    """
+    import numpy as np
+
+    from .stdlib import attention as _attn
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    handled = ("tessera.msa_sparse_attention", "tessera.dsa_block_sparse_attention")
+    if len(ops) != 1 or op_name not in handled:
+        raise ValueError(
+            f"rocm_sparse_attn_compiled executor handles {handled}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    names = [str(n) for n in op.get("operands", [])]
+    if len(names) < 3:
+        raise ValueError("sparse attention requires Q, K, V operands")
+    values = _bind_launch_args(args, arg_names)
+    Q, K, V = (_as_numpy(values[names[0]]), _as_numpy(values[names[1]]),
+               _as_numpy(values[names[2]]))
+    block_size_arg = kwargs.get("block_size")
+    if block_size_arg is None:
+        raise ValueError("sparse attention requires block_size")
+    block_size = int(block_size_arg)
+    causal = bool(kwargs.get("causal", True))
+    q_positions = kwargs.get("q_positions")
+    scale = kwargs.get("scale")
+    attention_strategy = str(kwargs.get("attention_strategy", "tiled"))
+    use_tiled = attention_strategy != "scalar"
+    if op_name == "tessera.msa_sparse_attention":
+        top_k_arg = kwargs.get("top_k")
+        if top_k_arg is None:
+            raise ValueError("msa_sparse_attention requires top_k")
+        top_k = int(top_k_arg)
+        selected = kwargs.get("selected_block_ids")
+        if selected is None and len(names) >= 4:
+            selected = values[names[3]]
+        if selected is None:
+            scores = _attn.msa_index_scores(Q, K, block_size=block_size, scale=scale)
+            force_local = bool(kwargs.get("force_local_block", True))
+            selection_strategy = str(kwargs.get("selection_strategy", "auto"))
+            can_try_gpu_select = (
+                selection_strategy == "gpu" or
+                (selection_strategy == "auto" and _rocm_wmma_runtime_available())
+            )
+            if can_try_gpu_select:
+                try:
+                    selected = _rocm_block_sparse_topk_select_native(
+                        scores, np, top_k=top_k, block_size=block_size,
+                        causal=causal, force_local_block=force_local,
+                        q_positions=q_positions)
+                except _RocmCompiledUnavailable:
+                    if selection_strategy == "gpu":
+                        raise
+                    selected = None
+            if selected is None:
+                selected = _attn.msa_select_blocks(
+                    scores, top_k=top_k, block_size=block_size,
+                    force_local_block=force_local,
+                    causal=causal, q_positions=q_positions)
+        try:
+            return (
+                _rocm_selected_block_attention_native(
+                    Q, K, V, selected, np, block_size=block_size, causal=causal,
+                    q_positions=q_positions, scale=scale, tiled=use_tiled),
+                "native_gpu",
+            )
+        except _RocmCompiledUnavailable:
+            return (
+                _attn.msa_sparse_attention(
+                    Q, K, V, block_size=block_size, top_k=top_k,
+                    force_local_block=bool(kwargs.get("force_local_block", True)),
+                    causal=causal, scale=scale, q_positions=q_positions,
+                    selected_block_ids=selected),
+                "reference_cpu",
+            )
+
+    top_k_blocks_arg = kwargs.get("top_k_blocks")
+    if top_k_blocks_arg is None:
+        raise ValueError("dsa_block_sparse_attention requires top_k_blocks")
+    top_k_blocks = int(top_k_blocks_arg)
+    selected = kwargs.get("selected_block_ids")
+    if selected is None and len(names) >= 4:
+        selected = values[names[3]]
+    if selected is None:
+        selected = _dsa_selected_block_ids(
+            Q, K, np, top_k_blocks=top_k_blocks, block_size=block_size,
+            causal=causal, q_positions=q_positions)
+    try:
+        return (
+            _rocm_selected_block_attention_native(
+                Q, K, V, selected, np, block_size=block_size, causal=causal,
+                q_positions=q_positions, scale=scale, tiled=use_tiled),
+            "native_gpu",
+        )
+    except _RocmCompiledUnavailable:
+        return (
+            _attn.dsa_block_sparse_attention(
+                Q, K, V, top_k_blocks=top_k_blocks, block_size=block_size,
+                causal=causal, scale=scale, q_positions=q_positions),
+            "reference_cpu",
+        )
 
 
 def _rocm_spmm_csr(indptr: Any, indices: Any, values: Any, B: Any,
@@ -11360,6 +12035,109 @@ def _rocm_project_last(x: Any, w: Any, store: Any) -> Any:
     return np.ascontiguousarray(y, dtype=store)
 
 
+_rocm_mla_absorb_decode_hsaco_cache: dict[tuple[str], bytes] = {}
+
+
+def _rocm_mla_absorb_decode_hsaco() -> bytes:
+    chip = _rocm_chip()
+    directive = (
+        'module {\n'
+        '  "tessera_rocm.mla_absorb_decode"() {name = "mla"} : () -> ()\n'
+        '}\n')
+    return _build_rocm_elementwise_hsaco(
+        "generate-rocm-mla-absorb-decode-kernel", directive,
+        _rocm_mla_absorb_decode_hsaco_cache, (chip,))
+
+
+def _rocm_mla_decode_step_native(x_t: Any, latent_cache: Any, rope_cache: Any,
+                                 weights: Any, np: Any, *,
+                                 absorb: bool = True, scale: Any = None) -> Any:
+    """DK1 ROCm absorbed-latent decode proof for stdlib.attention.mla_decode_step.
+
+    The wrapper matches the stdlib cache side effects: append c/rope for x_t,
+    read the full cache, project/rotate/scales Q on the host, then launch a
+    ROCm kernel that computes attention directly from latent c + Wuk/Wuv.
+    """
+    if not absorb:
+        raise _RocmCompiledUnavailable("rocm MLA decode_step native requires absorb=True")
+
+    from .stdlib import attention as _attn
+
+    hsaco = _rocm_mla_absorb_decode_hsaco()
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm MLA absorb decode: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable("rocm MLA absorb decode: no usable AMD GPU")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"mla") != 0:
+        raise RuntimeError("rocm MLA absorb decode: kernel symbol 'mla' not found")
+
+    xa = np.ascontiguousarray(_as_numpy(x_t), dtype=np.float32)
+    if xa.ndim != 2:
+        raise ValueError(f"mla_decode_step x_t must be rank-2; got {xa.shape}")
+    kv_start = int(latent_cache.current_seq)
+    c_new, kr_new = _attn.compress_latent(xa, weights)
+    latent_cache.append(c_new)
+    rope_cache.append(kr_new)
+    c_all = np.ascontiguousarray(latent_cache.read(0, latent_cache.current_seq),
+                                 dtype=np.float32)
+    kr_all = np.ascontiguousarray(rope_cache.read(0, rope_cache.current_seq),
+                                  dtype=np.float32)
+
+    Hh = int(weights.num_heads)
+    Dn = int(weights.d_nope)
+    Dr = int(weights.d_rope)
+    Dc = int(weights.d_c)
+    Dv = int(weights.d_v)
+    Sq = int(xa.shape[0])
+    T = int(c_all.shape[0])
+    if kr_all.shape != (T, Dr):
+        raise ValueError(f"rope cache must be ({T}, {Dr}); got {kr_all.shape}")
+
+    w_q = np.asarray(weights.w_q, dtype=np.float32)
+    q = np.matmul(xa, w_q).reshape(Sq, Hh, Dn + Dr)
+    q_nope = np.ascontiguousarray(q[..., :Dn], dtype=np.float32)
+    q_pos = kv_start + np.arange(Sq)
+    q_rope = _attn.apply_rope(q[..., Dn:].transpose(1, 0, 2), q_pos)
+    q_rope = np.ascontiguousarray(q_rope.transpose(1, 0, 2), dtype=np.float32)
+    sc = float(scale) if scale is not None else float(1.0 / np.sqrt(Dn + Dr))
+    q_nope *= np.float32(sc)
+    q_rope *= np.float32(sc)
+
+    wuk = np.ascontiguousarray(
+        np.asarray(weights.w_uk, dtype=np.float32).reshape(Dc, Hh, Dn))
+    wuv = np.ascontiguousarray(
+        np.asarray(weights.w_uv, dtype=np.float32).reshape(Dc, Hh, Dv))
+    out = np.zeros((Sq, Hh, Dv), dtype=np.float32)
+
+    devs: list[Any] = []
+    try:
+        d_qn = _rocm_dev_in(hip, q_nope.reshape(-1), 4 * q_nope.size); devs.append(d_qn)
+        d_qr = _rocm_dev_in(hip, q_rope.reshape(-1), 4 * q_rope.size); devs.append(d_qr)
+        d_c = _rocm_dev_in(hip, c_all.reshape(-1), 4 * c_all.size); devs.append(d_c)
+        d_kr = _rocm_dev_in(hip, kr_all.reshape(-1), 4 * kr_all.size); devs.append(d_kr)
+        d_wuk = _rocm_dev_in(hip, wuk.reshape(-1), 4 * wuk.size); devs.append(d_wuk)
+        d_wuv = _rocm_dev_in(hip, wuv.reshape(-1), 4 * wuv.size); devs.append(d_wuv)
+        d_o = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size); devs.append(d_o)
+        _rocm_sparse_launch(
+            hsaco, b"mla",
+            [(d_qn, q_nope.size), (d_qr, q_rope.size), (d_c, c_all.size),
+             (d_kr, kr_all.size), (d_wuk, wuk.size), (d_wuv, wuv.size),
+             (d_o, out.size)],
+            [Sq, T, Hh, Dn, Dr, Dc, Dv, kv_start],
+            Sq * Hh * Dv)
+        hip.hipMemcpy(out.ctypes.data_as(ctypes.c_void_p), d_o,
+                      4 * out.size, 2)
+    finally:
+        for dev in devs:
+            hip.hipFree(dev)
+    return out.reshape(Sq, Hh * Dv)
+
+
 def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
                                             args: Any) -> Any:
     """The ``target="rocm"`` exotic-attention composition lane: gated_attention
@@ -11372,7 +12150,7 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
     handled = ("tessera.gated_attention", "tessera.mla_decode",
-               "tessera.mla_decode_fused")
+               "tessera.mla_decode_fused", "tessera.mla_decode_step")
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     if len(ops) != 1 or op_name not in handled:
         raise ValueError(
@@ -11382,6 +12160,30 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
     operand_names = [str(n) for n in op.get("operands", [])]
     kwargs = op.get("kwargs") or {}
     values = _bind_launch_args(args, arg_names)
+    if op_name == "tessera.mla_decode_step":
+        if len(operand_names) != 4:
+            raise ValueError(
+                "mla_decode_step takes (x_t, latent_cache, rope_cache, weights)")
+        from .stdlib import attention as _attn
+        try:
+            out = _rocm_mla_decode_step_native(
+                values[operand_names[0]], values[operand_names[1]],
+                values[operand_names[2]], values[operand_names[3]], np,
+                absorb=bool(kwargs.get("absorb", True)),
+                scale=kwargs.get("scale"))
+            return out, "native_gpu"
+        except _RocmCompiledUnavailable:
+            try:
+                out = _attn.mla_decode_step(
+                    values[operand_names[0]], values[operand_names[1]],
+                    values[operand_names[2]], values[operand_names[3]],
+                    absorb=bool(kwargs.get("absorb", True)),
+                    scale=kwargs.get("scale"))
+                return out, "reference_cpu"
+            except KeyError as exc:
+                raise ValueError(
+                    f"missing mla_decode_step argument {exc.args[0]!r}") from exc
+
     operands = [_as_numpy(values[n]) for n in operand_names]
     scale = kwargs.get("scale")
     causal = bool(kwargs.get("causal", True))
@@ -11627,6 +12429,7 @@ def _executor_table():
         "rocm_compiled":        _execute_rocm_compiled_gemm,
         "rocm_flash_attn_compiled": _execute_rocm_compiled_flash_attn,
         "rocm_linear_attn_compiled": _execute_rocm_compiled_linear_attn,
+        "rocm_dspark_draft_block_compiled": _execute_rocm_dspark_draft_block_reference,
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled":    _execute_rocm_compiled_norm,
         "rocm_reduce_compiled":  _execute_rocm_compiled_reduce,
@@ -11706,13 +12509,16 @@ def _executor_table():
         "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
+        "rocm_dequant_gemm_compiled": _execute_rocm_dequant_gemm_reference,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,
         "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
+        "rocm_sparse_attn_compiled": _execute_rocm_compiled_sparse_attention,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
+        "rocm_moe_transport_compiled": _execute_rocm_moe_transport_reference,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_complex_compiled": _execute_rocm_compiled_complex,
         "rocm_conformal_compiled": _execute_rocm_compiled_conformal,

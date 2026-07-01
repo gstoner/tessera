@@ -96,6 +96,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tessera.linear_attn + the decay-masked siblings "
                             "tessera.lightning_attention (identity+decay) and "
                             "tessera.retention (x²+decay) by op name",
+    "rocm_dspark_draft_block_compiled": "DS2 DSpark draft-block ROCm compiler "
+                            "path — compiler-generated fused HIP/ROCDL "
+                            "draft-block kernel (generate-rocm-dspark-draft-"
+                            "block-kernel) with DS1 oracle fallback when ROCm "
+                            "hardware is unavailable. f32/i64",
     "rocm_softmax_compiled": "AMD GPU RDNA row-reduction softmax the Tessera "
                             "compiler GENERATES (generate-rocm-softmax-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -520,6 +525,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "wise CSR SpMM, sampled dense-dense SDDMM that skips "
                             "masked-zero entries) then HIP-launched; bsmm via the "
                             "WMMA matmul (bf16). f32",
+    "rocm_sparse_attn_compiled": "AMD GPU RDNA DK2 selected-block sparse "
+                            "attention (MSA and DSA/NSA block-id layouts) — "
+                            "COMPILER-GENERATED scalar + row-tiled block-sparse "
+                            "attention kernels plus GPU-resident top-k selection "
+                            "over explicit B,Hkv,Sq,top_k block ids with GQA, "
+                            "causal q-position masking, and f32 softmax",
     "rocm_optimizer_compiled": "AMD GPU RDNA optimizer steps (sgd / momentum / "
                             "adam / adamw / lion) — COMPILER-GENERATED gfx1151 "
                             "fused per-parameter update kernel (generate-rocm-"
@@ -536,6 +547,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kernel: routed per-token expert GEMV, one thread per "
                             "(token, out-col); routing resolved on host) HIP-"
                             "launched. f32",
+    "rocm_moe_transport_compiled": "DK3 MoE transport ROCm compiler path — "
+                            "moe_dispatch/moe_combine/grouped_swiglu over a "
+                            "DispatchPlan through the runtime ABI; reference_cpu "
+                            "until HIP gather/scatter transport kernels are promoted.",
     "rocm_normcompose_compiled": "AMD GPU RDNA group/instance/weight norm — "
                             "composed on the gfx1151 layer_norm + reduce kernels "
                             "(host reshape/divide). f32",
@@ -584,6 +599,11 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(quantize/dequantize fp8 / fp6 / fp4) — grid-snap on "
                             "generate-rocm-fpquant-kernel (log2/exp2/roundeven) + "
                             "per-tensor scale. ROCm mirror of x86_fpquant. f32",
+    "rocm_dequant_gemm_compiled": "DK4 dequant-GEMM ROCm compiler path — "
+                            "compiler-generated fused HIP/ROCDL packed-code "
+                            "dequant-into-GEMM kernel (generate-rocm-dequant-"
+                            "gemm-kernel) with packed int4/int8 codes + scales "
+                            "through the runtime ABI. f32 accumulate",
     "rocm_nvfp4_compiled": "AMD GPU RDNA NVFP4 block-scaled fp4 — per-block "
                             "fp8-E4M3 scale + E2M1 codes on the fpquant kernel + "
                             "host block structure. ROCm mirror of x86_nvfp4. f32",
@@ -616,10 +636,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "exact host epilogue; einsum handles single-"
                             "contraction matmul specs",
     "rocm_exotic_attn_compiled": "AMD GPU RDNA exotic-attention compositions "
-                            "(gated_attention, mla_decode, mla_decode_fused) "
+                            "(gated_attention, mla_decode, mla_decode_fused, "
+                            "mla_decode_step absorbed-latent decode) "
                             "built by COMPOSING the COMPILER-GENERATED WMMA "
                             "flash_attn kernel + the WMMA GEMM kernel (MLA latent "
-                            "projections) + an elementwise gate; f16/bf16 storage, "
+                            "projections) + an elementwise gate, plus the DK1 "
+                            "generated absorbed-latent ROCm decode kernel; f16/bf16 storage, "
                             "f32 softmax+accumulate. The block-sparse deepseek "
                             "variant stays artifact_only",
     "rocm_deltanet_compiled": "AMD GPU RDNA gated/delta linear-attention the "
@@ -1306,6 +1328,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "lightning_attention (identity+decay) + retention (x²+decay) by "
                "op name.",
         execution_mode="hip_runtime"),
+    # DS2 native row: the compiler/runtime ABI for the fused draft-block path
+    # launches a generated ROCm kernel when hardware is present, with an
+    # internal DS1-oracle fallback for hardware-free CI.
+    ("rocm", "rocm_dspark_draft_block_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_dspark_draft_block_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_dspark_draft_block_compiled", runtime_status="success",
+        reason="ROCm DSpark draft-block artifact launches the compiler-"
+               "generated fused HIP/ROCDL draft-block kernel "
+               "(generate-rocm-dspark-draft-block-kernel) for logits, "
+               "confidence logits, greedy tokens, and hidden states. The "
+               "executor falls back to the DS1 oracle only when ROCm hardware "
+               "or tessera-opt is unavailable.",
+        execution_mode="hip_runtime"),
     # Row-reduction softmax — the first non-matmul/non-WMMA compiled ROCm kernel.
     # Stable softmax over the last axis; f32/f16/bf16; validated vs numpy.
     ("rocm", "rocm_softmax_compiled"): ExecutionRow(
@@ -1578,6 +1614,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "zero entries) HIP-launched; COO folds to CSR on host; bsmm via "
                "the WMMA matmul (bf16). f32, matches numpy.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_sparse_attn_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_sparse_attn_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_sparse_attn_compiled", runtime_status="success",
+        reason="ROCm DK2 sparse-attention lane lowers selected-block layouts "
+               "(MSA explicit selected_block_ids plus DSA/NSA-compatible block "
+               "worklists) to COMPILER-GENERATED scalar/row-tiled block-sparse "
+               "attention kernels, with a GPU-resident top-k selector for MSA/"
+               "NSA score rows. It preserves GQA grouping, q-position causal "
+               "masking, and dense-equivalence when selected blocks cover the "
+               "full KV range. f32 softmax/accumulate.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_optimizer_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_optimizer_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1614,6 +1662,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "moe-kernel: one thread per (token, out-col); routing resolved on "
                "host) HIP-launched. f32, matches numpy.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_moe_transport_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_moe_transport_compiled",
+        execution_kind="reference_cpu", executable=True,
+        executor_id="rocm_moe_transport_compiled", runtime_status="success",
+        reason="ROCm DK3 MoE transport artifact executes moe_dispatch, "
+               "moe_combine, and grouped_swiglu against the stdlib DispatchPlan "
+               "oracle through the runtime ABI. This pins token permutation, "
+               "group sizes, capacity drops, and combine weights; promotion to "
+               "native_gpu requires HIP gather/scatter transport kernels.",
+        execution_mode="reference_oracle"),
     ("rocm", "rocm_normcompose_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_normcompose_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1710,6 +1768,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "kernel (generate-rocm-fpquant-kernel: log2/exp2/roundeven -> "
                "ROCDL). ROCm mirror of x86_fpquant. f32.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_dequant_gemm_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_dequant_gemm_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_dequant_gemm_compiled", runtime_status="success",
+        reason="ROCm DK4 dequant-GEMM artifact launches the compiler-generated "
+               "fused HIP/ROCDL packed-code dequant-into-GEMM kernel "
+               "(generate-rocm-dequant-gemm-kernel) for int4/int8 codes + "
+               "per-group scales, f32 accumulate. The executor falls back to "
+               "the packed-weight oracle only when ROCm hardware or tessera-opt "
+               "is unavailable.",
+        execution_mode="hip_runtime"),
     ("rocm", "rocm_nvfp4_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_nvfp4_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1791,7 +1860,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "conv reference to WMMA f16 tolerance.",
         execution_mode="hip_runtime"),
     # Exotic-attention compositions — gated_attention / mla_decode /
-    # mla_decode_fused on the WMMA flash_attn + GEMM kernels. vs numpy.
+    # mla_decode_fused on WMMA flash/GEMM plus mla_decode_step absorbed-latent
+    # decode on the DK1 generated ROCm kernel. vs stdlib/numpy.
     ("rocm", "rocm_exotic_attn_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_exotic_attn_compiled",
         execution_kind="native_gpu", executable=True,
@@ -1799,7 +1869,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm exotic-attention artifact composes the COMPILER-GENERATED "
                "WMMA flash_attn kernel with the WMMA GEMM kernel (MLA latent "
                "projections) + an elementwise gate — gated_attention, mla_decode, "
-               "mla_decode_fused. f16/bf16, f32 softmax+accumulate.",
+               "mla_decode_fused — and routes mla_decode_step through the DK1 "
+               "absorbed-latent decode kernel against stdlib.attention."
+               "mla_decode_step. f16/bf16, f32 softmax+accumulate.",
         execution_mode="hip_runtime"),
     # DeltaNet — causal sequential-scan gated/delta linear attention. vs numpy.
     ("rocm", "rocm_deltanet_compiled"): ExecutionRow(

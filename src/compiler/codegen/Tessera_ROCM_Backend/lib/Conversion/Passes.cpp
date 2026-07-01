@@ -42,6 +42,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMBinaryLossKernelPass(); });
   registerPass([]() { return createGenerateROCMPolicyLossKernelPass(); });
   registerPass([]() { return createGenerateROCMFpQuantKernelPass(); });
+  registerPass([]() { return createGenerateROCMDequantGemmKernelPass(); });
   registerPass([]() { return createGenerateROCMDftKernelPass(); });
   registerPass([]() { return createGenerateROCMSpmmKernelPass(); });
   registerPass([]() { return createGenerateROCMSddmmKernelPass(); });
@@ -57,6 +58,10 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMAlibiKernelPass(); });
   registerPass([]() { return createGenerateROCMDeltaNetKernelPass(); });
   registerPass([]() { return createGenerateROCMRopeKernelPass(); });
+  registerPass([]() { return createGenerateROCMDSparkDraftBlockKernelPass(); });
+  registerPass([]() { return createGenerateROCMMLAAbsorbDecodeKernelPass(); });
+  registerPass([]() { return createGenerateROCMBlockSparseAttnKernelPass(); });
+  registerPass([]() { return createGenerateROCMBlockSparseTopKKernelPass(); });
   registerPass([]() { return createGenerateROCMSoftmaxKernelPass(); });
   registerPass([]() { return createGenerateROCMNormKernelPass(); });
   registerPass([]() { return createGenerateROCMReduceKernelPass(); });

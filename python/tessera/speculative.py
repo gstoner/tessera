@@ -34,7 +34,7 @@ Design references:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -590,6 +590,203 @@ class SpeculativeStep:
         return result
 
 
+@dataclass(frozen=True)
+class DK5LaneSelection:
+    """Runtime lane choices for the DK5 scaled speculative-decode gate."""
+
+    draft: str = "rocm_dspark_draft_block_compiled"
+    accept: str = "spec_accept"
+    cache_effects: str = "cache_commit/cache_rollback"
+    mla: str | None = None
+    sparse_attention: str | None = None
+    moe: str | None = None
+    dequant_gemm: str | None = None
+
+    def as_dict(self) -> dict[str, str]:
+        out = {
+            "draft": self.draft,
+            "accept": self.accept,
+            "cache_effects": self.cache_effects,
+        }
+        for k in ("mla", "sparse_attention", "moe", "dequant_gemm"):
+            v = getattr(self, k)
+            if v is not None:
+                out[k] = v
+        return out
+
+
+@dataclass(frozen=True)
+class DK5SpeculativeGateResult:
+    """Result of one DK5 DSpark → target_verify → spec_accept step."""
+
+    draft_output: Any
+    proposal: Any
+    target_tokens: np.ndarray
+    accepted_lengths: np.ndarray
+    emitted_tokens: tuple[tuple[int, ...], ...]
+    lanes: DK5LaneSelection
+    draft_execution_kind: str
+    cache_final_seq: tuple[int, ...]
+
+
+def _cfg_get(config: Any, name: str, default: Any = None) -> Any:
+    if config is None:
+        return default
+    if isinstance(config, Mapping):
+        return config.get(name, default)
+    return getattr(config, name, default)
+
+
+def dk5_select_lanes(model_config: Any = None) -> DK5LaneSelection:
+    """Select the ROCm DK lanes requested by a model config.
+
+    The predicate is intentionally structural so tests and config factories can
+    pass a dataclass or a plain mapping. The returned names are execution-matrix
+    compiler paths, which makes DK5 provenance explicit in serving telemetry.
+    """
+
+    sparse = _cfg_get(model_config, "sparse")
+    if sparse is None and _cfg_get(model_config, "msa_top_k_blocks") is not None:
+        sparse = "msa"
+    uses_mla = bool(_cfg_get(model_config, "uses_mla", False)
+                    or _cfg_get(model_config, "mla", False)
+                    or _cfg_get(model_config, "mla_rank", None) is not None)
+    uses_sparse = sparse in {"dsa", "nsa", "msa"} or bool(
+        _cfg_get(model_config, "uses_sparse_attention", False))
+    uses_moe = bool(_cfg_get(model_config, "uses_moe", False)
+                    or int(_cfg_get(model_config, "num_experts", 0) or 0) > 0)
+    quantized = bool(_cfg_get(model_config, "quantized", False)
+                     or _cfg_get(model_config, "weight_dtype") in {"int4", "int8", "fp8"}
+                     or _cfg_get(model_config, "quantization", None) is not None)
+    return DK5LaneSelection(
+        mla="rocm_exotic_attn_compiled" if uses_mla else None,
+        sparse_attention="rocm_sparse_attn_compiled" if uses_sparse else None,
+        moe="rocm_moe_transport_compiled" if uses_moe else None,
+        dequant_gemm="rocm_dequant_gemm_compiled" if quantized else None,
+    )
+
+
+def _ds2_artifact(cfg: Any):
+    from . import runtime as _rt
+
+    return _rt.RuntimeArtifact(metadata={
+        "target": "rocm",
+        "compiler_path": "rocm_dspark_draft_block_compiled",
+        "executable": True,
+        "arg_names": ["target_hidden", "prev_tokens", "anchors", "weights"],
+        "dspark_config": {
+            "num_anchors": int(cfg.num_anchors),
+            "block_size": int(cfg.block_size),
+            "vocab_size": int(cfg.vocab_size),
+            "confidence_threshold": float(cfg.confidence_threshold),
+        },
+        "ops": [{"op_name": "tessera.dspark.draft_block"}],
+    })
+
+
+def _append_cache_chunk(cache: Any, chunk: Any) -> None:
+    if chunk is None:
+        return
+    if isinstance(chunk, tuple) and len(chunk) == 2:
+        cache.append(chunk[0], chunk[1])
+    else:
+        cache.append(chunk)
+
+
+def _commit_speculative_caches(cache_handles: Sequence[Any],
+                               speculative_cache_chunks: Sequence[Any],
+                               cache_pre_seq: int,
+                               accepted_len: int) -> tuple[int, ...]:
+    for cache, chunk in zip(cache_handles, speculative_cache_chunks):
+        _append_cache_chunk(cache, chunk)
+        advance_kv(cache, int(cache_pre_seq) + int(accepted_len))
+    return tuple(int(getattr(cache, "current_seq")) for cache in cache_handles)
+
+
+def dk5_scaled_speculative_decode_gate(
+    *,
+    target_hidden: Any,
+    prev_tokens: Any,
+    anchors: Any,
+    dspark_weights: Any,
+    dspark_config: Any,
+    target_verify: Callable[[np.ndarray, Any, Any], Any],
+    prompt_tokens: Any | None = None,
+    model_config: Any = None,
+    cache_handles: Sequence[Any] = (),
+    cache_pre_seq: int | None = None,
+    speculative_cache_chunks: Sequence[Any] = (),
+) -> DK5SpeculativeGateResult:
+    """One scaled DK5 speculative decode step.
+
+    Composition:
+    DS2 draft block → target_verify greedy tokens → spec_accept-style longest
+    prefix → cache commit/rollback via cursor trim. Optional `model_config`
+    records which DK1/DK2/DK3/DK4 lanes this model would select.
+    """
+
+    from . import runtime as _rt
+    from .stdlib import dspark as _dspark
+
+    res = _rt.launch(
+        _ds2_artifact(dspark_config),
+        (target_hidden, prev_tokens, anchors, dspark_weights),
+    )
+    if not res.get("ok"):
+        raise RuntimeError(f"DS2 draft block launch failed: {res.get('reason')}")
+    raw = res["output"]
+    draft = _dspark.DSparkDraftOutput(
+        logits=np.asarray(raw["logits"], dtype=np.float32),
+        confidence_logits=np.asarray(raw["confidence_logits"], dtype=np.float32),
+        tokens=np.asarray(raw["tokens"], dtype=np.int64),
+        hidden=np.asarray(raw["hidden"], dtype=np.float32),
+    )
+    proposal = _dspark.select_proposal(
+        draft, anchors, threshold=float(dspark_config.confidence_threshold))
+    target = np.asarray(target_verify(np.asarray(proposal.tokens, dtype=np.int64),
+                                      proposal, draft), dtype=np.int64)
+    B, D = proposal.tokens.shape
+    if target.shape != (B, D + 1):
+        raise ValueError(f"target_verify must return shape {(B, D + 1)}; got {target.shape}")
+
+    accepted = np.zeros((B,), dtype=np.int64)
+    emitted: list[tuple[int, ...]] = []
+    for b in range(B):
+        n = 0
+        limit = min(int(proposal.prefix_length[b]), D)
+        for i in range(limit):
+            if int(proposal.tokens[b, i]) != int(target[b, i]):
+                break
+            n += 1
+        accepted[b] = n
+        emitted.append(tuple(int(x) for x in proposal.tokens[b, :n]) + (int(target[b, n]),))
+
+    if cache_handles:
+        if cache_pre_seq is None:
+            raise ValueError("cache_pre_seq is required when cache_handles are provided")
+        if not speculative_cache_chunks:
+            raise ValueError("speculative_cache_chunks are required with cache_handles")
+        if len(speculative_cache_chunks) != len(cache_handles):
+            raise ValueError("speculative_cache_chunks must match cache_handles length")
+        # DK5 currently commits one batch-row cache set; multi-row cache sharding
+        # is represented by multiple handles, all using row 0's accepted length.
+        cache_final = _commit_speculative_caches(
+            cache_handles, speculative_cache_chunks, int(cache_pre_seq), int(accepted[0]))
+    else:
+        cache_final = ()
+
+    return DK5SpeculativeGateResult(
+        draft_output=draft,
+        proposal=proposal,
+        target_tokens=target,
+        accepted_lengths=accepted,
+        emitted_tokens=tuple(emitted),
+        lanes=dk5_select_lanes(model_config),
+        draft_execution_kind=str(res.get("execution_kind", "")),
+        cache_final_seq=cache_final,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Gumiho serial-draft loop — the SD1 primitives composed as ONE decode loop
 # ─────────────────────────────────────────────────────────────────────────────
@@ -672,6 +869,8 @@ __all__ = [
     "DraftSample",
     "RejectionSamplingResult",
     "SpeculativeStep",
+    "DK5LaneSelection",
+    "DK5SpeculativeGateResult",
     "expand_tree",
     "sample_draft_chain",
     "rejection_verify_chain",
@@ -680,6 +879,8 @@ __all__ = [
     "batch_verify",
     "advance_kv",
     "advance_ssm",
+    "dk5_select_lanes",
+    "dk5_scaled_speculative_decode_gate",
     "autoregressive_decode",
     "gumiho_serial_draft",
 ]

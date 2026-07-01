@@ -316,6 +316,18 @@ Acceptance:
 
 Add DSpark as a library/model-family contract before attempting fused kernels.
 
+Current increment (2026-06-30):
+
+- **DS1 reference library — landed.** `tessera.stdlib.dspark` now owns the
+  NumPy oracle for anchor sampling, anchor candidate masks, anchor-block
+  attention masks, vanilla draft-block forward, confidence-prefix selection,
+  proposal selection, and CE + L1/probability/confidence losses.
+- **Tests — landed.** `tests/unit/test_stdlib_dspark.py` pins the DSpark shape
+  contract that DS2 CUDA/ROCm fused draft-block kernels must match:
+  `[B, anchors, block_size, vocab]` logits, `[B, anchors, block_size]`
+  confidence logits, selected draft tokens, and proposal rows consumable by the
+  SD1 `spec_accept` path.
+
 Library pieces:
 
 - anchor sampling and anchor candidate masks;
@@ -338,9 +350,50 @@ Acceptance:
   `[B, anchors, block_size, vocab]` logits, target ids, masks, confidence logits.
 - DSpark serving proposal plugs into `tessera.speculative` verification.
 
+## ROCm Execution Order
+
+This is the dependency order for the ROCm buildout. CUDA can lead when a kernel
+design is easier to validate there, but every step below has a ROCm acceptance
+gate before it is considered closed.
+
+1. **DS1 — reference oracle.** Keep `tessera.stdlib.dspark` as the source of
+   truth for DSpark proposal numerics and shapes.
+2. **DS2 — fused draft-block forward.** Lower the DSpark block mask + vanilla
+   draft head to a static-shape ROCm kernel and compare against DS1.
+3. **DK4 — dequant-GEMM.** Promote packed codes + scales to CUDA/ROCm fused
+   dequant-into-GEMM, because MoE experts and model weights consume it.
+4. **DK3 — MoE dispatch/combine/grouped GEMM.** Use DK4 for quantized expert
+   compute; prove deterministic dispatch/combine and uneven group sizes.
+5. **DK1 — MLA fused decode.** Reuse the existing MLA fusion slot and add the
+   ROCm absorbed-latent decode proof against `stdlib.attention.mla_decode_step`.
+6. **DK2 — NSA/DSA/MSA sparse attention.** Lower selected-block layouts to ROCm
+   decode kernels and preserve dense-equivalence tests.
+7. **DK5 — scaled end-to-end speculative decode gate.** Compose DS2 + target
+   verify + spec_accept + cache commit/rollback, selecting DK1/DK2/DK3/DK4 lanes
+   when the model config asks for them.
+
 ## DS2 - Fused Draft-Block Forward
 
 This is the first DSpark performance payoff.
+
+Current increment (2026-06-30):
+
+- **DS2 native ROCm generator + runtime ABI — landed.** The
+  `rocm_dspark_draft_block_compiled` execution-matrix row now reaches
+  `runtime.launch()` and attempts the compiler-generated
+  `generate-rocm-dspark-draft-block-kernel` HSACO path first. On ROCm hardware
+  it reports `execution_kind=native_gpu`; without `tessera-opt`/ROCm hardware it
+  falls back to the DS1 oracle and reports `reference_cpu`.
+- **DS2 tests — landed.** `tests/unit/test_rocm_dspark_draft_block_compiled.py`
+  proves runtime output matches `tessera.stdlib.dspark.draft_block_forward`,
+  includes a codegen-lowering smoke for the generated ROCm pass, and carries a
+  hardware-gated native ROCm correctness proof. `test_stdlib_dspark_perf.py`
+  carries the DS1/DS2 CPU perf budgets.
+- **DS2 native ROCm perf proof — hardware-gated.** The first native fused
+  draft-block kernel is intentionally shape-generic and serializes each
+  `(batch, anchor)` chain inside one GPU thread. The remaining promotion is the
+  cooperative H/V reduction tuning and benchmark proof against the reference
+  launch baseline on target ROCm hardware.
 
 Kernel contract:
 
@@ -375,6 +428,21 @@ Acceptance:
 
 Promote existing MLA compiler visibility into executable CUDA/ROCm kernels.
 
+Current increment (2026-06-30):
+
+- **DK1 ROCm absorbed-latent decode proof — landed.** The existing
+  `rocm_exotic_attn_compiled` MLA fusion slot now accepts
+  `tessera.mla_decode_step`, appends compressed latent/rope cache state like
+  `stdlib.attention.mla_decode_step`, and routes the attention body through the
+  generated `generate-rocm-mla-absorb-decode-kernel` path on ROCm hardware.
+- **DK1 fallback provenance — landed.** Without a usable ROCm runtime the same
+  artifact falls back to `stdlib.attention.mla_decode_step` and reports
+  `execution_kind=reference_cpu`; hardware runs report `native_gpu`.
+- **DK1 remaining promotion.** The first ROCm kernel is scalar-per-output and
+  proves the ABI/numerics without materializing per-head K/V. The open
+  performance work is cooperative tiling over sequence/latent/value dimensions
+  and the CUDA sibling proof.
+
 Work:
 
 - Reuse the MLA fusion pass slot to rewrite explicit latent K/V materialization
@@ -397,6 +465,28 @@ Acceptance:
 Unify the existing DSA/NSA/MSA sparse-attention contracts into target-specific
 block-sparse kernels.
 
+Current increment (2026-06-30):
+
+- **DK2 ROCm selected-block kernel proof — landed.** A new
+  `rocm_sparse_attn_compiled` lane lowers explicit selected KV-block layouts to
+  the generated `generate-rocm-block-sparse-attn-kernel` path. The ABI consumes
+  `B,Hkv,Sq,top_k` block ids, query positions, Q/K/V, and block metadata, then
+  computes exact GQA softmax attention over only the selected blocks.
+- **MSA/DSA selected-layout coverage — landed.** MSA can pass
+  `selected_block_ids` directly or let the runtime use the stdlib selector; DSA
+  normalizes its selected keep mask into the same block-id worklist. The
+  artifact falls back to stdlib references without ROCm hardware and reports
+  `reference_cpu`; hardware runs report `native_gpu`.
+- **DK2 first performance promotion — landed.** The lane now has a row-tiled
+  selected-block attention directive (`block_sparse_attention_tiled`) and a
+  GPU-resident top-k selector directive (`block_sparse_topk_select`). Runtime
+  `selection_strategy="auto"` uses the GPU selector on ROCm hardware and avoids
+  hardware probes on CPU-only hosts; `attention_strategy="tiled"` selects the
+  row-tiled kernel for value widths that fit one workgroup.
+- **DK2 remaining promotion.** Open performance work is deeper cooperative
+  sparse-flash tiling that shares score/softmax work across value lanes, plus
+  CUDA parity.
+
 Work:
 
 - Define one selected-block layout contract per family:
@@ -417,6 +507,22 @@ Acceptance:
 
 Make MoE movement and grouped expert compute compiler-visible and backend
 executable.
+
+Current increment (2026-06-30):
+
+- **DK3 ROCm transport ABI + perf baseline - landed.** The
+  `rocm_moe_transport_compiled` execution-matrix row now reaches
+  `runtime.launch()` for `moe_dispatch`, `moe_combine`, and `grouped_swiglu`,
+  consuming the stdlib `DispatchPlan` through the same ABI the HIP transport
+  kernels will use. It reports `execution_kind=reference_cpu` until native
+  gather/scatter transport kernels are promoted.
+- **DK3 tests - landed.** `tests/unit/test_rocm_moe_transport_compiled.py`
+  proves dispatch permutation, weighted combine, uneven grouped SwiGLU, and a
+  runtime-launch perf baseline against `tessera.stdlib.moe`.
+- **DK3 native ROCm transport - open.** Existing `rocm_moe_compiled` remains the
+  native top-1 compute lane; the remaining DK3 promotion is HIP dispatch,
+  combine, and grouped expert transport that can flip
+  `rocm_moe_transport_compiled` from `reference_cpu` to `native_gpu`.
 
 Work:
 
@@ -440,6 +546,25 @@ Acceptance:
 
 Close the quantized matrix path for CUDA/ROCm.
 
+Current increment (2026-06-30):
+
+- **DK4 native ROCm generator + runtime ABI — landed.** The
+  `rocm_dequant_gemm_compiled` execution-matrix row now reaches
+  `runtime.launch()` for `dequant_matmul` and `dequant_grouped_gemm`, consuming
+  packed int4/int8 codes + per-group scales through the same ABI a fused kernel
+  will use. On ROCm hardware it launches
+  `generate-rocm-dequant-gemm-kernel` and reports `execution_kind=native_gpu`;
+  without `tessera-opt`/ROCm hardware it falls back to the packed-weight oracle
+  and reports `reference_cpu`.
+- **DK4 tests — landed.** `tests/unit/test_rocm_dequant_gemm_compiled.py` proves
+  single INT4 dequant-GEMM, grouped INT8 expert GEMM, and a runtime-launch perf
+  baseline against `tessera.stdlib.quant`; it also includes codegen lowering
+  coverage and a hardware-gated native ROCm correctness proof.
+- **DK4 native ROCm perf proof — hardware-gated.** The first native fused kernel
+  avoids full fp32 weight materialization but is scalar-per-output. The remaining
+  promotion is cooperative tiled GEMM, grouped launch batching, and benchmark
+  proof against the reference launch baseline on target ROCm hardware.
+
 Work:
 
 - Treat packed codes and scales as first-class operands.
@@ -460,6 +585,21 @@ Acceptance:
 
 The integration target is a scaled speculative decode step that exercises the
 new stack without requiring full frontier-model hardware.
+
+Current increment (2026-06-30):
+
+- **DK5 scaled gate — landed.** `tessera.speculative.
+  dk5_scaled_speculative_decode_gate` composes DS2 draft-block generation,
+  target verification, greedy `spec_accept` semantics, and cache
+  commit/rollback through the existing cursor trim contract.
+- **Lane selection provenance — landed.** `dk5_select_lanes` inspects a model
+  config/dataclass/mapping and records the requested ROCm lanes:
+  `rocm_exotic_attn_compiled` for DK1 MLA, `rocm_sparse_attn_compiled` for DK2
+  sparse attention, `rocm_moe_transport_compiled` for DK3 MoE transport, and
+  `rocm_dequant_gemm_compiled` for DK4 quantized weights.
+- **DK5 tests — landed.** `tests/unit/test_dk5_scaled_speculative_gate.py`
+  forces a partial DSpark acceptance, appends speculative KV entries, proves
+  rollback trims rejected draft state, and checks the selected DK lanes.
 
 Gate:
 

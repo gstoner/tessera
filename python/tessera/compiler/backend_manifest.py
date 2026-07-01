@@ -1946,6 +1946,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("dequant_matmul", "apple_gpu"): "tests/unit/test_stdlib_quant.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("transpose", "apple_gpu"): "tests/unit/test_apple_gpu_transpose.py",
+    ("gather", "apple_gpu"): "tests/unit/test_apple_gpu_gather.py",
+    ("slice", "apple_gpu"): "tests/unit/test_apple_gpu_slice.py",
     # rope(q)/rope(k) vs a numpy rotary reference (execute-compare), not the
     # buffer-pool RAII test.
     ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_ops_interception.py",

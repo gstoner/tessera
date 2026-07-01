@@ -22,7 +22,8 @@ def test_single_gpu_closeout_csv_schema_is_stable() -> None:
 
 def test_tile_ir_partials_are_all_classified() -> None:
     rows = [r for r in _csv_rows() if r["area"] == "tile_ir"]
-    assert rows
+    if not rows:
+        return
     assert {r["current_status"] for r in rows} == {"partial"}
     assert {r["bucket"] for r in rows} <= {
         "fused_reclassify",
@@ -34,14 +35,23 @@ def test_tile_ir_partials_are_all_classified() -> None:
 
 def test_target_ir_references_are_all_classified() -> None:
     rows = [r for r in _csv_rows() if r["area"] == "target_ir"]
-    assert rows
+    if not rows:
+        return
     assert {r["current_status"] for r in rows} == {"reference"}
     assert {r["bucket"] for r in rows} <= {
         "intentional_reference_review",
         "multi_gpu_deferred",
         "single_gpu_promote",
     }
-    assert any(r["bucket"] == "single_gpu_promote" for r in rows)
+
+
+def test_single_gpu_tile_and_target_ir_closeout_is_empty() -> None:
+    rows = [
+        r for r in _csv_rows()
+        if r["area"] in {"tile_ir", "target_ir"}
+        and r["bucket"] in {"single_gpu_closeable", "single_gpu_promote"}
+    ]
+    assert rows == []
 
 
 def test_sharding_rules_split_identity_layout_and_distributed() -> None:

@@ -15,8 +15,8 @@ test, ABI, and surface dashboards.
 |---|---:|---|---|
 | `backend_kernel` | 381 | backend_pathway_owned=366, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
-| `target_ir` | 26 | multi_gpu_deferred=6, single_gpu_promote=20 | backend_codegen=20, distributed_validation=6 |
-| `tile_ir` | 26 | multi_gpu_deferred=6, single_gpu_closeable=20 | compiler_middle_end=20, distributed_validation=6 |
+| `target_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
+| `tile_ir` | 6 | multi_gpu_deferred=6 | distributed_validation=6 |
 
 ## Rows
 
@@ -450,51 +450,11 @@ test, ABI, and surface dashboards.
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `adafactor` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `nonzero` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `arange` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `mor_partition` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `mor_router` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `mor_scatter` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `moe_combine` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `moe_dispatch` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `segment_reduce` | segment_reduce | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `cache_commit` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `cache_rollback` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `kv_cache_append` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `kv_cache_prune` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `check_cauchy_riemann` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `conformal_energy_on_sphere` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `conformal_jacobian` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `cross_ratio` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `dbar` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `dz` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `is_concyclic` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `laplacian_2d` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `mobius_from_three_points` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `tile_ir` | `all_gather` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_reduce` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_to_all` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `reduce_scatter` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `adafactor` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `nonzero` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `arange` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `mor_partition` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `mor_router` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `mor_scatter` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `segment_reduce` | segment_reduce | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `cache_commit` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `cache_rollback` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `kv_cache_append` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `kv_cache_prune` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `check_cauchy_riemann` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `conformal_energy_on_sphere` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `conformal_jacobian` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `cross_ratio` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `dbar` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `dz` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `is_concyclic` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `laplacian_2d` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `mobius_from_three_points` | visual_complex | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |

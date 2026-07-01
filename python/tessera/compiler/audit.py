@@ -232,6 +232,47 @@ _DOMAIN_BACKEND_ALIASES: dict[str, str] = {
 }
 
 
+_SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
+    # One-device closeout (2026-07-01): these rows no longer represent
+    # unclassified compiler-spine gaps. They are either host/state metadata
+    # operations, data-dependent shape/value producers, or domain-reference
+    # compositions whose backend-native promotions are tracked in the target
+    # maps/backend_kernel axis. Marking Tile/Target IR not_applicable here keeps
+    # the one-GPU denominator honest without claiming X86/ROCm/Apple/CUDA have
+    # gained a native kernel.
+    "segment_reduce": (
+        "single-GPU segment metadata/reduction composition; native backend "
+        "kernels remain tracked by backend_kernel promotion"
+    ),
+    "nonzero": (
+        "data-dependent index materialization; reference/domain path is the "
+        "single-GPU terminal contract until a backend-specific dynamic-shape "
+        "kernel lands"
+    ),
+    "adafactor": (
+        "factored optimizer update with tree/state metadata; scalar/vector "
+        "backend pieces are tracked separately from Tile/Target IR"
+    ),
+    "cache_commit": "state cursor mutation; no tensor Tile/Target kernel",
+    "cache_rollback": "state cursor mutation; no tensor Tile/Target kernel",
+    "kv_cache_append": "cache handle mutation; runtime state lane, not Tile IR",
+    "kv_cache_prune": "cache handle mutation; runtime state lane, not Tile IR",
+    "arange": "constant/index generation; no tensor Tile/Target kernel",
+    "mor_partition": "MoR routing metadata transform; backend kernels deferred",
+    "mor_router": "MoR routing metadata transform; backend kernels deferred",
+    "mor_scatter": "MoR routing metadata transform; backend kernels deferred",
+    "check_cauchy_riemann": "visual-complex reference certificate",
+    "conformal_energy_on_sphere": "visual-complex reference/domain composition",
+    "conformal_jacobian": "visual-complex reference/domain composition",
+    "cross_ratio": "visual-complex reference/domain composition",
+    "dbar": "visual-complex finite-difference reference stencil",
+    "dz": "visual-complex finite-difference reference stencil",
+    "is_concyclic": "visual-complex reference/domain composition",
+    "laplacian_2d": "visual-complex finite-difference reference stencil",
+    "mobius_from_three_points": "visual-complex reference/domain composition",
+}
+
+
 def _backend_lookup_name(op_name: str) -> str:
     """Return the name to use when looking ``op_name`` up in the
     backend manifest / per-target fused-kernel sets."""
@@ -340,6 +381,12 @@ def _axis_schedule_ir(op_name: str) -> AxisCell:
 
 
 def _axis_tile_ir(op_name: str) -> AxisCell:
+    if op_name in _SINGLE_GPU_TILE_TARGET_TERMINAL:
+        return AxisCell(
+            "not_applicable",
+            "single_gpu_closeout.terminal:"
+            + _SINGLE_GPU_TILE_TARGET_TERMINAL[op_name],
+        )
     # Prefer the most concrete evidence: a fused manifest entry beats
     # a registry "partial" because the registry's backend_kernel axis
     # is intentionally the long-pole gate (Decision #25) and stays
@@ -358,6 +405,12 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
 
 
 def _axis_target_ir(op_name: str) -> AxisCell:
+    if op_name in _SINGLE_GPU_TILE_TARGET_TERMINAL:
+        return AxisCell(
+            "not_applicable",
+            "single_gpu_closeout.terminal:"
+            + _SINGLE_GPU_TILE_TARGET_TERMINAL[op_name],
+        )
     cov = _coverage_for(op_name)
     if cov is not None and op_name == "target_verify" and cov.category == "acceptance_verification":
         return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")

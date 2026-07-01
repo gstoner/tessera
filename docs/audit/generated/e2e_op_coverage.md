@@ -25,9 +25,9 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 280 |
-| ``runnable_reference`` | 26 |
+| ``runnable_reference`` | 6 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 9 |
+| ``partial`` | 29 |
 | ``planned`` | 0 |
 | **total** | **315** |
 
@@ -316,7 +316,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (26)
+## runnable_reference (6)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -324,42 +324,42 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``nonzero`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``arange`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``mor_partition`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``mor_router`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``mor_scatter`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
-| ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
-| ``cache_commit`` | state_update | public | public | registered | partial | reference | ready | none |
-| ``cache_rollback`` | state_update | public | public | registered | partial | reference | ready | none |
-| ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
-| ``kv_cache_prune`` | state_update | public | public | registered | partial | reference | ready | none |
-| ``check_cauchy_riemann`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``conformal_jacobian`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``cross_ratio`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``dbar`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``dz`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``is_concyclic`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
-| ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
 
-## partial (9)
+## partial (29)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``target_verify`` | acceptance_verification | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``adafactor`` | functional_optimizer_step | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``nonzero`` | indexing | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``arange`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``broadcast`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``expand`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``flatten`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``mor_partition`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``mor_router`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``mor_scatter`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``reshape`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``tile_view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``unsqueeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``segment_reduce`` | segment_reduce | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``cache_commit`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``cache_rollback`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``kv_cache_append`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``kv_cache_prune`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``check_cauchy_riemann`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``conformal_energy_on_sphere`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``conformal_jacobian`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``cross_ratio`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``dbar`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``dz`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``is_concyclic`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``laplacian_2d`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``mobius_from_three_points`` | visual_complex | public | public | registered | not_applicable | not_applicable | ready | none |
 
 ## How to extend
 

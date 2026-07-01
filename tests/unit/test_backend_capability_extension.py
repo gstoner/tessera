@@ -183,6 +183,7 @@ def test_primitive_is_complete_rejects_fused_only() -> None:
 _APPLE_GPU_HARDWARE_VERIFIED_OPS = frozenset({
     "softmax", "softmax_safe", "gelu", "rope", "flash_attn",
     "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
+    "quantized_matmul",
 })
 
 # Strix Halo bring-up — the ROCm ops whose ``hardware_verified`` claim is
@@ -251,8 +252,9 @@ def test_only_apple_gpu_claims_hardware_verified_today() -> None:
         if not _hardware_verified_claim_is_allowed(op, e)
     ]
     assert not offenders, (
-        "Unexpected hardware_verified claim — only Apple GPU encode-session ops "
-        "(real Metal kernel), Strix Halo ROCm WMMA ops (real AMD-GPU kernel), and "
+        "Unexpected hardware_verified claim — only Apple GPU encode-session/"
+        "packed-quant ops (real Metal kernel), Strix Halo ROCm WMMA ops "
+        "(real AMD-GPU kernel), and "
         "sm_120 NVIDIA mma.sync ops (real RTX 5070 Ti kernel), each with a "
         "checked-in execute_compare_fixture, may claim it. Offenders: "
         + ", ".join(

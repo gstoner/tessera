@@ -1954,6 +1954,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_composite_helper_backend_parity.py"
        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
                   "score_combine")},
+    **{(op, "apple_gpu"): "tests/unit/test_apple_gpu_composite_helpers.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",

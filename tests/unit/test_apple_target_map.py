@@ -67,15 +67,20 @@ def test_per_family_row_counts_match_backend_manifest() -> None:
 
 
 def test_every_apple_gpu_msl_kernel_has_dispatch_symbol() -> None:
-    """If a new MSL kernel lands in ``_APPLE_GPU_KERNELS`` but the
-    dashboard's symbol map doesn't grow to match, the dashboard would
-    silently render an empty symbol.  Catch that here.
+    """If a new driver-backed MSL kernel lands in ``_APPLE_GPU_KERNELS`` but
+    the dashboard's symbol map doesn't grow to match, the dashboard would
+    silently render an empty symbol.  Manifest/composed tensor rows can be
+    symbol-less because they are routed through a higher-level lane.
     """
 
-    from tessera.compiler.apple_target_map import _APPLE_GPU_KERNELS_SYMBOL_MAP
+    from tessera.compiler.apple_target_map import (
+        _APPLE_GPU_KERNELS_SYMBOL_MAP,
+        _DRIVER_DISPATCH_OPS,
+    )
     from tessera.compiler import backend_manifest as bm
 
-    missing = sorted(set(bm._APPLE_GPU_KERNELS) - set(_APPLE_GPU_KERNELS_SYMBOL_MAP))
+    driver_backed = set(bm._APPLE_GPU_KERNELS) & set(_DRIVER_DISPATCH_OPS)
+    missing = sorted(driver_backed - set(_APPLE_GPU_KERNELS_SYMBOL_MAP))
     assert not missing, (
         f"new Apple GPU kernels {missing!r} lack a dispatch symbol "
         "entry in apple_target_map._APPLE_GPU_KERNELS_SYMBOL_MAP — "
@@ -144,9 +149,10 @@ def test_proof_tests_point_at_real_files() -> None:
 def test_dispatch_column_routes_match_real_dispatch() -> None:
     """The ``gpu_dispatch`` column must say ``driver`` for ops the
     generic driver routes (matmul / softmax / gelu / rope /
-    flash_attn / rmsnorm) and ``manifest`` for GA / EBM / M7."""
+    flash_attn / rmsnorm) and ``manifest`` for GA / EBM / M7 plus tensor
+    composite-helper lanes."""
 
-    from tessera.compiler.apple_target_map import all_rows
+    from tessera.compiler.apple_target_map import _DRIVER_DISPATCH_OPS, all_rows
 
     for row in all_rows():
         if row.gpu_status == "absent":
@@ -155,4 +161,5 @@ def test_dispatch_column_routes_match_real_dispatch() -> None:
         if row.family in ("ga", "ebm", "m7"):
             assert row.gpu_dispatch == "manifest", row
         elif row.family == "tensor":
-            assert row.gpu_dispatch in ("driver", "absent"), row
+            expected = "driver" if row.op_name in _DRIVER_DISPATCH_OPS else "manifest"
+            assert row.gpu_dispatch == expected, row

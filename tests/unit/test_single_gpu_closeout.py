@@ -87,6 +87,68 @@ def test_x86_and_rocm_native_backend_rows_are_pathway_owned() -> None:
     assert not offenders
 
 
+def test_compute_tail_backend_rows_are_pathway_owned() -> None:
+    compute_tail_families = {
+        "attention",
+        "diffusion",
+        "indexing",
+        "layout_transform",
+        "loss",
+        "memory",
+        "model_layer",
+        "normalization",
+        "pooling",
+        "position_encoding",
+        "quantization",
+        "recurrent",
+        "rng",
+        "rotary_embedding",
+        "state_update",
+        "stencil",
+        "vision",
+    }
+    offenders = [
+        r for r in _csv_rows()
+        if r["area"] == "backend_kernel"
+        and r["family"] in compute_tail_families
+        and r["bucket"] == "backend_pathway_unowned"
+    ]
+    assert not offenders
+
+
+def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
+    for op in (
+        "rng_beta",
+        "contrastive_loss",
+        "quantize_int4",
+        "image_resize",
+        "adaptive_pool",
+        "gru_cell",
+        "conv1d",
+        "patchify",
+        "edm_precondition",
+        "cross_attention",
+        "depthwise_conv1d",
+        "memory_read",
+    ):
+        entries = {entry.target: entry for entry in bm.manifest_for(op)}
+        assert entries["cpu"].status == "reference"
+        assert entries["x86"].status == "reference"
+        assert entries["apple_cpu"].status == "reference"
+        assert entries["rocm"].status == "planned"
+        assert "planned_kernel" in entries["rocm"].feature_flags
+        for target, arch in (
+            ("nvidia_sm80", "sm_80"),
+            ("nvidia_sm90", "sm_90a"),
+            ("nvidia_sm100", "sm_100a"),
+            ("nvidia_sm120", "sm_120a"),
+        ):
+            assert entries[target].status == "planned"
+            assert entries[target].cuda_arch_min == arch
+            assert entries[target].nvcc_version_min == "13.3"
+            assert "planned_kernel" in entries[target].feature_flags
+
+
 def test_host_only_categories_are_not_backend_kernel_unowned() -> None:
     host_only_categories = {
         "aot", "conformance", "control_flow", "data", "diffusion_schedule",

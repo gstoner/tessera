@@ -12632,6 +12632,7 @@ def _executor_table():
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
+        "rocm_composite_helper_compiled": _execute_rocm_composite_helper_compiled,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "x86_scan_compiled": _execute_x86_compiled_scan,
         "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
@@ -12686,6 +12687,7 @@ def _executor_table():
         "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
+        "x86_composite_helper_compiled": _execute_x86_composite_helper_compiled,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
@@ -13796,6 +13798,7 @@ from .compiler.apple_gpu_envelope import (  # noqa: F401
     _APPLE_GPU_DELTA_ATTN_OPS,
     _APPLE_GPU_HYBRID_ATTN_OPS,
     _APPLE_GPU_SPARSE_ATTN_OPS,
+    _APPLE_GPU_COMPOSITE_HELPER_OPS,
     _APPLE_GPU_MPSGRAPH_OPS,
     _APPLE_GPU_PROJECTION_OPS,
     _APPLE_GPU_REDUCE_OPS,
@@ -14558,6 +14561,114 @@ def _apple_gpu_dispatch_quantized_matmul(arrays: list[Any], kwargs: Mapping[str,
 _APPLE_GPU_LANE_HANDLERS: dict[str, Any] | None = None
 
 
+def _apple_gpu_dispatch_composite_helper(op_name: str, operands: list[Any],
+                                         kwargs: dict, np: Any) -> Any:
+    """Single-GPU helpers composed from existing Apple GPU lanes."""
+    import math as _math
+
+    short = str(op_name)
+    if short == "tessera.score_combine":
+        base = np.asarray(operands[0])
+        delta = np.asarray(operands[1])
+        if base.shape != delta.shape:
+            raise ValueError(
+                "score_combine expects base and delta to have identical shapes; "
+                f"got base {base.shape}, delta {delta.shape}"
+            )
+        scaled = np.asarray(delta, np.float32) * np.float32(kwargs.get("gamma", 1.0))
+        try:
+            out = _apple_gpu_dispatch_mpsgraph_binary(
+                "tessera.add",
+                [np.ascontiguousarray(base.astype(np.float32)), np.ascontiguousarray(scaled)],
+                {},
+                np,
+            )
+            return np.asarray(out).astype(np.result_type(base, delta))
+        except Exception:  # noqa: BLE001 - no Metal runtime on host: exact oracle.
+            return (base.astype(np.float32) + scaled).astype(np.result_type(base, delta))
+
+    if short == "tessera.memory_index_score":
+        k = np.asarray(operands[0])
+        q = np.asarray(operands[1])
+        if k.ndim != 4 or q.ndim != 4 or k.shape[:2] != q.shape[:2] or k.shape[-1] != q.shape[-1]:
+            return None
+        scale = kwargs.get("scale", None)
+        sc = float(scale) if scale is not None else 1.0 / _math.sqrt(q.shape[-1])
+        try:
+            scores = _apple_gpu_dispatch_bmm(
+                np.ascontiguousarray(q.astype(np.float32) * np.float32(sc)),
+                np.ascontiguousarray(np.swapaxes(k.astype(np.float32), -1, -2)),
+                np,
+            )
+            if scores is not None:
+                return _apple_gpu_dispatch_unary(
+                    "tessera.sigmoid",
+                    [np.ascontiguousarray(np.asarray(scores, np.float32))],
+                    np,
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        from tessera import lsa as _lsa
+        return _lsa.memory_index_score(k, q, scale=scale)
+
+    if short == "tessera.msa_index_scores":
+        Q = np.asarray(operands[0])
+        K = np.asarray(operands[1])
+        block_size = int(kwargs["block_size"])
+        if Q.ndim != 4 or K.ndim != 4 or block_size <= 0:
+            return None
+        B, Hq, Sq, D = Q.shape
+        Bk, Hkv, Sk_real, Dk = K.shape
+        if B != Bk or D != Dk or Hkv == 0 or Hq % Hkv != 0:
+            return None
+        scale_kw = kwargs.get("scale", None)
+        scale = float(scale_kw) if scale_kw is not None else 1.0 / _math.sqrt(D)
+        Kf = K.astype(np.float32)
+        pad = (-Sk_real) % block_size
+        if pad:
+            Kf = np.concatenate([Kf, np.zeros((B, Hkv, pad, D), dtype=np.float32)], axis=2)
+        nb = Kf.shape[2] // block_size
+        g = Hq // Hkv
+        q_grp = Q.astype(np.float32).reshape(B, Hkv, g, Sq, D).mean(axis=2)
+        k_c = Kf.reshape(B, Hkv, nb, block_size, D).mean(axis=3)
+        try:
+            out = _apple_gpu_dispatch_bmm(
+                np.ascontiguousarray(q_grp * np.float32(scale)),
+                np.ascontiguousarray(np.swapaxes(k_c, -1, -2)),
+                np,
+            )
+            if out is not None:
+                return np.asarray(out, np.float32)
+        except Exception:  # noqa: BLE001
+            pass
+        from tessera.stdlib import attention as _attn
+        return _attn.msa_index_scores(Q, K, block_size=block_size, scale=scale_kw)
+
+    if short == "tessera.varlen_sdpa":
+        from .nn.varlen import varlen_sdpa as _varlen
+        cu_q = operands[3] if len(operands) > 3 else kwargs["cu_seqlens_q"]
+        cu_k = operands[4] if len(operands) > 4 else kwargs["cu_seqlens_k"]
+        varlen_kwargs = {
+            "cu_seqlens_q": cu_q,
+            "cu_seqlens_k": cu_k,
+            "causal": bool(kwargs.get("causal", False)),
+            "scale": kwargs.get("scale", None),
+        }
+        try:
+            return _varlen(
+                operands[0],
+                operands[1],
+                operands[2],
+                **varlen_kwargs,
+                attention_fn=lambda q, k, v, **kw: _apple_gpu_dispatch_flash_attn(
+                    "tessera.flash_attn", [q, k, v], kw, np),
+            )
+        except Exception:  # noqa: BLE001
+            return _varlen(operands[0], operands[1], operands[2], **varlen_kwargs)
+
+    return None
+
+
 def _apple_gpu_lane_handlers() -> dict[str, Any]:
     """P1 (2026-06-09) — lane → handler adapter table for the per-op
     dispatcher above. Lanes come from ``apple_gpu_envelope.APPLE_GPU_LANE_BY_OP``
@@ -14594,6 +14705,7 @@ def _apple_gpu_lane_handlers() -> dict[str, Any]:
         "delta_attn": _apple_gpu_dispatch_delta_attn,
         "hybrid_attn": _apple_gpu_dispatch_hybrid_attn,
         "sparse_attn": _apple_gpu_dispatch_sparse_attn,
+        "composite_helper": _apple_gpu_dispatch_composite_helper,
         "rowop": _apple_gpu_dispatch_rowop,
         "silu_mul": lambda op, a, k, np: _apple_gpu_dispatch_silu_mul(a, np),
         "linear_general": lambda op, a, k, np: _apple_gpu_dispatch_linear_general(a, k, np),
@@ -23892,6 +24004,59 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
     if spec is not None and tessera is not None:
         return tessera.ops.registry.dispatch(spec.public_name, *operands, prefer_runtime=False, **kwargs)
     raise ValueError(f"unsupported runtime CPU op {op_name!r}")
+
+
+_COMPOSITE_HELPER_RUNTIME_OPS = {
+    "tessera.memory_index_score",
+    "tessera.msa_index_scores",
+    "tessera.varlen_sdpa",
+    "tessera.score_combine",
+}
+
+
+def _execute_composite_helper_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+    *,
+    compiler_path: str,
+    rocm_fallback: bool = False,
+) -> Any:
+    """Launch a compiler-visible helper composed from existing runtime ops."""
+    import numpy as np
+
+    md = artifact.metadata or {}
+    ops = md.get("ops")
+    if not isinstance(ops, list) or not ops or not isinstance(ops[0], Mapping):
+        raise ValueError(f"{compiler_path} executor expects a single op metadata row")
+    op = ops[0]
+    op_name = str(op.get("op_name") or op.get("name") or "")
+    if not op_name.startswith("tessera."):
+        op_name = f"tessera.{op_name}"
+    if op_name not in _COMPOSITE_HELPER_RUNTIME_OPS:
+        raise ValueError(
+            f"{compiler_path} executor only supports composite helpers; got {op_name!r}"
+        )
+
+    arg_names = list(md.get("arg_names") or op.get("operands") or [])
+    bound = _bind_launch_args(args, [str(name) for name in arg_names])
+    operands = [_as_numpy(bound[str(name)]) for name in op.get("operands", arg_names)]
+    kwargs = dict(md.get("kwargs") or {})
+    kwargs.update(dict(op.get("kwargs") or {}))
+    out = _execute_runtime_cpu_op(op_name, operands, kwargs, np)
+    if rocm_fallback:
+        return out, "reference_cpu"
+    return out
+
+
+def _execute_x86_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_composite_helper_compiled(
+        artifact, args, compiler_path="x86_composite_helper_compiled")
+
+
+def _execute_rocm_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_composite_helper_compiled(
+        artifact, args, compiler_path="rocm_composite_helper_compiled",
+        rocm_fallback=True)
 
 
 def _runtime_pair(value: Any) -> tuple[int, int]:

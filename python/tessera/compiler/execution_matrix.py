@@ -218,6 +218,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_scatter_compiled": "x86 CPU scatter lane — scatter/scatter_add/"
                             "scatter_reduce (0-reduce indexed store) via the "
                             "AVX-512 row-scatter kernel. f32",
+    "x86_composite_helper_compiled": "x86 CPU composite helper lane for "
+                            "memory_index_score / msa_index_scores / "
+                            "varlen_sdpa / score_combine. Host shape/metadata "
+                            "logic composes existing AVX-512-compatible "
+                            "matmul/attention/binary runtime semantics and is "
+                            "validated end-to-end through runtime.launch. f32",
     "rocm_scatter_compiled": "AMD GPU RDNA scatter lane — scatter/scatter_add/"
                              "scatter_reduce via the COMPILER-GENERATED gfx1151 "
                              "kernel (one thread per element; atomic_rmw). f32",
@@ -531,6 +537,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "attention kernels plus GPU-resident top-k selection "
                             "over explicit B,Hkv,Sq,top_k block ids with GQA, "
                             "causal q-position masking, and f32 softmax",
+    "rocm_composite_helper_compiled": "ROCm composite helper lane for "
+                            "memory_index_score / msa_index_scores / "
+                            "varlen_sdpa / score_combine. The Target IR lane "
+                            "keeps the op compiler-visible and delegates to "
+                            "existing matmul/flash-attn/binary helper semantics; "
+                            "runtime.launch has an exact reference fallback "
+                            "until a HIP-native helper is hardware-proven. f32",
     "rocm_optimizer_compiled": "AMD GPU RDNA optimizer steps (sgd / momentum / "
                             "adam / adamw / lion) — COMPILER-GENERATED gfx1151 "
                             "fused per-parameter update kernel (generate-rocm-"
@@ -1127,6 +1140,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "reduces duplicate targets set/add/min/max). f32, matches the "
                "numpy scatter reference.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_composite_helper_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_composite_helper_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_composite_helper_compiled", runtime_status="success",
+        reason="x86 composite-helper lane keeps memory_index_score, "
+               "msa_index_scores, varlen_sdpa, and score_combine on "
+               "compiler-visible Target IR while composing existing "
+               "matmul/attention/binary runtime semantics plus host metadata "
+               "logic. f32, matches the public ops references.",
+        execution_mode="cpu_avx512"),
     ("x86", "x86_conformal_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_conformal_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1625,6 +1648,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "NSA score rows. It preserves GQA grouping, q-position causal "
                "masking, and dense-equivalence when selected blocks cover the "
                "full KV range. f32 softmax/accumulate.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_composite_helper_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_composite_helper_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_composite_helper_compiled", runtime_status="success",
+        reason="ROCm composite-helper lane keeps memory_index_score, "
+               "msa_index_scores, varlen_sdpa, and score_combine visible to "
+               "Target IR while composing the existing matmul/flash-attn/binary "
+               "helper semantics. runtime.launch reports reference_cpu until "
+               "the HIP-native helper path is hardware-proven. f32.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_optimizer_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_optimizer_compiled",

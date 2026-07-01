@@ -244,6 +244,48 @@ def test_native_target_ir_rows_are_not_left_tile_partial(support_rows) -> None:
     assert not offenders
 
 
+def test_structural_aliases_reuse_existing_tile_target_evidence() -> None:
+    """Structural wrappers should inherit native evidence from canonical lanes."""
+
+    expected = {
+        "dynamic_slice": ("fused", {"fused"}),
+        "dynamic_update_slice": ("fused", {"compiled"}),
+        "chunk": ("fused", {"fused"}),
+        "cast": ("fused", {"fused"}),
+        "index_select": ("fused", {"fused"}),
+        "index_update": ("fused", {"compiled"}),
+        "masked_fill": ("fused", {"compiled"}),
+        "memory_index_select": ("fused", {"fused"}),
+        "memory_index_select_ste": ("fused", {"fused"}),
+        "msa_select_blocks": ("fused", {"fused"}),
+        "pack": ("fused", {"compiled"}),
+        "permute": ("fused", {"fused"}),
+        "rearrange": ("fused", {"fused"}),
+        "reduce": ("fused", {"compiled"}),
+        "rope_merge": ("fused", {"compiled"}),
+        "rope_split": ("fused", {"fused"}),
+        "select": ("fused", {"compiled"}),
+        "split": ("fused", {"fused"}),
+        "take": ("fused", {"fused"}),
+        "unpack": ("fused", {"fused"}),
+    }
+    for op_name, (tile_status, target_statuses) in expected.items():
+        row = audit.support_row_for(op_name)
+        assert row.cells["tile_ir"].status == tile_status, op_name
+        assert row.cells["target_ir"].status in target_statuses, op_name
+
+
+def test_domain_variants_reuse_existing_tile_target_evidence() -> None:
+    """Domain parameterizations should not look like separate codegen gaps."""
+
+    row = audit.support_row_for("ntk_rope")
+    assert row.cells["tile_ir"].status == "fused"
+    assert row.cells["target_ir"].status in {
+        "compiled",
+        "hardware_verified",
+    }
+
+
 def test_x86_and_rocm_native_manifest_rows_close_tile_ir(support_rows) -> None:
     """x86/ROCm native lanes must not drift back to Tile IR partial."""
     from tessera.compiler import backend_manifest as bm
@@ -300,6 +342,13 @@ def test_apple_gpu_structural_data_movers_close_tile_and_target_ir() -> None:
         assert row.cells["target_ir"].status == "fused", name
 
 
+def test_apple_gpu_composite_helpers_close_tile_and_target_ir() -> None:
+    for name in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine"):
+        row = audit.support_row_for(name)
+        assert row.cells["tile_ir"].status == "fused", name
+        assert row.cells["target_ir"].status == "fused", name
+
+
 def test_acceptance_verification_rows_do_not_require_tile_ir() -> None:
     """Verifier/reference acceptance ops are not executable tile kernels."""
     for name in (
@@ -314,6 +363,7 @@ def test_acceptance_verification_rows_do_not_require_tile_ir() -> None:
     target_verify = audit.support_row_for("target_verify")
     assert target_verify.family == "acceptance_verification"
     assert target_verify.cells["tile_ir"].status == "not_applicable"
+    assert target_verify.cells["target_ir"].status == "not_applicable"
 
 
 def test_support_table_includes_canonical_program_section(support_markdown) -> None:

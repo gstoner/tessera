@@ -24,21 +24,24 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 246 |
-| ``runnable_reference`` | 62 |
+| ``complete`` | 280 |
+| ``runnable_reference`` | 26 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 7 |
+| ``partial`` | 9 |
 | ``planned`` | 0 |
 | **total** | **315** |
 
-## complete (246)
+## complete (280)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``spec_accept`` | acceptance_verification | public | public | registered | fused | compiled | ready | none |
 | ``spec_accept_sample`` | acceptance_verification | public | public | registered | fused | compiled | ready | none |
 | ``spec_accept_tree_sample`` | acceptance_verification | public | public | registered | fused | compiled | ready | none |
+| ``attn_compressed_blocks`` | attention | public | public | registered | fused | fused | ready | benchmarked |
+| ``attn_local_window_2d`` | attention | public | public | registered | fused | fused | ready | benchmarked |
 | ``attn_sliding_window`` | attention | public | public | registered | fused | compiled | ready | none |
+| ``attn_top_k_blocks`` | attention | public | public | registered | fused | fused | ready | benchmarked |
 | ``deepseek_sparse_attention`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``flash_attn`` | attention | public | public | registered | fused | hardware_verified | ready | benchmarked |
 | ``gated_attention`` | attention | public | public | registered | fused | compiled | ready | none |
@@ -48,13 +51,19 @@ each row into a single E2E tier.
 | ``kimi_delta_attention`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``lightning_attention`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``linear_attn`` | attention | public | public | registered | fused | compiled | ready | none |
+| ``linear_attn_state`` | attention | public | public | registered | fused | fused | ready | benchmarked |
+| ``lookahead_sparse_attention`` | attention | public | public | registered | fused | fused | ready | benchmarked |
+| ``memory_index_score`` | attention | public | public | registered | fused | fused | ready | benchmarked |
 | ``mla_decode`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``mla_decode_fused`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``modified_delta_attention`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``mqa_attention`` | attention | public | public | registered | fused | compiled | ready | none |
+| ``msa_index_scores`` | attention | public | public | registered | fused | fused | ready | benchmarked |
+| ``msa_sparse_attention`` | attention | public | public | registered | fused | fused | ready | benchmarked |
 | ``multi_head_attention`` | attention | public | public | registered | fused | compiled | ready | benchmarked |
 | ``power_attn`` | attention | public | public | registered | fused | compiled | ready | none |
 | ``retention`` | attention | public | public | registered | fused | compiled | ready | none |
+| ``varlen_sdpa`` | attention | public | public | registered | fused | fused | ready | benchmarked |
 | ``eq`` | comparison | public | public | registered | fused | compiled | ready | none |
 | ``ge`` | comparison | public | public | registered | fused | compiled | ready | none |
 | ``gt`` | comparison | public | public | registered | fused | compiled | ready | none |
@@ -87,6 +96,7 @@ each row into a single E2E tier.
 | ``pow`` | elementwise | public | public | registered | fused | compiled | ready | none |
 | ``relu`` | elementwise | public | public | registered | fused | fused | ready | benchmarked |
 | ``rsqrt`` | elementwise | public | public | registered | fused | compiled | ready | none |
+| ``score_combine`` | elementwise | public | public | registered | fused | fused | ready | benchmarked |
 | ``sigmoid`` | elementwise | public | public | registered | fused | compiled | ready | benchmarked |
 | ``silu`` | elementwise | public | public | registered | fused | hardware_verified | ready | none |
 | ``silu_mul`` | elementwise | public | public | registered | fused | compiled | ready | none |
@@ -132,19 +142,39 @@ each row into a single E2E tier.
 | ``clifford_rotor_sandwich`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_vec_deriv`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``clifford_wedge`` | geometric_algebra | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``dynamic_slice`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``dynamic_update_slice`` | indexing | public | public | registered | fused | compiled | ready | none |
 | ``gather`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``index_select`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``index_update`` | indexing | public | public | registered | fused | compiled | ready | none |
+| ``masked_categorical`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``memory_index_select`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``memory_index_select_ste`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``msa_select_blocks`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
 | ``scatter`` | indexing | public | public | registered | fused | compiled | ready | none |
 | ``scatter_add`` | indexing | public | public | registered | fused | compiled | ready | none |
 | ``scatter_reduce`` | indexing | public | public | registered | fused | compiled | ready | none |
-| ``slice`` | indexing | public | public | registered | fused | fused | ready | none |
+| ``select`` | indexing | public | public | registered | fused | compiled | ready | none |
+| ``slice`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``take`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
+| ``cast`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``cat`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``chunk`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``flip`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``masked_fill`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``pack`` | layout_transform | public | public | registered | fused | compiled | ready | none |
 | ``pad`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``permute`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
+| ``rearrange`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``repeat`` | layout_transform | public | public | registered | fused | compiled | ready | none |
 | ``roll`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``rope_merge`` | layout_transform | public | public | registered | fused | compiled | ready | none |
+| ``rope_split`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
+| ``split`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``stack`` | layout_transform | public | public | registered | fused | compiled | ready | none |
 | ``tile`` | layout_transform | public | public | registered | fused | compiled | ready | none |
 | ``transpose`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
+| ``unpack`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``cholesky`` | linalg_decomposition | public | public | registered | fused | compiled | ready | none |
 | ``lu`` | linalg_decomposition | public | public | registered | fused | compiled | ready | none |
 | ``qr`` | linalg_decomposition | public | public | registered | fused | compiled | ready | none |
@@ -160,7 +190,8 @@ each row into a single E2E tier.
 | ``logical_or`` | logical | public | public | registered | fused | compiled | ready | none |
 | ``logical_xor`` | logical | public | public | registered | fused | compiled | ready | none |
 | ``batched_gemm`` | loop_nest | public | public | registered | fused | compiled | ready | none |
-| ``dequant_matmul`` | loop_nest | public | public | registered | fused | fused | ready | none |
+| ``dequant_grouped_gemm`` | loop_nest | public | public | registered | fused | compiled | ready | none |
+| ``dequant_matmul`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``factorized_matmul`` | loop_nest | public | public | registered | fused | compiled | ready | none |
 | ``gemm`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
@@ -169,6 +200,7 @@ each row into a single E2E tier.
 | ``latent_kv_expand_v`` | loop_nest | public | public | registered | fused | compiled | ready | none |
 | ``matmul`` | loop_nest | public | public | registered | fused | hardware_verified | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
+| ``quantized_matmul`` | loop_nest | public | public | registered | fused | hardware_verified | ready | none |
 | ``asymmetric_bce`` | loss | public | public | registered | fused | compiled | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | fused | compiled | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | fused | compiled | ready | none |
@@ -212,6 +244,7 @@ each row into a single E2E tier.
 | ``trunc`` | numeric_helper | public | public | registered | fused | compiled | ready | none |
 | ``where`` | numeric_helper | public | public | registered | fused | compiled | ready | none |
 | ``alibi`` | position_encoding | public | public | registered | fused | compiled | ready | none |
+| ``ntk_rope`` | position_encoding | public | public | registered | fused | hardware_verified | ready | none |
 | ``qkv_projection`` | projection | public | public | registered | fused | compiled | ready | none |
 | ``dequantize_fp4`` | quantize | public | public | registered | fused | compiled | ready | none |
 | ``dequantize_fp6`` | quantize | public | public | registered | fused | compiled | ready | none |
@@ -262,79 +295,44 @@ each row into a single E2E tier.
 | ``stft`` | spectral | public | public | registered | fused | compiled | ready | none |
 | ``log_softmax`` | stable_reduction | public | public | registered | fused | compiled | ready | none |
 | ``logsumexp`` | stable_reduction | public | public | registered | fused | compiled | ready | none |
+| ``reduce`` | stable_reduction | public | public | registered | fused | compiled | ready | benchmarked |
 | ``sigmoid_safe`` | stable_reduction | public | public | registered | fused | compiled | ready | none |
 | ``softmax`` | stable_reduction | public | public | registered | fused | hardware_verified | ready | benchmarked |
 | ``softmax_safe`` | stable_reduction | public | public | registered | fused | hardware_verified | ready | none |
 | ``sum`` | stable_reduction | public | public | registered | fused | compiled | ready | benchmarked |
 | ``selective_ssm`` | state_space | public | public | registered | fused | compiled | ready | none |
-| ``kv_cache_read`` | state_update | public | public | registered | fused | fused | ready | none |
+| ``kv_cache_read`` | state_update | public | public | registered | fused | fused | ready | benchmarked |
 | ``conv2d`` | stencil | public | public | registered | fused | hardware_verified | ready | benchmarked |
 | ``conv3d`` | stencil | public | public | registered | fused | compiled | ready | none |
-| ``complex_abs`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_arg`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_conjugate`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_div`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
-| ``complex_log`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
-| ``complex_pow`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``complex_sqrt`` | visual_complex | public | public | registered | fused | fused | ready | none |
-| ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
-| ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | none |
+| ``complex_abs`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_arg`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_conjugate`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_div`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_exp`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``complex_log`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_mul`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``complex_pow`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``complex_sqrt`` | visual_complex | public | public | registered | fused | fused | ready | benchmarked |
+| ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
+| ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (62)
+## runnable_reference (26)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
-| ``target_verify`` | acceptance_verification | public | public | registered | not_applicable | reference | ready | none |
-| ``attn_compressed_blocks`` | attention | public | public | registered | partial | reference | ready | none |
-| ``attn_local_window_2d`` | attention | public | public | registered | partial | reference | ready | none |
-| ``attn_top_k_blocks`` | attention | public | public | registered | partial | reference | ready | none |
-| ``linear_attn_state`` | attention | public | public | registered | partial | reference | ready | none |
-| ``lookahead_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
-| ``memory_index_score`` | attention | public | public | registered | partial | reference | ready | none |
-| ``msa_index_scores`` | attention | public | public | registered | partial | reference | ready | none |
-| ``msa_sparse_attention`` | attention | public | public | registered | partial | reference | ready | none |
-| ``varlen_sdpa`` | attention | public | public | registered | partial | reference | ready | none |
 | ``all_gather`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``score_combine`` | elementwise | public | public | registered | partial | reference | ready | none |
 | ``adafactor`` | functional_optimizer_step | public | public | registered | partial | reference | ready | none |
-| ``dynamic_slice`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``dynamic_update_slice`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``index_select`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``index_update`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``masked_categorical`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``memory_index_select`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``memory_index_select_ste`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``msa_select_blocks`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``nonzero`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``select`` | indexing | public | public | registered | partial | reference | ready | none |
-| ``take`` | indexing | public | public | registered | partial | reference | ready | none |
 | ``arange`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``cast`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``chunk`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``masked_fill`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_partition`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_router`` | layout_transform | public | public | registered | partial | reference | ready | none |
 | ``mor_scatter`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``pack`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``permute`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``rearrange`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``rope_merge`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``rope_split`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``split`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``tile_view`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``unpack`` | layout_transform | public | public | registered | partial | reference | ready | none |
-| ``dequant_grouped_gemm`` | loop_nest | public | public | registered | partial | reference | ready | none |
-| ``quantized_matmul`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``moe_combine`` | moe_transport | public | public | registered | partial | reference | ready | none |
 | ``moe_dispatch`` | moe_transport | public | public | registered | partial | reference | ready | none |
-| ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | partial | reference | ready | none |
-| ``reduce`` | stable_reduction | public | public | registered | partial | reference | ready | benchmarked |
 | ``cache_commit`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``cache_rollback`` | state_update | public | public | registered | partial | reference | ready | none |
 | ``kv_cache_append`` | state_update | public | public | registered | partial | reference | ready | none |
@@ -349,15 +347,17 @@ each row into a single E2E tier.
 | ``laplacian_2d`` | visual_complex | public | public | registered | partial | reference | ready | none |
 | ``mobius_from_three_points`` | visual_complex | public | public | registered | partial | reference | ready | none |
 
-## partial (7)
+## partial (9)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``target_verify`` | acceptance_verification | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``broadcast`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``expand`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``flatten`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``reshape`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``tile_view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``unsqueeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 

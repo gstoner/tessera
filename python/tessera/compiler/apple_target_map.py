@@ -147,10 +147,10 @@ _APPLE_GPU_FRAMEWORK_HINTS: dict[str, str] = {
     "rmsnorm":      "Metal (MSL)",
 }
 
-# Apple GPU dispatch route per op family.  "manifest" = goes through
-# ``jit_bridge.dispatch_via_manifest`` (GA/EBM/M7 path).  "driver" =
-# goes through ``compiler/driver.py::_backend_artifact_for`` (generic
-# tensor path).  D-phase work will eventually unify these but we
+# Apple GPU dispatch route per op family.  "manifest" = goes through a
+# manifest/composed runtime lane (GA/EBM/M7 and tensor composite helpers).
+# "driver" = a standalone generic tensor runtime symbol surfaced by the
+# driver/envelope route. D-phase work will eventually unify these but we
 # surface the distinction here today so the gap is visible.
 _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     "matmul", "softmax", "softmax_safe", "gelu",
@@ -169,6 +169,8 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     # Frontier MoE quant track — dequant_matmul dispatches via the runtime
     # (_apple_gpu_backend.gpu_dequant_matmul), like grouped_gemm.
     "dequant_matmul",
+    "quantized_matmul",
+    "masked_categorical",
     # Structural MPSGraph data movers in the generic per-op Metal lane.
     "transpose", "gather", "slice",
 })
@@ -195,6 +197,13 @@ _PROOF_TESTS: dict[str, str] = {
     "transpose":    "tests/unit/test_apple_gpu_transpose.py",
     "gather":       "tests/unit/test_apple_gpu_gather.py",
     "slice":        "tests/unit/test_apple_gpu_slice.py",
+    "quantized_matmul": "tests/unit/test_apple_gpu_quantized_matmul.py",
+    "masked_categorical": "tests/unit/test_apple_gpu_ldt_loss_ops.py",
+    "cast":         "tests/unit/test_apple_gpu_resident_mlp.py",
+    "memory_index_score": "tests/unit/test_apple_gpu_composite_helpers.py",
+    "msa_index_scores": "tests/unit/test_apple_gpu_composite_helpers.py",
+    "varlen_sdpa":  "tests/unit/test_apple_gpu_composite_helpers.py",
+    "score_combine": "tests/unit/test_apple_gpu_composite_helpers.py",
 }
 
 
@@ -293,6 +302,8 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     # Frontier MoE quant track — fused dequantize-into-GEMM (packed-INT4 codes +
     # group scales). Real kernel + dispatch (_apple_gpu_backend.gpu_dequant_matmul).
     "dequant_matmul":   "tessera_apple_gpu_dequant_matmul_f32",
+    "quantized_matmul": "tessera_apple_gpu_quantized_matmul_i4_f32",
+    "masked_categorical": "tessera_apple_gpu_masked_categorical_f32",
     # Structural MPSGraph data movers. f16 symbols carry both f16 and bf16 raw
     # 16-bit paths.
     "transpose":    "tessera_apple_gpu_mpsgraph_transpose_{f32,f16}",

@@ -7,7 +7,7 @@ un-benchmarked, even though those benchmarks exist and several ops carry a
 first-class ``benchmark_json`` in ``backend_manifest``.  That made the
 ``support_table`` bench column silently stale.
 
-This module derives bench coverage from three honest sources, in priority
+This module derives bench coverage from five honest sources, in priority
 order:
 
 1. **Manifest-attached** — any ``backend_manifest`` entry that carries a
@@ -20,6 +20,9 @@ order:
    manifest ``benchmark_json`` (GEMM alias, collectives, MHA, MegaMoE overlap).
 4. **Operator-benchmark coverage** — representative ops from the active
    ``Tessera_Operator_Benchmarks`` groups.
+5. **Single-GPU closeout smoke** — tiny runnable rows for compiler/domain
+   primitives whose benchmark evidence should not depend on large model
+   harnesses or backend-specific hardware being present in CI.
 
 **Fused-chain names are deliberately excluded.**  ``matmul_softmax`` /
 ``matmul_gelu`` / ``matmul_rmsnorm`` / ``matmul_softmax_matmul`` / ``swiglu``
@@ -38,6 +41,7 @@ from typing import Optional
 from .op_catalog import OP_SPECS
 
 _GA_EBM_BENCH = "benchmarks/apple_gpu/benchmark_ga_ebm.py"
+_SINGLE_GPU_CLOSEOUT_SMOKE = "benchmarks/single_gpu_closeout_smoke.py"
 
 # GA + native-EBM primitives benchmarked by benchmark_ga_ebm.py.  These have no
 # manifest ``benchmark_json`` — the harness owns its own row catalog.
@@ -72,6 +76,57 @@ _EXPLICIT_BENCH_OPS: dict[str, str] = {
     "reduce_scatter": "benchmarks/benchmark_collective.py",
     "all_to_all": "benchmarks/benchmark_collective.py",
     "multi_head_attention": "benchmarks/benchmark_attention.py",
+}
+
+_SINGLE_GPU_CLOSEOUT_SMOKE_OPS: dict[str, str] = {
+    op: _SINGLE_GPU_CLOSEOUT_SMOKE
+    for op in (
+        "attn_compressed_blocks",
+        "attn_local_window_2d",
+        "attn_top_k_blocks",
+        "linear_attn_state",
+        "lookahead_sparse_attention",
+        "msa_sparse_attention",
+        "memory_index_score",
+        "msa_index_scores",
+        "varlen_sdpa",
+        "score_combine",
+        "dynamic_slice",
+        "masked_categorical",
+        "slice",
+        "cast",
+        "chunk",
+        "rope_split",
+        "split",
+        "unpack",
+        "dequant_matmul",
+        "kv_cache_read",
+        "complex_abs",
+        "complex_arg",
+        "complex_conjugate",
+        "complex_div",
+        "complex_exp",
+        "complex_log",
+        "complex_mul",
+        "complex_pow",
+        "complex_sqrt",
+        "mobius",
+        "stereographic",
+    )
+}
+
+_STRUCTURAL_BENCH_ALIASES: dict[str, str] = {
+    # Structural wrappers covered by the same benchmark group as their
+    # canonical movement primitive. Only aliases whose canonical op already has
+    # benchmark evidence are listed here; slice/cast/cat/where remain visible
+    # benchmark gaps until their own smoke rows land.
+    "index_select": "gather",
+    "memory_index_select": "gather",
+    "memory_index_select_ste": "gather",
+    "msa_select_blocks": "gather",
+    "permute": "transpose",
+    "rearrange": "transpose",
+    "take": "gather",
 }
 
 #: Fused-chain benchmark aliases — benchmarked but NOT callable ops, so they are
@@ -118,13 +173,16 @@ def _operator_benchmarked() -> dict[str, str]:
 
 
 def benchmark_source_for(op_name: str) -> Optional[str]:
-    """Return the benchmark file covering ``op_name`` (manifest-attached →
-    GA/EBM → explicit), or ``None`` if the op has no benchmark row."""
+    """Return the benchmark file covering ``op_name`` or ``None``."""
+    alias = _STRUCTURAL_BENCH_ALIASES.get(op_name)
+    if alias is not None:
+        return benchmark_source_for(alias)
     return (
         _manifest_attached().get(op_name)
         or _GA_EBM_BENCH_OPS.get(op_name)
         or _EXPLICIT_BENCH_OPS.get(op_name)
         or _operator_benchmarked().get(op_name)
+        or _SINGLE_GPU_CLOSEOUT_SMOKE_OPS.get(op_name)
     )
 
 
@@ -135,6 +193,8 @@ def benchmarked_ops() -> frozenset[str]:
         | frozenset(_GA_EBM_BENCH_OPS)
         | frozenset(_EXPLICIT_BENCH_OPS)
         | frozenset(_operator_benchmarked())
+        | frozenset(_SINGLE_GPU_CLOSEOUT_SMOKE_OPS)
+        | frozenset(_STRUCTURAL_BENCH_ALIASES)
     )
 
 

@@ -97,13 +97,11 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",
         # MoE / MoR routing + score combine.
         "moe", "moe_combine", "moe_dispatch", "mor_partition", "mor_router",
-        "mor_scatter", "score_combine",
+        "mor_scatter",
         # Titans/Atlas memory-index + MSA block selection.
-        "memory_index_score", "memory_index_select", "memory_index_select_ste",
-        "msa_index_scores", "msa_select_blocks",
+        "memory_index_select", "memory_index_select_ste", "msa_select_blocks",
         # Attention/rope variants without a dedicated lane yet.
-        "alibi", "ntk_rope", "rope_merge", "rope_split", "varlen_sdpa",
-        "laplacian_2d",
+        "alibi", "ntk_rope", "rope_merge", "rope_split", "laplacian_2d",
         # Speculative-decode acceptance (SD1; verification ops — ROCm-native
         # kernels, no Apple GPU dispatch lane).
         "spec_accept", "spec_accept_sample", "spec_accept_tree_sample",

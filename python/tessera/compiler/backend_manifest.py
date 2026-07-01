@@ -649,6 +649,78 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "benchmark_json": "benchmarks/baselines/apple_gpu_hot_paths.json",
         "shape_envelope": "head_dim <= 256 (MSL stack array, Phase 8.4.1)",
     },
+    "attn_compressed_blocks": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "NSA compressed-block attention: QKᵀ / softmax / PV execute "
+                 "on the Apple GPU batched-attention lane over compressed K/V.",
+        "shape_envelope": "Q,K,V rank-4 [B,H,S,D], fp32 attention core",
+    },
+    "attn_top_k_blocks": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "NSA top-k block attention: host top-k/gather selects blocks; "
+                 "per-query dense attention FLOPs execute on Apple GPU.",
+        "shape_envelope": "rank-4 Q/K/V; S_k divisible by block_size",
+    },
+    "attn_local_window_2d": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "2D local-window attention: structured host im2col gather + "
+                 "Apple GPU bmm/add-mask/softmax/bmm attention core.",
+        "shape_envelope": "rank-5 Q/K/V [B,H,Hq,Wq,D], non-negative window",
+    },
+    "lookahead_sparse_attention": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Lookahead sparse attention: host data-dependent footprint "
+                 "selection with Apple GPU per-footprint attention; uses fused "
+                 "MSL single-dispatch path when the symbol/envelope is available.",
+        "shape_envelope": "rank-4 Q/K/V; positive window/block/tau; footprint <= 256 for fused path",
+    },
+    "msa_sparse_attention": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32", "fp16"),
+        "notes": "MiniMax Sparse Attention on Apple GPU: index/select may run on "
+                 "host or GPU selector; main sparse attention uses native fused "
+                 "block-sparse MSL when D<=256, otherwise composed GPU bmm lane.",
+        "shape_envelope": "rank-4 Q/K/V; S_k divisible by block_size; D<=256 native fast path",
+    },
+    "linear_attn_state": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Linear-attention recurrent state via quadratic-parallel "
+                 "Apple GPU batched matmul path with structured host masks.",
+        "shape_envelope": "rank-4 Q/K/V [B,H,S,D], fp32 state [B,H,D,D]",
+    },
+    "memory_index_score": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "LSA memory-index scoring: Apple GPU batched matmul + sigmoid "
+                 "composition; host only supplies scale/shape metadata.",
+        "shape_envelope": "indexer_keys/query rank-4 [B,H,nb|Sq,Dk]",
+    },
+    "msa_index_scores": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "MSA index-branch scoring: host block/head mean reductions plus "
+                 "Apple GPU batched matmul over grouped queries and block keys.",
+        "shape_envelope": "rank-4 Q/K; Hq divisible by Hkv; positive block_size",
+    },
+    "varlen_sdpa": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Packed-sequence SDPA decomposes to per-segment Apple GPU "
+                 "flash-attention calls with host cu_seqlens metadata.",
+        "shape_envelope": "rank-3 packed [H,total,Dh] Q/K/V and monotonic cu_seqlens",
+    },
+    "score_combine": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Diffusion score composition base + gamma*delta via Apple GPU "
+                 "binary elementwise multiply/add lanes.",
+        "shape_envelope": "base/delta identical shape, scalar gamma",
+    },
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops with full dtype
     # coverage. layer_norm/silu/bmm landed as part of the single-cb
     # decode-chain work; all 8 encode-eligible ops cover {f32, f16, bf16}.
@@ -744,6 +816,14 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "stride 1; bf16 rides the raw f16 path)."
         ),
     },
+    "cast": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph dtype-conversion lane used by encode-session bf16/f16 "
+            "bridges; bf16 rides raw f16 storage with fp32 internal compute."
+        ),
+    },
     # Audit follow-up (2026-06-10) — MoE expert-FFN ops. Both are runtime
     # envelope ops (apple_gpu_envelope.APPLE_GPU_LANE_BY_OP: lanes grouped_gemm
     # / moe_swiglu_block) with dedicated fused MSL kernels + execute-compare
@@ -795,6 +875,28 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         ),
         "runtime_symbol": "tessera_apple_gpu_dequant_matmul_f32",
         "shape_envelope": "x (M,K) + codes/scales packed (K%GS==0); O (M,N) fp32",
+    },
+    "quantized_matmul": {
+        "status": _HARDWARE_VERIFIED_STATUS,
+        "dtypes": ("fp32", "fp16"),
+        "notes": (
+            "Packed INT4 quantized matmul Apple GPU lane: i4 weights + "
+            "per-group affine scale/bias dequantized in-register, f32 "
+            "accumulate. Covers untiled f32, f16 activation upload, tiled, "
+            "and split-K variants through the quant_matmul runtime lane."
+        ),
+        "runtime_symbol": "tessera_apple_gpu_quantized_matmul_i4_f32",
+        "shape_envelope": (
+            "x (M,K), packed weights (N,ceil(K/2)), scales/biases "
+            "(N,ceil(K/group_size)); O (M,N) fp32"
+        ),
+    },
+    "masked_categorical": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32", "int32"),
+        "notes": "Masked categorical greedy/select path via Apple GPU MPSGraph "
+                 "select + argmax subgraph; stochastic-key path remains reference.",
+        "shape_envelope": "rank-2 logits/mask; keyless greedy path",
     },
 }
 
@@ -1170,6 +1272,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "WMMA matmul (bf16). Executes via runtime.launch() "
                  "(rocm_sparse_compiled).",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("composite_helper", "wmma"),
+        "notes": f"Composite helper {op} — Target IR keeps the helper "
+                 "compiler-visible while composing existing ROCm matmul/"
+                 "flash-attn/binary helper semantics plus host metadata logic. "
+                 "Executes via runtime.launch() (rocm_composite_helper_compiled) "
+                 "with exact reference fallback until HIP-native proof lands.",
+    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                 "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1) on gfx1151
     # (rocm_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {
@@ -1459,6 +1571,20 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel). Slopes default to the 2^(-8(k+1)/H) ramp. Executes via "
                  "runtime.launch() (rocm_alibi_compiled).",
     },
+    "dequant_matmul": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("quantization", "gemm"),
+        "notes": "Packed dequantize-then-GEMM over int4/int8 grouped weights — "
+                 "compiler-generated ROCm dequant GEMM executor. Executes via "
+                 "runtime.launch() (rocm_dequant_gemm_compiled).",
+    },
+    "dequant_grouped_gemm": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("quantization", "grouped_gemm"),
+        "notes": "Grouped packed dequantize-then-GEMM, one expert slice per "
+                 "group size; reuses the ROCm dequant GEMM executor per expert. "
+                 "Executes via runtime.launch() (rocm_dequant_gemm_compiled).",
+    },
     "batched_gemm": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Batched matmul A[...,M,K]@B[...,K,N] — the WMMA GEMM kernel "
@@ -1516,6 +1642,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "branches remain reference compositions while the top-k branch "
                  "uses the GPU-resident top-k selector plus selected-block "
                  "sparse-attention kernel when ROCm is available. Executes via "
+                 "runtime.launch() (rocm_sparse_attn_compiled), with exact "
+                 "reference fallback off hardware.",
+    },
+    "msa_sparse_attention": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("sparse_attention",),
+        "notes": "MiniMax Sparse Attention: block scores/select may use the ROCm "
+                 "GPU selector; selected-block attention uses the native sparse "
+                 "attention kernel when hardware is available. Executes via "
                  "runtime.launch() (rocm_sparse_attn_compiled), with exact "
                  "reference fallback off hardware.",
     },
@@ -1813,6 +1948,15 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py"
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{(op, "x86"): "tests/unit/test_composite_helper_backend_parity.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
+    **{(op, "rocm"): "tests/unit/test_composite_helper_backend_parity.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
+    **{(op, "apple_gpu"): "tests/unit/test_apple_gpu_composite_helpers.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
@@ -1886,6 +2030,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("popcount", "rocm"): "tests/unit/test_rocm_popcount_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
+    ("dequant_matmul", "rocm"): "tests/unit/test_rocm_dequant_gemm_compiled.py",
+    ("dequant_grouped_gemm", "rocm"):
+        "tests/unit/test_rocm_dequant_gemm_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     ("linear_general", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     ("qkv_projection", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
@@ -1898,6 +2045,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("mla_decode_fused", "rocm"):
         "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("deepseek_sparse_attention", "rocm"):
+        "tests/unit/test_rocm_sparse_attn_compiled.py",
+    ("msa_sparse_attention", "rocm"):
         "tests/unit/test_rocm_sparse_attn_compiled.py",
     ("hybrid_attention", "rocm"):
         "tests/unit/test_rocm_exotic_attn_compiled.py",
@@ -1930,6 +2079,18 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softmax", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("softmax_safe", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("flash_attn", "apple_gpu"): "tests/unit/test_apple_gpu_fused_attention.py",
+    ("attn_compressed_blocks", "apple_gpu"):
+        "tests/unit/test_apple_gpu_masked_attn.py",
+    ("attn_top_k_blocks", "apple_gpu"):
+        "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("attn_local_window_2d", "apple_gpu"):
+        "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("lookahead_sparse_attention", "apple_gpu"):
+        "tests/unit/test_apple_gpu_lookahead_envelope.py",
+    ("msa_sparse_attention", "apple_gpu"):
+        "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("linear_attn_state", "apple_gpu"):
+        "tests/unit/test_apple_gpu_linear_attn.py",
     # Fused matmul→softmax single MSL kernel: the fixture runs
     # ``agb.gpu_matmul_softmax(a, b)`` and compares it to both the un-fused
     # CPU-lane composition and the numpy reference ``softmax(a @ b)``.
@@ -1944,6 +2105,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # Fused dequantize-into-GEMM: dequant_matmul(backend="apple_gpu") output
     # compared to the full-precision x @ dequant(W) oracle.
     ("dequant_matmul", "apple_gpu"): "tests/unit/test_stdlib_quant.py",
+    ("quantized_matmul", "apple_gpu"):
+        "tests/unit/test_apple_gpu_quantized_matmul.py",
+    ("masked_categorical", "apple_gpu"):
+        "tests/unit/test_apple_gpu_ldt_loss_ops.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("transpose", "apple_gpu"): "tests/unit/test_apple_gpu_transpose.py",
@@ -2745,6 +2910,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
                  "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Composite helper {op} — host shape/metadata logic composes "
+                 "existing AVX-512-compatible matmul/attention/binary runtime "
+                 "semantics; x86_composite_helper_compiled lane; f32, matches "
+                 "the public op reference",
+    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                 "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1), AVX-512
     # (x86_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {
@@ -3842,9 +4016,120 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
 # Mirrors ``primitive_coverage._ROCM_MMA_OPS`` (kept as a local literal so this
 # module stays importable without pulling in the audit registry).
 _ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
-    "matmul", "batched_gemm", "grouped_gemm", "dequant_grouped_gemm",
+    "matmul", "batched_gemm", "grouped_gemm", "dequant_matmul",
+    "dequant_grouped_gemm",
     "linear_general", "qkv_projection", "factorized_matmul",
 })
+
+
+# Single-GPU closeout C.4 (2026-07-01): planned/partial compute-tail
+# primitives that are outside OP_SPECS still need explicit backend pathway
+# ownership. These rows do not claim native kernels; they pin the conservative
+# CPU reference execution lane so the closeout dashboard no longer treats them
+# as ownerless backend work.
+_SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
+    # rng
+    "rng_bernoulli", "rng_beta", "rng_categorical", "rng_dirichlet",
+    "rng_gamma", "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
+    "rng_mala_sample", "rng_multinomial", "rng_permutation", "rng_poisson",
+    "rng_randint", "rng_truncated_normal",
+    # loss
+    "contrastive_loss", "cosine_embedding_loss", "ctc_loss", "info_nce_loss",
+    "nt_xent_loss", "seq2seq_loss", "triplet_loss", "wasserstein_distance",
+    # quantization
+    "dequantize_int4", "dequantize_int8", "fake_quantize", "quantize_int4",
+    "quantize_int8",
+    # vision / pooling
+    "adaptive_pool", "avg_pool", "center_crop", "image_normalize",
+    "image_resize", "interpolate", "max_pool", "min_pool",
+    # recurrent / model / layout
+    "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell",
+    "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",
+    "simple_rnn_cell",
+    # smaller compute tails
+    "cross_attention", "depthwise_conv1d", "edm_loss_weight",
+    "edm_precondition", "factorized_pos_emb", "masked_scatter",
+    "memory_read", "mrope_2d", "online_softmax_state", "perceiver_resampler",
+    "spectral_norm",
+})
+
+_SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
+    "dequantize_int4": ("fp32",),
+    "dequantize_int8": ("fp32", "int8"),
+    "fake_quantize": ("fp32",),
+    "quantize_int4": ("fp32",),
+    "quantize_int8": ("fp32", "int8"),
+    "rng_bernoulli": ("bool", "fp32"),
+    "rng_categorical": ("int32", "fp32"),
+    "rng_multinomial": ("int32", "fp32"),
+    "rng_permutation": ("int32",),
+    "rng_randint": ("int32",),
+}
+
+
+def _single_gpu_compute_reference_manifest_for(
+    op_name: str,
+) -> list[BackendKernelEntry]:
+    if op_name not in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
+        return []
+    dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    notes = (
+        "Single-GPU closeout compute-tail reference owner: Python/numpy "
+        "execution path. Native fused kernel remains tracked separately."
+    )
+    entries = [
+        BackendKernelEntry(
+            target="cpu",
+            status=_REFERENCE_STATUS,
+            dtypes=dtypes,
+            feature_flags=("numpy", "reference_execution"),
+            notes=notes,
+        ),
+        BackendKernelEntry(
+            target="x86",
+            status=_REFERENCE_STATUS,
+            dtypes=dtypes,
+            feature_flags=("numpy", "reference_execution"),
+            notes=notes,
+        ),
+        BackendKernelEntry(
+            target="apple_cpu",
+            status=_REFERENCE_STATUS,
+            dtypes=dtypes,
+            feature_flags=("numpy", "reference_execution"),
+            notes=notes,
+        ),
+        BackendKernelEntry(
+            target="rocm",
+            status=_PLANNED_STATUS,
+            dtypes=dtypes,
+            feature_flags=("hip", "rocm", "planned_kernel"),
+            notes=(
+                "Single-GPU closeout compute-tail ROCm owner: HIP backend "
+                "planned lane. No compiled hsaco/runtime proof claimed yet."
+            ),
+        ),
+    ]
+    for target_name, flags, arch_min in (
+        ("nvidia_sm80", ("cuda", "wmma", "planned_kernel"), "sm_80"),
+        ("nvidia_sm90", ("cuda", "wgmma", "planned_kernel"), "sm_90a"),
+        ("nvidia_sm100", ("cuda", "tcgen05", "planned_kernel"), "sm_100a"),
+        ("nvidia_sm120", ("cuda", "tcgen05", "planned_kernel"), "sm_120a"),
+    ):
+        entries.append(BackendKernelEntry(
+            target=target_name,
+            status=_PLANNED_STATUS,
+            dtypes=dtypes,
+            feature_flags=flags,
+            notes=(
+                "Single-GPU closeout compute-tail NVIDIA owner: CUDA "
+                "compiler path planned lane. No PTX/SASS/runtime proof "
+                "claimed yet."
+            ),
+            cuda_arch_min=arch_min,
+            nvcc_version_min="13.3",
+        ))
+    return entries
 
 
 def _rocm_mma_descriptor_for(op_name: str, dtypes: tuple[str, ...]):
@@ -3893,6 +4178,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             or op_name in _COMPLEX_APPLE_GPU_FUSED
             or op_name in _M7_LONG_TAIL):
         return _attach_numerical_fixtures(op_name, complex_manifest_for(op_name))
+    if op_name in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
+        return _attach_numerical_fixtures(
+            op_name, _single_gpu_compute_reference_manifest_for(op_name))
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX / AVX-512
@@ -4157,6 +4445,10 @@ def all_manifests() -> Mapping[str, list[BackendKernelEntry]]:
             out[name] = m
     # GA9: include clifford primitives that aren't in OP_SPECS.
     for name in _CLIFFORD_PRIMITIVES:
+        m = manifest_for(name)
+        if m:
+            out[name] = m
+    for name in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
         m = manifest_for(name)
         if m:
             out[name] = m

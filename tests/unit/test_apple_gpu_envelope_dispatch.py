@@ -61,6 +61,8 @@ _LEGACY_ROUTING = {
     "tessera.kimi_delta_attention": "delta_attn",
     "tessera.hybrid_attention": "hybrid_attn",
     "tessera.deepseek_sparse_attention": "sparse_attn",
+    "tessera.memory_index_score": "composite_helper",
+    "tessera.score_combine": "composite_helper",
     "tessera.layer_norm": "rowop",
     "tessera.rmsnorm_safe": "rowop",
     "tessera.silu_mul": "silu_mul",
@@ -103,7 +105,7 @@ def test_driver_and_runtime_reexport_identical_objects():
         "_APPLE_GPU_ATTN_WRAPPER_OPS", "_APPLE_GPU_LINEAR_ATTN_OPS",
         "_APPLE_GPU_MASKED_ATTN_OPS", "_APPLE_GPU_DELTA_ATTN_OPS",
         "_APPLE_GPU_HYBRID_ATTN_OPS", "_APPLE_GPU_SPARSE_ATTN_OPS",
-        "_APPLE_GPU_RUNTIME_OPS",
+        "_APPLE_GPU_COMPOSITE_HELPER_OPS", "_APPLE_GPU_RUNTIME_OPS",
     ):
         assert getattr(driver, name) is getattr(env, name), name
         assert getattr(rt, name) is getattr(env, name), name

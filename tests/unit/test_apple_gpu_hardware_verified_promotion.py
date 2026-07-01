@@ -39,11 +39,12 @@ _RUNTIME_SRC_PATH = (
 )
 
 
-# 8 encode-eligible ops promoted by Project 3, plus conv2d promoted
-# by Project 5 (2026-06-01) once its encode-session lane landed.
+# 8 encode-eligible ops promoted by Project 3, conv2d promoted by Project 5
+# (2026-06-01) once its encode-session lane landed, and the packed-int4
+# quantized matmul lane once its runtime symbol + numerical proof landed.
 HARDWARE_VERIFIED_OPS = (
     "softmax", "softmax_safe", "gelu", "rope", "flash_attn",
-    "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
+    "rmsnorm", "layer_norm", "silu", "bmm", "conv2d", "quantized_matmul",
 )
 
 

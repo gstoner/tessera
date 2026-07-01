@@ -23,6 +23,7 @@ def LseLoadOp : Op<Tessera_Attn_Dialect, "lse.load", [Pure]> {
   let summary = "Load LSE tensor for backward";
   let results = (outs AnyType:$lse);
   let assemblyFormat = "attr-dict `:` type($lse)";
+  let hasVerifier = 1;
 }
 
 // ─── Phase 3 FA-4 ops ────────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ def LseAccumulateOp : Op<Tessera_Attn_Dialect, "lse_accumulate", [Pure]> {
     AnyType:$lse        // log-sum-exp values [tile_q] — saved for backward
   );
   let assemblyFormat = "$acc `,` $running_m `,` $running_l attr-dict `:` type($acc) `,` type($running_m) `,` type($running_l) `->` type($output) `,` type($lse)";
+  let hasVerifier = 1;
 }
 
 // DropoutMaskOp — stochastic binary mask for attention score dropout.
@@ -92,6 +94,7 @@ def DropoutMaskOp : Op<Tessera_Attn_Dialect, "dropout_mask", []> {
   );
   let results = (outs AnyType:$masked_scores);
   let assemblyFormat = "$scores `p` `=` $dropout_p `seed` `=` $seed attr-dict `:` type($scores) `->` type($masked_scores)";
+  let hasVerifier = 1;
 }
 
 // CausalMaskOp — applies lower-triangular causal mask to score tile.
@@ -107,4 +110,5 @@ def CausalMaskOp : Op<Tessera_Attn_Dialect, "causal_mask", [Pure]> {
   );
   let results = (outs AnyType:$masked_scores);
   let assemblyFormat = "$scores `q_off` `=` $q_offset `kv_off` `=` $kv_offset attr-dict `:` type($scores) `->` type($masked_scores)";
+  let hasVerifier = 1;
 }

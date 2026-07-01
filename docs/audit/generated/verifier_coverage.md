@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 152 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 159 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 22 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 15 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 174 | |
 
 ## Per-dialect details
@@ -38,9 +38,9 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnTopKBlocksOp` | `real` |
 | `BatchedGemmOp` | `real` |
 | `BroadcastOp` | `real` |
-| `CacheCommitOp` | `no_verifier` |
-| `CachePageLookupOp` | `no_verifier` |
-| `CacheRollbackOp` | `no_verifier` |
+| `CacheCommitOp` | `real` |
+| `CachePageLookupOp` | `real` |
+| `CacheRollbackOp` | `real` |
 | `CastOp` | `real` |
 | `CholeskyOp` | `real` |
 | `CholeskySolveOp` | `real` |
@@ -187,10 +187,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Op | Status |
 |----|--------|
-| `CausalMaskOp` | `no_verifier` |
-| `DropoutMaskOp` | `no_verifier` |
-| `LseAccumulateOp` | `no_verifier` |
-| `LseLoadOp` | `no_verifier` |
+| `CausalMaskOp` | `real` |
+| `DropoutMaskOp` | `real` |
+| `LseAccumulateOp` | `real` |
+| `LseLoadOp` | `real` |
 | `LseSaveOp` | `real` |
 | `OnlineSoftmaxOp` | `real` |
 | `ScaledDotProductOp` | `real` |

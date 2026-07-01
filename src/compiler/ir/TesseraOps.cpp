@@ -3192,6 +3192,28 @@ LogicalResult KVCachePruneOp::verify() {
   return success();
 }
 
+LogicalResult CacheCommitOp::verify() {
+  if (!getAcceptedLength().getType().isIndex())
+    return emitOpError("accepted_length must be index-typed");
+  if (getCache().getType() != getUpdated().getType())
+    return emitOpError("updated cache handle must preserve the input cache type");
+  return success();
+}
+
+LogicalResult CacheRollbackOp::verify() {
+  if (!getNumRejected().getType().isIndex())
+    return emitOpError("num_rejected must be index-typed");
+  if (getCache().getType() != getUpdated().getType())
+    return emitOpError("updated cache handle must preserve the input cache type");
+  return success();
+}
+
+LogicalResult CachePageLookupOp::verify() {
+  if (!getPosition().getType().isIndex())
+    return emitOpError("position must be index-typed");
+  return success();
+}
+
 // Sprint V8 (2026-06-07) — norm/softmax family shape+dtype contracts.
 // These ops are pointwise-over-the-normalized-axis: they preserve rank,
 // per-axis static dims, and element type (mirrors SoftmaxOp / LayerNormOp).

@@ -2034,6 +2034,7 @@ def Tessera_CacheCommitOp : Op<
   let arguments = (ins Tessera_KVCacheType:$cache, Index:$accepted_length);
   let results = (outs Tessera_KVCacheType:$updated);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_CacheRollbackOp : Op<
@@ -2052,6 +2053,7 @@ def Tessera_CacheRollbackOp : Op<
   let arguments = (ins Tessera_KVCacheType:$cache, Index:$num_rejected);
   let results = (outs Tessera_KVCacheType:$updated);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", [MemoryEffects<[MemRead]>]> {
@@ -2059,6 +2061,7 @@ def Tessera_CachePageLookupOp : Op<Tessera_Dialect, "cache.page_lookup", [Memory
   let arguments = (ins Tessera_KVCacheType:$cache, Index:$position);
   let results = (outs Tessera_CachePageType:$page);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_RingCreateOp : Op<Tessera_Dialect, "ring.create", [MemoryEffects<[MemWrite]>]> {

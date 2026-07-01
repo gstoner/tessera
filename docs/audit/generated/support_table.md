@@ -15,88 +15,88 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Op | Family | api | frontend | graph_ir | schedule_ir | tile_ir | target_ir | runtime | bench |
 |----|--------|---|---|---|---|---|---|---|---|
-| `spec_accept` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
-| `spec_accept_sample` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
-| `spec_accept_tree_sample` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
-| `target_verify` | acceptance_verification | public | public | registered | complete | partial | reference | ready | none |
+| `spec_accept` | acceptance_verification | public | public | registered | complete | fused | compiled | ready | none |
+| `spec_accept_sample` | acceptance_verification | public | public | registered | complete | fused | compiled | ready | none |
+| `spec_accept_tree_sample` | acceptance_verification | public | public | registered | complete | fused | compiled | ready | none |
+| `target_verify` | acceptance_verification | public | public | registered | complete | not_applicable | reference | ready | none |
 | `attn_compressed_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `attn_local_window_2d` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `attn_sliding_window` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `attn_sliding_window` | attention | public | public | registered | complete | fused | compiled | ready | none |
 | `attn_top_k_blocks` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `deepseek_sparse_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `flash_attn` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `gated_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `gated_deltanet` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `gqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `hybrid_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `kimi_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `lightning_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `linear_attn` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `deepseek_sparse_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `flash_attn` | attention | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `gated_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `gated_deltanet` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `gqa_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `hybrid_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `kimi_delta_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `lightning_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `linear_attn` | attention | public | public | registered | complete | fused | compiled | ready | none |
 | `linear_attn_state` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `lookahead_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `memory_index_score` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `mla_decode` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `mla_decode_fused` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `modified_delta_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `mqa_attention` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `mla_decode` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `mla_decode_fused` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `modified_delta_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `mqa_attention` | attention | public | public | registered | complete | fused | compiled | ready | none |
 | `msa_index_scores` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `msa_sparse_attention` | attention | public | public | registered | complete | partial | reference | ready | none |
-| `multi_head_attention` | attention | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `power_attn` | attention | public | public | registered | complete | partial | fused | ready | none |
-| `retention` | attention | public | public | registered | complete | partial | fused | ready | none |
+| `multi_head_attention` | attention | public | public | registered | complete | fused | compiled | ready | benchmarked |
+| `power_attn` | attention | public | public | registered | complete | fused | compiled | ready | none |
+| `retention` | attention | public | public | registered | complete | fused | compiled | ready | none |
 | `varlen_sdpa` | attention | public | public | registered | complete | partial | reference | ready | none |
 | `all_gather` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
 | `reduce_scatter` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
-| `eq` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `ge` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `gt` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `le` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `lt` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `ne` | comparison | public | public | registered | complete | partial | fused | ready | none |
-| `einsum` | contraction | public | public | registered | complete | partial | fused | ready | none |
-| `acos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `add` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `asin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `atan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `atan2` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `clip` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `cos` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `cosh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `digamma` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `erf` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `erfc` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `exp` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `expm1` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `floor_div` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `gelu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `lgamma` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `log` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `log1p` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `mod` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `popcount` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `pow` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `relu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `rsqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `eq` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `ge` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `gt` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `le` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `lt` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `ne` | comparison | public | public | registered | complete | fused | compiled | ready | none |
+| `einsum` | contraction | public | public | registered | complete | fused | compiled | ready | none |
+| `acos` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `add` | elementwise | public | public | registered | complete | fused | compiled | ready | benchmarked |
+| `asin` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `atan` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `atan2` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `clip` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `cos` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `cosh` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `digamma` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `div` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `erf` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `erfc` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `exp` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `expm1` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `floor_div` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `gelu` | elementwise | public | public | registered | complete | fused | hardware_verified | ready | none |
+| `lgamma` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `log` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `log1p` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `mod` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `mul` | elementwise | public | public | registered | complete | fused | compiled | ready | benchmarked |
+| `popcount` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `pow` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `relu` | elementwise | public | public | registered | complete | fused | fused | ready | benchmarked |
+| `rsqrt` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
 | `score_combine` | elementwise | public | public | registered | complete | partial | reference | ready | none |
-| `sigmoid` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `silu` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `silu_mul` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `sin` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `sinh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `softcap` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `softplus` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `sqrt` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `sub` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `tan` | elementwise | public | public | registered | complete | partial | fused | ready | none |
-| `tanh` | elementwise | public | public | registered | complete | partial | fused | ready | none |
+| `sigmoid` | elementwise | public | public | registered | complete | fused | compiled | ready | benchmarked |
+| `silu` | elementwise | public | public | registered | complete | fused | hardware_verified | ready | none |
+| `silu_mul` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `sin` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `sinh` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `softcap` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `softplus` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `sqrt` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `sub` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `tan` | elementwise | public | public | registered | complete | fused | compiled | ready | none |
+| `tanh` | elementwise | public | public | registered | complete | fused | compiled | ready | benchmarked |
 | `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
 | `ebm_energy` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
-| `ebm_energy_quadratic` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | none |
+| `ebm_energy_quadratic` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
@@ -104,12 +104,12 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
 | `adafactor` | functional_optimizer_step | public | public | registered | complete | partial | reference | ready | none |
-| `adam` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
-| `adamw` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
-| `lion` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
-| `momentum` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
-| `sgd` | functional_optimizer_step | public | public | registered | complete | partial | fused | ready | none |
-| `fused_epilogue` | fused_epilogue | public | public | registered | complete | partial | reference | ready | none |
+| `adam` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
+| `adamw` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
+| `lion` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
+| `momentum` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
+| `sgd` | functional_optimizer_step | public | public | registered | complete | fused | compiled | ready | none |
+| `fused_epilogue` | fused_epilogue | public | public | registered | complete | fused | compiled | ready | none |
 | `clifford_codiff` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_conjugate` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_exp` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -123,14 +123,14 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_left_contraction` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_log` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_norm_squared` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | none |
+| `clifford_norm_squared` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_reverse` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_rotor_sandwich` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_vec_deriv` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_wedge` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `dynamic_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `dynamic_update_slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `gather` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `gather` | indexing | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `index_select` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `index_update` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `masked_categorical` | indexing | public | public | registered | complete | partial | reference | ready | none |
@@ -138,188 +138,188 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `memory_index_select_ste` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `msa_select_blocks` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `nonzero` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `scatter` | indexing | public | public | registered | complete | partial | fused | ready | none |
-| `scatter_add` | indexing | public | public | registered | complete | partial | fused | ready | none |
-| `scatter_reduce` | indexing | public | public | registered | complete | partial | fused | ready | none |
+| `scatter` | indexing | public | public | registered | complete | fused | compiled | ready | none |
+| `scatter_add` | indexing | public | public | registered | complete | fused | compiled | ready | none |
+| `scatter_reduce` | indexing | public | public | registered | complete | fused | compiled | ready | none |
 | `select` | indexing | public | public | registered | complete | partial | reference | ready | none |
-| `slice` | indexing | public | public | registered | complete | partial | reference | ready | none |
+| `slice` | indexing | public | public | registered | complete | fused | fused | ready | none |
 | `take` | indexing | public | public | registered | complete | partial | reference | ready | none |
 | `arange` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `broadcast` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
+| `broadcast` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `cast` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `cat` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `cat` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `chunk` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `expand` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `flatten` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `flip` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `expand` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `flatten` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `flip` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_partition` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_router` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `mor_scatter` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `pack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `pad` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `pad` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `permute` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `rearrange` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `repeat` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
-| `reshape` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `roll` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `repeat` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
+| `reshape` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `roll` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `rope_merge` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `rope_split` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
 | `split` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `squeeze` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `stack` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
-| `tile` | layout_transform | public | public | registered | complete | partial | fused | ready | none |
+| `squeeze` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `stack` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
+| `tile` | layout_transform | public | public | registered | complete | fused | compiled | ready | none |
 | `tile_view` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `transpose` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
+| `transpose` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `unpack` | layout_transform | public | public | registered | complete | partial | reference | ready | none |
-| `unsqueeze` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `view` | layout_transform | public | public | registered | complete | not_applicable | reference | ready | none |
-| `cholesky` | linalg_decomposition | public | public | registered | complete | partial | fused | ready | none |
-| `lu` | linalg_decomposition | public | public | registered | complete | partial | fused | ready | none |
-| `qr` | linalg_decomposition | public | public | registered | complete | partial | fused | ready | none |
-| `svd` | linalg_decomposition | public | public | registered | complete | partial | fused | ready | none |
-| `cholesky_solve` | linalg_solver | public | public | registered | complete | partial | fused | ready | none |
-| `tri_solve` | linalg_solver | public | public | registered | complete | partial | fused | ready | none |
-| `bitwise_and` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `bitwise_not` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `bitwise_or` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `bitwise_xor` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `logical_and` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `logical_not` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `logical_or` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `logical_xor` | logical | public | public | registered | complete | partial | fused | ready | none |
-| `batched_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
+| `unsqueeze` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `view` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `cholesky` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
+| `lu` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
+| `qr` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
+| `svd` | linalg_decomposition | public | public | registered | complete | fused | compiled | ready | none |
+| `cholesky_solve` | linalg_solver | public | public | registered | complete | fused | compiled | ready | none |
+| `tri_solve` | linalg_solver | public | public | registered | complete | fused | compiled | ready | none |
+| `bitwise_and` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `bitwise_not` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `bitwise_or` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `bitwise_xor` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `logical_and` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `logical_not` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `logical_or` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `logical_xor` | logical | public | public | registered | complete | fused | compiled | ready | none |
+| `batched_gemm` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
 | `dequant_grouped_gemm` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `dequant_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `factorized_matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `grouped_gemm` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `latent_kv_compress` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `latent_kv_expand_k` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `latent_kv_expand_v` | loop_nest | public | public | registered | complete | partial | fused | ready | none |
-| `matmul` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `moe_swiglu_block` | loop_nest | public | public | registered | complete | partial | fused | ready | benchmarked |
+| `dequant_matmul` | loop_nest | public | public | registered | complete | fused | fused | ready | none |
+| `factorized_matmul` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
+| `gemm` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
+| `grouped_gemm` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
+| `latent_kv_compress` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
+| `latent_kv_expand_k` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
+| `latent_kv_expand_v` | loop_nest | public | public | registered | complete | fused | compiled | ready | none |
+| `matmul` | loop_nest | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `moe_swiglu_block` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
-| `asymmetric_bce` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `binary_cross_entropy_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `contrastive_divergence_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `cross_entropy_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `ddpm_noise_pred_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `denoising_score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `huber_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `implicit_score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `js_divergence` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `kl_divergence` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `load_balance_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `log_cosh_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `mae_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `mse_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `persistent_cd_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `score_matching_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `smooth_l1_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `vlb_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `z_loss` | loss | public | public | registered | complete | partial | fused | ready | none |
-| `linear_general` | model_layer | public | public | registered | complete | partial | fused | ready | none |
-| `moe` | moe | public | public | registered | complete | partial | fused | ready | none |
+| `asymmetric_bce` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `contrastive_divergence_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `cross_entropy_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `ddpm_noise_pred_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `denoising_score_matching_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `huber_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `implicit_score_matching_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `js_divergence` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `kl_divergence` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `load_balance_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `log_cosh_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `mae_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `mse_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `persistent_cd_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `score_matching_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `smooth_l1_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `vlb_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `z_loss` | loss | public | public | registered | complete | fused | compiled | ready | none |
+| `linear_general` | model_layer | public | public | registered | complete | fused | compiled | ready | none |
+| `moe` | moe | public | public | registered | complete | fused | compiled | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | partial | reference | ready | none |
-| `group_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
-| `instance_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
-| `layer_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
-| `rmsnorm` | normalization | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `rmsnorm_safe` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `weight_norm` | normalization | public | public | registered | complete | partial | fused | ready | none |
-| `abs` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `absolute` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `ceil` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `clamp` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `floor` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `isfinite` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `isinf` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `isnan` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `maximum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `minimum` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `reciprocal` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `round` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `sign` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `trunc` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `where` | numeric_helper | public | public | registered | complete | partial | fused | ready | none |
-| `alibi` | position_encoding | public | public | registered | complete | partial | fused | ready | none |
+| `group_norm` | normalization | public | public | registered | complete | fused | compiled | ready | none |
+| `instance_norm` | normalization | public | public | registered | complete | fused | compiled | ready | none |
+| `layer_norm` | normalization | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `rmsnorm` | normalization | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `rmsnorm_safe` | normalization | public | public | registered | complete | fused | compiled | ready | none |
+| `weight_norm` | normalization | public | public | registered | complete | fused | compiled | ready | none |
+| `abs` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `absolute` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `ceil` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `clamp` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `floor` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `isfinite` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `isinf` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `isnan` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `maximum` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `minimum` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `reciprocal` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `round` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `sign` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `trunc` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `where` | numeric_helper | public | public | registered | complete | fused | compiled | ready | none |
+| `alibi` | position_encoding | public | public | registered | complete | fused | compiled | ready | none |
 | `ntk_rope` | position_encoding | public | public | registered | complete | partial | reference | ready | none |
-| `qkv_projection` | projection | public | public | registered | complete | partial | fused | ready | none |
-| `dequantize_fp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dequantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dequantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dequantize_nvfp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `quantize_fp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `quantize_fp6` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `quantize_fp8` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `quantize_nvfp4` | quantize | public | public | registered | complete | partial | fused | ready | none |
-| `dropout` | random_mask | public | public | registered | complete | partial | fused | ready | none |
-| `rng_normal` | random_source | public | public | registered | complete | partial | fused | ready | none |
-| `rng_uniform` | random_source | public | public | registered | complete | partial | fused | ready | none |
-| `amax` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `amin` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `argmax` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `argmin` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `count_nonzero` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `cummax` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `cummin` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `cumprod` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `cumsum` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `max` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `mean` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `min` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `prod` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `std` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `var` | reduction | public | public | registered | complete | partial | fused | ready | none |
-| `cispo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
-| `grpo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
-| `normalize_group_advantages` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
-| `ppo_policy_loss` | rl_loss | public | public | registered | complete | partial | fused | ready | none |
-| `rope` | rotary_embedding | public | public | registered | complete | partial | fused | ready | none |
+| `qkv_projection` | projection | public | public | registered | complete | fused | compiled | ready | none |
+| `dequantize_fp4` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `dequantize_fp6` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `dequantize_fp8` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `dequantize_nvfp4` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `quantize_fp4` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `quantize_fp6` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `quantize_fp8` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `quantize_nvfp4` | quantize | public | public | registered | complete | fused | compiled | ready | none |
+| `dropout` | random_mask | public | public | registered | complete | fused | compiled | ready | none |
+| `rng_normal` | random_source | public | public | registered | complete | fused | compiled | ready | none |
+| `rng_uniform` | random_source | public | public | registered | complete | fused | compiled | ready | none |
+| `amax` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `amin` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `argmax` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `argmin` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `count_nonzero` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `cummax` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `cummin` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `cumprod` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `cumsum` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `max` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `mean` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `min` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `prod` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `std` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `var` | reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `cispo_policy_loss` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
+| `grpo_policy_loss` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
+| `normalize_group_advantages` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
+| `ppo_policy_loss` | rl_loss | public | public | registered | complete | fused | compiled | ready | none |
+| `rope` | rotary_embedding | public | public | registered | complete | fused | hardware_verified | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
-| `argsort` | sort | public | public | registered | complete | partial | fused | ready | none |
-| `sort` | sort | public | public | registered | complete | partial | fused | ready | none |
-| `top_k` | sort | public | public | registered | complete | partial | fused | ready | none |
-| `bsmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
-| `sddmm` | sparse | public | public | registered | complete | partial | fused | ready | none |
-| `spmm_coo` | sparse | public | public | registered | complete | partial | fused | ready | none |
-| `spmm_csr` | sparse | public | public | registered | complete | partial | fused | ready | none |
-| `dct` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `fft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `ifft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `irfft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `istft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `rfft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `spectral_conv` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `spectral_filter` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `stft` | spectral | public | public | registered | complete | partial | fused | ready | none |
-| `log_softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `logsumexp` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | none |
-| `sigmoid_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `softmax` | stable_reduction | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `softmax_safe` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `sum` | stable_reduction | public | public | registered | complete | partial | fused | ready | none |
-| `selective_ssm` | state_space | public | public | registered | complete | partial | fused | ready | none |
+| `argsort` | sort | public | public | registered | complete | fused | compiled | ready | none |
+| `sort` | sort | public | public | registered | complete | fused | compiled | ready | none |
+| `top_k` | sort | public | public | registered | complete | fused | compiled | ready | none |
+| `bsmm` | sparse | public | public | registered | complete | fused | compiled | ready | none |
+| `sddmm` | sparse | public | public | registered | complete | fused | compiled | ready | none |
+| `spmm_coo` | sparse | public | public | registered | complete | fused | compiled | ready | none |
+| `spmm_csr` | sparse | public | public | registered | complete | fused | compiled | ready | none |
+| `dct` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `fft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `ifft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `irfft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `istft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `rfft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `spectral_conv` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `spectral_filter` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `stft` | spectral | public | public | registered | complete | fused | compiled | ready | none |
+| `log_softmax` | stable_reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `logsumexp` | stable_reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `reduce` | stable_reduction | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `sigmoid_safe` | stable_reduction | public | public | registered | complete | fused | compiled | ready | none |
+| `softmax` | stable_reduction | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `softmax_safe` | stable_reduction | public | public | registered | complete | fused | hardware_verified | ready | none |
+| `sum` | stable_reduction | public | public | registered | complete | fused | compiled | ready | benchmarked |
+| `selective_ssm` | state_space | public | public | registered | complete | fused | compiled | ready | none |
 | `cache_commit` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `cache_rollback` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_append` | state_update | public | public | registered | complete | partial | reference | ready | none |
 | `kv_cache_prune` | state_update | public | public | registered | complete | partial | reference | ready | none |
-| `kv_cache_read` | state_update | public | public | registered | complete | partial | fused | ready | none |
-| `conv2d` | stencil | public | public | registered | complete | partial | fused | ready | benchmarked |
-| `conv3d` | stencil | public | public | registered | complete | partial | fused | ready | none |
+| `kv_cache_read` | state_update | public | public | registered | complete | fused | fused | ready | none |
+| `conv2d` | stencil | public | public | registered | complete | fused | hardware_verified | ready | benchmarked |
+| `conv3d` | stencil | public | public | registered | complete | fused | compiled | ready | none |
 | `check_cauchy_riemann` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
-| `complex_abs` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
-| `complex_arg` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
-| `complex_conjugate` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
-| `complex_div` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_abs` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
+| `complex_arg` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
+| `complex_conjugate` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
+| `complex_div` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
 | `complex_exp` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_log` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_log` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
 | `complex_mul` | visual_complex | public | public | not_applicable | complete | fused | fused | ready | none |
-| `complex_pow` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
-| `complex_sqrt` | visual_complex | public | public | registered | complete | partial | fused | ready | none |
+| `complex_pow` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
+| `complex_sqrt` | visual_complex | public | public | registered | complete | fused | fused | ready | none |
 | `conformal_energy_on_sphere` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `conformal_jacobian` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
 | `cross_ratio` | visual_complex | public | public | registered | complete | partial | reference | ready | none |
@@ -335,45 +335,45 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 
 | Family | Count | Glyphs (one column per op, axes packed L→R) |
 |--------|------:|------|
-| acceptance_verification | 4 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| attention | 26 | PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFNB PPGCpFN· PPGCpFN· PPGCpRN· |
+| acceptance_verification | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCnRN· |
+| attention | 26 | PPGCpRN· PPGCpRN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFHNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCpRN· |
 | collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
-| comparison | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| contraction | 1 | PPGCpFN· |
-| elementwise | 37 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 6 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| fused_epilogue | 1 | PPGCpRN· |
-| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
-| indexing | 16 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| layout_transform | 30 | PPGCpRN· PPGCnRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCnRN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpFN· PPGCnRN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnRN· PPGCnRN· |
-| linalg_decomposition | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| linalg_solver | 2 | PPGCpFN· PPGCpFN· |
-| logical | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| loop_nest | 12 | PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpFNB PPGCpRN· |
-| loss | 19 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| model_layer | 1 | PPGCpFN· |
-| moe | 1 | PPGCpFN· |
+| comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| contraction | 1 | PPGCFCN· |
+| elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCpRN· PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
+| energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
+| functional_optimizer_step | 6 | PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| fused_epilogue | 1 | PPGCFCN· |
+| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
+| indexing | 16 | PPGCpRN· PPGCpRN· PPGCFFNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFFN· PPGCpRN· |
+| layout_transform | 30 | PPGCpRN· PPGCnnN· PPGCpRN· PPGCFCN· PPGCpRN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFFNB PPGCpRN· PPGCnnN· PPGCnnN· |
+| linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| linalg_solver | 2 | PPGCFCN· PPGCFCN· |
+| logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| loop_nest | 12 | PPGCFCN· PPGCpRN· PPGCFFN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCpRN· |
+| loss | 19 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| model_layer | 1 | PPGCFCN· |
+| moe | 1 | PPGCFCN· |
 | moe_transport | 2 | PPGCpRN· PPGCpRN· |
-| normalization | 6 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFNB PPGCpRN· PPGCpFN· |
-| numeric_helper | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| position_encoding | 2 | PPGCpFN· PPGCpRN· |
-| projection | 1 | PPGCpFN· |
-| quantize | 8 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| random_mask | 1 | PPGCpFN· |
-| random_source | 2 | PPGCpFN· PPGCpFN· |
-| reduction | 15 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| rl_loss | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| rotary_embedding | 1 | PPGCpFN· |
+| normalization | 6 | PPGCFCN· PPGCFCN· PPGCFHNB PPGCFHNB PPGCFCN· PPGCFCN· |
+| numeric_helper | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| position_encoding | 2 | PPGCFCN· PPGCpRN· |
+| projection | 1 | PPGCFCN· |
+| quantize | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| random_mask | 1 | PPGCFCN· |
+| random_source | 2 | PPGCFCN· PPGCFCN· |
+| reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| rl_loss | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| rotary_embedding | 1 | PPGCFHN· |
 | segment_reduce | 1 | PPGCpRN· |
-| sort | 3 | PPGCpFN· PPGCpFN· PPGCpFN· |
-| sparse | 4 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| spectral | 9 | PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· |
-| stable_reduction | 7 | PPGCpFN· PPGCpFN· PPGCpRN· PPGCpFN· PPGCpFNB PPGCpFN· PPGCpFN· |
-| state_space | 1 | PPGCpFN· |
-| state_update | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpFN· |
-| stencil | 2 | PPGCpFNB PPGCpFN· |
-| visual_complex | 20 | PPGCpRN· PPGCpFN· PPGCpFN· PPGCpFN· PPGCpFN· PPnCFFN· PPGCpFN· PPnCFFN· PPGCpFN· PPGCpFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
+| sort | 3 | PPGCFCN· PPGCFCN· PPGCFCN· |
+| sparse | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| spectral | 9 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| stable_reduction | 7 | PPGCFCN· PPGCFCN· PPGCpRNB PPGCFCN· PPGCFHNB PPGCFHN· PPGCFCNB |
+| state_space | 1 | PPGCFCN· |
+| state_update | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFFN· |
+| stencil | 2 | PPGCFHNB PPGCFCN· |
+| visual_complex | 20 | PPGCpRN· PPGCFFN· PPGCFFN· PPGCFFN· PPGCFFN· PPnCFFN· PPGCFFN· PPnCFFN· PPGCFFN· PPGCFFN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPnCFFN· PPGCpRN· PPnCFFN· |
 
 ## Canonical end-to-end programs (M1 / M1.5)
 
@@ -394,7 +394,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 - **`frontend`** (source: `@tessera.jit / textual frontend`)
 - **`graph_ir`** (source: `primitive_coverage.metadata.graph_ir_lowering`)
 - **`schedule_ir`** (source: `primitive_coverage.contract_status.lowering_rule`)
-- **`tile_ir`** (source: `primitive_coverage.contract_status.backend_kernel`)
-- **`target_ir`** (source: `backend_manifest[apple_cpu]`)
+- **`tile_ir`** (source: `backend_manifest native/compiled entry`)
+- **`target_ir`** (source: `backend_manifest[rocm]`)
 - **`runtime`** (source: `capabilities[cpu]`)
 - **`bench`** (source: `no benchmark row`)

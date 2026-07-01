@@ -49,6 +49,33 @@ def test_tier0_pure_view_backend_kernel_is_not_applicable(op):
     )
 
 
+def test_host_control_surfaces_have_no_backend_kernel_contract():
+    from tessera.compiler.primitive_coverage import coverage_for
+
+    for op in (
+        "aot_export", "dataset_map", "custom_primitive", "scan",
+        "karras_sigma_schedule", "chained_schedule", "save_state",
+        "tree_map", "tokenizer_bpe", "vmap", "tiny_attention_conformance",
+        "clip_grad_norm", "ema_update", "grad_scaler_step",
+        "memory_write", "memory_evict",
+    ):
+        assert coverage_for(op).contract_status["backend_kernel"] == "not_applicable", op
+
+
+def test_rng_key_bookkeeping_is_not_a_backend_kernel_contract():
+    for op in ("rng_key", "rng_split", "rng_fold_in", "rng_clone"):
+        assert coverage_for(op).contract_status["backend_kernel"] == "not_applicable", op
+
+
+def test_tensor_rng_and_quantization_tails_stay_backend_owned_work():
+    for op in (
+        "rng_bernoulli", "rng_randint", "rng_gamma", "rng_poisson",
+        "quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4",
+        "fake_quantize", "contrastive_loss", "ctc_loss",
+    ):
+        assert coverage_for(op).contract_status["backend_kernel"] != "not_applicable", op
+
+
 @pytest.mark.parametrize("op", TIER0_MOVEMENT_STAYS_OPEN)
 def test_tier0_movement_ops_stay_open(op):
     bk = coverage_for(op).contract_status["backend_kernel"]

@@ -18,7 +18,7 @@
 | `transpose_rule` | 0 | 480 |
 | `sharding_rule` | 43 | 437 |
 | `lowering_rule` | 0 | 480 |
-| `backend_kernel` | 473 | 7 |
+| `backend_kernel` | 382 | 98 |
 
 ## Backend Proof By Target
 
@@ -29,8 +29,8 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | `cpu` | 287 | 0 | 287 | 0 | 193 |
 | `x86` | 245 | 214 | 31 | 0 | 235 |
 | `apple_cpu` | 319 | 2 | 317 | 0 | 161 |
-| `apple_gpu` | 71 | 45 | 1 | 25 | 409 |
-| `rocm` | 248 | 216 | 0 | 32 | 232 |
+| `apple_gpu` | 74 | 48 | 1 | 25 | 406 |
+| `rocm` | 251 | 219 | 0 | 32 | 229 |
 | `nvidia_sm80` | 54 | 0 | 0 | 54 | 426 |
 | `nvidia_sm90` | 86 | 0 | 0 | 86 | 394 |
 | `nvidia_sm100` | 54 | 0 | 0 | 54 | 426 |
@@ -44,29 +44,29 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S2 | `reduction` | 16 | — | — | — | — | 16 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
-| S5 | `control_flow` | 7 | — | — | — | — | 7 |
+| S5 | `control_flow` | 7 | — | — | — | — | — |
 | S7 | `attention` | 28 | — | — | 14 | — | 28 |
 | S7 | `position_encoding` | 3 | — | — | — | — | 3 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
-| S7 | `memory` | 3 | — | — | — | — | 3 |
+| S7 | `memory` | 3 | — | — | — | — | 1 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
 | S10 | `optimizer` | 3 | — | — | — | — | 3 |
-| S10 | `schedule` | 8 | — | — | — | — | 8 |
-| S10 | `grad_transform` | 7 | — | — | — | — | 7 |
+| S10 | `schedule` | 8 | — | — | — | — | — |
+| S10 | `grad_transform` | 7 | — | — | — | — | — |
 | S11 | `loss` | 29 | — | — | — | — | 29 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
 | M6 | `ebm` | 14 | — | — | 6 | — | 14 |
-| S15 | `data` | 11 | — | — | — | — | 11 |
-| S15 | `tokenizer` | 5 | — | — | — | — | 5 |
+| S15 | `data` | 11 | — | — | — | — | — |
+| S15 | `tokenizer` | 5 | — | — | — | — | — |
 | other | `acceptance_verification` | 4 | — | — | — | — | 4 |
-| other | `aot` | 6 | — | — | — | — | 6 |
+| other | `aot` | 6 | — | — | — | — | — |
 | other | `collective` | 10 | — | — | — | — | 10 |
-| other | `conformance` | 4 | — | — | — | — | 4 |
+| other | `conformance` | 4 | — | — | — | — | — |
 | other | `contraction` | 1 | — | — | — | — | 1 |
 | other | `diffusion` | 2 | — | — | — | — | 2 |
-| other | `diffusion_schedule` | 2 | — | — | — | — | 2 |
+| other | `diffusion_schedule` | 2 | — | — | — | — | — |
 | other | `elementwise` | 51 | — | — | — | — | 51 |
-| other | `extension` | 6 | — | — | — | — | 6 |
+| other | `extension` | 6 | — | — | — | — | — |
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 15 | — | — | — | — | 15 |
@@ -78,28 +78,28 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `model_layer` | 4 | — | — | — | — | 4 |
 | other | `moe` | 1 | 1 | — | 1 | — | 1 |
 | other | `moe_transport` | 2 | 2 | — | 2 | — | 2 |
-| other | `numerics` | 1 | — | — | — | — | 1 |
+| other | `numerics` | 1 | — | — | — | — | — |
 | other | `pooling` | 4 | — | — | — | — | 4 |
 | other | `projection` | 1 | — | — | — | — | 1 |
-| other | `quantization` | 8 | — | — | — | — | 8 |
+| other | `quantization` | 8 | — | — | — | — | 7 |
 | other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
 | other | `random_source` | 2 | — | — | — | — | 2 |
 | other | `recurrent` | 3 | — | — | — | — | 3 |
-| other | `rng` | 18 | — | — | — | — | 18 |
+| other | `rng` | 18 | — | — | — | — | 14 |
 | other | `rotary_embedding` | 2 | — | — | — | — | 2 |
 | other | `segment_reduce` | 1 | — | — | — | — | 1 |
-| other | `serialization` | 6 | — | — | — | — | 6 |
+| other | `serialization` | 6 | — | — | — | — | — |
 | other | `sharding` | 3 | — | — | — | — | 3 |
 | other | `sort` | 3 | — | — | — | — | 3 |
 | other | `sparse` | 4 | — | — | 1 | — | 4 |
 | other | `spectral` | 9 | — | — | 9 | — | 9 |
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
 | other | `state_space` | 1 | — | — | 1 | — | 1 |
-| other | `state_tree` | 10 | — | — | — | — | 10 |
+| other | `state_tree` | 10 | — | — | — | — | — |
 | other | `state_update` | 6 | 3 | — | 2 | — | 6 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
-| other | `transform` | 11 | — | — | — | — | 11 |
+| other | `transform` | 11 | — | — | — | — | — |
 | other | `vision` | 4 | — | — | — | — | 4 |
 
 ## Roll-up by sprint
@@ -107,13 +107,13 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | Sprint | Primitives | Open batching | Open transpose | Open sharding | Open backend |
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 49 |
-| S5 | 7 | 0 | 0 | 0 | 7 |
-| S7 | 58 | 0 | 0 | 14 | 58 |
-| S10 | 18 | 0 | 0 | 0 | 18 |
+| S5 | 7 | 0 | 0 | 0 | 0 |
+| S7 | 58 | 0 | 0 | 14 | 56 |
+| S10 | 18 | 0 | 0 | 0 | 3 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
-| S15 | 16 | 0 | 0 | 0 | 16 |
+| S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 278 | 6 | 0 | 23 | 278 |
+| other | 278 | 6 | 0 | 23 | 227 |
 
 ## Closure trajectory
 

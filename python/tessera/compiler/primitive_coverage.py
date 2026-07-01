@@ -2307,6 +2307,43 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     "visual_complex":      "complete",
 }
 
+_BACKEND_KERNEL_BY_CATEGORY: dict[str, str] = {
+    # Host/compiler/control surfaces with no standalone backend kernel contract.
+    # These may affect compilation or dispatch, but they do not own a target
+    # kernel lane the way tensor primitives do.
+    "aot":                 "not_applicable",
+    "conformance":         "not_applicable",
+    "control_flow":        "not_applicable",
+    "data":                "not_applicable",
+    "diffusion_schedule":  "not_applicable",
+    "extension":           "not_applicable",
+    "grad_transform":      "not_applicable",
+    "numerics":            "not_applicable",
+    "schedule":            "not_applicable",
+    "serialization":       "not_applicable",
+    "state_tree":          "not_applicable",
+    "tokenizer":           "not_applicable",
+    "transform":           "not_applicable",
+}
+
+_BACKEND_KERNEL_NOT_APPLICABLE_BY_NAME: frozenset[str] = frozenset({
+    # RNG key-management primitives are deterministic key/object transforms.
+    # Tensor-producing samplers (rng_uniform/rng_normal/rng_bernoulli/etc.)
+    # remain backend-kernel work.
+    "rng_key",
+    "rng_split",
+    "rng_fold_in",
+    "rng_clone",
+    # Memory writes/evictions are state-management surfaces. memory_read is
+    # intentionally excluded because it performs real top-k/gather work and
+    # remains backend-kernel gated until the target lanes close.
+    "memory_write",
+    "memory_evict",
+    # Factory for a Python-side min/max observer; observe() may consume tensors,
+    # but the primitive itself is not a standalone device kernel contract.
+    "calibration_observer",
+})
+
 
 def _apply_category_overrides(
     contract: dict[str, str], category: str | None,
@@ -2347,6 +2384,7 @@ def _apply_category_overrides(
     # S-series sprint #2 (transpose) follows the same shape as #1.
     _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned", "partial"}))
     _promote("lowering_rule",  _LOWERING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
+    _promote("backend_kernel", _BACKEND_KERNEL_BY_CATEGORY, frozenset({"planned"}))
     # Partial-and-planned axes (semantic axes start at partial by default)
     semantic_overridable = frozenset({"planned", "partial"})
     _promote("math_semantics",     _SEMANTIC_RULES_BY_CATEGORY, semantic_overridable)
@@ -2386,6 +2424,9 @@ def _apply_per_name_overrides(contract: dict[str, str], name: str) -> None:
         "not_applicable",
     }:
         contract["transpose_rule"] = "complete"
+    if (name in _BACKEND_KERNEL_NOT_APPLICABLE_BY_NAME
+            and contract.get("backend_kernel") == "planned"):
+        contract["backend_kernel"] = "not_applicable"
 
 
 def _apply_effect_overrides(

@@ -27,7 +27,8 @@ The taxonomy is eight axes — one column per row of the rendered table:
                    dedicated axis exists)
   ``tile_ir``    : ``contract_status['backend_kernel']`` (proxy)
   ``target_ir``  : best backend manifest status across all targets
-                   (``fused`` / ``reference`` / ``compileable`` /
+                   (``fused`` / ``hardware_verified`` / ``packaged`` /
+                   ``compiled`` / ``reference`` / ``compileable`` /
                    ``artifact_only`` / ``planned``)
   ``runtime``    : best capability runtime status across all targets
                    (``ready`` / ``reference`` / ``artifact_only`` /
@@ -106,6 +107,9 @@ AXIS_VALUE_GLYPHS: Mapping[str, str] = {
     "partial":          "p",
     "planned":          "·",
     "fused":            "F",
+    "hardware_verified": "H",
+    "packaged":         "K",
+    "compiled":         "C",
     "reference":        "R",
     "compileable":      "c",
     "artifact_only":    "A",
@@ -302,11 +306,12 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
     # is intentionally the long-pole gate (Decision #25) and stays
     # `partial` until Phase G/H lights up distributed runtime.
     backend_name = _backend_lookup_name(op_name)
-    if (backend_name in bm._CLIFFORD_APPLE_GPU_FUSED or
-            backend_name in bm._EBM_APPLE_GPU_FUSED or
-            backend_name in bm._COMPLEX_APPLE_GPU_FUSED):
-        return AxisCell("fused", "backend_manifest fused entry")
+    manifest_entries = bm.manifest_for(backend_name)
+    if any(e.status in {"fused", "hardware_verified", "packaged", "compiled"} for e in manifest_entries):
+        return AxisCell("fused", "backend_manifest native/compiled entry")
     cov = _coverage_for(op_name)
+    if cov is not None and cov.category == "acceptance_verification":
+        return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")
     if cov is not None:
         status = cov.contract_status.get("backend_kernel", "planned")
         return AxisCell(status, "primitive_coverage.contract_status.backend_kernel")
@@ -314,6 +319,10 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
 
 
 def _axis_target_ir(op_name: str) -> AxisCell:
+    cov = _coverage_for(op_name)
+    if (cov is not None
+            and cov.contract_status.get("backend_kernel") == "not_applicable"):
+        return AxisCell("not_applicable", "primitive_coverage.contract_status.backend_kernel")
     # M7 ops (mobius, stereographic) live under prefixed names in
     # backend_manifest; translate before lookup so the audit reflects
     # the fused-kernel coverage that actually ships.
@@ -321,7 +330,16 @@ def _axis_target_ir(op_name: str) -> AxisCell:
     if not entries:
         return AxisCell("planned", "backend_manifest")
     # Best status across targets — rank ordering chooses the most concrete.
-    rank = {"fused": 0, "reference": 1, "compileable": 2, "artifact_only": 3, "planned": 4}
+    rank = {
+        "hardware_verified": 0,
+        "packaged": 1,
+        "fused": 2,
+        "compiled": 3,
+        "reference": 4,
+        "compileable": 5,
+        "artifact_only": 6,
+        "planned": 7,
+    }
     best_target = min(entries, key=lambda e: rank.get(e.status, 99))
     return AxisCell(
         best_target.status,

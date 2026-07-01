@@ -214,14 +214,106 @@ def test_visual_complex_rows_match_public_api_and_backend_aliases(support_rows) 
         assert row.cells["target_ir"].status == "fused", op
 
 
-def test_matmul_is_public_and_fused_at_target_ir() -> None:
+def test_matmul_is_public_and_native_at_target_ir() -> None:
     """Tensor-side sanity: the canonical matmul row is public,
-    Graph-IR-registered, and fused on the best target."""
+    Graph-IR-registered, and native on the best target."""
     row = audit.support_row_for("matmul")
     assert row.cells["api"].status == "public"
     assert row.cells["frontend"].status == "public"
     assert row.cells["graph_ir"].status == "registered"
-    assert row.cells["target_ir"].status == "fused"
+    assert row.cells["tile_ir"].status == "fused"
+    assert row.cells["target_ir"].status in {
+        "fused", "compiled", "hardware_verified", "packaged",
+    }
+
+
+def test_native_target_ir_rows_are_not_left_tile_partial(support_rows) -> None:
+    """A native backend manifest row is terminal Tile IR evidence.
+
+    The primitive registry's backend-kernel axis is intentionally conservative,
+    so the support table must not leave a row as `tile_ir=partial` once the
+    backend manifest proves a native/compiled Target IR lane.
+    """
+    native_statuses = {"fused", "compiled", "hardware_verified", "packaged"}
+    offenders = [
+        row.op_name
+        for row in support_rows
+        if row.cells["target_ir"].status in native_statuses
+        and row.cells["tile_ir"].status == "partial"
+    ]
+    assert not offenders
+
+
+def test_x86_and_rocm_native_manifest_rows_close_tile_ir(support_rows) -> None:
+    """x86/ROCm native lanes must not drift back to Tile IR partial."""
+    from tessera.compiler import backend_manifest as bm
+
+    native_statuses = {"fused", "compiled", "hardware_verified", "packaged"}
+    native_x86_rocm = {
+        op_name
+        for op_name, entries in bm.all_manifests().items()
+        if any(
+            entry.target in {"x86", "rocm"}
+            and entry.status in native_statuses
+            for entry in entries
+        )
+    }
+    assert native_x86_rocm
+
+    offenders = [
+        row.op_name
+        for row in support_rows
+        if row.op_name in native_x86_rocm
+        and row.cells["tile_ir"].status == "partial"
+    ]
+    assert not offenders
+
+
+def test_compiled_rocm_lanes_beat_reference_target_ir() -> None:
+    """Compiled ROCm proof must not be hidden behind CPU reference entries."""
+    for name in (
+        "gated_attention",
+        "spec_accept",
+        "spec_accept_sample",
+        "spec_accept_tree_sample",
+    ):
+        row = audit.support_row_for(name)
+        assert row.cells["target_ir"].status == "compiled", name
+        assert row.cells["tile_ir"].status == "fused", name
+
+
+def test_backend_kernel_not_applicable_rows_do_not_need_target_ir() -> None:
+    """Pure metadata/view ops should not look like Target IR reference debt."""
+    for name in (
+        "reshape", "view", "squeeze", "unsqueeze",
+        "flatten", "expand", "broadcast",
+    ):
+        row = audit.support_row_for(name)
+        assert row.cells["tile_ir"].status == "not_applicable", name
+        assert row.cells["target_ir"].status == "not_applicable", name
+
+
+def test_apple_gpu_structural_data_movers_close_tile_and_target_ir() -> None:
+    for name in ("transpose", "gather", "slice"):
+        row = audit.support_row_for(name)
+        assert row.cells["tile_ir"].status == "fused", name
+        assert row.cells["target_ir"].status == "fused", name
+
+
+def test_acceptance_verification_rows_do_not_require_tile_ir() -> None:
+    """Verifier/reference acceptance ops are not executable tile kernels."""
+    for name in (
+        "spec_accept",
+        "spec_accept_sample",
+        "spec_accept_tree_sample",
+    ):
+        row = audit.support_row_for(name)
+        assert row.family == "acceptance_verification"
+        assert row.cells["tile_ir"].status == "fused"
+
+    target_verify = audit.support_row_for("target_verify")
+    assert target_verify.family == "acceptance_verification"
+    assert target_verify.cells["tile_ir"].status == "not_applicable"
 
 
 def test_support_table_includes_canonical_program_section(support_markdown) -> None:

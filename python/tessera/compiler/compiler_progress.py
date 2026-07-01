@@ -63,7 +63,7 @@ def _phase_rows(support_rows: list[dict[str, str]]) -> list[ProgressRow]:
         ("Graph IR registration", "graph_ir", {"registered", "not_applicable"}),
         ("Schedule IR", "schedule_ir", {"complete", "not_applicable"}),
         ("Tile IR", "tile_ir", {"complete", "fused", "not_applicable"}),
-        ("Target IR native/fused codegen", "target_ir", {"fused"}),
+        ("Target IR native/fused codegen", "target_ir", {"fused", "compiled", "hardware_verified", "packaged", "not_applicable"}),
         ("Runtime dispatch readiness", "runtime", {"ready", "fused"}),
         ("Benchmark evidence", "bench", {"benchmarked"}),
     )

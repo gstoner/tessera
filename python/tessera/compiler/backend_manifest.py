@@ -717,6 +717,33 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "for fp32/fp16/bf16 cache pages"
         ),
     },
+    "transpose": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph N-D permute lane "
+            "(tessera_apple_gpu_mpsgraph_transpose_{f32,f16}; bf16 rides the "
+            "raw f16 path). Value-preserving data movement."
+        ),
+    },
+    "gather": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph axis-0 row gather lane "
+            "(tessera_apple_gpu_mpsgraph_gather_{f32,f16}; 2D table + int32 "
+            "indices; bf16 rides the raw f16 path)."
+        ),
+    },
+    "slice": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": _APPLE_GPU_FUSED,
+        "notes": (
+            "MPSGraph static N-D slice lane "
+            "(tessera_apple_gpu_mpsgraph_slice_{f32,f16}; starts/sizes attrs, "
+            "stride 1; bf16 rides the raw f16 path)."
+        ),
+    },
     # Audit follow-up (2026-06-10) — MoE expert-FFN ops. Both are runtime
     # envelope ops (apple_gpu_envelope.APPLE_GPU_LANE_BY_OP: lanes grouped_gemm
     # / moe_swiglu_block) with dedicated fused MSL kernels + execute-compare
@@ -856,6 +883,28 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # no standalone op row, so it is covered by the flash_attn row, not listed here.
 # ─────────────────────────────────────────────────────────────────────────────
 _ROCM_COMPILED: dict[str, dict[str, Any]] = {
+    "spec_accept": {
+        "dtypes": ("int32",),
+        "feature_flags": ("control_flow", "speculative_decode"),
+        "notes": "Speculative-decoding accept mask kernel — compiler-generated "
+                 "ROCm control-flow lane (generate-rocm-spec-accept-kernel). "
+                 "Executes via runtime.launch() (rocm_spec_accept_compiled).",
+    },
+    "spec_accept_sample": {
+        "dtypes": ("int32", "fp32"),
+        "feature_flags": ("control_flow", "speculative_decode", "explicit_rng"),
+        "notes": "Speculative-decoding accept+sample kernel — compares proposal "
+                 "and target probabilities, emits accept flags plus sampled "
+                 "fallback ids via the explicit RNG stream. Executes via "
+                 "runtime.launch() (rocm_spec_accept_sample_compiled).",
+    },
+    "spec_accept_tree_sample": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("control_flow", "speculative_decode", "explicit_rng"),
+        "notes": "Tree speculative-decoding sampler — compiler-generated ROCm "
+                 "lane for per-node probabilities and parent links. Executes via "
+                 "runtime.launch() (rocm_spec_accept_tree_sample_compiled).",
+    },
     "gqa_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "GQA/MQA via the flash_attn WMMA kernel (gqa directive attr; "
@@ -1588,6 +1637,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # GPU / HIPRTC. The numerical-proof half of the rocm flash_attn
     # `hardware_verified` row — the second op after matmul to execute on ROCm.
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
+    ("spec_accept", "rocm"): "tests/unit/test_rocm_spec_accept_exec.py",
+    ("spec_accept_sample", "rocm"): "tests/unit/test_rocm_spec_accept_sample_exec.py",
+    ("spec_accept_tree_sample", "rocm"):
+        "tests/unit/test_rocm_spec_accept_tree_sample_exec.py",
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
@@ -1893,6 +1946,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("dequant_matmul", "apple_gpu"): "tests/unit/test_stdlib_quant.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
+    ("transpose", "apple_gpu"): "tests/unit/test_apple_gpu_transpose.py",
+    ("gather", "apple_gpu"): "tests/unit/test_apple_gpu_gather.py",
+    ("slice", "apple_gpu"): "tests/unit/test_apple_gpu_slice.py",
     # rope(q)/rope(k) vs a numpy rotary reference (execute-compare), not the
     # buffer-pool RAII test.
     ("rope", "apple_gpu"): "tests/unit/test_apple_gpu_ops_interception.py",
@@ -2183,8 +2239,13 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# x86 backend — AMX BF16 GEMM is the only currently-real execution path
-# (Phase 2).
+# x86 backend — two honest readiness tiers:
+#
+#   * matmul/gemm: AMX BF16 fused backend row.
+#   * AVX-512 f32/i32/bool lanes: runtime-loaded compiled kernels from
+#     libtessera_x86_elementwise.so, each backed by an execute-compare fixture.
+#     These are ``compiled`` rather than ``hardware_verified`` because the
+#     manifest does not claim per-op C ABI runtime_symbol contracts.
 # ─────────────────────────────────────────────────────────────────────────────
 _X86_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
@@ -3834,15 +3895,21 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         return _attach_numerical_fixtures(op_name, complex_manifest_for(op_name))
     entries: list[BackendKernelEntry] = []
 
-    # x86 AMX
+    # x86 AMX / AVX-512
     x86 = _X86_KERNELS.get(op_name)
     if x86 is not None:
+        x86_fixture = _NUMERICAL_FIXTURES.get((op_name, "x86"))
+        x86_status = str(x86["status"])
+        is_amx_gemm = op_name in {"matmul", "gemm"}
+        if x86_fixture is not None and not is_amx_gemm:
+            x86_status = _COMPILED_STATUS
         entries.append(BackendKernelEntry(
             target="x86",
-            status=str(x86["status"]),
+            status=x86_status,
             dtypes=tuple(x86["dtypes"]),
-            feature_flags=("amx", "avx512"),
+            feature_flags=("amx", "avx512") if is_amx_gemm else ("avx512",),
             notes=str(x86.get("notes", "")),
+            execute_compare_fixture=x86_fixture,
         ))
 
     # Apple CPU

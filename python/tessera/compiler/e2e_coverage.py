@@ -98,7 +98,13 @@ class E2ECoverageRow:
 
 _AXIS_REAL_API_FRONTEND = frozenset({"public"})
 _AXIS_REAL_GRAPH_IR = frozenset({"registered", "not_applicable"})
-_AXIS_NATIVE_LOWERING = frozenset({"complete", "fused"})
+_AXIS_NATIVE_LOWERING = frozenset({
+    "complete",
+    "fused",
+    "compiled",
+    "hardware_verified",
+    "packaged",
+})
 _AXIS_REFERENCE_LOWERING = frozenset({"reference", "compileable"})
 _AXIS_ARTIFACT_LOWERING = frozenset({"artifact_only"})
 _AXIS_RUNTIME_READY = frozenset({"ready", "fused"})

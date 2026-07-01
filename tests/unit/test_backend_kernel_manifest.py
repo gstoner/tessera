@@ -159,7 +159,7 @@ class TestAppleGPUMSLKernels:
         "rmsnorm", "layer_norm", "silu", "bmm", "conv2d",
     )
     # Remaining fused-but-not-yet-hw-verified.
-    FUSED_OPS = ("matmul",)
+    FUSED_OPS = ("matmul", "transpose", "gather", "slice")
 
     @pytest.mark.parametrize("name", HARDWARE_VERIFIED_OPS)
     def test_apple_gpu_kernel_is_hardware_verified(self, name):
@@ -192,16 +192,44 @@ class TestFlashAttnManifest:
         assert ag.status == "hardware_verified"
         assert set(ag.dtypes) >= {"fp32", "fp16", "bf16"}
 
-    def test_x86_ships_fused_flash_attn_partner(self):
+    def test_x86_ships_compiled_flash_attn_partner(self):
         """P10 — x86 now ships an AVX-512 online-softmax flash_attn forward
-        (the partner to the ROCm WMMA flash_attn), so the x86 slot is fused."""
+        (the partner to the ROCm WMMA flash_attn), so the x86 slot is compiled."""
         entries = {e.target: e for e in manifest_for("flash_attn")}
         assert "x86" in entries
         x86 = entries["x86"]
-        assert x86.status == "fused"
+        assert x86.status == "compiled"
         assert x86.dtypes == ("fp32",)
+        assert x86.feature_flags == ("avx512",)
         assert x86.execute_compare_fixture == (
             "tests/unit/test_x86_flash_attn_compiled.py")
+
+
+class TestX86AVX512Manifest:
+    @pytest.mark.parametrize("name", [
+        "flash_attn", "conv2d", "scatter_add", "sum", "cumsum",
+        "sqrt", "add", "eq", "logical_and", "where", "softmax",
+        "batched_gemm", "multi_head_attention", "mse_loss", "fft",
+        "spmm_csr", "selective_ssm", "cholesky",
+    ])
+    def test_fixture_backed_avx512_rows_are_compiled(self, name):
+        entries = {e.target: e for e in manifest_for(name)}
+        x86 = entries["x86"]
+        assert x86.status == "compiled", name
+        assert x86.execute_compare_fixture, name
+        assert x86.feature_flags == ("avx512",)
+
+    def test_every_compiled_x86_row_has_a_fixture(self):
+        for op_name, entries in all_manifests().items():
+            for entry in entries:
+                if entry.target == "x86" and entry.status == "compiled":
+                    assert entry.execute_compare_fixture, op_name
+                    assert entry.feature_flags == ("avx512",), op_name
+
+    def test_amx_matmul_remains_fused_not_compiled(self):
+        x86 = {e.target: e for e in manifest_for("matmul")}["x86"]
+        assert x86.status == "fused"
+        assert x86.feature_flags == ("amx", "avx512")
 
 
 # ──────────────────────────────────────────────────────────────────────────

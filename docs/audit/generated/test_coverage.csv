@@ -135,7 +135,7 @@ dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
 dct,8,0,1,8,0,fp32,directly_tested,8 direct test references
 ddpm_noise_pred_loss,3,0,0,3,0,,directly_tested,3 direct test references
-deepseek_sparse_attention,21,5,0,26,0,,directly_tested,26 direct test references
+deepseek_sparse_attention,22,5,0,27,0,,directly_tested,27 direct test references
 denoising_score_matching_loss,3,0,0,3,0,,directly_tested,3 direct test references
 depthwise_conv1d,10,0,1,10,0,,directly_tested,10 direct test references
 dequant_grouped_gemm,1,4,0,5,0,int8,directly_tested,5 direct test references
@@ -205,7 +205,7 @@ grpo_policy_loss,8,3,0,11,0,,directly_tested,11 direct test references
 gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
 gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 huber_loss,8,0,0,8,0,f32,directly_tested,8 direct test references
-hybrid_attention,15,2,1,17,0,,directly_tested,17 direct test references
+hybrid_attention,17,2,1,19,0,,directly_tested,19 direct test references
 ifft,6,0,0,6,0,fp32,directly_tested,6 direct test references
 image_normalize,6,0,1,6,0,,directly_tested,6 direct test references
 image_resize,6,0,1,6,0,,directly_tested,6 direct test references

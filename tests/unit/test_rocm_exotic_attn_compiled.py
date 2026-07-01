@@ -145,6 +145,24 @@ def test_hybrid_attention_mla_slot_reference_fallback_matches_ops():
     np.testing.assert_allclose(res["output"], ref, atol=1e-6, rtol=1e-6)
 
 
+def test_hybrid_attention_fp32_lightning_reference_fallback_matches_ops():
+    import tessera as ts
+    from tessera import runtime as rt
+
+    rng = np.random.default_rng(11)
+    q = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    k = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    v = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    kw = {"pattern": "auto", "causal": True}
+    art, ops = _artifact(rt, "tessera.hybrid_attention", [q, k, v], kw)
+    res = rt.launch(art, ops)
+
+    assert res["ok"], res.get("reason")
+    assert res["execution_kind"] == "reference_cpu"
+    ref = ts.ops.hybrid_attention(q, k, v, **kw)
+    np.testing.assert_allclose(res["output"], ref, atol=1e-6, rtol=1e-6)
+
+
 def test_hybrid_attention_auto_native_gpu_matches_ops_on_hardware():
     import tessera as ts
 

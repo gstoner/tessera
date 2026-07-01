@@ -11157,7 +11157,10 @@ def _deepseek_sparse_attention_rocm(
             scores, np, top_k=top_k, block_size=block_size, causal=causal,
             force_local_block=False)
         branch_topk = _rocm_selected_block_attention_native(
-            q, k, v, selected, np, block_size=block_size, causal=causal,
+            # NSA applies causal masking at block-selection time only.  Unlike
+            # MSA, the selected top-k blocks then attend over all tokens inside
+            # each selected block, including same-block future tokens.
+            q, k, v, selected, np, block_size=block_size, causal=False,
             tiled=True)
     except _RocmCompiledUnavailable:
         return (
@@ -12270,19 +12273,24 @@ def _rocm_hybrid_attention_composed(
             }],
         })
 
+    def _linear_lightning_or_ref() -> tuple[Any, str]:
+        art = _artifact(
+            "rocm_linear_attn_compiled", "tessera.lightning_attention",
+            ["Q", "K", "V"], {"causal": causal, "decay": kwargs.get("decay")})
+        try:
+            return _execute_rocm_compiled_linear_attn(art, (Q, K, V)), "native_gpu"
+        except ValueError as exc:
+            if "rocm linear_attn lane handles f16/bf16 storage" in str(exc):
+                return _ref()
+            raise
+
     try:
         if pattern in ("lightning", "auto"):
-            art = _artifact(
-                "rocm_linear_attn_compiled", "tessera.lightning_attention",
-                ["Q", "K", "V"], {"causal": causal, "decay": kwargs.get("decay")})
-            return _execute_rocm_compiled_linear_attn(art, (Q, K, V)), "native_gpu"
+            return _linear_lightning_or_ref()
         if pattern in ("ling_1_7_mla_lightning", "ling2_5", "ling_2_5"):
             if layer_index % 8 == 7:
                 return _ref()
-            art = _artifact(
-                "rocm_linear_attn_compiled", "tessera.lightning_attention",
-                ["Q", "K", "V"], {"causal": causal, "decay": kwargs.get("decay")})
-            return _execute_rocm_compiled_linear_attn(art, (Q, K, V)), "native_gpu"
+            return _linear_lightning_or_ref()
         if pattern in ("gated_deltanet", "delta", "kimi_kda_mla", "kimi_linear", "kimi"):
             if pattern in ("kimi_kda_mla", "kimi_linear", "kimi") and layer_index % 2 == 1:
                 return _ref()

@@ -1194,9 +1194,14 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     # satisfy vmap(row)==per-row loop (the per-model answer).
     "functional_optimizer_step": "complete",
     "optimizer":           "complete",
-    "moe":                 "partial",    # token routing under vmap — pending
-    "moe_transport":       "partial",    # cross-device all_to_all under vmap
-    "state_update":        "partial",    # kv_cache write per batch
+    # S-series closeout (2026-07-01): local token/cache batching is closed.
+    # The leading vmap axis is ordinary data: MoE routing applies independently
+    # per token-batch element, dispatch/combine preserve that axis, and cache
+    # commit/rollback/online-softmax state updates preserve per-batch state.
+    # Mesh/device transport remains tracked by sharding_rule/backend_kernel.
+    "moe":                 "complete",
+    "moe_transport":       "complete",
+    "state_update":        "complete",
     # S-series #2 (2026-06-02): SSM (Mamba) batches over B by construction —
     # the selective scan runs independently per batch element; vmap prepends
     # the batch axis with no recurrence-state coupling across the batch.

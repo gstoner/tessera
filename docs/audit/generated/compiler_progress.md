@@ -11,7 +11,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `End-to-end optimizing compiler` | mixed | 11 | 23 | 12 | closed=11, mixed=12, open=0, primary_open=backend_kernel, Direct test evidence, Verifier coverage | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
+| `End-to-end optimizing compiler` | mixed | 12 | 23 | 11 | closed=12, mixed=11, open=0, primary_open=backend_kernel, Direct test evidence, CUDA target-map native promotion | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
 
 ## Compiler Phase And IR State
 
@@ -30,7 +30,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `batching_rule` | mixed | 474 | 480 | 6 | primitive contract axis; open means partial or planned, not necessarily missing API support | Close the small remaining transform-rule tail. |
+| `batching_rule` | closed | 480 | 480 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `transpose_rule` | closed | 480 | 480 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `sharding_rule` | mixed | 437 | 480 | 43 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
 | `lowering_rule` | closed | 480 | 480 | 0 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
@@ -40,7 +40,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Verifier coverage` | mixed | 125 | 174 | 49 | no_verifier=49, real=125 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
+| `Verifier coverage` | mixed | 136 | 174 | 38 | no_verifier=38, real=136 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. |
 | `Direct test evidence` | mixed | 347 | 480 | 133 | covered_by_family=40, directly_tested=347, hardware_gated=4, structural_only=89 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 122 | 122 | 0 | apple_cpu=2, apple_gpu=2, cpu=2, nvidia_sm120=1, rocm=60, x86=55 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 387 | 640 | 253 | apple=557, nvidia=5, rocm=10, x86=68 | Reduce stub-only ABI rows where a backend claims native execution. |
@@ -62,8 +62,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---|---|---|
 | `backend_kernel` | mixed | 381 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
 | `Direct test evidence` | mixed | 133 | covered_by_family=40, directly_tested=347, hardware_gated=4, structural_only=89 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `docs/audit/generated/test_coverage.csv` |
-| `Verifier coverage` | mixed | 49 | no_verifier=49, real=125 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. | `docs/audit/generated/verifier_coverage.csv` |
 | `CUDA target-map native promotion` | open | 39 | artifact_only=39 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
+| `Verifier coverage` | mixed | 38 | no_verifier=38, real=136 | Add real verifier implementations for no_verifier ops, prioritizing native codegen lanes. | `docs/audit/generated/verifier_coverage.csv` |
 | `Audited repo surfaces` | mixed | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 6 | compiled=196, fused=72, hardware_verified=12, not_applicable=29, reference=6 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 | `ROCm target-map native promotion` | closed | 0 | compiled=34, hardware_verified=2 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |

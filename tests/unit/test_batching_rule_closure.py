@@ -1,11 +1,8 @@
-"""S-series #2 (2026-06-02) — long-tail batching/transpose closure guard.
+"""S-series #2+ closeout — long-tail batching/transpose closure guard.
 
-The long-tail batching axis was closed for the textbook-batchable families
-(collective / recurrent / state_space / linalg decomposition+solver / sparse /
-segment_reduce). Lock those completes, and lock that the genuinely-pending
-ones (moe / moe_transport / state_update — cross-device routing or kv-cache
-write under vmap) stay partial, so a future category-table edit can't silently
-over- or under-claim.
+The long-tail batching axis is closed for textbook-batchable families and for
+the local state/MoE transport lanes. Mesh/device ownership remains under
+``sharding_rule`` and ``backend_kernel`` rather than ``batching_rule``.
 
 The transpose axis was then closed to **zero open** on the linear-vs-nonlinear
 principle: a linear-transpose rule applies only to *linear* primitives. Linear
@@ -46,11 +43,29 @@ def test_batchable_families_are_complete():
         assert _bk(name) == "complete", f"{name} batching_rule should be complete"
 
 
-def test_cross_device_routing_stays_partial():
-    # Honest: token routing / all_to_all transport under vmap + kv-cache write
-    # per batch are genuinely pending (mesh-aware), not closed.
-    for name in ("moe", "moe_dispatch", "moe_combine", "online_softmax_state"):
-        assert _bk(name) == "partial", f"{name} batching_rule should stay partial"
+def test_state_and_moe_batching_is_closed_locally():
+    # vmap adds an ordinary leading data axis. MoE routing/transport and cache
+    # state updates preserve that axis locally; distributed mesh proof remains
+    # tracked by sharding_rule/backend_kernel.
+    for name in (
+        "cache_commit",
+        "cache_rollback",
+        "moe",
+        "moe_dispatch",
+        "moe_combine",
+        "online_softmax_state",
+    ):
+        assert _bk(name) == "complete", f"{name} batching_rule should be complete"
+
+
+def test_batching_axis_has_zero_open():
+    open_status = {"partial", "planned"}
+    offenders = [
+        n
+        for n, c in _COVS.items()
+        if c.contract_status.get("batching_rule") in open_status
+    ]
+    assert not offenders, f"batching_rule should be fully closed, open: {offenders}"
 
 
 def test_transpose_axis_has_zero_open():

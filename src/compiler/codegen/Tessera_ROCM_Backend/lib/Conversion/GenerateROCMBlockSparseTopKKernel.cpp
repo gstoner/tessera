@@ -90,14 +90,16 @@ void emitTopKBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
       b.create<scf::YieldOp>(loc, ValueRange{local});
 
       b.setInsertionPointToStart(choose.elseBlock());
+      Value falseVal = b.create<arith::ConstantIntOp>(loc, false, 1);
       auto scan = b.create<scf::ForOp>(loc, c0, Nb, c1,
-                                       ValueRange{negInf, c0});
+                                       ValueRange{negInf, c0, falseVal});
       {
         OpBuilder::InsertionGuard g3(b);
         b.setInsertionPointToStart(scan.getBody());
         Value blk = scan.getInductionVar();
         Value bestScore = scan.getRegionIterArgs()[0];
         Value bestBlk = scan.getRegionIterArgs()[1];
+        Value found = scan.getRegionIterArgs()[2];
         Value future = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
                                                blk, local);
         Value pastOk = b.create<arith::OrIOp>(
@@ -128,12 +130,48 @@ void emitTopKBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f) {
         Value score = b.create<arith::SelectOp>(loc, valid, raw, negInf);
         Value gt = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT,
                                            score, bestScore);
+        Value foundNext = b.create<arith::OrIOp>(loc, found, valid);
         b.create<scf::YieldOp>(
             loc, ValueRange{b.create<arith::SelectOp>(loc, gt, score, bestScore),
-                            b.create<arith::SelectOp>(loc, gt, blk, bestBlk)});
+                            b.create<arith::SelectOp>(loc, gt, blk, bestBlk),
+                            foundNext});
         (void)future;
       }
-      b.create<scf::YieldOp>(loc, ValueRange{scan.getResult(1)});
+      // When causal masking leaves fewer score-valid blocks than Ksel, keep
+      // filler ids unique. The attention kernel later masks future filler
+      // tokens, while duplicate past/local ids would incorrectly double-count.
+      Value trueVal = b.create<arith::ConstantIntOp>(loc, true, 1);
+      auto fallback = b.create<scf::ForOp>(loc, c0, Nb, c1,
+                                           ValueRange{c0, falseVal});
+      {
+        OpBuilder::InsertionGuard g3(b);
+        b.setInsertionPointToStart(fallback.getBody());
+        Value blk = fallback.getInductionVar();
+        Value chosen = fallback.getRegionIterArgs()[0];
+        Value have = fallback.getRegionIterArgs()[1];
+        Value notDup = b.create<arith::ConstantIntOp>(loc, true, 1);
+        auto prevLoop = b.create<scf::ForOp>(loc, c0, slot, c1,
+                                             ValueRange{notDup});
+        {
+          OpBuilder::InsertionGuard g4(b);
+          b.setInsertionPointToStart(prevLoop.getBody());
+          Value prev = prevLoop.getInductionVar();
+          Value ok = prevLoop.getRegionIterArgs()[0];
+          Value prevIdx = flat4(batch, h, sq, prev, Hkv, Sq, Ksel);
+          Value old = b.create<memref::LoadOp>(loc, Out, ValueRange{prevIdx});
+          Value neq = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne, old, blk);
+          b.create<scf::YieldOp>(loc, ValueRange{b.create<arith::AndIOp>(loc, ok, neq)});
+        }
+        Value take = b.create<arith::AndIOp>(
+            loc, b.create<arith::XOrIOp>(loc, have, trueVal),
+            prevLoop.getResult(0));
+        b.create<scf::YieldOp>(
+            loc, ValueRange{b.create<arith::SelectOp>(loc, take, blk, chosen),
+                            b.create<arith::OrIOp>(loc, have, take)});
+      }
+      b.create<scf::YieldOp>(
+          loc, ValueRange{b.create<arith::SelectOp>(
+              loc, scan.getResult(2), scan.getResult(1), fallback.getResult(0))});
     }
     Value outIdx = flat4(batch, h, sq, slot, Hkv, Sq, Ksel);
     b.create<memref::StoreOp>(loc, choose.getResult(0), Out, ValueRange{outIdx});

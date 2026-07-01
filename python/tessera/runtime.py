@@ -11110,7 +11110,11 @@ def _dsa_selected_block_ids(Q: Any, K: Any, np: Any, *, top_k_blocks: int,
                 ids = ids[:ksel]
                 sel[b, h, s, :ids.size] = ids
                 if ids.size < ksel:
-                    sel[b, h, s, ids.size:] = ids[-1]
+                    fillers = [blk for blk in range(nb) if blk not in set(ids.tolist())]
+                    fill = np.asarray(fillers[:ksel - ids.size], dtype=np.int64)
+                    sel[b, h, s, ids.size:ids.size + fill.size] = fill
+                    if ids.size + fill.size < ksel:
+                        sel[b, h, s, ids.size + fill.size:] = ids[-1]
     return sel
 
 

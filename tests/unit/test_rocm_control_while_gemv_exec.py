@@ -74,9 +74,9 @@ func.func @b(%h: {h}, %w: {w}) -> {h} {{
   %m = "tessera.matmul"(%h, %w) : ({h}, {w}) -> {h}
   return %m : {h}
 }}
-func.func @c(%h: {h}) -> tensor<1x1xf32> {{
-  %s = "tessera.reduce"(%h) {{kind = "sum", axis = 1 : i64}} : ({h}) -> tensor<1x1xf32>
-  return %s : tensor<1x1xf32>
+func.func @c(%h: {h}) -> tensor<1xf32> {{
+  %s = "tessera.reduce"(%h) {{kind = "sum", axis = 1 : i64}} : ({h}) -> tensor<1xf32>
+  return %s : tensor<1xf32>
 }}
 func.func @f(%init: {h}, %W: {w}) -> {h} {{
   %r = "tessera.control_while"(%init, %W) {{body = @b, cond = @c,

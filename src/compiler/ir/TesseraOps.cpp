@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <type_traits>
 
 using namespace mlir;
 
@@ -498,12 +499,20 @@ LogicalResult verifyPositiveOptionalI64(Operation *op, StringRef name,
   return success();
 }
 
+template <typename FloatLike>
+double floatLikeToDouble(FloatLike value) {
+  if constexpr (std::is_same_v<std::decay_t<FloatLike>, FloatAttr>)
+    return value.getValueAsDouble();
+  else
+    return value.convertToDouble();
+}
+
 template <typename OptionalFloatAttr>
 LogicalResult verifyPositiveOptionalF64(Operation *op, StringRef name,
                                         OptionalFloatAttr value) {
   if (!value)
     return success();
-  double v = value->convertToDouble();
+  double v = floatLikeToDouble(*value);
   if (!(v > 0.0))
     return op->emitOpError() << name << " must be positive when set";
   return success();
@@ -514,7 +523,7 @@ LogicalResult verifyUnitIntervalOptionalF64(Operation *op, StringRef name,
                                             OptionalFloatAttr value) {
   if (!value)
     return success();
-  double v = value->convertToDouble();
+  double v = floatLikeToDouble(*value);
   if (!(v >= 0.0) || !(v < 1.0))
     return op->emitOpError() << name << " must satisfy 0.0 <= value < 1.0";
   return success();
@@ -2262,7 +2271,7 @@ LogicalResult SoftplusOp::verify() {
 LogicalResult NTKRopeOp::verify() {
   if (failed(verifyUnaryPointwise(getOperation(), getX(), getY(), "ntk_rope")))
     return failure();
-  if (getScale() <= 0.0)
+  if (floatLikeToDouble(getScale()) <= 0.0)
     return emitOpError("scale must be positive");
   return success();
 }
@@ -2523,12 +2532,12 @@ LogicalResult AdamOp::verify() {
 static LogicalResult verifyOptimizerTree(Operation *op, Value params,
                                          Value grads, Value state,
                                          Value newParams, Value newState,
-                                         std::optional<FloatAttr> lr,
-                                         std::optional<FloatAttr> beta1,
-                                         std::optional<FloatAttr> beta2,
-                                         std::optional<FloatAttr> eps,
-                                         std::optional<FloatAttr> momentum,
-                                         std::optional<FloatAttr> weightDecay,
+                                         std::optional<APFloat> lr,
+                                         std::optional<APFloat> beta1,
+                                         std::optional<APFloat> beta2,
+                                         std::optional<APFloat> eps,
+                                         std::optional<APFloat> momentum,
+                                         std::optional<APFloat> weightDecay,
                                          StringRef name) {
   auto paramsTy = dyn_cast<RankedTensorType>(params.getType());
   auto gradsTy = dyn_cast<RankedTensorType>(grads.getType());

@@ -103,6 +103,24 @@ def test_rocm_dsa_selected_layout_matches_stdlib():
     np.testing.assert_allclose(res["output"], ref, rtol=2e-5, atol=2e-5)
 
 
+def test_rocm_deepseek_sparse_attention_matches_ops_reference():
+    import tessera as ts
+
+    Q, K, V = _qkv(seed=57, Hq=2, Hkv=2, Sq=8, Sk=8, D=4, Dv=4)
+    gate = np.random.default_rng(58).standard_normal((1, 2, 8, 3)).astype(np.float32)
+    kw = {"window_size": 4, "block_size": 2, "top_k": 2, "causal": True}
+    res = rt.launch(
+        _artifact("tessera.deepseek_sparse_attention", ["Q", "K", "V", "gate"], kw),
+        (Q, K, V, gate),
+    )
+
+    assert res["ok"], res.get("reason")
+    assert res["compiler_path"] == "rocm_sparse_attn_compiled"
+    assert res["execution_kind"] in {"native_gpu", "reference_cpu"}
+    ref = ts.ops.deepseek_sparse_attention(Q, K, V, gate, **kw)
+    np.testing.assert_allclose(res["output"], ref, rtol=2e-5, atol=2e-5)
+
+
 def test_dk2_rocm_sparse_attention_perf_baseline_is_bounded():
     Q, K, V = _qkv(seed=54, Sq=8, Sk=8, D=4)
     kw = {"block_size": 2, "top_k": 2, "causal": True}
@@ -134,6 +152,27 @@ def test_rocm_sparse_attention_native_gpu_matches_reference_on_hardware():
     assert res["ok"], res.get("reason")
     assert res["execution_kind"] == "native_gpu"
     ref = attention.msa_sparse_attention(Q, K, V, **kw)
+    np.testing.assert_allclose(res["output"], ref, rtol=2e-4, atol=2e-4)
+
+
+def test_rocm_deepseek_sparse_attention_native_gpu_matches_reference_on_hardware():
+    import tessera as ts
+
+    if rt._tessera_opt_path() is None:
+        pytest.skip("tessera-opt not built")
+    if not rt._rocm_wmma_runtime_available():
+        pytest.skip("no usable AMD GPU")
+
+    Q, K, V = _qkv(seed=59, Hq=2, Hkv=2, Sq=8, Sk=8, D=4, Dv=4)
+    kw = {"window_size": 4, "block_size": 2, "top_k": 2, "causal": True}
+    res = rt.launch(
+        _artifact("tessera.deepseek_sparse_attention", ["Q", "K", "V"], kw),
+        (Q, K, V),
+    )
+
+    assert res["ok"], res.get("reason")
+    assert res["execution_kind"] == "native_gpu"
+    ref = ts.ops.deepseek_sparse_attention(Q, K, V, **kw)
     np.testing.assert_allclose(res["output"], ref, rtol=2e-4, atol=2e-4)
 
 

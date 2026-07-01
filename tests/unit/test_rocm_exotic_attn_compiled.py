@@ -127,6 +127,43 @@ def test_mla_decode_fused(dtype, tol):
     np.testing.assert_allclose(out, ref, atol=max(tol, 6e-2), rtol=max(tol, 6e-2))
 
 
+def test_hybrid_attention_mla_slot_reference_fallback_matches_ops():
+    import tessera as ts
+    from tessera import runtime as rt
+
+    rng = np.random.default_rng(9)
+    q = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    k = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    v = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float32)
+    kw = {"pattern": "ling_1_7_mla_lightning", "layer_index": 7, "causal": True}
+    art, ops = _artifact(rt, "tessera.hybrid_attention", [q, k, v], kw)
+    res = rt.launch(art, ops)
+
+    assert res["ok"], res.get("reason")
+    assert res["execution_kind"] == "reference_cpu"
+    ref = ts.ops.hybrid_attention(q, k, v, **kw)
+    np.testing.assert_allclose(res["output"], ref, atol=1e-6, rtol=1e-6)
+
+
+def test_hybrid_attention_auto_native_gpu_matches_ops_on_hardware():
+    import tessera as ts
+
+    rt = _attn_or_skip()
+    rng = np.random.default_rng(10)
+    q = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float16)
+    k = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float16)
+    v = (rng.standard_normal((1, 2, 8, 32)) * 0.2).astype(np.float16)
+    kw = {"pattern": "auto", "causal": True}
+    art, ops = _artifact(rt, "tessera.hybrid_attention", [q, k, v], kw)
+    res = rt.launch(art, ops)
+
+    assert res["ok"], res.get("reason")
+    assert res["execution_kind"] == "native_gpu"
+    ref = ts.ops.hybrid_attention(q, k, v, **kw)
+    np.testing.assert_allclose(res["output"].astype(np.float32), ref.astype(np.float32),
+                               atol=3e-2, rtol=3e-2)
+
+
 def test_gated_attention_bad_arity_rejected():
     from tessera import runtime as rt
     q = np.zeros((1, 2, 16, 32), np.float16)

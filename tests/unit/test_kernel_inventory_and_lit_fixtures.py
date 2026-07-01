@@ -214,16 +214,15 @@ class TestG3ManifestWiring:
         assert "wmma" in rocm.feature_flags
         assert rocm.runtime_symbol == "tessera_rocm_wmma_flash_attn_f16"
 
-    def test_rocm_attention_family_uses_16x16x16(self):
-        # The still-artifact_only attention family carries the 16x16x16 MFMA
-        # score-tile shape (CDNA MFMA artifact path; HIP execution gated).
-        # The executing members moved off this path: flash_attn → WMMA
-        # hardware_verified, and multi_head_attention → WMMA `compiled` (it IS
-        # the flash_attn kernel) — both carry the `wmma` flag and no MFMA shape.
+    def test_rocm_attention_family_promotions_are_not_mfma_artifacts(self):
+        # The executing members moved off the CDNA MFMA artifact path:
+        # flash_attn → WMMA hardware_verified, multi_head_attention → WMMA
+        # `compiled`, and DeepSeek/NSA → the DK2 sparse-attention compiled lane.
         from tessera.compiler.backend_manifest import manifest_for
-        artifact = {e.target: e for e in
-                    manifest_for("deepseek_sparse_attention")}
-        assert artifact["rocm"].mfma_shape == (16, 16, 16, 1)
+        nsa = {e.target: e for e in manifest_for("deepseek_sparse_attention")}
+        assert nsa["rocm"].status == "compiled"
+        assert "sparse_attention" in nsa["rocm"].feature_flags
+        assert nsa["rocm"].mfma_shape is None
 
         mha = {e.target: e for e in manifest_for("multi_head_attention")}
         assert mha["rocm"].status == "compiled"

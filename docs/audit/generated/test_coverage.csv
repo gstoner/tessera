@@ -108,7 +108,7 @@ cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 count_nonzero,11,0,0,11,0,,directly_tested,11 direct test references
-cross_attention,7,0,0,7,0,,directly_tested,7 direct test references
+cross_attention,8,0,0,8,0,,directly_tested,8 direct test references
 cross_entropy_loss,8,0,0,8,0,,directly_tested,8 direct test references
 cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 ctc_loss,7,0,0,7,0,,directly_tested,7 direct test references
@@ -135,7 +135,7 @@ dataset_zip,0,0,0,0,1,,structural_only,category default for 'data'
 dbar,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
 dct,8,0,1,8,0,fp32,directly_tested,8 direct test references
 ddpm_noise_pred_loss,3,0,0,3,0,,directly_tested,3 direct test references
-deepseek_sparse_attention,17,5,0,22,0,,directly_tested,22 direct test references
+deepseek_sparse_attention,21,5,0,26,0,,directly_tested,26 direct test references
 denoising_score_matching_loss,3,0,0,3,0,,directly_tested,3 direct test references
 depthwise_conv1d,10,0,1,10,0,,directly_tested,10 direct test references
 dequant_grouped_gemm,1,4,0,5,0,int8,directly_tested,5 direct test references
@@ -205,7 +205,7 @@ grpo_policy_loss,8,3,0,11,0,,directly_tested,11 direct test references
 gru_cell,2,0,0,2,0,,directly_tested,2 direct test references
 gt,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 huber_loss,8,0,0,8,0,f32,directly_tested,8 direct test references
-hybrid_attention,11,2,0,13,0,,directly_tested,13 direct test references
+hybrid_attention,15,2,1,17,0,,directly_tested,17 direct test references
 ifft,6,0,0,6,0,fp32,directly_tested,6 direct test references
 image_normalize,6,0,1,6,0,,directly_tested,6 direct test references
 image_resize,6,0,1,6,0,,directly_tested,6 direct test references
@@ -282,7 +282,7 @@ min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,2,0,0,2,0,,directly_tested,2 direct test references
 minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
-mla_decode_fused,11,9,1,20,0,,directly_tested,20 direct test references
+mla_decode_fused,11,9,0,20,0,,directly_tested,20 direct test references
 mobius,3,0,0,3,0,,directly_tested,3 direct test references
 mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references
@@ -320,11 +320,11 @@ pad,6,0,0,6,0,,directly_tested,6 direct test references
 partial_state_load,0,0,0,0,1,,structural_only,category default for 'serialization'
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 patchify,6,0,1,6,0,,directly_tested,6 direct test references
-perceiver_resampler,1,0,0,1,1,,needs_direct_test,category default for 'attention'
+perceiver_resampler,2,0,0,2,0,,directly_tested,2 direct test references
 permute,5,12,1,17,0,,directly_tested,17 direct test references
 persistent_cd_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
-pixel_shuffle,1,0,1,1,1,,needs_direct_test,category default for 'layout_transform'
-pixel_unshuffle,5,0,1,5,0,,directly_tested,5 direct test references
+pixel_shuffle,2,0,1,2,0,,directly_tested,2 direct test references
+pixel_unshuffle,6,0,1,6,0,,directly_tested,6 direct test references
 pmap,0,0,0,0,1,,structural_only,category default for 'transform'
 pmax,2,0,0,2,0,,directly_tested,2 direct test references
 pmean,2,0,0,2,0,,directly_tested,2 direct test references

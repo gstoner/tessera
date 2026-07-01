@@ -581,6 +581,17 @@ def test_pixel_unshuffle_shape_and_roundtrip():
     np.testing.assert_allclose(up, x)
 
 
+def test_pixel_shuffle_nhwc_layout_roundtrip():
+    rng = np.random.default_rng(10)
+    x = rng.normal(size=(1, 6, 6, 2))
+    down = np.asarray(
+        tessera.ops.pixel_unshuffle(x, downscale_factor=3, layout="nhwc"))
+    assert down.shape == (1, 2, 2, 18)
+    up = np.asarray(
+        tessera.ops.pixel_shuffle(down, upscale_factor=3, layout="nhwc"))
+    np.testing.assert_allclose(up, x)
+
+
 def test_pixel_unshuffle_indivisible_raises():
     with pytest.raises(ValueError, match="divisible"):
         tessera.ops.pixel_unshuffle(np.zeros((1, 3, 7, 8)), downscale_factor=2)
@@ -681,3 +692,13 @@ def test_perceiver_resampler_compresses_and_is_differentiable():
     for nm, prm in [("latents", latents), ("feats", feats)]:
         g = prm.grad
         assert g is not None and np.isfinite(np.asarray(g.numpy())).all(), nm
+
+
+def test_perceiver_resampler_matches_cross_attention_composite():
+    rng = np.random.default_rng(11)
+    latents = rng.normal(size=(1, 3, 4))
+    features = rng.normal(size=(1, 7, 4))
+    out = np.asarray(tessera.ops.perceiver_resampler(latents, features))
+    ref = np.asarray(tessera.ops.cross_attention(latents, features, features))
+    assert out.shape == (1, 3, 4)
+    np.testing.assert_allclose(out, ref, atol=1e-12)

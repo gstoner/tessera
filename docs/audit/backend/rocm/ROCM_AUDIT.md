@@ -524,9 +524,11 @@ become the on-silicon **oracle** the compiled path validates against.
 
 ## Still Open
 
-- **The rest of the RDNA op surface stays `artifact_only`** (IR/MFMA artifact
-  emits; not yet a compiler-generated executing kernel). The not-yet-executing
-  groups (see `../../generated/rocm_target_map.md` for the live list):
+- **No generic-`rocm` target-map rows remain `artifact_only`.** The live source
+  of truth is `../../generated/rocm_target_map.md`; entries there are now
+  `hardware_verified` or `compiled` for the generic ROCm lane. Remaining work is
+  performance promotion and sub-arch/hardware expansion, not a missing
+  artifact-only classification.
   - **norms / activations:** *(group closed)* — `softmax`/`softmax_safe`,
     `rmsnorm(_safe)`, `layer_norm`, `gelu`, `silu`, and `silu_mul` (SwiGLU) all
     execute as compiled kernels (see Landed above).
@@ -535,19 +537,11 @@ become the on-silicon **oracle** the compiled path validates against.
   - **matmul-family chains:** *(group closed)* — `batched_gemm`, `einsum`,
     `factorized_matmul`, `linear_general`, `qkv_projection` all execute on the
     shared WMMA GEMM lane (see Landed above).
-  - **exotic attention:** the **composable** members
-    (`gated_attention`/`mla_decode`/`mla_decode_fused`) and the **recurrent
-    DeltaNet** family (`gated_deltanet`/`kimi_delta_attention`/
-    `modified_delta_attention`, via the sequential-scan kernel) now execute (see
-    Landed above). One genuinely-open member remains:
-    - **block-sparse** — `deepseek_sparse_attention` needs a top-k block-select
-      index branch + a sparse KV gather; the dense flash kernel only covers the
-      `top_k == all blocks` degenerate case, so claiming it "compiled" would be
-      audit inflation (Decision #25). (The sliding + compressed branches reduce
-      to the compiled flash/pool lanes; the top-k gather is the open piece.)
-    - **`hybrid_attention`** is a per-layer policy wrapper; its lightning / MLA /
-      Kimi-Delta / gated-DeltaNet slots are now all compiled, so it's composable
-      — a thin dispatch lane is the only remaining work (no new kernel).
+  - **exotic / sparse attention:** `gated_attention`, `mla_decode`,
+    `mla_decode_fused`, `hybrid_attention`, `deepseek_sparse_attention`, and the
+    recurrent DeltaNet family now have ROCm compiled rows. The remaining DK2
+    work is performance promotion: cooperative tiled sparse flash attention and
+    larger GPU-resident top-k selection, not dashboard classification.
 - **CDNA (MI300X / MI325X) execution is hardware-gated** — distinct MFMA shape
   table + FP4/FP6; no device available. The named ROCm sub-arches
   (gfx90a/942/950/1100/1151/1200) stay in `_UNIMPLEMENTED_TARGETS`; the generic
@@ -981,4 +975,3 @@ lowers but (for matmul/WMMA) doesn't execute. Converge them:
 ## Source Material Consolidated
 
 - `../archive/nvidia_rocm_execute_and_compare_plan.md`
-

@@ -90,6 +90,14 @@ records the **native** (AVX-512 + RDNA WMMA) planned fused-kernel inventory
 (flash_attn, MLA, NSA, lightning/kimi, swiglu, fused AdamW, conv, sort, RNG) —
 the executable-now companion to the hardware-gated WGMMA/MFMA inventories.
 
+**Active plan — closing all single-GPU-closeable compiler gaps:**
+see [`SINGLE_GPU_CLOSEOUT_PLAN.md`](SINGLE_GPU_CLOSEOUT_PLAN.md). This plan owns
+the strict one-device closeout queue for Tile IR partial rows, Target IR
+reference rows, backend-kernel pathway ownership, verifier/direct-test/benchmark
+evidence, runtime ABI stubs, audited surfaces, and mesh/sharding identity rules.
+Generated dashboards remain the count authority; the plan owns sequencing and
+acceptance gates.
+
 ## Deferred — sequenced to the NVIDIA/AMD backend timeline
 
 - **Tiled fused SSD (Mamba-2) as a Tile-IR schedule** — decided 2026-06-07,

@@ -38,6 +38,20 @@ def test_explicit_map_names_only_real_ops():
         assert op in OP_SPECS, f"explicit bench op {op!r} is not a real OP_SPECS op"
 
 
+def test_operator_benchmark_representatives_feed_bench_axis():
+    expected = {
+        "add", "mul", "relu", "sigmoid", "tanh",
+        "reduce", "sum",
+        "softmax", "layer_norm",
+        "transpose", "gather",
+        "conv2d", "flash_attn",
+    }
+    assert expected <= bc.benchmarked_ops()
+    opbench_sourced = expected - {"conv2d", "flash_attn", "softmax"}
+    for op in opbench_sourced:
+        assert "Tessera_Operator_Benchmarks" in (bc.benchmark_source_for(op) or "")
+
+
 def test_fused_chain_aliases_are_benchmark_only():
     # matmul_softmax / matmul_gelu / ... are NOT callable ops; they must never
     # become support-table rows. Their constituents carry the coverage.
@@ -51,6 +65,15 @@ def test_bench_axis_is_no_longer_ga_ebm_only():
     ops = bc.benchmarked_ops()
     non_ga_ebm = {o for o in ops if not (o.startswith("clifford_") or o.startswith("ebm_"))}
     assert {"matmul", "flash_attn", "all_reduce", "gemm"} <= non_ga_ebm
+
+
+def test_ga_ebm_alias_rows_are_covered_by_ga_ebm_harness():
+    assert bc.benchmark_source_for("ebm_energy_quadratic") == (
+        "benchmarks/apple_gpu/benchmark_ga_ebm.py"
+    )
+    assert bc.benchmark_source_for("clifford_norm_squared") == (
+        "benchmarks/apple_gpu/benchmark_ga_ebm.py"
+    )
 
 
 def test_source_priority_manifest_over_explicit():

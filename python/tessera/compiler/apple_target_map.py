@@ -169,6 +169,8 @@ _DRIVER_DISPATCH_OPS: frozenset[str] = frozenset({
     # Frontier MoE quant track — dequant_matmul dispatches via the runtime
     # (_apple_gpu_backend.gpu_dequant_matmul), like grouped_gemm.
     "dequant_matmul",
+    # Structural MPSGraph data movers in the generic per-op Metal lane.
+    "transpose", "gather", "slice",
 })
 
 
@@ -190,6 +192,9 @@ _PROOF_TESTS: dict[str, str] = {
     "flash_attn":   "tests/unit/test_apple_backend_roadmap.py",
     "rmsnorm":      "tests/unit/test_apple_backend_roadmap.py",
     "gemm":         "tests/unit/test_apple_backend_roadmap.py",
+    "transpose":    "tests/unit/test_apple_gpu_transpose.py",
+    "gather":       "tests/unit/test_apple_gpu_gather.py",
+    "slice":        "tests/unit/test_apple_gpu_slice.py",
 }
 
 
@@ -288,6 +293,11 @@ _APPLE_GPU_KERNELS_SYMBOL_MAP: dict[str, str] = {
     # Frontier MoE quant track — fused dequantize-into-GEMM (packed-INT4 codes +
     # group scales). Real kernel + dispatch (_apple_gpu_backend.gpu_dequant_matmul).
     "dequant_matmul":   "tessera_apple_gpu_dequant_matmul_f32",
+    # Structural MPSGraph data movers. f16 symbols carry both f16 and bf16 raw
+    # 16-bit paths.
+    "transpose":    "tessera_apple_gpu_mpsgraph_transpose_{f32,f16}",
+    "gather":       "tessera_apple_gpu_mpsgraph_gather_{f32,f16}",
+    "slice":        "tessera_apple_gpu_mpsgraph_slice_{f32,f16}",
 }
 
 

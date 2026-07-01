@@ -88,6 +88,16 @@ def _r_compiler_progress_csv() -> str:
     return compiler_progress.render_csv()
 
 
+def _r_single_gpu_closeout() -> str:
+    from . import single_gpu_closeout
+    return single_gpu_closeout.render_markdown()
+
+
+def _r_single_gpu_closeout_csv() -> str:
+    from . import single_gpu_closeout
+    return single_gpu_closeout.render_csv()
+
+
 def _r_conformance() -> str:
     from . import conformance_matrix
     return conformance_matrix.render_markdown()
@@ -390,6 +400,12 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     GeneratedDoc(
         "support_table", "op_coverage", _GEN / "support_table.md", _r_support_table,
         csv_path=_GEN / "support_table.csv", render_csv=_r_support_table_csv,
+    ),
+    GeneratedDoc(
+        "single_gpu_closeout", "op_coverage",
+        _GEN / "single_gpu_closeout.md", _r_single_gpu_closeout,
+        csv_path=_GEN / "single_gpu_closeout.csv",
+        render_csv=_r_single_gpu_closeout_csv,
     ),
     # ── Contract-pass plan meta-gap tracker (Phase 0) ──
     GeneratedDoc(

@@ -18,6 +18,8 @@ order:
    they benchmark through that harness's row catalog).
 3. **Explicit real-op map** — surfaces that benchmark a *callable op* without a
    manifest ``benchmark_json`` (GEMM alias, collectives, MHA, MegaMoE overlap).
+4. **Operator-benchmark coverage** — representative ops from the active
+   ``Tessera_Operator_Benchmarks`` groups.
 
 **Fused-chain names are deliberately excluded.**  ``matmul_softmax`` /
 ``matmul_gelu`` / ``matmul_rmsnorm`` / ``matmul_softmax_matmul`` / ``swiglu``
@@ -32,6 +34,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Optional
+
+from .op_catalog import OP_SPECS
 
 _GA_EBM_BENCH = "benchmarks/apple_gpu/benchmark_ga_ebm.py"
 
@@ -51,7 +55,10 @@ _GA_EBM_BENCH_OPS: dict[str, str] = {
         ],
         "ebm_inner_step", "ebm_refinement", "ebm_langevin_step",
         "ebm_decode_init", "ebm_bivector_langevin", "ebm_sphere_langevin",
-        "ebm_self_verify", "ebm_energy", "ebm_partition_exact",
+        "ebm_self_verify", "ebm_energy", "ebm_energy_quadratic",
+        "ebm_partition_exact",
+        # Fused-chain GA row emitted by the GA/EBM benchmark harness.
+        "clifford_norm_squared",
     )
 }
 
@@ -91,6 +98,25 @@ def _manifest_attached() -> dict[str, str]:
     return out
 
 
+@lru_cache(maxsize=1)
+def _operator_benchmarked() -> dict[str, str]:
+    """Representative callable ops covered by Tessera_Operator_Benchmarks."""
+    from . import operator_benchmarks_coverage as _obc
+
+    out: dict[str, str] = {}
+    for row in _obc.COVERAGE_ROWS:
+        if row.coverage_status not in {"direct", "grouped"}:
+            continue
+        source = (
+            "benchmarks/Tessera_Operator_Benchmarks/"
+            f"scripts/configs/quick_sweep.yaml#{row.opbench_group}"
+        )
+        for op_name in row.representative_ops:
+            if op_name in OP_SPECS:
+                out[op_name] = source
+    return out
+
+
 def benchmark_source_for(op_name: str) -> Optional[str]:
     """Return the benchmark file covering ``op_name`` (manifest-attached →
     GA/EBM → explicit), or ``None`` if the op has no benchmark row."""
@@ -98,6 +124,7 @@ def benchmark_source_for(op_name: str) -> Optional[str]:
         _manifest_attached().get(op_name)
         or _GA_EBM_BENCH_OPS.get(op_name)
         or _EXPLICIT_BENCH_OPS.get(op_name)
+        or _operator_benchmarked().get(op_name)
     )
 
 
@@ -107,6 +134,7 @@ def benchmarked_ops() -> frozenset[str]:
         frozenset(_manifest_attached())
         | frozenset(_GA_EBM_BENCH_OPS)
         | frozenset(_EXPLICIT_BENCH_OPS)
+        | frozenset(_operator_benchmarked())
     )
 
 

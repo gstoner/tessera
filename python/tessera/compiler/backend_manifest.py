@@ -951,6 +951,13 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel, generate-rocm-norm-kernel): (x − μ) / sqrt(var + eps). "
                  "Executes via runtime.launch() (rocm_norm_compiled).",
     },
+    "rmsnorm_safe": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": "Unweighted row rmsnorm_safe over the last axis (row-reduction "
+                 "kernel, generate-rocm-norm-kernel) with the safe default "
+                 "eps=1e-6. Executes via runtime.launch() (rocm_norm_compiled).",
+    },
     # P5 — group/instance/weight norm composed on the gfx1151 layer_norm (row
     # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
     **{op: {
@@ -1453,6 +1460,25 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "kernel. Executes via runtime.launch() "
                  "(rocm_exotic_attn_compiled).",
     },
+    "deepseek_sparse_attention": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("sparse_attention",),
+        "notes": "DeepSeek/NSA composition — sliding + compressed-block "
+                 "branches remain reference compositions while the top-k branch "
+                 "uses the GPU-resident top-k selector plus selected-block "
+                 "sparse-attention kernel when ROCm is available. Executes via "
+                 "runtime.launch() (rocm_sparse_attn_compiled), with exact "
+                 "reference fallback off hardware.",
+    },
+    "hybrid_attention": {
+        "dtypes": ("fp16", "bf16", "fp32"),
+        "feature_flags": ("attention_policy",),
+        "notes": "Named Ling/Kimi hybrid attention policy wrapper — delegates "
+                 "Lightning slots to rocm_linear_attn_compiled and Delta/Kimi "
+                 "slots to rocm_deltanet_compiled when ROCm is available; MLA "
+                 "softmax/weight slots fall back to the public reference until "
+                 "the fused hybrid slot is promoted.",
+    },
     "gated_deltanet": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("recurrent",),
@@ -1756,6 +1782,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("svd", "x86"): "tests/unit/test_x86_svd_compiled.py",
     ("svd", "rocm"): "tests/unit/test_rocm_svd_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
+    ("rmsnorm_safe", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_normcompose_compiled.py"
        for op in ("group_norm", "instance_norm", "weight_norm")},
@@ -1816,6 +1843,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("mla_decode", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("mla_decode_fused", "rocm"):
+        "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("deepseek_sparse_attention", "rocm"):
+        "tests/unit/test_rocm_sparse_attn_compiled.py",
+    ("hybrid_attention", "rocm"):
         "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("gated_deltanet", "rocm"): "tests/unit/test_rocm_deltanet_compiled.py",
     ("kimi_delta_attention", "rocm"):

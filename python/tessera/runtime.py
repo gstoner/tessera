@@ -11114,6 +11114,78 @@ def _dsa_selected_block_ids(Q: Any, K: Any, np: Any, *, top_k_blocks: int,
     return sel
 
 
+def _deepseek_sparse_attention_rocm(
+    Q: Any,
+    K: Any,
+    V: Any,
+    gate_logits: Any,
+    np: Any,
+    *,
+    window_size: int,
+    block_size: int,
+    top_k: int,
+    causal: bool,
+) -> tuple[Any, str]:
+    """DeepSeek/NSA ROCm lane.
+
+    The public op is a three-branch composition.  Off hardware we deliberately
+    call the reference op so unsupported hosts remain exact.  On ROCm hardware
+    the selected-block top-k branch uses the DK2 GPU-resident top-k selector and
+    selected-block sparse-attention kernel; sliding and compressed branches stay
+    reference compositions until a fused NSA branch kernel lands.
+    """
+    from . import ops as _ops
+
+    q = np.asarray(Q)
+    k = np.asarray(K)
+    v = np.asarray(V)
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("deepseek_sparse_attention expects rank-4 Q/K/V")
+    if q.shape[:2] != k.shape[:2] or q.shape[:2] != v.shape[:2]:
+        raise ValueError(
+            "rocm deepseek_sparse_attention currently requires equal Q/K/V "
+            f"batch/head dims; got Q{q.shape} K{k.shape} V{v.shape}")
+    if int(k.shape[2]) % int(block_size) != 0:
+        raise ValueError(
+            f"K sequence length {k.shape[2]} must be divisible by block_size={block_size}")
+
+    try:
+        K_c, V_c = _ops.compress_blocks(k, v, block_size=block_size)
+        scores = np.matmul(q.astype(np.float32), np.swapaxes(
+            np.asarray(K_c, dtype=np.float32), -1, -2))
+        selected = _rocm_block_sparse_topk_select_native(
+            scores, np, top_k=top_k, block_size=block_size, causal=causal,
+            force_local_block=False)
+        branch_topk = _rocm_selected_block_attention_native(
+            q, k, v, selected, np, block_size=block_size, causal=causal,
+            tiled=True)
+    except _RocmCompiledUnavailable:
+        return (
+            _ops.deepseek_sparse_attention(
+                q, k, v, gate_logits,
+                window_size=window_size, block_size=block_size, top_k=top_k,
+                causal=causal),
+            "reference_cpu",
+        )
+
+    branch_sliding = _ops.attn_sliding_window(
+        q, k, v, window_size=window_size, causal=causal)
+    branch_compressed = _ops.attn_compressed_blocks(q, K_c, V_c)
+    if gate_logits is None:
+        weights = np.full(branch_sliding.shape[:-1] + (3,), 1.0 / 3.0,
+                          dtype=np.float64)
+    else:
+        logits = np.asarray(gate_logits, dtype=np.float64)
+        e = np.exp(logits - logits.max(axis=-1, keepdims=True))
+        weights = e / e.sum(axis=-1, keepdims=True)
+    out = (
+        np.asarray(branch_sliding) * weights[..., 0:1]
+        + np.asarray(branch_compressed) * weights[..., 1:2]
+        + np.asarray(branch_topk) * weights[..., 2:3]
+    )
+    return out.astype(np.result_type(q, k, v), copy=False), "native_gpu"
+
+
 def _execute_rocm_compiled_sparse_attention(artifact: RuntimeArtifact,
                                             args: Any) -> Any:
     """DK2 ROCm selected-block sparse attention lane.
@@ -11130,7 +11202,11 @@ def _execute_rocm_compiled_sparse_attention(artifact: RuntimeArtifact,
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    handled = ("tessera.msa_sparse_attention", "tessera.dsa_block_sparse_attention")
+    handled = (
+        "tessera.msa_sparse_attention",
+        "tessera.dsa_block_sparse_attention",
+        "tessera.deepseek_sparse_attention",
+    )
     if len(ops) != 1 or op_name not in handled:
         raise ValueError(
             f"rocm_sparse_attn_compiled executor handles {handled}; "
@@ -11152,6 +11228,20 @@ def _execute_rocm_compiled_sparse_attention(artifact: RuntimeArtifact,
     scale = kwargs.get("scale")
     attention_strategy = str(kwargs.get("attention_strategy", "tiled"))
     use_tiled = attention_strategy != "scalar"
+    if op_name == "tessera.deepseek_sparse_attention":
+        top_k_arg = kwargs.get("top_k")
+        window_size_arg = kwargs.get("window_size")
+        if top_k_arg is None or window_size_arg is None:
+            raise ValueError("deepseek_sparse_attention requires window_size and top_k")
+        gate_logits = None
+        if len(names) >= 4:
+            gate_logits = values[names[3]]
+        elif kwargs.get("gate_logits") is not None:
+            gate_logits = kwargs.get("gate_logits")
+        return _deepseek_sparse_attention_rocm(
+            Q, K, V, gate_logits, np, window_size=int(window_size_arg),
+            block_size=block_size, top_k=int(top_k_arg), causal=causal)
+
     if op_name == "tessera.msa_sparse_attention":
         top_k_arg = kwargs.get("top_k")
         if top_k_arg is None:
@@ -12003,10 +12093,10 @@ def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
 # mla_decode, mla_decode_fused, all built by COMPOSING already-compiled lanes:
 # the WMMA flash_attn kernel + the WMMA GEMM kernel (for MLA's latent
 # projections) + an elementwise gate. ``compiler_path = "rocm_exotic_attn_compiled"``.
-# This is the attention analog of the matmul-family lane — no new MLIR pass; the
-# recurrent DeltaNet variants (gated_deltanet / kimi / modified) and block-sparse
-# deepseek_sparse_attention need a sequential-scan / sparse-gather kernel and
-# stay artifact_only (see ROCM_AUDIT "Still Open").
+# This is the attention analog of the matmul-family lane — no new MLIR pass.
+# The hybrid_attention policy wrapper delegates to the already-compiled
+# linear/delta lanes where possible, and DeepSeek sparse attention now lives in
+# the DK2 rocm_sparse_attn_compiled lane.
 # ─────────────────────────────────────────────────────────────────────────────
 def _rocm_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None,
                      causal: bool = True) -> Any:
@@ -12138,6 +12228,87 @@ def _rocm_mla_decode_step_native(x_t: Any, latent_cache: Any, rope_cache: Any,
     return out.reshape(Sq, Hh * Dv)
 
 
+def _rocm_hybrid_attention_composed(
+    Q: Any,
+    K: Any,
+    V: Any,
+    np: Any,
+    kwargs: dict[str, Any],
+) -> tuple[Any, str]:
+    """ROCm hybrid_attention policy wrapper.
+
+    hybrid_attention is a named dispatch policy over already-proven lanes, not a
+    separate math kernel.  Route the policies that map cleanly to ROCm compiled
+    lanes, and fall back to the public reference when the selected slot is an
+    MLA softmax/weight path or ROCm is unavailable.
+    """
+    from . import ops as _ops
+
+    def _ref() -> tuple[Any, str]:
+        return _ops.hybrid_attention(Q, K, V, **kwargs), "reference_cpu"
+
+    if kwargs.get("return_state") or kwargs.get("state") is not None:
+        return _ref()
+    pattern = str(kwargs.get("pattern", "auto")).lower()
+    layer_index = int(kwargs.get("layer_index", 0))
+    causal = bool(kwargs.get("causal", True))
+
+    def _artifact(path: str, op_name: str, names: list[str],
+                  op_kwargs: dict[str, Any]) -> RuntimeArtifact:
+        return RuntimeArtifact(metadata={
+            "target": "rocm",
+            "compiler_path": path,
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "arg_names": names,
+            "output_name": "o",
+            "ops": [{
+                "op_name": op_name,
+                "result": "o",
+                "operands": names,
+                "kwargs": op_kwargs,
+            }],
+        })
+
+    try:
+        if pattern in ("lightning", "auto"):
+            art = _artifact(
+                "rocm_linear_attn_compiled", "tessera.lightning_attention",
+                ["Q", "K", "V"], {"causal": causal, "decay": kwargs.get("decay")})
+            return _execute_rocm_compiled_linear_attn(art, (Q, K, V)), "native_gpu"
+        if pattern in ("ling_1_7_mla_lightning", "ling2_5", "ling_2_5"):
+            if layer_index % 8 == 7:
+                return _ref()
+            art = _artifact(
+                "rocm_linear_attn_compiled", "tessera.lightning_attention",
+                ["Q", "K", "V"], {"causal": causal, "decay": kwargs.get("decay")})
+            return _execute_rocm_compiled_linear_attn(art, (Q, K, V)), "native_gpu"
+        if pattern in ("gated_deltanet", "delta", "kimi_kda_mla", "kimi_linear", "kimi"):
+            if pattern in ("kimi_kda_mla", "kimi_linear", "kimi") and layer_index % 2 == 1:
+                return _ref()
+            op_name = (
+                "tessera.kimi_delta_attention"
+                if pattern in ("kimi_kda_mla", "kimi_linear", "kimi")
+                else "tessera.gated_deltanet"
+            )
+            names = ["Q", "K", "V"]
+            operands: list[Any] = [Q, K, V]
+            op_kwargs: dict[str, Any] = {"causal": causal}
+            for key, name in (("gate", "gate"), ("beta", "beta"), ("decay", "decay")):
+                val = kwargs.get(key)
+                present = val is not None
+                op_kwargs[f"has_{key}"] = present
+                if present:
+                    names.append(name)
+                    operands.append(val)
+            art = _artifact("rocm_deltanet_compiled", op_name, names, op_kwargs)
+            return _execute_rocm_compiled_deltanet(art, tuple(operands)), "native_gpu"
+    except _RocmCompiledUnavailable:
+        return _ref()
+
+    return _ref()
+
+
 def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
                                             args: Any) -> Any:
     """The ``target="rocm"`` exotic-attention composition lane: gated_attention
@@ -12149,8 +12320,9 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
     ops = list(metadata.get("ops") or [])
-    handled = ("tessera.gated_attention", "tessera.mla_decode",
-               "tessera.mla_decode_fused", "tessera.mla_decode_step")
+    handled = ("tessera.gated_attention", "tessera.hybrid_attention",
+               "tessera.mla_decode", "tessera.mla_decode_fused",
+               "tessera.mla_decode_step")
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     if len(ops) != 1 or op_name not in handled:
         raise ValueError(
@@ -12185,6 +12357,12 @@ def _execute_rocm_compiled_exotic_attention(artifact: RuntimeArtifact,
                     f"missing mla_decode_step argument {exc.args[0]!r}") from exc
 
     operands = [_as_numpy(values[n]) for n in operand_names]
+    if op_name == "tessera.hybrid_attention":
+        if len(operands) != 3:
+            raise ValueError("hybrid_attention takes (Q, K, V)")
+        return _rocm_hybrid_attention_composed(
+            operands[0], operands[1], operands[2], np, dict(kwargs))
+
     scale = kwargs.get("scale")
     causal = bool(kwargs.get("causal", True))
 

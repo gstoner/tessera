@@ -7,9 +7,9 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **3649** total Python-test references, **961** total lit-fixture references.
+- **3661** total Python-test references, **961** total lit-fixture references.
 - **96** ops have **zero** references in either test surface.
-- **135** ops have ≤1 reference ("thinly tested").
+- **133** ops have ≤1 reference ("thinly tested").
 - **92** ops have ≥10 references ("well tested").
 - **121** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **135** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **133** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **135** ops have at most one test reference across the whole test surface.
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 
-_(75 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(73 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,24 +117,22 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**135** ops have ≤1 direct test reference.  They break down as:
+**133** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
 | `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    2 | **Actionable test debt** — real primitive without direct test |
+| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 
 ## Actionable: `needs_direct_test` ops
 
-These **2** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
-| `perceiver_resampler` |   1 |   0 | category default for 'attention' |
-| `pixel_shuffle` |   1 |   0 | category default for 'layout_transform' |
 
 ## Hardware-gated ops
 

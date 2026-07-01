@@ -156,7 +156,7 @@ the GEMM tile).
 | **flash_attn** (FA-style) | AVX-512 tiled QKᵀ→softmax→·V (online softmax) | WMMA flash kernel (shipped `hardware_verified`) | ✅ ROCm; **x86 = gap** | vs reference attn |
 | **multi_head_attention** | x86 `fused` (shipped) | WMMA `compiled` (shipped) | ✅ both | vs reference |
 | **mla_decode_fused** (DeepSeek MLA) | tiled latent-KV decode | WMMA `compiled` (shipped); native decode kernel | ✅ ROCm; x86 = gap | vs reference |
-| **deepseek_sparse_attention** (NSA) | top-k block gather → tiled attn over selected blocks | block-sparse WMMA; needs top_k kernel (Tier 4 sort) | artifact; **gap both** | vs dense-masked ref |
+| **deepseek_sparse_attention** (NSA) | top-k block gather → tiled attn over selected blocks | `rocm_sparse_attn_compiled` DK2 lane: GPU-resident top-k selector + selected-block sparse-attention kernel with exact reference fallback | ✅ ROCm; x86 = gap | vs public NSA reference |
 | **lightning_attention** (MiniMax) | linear-attn state recurrence (cumulative) | WMMA `compiled` (shipped); native state scan | ✅ ROCm; x86 = gap | vs reference |
 | **kimi_delta_attention** | delta-rule state update + readout | WMMA + state scan (compose on deltanet lane) | gap both | vs reference |
 | **gated_deltanet / retention / power_attn / linear_attn** | state-recurrence scans (reuse the SSM scan substrate) | one-thread-per-channel scan (the selective_ssm pattern) | gap both | vs reference |
@@ -509,17 +509,18 @@ the RNG-free losses first (1 PR), the sampling losses after Philox.
 The 10 ROCm-only ops are almost all attention: flash_attn, mla_decode_fused,
 lightning_attention, kimi_delta_attention, gated_attention, gated_deltanet,
 linear_attn, modified_delta_attention, attn_sliding_window (+ fused_epilogue).
-**They already execute on ROCm (WMMA `compiled`/`hardware_verified`)** — the gap is
-the **x86 AVX-512 counterpart**, plus the both-device exotic variants
-(deepseek_sparse_attention/NSA, retention, power_attn, the attn_*_blocks family).
+**They already execute on ROCm (WMMA/sparse `compiled` or `hardware_verified`)** —
+the gap is the **x86 AVX-512 counterpart**, plus the both-device exotic variants
+(retention, power_attn, the attn_*_blocks family).
 - **flash_attn (x86):** AVX-512 tiled QKᵀ → online-softmax → ·V (FA-style, the
   `multi_head_attention` x86 lane already exists — generalize it). Substrate for
   mla/swiglu/matmul_softmax.
 - **state-recurrence family** (lightning/retention/power/linear/gated_deltanet/
   kimi_delta): these are **linear-attention scans** → reuse the **selective_ssm
   scan substrate** (one-thread-per-channel, in-place state) just landed in #181.
-- **NSA (deepseek_sparse_attention):** **depends on top_k** (4c) for block
-  selection, then tiled attention over selected blocks. Sequence after sort.
+- **NSA (deepseek_sparse_attention):** ROCm now has the DK2 selected-block lane;
+  the remaining native-device parity work is the x86 top-k/block-sparse partner
+  plus ROCm performance promotion for larger MSA/NSA cases.
 **Disposition:** 2–3 PRs (flash_attn x86 + mla/swiglu compose; the scan-family x86
 partners; NSA after top_k). Validation vs the dense-masked reference.
 

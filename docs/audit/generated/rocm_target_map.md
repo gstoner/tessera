@@ -12,8 +12,7 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 27 |
-| ``artifact_only`` | 3 |
+| ``compiled`` | 30 |
 | **total** | **32** |
 
 ## FP8 numeric semantics (per arch)
@@ -47,12 +46,12 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
 | attn_sliding_window | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
-| deepseek_sparse_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| deepseek_sparse_attention | compiled | fp32 | hipcc≥7.2.4 | - | - | - |
 | flash_attn | hardware_verified | fp16,bf16 | hipcc≥7.2.4 | - | 65% | - |
 | gated_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | gated_deltanet | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | gqa_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
-| hybrid_attention | artifact_only | fp32 | hipcc≥7.2.4 | (16, 16, 16, 1) | - | - |
+| hybrid_attention | compiled | fp16,bf16,fp32 | hipcc≥7.2.4 | - | - | - |
 | kimi_delta_attention | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | lightning_attention | compiled | fp16,bf16 | hipcc≥7.2.4 | - | 35% | - |
 | linear_attn | compiled | fp16,bf16 | hipcc≥7.2.4 | - | - | - |
@@ -68,7 +67,7 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 |---|---|---|---|---|---|---|
 | layer_norm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | rmsnorm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
-| rmsnorm_safe | artifact_only | fp32 | hipcc≥7.2.4 | - | - | - |
+| rmsnorm_safe | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 
 ## position_encoding (2)
 

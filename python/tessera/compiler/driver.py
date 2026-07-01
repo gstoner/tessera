@@ -443,6 +443,7 @@ from .apple_gpu_envelope import (  # noqa: F401
     _APPLE_GPU_DELTA_ATTN_OPS,
     _APPLE_GPU_HYBRID_ATTN_OPS,
     _APPLE_GPU_SPARSE_ATTN_OPS,
+    _APPLE_GPU_COMPOSITE_HELPER_OPS,
     _APPLE_GPU_RUNTIME_OPS,
     lane_for,
 )

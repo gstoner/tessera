@@ -824,7 +824,8 @@ _EXISTING_CONTRACT_OVERRIDES["dequant_grouped_gemm"] = {
 # backend gap, the PR #132 distinction). Both dispositions are pinned by
 # tests/unit/test_tier0_tier1_disposition.py.
 _TIER0_PURE_VIEW: tuple[str, ...] = (
-    "reshape", "view", "squeeze", "unsqueeze", "flatten", "expand", "broadcast",
+    "reshape", "view", "squeeze", "unsqueeze", "flatten", "expand",
+    "broadcast", "tile_view",
 )
 for _na_name in _TIER0_PURE_VIEW:
     _EXISTING_CONTRACT_OVERRIDES[_na_name] = {

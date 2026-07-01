@@ -5,7 +5,7 @@ all_to_all,Collectives,1,complete,complete,complete,complete,complete,complete,p
 reduce_scatter,Collectives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 pack,Layout and Packing,1,complete,complete,complete,not_applicable,not_applicable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 rearrange,Layout and Packing,1,complete,complete,complete,not_applicable,not_applicable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-tile_view,Layout and Packing,1,complete,complete,complete,not_applicable,not_applicable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+tile_view,Layout and Packing,1,complete,complete,complete,not_applicable,not_applicable,complete,not_applicable,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 transpose,Layout and Packing,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 unpack,Layout and Packing,1,complete,complete,complete,not_applicable,not_applicable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 batched_gemm,Linear Algebra,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.

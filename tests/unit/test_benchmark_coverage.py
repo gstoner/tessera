@@ -38,6 +38,12 @@ def test_explicit_map_names_only_real_ops():
         assert op in OP_SPECS, f"explicit bench op {op!r} is not a real OP_SPECS op"
 
 
+def test_single_gpu_closeout_smoke_names_only_real_ops():
+    for op in bc._SINGLE_GPU_CLOSEOUT_SMOKE_OPS:
+        assert op in OP_SPECS, f"closeout smoke op {op!r} is not a real OP_SPECS op"
+        assert bc.benchmark_source_for(op) == "benchmarks/single_gpu_closeout_smoke.py"
+
+
 def test_operator_benchmark_representatives_feed_bench_axis():
     expected = {
         "add", "mul", "relu", "sigmoid", "tanh",
@@ -81,3 +87,16 @@ def test_source_priority_manifest_over_explicit():
     # baseline wins (manifest-attached is the strongest proof).
     assert bc.benchmark_source_for("matmul") == "benchmarks/baselines/apple_gpu_hot_paths.json"
     assert bc.benchmark_source_for("gemm") == "benchmarks/benchmark_gemm.py"
+
+
+def test_structural_benchmark_aliases_reuse_canonical_sources():
+    for alias, canonical in {
+        "index_select": "gather",
+        "memory_index_select": "gather",
+        "memory_index_select_ste": "gather",
+        "msa_select_blocks": "gather",
+        "permute": "transpose",
+        "rearrange": "transpose",
+        "take": "gather",
+    }.items():
+        assert bc.benchmark_source_for(alias) == bc.benchmark_source_for(canonical)

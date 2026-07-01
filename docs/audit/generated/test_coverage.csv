@@ -273,7 +273,7 @@ max_pool,4,0,0,4,0,,directly_tested,4 direct test references
 maximum,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references
 mean,13,0,0,13,0,bf16 f16 f32,directly_tested,13 direct test references
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
-memory_index_score,4,0,1,4,0,,directly_tested,4 direct test references
+memory_index_score,8,0,1,8,0,,directly_tested,8 direct test references
 memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
 memory_index_select_ste,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 memory_read,2,0,0,2,0,,directly_tested,2 direct test references
@@ -298,7 +298,7 @@ mor_router,5,3,1,8,0,,directly_tested,8 direct test references
 mor_scatter,3,2,1,5,0,,directly_tested,5 direct test references
 mqa_attention,6,0,2,6,0,,directly_tested,6 direct test references
 mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
-msa_index_scores,8,4,1,12,0,,directly_tested,12 direct test references
+msa_index_scores,11,4,1,15,0,,directly_tested,15 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,44,11,1,55,0,,directly_tested,55 direct test references
 mse_loss,16,0,5,16,0,f32,directly_tested,16 direct test references
@@ -391,7 +391,7 @@ scan,12,0,2,12,0,fp16,directly_tested,12 direct test references
 scatter,7,0,0,7,0,,directly_tested,7 direct test references
 scatter_add,10,0,0,10,0,,directly_tested,10 direct test references
 scatter_reduce,9,0,0,9,0,,directly_tested,9 direct test references
-score_combine,3,6,1,9,0,,directly_tested,9 direct test references
+score_combine,7,6,1,13,0,,directly_tested,13 direct test references
 score_matching_loss,3,0,0,3,0,,directly_tested,3 direct test references
 sddmm,4,0,0,4,0,,directly_tested,4 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
@@ -469,7 +469,7 @@ unpack,2,0,0,2,0,,directly_tested,2 direct test references
 unsqueeze,4,3,0,7,0,,directly_tested,7 direct test references
 value_and_grad,0,0,0,0,1,,structural_only,category default for 'transform'
 var,4,0,0,4,0,,directly_tested,4 direct test references
-varlen_sdpa,3,19,0,22,0,,directly_tested,22 direct test references
+varlen_sdpa,6,19,0,25,0,,directly_tested,25 direct test references
 view,5,9,1,14,0,,directly_tested,14 direct test references
 vjp,0,0,0,0,1,,structural_only,category default for 'transform'
 vlb_loss,3,0,0,3,0,,directly_tested,3 direct test references

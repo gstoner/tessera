@@ -278,6 +278,15 @@ _APPLE_GPU_EBM_LOSS_OPS = frozenset({
     "tessera.loss.score_matching", "tessera.loss.implicit_score_matching",
     "tessera.loss.denoising_score_matching",
 })
+# Single-GPU closeout helper lane. These ops are compiler-visible primitives
+# whose target path is a short composition of existing Apple GPU lanes plus
+# host-side shape/metadata work, not a new hand-written kernel family.
+_APPLE_GPU_COMPOSITE_HELPER_OPS = frozenset({
+    "tessera.memory_index_score",
+    "tessera.msa_index_scores",
+    "tessera.varlen_sdpa",
+    "tessera.score_combine",
+})
 _APPLE_GPU_RUNTIME_OPS = (
     _APPLE_GPU_MPS_OPS | _APPLE_GPU_MSL_OPS | _APPLE_GPU_MPSGRAPH_OPS
     | _APPLE_GPU_QUANT_OPS
@@ -293,6 +302,7 @@ _APPLE_GPU_RUNTIME_OPS = (
     | _APPLE_GPU_LINEAR_ATTN_OPS | _APPLE_GPU_MASKED_ATTN_OPS
     | _APPLE_GPU_DELTA_ATTN_OPS | _APPLE_GPU_HYBRID_ATTN_OPS
     | _APPLE_GPU_SPARSE_ATTN_OPS
+    | _APPLE_GPU_COMPOSITE_HELPER_OPS
 )
 
 
@@ -350,6 +360,7 @@ def _build_lane_by_op() -> dict[str, str]:
     put(_APPLE_GPU_CLIFFORD_OPS, "clifford")
     put(_APPLE_GPU_EBM_OPS, "ebm")
     put(_APPLE_GPU_EBM_LOSS_OPS, "ebm_loss")
+    put(_APPLE_GPU_COMPOSITE_HELPER_OPS, "composite_helper")
     missing = _APPLE_GPU_RUNTIME_OPS - set(table)
     if missing:  # structural invariant — every runtime op has a lane
         raise AssertionError(f"apple_gpu envelope ops without a lane: {sorted(missing)}")

@@ -22,7 +22,7 @@ Counts below are restricted to the TSOL canonical names.  The full 432-primitive
 | `jvp` |  40 |   0 |   0 |   7 |   0 |
 | `lowering_rule` |  47 |   0 |   0 |   0 |   0 |
 | `sharding_rule` |  31 |  16 |   0 |   0 |   0 |
-| `backend_kernel` |   0 |  47 |   0 |   0 |   0 |
+| `backend_kernel` |   0 |  46 |   0 |   1 |   0 |
 
 ## Per-op coverage
 
@@ -108,7 +108,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • – `no
 | `rearrange` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
 | `pack` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
 | `unpack` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
-| `tile_view` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | ◐ |
+| `tile_view` | ✅ | ✅ | ✅ | – | – | ✅ | ✅ | – |
 
 ## Notable gaps
 

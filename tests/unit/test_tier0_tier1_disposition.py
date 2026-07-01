@@ -23,7 +23,8 @@ from tessera.compiler.primitive_coverage import coverage_for
 
 # 0-view — genuinely zero-FLOP, zero-movement metadata.
 TIER0_PURE_VIEW = (
-    "reshape", "view", "squeeze", "unsqueeze", "flatten", "expand", "broadcast",
+    "reshape", "view", "squeeze", "unsqueeze", "flatten", "expand",
+    "broadcast", "tile_view",
 )
 
 # 0-move / 0-reduce + transpose/permute — must stay open (a real lane is owed).

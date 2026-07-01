@@ -198,12 +198,51 @@ _M7_BACKEND_ALIASES: dict[str, str] = {
     # complex_mul / complex_exp use the same name on both sides.
 }
 
+_STRUCTURAL_BACKEND_ALIASES: dict[str, str] = {
+    # Structural wrappers whose Tile/Target evidence is the same native lane as
+    # the canonical data-movement or reduction primitive. These aliases are
+    # audit-only: they do not change runtime dispatch, just prevent the support
+    # table from hiding already-owned compiler paths behind CPU reference rows.
+    "dynamic_slice": "slice",
+    "dynamic_update_slice": "scatter",
+    "index_select": "gather",
+    "index_update": "scatter",
+    "masked_fill": "where",
+    "memory_index_select": "gather",
+    "memory_index_select_ste": "gather",
+    "msa_select_blocks": "gather",
+    "pack": "cat",
+    "permute": "transpose",
+    "rearrange": "transpose",
+    "reduce": "sum",
+    "chunk": "slice",
+    "rope_merge": "cat",
+    "rope_split": "slice",
+    "select": "where",
+    "split": "slice",
+    "take": "gather",
+    "unpack": "slice",
+}
+
+_DOMAIN_BACKEND_ALIASES: dict[str, str] = {
+    # Domain variants whose Tile/Target lowering is the canonical kernel plus a
+    # parameterization, not a distinct backend lane. NTK RoPE changes the angle
+    # schedule; the executing compiler path is the existing RoPE kernel.
+    "ntk_rope": "rope",
+}
+
 
 def _backend_lookup_name(op_name: str) -> str:
     """Return the name to use when looking ``op_name`` up in the
     backend manifest / per-target fused-kernel sets."""
 
-    return _M7_BACKEND_ALIASES.get(op_name, op_name)
+    return _M7_BACKEND_ALIASES.get(
+        op_name,
+        _STRUCTURAL_BACKEND_ALIASES.get(
+            op_name,
+            _DOMAIN_BACKEND_ALIASES.get(op_name, op_name),
+        ),
+    )
 
 
 def m7_fused_public_ops() -> frozenset[str]:
@@ -320,6 +359,8 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
 
 def _axis_target_ir(op_name: str) -> AxisCell:
     cov = _coverage_for(op_name)
+    if cov is not None and op_name == "target_verify" and cov.category == "acceptance_verification":
+        return AxisCell("not_applicable", "primitive_coverage.category.acceptance_verification")
     if (cov is not None
             and cov.contract_status.get("backend_kernel") == "not_applicable"):
         return AxisCell("not_applicable", "primitive_coverage.contract_status.backend_kernel")

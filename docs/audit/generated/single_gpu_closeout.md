@@ -13,11 +13,10 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 382 | backend_pathway_owned=312, backend_pathway_unowned=55, multi_gpu_deferred=15 | backend_codegen=367, distributed_validation=15 |
-| `benchmark_evidence` | 14 | benchmark_required=14 | benchmarks=14 |
+| `backend_kernel` | 381 | backend_pathway_owned=366, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
-| `target_ir` | 62 | intentional_reference_review=1, multi_gpu_deferred=6, single_gpu_promote=55 | backend_codegen=55, compiler_audit=1, distributed_validation=6 |
-| `tile_ir` | 61 | multi_gpu_deferred=6, single_gpu_closeable=55 | compiler_middle_end=55, distributed_validation=6 |
+| `target_ir` | 26 | multi_gpu_deferred=6, single_gpu_promote=20 | backend_codegen=20, distributed_validation=6 |
+| `tile_ir` | 26 | multi_gpu_deferred=6, single_gpu_closeable=20 | compiler_middle_end=20, distributed_validation=6 |
 
 ## Rows
 
@@ -31,7 +30,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `attn_local_window_2d` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `attn_sliding_window` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `attn_top_k_blocks` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `cross_attention` | attention | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `cross_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `deepseek_sparse_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `flash_attn` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `gated_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -51,7 +50,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `msa_index_scores` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `msa_sparse_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `multi_head_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `perceiver_resampler` | attention | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `perceiver_resampler` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `power_attn` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `retention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `varlen_sdpa` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -72,8 +71,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `lt` | comparison | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ne` | comparison | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `einsum` | contraction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `edm_loss_weight` | diffusion | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `edm_precondition` | diffusion | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `edm_loss_weight` | diffusion | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `edm_precondition` | diffusion | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_bivector_langevin_sample` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_bivector_langevin_step` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_decode_init` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -169,7 +168,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `index_select` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `index_update` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `masked_categorical` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `masked_scatter` | indexing | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `masked_scatter` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `memory_index_select` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `memory_index_select_ste` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `msa_select_blocks` | indexing | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -185,13 +184,12 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `mor_router` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mor_scatter` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `pack` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `patchify` | layout_transform | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `pixel_shuffle` | layout_transform | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `pixel_unshuffle` | layout_transform | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `patchify` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `pixel_shuffle` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `pixel_unshuffle` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rearrange` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope_merge` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope_split` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `tile_view` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `transpose` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `unpack` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cholesky` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -221,16 +219,16 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `asymmetric_bce` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `binary_cross_entropy_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `contrastive_divergence_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `contrastive_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `cosine_embedding_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `contrastive_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `cosine_embedding_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cross_entropy_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `ctc_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `ctc_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ddpm_noise_pred_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `denoising_score_matching_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `focal_loss` | loss | planned | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `huber_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `implicit_score_matching_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `info_nce_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `info_nce_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `js_divergence` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `kl_divergence` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `label_smoothed_cross_entropy` | loss | planned | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -238,20 +236,20 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `log_cosh_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mae_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mse_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `nt_xent_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `nt_xent_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `persistent_cd_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `score_matching_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `seq2seq_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `seq2seq_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `smooth_l1_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `triplet_loss` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `triplet_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `vlb_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `wasserstein_distance` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `wasserstein_distance` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `z_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `memory_read` | memory | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `conv1d` | model_layer | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `conv_transpose` | model_layer | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `memory_read` | memory | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `conv1d` | model_layer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `conv_transpose` | model_layer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `linear_general` | model_layer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `lora_linear` | model_layer | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `lora_linear` | model_layer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `moe` | moe | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
 | `backend_kernel` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
@@ -260,7 +258,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `layer_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rmsnorm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rmsnorm_safe` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `spectral_norm` | normalization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `spectral_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `weight_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `abs` | numeric_helper | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `absolute` | numeric_helper | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -280,21 +278,21 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `lamb` | optimizer | planned | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `muon` | optimizer | planned | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `nesterov` | optimizer | planned | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `adaptive_pool` | pooling | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `avg_pool` | pooling | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `max_pool` | pooling | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `min_pool` | pooling | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `adaptive_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `avg_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `max_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `min_pool` | pooling | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `alibi` | position_encoding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `factorized_pos_emb` | position_encoding | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `factorized_pos_emb` | position_encoding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ntk_rope` | position_encoding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `qkv_projection` | projection | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequant_grouped_gemm` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequant_matmul` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `dequantize_int4` | quantization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `dequantize_int8` | quantization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `fake_quantize` | quantization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `quantize_int4` | quantization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `quantize_int8` | quantization | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `dequantize_int4` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `dequantize_int8` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `fake_quantize` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `quantize_int4` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `quantize_int8` | quantization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_fp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_fp6` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_fp8` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -306,9 +304,9 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `dropout` | random_mask | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rng_normal` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rng_uniform` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `bidirectional_scan` | recurrent | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `gru_cell` | recurrent | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `simple_rnn_cell` | recurrent | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `bidirectional_scan` | recurrent | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `gru_cell` | recurrent | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `simple_rnn_cell` | recurrent | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `amax` | reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `amin` | reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `argmax` | reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -329,21 +327,21 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `grpo_policy_loss` | rl_loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `normalize_group_advantages` | rl_loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ppo_policy_loss` | rl_loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `rng_bernoulli` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_beta` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_categorical` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_dirichlet` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_gamma` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_gibbs_sample` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_hmc_sample` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_langevin_sample` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_mala_sample` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_multinomial` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_permutation` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_poisson` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_randint` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `rng_truncated_normal` | rng | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `mrope_2d` | rotary_embedding | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `rng_bernoulli` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_beta` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_categorical` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_dirichlet` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_gamma` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_gibbs_sample` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_hmc_sample` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_langevin_sample` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_mala_sample` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_multinomial` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_permutation` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_poisson` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_randint` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_truncated_normal` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `mrope_2d` | rotary_embedding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope` | rotary_embedding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `segment_reduce` | segment_reduce | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `named_sharding` | sharding | planned | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
@@ -380,13 +378,13 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `kv_cache_append` | state_update | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `kv_cache_prune` | state_update | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `kv_cache_read` | state_update | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `online_softmax_state` | state_update | partial | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `online_softmax_state` | state_update | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `check_cauchy_riemann` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `conformal_jacobian` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `conv2d` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `conv3d` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dbar` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `depthwise_conv1d` | stencil | partial | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
+| `backend_kernel` | `depthwise_conv1d` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dz` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `laplacian_2d` | stencil | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cat` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -401,24 +399,10 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `split` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `stack` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tile` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
-| `backend_kernel` | `center_crop` | vision | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `image_normalize` | vision | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `image_resize` | vision | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `backend_kernel` | `interpolate` | vision | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
-| `benchmark_evidence` | `slice` | indexing | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `dequant_matmul` | loop_nest | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `kv_cache_read` | state_update | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_abs` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_arg` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_conjugate` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_div` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_exp` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_log` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_mul` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_pow` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `complex_sqrt` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `mobius` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
-| `benchmark_evidence` | `stereographic` | visual_complex | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
+| `backend_kernel` | `center_crop` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `image_normalize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `image_resize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `interpolate` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `sharding_rule` | `cross_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `deepseek_sparse_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `gated_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
@@ -462,55 +446,19 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `selective_ssm` | state_space | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cache_commit` | state_update | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cache_rollback` | state_update | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
-| `target_ir` | `target_verify` | acceptance_verification | reference | `intentional_reference_review` | compiler_audit | Confirm this is a verifier/reference-only lane or attach a native target owner. |
-| `target_ir` | `attn_compressed_blocks` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `attn_local_window_2d` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `attn_top_k_blocks` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `linear_attn_state` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `lookahead_sparse_attention` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `memory_index_score` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `msa_index_scores` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `msa_sparse_attention` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `varlen_sdpa` | attention | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `all_gather` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `score_combine` | elementwise | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `adafactor` | functional_optimizer_step | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `dynamic_slice` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `dynamic_update_slice` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `index_select` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `index_update` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `masked_categorical` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `memory_index_select` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `memory_index_select_ste` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `msa_select_blocks` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `nonzero` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `select` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `take` | indexing | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `arange` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `cast` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `chunk` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `masked_fill` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `mor_partition` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `mor_router` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `mor_scatter` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `pack` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `permute` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `rearrange` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `rope_merge` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `rope_split` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `split` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `tile_view` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `unpack` | layout_transform | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `dequant_grouped_gemm` | loop_nest | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `quantized_matmul` | loop_nest | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `moe_combine` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `moe_dispatch` | moe_transport | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `target_ir` | `ntk_rope` | position_encoding | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `segment_reduce` | segment_reduce | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `target_ir` | `reduce` | stable_reduction | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `cache_commit` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `cache_rollback` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `kv_cache_append` | state_update | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
@@ -524,54 +472,19 @@ test, ABI, and surface dashboards.
 | `target_ir` | `is_concyclic` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `laplacian_2d` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `mobius_from_three_points` | visual_complex | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
-| `tile_ir` | `attn_compressed_blocks` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `attn_local_window_2d` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `attn_top_k_blocks` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `linear_attn_state` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `lookahead_sparse_attention` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `memory_index_score` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `msa_index_scores` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `msa_sparse_attention` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `varlen_sdpa` | attention | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `all_gather` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_reduce` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_to_all` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `reduce_scatter` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `score_combine` | elementwise | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `adafactor` | functional_optimizer_step | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `dynamic_slice` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `dynamic_update_slice` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `index_select` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `index_update` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `masked_categorical` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `memory_index_select` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `memory_index_select_ste` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `msa_select_blocks` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `nonzero` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `select` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `take` | indexing | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `arange` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `cast` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `chunk` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `masked_fill` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `mor_partition` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `mor_router` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `mor_scatter` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `pack` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `permute` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `rearrange` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `rope_merge` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `rope_split` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `split` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `tile_view` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `unpack` | layout_transform | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `dequant_grouped_gemm` | loop_nest | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `quantized_matmul` | loop_nest | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `ntk_rope` | position_encoding | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `segment_reduce` | segment_reduce | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
-| `tile_ir` | `reduce` | stable_reduction | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `cache_commit` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `cache_rollback` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `kv_cache_append` | state_update | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |

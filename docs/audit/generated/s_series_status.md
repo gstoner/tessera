@@ -18,7 +18,7 @@
 | `transpose_rule` | 0 | 480 |
 | `sharding_rule` | 43 | 437 |
 | `lowering_rule` | 0 | 480 |
-| `backend_kernel` | 382 | 98 |
+| `backend_kernel` | 381 | 99 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
-| `cpu` | 287 | 0 | 287 | 0 | 193 |
-| `x86` | 245 | 214 | 31 | 0 | 235 |
-| `apple_cpu` | 319 | 2 | 317 | 0 | 161 |
-| `apple_gpu` | 74 | 48 | 1 | 25 | 406 |
-| `rocm` | 251 | 219 | 0 | 32 | 229 |
-| `nvidia_sm80` | 54 | 0 | 0 | 54 | 426 |
-| `nvidia_sm90` | 86 | 0 | 0 | 86 | 394 |
-| `nvidia_sm100` | 54 | 0 | 0 | 54 | 426 |
-| `nvidia_sm120` | 54 | 1 | 0 | 53 | 426 |
+| `cpu` | 342 | 0 | 342 | 0 | 138 |
+| `x86` | 300 | 214 | 86 | 0 | 180 |
+| `apple_cpu` | 374 | 2 | 372 | 0 | 106 |
+| `apple_gpu` | 87 | 61 | 1 | 25 | 393 |
+| `rocm` | 309 | 222 | 0 | 87 | 171 |
+| `nvidia_sm80` | 109 | 0 | 0 | 109 | 371 |
+| `nvidia_sm90` | 141 | 0 | 0 | 141 | 339 |
+| `nvidia_sm100` | 109 | 0 | 0 | 109 | 371 |
+| `nvidia_sm120` | 109 | 1 | 0 | 108 | 371 |
 
 ## Per-category breakdown
 
@@ -70,7 +70,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `functional_optimizer_step` | 6 | — | — | — | — | 6 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 15 | — | — | — | — | 15 |
-| other | `layout_transform` | 16 | — | — | — | — | 16 |
+| other | `layout_transform` | 16 | — | — | — | — | 15 |
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 278 | 6 | 0 | 23 | 227 |
+| other | 278 | 6 | 0 | 23 | 226 |
 
 ## Closure trajectory
 

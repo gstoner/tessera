@@ -183,6 +183,30 @@ class TestAppleGPUMSLKernels:
         assert "apple_gpu" in entries, f"{name} missing from apple_gpu manifest"
         assert entries["apple_gpu"].status == "fused"
 
+    def test_quantized_matmul_is_hardware_verified(self):
+        entries = {e.target: e for e in manifest_for("quantized_matmul")}
+        ag = entries["apple_gpu"]
+        assert ag.status == "hardware_verified"
+        assert ag.runtime_symbol == "tessera_apple_gpu_quantized_matmul_i4_f32"
+        assert ag.execute_compare_fixture == (
+            "tests/unit/test_apple_gpu_quantized_matmul.py")
+        assert set(ag.dtypes) == {"fp32", "fp16"}
+
+    @pytest.mark.parametrize("name,fixture", [
+        ("attn_compressed_blocks", "tests/unit/test_apple_gpu_masked_attn.py"),
+        ("attn_top_k_blocks", "tests/unit/test_apple_gpu_sparse_attn.py"),
+        ("attn_local_window_2d", "tests/unit/test_apple_gpu_sparse_attn.py"),
+        ("lookahead_sparse_attention",
+         "tests/unit/test_apple_gpu_lookahead_envelope.py"),
+        ("msa_sparse_attention", "tests/unit/test_apple_gpu_sparse_attn.py"),
+        ("linear_attn_state", "tests/unit/test_apple_gpu_linear_attn.py"),
+        ("masked_categorical", "tests/unit/test_apple_gpu_ldt_loss_ops.py"),
+    ])
+    def test_apple_gpu_composite_runtime_rows_are_fused(self, name, fixture):
+        entries = {e.target: e for e in manifest_for(name)}
+        ag = entries["apple_gpu"]
+        assert ag.status == "fused"
+        assert ag.execute_compare_fixture == fixture
 
 class TestFlashAttnManifest:
     def test_apple_gpu_supports_three_dtypes(self):
@@ -230,6 +254,25 @@ class TestX86AVX512Manifest:
         x86 = {e.target: e for e in manifest_for("matmul")}["x86"]
         assert x86.status == "fused"
         assert x86.feature_flags == ("amx", "avx512")
+
+
+class TestROCmCompiledManifest:
+    @pytest.mark.parametrize("name", ["dequant_matmul", "dequant_grouped_gemm"])
+    def test_dequant_gemm_rows_are_compiled(self, name):
+        entries = {e.target: e for e in manifest_for(name)}
+        rocm = entries["rocm"]
+        assert rocm.status == "compiled"
+        assert rocm.execute_compare_fixture == (
+            "tests/unit/test_rocm_dequant_gemm_compiled.py")
+        assert "quantization" in rocm.feature_flags
+
+    def test_msa_sparse_attention_row_is_compiled(self):
+        entries = {e.target: e for e in manifest_for("msa_sparse_attention")}
+        rocm = entries["rocm"]
+        assert rocm.status == "compiled"
+        assert rocm.execute_compare_fixture == (
+            "tests/unit/test_rocm_sparse_attn_compiled.py")
+        assert "sparse_attention" in rocm.feature_flags
 
 
 # ──────────────────────────────────────────────────────────────────────────

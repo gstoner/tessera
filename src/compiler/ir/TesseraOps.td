@@ -876,6 +876,7 @@ def Tessera_NTKRopeOp : Op<Tessera_Dialect, "ntk_rope", [Pure]> {
                         DefaultValuedAttr<F64Attr, "1.0">:$scale);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_ALiBiOp : Op<Tessera_Dialect, "alibi", [Pure]> {
@@ -883,6 +884,7 @@ def Tessera_ALiBiOp : Op<Tessera_Dialect, "alibi", [Pure]> {
   let arguments = (ins I64Attr:$num_heads, I64Attr:$seq_len);
   let results = (outs TensorType:$bias);
   let assemblyFormat = "attr-dict `:` type($bias)";
+  let hasVerifier = 1;
 }
 
 def Tessera_RopeSplitOp : Op<Tessera_Dialect, "rope_split", [Pure]> {
@@ -890,6 +892,7 @@ def Tessera_RopeSplitOp : Op<Tessera_Dialect, "rope_split", [Pure]> {
   let arguments = (ins TensorType:$x, I64Attr:$rope_dim);
   let results = (outs TensorType:$rope_part, TensorType:$no_rope_part);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_RopeMergeOp : Op<Tessera_Dialect, "rope_merge", [Pure]> {
@@ -897,6 +900,7 @@ def Tessera_RopeMergeOp : Op<Tessera_Dialect, "rope_merge", [Pure]> {
   let arguments = (ins TensorType:$rope_part, TensorType:$no_rope_part);
   let results = (outs TensorType:$x);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_MultiHeadAttentionOp : Op<Tessera_Dialect, "multi_head_attention", [Pure]> {
@@ -1334,12 +1338,14 @@ def Tessera_SelectOp : Op<Tessera_Dialect, "select", [Pure]> {
   let arguments = (ins TensorType:$cond, TensorType:$a, TensorType:$b);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 def Tessera_MaskedFillOp : Op<Tessera_Dialect, "masked_fill", [Pure]> {
   let summary = "Elementwise masked fill (mask != 0 ? x : value)";
   let arguments = (ins TensorType:$x, TensorType:$mask, F64Attr:$value);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase 2 state — functional KV-cache update. Writes `value` (1 x D) into row
@@ -1350,6 +1356,7 @@ def Tessera_WriteRowOp : Op<Tessera_Dialect, "write_row", [Pure]> {
   let arguments = (ins TensorType:$buffer, TensorType:$value, I64Attr:$row);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase 1 Sprint 1.2 — single-axis reduction. One parameterized op
@@ -1362,6 +1369,7 @@ def Tessera_ReduceOp : Op<Tessera_Dialect, "reduce", [Pure]> {
   let arguments = (ins TensorType:$input, StrAttr:$kind, I64Attr:$axis);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
@@ -1394,6 +1402,7 @@ def Tessera_SiluMulOp : Op<
   let arguments = (ins TensorType:$a, TensorType:$b);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase 8.4.8 Stage 2b — SwiGLU 3-op fusion target. Result of
@@ -1907,6 +1916,7 @@ def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
   let arguments = (ins TensorType:$x, TensorType:$filter);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AdamOp : Op<Tessera_Dialect, "adam", [Pure]> {

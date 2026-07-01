@@ -401,6 +401,14 @@ LogicalResult verifyBinaryPointwise(Operation *op, Value lhs, Value rhs,
   return verifySameRankedShapeAndElementType(op, lhsTy, resultTy, name);
 }
 
+LogicalResult verifyAxisInRange(Operation *op, int64_t axis, int64_t rank,
+                                StringRef name) {
+  if (axis < -rank || axis >= rank)
+    return op->emitOpError() << name << " axis out of range: got " << axis
+                             << " for rank-" << rank << " input";
+  return success();
+}
+
 // Helper: static dim equality (treats dynamic as "matches anything").
 bool dimsAgree(int64_t a, int64_t b) {
   return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
@@ -2229,6 +2237,88 @@ LogicalResult SoftplusOp::verify() {
   return verifyUnaryPointwise(getOperation(), getX(), getY(), "softplus");
 }
 
+LogicalResult NTKRopeOp::verify() {
+  if (failed(verifyUnaryPointwise(getOperation(), getX(), getY(), "ntk_rope")))
+    return failure();
+  if (getScale() <= 0.0)
+    return emitOpError("scale must be positive");
+  return success();
+}
+
+LogicalResult ALiBiOp::verify() {
+  if (failed(verifyPositiveI64(getOperation(), "num_heads", getNumHeads())) ||
+      failed(verifyPositiveI64(getOperation(), "seq_len", getSeqLen())))
+    return failure();
+  if (auto biasTy = dyn_cast<RankedTensorType>(getBias().getType())) {
+    if (!isFloatTensor(biasTy))
+      return emitOpError("bias result must be a floating tensor");
+    int64_t rank = biasTy.getRank();
+    if (rank >= 2) {
+      int64_t s0 = biasTy.getDimSize(rank - 2);
+      int64_t s1 = biasTy.getDimSize(rank - 1);
+      if (!dimsAgree(s0, getSeqLen()) || !dimsAgree(s1, getSeqLen()))
+        return emitOpError("bias trailing dimensions must match seq_len");
+    }
+  }
+  return success();
+}
+
+LogicalResult RopeSplitOp::verify() {
+  if (failed(verifyPositiveI64(getOperation(), "rope_dim", getRopeDim())))
+    return failure();
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto ropeTy = dyn_cast<RankedTensorType>(getRopePart().getType());
+  auto noRopeTy = dyn_cast<RankedTensorType>(getNoRopePart().getType());
+  if (!xTy || !ropeTy || !noRopeTy)
+    return success();
+  if (xTy.getElementType() != ropeTy.getElementType() ||
+      xTy.getElementType() != noRopeTy.getElementType())
+    return emitOpError("split result element types must match input");
+  if (xTy.getRank() != ropeTy.getRank() || xTy.getRank() != noRopeTy.getRank())
+    return emitOpError("split results must preserve input rank");
+  int64_t rank = xTy.getRank();
+  for (int64_t i = 0; i + 1 < rank; ++i) {
+    if (!dimsAgree(xTy.getDimSize(i), ropeTy.getDimSize(i)) ||
+        !dimsAgree(xTy.getDimSize(i), noRopeTy.getDimSize(i)))
+      return emitOpError("split results must preserve non-feature dims");
+  }
+  int64_t xLast = xTy.getDimSize(rank - 1);
+  int64_t ropeLast = ropeTy.getDimSize(rank - 1);
+  int64_t noRopeLast = noRopeTy.getDimSize(rank - 1);
+  if (!ShapedType::isDynamic(ropeLast) && ropeLast != getRopeDim())
+    return emitOpError("rope_part last dim must equal rope_dim");
+  if (!ShapedType::isDynamic(xLast) && !ShapedType::isDynamic(ropeLast) &&
+      !ShapedType::isDynamic(noRopeLast) && ropeLast + noRopeLast != xLast)
+    return emitOpError("split result last dims must sum to input last dim");
+  return success();
+}
+
+LogicalResult RopeMergeOp::verify() {
+  auto ropeTy = dyn_cast<RankedTensorType>(getRopePart().getType());
+  auto noRopeTy = dyn_cast<RankedTensorType>(getNoRopePart().getType());
+  auto outTy = dyn_cast<RankedTensorType>(getX().getType());
+  if (!ropeTy || !noRopeTy || !outTy)
+    return success();
+  if (outTy.getElementType() != ropeTy.getElementType() ||
+      outTy.getElementType() != noRopeTy.getElementType())
+    return emitOpError("merge operand/result element types must match");
+  if (outTy.getRank() != ropeTy.getRank() || outTy.getRank() != noRopeTy.getRank())
+    return emitOpError("merge operands and result must have matching rank");
+  int64_t rank = outTy.getRank();
+  for (int64_t i = 0; i + 1 < rank; ++i) {
+    if (!dimsAgree(outTy.getDimSize(i), ropeTy.getDimSize(i)) ||
+        !dimsAgree(outTy.getDimSize(i), noRopeTy.getDimSize(i)))
+      return emitOpError("merge must preserve non-feature dims");
+  }
+  int64_t outLast = outTy.getDimSize(rank - 1);
+  int64_t ropeLast = ropeTy.getDimSize(rank - 1);
+  int64_t noRopeLast = noRopeTy.getDimSize(rank - 1);
+  if (!ShapedType::isDynamic(outLast) && !ShapedType::isDynamic(ropeLast) &&
+      !ShapedType::isDynamic(noRopeLast) && ropeLast + noRopeLast != outLast)
+    return emitOpError("merge operand last dims must sum to result last dim");
+  return success();
+}
+
 LogicalResult AddOp::verify() {
   return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
                                "add");
@@ -2247,6 +2337,94 @@ LogicalResult MulOp::verify() {
 LogicalResult DivOp::verify() {
   return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
                                "div");
+}
+
+LogicalResult SelectOp::verify() {
+  auto condTy = dyn_cast<RankedTensorType>(getCond().getType());
+  auto aTy = dyn_cast<RankedTensorType>(getA().getType());
+  auto bTy = dyn_cast<RankedTensorType>(getB().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!condTy || !aTy || !bTy || !resultTy)
+    return success();
+  if (failed(verifySameRankedShape(getOperation(), condTy, aTy, "select")))
+    return failure();
+  if (failed(verifySameRankedShapeAndElementType(getOperation(), aTy, bTy,
+                                                 "select")))
+    return failure();
+  return verifySameRankedShapeAndElementType(getOperation(), aTy, resultTy,
+                                             "select");
+}
+
+LogicalResult MaskedFillOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto maskTy = dyn_cast<RankedTensorType>(getMask().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!xTy || !maskTy || !resultTy)
+    return success();
+  if (failed(verifySameRankedShape(getOperation(), xTy, maskTy, "masked_fill")))
+    return failure();
+  return verifySameRankedShapeAndElementType(getOperation(), xTy, resultTy,
+                                             "masked_fill");
+}
+
+LogicalResult WriteRowOp::verify() {
+  if (getRow() < 0)
+    return emitOpError("row must be non-negative");
+  auto bufferTy = dyn_cast<RankedTensorType>(getBuffer().getType());
+  auto valueTy = dyn_cast<RankedTensorType>(getValue().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!bufferTy || !valueTy || !resultTy)
+    return success();
+  if (failed(verifySameRankedShapeAndElementType(getOperation(), bufferTy,
+                                                 resultTy, "write_row")))
+    return failure();
+  if (bufferTy.getRank() != 2)
+    return emitOpError("buffer must be rank-2 (T x D)");
+  if (valueTy.getElementType() != bufferTy.getElementType())
+    return emitOpError("value element type must match buffer");
+  if (valueTy.getRank() == 1) {
+    if (!dimsAgree(valueTy.getDimSize(0), bufferTy.getDimSize(1)))
+      return emitOpError("rank-1 value length must match buffer D");
+    return success();
+  }
+  if (valueTy.getRank() == 2) {
+    if (!dimsAgree(valueTy.getDimSize(0), 1) ||
+        !dimsAgree(valueTy.getDimSize(1), bufferTy.getDimSize(1)))
+      return emitOpError("rank-2 value must have shape 1 x D");
+    return success();
+  }
+  return emitOpError("value must be rank-1 D or rank-2 1 x D");
+}
+
+LogicalResult ReduceOp::verify() {
+  StringRef kind = getKind();
+  if (kind != "sum" && kind != "max" && kind != "min" && kind != "mean")
+    return emitOpError("kind must be one of sum, max, min, mean");
+  auto inputTy = dyn_cast<RankedTensorType>(getInput().getType());
+  auto resultTy = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!inputTy || !resultTy)
+    return success();
+  int64_t rank = inputTy.getRank();
+  if (failed(verifyAxisInRange(getOperation(), getAxis(), rank, "reduce")))
+    return failure();
+  if (resultTy.getElementType() != inputTy.getElementType())
+    return emitOpError("result element type must match input");
+  if (resultTy.getRank() != rank - 1)
+    return emitOpError("result rank must be input rank minus one");
+  int64_t axis = getAxis() < 0 ? getAxis() + rank : getAxis();
+  for (int64_t inDim = 0, outDim = 0; inDim < rank; ++inDim) {
+    if (inDim == axis)
+      continue;
+    if (!dimsAgree(inputTy.getDimSize(inDim), resultTy.getDimSize(outDim)))
+      return emitOpError("result dims must match input dims except axis");
+    ++outDim;
+  }
+  return success();
+}
+
+LogicalResult SiluMulOp::verify() {
+  return verifyBinaryPointwise(getOperation(), getA(), getB(), getY(),
+                               "silu_mul");
 }
 
 // ── Phase 1 identity folders for the elementwise binary family ───────────────
@@ -3298,6 +3476,18 @@ LogicalResult IRFFTOp::verify() {
 }
 LogicalResult DCTOp::verify() {
   return verifySpectralAxis(getOperation(), getX(), getAxis(), "dct");
+}
+
+LogicalResult SpectralConvOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto filterTy = dyn_cast<RankedTensorType>(getFilter().getType());
+  auto yTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!xTy || !filterTy || !yTy)
+    return success();
+  if (!isFloatTensor(xTy) || !isFloatTensor(filterTy) || !isFloatTensor(yTy))
+    return emitOpError("spectral_conv operands and result must be floating tensors");
+  return verifySameRankedShapeAndElementType(getOperation(), xTy, yTy,
+                                             "spectral_conv");
 }
 
 } // namespace tessera

@@ -4,8 +4,8 @@ src/compiler/ir/TesseraOps.td,AdafactorOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamOp,1,1,real
 src/compiler/ir/TesseraOps.td,AdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,AddOp,1,1,real
-src/compiler/ir/TesseraOps.td,AllGatherOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,AllReduceOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,AllGatherOp,1,1,real
+src/compiler/ir/TesseraOps.td,AllReduceOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchGumbelSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchHardConcreteOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchMixedOp,1,1,real
@@ -128,7 +128,7 @@ src/compiler/ir/TesseraOps.td,RLNormalizeGroupAdvantagesOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLPPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RMSNormSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceOp,1,1,real
-src/compiler/ir/TesseraOps.td,ReduceScatterOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,ReduceScatterOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReluOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReshapeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RetentionOp,1,1,real

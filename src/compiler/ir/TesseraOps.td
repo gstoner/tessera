@@ -1884,6 +1884,7 @@ class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
                        OptionalAttr<StrAttr>:$op);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AllReduceOp : Tessera_CollectiveOp<"all_reduce", "Single-rank/reference all-reduce semantic op">;

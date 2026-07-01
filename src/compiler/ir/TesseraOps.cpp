@@ -3039,6 +3039,42 @@ LogicalResult DropoutOp::verify() {
   return success();
 }
 
+static LogicalResult verifyCollectiveOp(Operation *op, Value input,
+                                        Value output, StringRef name) {
+  if (auto axis = op->getAttrOfType<StringAttr>("axis"))
+    if (axis.getValue().empty())
+      return op->emitOpError("axis must be non-empty when set");
+
+  if (auto reduction = op->getAttrOfType<StringAttr>("op")) {
+    StringRef kind = reduction.getValue();
+    if (kind != "sum" && kind != "mean" && kind != "max" && kind != "min" &&
+        kind != "prod")
+      return op->emitOpError()
+             << "op must be one of sum, mean, max, min, prod";
+  }
+
+  auto inTy = dyn_cast<RankedTensorType>(input.getType());
+  auto outTy = dyn_cast<RankedTensorType>(output.getType());
+  if (!inTy || !outTy)
+    return success();
+  return verifySameRankedShapeAndElementType(op, inTy, outTy, name);
+}
+
+LogicalResult AllReduceOp::verify() {
+  return verifyCollectiveOp(getOperation(), getX(), getY(), "all_reduce");
+}
+
+LogicalResult ReduceScatterOp::verify() {
+  // Graph IR models the single-rank/reference form here. Multi-rank scatter
+  // shape changes remain a mesh/sharding contract, not a single-GPU verifier
+  // claim.
+  return verifyCollectiveOp(getOperation(), getX(), getY(), "reduce_scatter");
+}
+
+LogicalResult AllGatherOp::verify() {
+  return verifyCollectiveOp(getOperation(), getX(), getY(), "all_gather");
+}
+
 LogicalResult DeepSeekSparseAttentionOp::verify() {
   if (failed(verifyPositiveI64(this->getOperation(), "window_size",
                                getWindowSize())) ||

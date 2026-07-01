@@ -14,7 +14,7 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 6 | 474 |
+| `batching_rule` | 0 | 480 |
 | `transpose_rule` | 0 | 480 |
 | `sharding_rule` | 43 | 437 |
 | `lowering_rule` | 0 | 480 |
@@ -76,8 +76,8 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 10 | — | — | 1 | — | 10 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
-| other | `moe` | 1 | 1 | — | 1 | — | 1 |
-| other | `moe_transport` | 2 | 2 | — | 2 | — | 2 |
+| other | `moe` | 1 | — | — | 1 | — | 1 |
+| other | `moe_transport` | 2 | — | — | 2 | — | 2 |
 | other | `numerics` | 1 | — | — | — | — | — |
 | other | `pooling` | 4 | — | — | — | — | 4 |
 | other | `projection` | 1 | — | — | — | — | 1 |
@@ -97,7 +97,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `stable_reduction` | 9 | — | — | — | — | 9 |
 | other | `state_space` | 1 | — | — | 1 | — | 1 |
 | other | `state_tree` | 10 | — | — | — | — | — |
-| other | `state_update` | 6 | 3 | — | 2 | — | 6 |
+| other | `state_update` | 6 | — | — | 2 | — | 6 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
 | other | `transform` | 11 | — | — | — | — | — |
 | other | `vision` | 4 | — | — | — | — | 4 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 278 | 6 | 0 | 23 | 226 |
+| other | 278 | 0 | 0 | 23 | 226 |
 
 ## Closure trajectory
 

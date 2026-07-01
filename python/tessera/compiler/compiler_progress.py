@@ -127,7 +127,6 @@ def _primitive_axis_next_action(axis: str) -> str:
     return {
         "backend_kernel": "Promote by backend/pathway; do not treat every target as an all-up compiler veto.",
         "sharding_rule": "Prioritize model-facing collectives, layout, memory, and optimizer rows.",
-        "batching_rule": "Close the small remaining transform-rule tail.",
     }.get(axis, "No action unless this row reopens.")
 
 

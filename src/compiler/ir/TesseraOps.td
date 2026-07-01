@@ -1226,14 +1226,28 @@ def Tessera_SoftmaxOp : Tessera_UnaryPureOp<"softmax", "Softmax over an explicit
   let hasVerifier = 1;
 }
 
-def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit">;
-def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit">;
-def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation">;
-def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op">;
+def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit"> {
+  let hasVerifier = 1;
+}
+def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit"> {
+  let hasVerifier = 1;
+}
+def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation"> {
+  let hasVerifier = 1;
+}
+def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op"> {
+  let hasVerifier = 1;
+}
 // Tier-1 activations lowered by the Apple GPU MPSGraph lane (2026-05-29).
-def Tessera_SiluOp : Tessera_UnaryPureOp<"silu", "SiLU / swish activation (x * sigmoid(x))">;
-def Tessera_TanhOp : Tessera_UnaryPureOp<"tanh", "Hyperbolic tangent activation">;
-def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (log(1 + exp(x)))">;
+def Tessera_SiluOp : Tessera_UnaryPureOp<"silu", "SiLU / swish activation (x * sigmoid(x))"> {
+  let hasVerifier = 1;
+}
+def Tessera_TanhOp : Tessera_UnaryPureOp<"tanh", "Hyperbolic tangent activation"> {
+  let hasVerifier = 1;
+}
+def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (log(1 + exp(x)))"> {
+  let hasVerifier = 1;
+}
 
 // Phase 0 production-compiler spine (docs/spec/PRODUCTION_COMPILER_PLAN.md):
 // the minimal *total* binary elementwise op used to prove the
@@ -1249,6 +1263,7 @@ def Tessera_AddOp : Op<
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
   let hasFolder = 1;
 }
 
@@ -1261,6 +1276,7 @@ def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
   let hasFolder = 1;
 }
 def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
@@ -1268,6 +1284,7 @@ def Tessera_MulOp : Op<Tessera_Dialect, "mul", [Pure]> {
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
   let hasFolder = 1;
 }
 def Tessera_ScoreCombineOp : Op<Tessera_Dialect, "score_combine", [Pure]> {
@@ -1304,6 +1321,7 @@ def Tessera_DivOp : Op<Tessera_Dialect, "div", [Pure]> {
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
   let hasFolder = 1;
 }
 

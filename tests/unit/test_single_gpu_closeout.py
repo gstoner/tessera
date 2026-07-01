@@ -58,9 +58,22 @@ def test_sharding_rules_split_identity_layout_and_distributed() -> None:
     rows = [r for r in _csv_rows() if r["area"] == "sharding_rule"]
     buckets = Counter(r["bucket"] for r in rows)
     assert rows
+    assert {r["current_status"] for r in rows} <= {"partial", "planned"}
+    assert {r["bucket"] for r in rows} <= {
+        "local_layout_transform",
+        "multi_gpu_deferred",
+        "needs_mesh_or_domain_proof",
+        "single_device_identity",
+    }
     assert buckets["needs_mesh_or_domain_proof"] > 0
     assert buckets["local_layout_transform"] > 0
     assert buckets["multi_gpu_deferred"] > 0
+    assert all(r["owner"] and r["next_action"] for r in rows)
+
+
+def test_batching_rule_closeout_is_empty() -> None:
+    rows = [r for r in _csv_rows() if r["area"] == "batching_rule"]
+    assert rows == []
 
 
 def test_backend_kernel_rows_have_pathway_ownership() -> None:
@@ -72,6 +85,16 @@ def test_backend_kernel_rows_have_pathway_ownership() -> None:
         "multi_gpu_deferred",
     }
     assert any(r["bucket"] == "backend_pathway_owned" for r in rows)
+    assert all(r["owner"] and r["next_action"] for r in rows)
+
+
+def test_backend_kernel_rows_are_not_unowned() -> None:
+    offenders = [
+        r for r in _csv_rows()
+        if r["area"] == "backend_kernel"
+        and r["bucket"] == "backend_pathway_unowned"
+    ]
+    assert offenders == []
 
 
 def test_x86_and_rocm_native_backend_rows_are_pathway_owned() -> None:

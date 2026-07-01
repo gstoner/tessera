@@ -369,6 +369,38 @@ LogicalResult verifySameRankedShape(Operation *op, RankedTensorType a,
   return success();
 }
 
+LogicalResult verifySameRankedShapeAndElementType(Operation *op,
+                                                  RankedTensorType a,
+                                                  RankedTensorType b,
+                                                  StringRef label) {
+  if (failed(verifySameRankedShape(op, a, b, label)))
+    return failure();
+  if (a.getElementType() != b.getElementType())
+    return op->emitOpError() << label << " element types must match";
+  return success();
+}
+
+LogicalResult verifyUnaryPointwise(Operation *op, Value input, Value output,
+                                   StringRef name) {
+  auto inTy = dyn_cast<RankedTensorType>(input.getType());
+  auto outTy = dyn_cast<RankedTensorType>(output.getType());
+  if (!inTy || !outTy)
+    return success();
+  return verifySameRankedShapeAndElementType(op, inTy, outTy, name);
+}
+
+LogicalResult verifyBinaryPointwise(Operation *op, Value lhs, Value rhs,
+                                    Value result, StringRef name) {
+  auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
+  auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
+  auto resultTy = dyn_cast<RankedTensorType>(result.getType());
+  if (!lhsTy || !rhsTy || !resultTy)
+    return success();
+  if (failed(verifySameRankedShapeAndElementType(op, lhsTy, rhsTy, name)))
+    return failure();
+  return verifySameRankedShapeAndElementType(op, lhsTy, resultTy, name);
+}
+
 // Helper: static dim equality (treats dynamic as "matches anything").
 bool dimsAgree(int64_t a, int64_t b) {
   return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
@@ -2164,6 +2196,57 @@ OpFoldResult CastOp::fold(FoldAdaptor adaptor) {
       !(*this)->hasAttr("tessera.layout"))
     return getX();
   return {};
+}
+
+// Sprint verifier closeout (2026-07-01): simple pointwise activations and
+// binary elementwise ops are shape- and dtype-preserving. Keep these real
+// verifiers small; broadcasting remains a separate op contract.
+LogicalResult GeluOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "gelu");
+}
+
+LogicalResult ReluOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "relu");
+}
+
+LogicalResult SigmoidOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "sigmoid");
+}
+
+LogicalResult SinOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "sin");
+}
+
+LogicalResult SiluOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "silu");
+}
+
+LogicalResult TanhOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "tanh");
+}
+
+LogicalResult SoftplusOp::verify() {
+  return verifyUnaryPointwise(getOperation(), getX(), getY(), "softplus");
+}
+
+LogicalResult AddOp::verify() {
+  return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                               "add");
+}
+
+LogicalResult SubOp::verify() {
+  return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                               "sub");
+}
+
+LogicalResult MulOp::verify() {
+  return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                               "mul");
+}
+
+LogicalResult DivOp::verify() {
+  return verifyBinaryPointwise(getOperation(), getLhs(), getRhs(), getResult(),
+                               "div");
 }
 
 // ── Phase 1 identity folders for the elementwise binary family ───────────────

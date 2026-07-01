@@ -2318,7 +2318,6 @@ _BACKEND_KERNEL_BY_CATEGORY: dict[str, str] = {
     "diffusion_schedule":  "not_applicable",
     "extension":           "not_applicable",
     "grad_transform":      "not_applicable",
-    "memory":              "not_applicable",
     "numerics":            "not_applicable",
     "schedule":            "not_applicable",
     "serialization":       "not_applicable",
@@ -2335,6 +2334,11 @@ _BACKEND_KERNEL_NOT_APPLICABLE_BY_NAME: frozenset[str] = frozenset({
     "rng_split",
     "rng_fold_in",
     "rng_clone",
+    # Memory writes/evictions are state-management surfaces. memory_read is
+    # intentionally excluded because it performs real top-k/gather work and
+    # remains backend-kernel gated until the target lanes close.
+    "memory_write",
+    "memory_evict",
     # Factory for a Python-side min/max observer; observe() may consume tensors,
     # but the primitive itself is not a standalone device kernel contract.
     "calibration_observer",

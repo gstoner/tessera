@@ -13,7 +13,7 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 381 | backend_pathway_owned=312, backend_pathway_unowned=54, multi_gpu_deferred=15 | backend_codegen=366, distributed_validation=15 |
+| `backend_kernel` | 382 | backend_pathway_owned=312, backend_pathway_unowned=55, multi_gpu_deferred=15 | backend_codegen=367, distributed_validation=15 |
 | `benchmark_evidence` | 14 | benchmark_required=14 | benchmarks=14 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 62 | intentional_reference_review=1, multi_gpu_deferred=6, single_gpu_promote=55 | backend_codegen=55, compiler_audit=1, distributed_validation=6 |
@@ -247,6 +247,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `vlb_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `wasserstein_distance` | loss | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
 | `backend_kernel` | `z_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `memory_read` | memory | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
 | `backend_kernel` | `conv1d` | model_layer | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
 | `backend_kernel` | `conv_transpose` | model_layer | planned | `backend_pathway_unowned` | backend_codegen | Add BackendKernelEntry ownership or classify as intentional reference-only/not-applicable. |
 | `backend_kernel` | `linear_general` | model_layer | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |

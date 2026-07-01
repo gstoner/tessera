@@ -18,7 +18,7 @@
 | `transpose_rule` | 0 | 480 |
 | `sharding_rule` | 43 | 437 |
 | `lowering_rule` | 0 | 480 |
-| `backend_kernel` | 381 | 99 |
+| `backend_kernel` | 382 | 98 |
 
 ## Backend Proof By Target
 
@@ -48,7 +48,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S7 | `attention` | 28 | — | — | 14 | — | 28 |
 | S7 | `position_encoding` | 3 | — | — | — | — | 3 |
 | S7 | `normalization` | 7 | — | — | — | — | 7 |
-| S7 | `memory` | 3 | — | — | — | — | — |
+| S7 | `memory` | 3 | — | — | — | — | 1 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
 | S10 | `optimizer` | 3 | — | — | — | — | 3 |
 | S10 | `schedule` | 8 | — | — | — | — | — |
@@ -108,7 +108,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 49 |
 | S5 | 7 | 0 | 0 | 0 | 0 |
-| S7 | 58 | 0 | 0 | 14 | 55 |
+| S7 | 58 | 0 | 0 | 14 | 56 |
 | S10 | 18 | 0 | 0 | 0 | 3 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |

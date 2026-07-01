@@ -57,7 +57,7 @@ def test_host_control_surfaces_have_no_backend_kernel_contract():
         "karras_sigma_schedule", "chained_schedule", "save_state",
         "tree_map", "tokenizer_bpe", "vmap", "tiny_attention_conformance",
         "clip_grad_norm", "ema_update", "grad_scaler_step",
-        "memory_read", "memory_write", "memory_evict",
+        "memory_write", "memory_evict",
     ):
         assert coverage_for(op).contract_status["backend_kernel"] == "not_applicable", op
 

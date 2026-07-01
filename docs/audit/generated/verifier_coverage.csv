@@ -1,8 +1,8 @@
 td_file,op_class,has_verifier_declared,verify_impl_present,impl_status
 src/compiler/ir/TesseraOps.td,ALiBiOp,1,1,real
-src/compiler/ir/TesseraOps.td,AdafactorOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,AdamOp,0,0,no_verifier
-src/compiler/ir/TesseraOps.td,AdamWOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,AdafactorOp,1,1,real
+src/compiler/ir/TesseraOps.td,AdamOp,1,1,real
+src/compiler/ir/TesseraOps.td,AdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,AddOp,1,1,real
 src/compiler/ir/TesseraOps.td,AllGatherOp,0,0,no_verifier
 src/compiler/ir/TesseraOps.td,AllReduceOp,0,0,no_verifier
@@ -83,7 +83,7 @@ src/compiler/ir/TesseraOps.td,LayerNormOp,1,1,real
 src/compiler/ir/TesseraOps.td,LightningAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,LinearAttnStateOp,1,1,real
-src/compiler/ir/TesseraOps.td,LionOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,LionOp,1,1,real
 src/compiler/ir/TesseraOps.td,LogSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,LookaheadSparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MLADecodeFusedOp,1,1,real
@@ -98,7 +98,7 @@ src/compiler/ir/TesseraOps.td,ModifiedDeltaAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeDispatchOp,1,1,real
 src/compiler/ir/TesseraOps.td,MoeSwigluBlockOp,1,1,real
-src/compiler/ir/TesseraOps.td,MomentumOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,MomentumOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorPartitionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorRouterOp,1,1,real
 src/compiler/ir/TesseraOps.td,MorScatterOp,1,1,real
@@ -154,7 +154,7 @@ src/compiler/ir/TesseraOps.td,SpecAcceptTreeSampleOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpectralConvOp,1,1,real
 src/compiler/ir/TesseraOps.td,SqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SubOp,1,1,real
-src/compiler/ir/TesseraOps.td,SwigluFusedOp,0,0,no_verifier
+src/compiler/ir/TesseraOps.td,SwigluFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,TanhOp,1,1,real
 src/compiler/ir/TesseraOps.td,TargetVerifyOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real

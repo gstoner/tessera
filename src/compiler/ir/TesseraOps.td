@@ -1207,6 +1207,7 @@ class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the innermost dimension"> {
@@ -1423,6 +1424,7 @@ def Tessera_SwigluFusedOp : Op<
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Theme 5 — MLA primitives (Python ops landed; ODS for fusion-pass
@@ -1934,6 +1936,7 @@ def Tessera_AdamOp : Op<Tessera_Dialect, "adam", [Pure]> {
                        OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
   let results = (outs TensorType:$new_param, TensorType:$new_moment1, TensorType:$new_moment2);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 class Tessera_OptimizerTreeOp<string mnemonic, string summaryText>
@@ -1953,6 +1956,7 @@ class Tessera_OptimizerTreeOp<string mnemonic, string summaryText>
                        OptionalAttr<BoolAttr>:$cast_updates_to_param_dtype);
   let results = (outs TensorType:$new_params, TensorType:$new_state);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AdamWOp : Tessera_OptimizerTreeOp<"adamw", "Functional AdamW optimizer tree step">;

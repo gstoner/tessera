@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 146 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 152 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 28 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 22 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 174 | |
 
 ## Per-dialect details
@@ -19,9 +19,9 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | Op | Status |
 |----|--------|
 | `ALiBiOp` | `real` |
-| `AdafactorOp` | `no_verifier` |
-| `AdamOp` | `no_verifier` |
-| `AdamWOp` | `no_verifier` |
+| `AdafactorOp` | `real` |
+| `AdamOp` | `real` |
+| `AdamWOp` | `real` |
 | `AddOp` | `real` |
 | `AllGatherOp` | `no_verifier` |
 | `AllReduceOp` | `no_verifier` |
@@ -102,7 +102,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `LightningAttentionOp` | `real` |
 | `LinearAttnOp` | `real` |
 | `LinearAttnStateOp` | `real` |
-| `LionOp` | `no_verifier` |
+| `LionOp` | `real` |
 | `LogSoftmaxOp` | `real` |
 | `LookaheadSparseAttentionOp` | `real` |
 | `MLADecodeFusedOp` | `real` |
@@ -117,7 +117,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MoeCombineOp` | `real` |
 | `MoeDispatchOp` | `real` |
 | `MoeSwigluBlockOp` | `real` |
-| `MomentumOp` | `no_verifier` |
+| `MomentumOp` | `real` |
 | `MorPartitionOp` | `real` |
 | `MorRouterOp` | `real` |
 | `MorScatterOp` | `real` |
@@ -173,7 +173,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SpectralConvOp` | `real` |
 | `SqueezeOp` | `real` |
 | `SubOp` | `real` |
-| `SwigluFusedOp` | `no_verifier` |
+| `SwigluFusedOp` | `real` |
 | `TanhOp` | `real` |
 | `TargetVerifyOp` | `real` |
 | `TransposeOp` | `real` |

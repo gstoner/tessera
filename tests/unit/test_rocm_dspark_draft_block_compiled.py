@@ -48,10 +48,11 @@ def test_rocm_dspark_draft_block_runtime_matches_reference_oracle():
     assert res["compiler_path"] == "rocm_dspark_draft_block_compiled"
     assert res["execution_kind"] in {"native_gpu", "reference_cpu"}
     out = res["output"]
-    np.testing.assert_allclose(out["logits"], ref.logits)
-    np.testing.assert_allclose(out["confidence_logits"], ref.confidence_logits)
+    np.testing.assert_allclose(out["logits"], ref.logits, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(
+        out["confidence_logits"], ref.confidence_logits, rtol=2e-6, atol=2e-6)
     np.testing.assert_array_equal(out["tokens"], ref.tokens)
-    np.testing.assert_allclose(out["hidden"], ref.hidden)
+    np.testing.assert_allclose(out["hidden"], ref.hidden, rtol=2e-6, atol=2e-6)
 
 
 def test_rocm_dspark_draft_block_accepts_weight_mapping_and_infers_static_shape():

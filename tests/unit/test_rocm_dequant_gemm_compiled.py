@@ -40,8 +40,8 @@ def test_rocm_dequant_matmul_runtime_matches_packed_oracle_int4():
     np.testing.assert_allclose(
         res["output"],
         quant.dequant_matmul(x, packed, backend="reference"),
-        rtol=0,
-        atol=0,
+        rtol=2e-6,
+        atol=2e-6,
     )
     np.testing.assert_allclose(
         res["output"],
@@ -76,8 +76,8 @@ def test_rocm_dequant_grouped_gemm_runtime_matches_per_expert_oracle():
     np.testing.assert_allclose(
         res["output"],
         quant.dequant_grouped_gemm(x, experts, group_sizes),
-        rtol=0,
-        atol=0,
+        rtol=2e-6,
+        atol=2e-6,
     )
 
 

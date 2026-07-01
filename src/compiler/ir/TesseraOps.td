@@ -2200,6 +2200,7 @@ def Tessera_CustomAdjointCallOp : Op<
   let arguments = (ins StrAttr:$name, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>:$cotangents);
   let assemblyFormat = "$name `(` operands `)` attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase-G G-B — Graph-IR bounded control-flow loop. The loop body is a

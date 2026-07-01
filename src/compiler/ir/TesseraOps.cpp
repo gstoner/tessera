@@ -3371,6 +3371,12 @@ LogicalResult ArchMixedOp::verify() {
   return success();
 }
 
+LogicalResult CustomAdjointCallOp::verify() {
+  if (getName().empty())
+    return emitOpError("name must be a non-empty custom-adjoint registry key");
+  return success();
+}
+
 // ── Phase-G control flow — payload-ABI + carry/flag-index contracts. ──────────
 // The serialized run_graph op-list arrays (opcodes/in0/in1/iattr/fattr) must be
 // mutually length-consistent (one entry per body op) with out_id set, else the

@@ -498,6 +498,28 @@ LogicalResult verifyPositiveOptionalI64(Operation *op, StringRef name,
   return success();
 }
 
+template <typename OptionalFloatAttr>
+LogicalResult verifyPositiveOptionalF64(Operation *op, StringRef name,
+                                        OptionalFloatAttr value) {
+  if (!value)
+    return success();
+  double v = value->convertToDouble();
+  if (!(v > 0.0))
+    return op->emitOpError() << name << " must be positive when set";
+  return success();
+}
+
+template <typename OptionalFloatAttr>
+LogicalResult verifyUnitIntervalOptionalF64(Operation *op, StringRef name,
+                                            OptionalFloatAttr value) {
+  if (!value)
+    return success();
+  double v = value->convertToDouble();
+  if (!(v >= 0.0) || !(v < 1.0))
+    return op->emitOpError() << name << " must satisfy 0.0 <= value < 1.0";
+  return success();
+}
+
 LogicalResult verifyAttentionQKV(Operation *op, Value q, Value k, Value v,
                                  Value o, StringRef label) {
   auto qTy = dyn_cast<RankedTensorType>(q.getType());
@@ -2425,6 +2447,143 @@ LogicalResult ReduceOp::verify() {
 LogicalResult SiluMulOp::verify() {
   return verifyBinaryPointwise(getOperation(), getA(), getB(), getY(),
                                "silu_mul");
+}
+
+LogicalResult SwigluFusedOp::verify() {
+  auto xTy = dyn_cast<RankedTensorType>(getX().getType());
+  auto gateTy = dyn_cast<RankedTensorType>(getWGate().getType());
+  auto upTy = dyn_cast<RankedTensorType>(getWUp().getType());
+  auto downTy = dyn_cast<RankedTensorType>(getWDown().getType());
+  auto yTy = dyn_cast<RankedTensorType>(getY().getType());
+  if (!xTy || !gateTy || !upTy || !downTy || !yTy)
+    return success();
+  if (xTy.getRank() != 2 || gateTy.getRank() != 2 || upTy.getRank() != 2 ||
+      downTy.getRank() != 2 || yTy.getRank() != 2)
+    return emitOpError("swiglu_fused expects rank-2 x/weights/result tensors");
+  if (!isFloatTensor(xTy) || !isFloatTensor(gateTy) || !isFloatTensor(upTy) ||
+      !isFloatTensor(downTy) || !isFloatTensor(yTy))
+    return emitOpError("swiglu_fused expects floating tensors");
+  Type elem = xTy.getElementType();
+  if (gateTy.getElementType() != elem || upTy.getElementType() != elem ||
+      downTy.getElementType() != elem || yTy.getElementType() != elem)
+    return emitOpError("swiglu_fused operand/result dtypes must match");
+  if (!dimsAgree(xTy.getDimSize(1), gateTy.getDimSize(0)) ||
+      !dimsAgree(xTy.getDimSize(1), upTy.getDimSize(0)))
+    return emitOpError("gate/up weights input dim must match x feature dim");
+  if (!dimsAgree(gateTy.getDimSize(1), upTy.getDimSize(1)) ||
+      !dimsAgree(gateTy.getDimSize(1), downTy.getDimSize(0)))
+    return emitOpError("hidden dims must agree across gate/up/down weights");
+  if (!dimsAgree(yTy.getDimSize(0), xTy.getDimSize(0)) ||
+      !dimsAgree(yTy.getDimSize(1), downTy.getDimSize(1)))
+    return emitOpError("result shape must be x batch by down output dim");
+  return success();
+}
+
+LogicalResult AdamOp::verify() {
+  auto paramTy = dyn_cast<RankedTensorType>(getParam().getType());
+  auto gradTy = dyn_cast<RankedTensorType>(getGrad().getType());
+  auto m1Ty = dyn_cast<RankedTensorType>(getMoment1().getType());
+  auto m2Ty = dyn_cast<RankedTensorType>(getMoment2().getType());
+  auto newParamTy = dyn_cast<RankedTensorType>(getNewParam().getType());
+  auto newM1Ty = dyn_cast<RankedTensorType>(getNewMoment1().getType());
+  auto newM2Ty = dyn_cast<RankedTensorType>(getNewMoment2().getType());
+  if (paramTy && gradTy &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
+                                                 gradTy, "adam grad")))
+    return failure();
+  if (paramTy && m1Ty &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
+                                                 m1Ty, "adam moment1")))
+    return failure();
+  if (paramTy && m2Ty &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
+                                                 m2Ty, "adam moment2")))
+    return failure();
+  if (paramTy && newParamTy &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), paramTy,
+                                                 newParamTy, "adam new_param")))
+    return failure();
+  if (m1Ty && newM1Ty &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), m1Ty, newM1Ty,
+                                                 "adam new_moment1")))
+    return failure();
+  if (m2Ty && newM2Ty &&
+      failed(verifySameRankedShapeAndElementType(getOperation(), m2Ty, newM2Ty,
+                                                 "adam new_moment2")))
+    return failure();
+  if (failed(verifyPositiveOptionalF64(getOperation(), "lr", getLr())) ||
+      failed(verifyUnitIntervalOptionalF64(getOperation(), "beta1", getBeta1())) ||
+      failed(verifyUnitIntervalOptionalF64(getOperation(), "beta2", getBeta2())) ||
+      failed(verifyPositiveOptionalF64(getOperation(), "eps", getEps())) ||
+      failed(verifyPositiveOptionalI64(getOperation(), "step", getStep())))
+    return failure();
+  return success();
+}
+
+static LogicalResult verifyOptimizerTree(Operation *op, Value params,
+                                         Value grads, Value state,
+                                         Value newParams, Value newState,
+                                         std::optional<FloatAttr> lr,
+                                         std::optional<FloatAttr> beta1,
+                                         std::optional<FloatAttr> beta2,
+                                         std::optional<FloatAttr> eps,
+                                         std::optional<FloatAttr> momentum,
+                                         std::optional<FloatAttr> weightDecay,
+                                         StringRef name) {
+  auto paramsTy = dyn_cast<RankedTensorType>(params.getType());
+  auto gradsTy = dyn_cast<RankedTensorType>(grads.getType());
+  auto newParamsTy = dyn_cast<RankedTensorType>(newParams.getType());
+  if (paramsTy && gradsTy &&
+      failed(verifySameRankedShapeAndElementType(op, paramsTy, gradsTy, name)))
+    return failure();
+  if (paramsTy && newParamsTy &&
+      failed(verifySameRankedShapeAndElementType(op, paramsTy, newParamsTy,
+                                                 name)))
+    return failure();
+  if (state) {
+    auto stateTy = dyn_cast<RankedTensorType>(state.getType());
+    auto newStateTy = dyn_cast<RankedTensorType>(newState.getType());
+    if (stateTy && newStateTy &&
+        failed(verifySameRankedShapeAndElementType(op, stateTy, newStateTy,
+                                                   name)))
+      return failure();
+  }
+  if (failed(verifyPositiveOptionalF64(op, "lr", lr)) ||
+      failed(verifyUnitIntervalOptionalF64(op, "beta1", beta1)) ||
+      failed(verifyUnitIntervalOptionalF64(op, "beta2", beta2)) ||
+      failed(verifyPositiveOptionalF64(op, "eps", eps)) ||
+      failed(verifyPositiveOptionalF64(op, "momentum", momentum)) ||
+      failed(verifyPositiveOptionalF64(op, "weight_decay", weightDecay)))
+    return failure();
+  return success();
+}
+
+LogicalResult AdamWOp::verify() {
+  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
+                             getState(), getNewParams(), getNewState(),
+                             getLr(), getBeta1(), getBeta2(), getEps(),
+                             getMomentum(), getWeightDecay(), "adamw");
+}
+
+LogicalResult MomentumOp::verify() {
+  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
+                             getState(), getNewParams(), getNewState(),
+                             getLr(), getBeta1(), getBeta2(), getEps(),
+                             getMomentum(), getWeightDecay(), "momentum");
+}
+
+LogicalResult AdafactorOp::verify() {
+  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
+                             getState(), getNewParams(), getNewState(),
+                             getLr(), getBeta1(), getBeta2(), getEps(),
+                             getMomentum(), getWeightDecay(), "adafactor");
+}
+
+LogicalResult LionOp::verify() {
+  return verifyOptimizerTree(getOperation(), getParams(), getGrads(),
+                             getState(), getNewParams(), getNewState(),
+                             getLr(), getBeta1(), getBeta2(), getEps(),
+                             getMomentum(), getWeightDecay(), "lion");
 }
 
 // ── Phase 1 identity folders for the elementwise binary family ───────────────

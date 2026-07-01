@@ -6,10 +6,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 136 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 146 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
-| `no_verifier` | 38 | No verifier declared.  TD constraints suffice — fine for many ops. |
+| `no_verifier` | 28 | No verifier declared.  TD constraints suffice — fine for many ops. |
 | **Total** | 174 | |
 
 ## Per-dialect details
@@ -18,7 +18,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Op | Status |
 |----|--------|
-| `ALiBiOp` | `no_verifier` |
+| `ALiBiOp` | `real` |
 | `AdafactorOp` | `no_verifier` |
 | `AdamOp` | `no_verifier` |
 | `AdamWOp` | `no_verifier` |
@@ -111,7 +111,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MSAIndexScoresOp` | `real` |
 | `MSASelectBlocksOp` | `real` |
 | `MSASparseAttentionOp` | `real` |
-| `MaskedFillOp` | `no_verifier` |
+| `MaskedFillOp` | `real` |
 | `MatmulOp` | `real` |
 | `ModifiedDeltaAttentionOp` | `real` |
 | `MoeCombineOp` | `real` |
@@ -123,7 +123,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `MorScatterOp` | `real` |
 | `MulOp` | `real` |
 | `MultiHeadAttentionOp` | `real` |
-| `NTKRopeOp` | `no_verifier` |
+| `NTKRopeOp` | `real` |
 | `NativeSparseAttnFusedOp` | `real` |
 | `NeighborsHaloExchangeOp` | `no_verifier` |
 | `NeighborsHaloPackOp` | `no_verifier` |
@@ -146,22 +146,22 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RLNormalizeGroupAdvantagesOp` | `real` |
 | `RLPPOPolicyLossOp` | `real` |
 | `RMSNormSafeOp` | `real` |
-| `ReduceOp` | `no_verifier` |
+| `ReduceOp` | `real` |
 | `ReduceScatterOp` | `no_verifier` |
 | `ReluOp` | `real` |
 | `ReshapeOp` | `real` |
 | `RetentionOp` | `real` |
 | `RingCreateOp` | `real` |
 | `RmsNormOp` | `real` |
-| `RopeMergeOp` | `no_verifier` |
+| `RopeMergeOp` | `real` |
 | `RopeOp` | `real` |
-| `RopeSplitOp` | `no_verifier` |
+| `RopeSplitOp` | `real` |
 | `SVDOp` | `real` |
 | `ScoreCombineOp` | `real` |
-| `SelectOp` | `no_verifier` |
+| `SelectOp` | `real` |
 | `SelectiveSsmOp` | `real` |
 | `SigmoidOp` | `real` |
-| `SiluMulOp` | `no_verifier` |
+| `SiluMulOp` | `real` |
 | `SiluOp` | `real` |
 | `SinOp` | `real` |
 | `SoftmaxOp` | `real` |
@@ -170,7 +170,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SpecAcceptOp` | `real` |
 | `SpecAcceptSampleOp` | `real` |
 | `SpecAcceptTreeSampleOp` | `real` |
-| `SpectralConvOp` | `no_verifier` |
+| `SpectralConvOp` | `real` |
 | `SqueezeOp` | `real` |
 | `SubOp` | `real` |
 | `SwigluFusedOp` | `no_verifier` |
@@ -181,7 +181,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `UnsqueezeOp` | `real` |
 | `VarlenSdpaOp` | `real` |
 | `ViewOp` | `real` |
-| `WriteRowOp` | `no_verifier` |
+| `WriteRowOp` | `real` |
 
 ### `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td`
 

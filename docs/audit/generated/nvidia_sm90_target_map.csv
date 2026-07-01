@@ -25,6 +25,10 @@ multi_head_attention,attention,artifact_only,fp32,sm_90a,"(64, 128, 16)",,,Targe
 layer_norm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 rmsnorm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 rmsnorm_safe,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
+memory_index_score,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
+msa_index_scores,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
+score_combine,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
+varlen_sdpa,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 alibi,position_encoding,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 rope,position_encoding,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 batched_gemm,tensor,artifact_only,fp32,sm_90a,"(64, 256, 16)",0.7800,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G

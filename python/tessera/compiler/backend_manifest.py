@@ -1272,6 +1272,16 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "WMMA matmul (bf16). Executes via runtime.launch() "
                  "(rocm_sparse_compiled).",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("composite_helper", "wmma"),
+        "notes": f"Composite helper {op} — Target IR keeps the helper "
+                 "compiler-visible while composing existing ROCm matmul/"
+                 "flash-attn/binary helper semantics plus host metadata logic. "
+                 "Executes via runtime.launch() (rocm_composite_helper_compiled) "
+                 "with exact reference fallback until HIP-native proof lands.",
+    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                 "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1) on gfx1151
     # (rocm_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {
@@ -1938,6 +1948,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
     **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py"
        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{(op, "x86"): "tests/unit/test_composite_helper_backend_parity.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
+    **{(op, "rocm"): "tests/unit/test_composite_helper_backend_parity.py"
+       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                  "score_combine")},
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
@@ -2891,6 +2907,15 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
                  "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
     } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"Composite helper {op} — host shape/metadata logic composes "
+                 "existing AVX-512-compatible matmul/attention/binary runtime "
+                 "semantics; x86_composite_helper_compiled lane; f32, matches "
+                 "the public op reference",
+    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
+                 "score_combine")},
     # MoE compute (PR) — routed per-token expert GEMVs (top-1), AVX-512
     # (x86_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {

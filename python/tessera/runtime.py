@@ -12632,6 +12632,7 @@ def _executor_table():
         "rocm_logical_compiled": _execute_rocm_compiled_logical,
         "rocm_bitwise_compiled": _execute_rocm_compiled_bitwise,
         "rocm_where_compiled": _execute_rocm_compiled_where,
+        "rocm_composite_helper_compiled": _execute_rocm_composite_helper_compiled,
         "x86_reduce_compiled": _execute_x86_compiled_reduce,
         "x86_scan_compiled": _execute_x86_compiled_scan,
         "x86_argreduce_compiled": _execute_x86_compiled_argreduce,
@@ -12686,6 +12687,7 @@ def _executor_table():
         "x86_predicate_compiled": _execute_x86_compiled_predicate,
         "x86_logical_compiled": _execute_x86_compiled_logical,
         "x86_bitwise_compiled": _execute_x86_compiled_bitwise,
+        "x86_composite_helper_compiled": _execute_x86_composite_helper_compiled,
         "rocm_silu_mul_compiled": _execute_rocm_compiled_silu_mul,
         "rocm_loss_compiled": _execute_rocm_compiled_pointwise_loss,
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
@@ -24002,6 +24004,59 @@ def _execute_runtime_cpu_op(op_name: str, operands: list[Any], kwargs: dict[str,
     if spec is not None and tessera is not None:
         return tessera.ops.registry.dispatch(spec.public_name, *operands, prefer_runtime=False, **kwargs)
     raise ValueError(f"unsupported runtime CPU op {op_name!r}")
+
+
+_COMPOSITE_HELPER_RUNTIME_OPS = {
+    "tessera.memory_index_score",
+    "tessera.msa_index_scores",
+    "tessera.varlen_sdpa",
+    "tessera.score_combine",
+}
+
+
+def _execute_composite_helper_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+    *,
+    compiler_path: str,
+    rocm_fallback: bool = False,
+) -> Any:
+    """Launch a compiler-visible helper composed from existing runtime ops."""
+    import numpy as np
+
+    md = artifact.metadata or {}
+    ops = md.get("ops")
+    if not isinstance(ops, list) or not ops or not isinstance(ops[0], Mapping):
+        raise ValueError(f"{compiler_path} executor expects a single op metadata row")
+    op = ops[0]
+    op_name = str(op.get("op_name") or op.get("name") or "")
+    if not op_name.startswith("tessera."):
+        op_name = f"tessera.{op_name}"
+    if op_name not in _COMPOSITE_HELPER_RUNTIME_OPS:
+        raise ValueError(
+            f"{compiler_path} executor only supports composite helpers; got {op_name!r}"
+        )
+
+    arg_names = list(md.get("arg_names") or op.get("operands") or [])
+    bound = _bind_launch_args(args, [str(name) for name in arg_names])
+    operands = [_as_numpy(bound[str(name)]) for name in op.get("operands", arg_names)]
+    kwargs = dict(md.get("kwargs") or {})
+    kwargs.update(dict(op.get("kwargs") or {}))
+    out = _execute_runtime_cpu_op(op_name, operands, kwargs, np)
+    if rocm_fallback:
+        return out, "reference_cpu"
+    return out
+
+
+def _execute_x86_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_composite_helper_compiled(
+        artifact, args, compiler_path="x86_composite_helper_compiled")
+
+
+def _execute_rocm_composite_helper_compiled(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_composite_helper_compiled(
+        artifact, args, compiler_path="rocm_composite_helper_compiled",
+        rocm_fallback=True)
 
 
 def _runtime_pair(value: Any) -> tuple[int, int]:

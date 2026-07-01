@@ -242,6 +242,10 @@ _NVIDIA_ARTIFACT = (
     "tessera.softmax", "tessera.softmax_safe", "tessera.online_softmax",
     "tessera.gelu", "tessera.silu", "tessera.silu_mul",
     "tessera.rope", "tessera.alibi",
+    # Composite helpers promoted during single-GPU closeout. CUDA carries
+    # Target IR artifacts; executable smoke remains hardware-gated.
+    "tessera.memory_index_score", "tessera.msa_index_scores",
+    "tessera.varlen_sdpa", "tessera.score_combine",
 )
 
 # Sprint H-3 (2026-05-11): expanded to match the planned ROCm kernel
@@ -264,6 +268,8 @@ _ROCM_ARTIFACT = (
     "tessera.softmax", "tessera.softmax_safe",
     "tessera.gelu", "tessera.silu", "tessera.silu_mul",
     "tessera.rope", "tessera.alibi",
+    "tessera.memory_index_score", "tessera.msa_index_scores",
+    "tessera.varlen_sdpa", "tessera.score_combine",
 )
 
 

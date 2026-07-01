@@ -12,8 +12,8 @@ Per-op view of ROCm coverage today (2026-05-20).  Same row schema as the Apple t
 | Status | Count |
 |---|---:|
 | ``hardware_verified`` | 2 |
-| ``compiled`` | 30 |
-| **total** | **32** |
+| ``compiled`` | 34 |
+| **total** | **36** |
 
 ## FP8 numeric semantics (per arch)
 
@@ -68,6 +68,15 @@ The same canonical `fp8_e4m3` / `fp8_e5m2` dtype encodes **different bits** acro
 | layer_norm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | rmsnorm | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
 | rmsnorm_safe | compiled | fp32,fp16,bf16 | hipcc≥7.2.4 | - | - | - |
+
+## other (4)
+
+| Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
+|---|---|---|---|---|---|---|
+| memory_index_score | compiled | fp32 | hipcc≥7.2.4 | - | - | - |
+| msa_index_scores | compiled | fp32 | hipcc≥7.2.4 | - | - | - |
+| score_combine | compiled | fp32 | hipcc≥7.2.4 | - | - | - |
+| varlen_sdpa | compiled | fp32 | hipcc≥7.2.4 | - | - | - |
 
 ## position_encoding (2)
 

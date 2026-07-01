@@ -67,6 +67,47 @@ mlir::LogicalResult LseSaveOp::verify() {
   return emitOpError("lse must be a scalar float or a rank-1 ranked tensor");
 }
 
+static bool attnDimsAgree(int64_t a, int64_t b) {
+  return mlir::ShapedType::isDynamic(a) || mlir::ShapedType::isDynamic(b) ||
+         a == b;
+}
+
+static bool isFloatElementType(mlir::Type type) {
+  return mlir::isa<mlir::FloatType>(type);
+}
+
+static mlir::LogicalResult verifyFloatScalarOrRankedTensor(mlir::Operation *op,
+                                                           mlir::Type type,
+                                                           llvm::StringRef label,
+                                                           int64_t maxRank) {
+  if (isFloatElementType(type))
+    return mlir::success();
+  if (auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(type)) {
+    if (ranked.getRank() > maxRank)
+      return op->emitOpError()
+             << label << " must have rank <= " << maxRank;
+    if (!isFloatElementType(ranked.getElementType()))
+      return op->emitOpError() << label << " element type must be floating";
+    return mlir::success();
+  }
+  return op->emitOpError()
+         << label << " must be a floating scalar or ranked tensor";
+}
+
+static mlir::LogicalResult verifySameRankedTensor(mlir::Operation *op,
+                                                  mlir::RankedTensorType a,
+                                                  mlir::RankedTensorType b,
+                                                  llvm::StringRef label) {
+  if (a.getRank() != b.getRank())
+    return op->emitOpError() << label << " ranks must match";
+  if (a.getElementType() != b.getElementType())
+    return op->emitOpError() << label << " element types must match";
+  for (int64_t i = 0, e = a.getRank(); i < e; ++i)
+    if (!attnDimsAgree(a.getDimSize(i), b.getDimSize(i)))
+      return op->emitOpError() << label << " shapes must match";
+  return mlir::success();
+}
+
 // Sprint V6c (2026-05-22) — target-aware tile size limits.
 //
 // Per-SM (tile_q_max, tile_kv_max) for the FA-4 ScaledDotProduct kernel.
@@ -160,6 +201,69 @@ mlir::LogicalResult OnlineSoftmaxOp::verify() {
   // running_m / running_l: scalar f32 or 1-D [tile_q] — accept both.
   // acc_out: [tile_q × d_v] — opaque check only.
   return mlir::success();
+}
+
+mlir::LogicalResult LseLoadOp::verify() {
+  return verifyFloatScalarOrRankedTensor(getOperation(), getLse().getType(),
+                                         "lse", /*maxRank=*/1);
+}
+
+mlir::LogicalResult LseAccumulateOp::verify() {
+  auto accType = mlir::dyn_cast<mlir::RankedTensorType>(getAcc().getType());
+  auto mType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
+  auto lType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
+  auto outType = mlir::dyn_cast<mlir::RankedTensorType>(getOutput().getType());
+  auto lseType = mlir::dyn_cast<mlir::RankedTensorType>(getLse().getType());
+  if (!accType || !mType || !lType || !outType || !lseType)
+    return emitOpError("expects ranked tensor operands and results");
+  if (accType.getRank() != 2 || outType.getRank() != 2)
+    return emitOpError("acc and output must be 2-D tensors [tile_q, d_v]");
+  if (mType.getRank() != 1 || lType.getRank() != 1 || lseType.getRank() != 1)
+    return emitOpError("running_m, running_l, and lse must be rank-1 tensors");
+  if (failed(verifySameRankedTensor(getOperation(), accType, outType,
+                                    "acc/output")))
+    return mlir::failure();
+  if (failed(verifySameRankedTensor(getOperation(), mType, lType,
+                                    "running_m/running_l")) ||
+      failed(verifySameRankedTensor(getOperation(), mType, lseType,
+                                    "running_m/lse")))
+    return mlir::failure();
+  if (!attnDimsAgree(accType.getDimSize(0), mType.getDimSize(0)))
+    return emitOpError("acc tile_q must match running_m length");
+  return mlir::success();
+}
+
+mlir::LogicalResult DropoutMaskOp::verify() {
+  double p = getDropoutP().convertToDouble();
+  if (!(p >= 0.0) || !(p < 1.0))
+    return emitOpError("dropout_p must satisfy 0.0 <= p < 1.0");
+  if (getSeed() < 0)
+    return emitOpError("seed must be non-negative");
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto maskedType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getMaskedScores().getType());
+  if (!scoresType || !maskedType)
+    return emitOpError("scores and masked_scores must be ranked tensors");
+  if (scoresType.getRank() != 2)
+    return emitOpError("scores must be a 2-D attention tile");
+  return verifySameRankedTensor(getOperation(), scoresType, maskedType,
+                                "dropout scores/masked_scores");
+}
+
+mlir::LogicalResult CausalMaskOp::verify() {
+  if (getQOffset() < 0 || getKvOffset() < 0)
+    return emitOpError("q_offset and kv_offset must be non-negative");
+  auto scoresType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
+  auto maskedType =
+      mlir::dyn_cast<mlir::RankedTensorType>(getMaskedScores().getType());
+  if (!scoresType || !maskedType)
+    return emitOpError("scores and masked_scores must be ranked tensors");
+  if (scoresType.getRank() != 2)
+    return emitOpError("scores must be a 2-D attention tile");
+  return verifySameRankedTensor(getOperation(), scoresType, maskedType,
+                                "causal scores/masked_scores");
 }
 
 void TesseraAttnDialect::initialize() {

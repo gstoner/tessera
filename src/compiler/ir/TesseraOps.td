@@ -1884,6 +1884,7 @@ class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
                        OptionalAttr<StrAttr>:$op);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_AllReduceOp : Tessera_CollectiveOp<"all_reduce", "Single-rank/reference all-reduce semantic op">;
@@ -2199,6 +2200,7 @@ def Tessera_CustomAdjointCallOp : Op<
   let arguments = (ins StrAttr:$name, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>:$cotangents);
   let assemblyFormat = "$name `(` operands `)` attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase-G G-B — Graph-IR bounded control-flow loop. The loop body is a

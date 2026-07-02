@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from tessera import rng_device as R
+from tessera import rng as keyed_rng
 
 
 def _rt_or_skip():
@@ -96,3 +97,49 @@ def test_rng_determinism():
     a = rt.launch(_art(rt, "tessera.rng_uniform", {"seed": 9, "shape": [1000]}), ())
     b = rt.launch(_art(rt, "tessera.rng_uniform", {"seed": 9, "shape": [1000]}), ())
     np.testing.assert_array_equal(np.asarray(a["output"]), np.asarray(b["output"]))
+
+
+def test_rng_distribution_tail_matches_keyed_reference():
+    rt = _rt_or_skip()
+    seed = 31
+    key = keyed_rng.RNGKey.from_seed(seed)
+    for op, kwargs, operands, expected in (
+        ("tessera.rng_bernoulli", {"seed": seed, "shape": [8], "p": 0.35}, (),
+         keyed_rng.bernoulli(key, (8,), p=0.35)),
+        ("tessera.rng_randint", {"seed": seed, "shape": [8], "low": 2, "high": 9}, (),
+         keyed_rng.randint(key, (8,), low=2, high=9)),
+        ("tessera.rng_truncated_normal", {"seed": seed, "shape": [8]}, (),
+         keyed_rng.truncated_normal(key, (8,))),
+        ("tessera.rng_gamma", {"seed": seed, "shape": [8], "concentration": 2.0}, (),
+         keyed_rng.gamma(key, (8,), concentration=2.0)),
+        ("tessera.rng_beta", {"seed": seed, "shape": [8], "alpha": 2.0, "beta": 3.0}, (),
+         keyed_rng.beta(key, (8,), alpha=2.0, beta_param=3.0)),
+        ("tessera.rng_poisson", {"seed": seed, "shape": [8], "rate": 4.0}, (),
+         keyed_rng.poisson(key, (8,), rate=4.0)),
+    ):
+        out = rt.launch(_art(rt, op, kwargs, operands), operands)
+        assert out["ok"] is True, out.get("reason")
+        np.testing.assert_array_equal(np.asarray(out["output"]), expected)
+
+
+def test_rng_distribution_operands_and_key_state_match_reference():
+    rt = _rt_or_skip()
+    seed = 37
+    key = keyed_rng.RNGKey.from_seed(seed)
+    logits = np.array([[0.1, 2.0, -1.0], [3.0, 0.0, 0.5]], np.float32)
+    out = rt.launch(_art(rt, "tessera.rng_categorical", {"seed": seed}, (logits,)),
+                    (logits,))
+    np.testing.assert_array_equal(np.asarray(out["output"]),
+                                  keyed_rng.categorical(key, logits))
+
+    alpha = np.array([0.5, 1.5, 2.5], np.float32)
+    out = rt.launch(_art(rt, "tessera.rng_dirichlet",
+                         {"seed": seed, "shape": [2]}, (alpha,)), (alpha,))
+    np.testing.assert_allclose(np.asarray(out["output"]),
+                               keyed_rng.dirichlet(key, alpha, shape=(2,)))
+
+    states = rt.launch(_art(rt, "tessera.rng_split", {"seed": seed, "num": 3}), ())
+    assert states["output"] == tuple(k.to_state() for k in key.split(3))
+    folded = rt.launch(_art(rt, "tessera.rng_fold_in",
+                            {"seed": seed, "data": "rank0"}), ())
+    assert folded["output"] == key.fold_in("rank0").to_state()

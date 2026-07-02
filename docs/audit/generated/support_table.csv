@@ -153,7 +153,7 @@ split,layout_transform,public,public,registered,complete,fused,fused,ready,bench
 squeeze,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
 stack,layout_transform,public,public,registered,complete,fused,compiled,ready,none
 tile,layout_transform,public,public,registered,complete,fused,compiled,ready,none
-tile_view,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
+tile_view,layout_transform,public,public,registered,complete,fused,not_applicable,ready,none
 transpose,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unpack,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unsqueeze,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none

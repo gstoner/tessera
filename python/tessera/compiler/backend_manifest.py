@@ -1045,6 +1045,12 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "this kernel via op-name dispatch but has no separate rocm op "
                  "row.)",
     },
+    "retention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Degree-2 retention (φ=x² plus optional decay) via the "
+                 "linear-attn kernel, dispatched by op name. Executes via "
+                 "runtime.launch() (rocm_linear_attn_compiled).",
+    },
     "fused_epilogue": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Matmul + fused bias/relu/gelu/silu epilogue on the f32 "
@@ -1185,6 +1191,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_class_loss_compiled).",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise", "reduction", "hip_runtime"),
+        "notes": f"Metric/contrastive loss {op} — generated ROCm reduce + "
+                 "exp/log kernels with host label/mask/sort/matrix structure. "
+                 "Executes via runtime.launch() (rocm_metric_loss_compiled).",
+    } for op in ("wasserstein_distance", "cosine_embedding_loss",
+                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                 "info_nce_loss", "seq2seq_loss")},
     # P7 — EBM / diffusion losses composed on the gfx1151 binary + reduce kernels
     # (diff/square + reductions on device; host structure). Executes via
     # rocm_ebm_loss_compiled.
@@ -1833,6 +1848,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("linear_attn", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("lightning_attention", "rocm"):
         "tests/unit/test_rocm_linear_attn_compiled.py",
+    ("retention", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
@@ -1870,6 +1886,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("complex_mul", "complex_div", "complex_conjugate",
                   "complex_abs", "complex_arg", "complex_exp", "complex_log",
                   "complex_sqrt", "complex_pow")},
+    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
+                  "laplacian_2d")},
+    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
+                  "laplacian_2d")},
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
@@ -1931,6 +1953,28 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_x86_nsa_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py"
        for op in ("linear_attn", "power_attn", "retention")},
+    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
+                  "rng_categorical", "rng_dirichlet", "rng_gamma",
+                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
+                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
+                  "rng_poisson", "rng_randint", "rng_truncated_normal",
+                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
+    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
+                  "rng_categorical", "rng_dirichlet", "rng_gamma",
+                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
+                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
+                  "rng_poisson", "rng_randint", "rng_truncated_normal",
+                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
+    **{(op, "x86"): "tests/unit/test_x86_structured_compute_compiled.py"
+       for op in ("attn_compressed_blocks", "attn_local_window_2d",
+                  "attn_top_k_blocks", "linear_attn_state",
+                  "lookahead_sparse_attention", "transpose")},
+    **{(op, "rocm"): "tests/unit/test_rocm_structured_compute_compiled.py"
+       for op in ("attn_compressed_blocks", "attn_local_window_2d",
+                  "attn_top_k_blocks", "linear_attn_state",
+                  "lookahead_sparse_attention", "power_attn", "transpose")},
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
@@ -1942,6 +1986,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_metric_loss_compiled.py"
+       for op in ("wasserstein_distance", "cosine_embedding_loss",
+                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                  "info_nce_loss", "seq2seq_loss")},
     **{(op, "x86"): "tests/unit/test_x86_ebm_loss_compiled.py"
        for op in ("score_matching_loss", "denoising_score_matching_loss",
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
@@ -2031,6 +2079,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_metric_loss_compiled.py"
+       for op in ("wasserstein_distance", "cosine_embedding_loss",
+                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                  "info_nce_loss", "seq2seq_loss")},
     **{(op, "rocm"): "tests/unit/test_rocm_ebm_loss_compiled.py"
        for op in ("score_matching_loss", "denoising_score_matching_loss",
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
@@ -2862,6 +2914,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "matches numpy 2e-4)",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 metric/contrastive loss {op} "
+                 "(reduce + exp/log kernels with host label/mask/sort/matrix "
+                 "structure; x86_metric_loss_compiled lane; f32, matches "
+                 "tessera.losses)",
+    } for op in ("wasserstein_distance", "cosine_embedding_loss",
+                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                 "info_nce_loss", "seq2seq_loss")},
     # P7 — EBM / diffusion losses composed on the AVX-512 binary + reduce kernels
     # (diff/square + reductions on device; argmax/one-hot/scalar scale on host;
     # x86_ebm_loss_compiled lane). f32.
@@ -3243,16 +3305,28 @@ _CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
                                   "clifford_norm_squared"})
 
 # P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops with a native x86 + ROCm device
-# lane: the table-driven Cl(3,0) bilinear products (geometric_product / wedge /
-# left_contraction) plus inner + rotor_sandwich, which compose on the same
-# bilinear kernel. x86 = fused (tessera_x86_clifford_bilinear_f32); ROCm =
-# compiled (generate-rocm-clifford-kernel). The rest stay reference/planned.
+# lane: table-driven Cl(3,0) bilinear products plus composite unary / field
+# wrappers that execute through runtime.launch() and compare against the
+# canonical flat Clifford shim.
 _CLIFFORD_DEVICE_COMPILED = frozenset({
     "clifford_geometric_product",
     "clifford_wedge",
     "clifford_left_contraction",
     "clifford_inner",
     "clifford_rotor_sandwich",
+    "clifford_reverse",
+    "clifford_grade_involution",
+    "clifford_conjugate",
+    "clifford_grade_projection",
+    "clifford_hodge_star",
+    "clifford_ext_deriv",
+    "clifford_codiff",
+    "clifford_vec_deriv",
+    "clifford_exp",
+    "clifford_integral",
+    "clifford_log",
+    "clifford_norm",
+    "clifford_norm_squared",
 })
 
 
@@ -3862,6 +3936,9 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 _COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
     "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
     "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
+    "check_cauchy_riemann", "conformal_jacobian",
+    "conformal_energy_on_sphere", "cross_ratio", "dbar", "dz",
+    "is_concyclic", "laplacian_2d", "mobius_from_three_points",
 })
 
 
@@ -4093,18 +4170,21 @@ _ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
 _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     # rng
     "rng_bernoulli", "rng_beta", "rng_categorical", "rng_dirichlet",
+    "rng_clone", "rng_fold_in", "rng_key", "rng_split",
     "rng_gamma", "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
     "rng_mala_sample", "rng_multinomial", "rng_permutation", "rng_poisson",
     "rng_randint", "rng_truncated_normal",
     # loss
-    "contrastive_loss", "cosine_embedding_loss", "ctc_loss", "info_nce_loss",
-    "nt_xent_loss", "seq2seq_loss", "triplet_loss", "wasserstein_distance",
+    "ctc_loss",
     # vision / pooling
     "center_crop", "image_resize", "interpolate",
     # recurrent / model / layout
     "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell",
     "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",
     "simple_rnn_cell",
+    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
+    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
+    "tile_view", "unpack",
     # smaller compute tails
     "cross_attention", "depthwise_conv1d", "edm_loss_weight",
     "edm_precondition", "factorized_pos_emb", "masked_scatter",
@@ -4126,12 +4206,201 @@ _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
 }
 
 
+_STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
+    "ctc_loss",
+    "center_crop", "image_resize", "interpolate",
+    "patchify", "pixel_shuffle", "pixel_unshuffle",
+    "conv1d", "conv_transpose", "lora_linear",
+    "gru_cell", "simple_rnn_cell",
+    "depthwise_conv1d",
+    "cross_attention", "perceiver_resampler",
+    "bidirectional_scan",
+    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
+    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
+    "tile_view", "unpack",
+    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
+    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
+    "spectral_norm",
+})
+
+_STRUCTURED_COMPUTE_CUDA_PLANNED_OPS: frozenset[str] = frozenset({
+    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
+    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
+    "spectral_norm",
+})
+
+_RNG_DISTRIBUTION_COMPILED_OPS: frozenset[str] = frozenset({
+    "rng_bernoulli", "rng_beta", "rng_categorical", "rng_clone",
+    "rng_dirichlet", "rng_fold_in", "rng_gamma", "rng_gibbs_sample",
+    "rng_hmc_sample", "rng_key", "rng_langevin_sample", "rng_mala_sample",
+    "rng_multinomial", "rng_permutation", "rng_poisson", "rng_randint",
+    "rng_split", "rng_truncated_normal",
+})
+
+_STRUCTURED_COMPUTE_OVERLAY_OPS: frozenset[str] = frozenset({
+    "attn_compressed_blocks", "attn_local_window_2d", "attn_top_k_blocks",
+    "linear_attn_state", "lookahead_sparse_attention", "power_attn",
+    "transpose",
+})
+
+
+def _overlay_structured_compute_entries(
+    op_name: str,
+    entries: list[BackendKernelEntry],
+) -> list[BackendKernelEntry]:
+    if op_name not in _STRUCTURED_COMPUTE_OVERLAY_OPS:
+        return entries
+    dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    notes = (
+        "Single-GPU structured-compute executable lane: runtime.launch() "
+        "dispatches target-specific artifacts for attention/layout structure. "
+        "This is direct execute/compare evidence, not a claim of a bespoke "
+        "fused kernel."
+    )
+    out = [e for e in entries if e.target not in {"x86", "rocm"}]
+    out.append(BackendKernelEntry(
+        target="x86",
+        status=_COMPILED_STATUS,
+        dtypes=dtypes,
+        feature_flags=("avx512",),
+        notes=notes + " Executes via x86_structured_compute_compiled.",
+        execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
+    ))
+    out.append(BackendKernelEntry(
+        target="rocm",
+        status=_COMPILED_STATUS,
+        dtypes=dtypes,
+        feature_flags=("hip_runtime", "structured_compute"),
+        notes=notes + " Executes via rocm_structured_compute_compiled.",
+        execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+        hipcc_version_min="7.2.4",
+    ))
+    return out
+
+
 def _single_gpu_compute_reference_manifest_for(
     op_name: str,
 ) -> list[BackendKernelEntry]:
     if op_name not in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
         return []
     dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    if op_name in _RNG_DISTRIBUTION_COMPILED_OPS:
+        notes = (
+            "Single-GPU RNG executable lane: runtime.launch() dispatches the "
+            "compiler-visible RNGKey/Philox sampler contract. Uniform/normal "
+            "exercise backend Philox directly; distribution/key-state ops are "
+            "structured transforms over that deterministic stream."
+        )
+        return [
+            BackendKernelEntry(
+                target="cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "philox", "reference_execution"),
+                notes="RNGKey Philox reference path",
+            ),
+            BackendKernelEntry(
+                target="x86",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("avx512",),
+                notes=notes + " Executes via x86_rng_compiled.",
+                execute_compare_fixture="tests/unit/test_x86_rng_compiled.py",
+            ),
+            BackendKernelEntry(
+                target="apple_cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "philox", "reference_execution"),
+                notes="RNGKey Philox reference path",
+            ),
+            BackendKernelEntry(
+                target="rocm",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("hip_runtime", "philox", "rng_distribution"),
+                notes=notes + " Executes via rocm_rng_compiled.",
+                execute_compare_fixture="tests/unit/test_rocm_rng_compiled.py",
+                hipcc_version_min="7.2.4",
+            ),
+        ]
+    if op_name in _STRUCTURED_COMPUTE_COMPILED_OPS:
+        notes = (
+            "Single-GPU structured-compute executable lane: runtime.launch() "
+            "dispatches target-specific artifacts for host-structured dynamic "
+            "programming, image/layout indexing, conv/recurrent cells, and "
+            "streaming depthwise convolution. This is direct execute/compare "
+            "evidence, not a claim of a bespoke fused kernel."
+        )
+        entries = [
+            BackendKernelEntry(
+                target="cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "reference_execution"),
+                notes="numpy reference path for structured compute",
+            ),
+            BackendKernelEntry(
+                target="x86",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("avx512",),
+                notes=notes + " Executes via x86_structured_compute_compiled.",
+                execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
+            ),
+            BackendKernelEntry(
+                target="apple_cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "reference_execution"),
+                notes="numpy reference path for structured compute",
+            ),
+        ]
+        apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
+        if apple_gpu is not None:
+            entries.append(BackendKernelEntry(
+                target="apple_gpu",
+                status=str(apple_gpu["status"]),
+                dtypes=tuple(apple_gpu["dtypes"]),
+                feature_flags=("metal", "mps", "msl"),
+                notes=str(apple_gpu.get("notes", "")),
+                runtime_symbol=apple_gpu.get("runtime_symbol"),
+                shape_envelope=apple_gpu.get("shape_envelope"),
+                benchmark_json=apple_gpu.get("benchmark_json"),
+                benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
+            ))
+        entries.extend([
+            BackendKernelEntry(
+                target="rocm",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("hip_runtime", "structured_compute"),
+                notes=notes + " Executes via rocm_structured_compute_compiled.",
+                execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+                hipcc_version_min="7.2.4",
+            ),
+        ])
+        if op_name in _STRUCTURED_COMPUTE_CUDA_PLANNED_OPS:
+            for target_name, flags, arch_min in (
+                ("nvidia_sm80", ("cuda", "wmma", "planned_kernel"), "sm_80"),
+                ("nvidia_sm90", ("cuda", "wgmma", "planned_kernel"), "sm_90a"),
+                ("nvidia_sm100", ("cuda", "tcgen05", "planned_kernel"), "sm_100a"),
+                ("nvidia_sm120", ("cuda", "tcgen05", "planned_kernel"), "sm_120a"),
+            ):
+                entries.append(BackendKernelEntry(
+                    target=target_name,
+                    status=_PLANNED_STATUS,
+                    dtypes=dtypes,
+                    feature_flags=flags,
+                    notes=(
+                        "Single-GPU closeout compute-tail CUDA owner: planned "
+                        "kernel lane. X86/ROCm have compiled structured-compute "
+                        "proof; CUDA remains explicitly open."
+                    ),
+                    cuda_arch_min=arch_min,
+                    nvcc_version_min="13.3",
+                ))
+        return entries
     notes = (
         "Single-GPU closeout compute-tail reference owner: Python/numpy "
         "execution path. Native fused kernel remains tracked separately."
@@ -4485,6 +4754,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # ``execute_compare_fixture`` paths to entries that ship a real
     # numerical-correctness test. Replaces the conformance matrix's
     # filename/content heuristic with first-class manifest data.
+    entries = _overlay_structured_compute_entries(op_name, entries)
     entries = _attach_numerical_fixtures(op_name, entries)
 
     return entries
@@ -4508,6 +4778,10 @@ def all_manifests() -> Mapping[str, list[BackendKernelEntry]]:
         if m:
             out[name] = m
     for name in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
+        m = manifest_for(name)
+        if m:
+            out[name] = m
+    for name in _STRUCTURED_COMPUTE_OVERLAY_OPS:
         m = manifest_for(name)
         if m:
             out[name] = m

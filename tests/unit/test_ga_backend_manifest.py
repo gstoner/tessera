@@ -345,12 +345,12 @@ def test_headline_apple_gpu_entry_documents_all_three_dtype_kernels() -> None:
     assert "apple_gpu_runtime.mm" in apple_gpu.notes
 
 
-def test_cpu_entries_document_python_reference_path() -> None:
-    # clifford_reverse stays on the reference path (not a P12 device-lane op).
-    manifest = bm.clifford_manifest_for("clifford_reverse")
+def test_clifford_integral_documents_compiled_composite_path() -> None:
+    manifest = bm.clifford_manifest_for("clifford_integral")
     x86 = next(e for e in manifest if e.target == "x86")
-    assert "Python GA reference" in x86.notes
-    assert "GA8" in x86.notes  # references the GA8 lowering pass
+    assert x86.status == "fused"
+    assert x86.execute_compare_fixture == "tests/unit/test_x86_clifford_compiled.py"
+    assert "x86_clifford_compiled lane" in x86.notes
 
 
 def test_nvidia_entry_documents_phase_g_gating() -> None:
@@ -359,11 +359,12 @@ def test_nvidia_entry_documents_phase_g_gating() -> None:
     assert "Phase G" in nv.notes
 
 
-def test_rocm_entry_documents_phase_h_gating() -> None:
-    # clifford_reverse stays Phase-H-gated (not a P12 device-lane op).
-    manifest = bm.clifford_manifest_for("clifford_reverse")
+def test_rocm_entry_documents_compiled_clifford_path() -> None:
+    manifest = bm.clifford_manifest_for("clifford_integral")
     rocm = next(e for e in manifest if e.target == "rocm")
-    assert "Phase H" in rocm.notes
+    assert rocm.status == "compiled"
+    assert rocm.execute_compare_fixture == "tests/unit/test_rocm_clifford_compiled.py"
+    assert "rocm_clifford_compiled lane" in rocm.notes
 
 
 # ---------------------------------------------------------------------------

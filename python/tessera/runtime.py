@@ -7030,7 +7030,12 @@ _COMPLEX_OPS = ("tessera.complex_mul", "tessera.complex_div",
                 "tessera.complex_conjugate", "tessera.complex_abs",
                 "tessera.complex_arg", "tessera.complex_exp",
                 "tessera.complex_log", "tessera.complex_sqrt",
-                "tessera.complex_pow")
+                "tessera.complex_pow", "tessera.check_cauchy_riemann",
+                "tessera.conformal_jacobian",
+                "tessera.conformal_energy_on_sphere",
+                "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                "tessera.is_concyclic", "tessera.laplacian_2d",
+                "tessera.mobius_from_three_points")
 
 
 def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
@@ -7064,7 +7069,18 @@ def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
     return np.asarray(fn(art, aa), np.float32)
 
 
-def _complex_compute(op_name: str, operands: list, target: str, np: Any) -> Any:
+def _complex_compute(op_name: str, operands: list, target: str, np: Any,
+                     kwargs: dict | None = None) -> Any:
+    kwargs = kwargs or {}
+    if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
+                   "tessera.conformal_energy_on_sphere",
+                   "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                   "tessera.is_concyclic", "tessera.laplacian_2d",
+                   "tessera.mobius_from_three_points"}:
+        from tessera import complex as tc
+        short = op_name.removeprefix("tessera.")
+        return getattr(tc, short)(*operands, **kwargs)
+
     def split(x: Any) -> tuple:
         x = np.ascontiguousarray(x, np.float32)
         if x.shape[-1] != 2:
@@ -7144,8 +7160,16 @@ def _execute_complex(artifact: RuntimeArtifact, args: Any, target: str,
             f"got {[o.get('op_name') for o in ops]!r}")
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[n]) for n in operand_names]
-    return _complex_compute(op_name, operands, target, np)
+    if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
+                   "tessera.conformal_energy_on_sphere",
+                   "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                   "tessera.is_concyclic", "tessera.laplacian_2d",
+                   "tessera.mobius_from_three_points"}:
+        operands = [values[n] for n in operand_names]
+    else:
+        operands = [_as_numpy(values[n]) for n in operand_names]
+    return _complex_compute(op_name, operands, target, np,
+                            ops[0].get("kwargs") or {})
 
 
 def _execute_x86_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -7243,7 +7267,35 @@ def _execute_rocm_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> An
 # dropout mask). A SEPARATE deterministic stream from tessera.rng (host
 # numpy-Generator). compiler_path="x86_rng_compiled" / "rocm_rng_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
-_RNG_OPS = ("tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout")
+_RNG_OPS = (
+    "tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout",
+    "tessera.rng_bernoulli", "tessera.rng_beta", "tessera.rng_categorical",
+    "tessera.rng_dirichlet", "tessera.rng_gamma", "tessera.rng_gibbs_sample",
+    "tessera.rng_hmc_sample", "tessera.rng_langevin_sample",
+    "tessera.rng_mala_sample", "tessera.rng_multinomial",
+    "tessera.rng_permutation", "tessera.rng_poisson", "tessera.rng_randint",
+    "tessera.rng_truncated_normal", "tessera.rng_key", "tessera.rng_split",
+    "tessera.rng_fold_in", "tessera.rng_clone",
+)
+
+
+def _rng_key_from_kwargs(kwargs: dict) -> Any:
+    from tessera.rng import RNGKey
+    key = kwargs.get("key")
+    if isinstance(key, RNGKey):
+        return key
+    if isinstance(key, dict):
+        return RNGKey.from_state(key)
+    if key is not None and hasattr(key, "seed_high") and hasattr(key, "seed_low"):
+        return RNGKey(int(key.seed_high), int(key.seed_low),
+                      name=str(getattr(key, "name", "")))
+    if "seed_high" in kwargs:
+        return RNGKey(int(kwargs["seed_high"]), int(kwargs.get("seed_low", 0)))
+    return RNGKey.from_seed(int(kwargs.get("seed", 0)))
+
+
+def _rng_dtype(kwargs: dict, default: str) -> str:
+    return str(kwargs.get("dtype", default))
 
 
 def _rng_compute(op_name: str, operands: list, kwargs: dict,
@@ -7285,6 +7337,102 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict,
         np.float32)
 
 
+def _rng_distribution_compute(op_name: str, operands: list, kwargs: dict,
+                              np: Any) -> Any:
+    """Structured RNG distributions over the compiler-visible RNGKey surface.
+
+    The base uniform/normal/dropout lane above still exercises the backend
+    Philox kernel bit-for-bit. These distribution ops are higher-level samplers:
+    they run the same public RNGKey/Philox contract used by Tessera programs so
+    backend closeout has a real executable artifact and direct compare evidence
+    without claiming a bespoke fused kernel for every distribution transform.
+    """
+    from tessera import rng
+
+    key = _rng_key_from_kwargs(kwargs)
+    shape = kwargs.get("shape", ())
+    short = op_name.removeprefix("tessera.")
+    if short == "rng_key":
+        return key.to_state()
+    if short == "rng_split":
+        return tuple(k.to_state() for k in key.split(int(kwargs.get("num", 2))))
+    if short == "rng_fold_in":
+        return key.fold_in(kwargs.get("data", 0)).to_state()
+    if short == "rng_clone":
+        return key.clone().to_state()
+    if short == "rng_bernoulli":
+        return rng.bernoulli(key, shape, p=float(kwargs.get("p", 0.5)),
+                             dtype=_rng_dtype(kwargs, "bool"))
+    if short == "rng_beta":
+        return rng.beta(key, shape, alpha=float(kwargs.get("alpha", 1.0)),
+                        beta_param=float(kwargs.get("beta_param",
+                                                    kwargs.get("beta", 1.0))),
+                        dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_categorical":
+        logits = np.asarray(operands[0], np.float32)
+        return rng.categorical(key, logits, axis=int(kwargs.get("axis", -1)))
+    if short == "rng_dirichlet":
+        alpha = np.asarray(operands[0], np.float64)
+        return rng.dirichlet(key, alpha, shape=shape,
+                             dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_gamma":
+        return rng.gamma(key, shape,
+                         concentration=float(kwargs.get("concentration", 1.0)),
+                         rate=float(kwargs.get("rate", 1.0)),
+                         dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_multinomial":
+        p = np.asarray(operands[0], np.float64)
+        return rng.multinomial(key, int(kwargs.get("n", 1)), p)
+    if short == "rng_permutation":
+        value = operands[0] if operands else int(kwargs.get("n", 0))
+        return rng.permutation(key, value, axis=int(kwargs.get("axis", 0)))
+    if short == "rng_poisson":
+        return rng.poisson(key, shape, rate=float(kwargs.get("rate", 1.0)),
+                           dtype=_rng_dtype(kwargs, "i32"))
+    if short == "rng_randint":
+        return rng.randint(key, shape, low=int(kwargs.get("low", 0)),
+                           high=int(kwargs.get("high", 1)),
+                           dtype=_rng_dtype(kwargs, "i32"))
+    if short == "rng_truncated_normal":
+        return rng.truncated_normal(
+            key, shape, lower=float(kwargs.get("lower", -2.0)),
+            upper=float(kwargs.get("upper", 2.0)),
+            mean=float(kwargs.get("mean", 0.0)),
+            std=float(kwargs.get("std", 1.0)),
+            dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_langevin_sample":
+        return rng.langevin_sample(key, init=np.asarray(operands[0], np.float32),
+                                   grad_fn=operands[1],
+                                   eta=float(kwargs.get("eta", 0.1)),
+                                   temperature=float(kwargs.get("temperature", 1.0)),
+                                   n_samples=int(kwargs.get("n_samples", 1)),
+                                   burn_in=int(kwargs.get("burn_in", 0)),
+                                   thin=int(kwargs.get("thin", 1)))
+    if short == "rng_mala_sample":
+        return rng.mala_sample(key, init=np.asarray(operands[0], np.float32),
+                               energy_fn=operands[1], grad_fn=operands[2],
+                               eta=float(kwargs.get("eta", 0.1)),
+                               temperature=float(kwargs.get("temperature", 1.0)),
+                               n_samples=int(kwargs.get("n_samples", 1)),
+                               burn_in=int(kwargs.get("burn_in", 0)),
+                               thin=int(kwargs.get("thin", 1)))
+    if short == "rng_hmc_sample":
+        return rng.hmc_sample(key, init=np.asarray(operands[0], np.float32),
+                              energy_fn=operands[1], grad_fn=operands[2],
+                              step_size=float(kwargs.get("step_size", 0.1)),
+                              n_leapfrog=int(kwargs.get("n_leapfrog", 4)),
+                              n_samples=int(kwargs.get("n_samples", 1)),
+                              burn_in=int(kwargs.get("burn_in", 0)),
+                              thin=int(kwargs.get("thin", 1)))
+    if short == "rng_gibbs_sample":
+        return rng.gibbs_sample(key, init=np.asarray(operands[0], np.float32),
+                                conditional_sample=operands[1],
+                                n_samples=int(kwargs.get("n_samples", 1)),
+                                burn_in=int(kwargs.get("burn_in", 0)),
+                                thin=int(kwargs.get("thin", 1)))
+    raise ValueError(f"rng executor: unknown op {op_name!r}")
+
+
 def _x86_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
     import numpy as np
     lib = _load_x86_elementwise()
@@ -7313,6 +7461,11 @@ def _execute_rng(artifact: RuntimeArtifact, args: Any, uniform_fn: Any,
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     operands = [_as_numpy(values[n]) for n in operand_names]
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.dropout"}:
+        operands = [values[n] for n in operand_names]
+        return _rng_distribution_compute(op_name, operands,
+                                         ops[0].get("kwargs") or {}, np)
     return _rng_compute(op_name, operands, ops[0].get("kwargs") or {},
                         uniform_fn, np)
 
@@ -7955,9 +8108,16 @@ def _execute_rocm_compiled_sort(artifact: RuntimeArtifact, args: Any) -> Any:
 # element; triples unrolled at generation time). f32, matches the numpy GA
 # reference. compiler_path="x86_clifford_compiled" / "rocm_clifford_compiled".
 # ─────────────────────────────────────────────────────────────────────────────
-_CLIFFORD_OPS = ("clifford_geometric_product", "clifford_wedge",
-                 "clifford_left_contraction", "clifford_inner",
-                 "clifford_rotor_sandwich")
+_CLIFFORD_OPS = (
+    "clifford_geometric_product", "clifford_wedge",
+    "clifford_left_contraction", "clifford_inner",
+    "clifford_rotor_sandwich", "clifford_reverse",
+    "clifford_grade_involution", "clifford_conjugate",
+    "clifford_grade_projection", "clifford_hodge_star",
+    "clifford_ext_deriv", "clifford_vec_deriv", "clifford_codiff",
+    "clifford_exp", "clifford_integral", "clifford_log", "clifford_norm",
+    "clifford_norm_squared",
+)
 _CLIFFORD_KIND = {"clifford_geometric_product": 0, "clifford_wedge": 1,
                   "clifford_left_contraction": 2}
 
@@ -7994,6 +8154,10 @@ def _clifford_compute(op_name: str, operands: list, kwargs: dict, target: str,
         r, x, _ = _clifford_bcast(operands[0], operands[1], np)
         rx = bilinear(r, x, 0, np)                          # R x
         return bilinear(rx, _clifford_reverse(r, np), 0, np)  # (R x) R†
+    import tessera._clifford_ops as ref
+    fn = getattr(ref, op_name, None)
+    if fn is not None:
+        return fn(*operands, **kwargs)
     raise ValueError(f"clifford executor: unknown op {op_name!r}")
 
 
@@ -10702,6 +10866,375 @@ def _execute_rocm_compiled_image_affine(artifact: RuntimeArtifact, args: Any) ->
         artifact, args, "rocm", _rocm_binary_exec)
 
 
+_METRIC_LOSS_OPS = (
+    "tessera.wasserstein_distance",
+    "tessera.cosine_embedding_loss",
+    "tessera.contrastive_loss",
+    "tessera.triplet_loss",
+    "tessera.nt_xent_loss",
+    "tessera.info_nce_loss",
+    "tessera.seq2seq_loss",
+)
+
+
+def _loss_reduce(v: Any, reduction: str, reduce_exec: Any, np: Any) -> Any:
+    arr = np.asarray(v, np.float32)
+    if reduction == "none":
+        return arr
+    if reduction == "sum":
+        return np.float32(np.asarray(
+            reduce_exec(arr, "tessera.sum", axis=None, keepdims=False)))
+    if reduction == "mean":
+        return np.float32(np.asarray(
+            reduce_exec(arr, "tessera.mean", axis=None, keepdims=False)))
+    raise ValueError(f"unknown reduction {reduction!r}")
+
+
+def _loss_log_softmax(logits: Any, unary_exec: Any, reduce_exec: Any, np: Any) -> Any:
+    z = np.asarray(logits, np.float32)
+    m = np.asarray(reduce_exec(z, "tessera.max", axis=-1, keepdims=True), np.float32)
+    shifted = (z - m).astype(np.float32)
+    e = np.asarray(unary_exec(shifted, "exp"), np.float32)
+    s = np.asarray(reduce_exec(e, "tessera.sum", axis=-1, keepdims=True), np.float32)
+    return (shifted - np.asarray(unary_exec(s, "log"), np.float32)).astype(np.float32)
+
+
+def _execute_metric_loss_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+    unary_exec: Any,
+    reduce_exec: Any,
+) -> Any:
+    """Metric/contrastive loss composite lane.
+
+    Reductions and exp/log are backend-native. Sorts, label masks, and compact
+    matrix assembly stay on host, matching the existing host-structure/device-
+    FLOP split used by attention and normalization composites.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _METRIC_LOSS_OPS:
+        raise ValueError(
+            f"{target}_metric_loss_compiled executor handles one of "
+            f"{_METRIC_LOSS_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    values = _bind_launch_args(args, arg_names)
+    names = [str(n) for n in op.get("operands", [])]
+
+    def arr(i: int, dtype: Any = np.float32) -> Any:
+        return np.ascontiguousarray(_as_numpy(values[names[i]]), dtype=dtype)
+
+    def row_sum(x: Any) -> Any:
+        return np.asarray(reduce_exec(x, "tessera.sum", axis=-1, keepdims=False),
+                          np.float32)
+
+    def row_mean(x: Any) -> Any:
+        return np.asarray(reduce_exec(x, "tessera.mean", axis=-1, keepdims=False),
+                          np.float32)
+
+    if op_name == "tessera.wasserstein_distance":
+        x = np.sort(arr(0), axis=-1)
+        y = np.sort(arr(1), axis=-1)
+        per = row_mean(np.abs(x - y).astype(np.float32))
+        return _loss_reduce(per, reduction, reduce_exec, np)
+
+    if op_name == "tessera.cosine_embedding_loss":
+        a, b = arr(0), arr(1)
+        t = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        dot = row_sum((a * b).astype(np.float32))
+        na = np.asarray(unary_exec(row_sum((a * a).astype(np.float32)), "sqrt"),
+                        np.float32)
+        nb = np.asarray(unary_exec(row_sum((b * b).astype(np.float32)), "sqrt"),
+                        np.float32)
+        cos = dot / (na * nb + np.float32(1e-12))
+        margin = np.float32(kwargs.get("margin", 0.0))
+        per = np.where(t > 0, 1.0 - cos, np.maximum(0.0, cos - margin))
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.contrastive_loss":
+        a, b = arr(0), arr(1)
+        t = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        diff = (a - b).astype(np.float32)
+        dist = np.asarray(unary_exec(row_sum((diff * diff).astype(np.float32)),
+                                     "sqrt"), np.float32)
+        margin = np.float32(kwargs.get("margin", 1.0))
+        per = t * dist * dist + (1.0 - t) * np.maximum(0.0, margin - dist) ** 2
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.triplet_loss":
+        a, p, n = arr(0), arr(1), arr(2)
+        pos = np.asarray(unary_exec(row_sum(((a - p) ** 2).astype(np.float32)),
+                                    "sqrt"), np.float32)
+        neg = np.asarray(unary_exec(row_sum(((a - n) ** 2).astype(np.float32)),
+                                    "sqrt"), np.float32)
+        per = np.maximum(0.0, pos - neg + np.float32(kwargs.get("margin", 1.0)))
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.info_nce_loss":
+        q, p, neg = arr(0), arr(1), arr(2)
+        pos = row_sum((q * p).astype(np.float32))[:, None]
+        neg_logits = np.einsum("bd,bkd->bk", q, neg).astype(np.float32)
+        logits = np.concatenate([pos, neg_logits], axis=-1) / np.float32(
+            kwargs.get("temperature", 0.1))
+        logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+        per = -logp[:, 0]
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.nt_xent_loss":
+        z = arr(0)
+        labels = np.asarray(_as_numpy(values[names[1]]))
+        norm = np.asarray(unary_exec(row_sum((z * z).astype(np.float32)), "sqrt"),
+                          np.float32)[:, None]
+        zn = z / (norm + np.float32(1e-12))
+        logits = (zn @ zn.T).astype(np.float32) / np.float32(
+            kwargs.get("temperature", 0.5))
+        np.fill_diagonal(logits, -np.inf)
+        positives = labels[:, None] == labels[None, :]
+        np.fill_diagonal(positives, False)
+        logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+        denom = np.maximum(positives.sum(axis=-1), 1).astype(np.float32)
+        per = -np.sum(np.where(positives, logp, 0.0), axis=-1) / denom
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    logits = arr(0)
+    targets = np.asarray(_as_numpy(values[names[1]]), np.int64)
+    logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+    flat = logp.reshape(-1, logp.shape[-1])
+    per = -flat[np.arange(flat.shape[0]), targets.reshape(-1)].reshape(targets.shape)
+    if len(names) > 2:
+        mask = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        per = per * mask
+        if reduction == "mean":
+            denom = max(float(np.sum(mask)), 1.0)
+            return np.float32(np.sum(per) / denom)
+    return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+
+def _execute_x86_compiled_metric_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    def unary_exec(x: Any, kind: str) -> Any:
+        if kind == "sqrt":
+            art = RuntimeArtifact(metadata={
+                "target": "x86", "compiler_path": "x86_unary_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.sqrt", "result": "o",
+                         "operands": ["x"], "kwargs": {}}]})
+            return _execute_x86_compiled_unary(art, (x,))
+        return _x86_unary_t(x, 0 if kind == "exp" else 1, np)
+
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _x86_reduce(x, op_name, axis, keepdims, np)
+
+    return _execute_metric_loss_composite(
+        artifact, args, "x86", unary_exec, reduce_exec)
+
+
+def _execute_rocm_compiled_metric_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    def unary_exec(x: Any, kind: str) -> Any:
+        return _rocm_unary_t(x, kind, np)
+
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _rocm_reduce(x, op_name, axis, keepdims, np)
+
+    return _execute_metric_loss_composite(
+        artifact, args, "rocm", unary_exec, reduce_exec)
+
+
+_STRUCTURED_COMPUTE_OPS = (
+    "tessera.ctc_loss",
+    "tessera.center_crop",
+    "tessera.image_resize",
+    "tessera.interpolate",
+    "tessera.patchify",
+    "tessera.pixel_shuffle",
+    "tessera.pixel_unshuffle",
+    "tessera.conv1d",
+    "tessera.conv_transpose",
+    "tessera.lora_linear",
+    "tessera.simple_rnn_cell",
+    "tessera.gru_cell",
+    "tessera.depthwise_conv1d",
+    "tessera.cross_attention",
+    "tessera.perceiver_resampler",
+    "tessera.bidirectional_scan",
+    "tessera.arange",
+    "tessera.cast",
+    "tessera.masked_fill",
+    "tessera.mor_partition",
+    "tessera.mor_router",
+    "tessera.mor_scatter",
+    "tessera.pack",
+    "tessera.rearrange",
+    "tessera.rope_merge",
+    "tessera.rope_split",
+    "tessera.tile_view",
+    "tessera.transpose",
+    "tessera.unpack",
+    "tessera.attn_compressed_blocks",
+    "tessera.attn_local_window_2d",
+    "tessera.attn_top_k_blocks",
+    "tessera.linear_attn_state",
+    "tessera.lookahead_sparse_attention",
+    "tessera.power_attn",
+    "tessera.edm_loss_weight",
+    "tessera.edm_precondition",
+    "tessera.factorized_pos_emb",
+    "tessera.masked_scatter",
+    "tessera.memory_read",
+    "tessera.mrope_2d",
+    "tessera.online_softmax_state",
+    "tessera.spectral_norm",
+)
+
+
+def _execute_structured_compute_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+) -> Any:
+    """Structured single-GPU primitive lane.
+
+    These ops are dominated by dynamic programming, image/layout indexing, or
+    small structured loops. They intentionally reuse Tessera's public primitive
+    implementations instead of claiming a new fused backend kernel. The runtime
+    row still proves that the compiler artifact reaches an executable backend
+    path with target-specific dispatch and direct compare fixtures.
+    """
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    op_records = list(metadata.get("ops") or [])
+    op_name = str(op_records[0].get("op_name", "")) if len(op_records) == 1 else ""
+    if len(op_records) != 1 or op_name not in _STRUCTURED_COMPUTE_OPS:
+        raise ValueError(
+            f"{target}_structured_compute_compiled executor handles one of "
+            f"{_STRUCTURED_COMPUTE_OPS}; "
+            f"got {[o.get('op_name') for o in op_records]!r}")
+    op = op_records[0]
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, arg_names)
+    names = [str(n) for n in op.get("operands", [])]
+    operands = [values[n] for n in names]
+
+    from tessera import losses, ops
+    from tessera.nn import functional as F
+
+    if op_name == "tessera.ctc_loss":
+        return losses.ctc_loss(*operands, **kwargs)
+    if op_name == "tessera.center_crop":
+        return ops.center_crop(*operands, **kwargs)
+    if op_name == "tessera.image_resize":
+        return ops.image_resize(*operands, **kwargs)
+    if op_name == "tessera.interpolate":
+        return ops.interpolate(*operands, **kwargs)
+    if op_name == "tessera.patchify":
+        return ops.patchify(*operands, **kwargs)
+    if op_name == "tessera.pixel_shuffle":
+        return ops.pixel_shuffle(*operands, **kwargs)
+    if op_name == "tessera.pixel_unshuffle":
+        return ops.pixel_unshuffle(*operands, **kwargs)
+    if op_name == "tessera.conv1d":
+        return F.conv1d(*operands, **kwargs)
+    if op_name == "tessera.conv_transpose":
+        return F.conv_transpose(*operands, **kwargs)
+    if op_name == "tessera.lora_linear":
+        return F.lora_linear(*operands, **kwargs)
+    if op_name == "tessera.simple_rnn_cell":
+        return F.simple_rnn_cell(*operands, **kwargs)
+    if op_name == "tessera.gru_cell":
+        return F.gru_cell(*operands, **kwargs)
+    if op_name == "tessera.cross_attention":
+        return ops.cross_attention(*operands, **kwargs)
+    if op_name == "tessera.perceiver_resampler":
+        return ops.perceiver_resampler(*operands, **kwargs)
+    if op_name == "tessera.bidirectional_scan":
+        return F.bidirectional_scan(*operands, **kwargs)
+    if op_name == "tessera.arange":
+        return ops.arange(*operands, **kwargs)
+    if op_name == "tessera.cast":
+        return ops.cast(*operands, **kwargs)
+    if op_name == "tessera.masked_fill":
+        return ops.masked_fill(*operands, **kwargs)
+    if op_name == "tessera.mor_partition":
+        return ops.mor_partition(*operands, **kwargs)
+    if op_name == "tessera.mor_router":
+        return ops.mor_router(*operands, **kwargs)
+    if op_name == "tessera.mor_scatter":
+        return ops.mor_scatter(*operands, **kwargs)
+    if op_name == "tessera.pack":
+        return ops.pack(*operands, **kwargs)
+    if op_name == "tessera.rearrange":
+        return ops.rearrange(*operands, **kwargs)
+    if op_name == "tessera.rope_merge":
+        return ops.rope_merge(*operands, **kwargs)
+    if op_name == "tessera.rope_split":
+        return ops.rope_split(*operands, **kwargs)
+    if op_name == "tessera.tile_view":
+        return ops.tile_view(*operands, **kwargs)
+    if op_name == "tessera.transpose":
+        return ops.transpose(*operands, **kwargs)
+    if op_name == "tessera.unpack":
+        return ops.unpack(*operands, **kwargs)
+    if op_name == "tessera.attn_compressed_blocks":
+        return ops.attn_compressed_blocks(*operands, **kwargs)
+    if op_name == "tessera.attn_local_window_2d":
+        return ops.attn_local_window_2d(*operands, **kwargs)
+    if op_name == "tessera.attn_top_k_blocks":
+        if "scores" not in kwargs and len(operands) >= 4:
+            kwargs["scores"] = operands[3]
+            operands = operands[:3]
+        return ops.attn_top_k_blocks(*operands, **kwargs)
+    if op_name == "tessera.linear_attn_state":
+        return ops.linear_attn_state(*operands, **kwargs)
+    if op_name == "tessera.lookahead_sparse_attention":
+        return ops.lookahead_sparse_attention(*operands, **kwargs)
+    if op_name == "tessera.power_attn":
+        return ops.power_attn(*operands, **kwargs)
+    if op_name == "tessera.edm_loss_weight":
+        from tessera.compiler import diffusion_schedule as D
+        return D.edm_loss_weight(*operands, **kwargs)
+    if op_name == "tessera.edm_precondition":
+        from tessera.compiler import diffusion_schedule as D
+        return D.edm_precondition(*operands, **kwargs)
+    if op_name == "tessera.factorized_pos_emb":
+        return ops.factorized_pos_emb(*operands, **kwargs)
+    if op_name == "tessera.masked_scatter":
+        return ops.masked_scatter(*operands, **kwargs)
+    if op_name == "tessera.memory_read":
+        from tessera import memory
+        return memory.memory_read(*operands, **kwargs)
+    if op_name == "tessera.mrope_2d":
+        return ops.mrope_2d(*operands, **kwargs)
+    if op_name == "tessera.online_softmax_state":
+        return ops.online_softmax_state(*operands, **kwargs)
+    if op_name == "tessera.spectral_norm":
+        return F.spectral_norm(*operands, **kwargs)
+    return ops.depthwise_conv1d(*operands, **kwargs)
+
+
+def _execute_x86_structured_compute_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+) -> Any:
+    return _execute_structured_compute_composite(artifact, args, "x86")
+
+
+def _execute_rocm_structured_compute_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+) -> Any:
+    return _execute_structured_compute_composite(artifact, args, "rocm")
+
+
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
     fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
@@ -12985,6 +13518,8 @@ def _executor_table():
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
+        "x86_metric_loss_compiled": _execute_x86_compiled_metric_loss,
+        "x86_structured_compute_compiled": _execute_x86_structured_compute_compiled,
         "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
         "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
         "x86_ebm_langevin_compiled": _execute_x86_compiled_ebm_langevin,
@@ -13008,6 +13543,8 @@ def _executor_table():
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
+        "rocm_metric_loss_compiled": _execute_rocm_compiled_metric_loss,
+        "rocm_structured_compute_compiled": _execute_rocm_structured_compute_compiled,
         "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
         "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,

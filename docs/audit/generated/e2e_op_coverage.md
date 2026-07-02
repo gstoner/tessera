@@ -343,7 +343,7 @@ each row into a single E2E tier.
 | ``mor_scatter`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``reshape`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
-| ``tile_view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
+| ``tile_view`` | layout_transform | public | public | registered | fused | not_applicable | ready | none |
 | ``unsqueeze`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``view`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | not_applicable | not_applicable | ready | none |

@@ -155,6 +155,30 @@ def clifford_codiff(field: Any, *, spacing=None) -> np.ndarray:
     return np.asarray(cal.codiff(_field(field, spacing)).values)
 
 
+def clifford_integral(field: Any, *, weights=None) -> np.ndarray:
+    """Weighted integral over a sampled Cl(3,0) multivector field.
+
+    ``field`` is flattened over all spatial/sample axes and must end in the
+    eight Cl(3,0) coefficients. ``weights`` defaults to unit cell weights and
+    may be shaped like the sample axes or flattened. This is the flat runtime
+    ABI used by the X86/ROCm composed lanes; manifold-aware callers should keep
+    using :func:`tessera.ga.calculus.integral`.
+    """
+    arr = np.asarray(field)
+    if arr.shape[-1] != 8:
+        raise ValueError(f"clifford_integral expects field [...,8]; got {arr.shape}")
+    flat = arr.reshape(-1, 8)
+    if weights is None:
+        w = np.ones((flat.shape[0],), dtype=arr.dtype)
+    else:
+        w = np.asarray(weights, dtype=arr.dtype).reshape(-1)
+        if w.shape[0] != flat.shape[0]:
+            raise ValueError(
+                "clifford_integral weights must match the flattened sample "
+                f"count {flat.shape[0]}; got {w.shape[0]}")
+    return np.einsum("i,ij->j", w, flat)
+
+
 # ── norms (scalar-valued) ──────────────────────────────────────────────────── #
 def clifford_norm(a: Any) -> np.ndarray:
     from tessera.ga import ops as G
@@ -181,6 +205,7 @@ CLIFFORD_OPS = {
     "clifford_ext_deriv": clifford_ext_deriv,
     "clifford_vec_deriv": clifford_vec_deriv,
     "clifford_codiff": clifford_codiff,
+    "clifford_integral": clifford_integral,
     "clifford_exp": clifford_exp,
     "clifford_log": clifford_log,
     "clifford_norm": clifford_norm,

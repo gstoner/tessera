@@ -34,8 +34,15 @@ def _art(rt, op, n_operands):
                  "kwargs": {}}]})
 
 
-def _run(rt, op, *arrs):
-    res = rt.launch(_art(rt, op, len(arrs)), arrs)
+def _art_with_kwargs(rt, op, n_operands, kwargs):
+    art = _art(rt, op, n_operands)
+    art.metadata["ops"][0]["kwargs"] = dict(kwargs)
+    return art
+
+
+def _run(rt, op, *arrs, **kwargs):
+    art = _art_with_kwargs(rt, op, len(arrs), kwargs) if kwargs else _art(rt, op, len(arrs))
+    res = rt.launch(art, arrs)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "rocm_clifford_compiled"
     return np.asarray(res["output"])
@@ -81,4 +88,43 @@ def test_rotor_sandwich():
     rotor[:, 3] = np.sin(0.3)
     got = _run(rt, "clifford_rotor_sandwich", rotor, A)
     np.testing.assert_allclose(got, ref.clifford_rotor_sandwich(rotor, A),
+                               rtol=1e-5, atol=1e-5)
+
+
+def test_unary_composite_ops():
+    rt = _rocm_or_skip()
+    for op in ("clifford_reverse", "clifford_grade_involution",
+               "clifford_conjugate", "clifford_hodge_star",
+               "clifford_exp", "clifford_log", "clifford_norm"):
+        got = _run(rt, op, A)
+        exp = getattr(ref, op)(A)
+        np.testing.assert_allclose(got, exp, rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(
+        _run(rt, "clifford_grade_projection", A, grade=2),
+        ref.clifford_grade_projection(A, grade=2),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_field_composite_ops():
+    rt = _rocm_or_skip()
+    field = np.arange(3 * 3 * 3 * 8, dtype=np.float32).reshape(3, 3, 3, 8) / 100.0
+    for op in ("clifford_ext_deriv", "clifford_vec_deriv", "clifford_codiff"):
+        got = _run(rt, op, field, spacing=(1.0, 1.0, 1.0))
+        exp = getattr(ref, op)(field, spacing=(1.0, 1.0, 1.0))
+        np.testing.assert_allclose(got, exp, rtol=1e-5, atol=1e-5)
+    weights = np.linspace(0.5, 1.5, num=27, dtype=np.float32).reshape(3, 3, 3)
+    np.testing.assert_allclose(
+        _run(rt, "clifford_integral", field, weights=weights.tolist()),
+        ref.clifford_integral(field, weights=weights),
+        rtol=1e-5,
+        atol=1e-5,
+    )
+
+
+def test_scalar_norm_squared_composite_op():
+    rt = _rocm_or_skip()
+    got = _run(rt, "clifford_norm_squared", A)
+    np.testing.assert_allclose(got, ref.clifford_norm_squared(A),
                                rtol=1e-5, atol=1e-5)

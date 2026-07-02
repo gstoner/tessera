@@ -33,6 +33,10 @@ backend breadth and unproven architectures stay hardware-gated; see
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md)
 and [`docs/README.md`](docs/README.md) for status labels.
 
+The fast Python unit suite currently collects ~13,360 fast tests under
+`pytest tests/unit -m "not slow"`; generated audits remain the source of truth
+for exact status counts.
+
 ---
 
 ## What Tessera Is
@@ -109,8 +113,8 @@ source of truth for exact counts and executable lanes:
 | Mathematical and model IR surfaces | implemented / lit-testable | GA/EBM, reasoning-attention families, DFlash, DiffusionGemma, and frontier MoE model-class contracts are compiler-visible. Native execution is claimed only where a backend row below or a generated audit proves it. |
 | Runtime ABI and audits | implemented | Runtime C ABI surfaces and generated audit dashboards are drift-gated; exact counts are listed in the support snapshot below. |
 
-The ~9,560-test fast unit suite passes under `-m "not slow"`; the full Python
-suite collects ~10,340 tests including heavy benchmark contracts.
+The ~13,360-test fast unit suite passes under `-m "not slow"`; the full Python
+suite collects ~13,360 tests plus slow/heavy benchmark contracts.
 
 ### Current Support Snapshot
 
@@ -379,7 +383,7 @@ in ~80 lines.  Runs on CPU, no accelerator required.
 # Python development install
 pip install -e ".[dev]"
 
-# Daily edit-loop sanity check (~13,088 fast tests, < 512 MB RAM)
+# Daily edit-loop sanity check (~13,360 fast tests, < 512 MB RAM)
 pytest tests/unit/ -m "not slow" -q
 
 # Full Python suite including heavy benchmarks (~13,866 collected)

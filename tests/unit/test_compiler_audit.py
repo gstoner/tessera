@@ -251,7 +251,7 @@ def test_structural_aliases_reuse_existing_tile_target_evidence() -> None:
         "dynamic_slice": ("fused", {"fused"}),
         "dynamic_update_slice": ("fused", {"compiled"}),
         "chunk": ("fused", {"fused"}),
-        "cast": ("fused", {"fused"}),
+        "cast": ("fused", {"compiled", "fused"}),
         "index_select": ("fused", {"fused"}),
         "index_update": ("fused", {"compiled"}),
         "masked_fill": ("fused", {"compiled"}),

@@ -157,7 +157,7 @@ each row into a single E2E tier.
 | ``select`` | indexing | public | public | registered | fused | compiled | ready | none |
 | ``slice`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
 | ``take`` | indexing | public | public | registered | fused | fused | ready | benchmarked |
-| ``cast`` | layout_transform | public | public | registered | fused | compiled | ready | benchmarked |
+| ``cast`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``cat`` | layout_transform | public | public | registered | fused | compiled | ready | none |
 | ``chunk`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``flip`` | layout_transform | public | public | registered | fused | compiled | ready | none |

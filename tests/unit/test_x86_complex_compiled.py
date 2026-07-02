@@ -112,3 +112,32 @@ def test_complex_stencil_and_certificate_ops():
             np.testing.assert_allclose(got[1], exp[1])
         else:
             np.testing.assert_allclose(got, exp)
+
+
+def test_complex_projective_and_domain_ops():
+    rt = _rt_or_skip()
+    z1, z2, z3, z4 = 0.0 + 0.0j, 1.0 + 0.0j, 0.5 + 0.5j, 0.2 + 0.8j
+    got = _run(rt, "tessera.cross_ratio", z1, z2, z3, z4, raw=True)
+    np.testing.assert_allclose(
+        np.asarray([got.real, got.imag], np.float32),
+        np.asarray([C.cross_ratio(z1, z2, z3, z4).real,
+                    C.cross_ratio(z1, z2, z3, z4).imag], np.float32),
+    )
+    assert _run(rt, "tessera.is_concyclic", z1, z2, z3, z4, raw=True) == C.is_concyclic(z1, z2, z3, z4)
+
+    src = (0.0 + 0.0j, 1.0 + 0.0j, 1.0j)
+    dst = (1.0 + 0.0j, 2.0 + 0.0j, 1.0 + 1.0j)
+    coeffs = _run(rt, "tessera.mobius_from_three_points", src, dst, raw=True)
+    exp = C.mobius_from_three_points(src, dst)
+    np.testing.assert_allclose(
+        np.asarray([[c.real, c.imag] for c in coeffs], np.float32),
+        np.asarray([[c.real, c.imag] for c in exp], np.float32),
+    )
+
+    p = np.array([0.0, 0.0, 1.0], np.float32)
+    q = np.array([0.2, 0.1, 0.97], np.float32)
+    q = q / np.linalg.norm(q)
+    np.testing.assert_allclose(
+        _run(rt, "tessera.conformal_energy_on_sphere", p, q, raw=True),
+        C.conformal_energy_on_sphere(p, q),
+    )

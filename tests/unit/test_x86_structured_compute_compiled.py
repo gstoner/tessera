@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from tessera import losses, ops
+from tessera import losses, memory, ops
+from tessera.compiler import diffusion_schedule as D
 from tessera import runtime as rt
 from tessera.nn import functional as F
 
@@ -254,4 +255,64 @@ def test_x86_structured_layout_tail_matches_reference():
     np.testing.assert_allclose(
         _launch("tessera.mor_scatter", ("full", "updated", "mask"), (hidden, updated, part)),
         ops.mor_scatter(hidden, updated, part),
+    )
+
+
+def test_x86_structured_helper_tail_matches_reference():
+    rng = np.random.default_rng(85)
+    sigma = np.array([0.2, 0.5, 1.0], np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.edm_loss_weight", ("sigma",), (sigma,)),
+        D.edm_loss_weight(sigma),
+    )
+    got_scalings = _launch("tessera.edm_precondition", ("sigma",), (sigma,))
+    exp_scalings = D.edm_precondition(sigma)
+    for field in ("c_skip", "c_out", "c_in", "c_noise"):
+        np.testing.assert_allclose(getattr(got_scalings, field), getattr(exp_scalings, field))
+
+    row = rng.standard_normal((4, 6)).astype(np.float32)
+    col = rng.standard_normal((5, 6)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.factorized_pos_emb", ("row", "col"), (row, col),
+                {"grid_h": 3, "grid_w": 4}),
+        ops.factorized_pos_emb(row, col, grid_h=3, grid_w=4),
+    )
+
+    x = rng.standard_normal((2, 3, 4)).astype(np.float32)
+    mask = np.array([[True, False, True], [False, True, False]])
+    source = rng.standard_normal((3, 4)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.masked_scatter", ("x", "mask", "source"), (x, mask, source)),
+        ops.masked_scatter(x, mask, source),
+    )
+
+    table = memory.MemoryTable(
+        keys=np.array([[1.0, 0.0], [0.0, 1.0], [0.8, 0.2]], np.float32),
+        values=np.array([[10.0, 0.0], [0.0, 20.0], [8.0, 2.0]], np.float32),
+    )
+    got_mem = _launch("tessera.memory_read", ("table", "query"),
+                      (table, np.array([1.0, 0.0], np.float32)), {"top_k": 2})
+    exp_mem = memory.memory_read(table, np.array([1.0, 0.0], np.float32), top_k=2)
+    np.testing.assert_allclose(got_mem.values, exp_mem.values)
+    np.testing.assert_array_equal(got_mem.indices, exp_mem.indices)
+
+    rope_x = rng.standard_normal((2, 4)).astype(np.float32)
+    positions = np.array([[0, 1]], np.float32)
+    inv_freq = np.array([1.0, 0.5], np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.mrope_2d", ("x", "positions", "inv_freq"),
+                (rope_x, positions, inv_freq), {"sections": (2,)}),
+        ops.mrope_2d(rope_x, positions, inv_freq, sections=(2,)),
+    )
+
+    logits = rng.standard_normal((2, 4)).astype(np.float32)
+    got_state = _launch("tessera.online_softmax_state", ("x",), (logits,), {"axis": -1})
+    exp_state = ops.online_softmax_state(logits, axis=-1)
+    np.testing.assert_allclose(got_state[0], exp_state[0])
+    np.testing.assert_allclose(got_state[1], exp_state[1])
+
+    weight = rng.standard_normal((3, 2, 2)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.spectral_norm", ("weight",), (weight,)),
+        F.spectral_norm(weight),
     )

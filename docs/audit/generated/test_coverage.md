@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **3856** total Python-test references, **961** total lit-fixture references.
-- **86** ops have **zero** references in either test surface.
-- **123** ops have ≤1 reference ("thinly tested").
-- **105** ops have ≥10 references ("well tested").
+- **3890** total Python-test references, **961** total lit-fixture references.
+- **81** ops have **zero** references in either test surface.
+- **118** ops have ≤1 reference ("thinly tested").
+- **108** ops have ≥10 references ("well tested").
 - **123** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **123** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **118** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -73,7 +73,6 @@ These **123** ops have at most one test reference across the whole test surface.
 | `clifford_wedge` |    1 |    0 |    1 |
 | `conformal_jacobian` |    0 |    0 |    0 |
 | `cosine_warmup_lr` |    1 |    0 |    1 |
-| `cross_ratio` |    0 |    0 |    0 |
 | `custom_batching` |    0 |    0 |    0 |
 | `custom_call` |    0 |    0 |    0 |
 | `custom_jvp` |    0 |    0 |    0 |
@@ -104,8 +103,9 @@ These **123** ops have at most one test reference across the whole test surface.
 | `ebm_partition_monte_carlo` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
+| `ema_update` |    1 |    0 |    1 |
 
-_(63 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(58 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**123** ops have ≤1 direct test reference.  They break down as:
+**118** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   30 | Tested via a parent op or family wrapper |
-| `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `covered_by_family`      |   27 | Tested via a parent op or family wrapper |
+| `structural_only`        |   87 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H).  They cannot be tested wi
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 30 ops
+## `covered_by_family` — 27 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -166,12 +166,9 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `clifford_vec_deriv` | category default for 'geometric_algebra' |
 | `clifford_wedge` | category default for 'geometric_algebra' |
 | `conformal_jacobian` | exercised by complex/conformal lane tests |
-| `cross_ratio` | category default for 'elementwise' |
 | `dbar` | exercised by complex differential tests |
 | `dz` | exercised by complex differential tests |
 | `ebm_decode_init` | scaffold for ebm decode tests |
-| `is_concyclic` | category default for 'elementwise' |
-| `mobius_from_three_points` | category default for 'elementwise' |
 | `persistent_cd_loss` | category default for 'loss' |
 | `rng_clone` | category default for 'rng' |
 | `rng_gibbs_sample` | category default for 'rng' |
@@ -182,7 +179,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_multinomial` | category default for 'rng' |
 | `rng_permutation` | category default for 'rng' |
 
-## `structural_only` — 89 ops
+## `structural_only` — 87 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -219,4 +216,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_shuffle` | category default for 'data' |
 | `dataset_zip` | category default for 'data' |
 
-_(59 additional structural ops omitted.)_
+_(57 additional structural ops omitted.)_

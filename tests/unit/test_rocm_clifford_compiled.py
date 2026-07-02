@@ -114,3 +114,17 @@ def test_field_composite_ops():
         got = _run(rt, op, field, spacing=(1.0, 1.0, 1.0))
         exp = getattr(ref, op)(field, spacing=(1.0, 1.0, 1.0))
         np.testing.assert_allclose(got, exp, rtol=1e-5, atol=1e-5)
+    weights = np.linspace(0.5, 1.5, num=27, dtype=np.float32).reshape(3, 3, 3)
+    np.testing.assert_allclose(
+        _run(rt, "clifford_integral", field, weights=weights.tolist()),
+        ref.clifford_integral(field, weights=weights),
+        rtol=1e-5,
+        atol=1e-5,
+    )
+
+
+def test_scalar_norm_squared_composite_op():
+    rt = _rocm_or_skip()
+    got = _run(rt, "clifford_norm_squared", A)
+    np.testing.assert_allclose(got, ref.clifford_norm_squared(A),
+                               rtol=1e-5, atol=1e-5)

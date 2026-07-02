@@ -130,7 +130,7 @@ slice,indexing,public,public,registered,complete,fused,fused,ready,benchmarked
 take,indexing,public,public,registered,complete,fused,fused,ready,benchmarked
 arange,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
 broadcast,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
-cast,layout_transform,public,public,registered,complete,fused,compiled,ready,benchmarked
+cast,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 cat,layout_transform,public,public,registered,complete,fused,compiled,ready,none
 chunk,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 expand,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none

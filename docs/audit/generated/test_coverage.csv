@@ -93,7 +93,7 @@ complex_mul,13,0,1,13,0,,directly_tested,13 direct test references
 complex_pow,2,0,0,2,0,,directly_tested,2 direct test references
 complex_sqrt,2,0,0,2,0,,directly_tested,2 direct test references
 cond,20,0,3,20,0,fp16,directly_tested,20 direct test references
-conformal_energy_on_sphere,2,0,0,2,0,,directly_tested,2 direct test references
+conformal_energy_on_sphere,4,0,0,4,0,,directly_tested,4 direct test references
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
 constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
 contrastive_divergence_loss,4,0,0,4,0,,directly_tested,4 direct test references
@@ -110,7 +110,7 @@ cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 count_nonzero,11,0,0,11,0,,directly_tested,11 direct test references
 cross_attention,12,0,0,12,0,fp16,directly_tested,12 direct test references
 cross_entropy_loss,8,0,0,8,0,,directly_tested,8 direct test references
-cross_ratio,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
+cross_ratio,2,0,0,2,0,,directly_tested,2 direct test references
 ctc_loss,11,0,0,11,0,fp16,directly_tested,11 direct test references
 cummax,7,0,0,7,0,f32,directly_tested,7 direct test references
 cummin,5,0,0,5,0,f32,directly_tested,5 direct test references
@@ -166,8 +166,8 @@ ebm_refinement,6,0,0,6,0,,directly_tested,6 direct test references
 ebm_self_verify,6,0,0,6,0,,directly_tested,6 direct test references
 ebm_sphere_langevin_sample,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
 ebm_sphere_langevin_step,0,0,0,0,1,,hardware_gated,manifold Langevin needs real GPU mesh (Phase G)
-edm_loss_weight,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
-edm_precondition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
+edm_loss_weight,2,0,0,2,0,fp16,directly_tested,2 direct test references
+edm_precondition,2,0,0,2,0,fp16,directly_tested,2 direct test references
 einsum,11,0,2,11,0,fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,11 direct test references
 ema_update,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 empty_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
@@ -179,7 +179,7 @@ exp,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references
 expand,4,8,0,12,0,,directly_tested,12 direct test references
 expm1,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 factorized_matmul,5,0,1,5,0,,directly_tested,5 direct test references
-factorized_pos_emb,6,0,1,6,0,,directly_tested,6 direct test references
+factorized_pos_emb,10,0,1,10,0,fp16,directly_tested,10 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
 flash_attn,105,57,8,162,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,162 direct test references
@@ -217,7 +217,7 @@ instance_norm,9,0,0,9,0,,directly_tested,9 direct test references
 interpolate,10,0,1,10,0,fp16,directly_tested,10 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 irfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
-is_concyclic,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
+is_concyclic,2,0,0,2,0,,directly_tested,2 direct test references
 isfinite,5,0,0,5,0,,directly_tested,5 direct test references
 isinf,3,0,0,3,0,,directly_tested,3 direct test references
 isnan,5,0,0,5,0,,directly_tested,5 direct test references
@@ -266,7 +266,7 @@ mae_loss,5,0,0,5,0,f32,directly_tested,5 direct test references
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,8,0,0,8,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,8 direct test references
-masked_scatter,8,0,1,8,0,,directly_tested,8 direct test references
+masked_scatter,12,0,1,12,0,fp16,directly_tested,12 direct test references
 matmul,401,225,18,626,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,626 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -276,7 +276,7 @@ memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by mem
 memory_index_score,9,0,1,9,0,,directly_tested,9 direct test references
 memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
 memory_index_select_ste,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-memory_read,2,0,0,2,0,,directly_tested,2 direct test references
+memory_read,6,0,0,6,0,fp16,directly_tested,6 direct test references
 memory_write,4,0,0,4,0,,directly_tested,4 direct test references
 min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,4,0,0,4,0,,directly_tested,4 direct test references
@@ -284,7 +284,7 @@ minimum,10,0,2,10,0,bf16 f32,directly_tested,10 direct test references
 mla_decode,5,2,0,7,0,,directly_tested,7 direct test references
 mla_decode_fused,11,9,0,20,0,,directly_tested,20 direct test references
 mobius,3,0,0,3,0,,directly_tested,3 direct test references
-mobius_from_three_points,0,0,0,0,1,,covered_by_family,category default for 'elementwise'
+mobius_from_three_points,2,0,0,2,0,,directly_tested,2 direct test references
 mod,4,0,0,4,0,f32,directly_tested,4 direct test references
 modified_delta_attention,8,0,0,8,0,f32 fp64,directly_tested,8 direct test references
 module_state_tree,0,0,0,0,1,,structural_only,category default for 'state_tree'
@@ -297,7 +297,7 @@ mor_partition,6,2,1,8,0,fp16,directly_tested,8 direct test references
 mor_router,8,3,1,11,0,fp16,directly_tested,11 direct test references
 mor_scatter,7,2,1,9,0,fp16,directly_tested,9 direct test references
 mqa_attention,6,0,2,6,0,,directly_tested,6 direct test references
-mrope_2d,8,0,1,8,0,,directly_tested,8 direct test references
+mrope_2d,12,0,1,12,0,fp16,directly_tested,12 direct test references
 msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,44,11,1,55,0,,directly_tested,55 direct test references
@@ -313,7 +313,7 @@ normalize_group_advantages,6,0,0,6,0,,directly_tested,6 direct test references
 nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
 online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
-online_softmax_state,4,0,0,4,0,,directly_tested,4 direct test references
+online_softmax_state,8,0,0,8,0,fp16,directly_tested,8 direct test references
 optax_style_chain,0,0,0,0,1,,structural_only,category default for 'grad_transform'
 pack,5,0,0,5,0,fp16,directly_tested,5 direct test references
 pad,6,0,0,6,0,,directly_tested,6 direct test references
@@ -421,7 +421,7 @@ spec_accept_sample,2,7,1,9,0,,directly_tested,9 direct test references
 spec_accept_tree_sample,1,6,0,7,0,,directly_tested,7 direct test references
 spectral_conv,7,0,0,7,0,fp32,directly_tested,7 direct test references
 spectral_filter,5,0,0,5,0,fp32,directly_tested,5 direct test references
-spectral_norm,2,0,0,2,0,,directly_tested,2 direct test references
+spectral_norm,4,0,0,4,0,fp16,directly_tested,4 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,5,0,0,5,0,,directly_tested,5 direct test references
 spmm_csr,4,0,0,4,0,,directly_tested,4 direct test references

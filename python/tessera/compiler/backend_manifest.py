@@ -3307,8 +3307,7 @@ _CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
 # P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops with a native x86 + ROCm device
 # lane: table-driven Cl(3,0) bilinear products plus composite unary / field
 # wrappers that execute through runtime.launch() and compare against the
-# canonical flat Clifford shim. ``clifford_integral`` stays off this list until
-# it gets a flat X86/ROCm executor; today it remains Apple/CPU-owned.
+# canonical flat Clifford shim.
 _CLIFFORD_DEVICE_COMPILED = frozenset({
     "clifford_geometric_product",
     "clifford_wedge",
@@ -3324,8 +3323,10 @@ _CLIFFORD_DEVICE_COMPILED = frozenset({
     "clifford_codiff",
     "clifford_vec_deriv",
     "clifford_exp",
+    "clifford_integral",
     "clifford_log",
     "clifford_norm",
+    "clifford_norm_squared",
 })
 
 
@@ -3935,8 +3936,9 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 _COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
     "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
     "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
-    "check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
-    "laplacian_2d",
+    "check_cauchy_riemann", "conformal_jacobian",
+    "conformal_energy_on_sphere", "cross_ratio", "dbar", "dz",
+    "is_concyclic", "laplacian_2d", "mobius_from_three_points",
 })
 
 
@@ -4216,6 +4218,15 @@ _STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
     "arange", "cast", "masked_fill", "mor_partition", "mor_router",
     "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
     "tile_view", "unpack",
+    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
+    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
+    "spectral_norm",
+})
+
+_STRUCTURED_COMPUTE_CUDA_PLANNED_OPS: frozenset[str] = frozenset({
+    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
+    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
+    "spectral_norm",
 })
 
 _RNG_DISTRIBUTION_COMPILED_OPS: frozenset[str] = frozenset({
@@ -4321,7 +4332,7 @@ def _single_gpu_compute_reference_manifest_for(
             "streaming depthwise convolution. This is direct execute/compare "
             "evidence, not a claim of a bespoke fused kernel."
         )
-        return [
+        entries = [
             BackendKernelEntry(
                 target="cpu",
                 status=_REFERENCE_STATUS,
@@ -4344,6 +4355,21 @@ def _single_gpu_compute_reference_manifest_for(
                 feature_flags=("numpy", "reference_execution"),
                 notes="numpy reference path for structured compute",
             ),
+        ]
+        apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
+        if apple_gpu is not None:
+            entries.append(BackendKernelEntry(
+                target="apple_gpu",
+                status=str(apple_gpu["status"]),
+                dtypes=tuple(apple_gpu["dtypes"]),
+                feature_flags=("metal", "mps", "msl"),
+                notes=str(apple_gpu.get("notes", "")),
+                runtime_symbol=apple_gpu.get("runtime_symbol"),
+                shape_envelope=apple_gpu.get("shape_envelope"),
+                benchmark_json=apple_gpu.get("benchmark_json"),
+                benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
+            ))
+        entries.extend([
             BackendKernelEntry(
                 target="rocm",
                 status=_COMPILED_STATUS,
@@ -4353,7 +4379,28 @@ def _single_gpu_compute_reference_manifest_for(
                 execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
                 hipcc_version_min="7.2.4",
             ),
-        ]
+        ])
+        if op_name in _STRUCTURED_COMPUTE_CUDA_PLANNED_OPS:
+            for target_name, flags, arch_min in (
+                ("nvidia_sm80", ("cuda", "wmma", "planned_kernel"), "sm_80"),
+                ("nvidia_sm90", ("cuda", "wgmma", "planned_kernel"), "sm_90a"),
+                ("nvidia_sm100", ("cuda", "tcgen05", "planned_kernel"), "sm_100a"),
+                ("nvidia_sm120", ("cuda", "tcgen05", "planned_kernel"), "sm_120a"),
+            ):
+                entries.append(BackendKernelEntry(
+                    target=target_name,
+                    status=_PLANNED_STATUS,
+                    dtypes=dtypes,
+                    feature_flags=flags,
+                    notes=(
+                        "Single-GPU closeout compute-tail CUDA owner: planned "
+                        "kernel lane. X86/ROCm have compiled structured-compute "
+                        "proof; CUDA remains explicitly open."
+                    ),
+                    cuda_arch_min=arch_min,
+                    nvcc_version_min="13.3",
+                ))
+        return entries
     notes = (
         "Single-GPU closeout compute-tail reference owner: Python/numpy "
         "execution path. Native fused kernel remains tracked separately."

@@ -7031,8 +7031,11 @@ _COMPLEX_OPS = ("tessera.complex_mul", "tessera.complex_div",
                 "tessera.complex_arg", "tessera.complex_exp",
                 "tessera.complex_log", "tessera.complex_sqrt",
                 "tessera.complex_pow", "tessera.check_cauchy_riemann",
-                "tessera.conformal_jacobian", "tessera.dbar", "tessera.dz",
-                "tessera.laplacian_2d")
+                "tessera.conformal_jacobian",
+                "tessera.conformal_energy_on_sphere",
+                "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                "tessera.is_concyclic", "tessera.laplacian_2d",
+                "tessera.mobius_from_three_points")
 
 
 def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
@@ -7070,7 +7073,10 @@ def _complex_compute(op_name: str, operands: list, target: str, np: Any,
                      kwargs: dict | None = None) -> Any:
     kwargs = kwargs or {}
     if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
-                   "tessera.dbar", "tessera.dz", "tessera.laplacian_2d"}:
+                   "tessera.conformal_energy_on_sphere",
+                   "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                   "tessera.is_concyclic", "tessera.laplacian_2d",
+                   "tessera.mobius_from_three_points"}:
         from tessera import complex as tc
         short = op_name.removeprefix("tessera.")
         return getattr(tc, short)(*operands, **kwargs)
@@ -7155,7 +7161,10 @@ def _execute_complex(artifact: RuntimeArtifact, args: Any, target: str,
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
-                   "tessera.dbar", "tessera.dz", "tessera.laplacian_2d"}:
+                   "tessera.conformal_energy_on_sphere",
+                   "tessera.cross_ratio", "tessera.dbar", "tessera.dz",
+                   "tessera.is_concyclic", "tessera.laplacian_2d",
+                   "tessera.mobius_from_three_points"}:
         operands = [values[n] for n in operand_names]
     else:
         operands = [_as_numpy(values[n]) for n in operand_names]
@@ -8106,7 +8115,8 @@ _CLIFFORD_OPS = (
     "clifford_grade_involution", "clifford_conjugate",
     "clifford_grade_projection", "clifford_hodge_star",
     "clifford_ext_deriv", "clifford_vec_deriv", "clifford_codiff",
-    "clifford_exp", "clifford_log", "clifford_norm",
+    "clifford_exp", "clifford_integral", "clifford_log", "clifford_norm",
+    "clifford_norm_squared",
 )
 _CLIFFORD_KIND = {"clifford_geometric_product": 0, "clifford_wedge": 1,
                   "clifford_left_contraction": 2}
@@ -11076,6 +11086,14 @@ _STRUCTURED_COMPUTE_OPS = (
     "tessera.linear_attn_state",
     "tessera.lookahead_sparse_attention",
     "tessera.power_attn",
+    "tessera.edm_loss_weight",
+    "tessera.edm_precondition",
+    "tessera.factorized_pos_emb",
+    "tessera.masked_scatter",
+    "tessera.memory_read",
+    "tessera.mrope_2d",
+    "tessera.online_softmax_state",
+    "tessera.spectral_norm",
 )
 
 
@@ -11181,6 +11199,25 @@ def _execute_structured_compute_composite(
         return ops.lookahead_sparse_attention(*operands, **kwargs)
     if op_name == "tessera.power_attn":
         return ops.power_attn(*operands, **kwargs)
+    if op_name == "tessera.edm_loss_weight":
+        from tessera.compiler import diffusion_schedule as D
+        return D.edm_loss_weight(*operands, **kwargs)
+    if op_name == "tessera.edm_precondition":
+        from tessera.compiler import diffusion_schedule as D
+        return D.edm_precondition(*operands, **kwargs)
+    if op_name == "tessera.factorized_pos_emb":
+        return ops.factorized_pos_emb(*operands, **kwargs)
+    if op_name == "tessera.masked_scatter":
+        return ops.masked_scatter(*operands, **kwargs)
+    if op_name == "tessera.memory_read":
+        from tessera import memory
+        return memory.memory_read(*operands, **kwargs)
+    if op_name == "tessera.mrope_2d":
+        return ops.mrope_2d(*operands, **kwargs)
+    if op_name == "tessera.online_softmax_state":
+        return ops.online_softmax_state(*operands, **kwargs)
+    if op_name == "tessera.spectral_norm":
+        return F.spectral_norm(*operands, **kwargs)
     return ops.depthwise_conv1d(*operands, **kwargs)
 
 

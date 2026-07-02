@@ -149,17 +149,21 @@ def test_compute_tail_backend_rows_are_pathway_owned() -> None:
     assert not offenders
 
 
-def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
+def test_compute_tail_compiled_manifests_cover_representative_ops() -> None:
     for op in (
         "edm_precondition",
         "memory_read",
     ):
         entries = {entry.target: entry for entry in bm.manifest_for(op)}
         assert entries["cpu"].status == "reference"
-        assert entries["x86"].status == "reference"
+        assert entries["x86"].status == "compiled"
+        assert entries["x86"].execute_compare_fixture == (
+            "tests/unit/test_x86_structured_compute_compiled.py")
         assert entries["apple_cpu"].status == "reference"
-        assert entries["rocm"].status == "planned"
-        assert "planned_kernel" in entries["rocm"].feature_flags
+        assert entries["rocm"].status == "compiled"
+        assert entries["rocm"].execute_compare_fixture == (
+            "tests/unit/test_rocm_structured_compute_compiled.py")
+        assert "structured_compute" in entries["rocm"].feature_flags
         for target, arch in (
             ("nvidia_sm80", "sm_80"),
             ("nvidia_sm90", "sm_90a"),

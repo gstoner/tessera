@@ -6781,7 +6781,7 @@ _INTQUANT_OPS = (
 )
 
 
-def _intquant_params(x: Any, bits: int, kwargs: dict, np: Any) -> tuple[np.float32, int, int, int]:
+def _intquant_params(x: Any, bits: int, kwargs: dict, np: Any) -> tuple[Any, int, int, int]:
     symmetric = bool(kwargs.get("symmetric", True))
     scale_kw = kwargs.get("scale")
     zero_point = int(kwargs.get("zero_point", 0))

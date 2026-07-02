@@ -6774,6 +6774,116 @@ def _execute_x86_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
     return (out.reshape(x.shape) * np.float32(scale)).astype(np.float32)
 
 
+_INTQUANT_OPS = (
+    "tessera.quantize_int8", "tessera.dequantize_int8",
+    "tessera.quantize_int4", "tessera.dequantize_int4",
+    "tessera.fake_quantize",
+)
+
+
+def _intquant_params(x: Any, bits: int, kwargs: dict, np: Any) -> tuple[Any, int, int, int]:
+    symmetric = bool(kwargs.get("symmetric", True))
+    scale_kw = kwargs.get("scale")
+    zero_point = int(kwargs.get("zero_point", 0))
+    if bits == 8:
+        qmin, qmax = (-127, 127) if symmetric else (-128, 127)
+    elif bits == 4:
+        qmin, qmax = (-7, 7) if symmetric else (-8, 7)
+    else:
+        raise ValueError("intquant bits must be 4 or 8")
+    if scale_kw is not None:
+        scale = np.float32(scale_kw)
+    elif symmetric:
+        amax = float(np.max(np.abs(x))) if np.size(x) else 0.0
+        scale = np.float32(amax / float(qmax) if amax else 1.0)
+    else:
+        scale = np.float32(
+            (float(np.max(x)) - float(np.min(x))) / float(qmax - qmin)
+            if np.size(x) else 1.0)
+    if float(scale) == 0.0:
+        scale = np.float32(1.0)
+    return scale, zero_point, qmin, qmax
+
+
+def _execute_intquant_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+    round_exec: Any,
+    binary_exec: Any,
+) -> Any:
+    """Integer quantization composite lane.
+
+    Scalar qparam selection and dtype conversion stay on the host; round/clamp
+    and dequant multiply run on the backend elementwise kernels. int4 is the
+    public API's signed int4-in-int8-container contract, not packed nibbles.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _INTQUANT_OPS:
+        raise ValueError(
+            f"{target}_intquant_compiled executor handles one of "
+            f"{_INTQUANT_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("intquant op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+
+    def dequant(q: Any, scale: float, zero_point: int = 0) -> Any:
+        qf = np.ascontiguousarray(_as_numpy(q), dtype=np.float32)
+        shifted = (qf - np.float32(zero_point)).astype(np.float32)
+        sf = np.full(shifted.shape, np.float32(scale), dtype=np.float32)
+        return np.asarray(binary_exec("tessera.mul", shifted, sf), np.float32)
+
+    def quant(x: Any, bits: int) -> tuple[Any, np.float32, int]:
+        xf = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+        scale, zp, qmin, qmax = _intquant_params(xf, bits, kwargs, np)
+        scaled = (xf / scale + np.float32(0 if bool(kwargs.get("symmetric", True)) else zp)).astype(np.float32)
+        rounded = np.asarray(round_exec(scaled), np.float32)
+        lo = np.full(rounded.shape, np.float32(qmin), dtype=np.float32)
+        hi = np.full(rounded.shape, np.float32(qmax), dtype=np.float32)
+        clamped = binary_exec("tessera.maximum", rounded, lo)
+        clamped = binary_exec("tessera.minimum", np.asarray(clamped, np.float32), hi)
+        return np.asarray(clamped, np.float32).astype(np.int8), np.float32(scale), (0 if bool(kwargs.get("symmetric", True)) else zp)
+
+    x = values[operand_names[0]]
+    if op_name == "tessera.quantize_int8":
+        return quant(x, 8)
+    if op_name == "tessera.quantize_int4":
+        return quant(x, 4)
+    if op_name == "tessera.dequantize_int8":
+        return dequant(x, float(kwargs["scale"]), int(kwargs.get("zero_point", 0)))
+    if op_name == "tessera.dequantize_int4":
+        q = _as_numpy(x)
+        if np.any(q < -8) or np.any(q > 7):
+            raise ValueError("int4 containers must hold values in [-8, 7]")
+        return dequant(q, float(kwargs["scale"]), int(kwargs.get("zero_point", 0)))
+    bits = int(kwargs.get("num_bits", 8))
+    if bits not in (4, 8):
+        raise ValueError("fake_quantize supports num_bits 4 or 8")
+    q, scale, zp = quant(x, bits)
+    return dequant(q, float(scale), int(zp)).astype(_as_numpy(x).dtype, copy=False)
+
+
+def _execute_x86_compiled_intquant(artifact: RuntimeArtifact, args: Any) -> Any:
+    def round_exec(x: Any) -> Any:
+        art = RuntimeArtifact(metadata={
+            "target": "x86", "compiler_path": "x86_unary_compiled",
+            "arg_names": ["x"], "output_name": "o",
+            "ops": [{"op_name": "tessera.round", "result": "o",
+                     "operands": ["x"], "kwargs": {}}]})
+        return _execute_x86_compiled_unary(art, (x,))
+
+    return _execute_intquant_composite(
+        artifact, args, "x86", round_exec, _x86_binary_exec)
+
+
 def _x86_fpgrid(x: Any, max_normal: float, mantissa_bits: int, min_exp: int,
                 np: Any) -> Any:
     """Snap an array to a low-precision float grid on the AVX-512 fpquant kernel
@@ -10394,6 +10504,204 @@ def _execute_rocm_compiled_fpquant(artifact: RuntimeArtifact, args: Any) -> Any:
     return (out * np.float32(scale)).astype(np.float32)
 
 
+def _execute_rocm_compiled_intquant(artifact: RuntimeArtifact, args: Any) -> Any:
+    def round_exec(x: Any) -> Any:
+        import numpy as np
+        return _rocm_unary_t(x, "round", np)
+
+    return _execute_intquant_composite(
+        artifact, args, "rocm", round_exec, _rocm_binary_exec)
+
+
+_POOLING_OPS = (
+    "tessera.max_pool", "tessera.avg_pool", "tessera.min_pool",
+    "tessera.adaptive_pool",
+)
+
+
+def _pool_pair(v: Any) -> tuple[int, int]:
+    if isinstance(v, (tuple, list)):
+        return int(v[0]), int(v[1])
+    return int(v), int(v)
+
+
+def _pool2d_compiled(
+    x: Any,
+    kernel_size: Any,
+    stride: Any,
+    padding: Any,
+    reduce_op: str,
+    reduce_exec: Any,
+    np: Any,
+) -> Any:
+    x_arr = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+    if x_arr.ndim != 4:
+        raise ValueError(f"pool expects NCHW rank-4 input; got {x_arr.shape}")
+    kh, kw = _pool_pair(kernel_size)
+    sh, sw = _pool_pair(stride if stride is not None else kernel_size)
+    ph, pw = _pool_pair(padding)
+    pad_value = -np.inf if reduce_op == "tessera.max" else (
+        np.inf if reduce_op == "tessera.min" else 0.0)
+    padded = np.pad(
+        x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)),
+        constant_values=pad_value)
+    out_h = (x_arr.shape[2] + 2 * ph - kh) // sh + 1
+    out_w = (x_arr.shape[3] + 2 * pw - kw) // sw + 1
+    if out_h <= 0 or out_w <= 0:
+        raise ValueError("pool output spatial dimensions must be positive")
+    rows = []
+    for i in range(out_h):
+        for j in range(out_w):
+            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            rows.append(window.reshape(x_arr.shape[0], x_arr.shape[1], kh * kw))
+    mat = np.stack(rows, axis=2).reshape(-1, kh * kw)
+    red = np.asarray(reduce_exec(mat, reduce_op, axis=1, keepdims=False), np.float32)
+    return red.reshape(x_arr.shape[0], x_arr.shape[1], out_h, out_w)
+
+
+def _adaptive_pool2d_compiled(
+    x: Any,
+    output_size: Any,
+    reduce_op: str,
+    reduce_exec: Any,
+    np: Any,
+) -> Any:
+    x_arr = np.ascontiguousarray(_as_numpy(x), dtype=np.float32)
+    if x_arr.ndim != 4:
+        raise ValueError(f"adaptive_pool expects NCHW rank-4 input; got {x_arr.shape}")
+    out_h, out_w = _pool_pair(output_size)
+    out = np.zeros((x_arr.shape[0], x_arr.shape[1], out_h, out_w), dtype=np.float32)
+    for i in range(out_h):
+        h0 = int(np.floor(i * x_arr.shape[2] / out_h))
+        h1 = int(np.ceil((i + 1) * x_arr.shape[2] / out_h))
+        for j in range(out_w):
+            w0 = int(np.floor(j * x_arr.shape[3] / out_w))
+            w1 = int(np.ceil((j + 1) * x_arr.shape[3] / out_w))
+            window = x_arr[:, :, h0:h1, w0:w1]
+            mat = window.reshape(x_arr.shape[0], x_arr.shape[1], -1).reshape(-1, window.shape[2] * window.shape[3])
+            red = np.asarray(reduce_exec(mat, reduce_op, axis=1, keepdims=False), np.float32)
+            out[:, :, i, j] = red.reshape(x_arr.shape[0], x_arr.shape[1])
+    return out
+
+
+def _execute_pooling_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+    reduce_exec: Any,
+) -> Any:
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _POOLING_OPS:
+        raise ValueError(
+            f"{target}_pooling_compiled executor handles one of {_POOLING_OPS}; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    operand_names = [str(n) for n in op.get("operands", [])]
+    if len(operand_names) < 1:
+        raise ValueError("pooling op requires one operand")
+    kwargs = op.get("kwargs") or {}
+    values = _bind_launch_args(args, arg_names)
+    x = values[operand_names[0]]
+    if op_name == "tessera.max_pool":
+        red = "tessera.max"
+    elif op_name == "tessera.min_pool":
+        red = "tessera.min"
+    else:
+        red = "tessera.mean"
+    if op_name == "tessera.adaptive_pool":
+        reducer = kwargs.get("reducer", "mean")
+        if reducer in ("max", "amax"):
+            red = "tessera.max"
+        elif reducer in ("min", "amin"):
+            red = "tessera.min"
+        elif reducer not in ("mean", "avg", None):
+            raise ValueError("compiled adaptive_pool supports reducer mean/max/min")
+        return _adaptive_pool2d_compiled(
+            x, kwargs["output_size"], red, reduce_exec, np)
+    return _pool2d_compiled(
+        x,
+        kwargs["kernel_size"],
+        kwargs.get("stride"),
+        kwargs.get("padding", 0),
+        red,
+        reduce_exec,
+        np,
+    )
+
+
+def _execute_x86_compiled_pooling(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _x86_reduce(x, op_name, axis, keepdims, np)
+    return _execute_pooling_composite(artifact, args, "x86", reduce_exec)
+
+
+def _execute_rocm_compiled_pooling(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _rocm_reduce(x, op_name, axis, keepdims, np)
+    return _execute_pooling_composite(artifact, args, "rocm", reduce_exec)
+
+
+_IMAGE_AFFINE_OPS = ("tessera.image_normalize",)
+
+
+def _execute_image_affine_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+    binary_exec: Any,
+) -> Any:
+    import numpy as np
+    from . import _image_ops as _imgops
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _IMAGE_AFFINE_OPS:
+        raise ValueError(
+            f"{target}_image_affine_compiled executor handles image_normalize; "
+            f"got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    operand_names = [str(n) for n in op.get("operands", [])]
+    values = _bind_launch_args(args, arg_names)
+    x = np.ascontiguousarray(_as_numpy(values[operand_names[0]]), dtype=np.float32)
+    nchw, restore = _imgops.img_canon(x, str(kwargs.get("layout", "nchw")))
+    c = int(nchw.shape[1])
+    mean_a = np.asarray(kwargs["mean"], dtype=np.float32).reshape(-1)
+    std_a = np.asarray(kwargs["std"], dtype=np.float32).reshape(-1)
+    if mean_a.size not in (1, c) or std_a.size not in (1, c):
+        raise ValueError(
+            f"image_normalize: mean/std must be scalar or per-channel "
+            f"(C={c}); got mean={mean_a.size}, std={std_a.size}.")
+    if np.any(std_a == 0):
+        raise ValueError("image_normalize: std must be nonzero.")
+    m = mean_a.reshape(1, -1, 1, 1) if mean_a.size == c else mean_a.reshape(1, 1, 1, 1)
+    s = std_a.reshape(1, -1, 1, 1) if std_a.size == c else std_a.reshape(1, 1, 1, 1)
+    mb = np.broadcast_to(m, nchw.shape).astype(np.float32)
+    sb = np.broadcast_to(s, nchw.shape).astype(np.float32)
+    centered = np.asarray(binary_exec("tessera.sub", np.ascontiguousarray(nchw, np.float32), mb), np.float32)
+    out = np.asarray(binary_exec("tessera.div", centered, sb), np.float32)
+    return restore(out)
+
+
+def _execute_x86_compiled_image_affine(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_image_affine_composite(
+        artifact, args, "x86", _x86_binary_exec)
+
+
+def _execute_rocm_compiled_image_affine(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_image_affine_composite(
+        artifact, args, "rocm", _rocm_binary_exec)
+
+
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
     fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
@@ -12681,6 +12989,9 @@ def _executor_table():
         "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
         "x86_ebm_langevin_compiled": _execute_x86_compiled_ebm_langevin,
         "x86_fpquant_compiled": _execute_x86_compiled_fpquant,
+        "x86_intquant_compiled": _execute_x86_compiled_intquant,
+        "x86_pooling_compiled": _execute_x86_compiled_pooling,
+        "x86_image_affine_compiled": _execute_x86_compiled_image_affine,
         "x86_nvfp4_compiled": _execute_x86_compiled_nvfp4,
         "x86_unary_compiled": _execute_x86_compiled_unary,
         "x86_binary_compiled": _execute_x86_compiled_binary,
@@ -12701,6 +13012,9 @@ def _executor_table():
         "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,
         "rocm_fpquant_compiled": _execute_rocm_compiled_fpquant,
+        "rocm_intquant_compiled": _execute_rocm_compiled_intquant,
+        "rocm_pooling_compiled": _execute_rocm_compiled_pooling,
+        "rocm_image_affine_compiled": _execute_rocm_compiled_image_affine,
         "rocm_dequant_gemm_compiled": _execute_rocm_dequant_gemm_reference,
         "rocm_nvfp4_compiled": _execute_rocm_compiled_nvfp4,
         "rocm_stat_reduce_compiled": _execute_rocm_compiled_stat_reduce,

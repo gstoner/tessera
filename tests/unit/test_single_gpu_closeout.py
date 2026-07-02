@@ -153,9 +153,7 @@ def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
     for op in (
         "rng_beta",
         "contrastive_loss",
-        "quantize_int4",
         "image_resize",
-        "adaptive_pool",
         "gru_cell",
         "conv1d",
         "patchify",

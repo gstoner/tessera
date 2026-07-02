@@ -8,32 +8,32 @@ and explains the `slow` marker boundary.
 
 If you only need one sentence: **the default daily-driver sweep
 (`pytest -m "not slow"`) peaks at ~125 MB resident and finishes in
-~4 minutes (measured 2026-05-20).** The numbers below were measured
+~13 minutes on the GitHub Actions CPU lane (measured 2026-07-02).** The numbers below were measured
 on Apple Silicon with Python 3.14 via `/usr/bin/time -l`; figures
 will vary by ~25% across machines but the orders of magnitude hold.
 
 ## Suite-by-suite footprint
 
-Measured 2026-06-26 against the current test tree (~11,686 fast / 778
-deselected / ~12,464 total collected via `pytest --collect-only`).
+Measured 2026-07-02 against the current test tree (~13,360 fast / ~506
+deselected / ~13,866 total collected via `pytest --collect-only`).
 Counts grew from earlier baselines as Apple GPU encode/conv2d,
 MTL4 routing, optimizer-batching, descriptor, feature-limit, the
 Phase-G attention-family / accelerator-proof composition suites, and the
-ROCm + x86 compiled S2 op-family lanes (reduce / unary / binary) landed:
+ROCm + x86 compiled primitive-closure lanes landed:
 
 | Suite | Tests | Wall clock | Peak RSS | Source of pressure |
 |---|---:|---:|---:|---|
-| **`-m "not slow"`** (default) | ~11,686 | ~4 min | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple GPU encode-session / MTL4 / descriptor / feature-limit coverage |
-| **`-m slow`** (heavy benchmarks) | 778 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
-| **Full suite** (`-m ""`) | ~12,464 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
+| **`-m "not slow"`** (default) | ~13,360 | ~13 min in GitHub Actions | **~125 MB** (measured `/usr/bin/time -l`) | Python interpreter + pytest + numpy + tessera modules; small fp64 working arrays for autodiff tests + the expanded S-series / Apple GPU encode-session / MTL4 / descriptor / feature-limit coverage |
+| **`-m slow`** (heavy benchmarks) | ~506 | ~30 min (serial) | ~1.5–2 GB (estimated) | fp32 8192³ GEMM in `test_benchmark_gemm.py`; SuperBench subprocess in `test_benchmark_compiler_contract.py`; operator-bench bridge in `test_operator_benchmarks_contract.py` |
+| **Full suite** (`-m ""`) | ~13,866 | ~30+ min | ~1.5–2 GB | Same as `slow`; pytest is serial by default so peaks aren't additive |
 
 The measured fast-suite numbers (~125 MB peak, ~4 min) leave a
 comfortable margin on any modern machine.  Peak RSS dropped from the
 2026-05 baseline of ~213 MB because every heavy test that previously
 dominated steady-state allocation has been moved behind
 `pytestmark = pytest.mark.slow` — the fast lane is now allocation-disciplined.
-The wall-clock budget grew from ~31 s to ~4 min because the registry,
-audit, Apple, and S-series coverage all expanded; the test-doc drift
+The wall-clock budget grew from ~31 s to ~13 min in CI because the registry,
+audit, Apple, ROCm, x86, and S-series coverage all expanded; the test-doc drift
 gate (`tests/unit/test_test_docs_drift.py`) keeps this table in sync
 with the actual measurements going forward.
 
@@ -76,8 +76,8 @@ With `pytest-xdist` (`pytest -n auto`), each worker holds its own state:
 | 8 | ~1.7 GB | ~12–16 GB |
 | 10+ (typical M-series core count) | ~2.1 GB | ~15–20 GB |
 
-**Recommendation:** the fast suite is so quick (31 s serial) that
-`-n auto` rarely pays off; the slow suite is dominated by subprocess
+**Recommendation:** the fast suite is memory-light but no longer tiny, so
+`-n auto` may help on local machines after confirming xdist stability; the slow suite is dominated by subprocess
 spawns and an 8192³ GEMM, neither of which parallelizes cleanly across
 pytest workers. Stick to serial execution.
 
@@ -96,7 +96,7 @@ For most contributor workflows **8 GB is plenty**.
 
 | Workflow | Command | Expected RSS | Expected time |
 |---|---|---:|---:|
-| Edit-loop sanity check | `pytest tests/unit/ -m "not slow" -q` | < 256 MB | ~31 s |
+| Edit-loop sanity check | `pytest tests/unit/ -m "not slow" -q` | < 512 MB | ~13 min in GitHub Actions |
 | Just the autodiff slice | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_attention_family_support.py tests/unit/test_reasoning_model_support.py tests/unit/test_optimizer_mixed_precision_support.py tests/unit/test_standalone_compiler_roadmap.py -q` | < 200 MB | ~2 s |
 | Pre-PR full check | `pytest tests/unit/ -m "not slow" -q && pytest tests/unit/ -m slow -q` | ~2 GB peak | ~31 min |
 | MLIR lit fixtures | `lit tests/tessera-ir/ -v` (needs `tessera-opt` on PATH) | < 100 MB | < 1 s |

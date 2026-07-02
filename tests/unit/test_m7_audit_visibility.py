@@ -124,15 +124,16 @@ class TestM7BackendAlias:
         kernel today, but they're not overclaimed as ``fused`` either.
         For the single-GPU closeout they read as
         ``target_ir=not_applicable`` — an intentional reference/domain
-        composition, while apple_gpu / nvidia_sm90+ / rocm keep
-        ``planned`` manifest slots reserved for the M7 kernel follow-up.
+        composition, while apple_gpu / nvidia_sm90+ keep ``planned`` manifest
+        slots reserved for the M7 kernel follow-up. ROCm rows may promote to
+        compiled as composed runtime lanes gain direct device evidence.
         """
 
         from tessera.compiler.audit import support_row_for
         from tessera.compiler.backend_manifest import manifest_for
 
         expected_rocm = {
-            "cross_ratio": "planned",
+            "cross_ratio": "compiled",
             "dz": "compiled",
             "laplacian_2d": "compiled",
         }
@@ -151,9 +152,9 @@ class TestM7BackendAlias:
                 f"reference/domain composition; native-kernel slots are "
                 f"reserved as planned on the GPU targets)."
             )
-            # The manifest must carry planned slots for the GPU
-            # targets so Phase G / H / M7-follow-up knows where to
-            # land the actual kernels.
+            # The manifest must carry planned slots for GPU targets that still
+            # need native kernels. ROCm can promote specific long-tail ops once
+            # the composed runtime lane has direct execute/compare evidence.
             entries = {e.target: e.status for e in manifest_for(op_name)}
             for gpu in ("apple_gpu", "nvidia_sm90", "rocm"):
                 expected = expected_rocm[op_name] if gpu == "rocm" else "planned"

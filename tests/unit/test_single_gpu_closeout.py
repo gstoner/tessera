@@ -152,7 +152,6 @@ def test_compute_tail_backend_rows_are_pathway_owned() -> None:
 def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
     for op in (
         "rng_beta",
-        "contrastive_loss",
         "image_resize",
         "gru_cell",
         "conv1d",

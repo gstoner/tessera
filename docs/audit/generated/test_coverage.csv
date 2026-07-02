@@ -97,14 +97,14 @@ conformal_energy_on_sphere,2,0,0,2,0,,directly_tested,2 direct test references
 conformal_jacobian,0,0,0,0,1,,covered_by_family,exercised by complex/conformal lane tests
 constant_lr,3,0,0,3,0,,directly_tested,3 direct test references
 contrastive_divergence_loss,4,0,0,4,0,,directly_tested,4 direct test references
-contrastive_loss,5,0,0,5,0,,directly_tested,5 direct test references
+contrastive_loss,9,0,0,9,0,,directly_tested,9 direct test references
 conv1d,2,0,0,2,0,,directly_tested,2 direct test references
 conv2d,17,2,0,19,0,bf16 f16 f32 fp16 fp32,directly_tested,19 direct test references
 conv3d,10,0,0,10,0,,directly_tested,10 direct test references
 conv_transpose,3,0,0,3,0,,directly_tested,3 direct test references
 cos,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 cosh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-cosine_embedding_loss,2,0,0,2,0,,directly_tested,2 direct test references
+cosine_embedding_loss,6,0,0,6,0,,directly_tested,6 direct test references
 cosine_lr,2,0,0,2,0,,directly_tested,2 direct test references
 cosine_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 count_nonzero,11,0,0,11,0,,directly_tested,11 direct test references
@@ -212,7 +212,7 @@ image_resize,6,0,1,6,0,,directly_tested,6 direct test references
 implicit_score_matching_loss,2,0,0,2,0,,directly_tested,2 direct test references
 index_select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 index_update,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-info_nce_loss,3,0,0,3,0,,directly_tested,3 direct test references
+info_nce_loss,7,0,0,7,0,,directly_tested,7 direct test references
 instance_norm,9,0,0,9,0,,directly_tested,9 direct test references
 interpolate,6,0,1,6,0,,directly_tested,6 direct test references
 inverse_sqrt_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
@@ -310,7 +310,7 @@ ne,2,0,0,2,0,bf16 f32,directly_tested,2 direct test references
 nesterov,10,0,0,10,0,,directly_tested,10 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 normalize_group_advantages,6,0,0,6,0,,directly_tested,6 direct test references
-nt_xent_loss,4,0,0,4,0,,directly_tested,4 direct test references
+nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
 online_softmax,5,2,0,7,0,,directly_tested,7 direct test references
 online_softmax_state,4,0,0,4,0,,directly_tested,4 direct test references
@@ -397,7 +397,7 @@ sddmm,4,0,0,4,0,,directly_tested,4 direct test references
 segment_reduce,4,0,0,4,0,fp32,directly_tested,4 direct test references
 select,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 selective_ssm,60,10,2,70,0,bf16 fp16 fp32,directly_tested,70 direct test references
-seq2seq_loss,3,0,0,3,0,,directly_tested,3 direct test references
+seq2seq_loss,7,0,0,7,0,,directly_tested,7 direct test references
 sgd,10,0,0,10,0,,directly_tested,10 direct test references
 shard_map,0,0,0,0,1,,structural_only,category default for 'sharding'
 sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
@@ -463,7 +463,7 @@ tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_transpose,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_unflatten,1,0,0,1,1,,structural_only,category default for 'state_tree'
 tri_solve,9,2,0,11,0,bf16 f16 f32 fp16 fp32,directly_tested,11 direct test references
-triplet_loss,6,0,0,6,0,,directly_tested,6 direct test references
+triplet_loss,10,0,0,10,0,,directly_tested,10 direct test references
 trunc,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 unpack,2,0,0,2,0,,directly_tested,2 direct test references
 unsqueeze,4,3,0,7,0,,directly_tested,7 direct test references
@@ -474,7 +474,7 @@ view,5,9,1,14,0,,directly_tested,14 direct test references
 vjp,0,0,0,0,1,,structural_only,category default for 'transform'
 vlb_loss,3,0,0,3,0,,directly_tested,3 direct test references
 vmap,0,0,0,0,1,,structural_only,category default for 'transform'
-wasserstein_distance,6,0,0,6,0,,directly_tested,6 direct test references
+wasserstein_distance,10,0,0,10,0,,directly_tested,10 direct test references
 weight_norm,9,0,0,9,0,,directly_tested,9 direct test references
 where,5,0,0,5,0,f32,directly_tested,5 direct test references
 while_loop,8,0,3,8,0,fp16,directly_tested,8 direct test references

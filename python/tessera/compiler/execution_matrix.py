@@ -367,6 +367,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_image_affine_compiled": "x86 CPU image affine preprocessing — "
                             "image_normalize as sub/div on AVX-512 binary "
                             "kernels with host layout and per-channel broadcast",
+    "x86_metric_loss_compiled": "x86 CPU metric/contrastive loss tail — "
+                            "reductions and exp/log on AVX-512 kernels with "
+                            "host label/mask/sort/matrix structure",
     "x86_class_loss_compiled": "x86 CPU class-axis loss — cross_entropy / kl / "
                             "js / focal / label_smoothed_cross_entropy / z_loss: "
                             "exp/log on the AVX-512 transcendental kernel, "
@@ -633,6 +636,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "image_normalize as sub/div on generated ROCm "
                             "binary kernels with host layout and per-channel "
                             "broadcast",
+    "rocm_metric_loss_compiled": "AMD GPU RDNA metric/contrastive loss tail — "
+                            "reductions and exp/log on generated ROCm kernels "
+                            "with host label/mask/sort/matrix structure",
     "rocm_dequant_gemm_compiled": "DK4 dequant-GEMM ROCm compiler path — "
                             "compiler-generated fused HIP/ROCDL packed-code "
                             "dequant-into-GEMM kernel (generate-rocm-dequant-"
@@ -841,6 +847,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="x86 image affine artifact runs image_normalize as "
                "(x-mean)/std: layout and per-channel broadcast on host, sub/div "
                "on tessera_x86_avx512_binary_f32. f32, matches tessera.ops.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_metric_loss_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_metric_loss_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_metric_loss_compiled", runtime_status="success",
+        reason="x86 metric-loss artifact runs wasserstein / cosine_embedding / "
+               "contrastive / triplet / InfoNCE / NT-Xent / seq2seq losses with "
+               "AVX-512 reductions and exp/log; label, mask, sort, and compact "
+               "matrix structure remain on host. f32, matches tessera.losses.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_class_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_class_loss_compiled",
@@ -1872,6 +1887,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="ROCm image affine artifact runs image_normalize as "
                "(x-mean)/std: layout and per-channel broadcast on host, sub/div "
                "on generated ROCm binary kernels. f32, matches tessera.ops.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_metric_loss_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_metric_loss_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_metric_loss_compiled", runtime_status="success",
+        reason="ROCm metric-loss artifact runs wasserstein / cosine_embedding / "
+               "contrastive / triplet / InfoNCE / NT-Xent / seq2seq losses with "
+               "generated ROCm reductions and exp/log; label, mask, sort, and "
+               "compact matrix structure remain on host. f32, matches "
+               "tessera.losses.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_dequant_gemm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_dequant_gemm_compiled",

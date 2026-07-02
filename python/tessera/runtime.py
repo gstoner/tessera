@@ -10702,6 +10702,190 @@ def _execute_rocm_compiled_image_affine(artifact: RuntimeArtifact, args: Any) ->
         artifact, args, "rocm", _rocm_binary_exec)
 
 
+_METRIC_LOSS_OPS = (
+    "tessera.wasserstein_distance",
+    "tessera.cosine_embedding_loss",
+    "tessera.contrastive_loss",
+    "tessera.triplet_loss",
+    "tessera.nt_xent_loss",
+    "tessera.info_nce_loss",
+    "tessera.seq2seq_loss",
+)
+
+
+def _loss_reduce(v: Any, reduction: str, reduce_exec: Any, np: Any) -> Any:
+    arr = np.asarray(v, np.float32)
+    if reduction == "none":
+        return arr
+    if reduction == "sum":
+        return np.float32(np.asarray(
+            reduce_exec(arr, "tessera.sum", axis=None, keepdims=False)))
+    if reduction == "mean":
+        return np.float32(np.asarray(
+            reduce_exec(arr, "tessera.mean", axis=None, keepdims=False)))
+    raise ValueError(f"unknown reduction {reduction!r}")
+
+
+def _loss_log_softmax(logits: Any, unary_exec: Any, reduce_exec: Any, np: Any) -> Any:
+    z = np.asarray(logits, np.float32)
+    m = np.asarray(reduce_exec(z, "tessera.max", axis=-1, keepdims=True), np.float32)
+    shifted = (z - m).astype(np.float32)
+    e = np.asarray(unary_exec(shifted, "exp"), np.float32)
+    s = np.asarray(reduce_exec(e, "tessera.sum", axis=-1, keepdims=True), np.float32)
+    return (shifted - np.asarray(unary_exec(s, "log"), np.float32)).astype(np.float32)
+
+
+def _execute_metric_loss_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+    unary_exec: Any,
+    reduce_exec: Any,
+) -> Any:
+    """Metric/contrastive loss composite lane.
+
+    Reductions and exp/log are backend-native. Sorts, label masks, and compact
+    matrix assembly stay on host, matching the existing host-structure/device-
+    FLOP split used by attention and normalization composites.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _METRIC_LOSS_OPS:
+        raise ValueError(
+            f"{target}_metric_loss_compiled executor handles one of "
+            f"{_METRIC_LOSS_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = op.get("kwargs") or {}
+    reduction = str(kwargs.get("reduction", "mean"))
+    values = _bind_launch_args(args, arg_names)
+    names = [str(n) for n in op.get("operands", [])]
+
+    def arr(i: int, dtype: Any = np.float32) -> Any:
+        return np.ascontiguousarray(_as_numpy(values[names[i]]), dtype=dtype)
+
+    def row_sum(x: Any) -> Any:
+        return np.asarray(reduce_exec(x, "tessera.sum", axis=-1, keepdims=False),
+                          np.float32)
+
+    def row_mean(x: Any) -> Any:
+        return np.asarray(reduce_exec(x, "tessera.mean", axis=-1, keepdims=False),
+                          np.float32)
+
+    if op_name == "tessera.wasserstein_distance":
+        x = np.sort(arr(0), axis=-1)
+        y = np.sort(arr(1), axis=-1)
+        per = row_mean(np.abs(x - y).astype(np.float32))
+        return _loss_reduce(per, reduction, reduce_exec, np)
+
+    if op_name == "tessera.cosine_embedding_loss":
+        a, b = arr(0), arr(1)
+        t = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        dot = row_sum((a * b).astype(np.float32))
+        na = np.asarray(unary_exec(row_sum((a * a).astype(np.float32)), "sqrt"),
+                        np.float32)
+        nb = np.asarray(unary_exec(row_sum((b * b).astype(np.float32)), "sqrt"),
+                        np.float32)
+        cos = dot / (na * nb + np.float32(1e-12))
+        margin = np.float32(kwargs.get("margin", 0.0))
+        per = np.where(t > 0, 1.0 - cos, np.maximum(0.0, cos - margin))
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.contrastive_loss":
+        a, b = arr(0), arr(1)
+        t = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        diff = (a - b).astype(np.float32)
+        dist = np.asarray(unary_exec(row_sum((diff * diff).astype(np.float32)),
+                                     "sqrt"), np.float32)
+        margin = np.float32(kwargs.get("margin", 1.0))
+        per = t * dist * dist + (1.0 - t) * np.maximum(0.0, margin - dist) ** 2
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.triplet_loss":
+        a, p, n = arr(0), arr(1), arr(2)
+        pos = np.asarray(unary_exec(row_sum(((a - p) ** 2).astype(np.float32)),
+                                    "sqrt"), np.float32)
+        neg = np.asarray(unary_exec(row_sum(((a - n) ** 2).astype(np.float32)),
+                                    "sqrt"), np.float32)
+        per = np.maximum(0.0, pos - neg + np.float32(kwargs.get("margin", 1.0)))
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.info_nce_loss":
+        q, p, neg = arr(0), arr(1), arr(2)
+        pos = row_sum((q * p).astype(np.float32))[:, None]
+        neg_logits = np.einsum("bd,bkd->bk", q, neg).astype(np.float32)
+        logits = np.concatenate([pos, neg_logits], axis=-1) / np.float32(
+            kwargs.get("temperature", 0.1))
+        logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+        per = -logp[:, 0]
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    if op_name == "tessera.nt_xent_loss":
+        z = arr(0)
+        labels = np.asarray(_as_numpy(values[names[1]]))
+        norm = np.asarray(unary_exec(row_sum((z * z).astype(np.float32)), "sqrt"),
+                          np.float32)[:, None]
+        zn = z / (norm + np.float32(1e-12))
+        logits = (zn @ zn.T).astype(np.float32) / np.float32(
+            kwargs.get("temperature", 0.5))
+        np.fill_diagonal(logits, -np.inf)
+        positives = labels[:, None] == labels[None, :]
+        np.fill_diagonal(positives, False)
+        logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+        denom = np.maximum(positives.sum(axis=-1), 1).astype(np.float32)
+        per = -np.sum(np.where(positives, logp, 0.0), axis=-1) / denom
+        return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+    logits = arr(0)
+    targets = np.asarray(_as_numpy(values[names[1]]), np.int64)
+    logp = _loss_log_softmax(logits, unary_exec, reduce_exec, np)
+    flat = logp.reshape(-1, logp.shape[-1])
+    per = -flat[np.arange(flat.shape[0]), targets.reshape(-1)].reshape(targets.shape)
+    if len(names) > 2:
+        mask = np.asarray(_as_numpy(values[names[2]]), np.float32)
+        per = per * mask
+        if reduction == "mean":
+            denom = max(float(np.sum(mask)), 1.0)
+            return np.float32(np.sum(per) / denom)
+    return _loss_reduce(per.astype(np.float32), reduction, reduce_exec, np)
+
+
+def _execute_x86_compiled_metric_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    def unary_exec(x: Any, kind: str) -> Any:
+        if kind == "sqrt":
+            art = RuntimeArtifact(metadata={
+                "target": "x86", "compiler_path": "x86_unary_compiled",
+                "arg_names": ["x"], "output_name": "o",
+                "ops": [{"op_name": "tessera.sqrt", "result": "o",
+                         "operands": ["x"], "kwargs": {}}]})
+            return _execute_x86_compiled_unary(art, (x,))
+        return _x86_unary_t(x, 0 if kind == "exp" else 1, np)
+
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _x86_reduce(x, op_name, axis, keepdims, np)
+
+    return _execute_metric_loss_composite(
+        artifact, args, "x86", unary_exec, reduce_exec)
+
+
+def _execute_rocm_compiled_metric_loss(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    def unary_exec(x: Any, kind: str) -> Any:
+        return _rocm_unary_t(x, kind, np)
+
+    def reduce_exec(x: Any, op_name: str, axis: Any, keepdims: bool) -> Any:
+        return _rocm_reduce(x, op_name, axis, keepdims, np)
+
+    return _execute_metric_loss_composite(
+        artifact, args, "rocm", unary_exec, reduce_exec)
+
+
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
     fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
@@ -12985,6 +13169,7 @@ def _executor_table():
         "x86_binary_loss_compiled": _execute_x86_compiled_binary_loss,
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
+        "x86_metric_loss_compiled": _execute_x86_compiled_metric_loss,
         "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
         "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
         "x86_ebm_langevin_compiled": _execute_x86_compiled_ebm_langevin,
@@ -13008,6 +13193,7 @@ def _executor_table():
         "rocm_binary_loss_compiled": _execute_rocm_compiled_binary_loss,
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
+        "rocm_metric_loss_compiled": _execute_rocm_compiled_metric_loss,
         "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
         "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,

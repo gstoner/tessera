@@ -1185,6 +1185,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "(rocm_class_loss_compiled).",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise", "reduction", "hip_runtime"),
+        "notes": f"Metric/contrastive loss {op} — generated ROCm reduce + "
+                 "exp/log kernels with host label/mask/sort/matrix structure. "
+                 "Executes via runtime.launch() (rocm_metric_loss_compiled).",
+    } for op in ("wasserstein_distance", "cosine_embedding_loss",
+                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                 "info_nce_loss", "seq2seq_loss")},
     # P7 — EBM / diffusion losses composed on the gfx1151 binary + reduce kernels
     # (diff/square + reductions on device; host structure). Executes via
     # rocm_ebm_loss_compiled.
@@ -1942,6 +1951,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "x86"): "tests/unit/test_x86_metric_loss_compiled.py"
+       for op in ("wasserstein_distance", "cosine_embedding_loss",
+                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                  "info_nce_loss", "seq2seq_loss")},
     **{(op, "x86"): "tests/unit/test_x86_ebm_loss_compiled.py"
        for op in ("score_matching_loss", "denoising_score_matching_loss",
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
@@ -2031,6 +2044,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
        for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                   "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{(op, "rocm"): "tests/unit/test_rocm_metric_loss_compiled.py"
+       for op in ("wasserstein_distance", "cosine_embedding_loss",
+                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                  "info_nce_loss", "seq2seq_loss")},
     **{(op, "rocm"): "tests/unit/test_rocm_ebm_loss_compiled.py"
        for op in ("score_matching_loss", "denoising_score_matching_loss",
                   "implicit_score_matching_loss", "contrastive_divergence_loss",
@@ -2862,6 +2879,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "matches numpy 2e-4)",
     } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 metric/contrastive loss {op} "
+                 "(reduce + exp/log kernels with host label/mask/sort/matrix "
+                 "structure; x86_metric_loss_compiled lane; f32, matches "
+                 "tessera.losses)",
+    } for op in ("wasserstein_distance", "cosine_embedding_loss",
+                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
+                 "info_nce_loss", "seq2seq_loss")},
     # P7 — EBM / diffusion losses composed on the AVX-512 binary + reduce kernels
     # (diff/square + reductions on device; argmax/one-hot/scalar scale on host;
     # x86_ebm_loss_compiled lane). f32.
@@ -4097,8 +4124,7 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     "rng_mala_sample", "rng_multinomial", "rng_permutation", "rng_poisson",
     "rng_randint", "rng_truncated_normal",
     # loss
-    "contrastive_loss", "cosine_embedding_loss", "ctc_loss", "info_nce_loss",
-    "nt_xent_loss", "seq2seq_loss", "triplet_loss", "wasserstein_distance",
+    "ctc_loss",
     # vision / pooling
     "center_crop", "image_resize", "interpolate",
     # recurrent / model / layout

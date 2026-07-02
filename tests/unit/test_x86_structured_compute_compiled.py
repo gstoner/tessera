@@ -173,6 +173,30 @@ def test_x86_structured_attention_and_scan_match_reference():
         atol=1e-6,
     )
 
+    scores = rng.standard_normal((1, 2, 4, 2)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch("tessera.attn_top_k_blocks", ("q", "k", "v", "scores"),
+                (q4, q4, q4, scores), {"top_k": 1, "block_size": 2,
+                                        "causal": True}),
+        ops.attn_top_k_blocks(q4, q4, q4, scores=scores, top_k=1,
+                              block_size=2, causal=True),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        _launch("tessera.lookahead_sparse_attention", ("q", "k", "v"),
+                (q4, q4, q4), {"window_size": 2, "block_size": 2,
+                               "causal": True}),
+        ops.lookahead_sparse_attention(q4, q4, q4, window_size=2,
+                                       block_size=2, causal=True),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        _launch("tessera.power_attn", ("q", "k", "v"), (q4, q4, q4),
+                {"deg": 2, "causal": True}),
+        ops.power_attn(q4, q4, q4, deg=2, causal=True),
+        atol=1e-6,
+    )
+
 
 def test_x86_structured_layout_tail_matches_reference():
     rng = np.random.default_rng(81)

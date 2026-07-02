@@ -84,6 +84,7 @@ def test_drift_script_passes_today():
     edit drifted a dashboard, this fails with the regen hint."""
     proc = subprocess.run(
         ["bash", str(_SCRIPT)], capture_output=True, text=True,
-        cwd=str(_REPO), timeout=300)
+        cwd=str(_REPO), env={**os.environ, "PYTHON": sys.executable},
+        timeout=300)
     assert proc.returncode == 0, (
         f"generated-doc drift detected:\n{proc.stdout}\n{proc.stderr}")

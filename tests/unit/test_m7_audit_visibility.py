@@ -131,6 +131,11 @@ class TestM7BackendAlias:
         from tessera.compiler.audit import support_row_for
         from tessera.compiler.backend_manifest import manifest_for
 
+        expected_rocm = {
+            "cross_ratio": "planned",
+            "dz": "compiled",
+            "laplacian_2d": "compiled",
+        }
         for op_name in ("cross_ratio", "dz", "laplacian_2d"):
             row = support_row_for(op_name)
             assert row.cells["tile_ir"].status == "not_applicable", (
@@ -151,8 +156,9 @@ class TestM7BackendAlias:
             # land the actual kernels.
             entries = {e.target: e.status for e in manifest_for(op_name)}
             for gpu in ("apple_gpu", "nvidia_sm90", "rocm"):
-                assert entries.get(gpu) == "planned", (
-                    f"{op_name}: expected {gpu}=planned, got "
+                expected = expected_rocm[op_name] if gpu == "rocm" else "planned"
+                assert entries.get(gpu) == expected, (
+                    f"{op_name}: expected {gpu}={expected}, got "
                     f"{entries.get(gpu)!r} — every M7 long-tail op "
                     f"should reserve a native-kernel slot for that "
                     f"target."

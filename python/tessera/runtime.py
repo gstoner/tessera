@@ -7030,7 +7030,9 @@ _COMPLEX_OPS = ("tessera.complex_mul", "tessera.complex_div",
                 "tessera.complex_conjugate", "tessera.complex_abs",
                 "tessera.complex_arg", "tessera.complex_exp",
                 "tessera.complex_log", "tessera.complex_sqrt",
-                "tessera.complex_pow")
+                "tessera.complex_pow", "tessera.check_cauchy_riemann",
+                "tessera.conformal_jacobian", "tessera.dbar", "tessera.dz",
+                "tessera.laplacian_2d")
 
 
 def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
@@ -7064,7 +7066,15 @@ def _creal(op: str, target: str, np: Any, *arrs: Any) -> Any:
     return np.asarray(fn(art, aa), np.float32)
 
 
-def _complex_compute(op_name: str, operands: list, target: str, np: Any) -> Any:
+def _complex_compute(op_name: str, operands: list, target: str, np: Any,
+                     kwargs: dict | None = None) -> Any:
+    kwargs = kwargs or {}
+    if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
+                   "tessera.dbar", "tessera.dz", "tessera.laplacian_2d"}:
+        from tessera import complex as tc
+        short = op_name.removeprefix("tessera.")
+        return getattr(tc, short)(*operands, **kwargs)
+
     def split(x: Any) -> tuple:
         x = np.ascontiguousarray(x, np.float32)
         if x.shape[-1] != 2:
@@ -7144,8 +7154,13 @@ def _execute_complex(artifact: RuntimeArtifact, args: Any, target: str,
             f"got {[o.get('op_name') for o in ops]!r}")
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[n]) for n in operand_names]
-    return _complex_compute(op_name, operands, target, np)
+    if op_name in {"tessera.check_cauchy_riemann", "tessera.conformal_jacobian",
+                   "tessera.dbar", "tessera.dz", "tessera.laplacian_2d"}:
+        operands = [values[n] for n in operand_names]
+    else:
+        operands = [_as_numpy(values[n]) for n in operand_names]
+    return _complex_compute(op_name, operands, target, np,
+                            ops[0].get("kwargs") or {})
 
 
 def _execute_x86_compiled_complex(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -7243,7 +7258,35 @@ def _execute_rocm_compiled_conformal(artifact: RuntimeArtifact, args: Any) -> An
 # dropout mask). A SEPARATE deterministic stream from tessera.rng (host
 # numpy-Generator). compiler_path="x86_rng_compiled" / "rocm_rng_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
-_RNG_OPS = ("tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout")
+_RNG_OPS = (
+    "tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout",
+    "tessera.rng_bernoulli", "tessera.rng_beta", "tessera.rng_categorical",
+    "tessera.rng_dirichlet", "tessera.rng_gamma", "tessera.rng_gibbs_sample",
+    "tessera.rng_hmc_sample", "tessera.rng_langevin_sample",
+    "tessera.rng_mala_sample", "tessera.rng_multinomial",
+    "tessera.rng_permutation", "tessera.rng_poisson", "tessera.rng_randint",
+    "tessera.rng_truncated_normal", "tessera.rng_key", "tessera.rng_split",
+    "tessera.rng_fold_in", "tessera.rng_clone",
+)
+
+
+def _rng_key_from_kwargs(kwargs: dict) -> Any:
+    from tessera.rng import RNGKey
+    key = kwargs.get("key")
+    if isinstance(key, RNGKey):
+        return key
+    if isinstance(key, dict):
+        return RNGKey.from_state(key)
+    if key is not None and hasattr(key, "seed_high") and hasattr(key, "seed_low"):
+        return RNGKey(int(key.seed_high), int(key.seed_low),
+                      name=str(getattr(key, "name", "")))
+    if "seed_high" in kwargs:
+        return RNGKey(int(kwargs["seed_high"]), int(kwargs.get("seed_low", 0)))
+    return RNGKey.from_seed(int(kwargs.get("seed", 0)))
+
+
+def _rng_dtype(kwargs: dict, default: str) -> str:
+    return str(kwargs.get("dtype", default))
 
 
 def _rng_compute(op_name: str, operands: list, kwargs: dict,
@@ -7285,6 +7328,102 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict,
         np.float32)
 
 
+def _rng_distribution_compute(op_name: str, operands: list, kwargs: dict,
+                              np: Any) -> Any:
+    """Structured RNG distributions over the compiler-visible RNGKey surface.
+
+    The base uniform/normal/dropout lane above still exercises the backend
+    Philox kernel bit-for-bit. These distribution ops are higher-level samplers:
+    they run the same public RNGKey/Philox contract used by Tessera programs so
+    backend closeout has a real executable artifact and direct compare evidence
+    without claiming a bespoke fused kernel for every distribution transform.
+    """
+    from tessera import rng
+
+    key = _rng_key_from_kwargs(kwargs)
+    shape = kwargs.get("shape", ())
+    short = op_name.removeprefix("tessera.")
+    if short == "rng_key":
+        return key.to_state()
+    if short == "rng_split":
+        return tuple(k.to_state() for k in key.split(int(kwargs.get("num", 2))))
+    if short == "rng_fold_in":
+        return key.fold_in(kwargs.get("data", 0)).to_state()
+    if short == "rng_clone":
+        return key.clone().to_state()
+    if short == "rng_bernoulli":
+        return rng.bernoulli(key, shape, p=float(kwargs.get("p", 0.5)),
+                             dtype=_rng_dtype(kwargs, "bool"))
+    if short == "rng_beta":
+        return rng.beta(key, shape, alpha=float(kwargs.get("alpha", 1.0)),
+                        beta_param=float(kwargs.get("beta_param",
+                                                    kwargs.get("beta", 1.0))),
+                        dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_categorical":
+        logits = np.asarray(operands[0], np.float32)
+        return rng.categorical(key, logits, axis=int(kwargs.get("axis", -1)))
+    if short == "rng_dirichlet":
+        alpha = np.asarray(operands[0], np.float64)
+        return rng.dirichlet(key, alpha, shape=shape,
+                             dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_gamma":
+        return rng.gamma(key, shape,
+                         concentration=float(kwargs.get("concentration", 1.0)),
+                         rate=float(kwargs.get("rate", 1.0)),
+                         dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_multinomial":
+        p = np.asarray(operands[0], np.float64)
+        return rng.multinomial(key, int(kwargs.get("n", 1)), p)
+    if short == "rng_permutation":
+        value = operands[0] if operands else int(kwargs.get("n", 0))
+        return rng.permutation(key, value, axis=int(kwargs.get("axis", 0)))
+    if short == "rng_poisson":
+        return rng.poisson(key, shape, rate=float(kwargs.get("rate", 1.0)),
+                           dtype=_rng_dtype(kwargs, "i32"))
+    if short == "rng_randint":
+        return rng.randint(key, shape, low=int(kwargs.get("low", 0)),
+                           high=int(kwargs.get("high", 1)),
+                           dtype=_rng_dtype(kwargs, "i32"))
+    if short == "rng_truncated_normal":
+        return rng.truncated_normal(
+            key, shape, lower=float(kwargs.get("lower", -2.0)),
+            upper=float(kwargs.get("upper", 2.0)),
+            mean=float(kwargs.get("mean", 0.0)),
+            std=float(kwargs.get("std", 1.0)),
+            dtype=_rng_dtype(kwargs, "fp32"))
+    if short == "rng_langevin_sample":
+        return rng.langevin_sample(key, init=np.asarray(operands[0], np.float32),
+                                   grad_fn=operands[1],
+                                   eta=float(kwargs.get("eta", 0.1)),
+                                   temperature=float(kwargs.get("temperature", 1.0)),
+                                   n_samples=int(kwargs.get("n_samples", 1)),
+                                   burn_in=int(kwargs.get("burn_in", 0)),
+                                   thin=int(kwargs.get("thin", 1)))
+    if short == "rng_mala_sample":
+        return rng.mala_sample(key, init=np.asarray(operands[0], np.float32),
+                               energy_fn=operands[1], grad_fn=operands[2],
+                               eta=float(kwargs.get("eta", 0.1)),
+                               temperature=float(kwargs.get("temperature", 1.0)),
+                               n_samples=int(kwargs.get("n_samples", 1)),
+                               burn_in=int(kwargs.get("burn_in", 0)),
+                               thin=int(kwargs.get("thin", 1)))
+    if short == "rng_hmc_sample":
+        return rng.hmc_sample(key, init=np.asarray(operands[0], np.float32),
+                              energy_fn=operands[1], grad_fn=operands[2],
+                              step_size=float(kwargs.get("step_size", 0.1)),
+                              n_leapfrog=int(kwargs.get("n_leapfrog", 4)),
+                              n_samples=int(kwargs.get("n_samples", 1)),
+                              burn_in=int(kwargs.get("burn_in", 0)),
+                              thin=int(kwargs.get("thin", 1)))
+    if short == "rng_gibbs_sample":
+        return rng.gibbs_sample(key, init=np.asarray(operands[0], np.float32),
+                                conditional_sample=operands[1],
+                                n_samples=int(kwargs.get("n_samples", 1)),
+                                burn_in=int(kwargs.get("burn_in", 0)),
+                                thin=int(kwargs.get("thin", 1)))
+    raise ValueError(f"rng executor: unknown op {op_name!r}")
+
+
 def _x86_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
     import numpy as np
     lib = _load_x86_elementwise()
@@ -7313,6 +7452,11 @@ def _execute_rng(artifact: RuntimeArtifact, args: Any, uniform_fn: Any,
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     operands = [_as_numpy(values[n]) for n in operand_names]
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.dropout"}:
+        operands = [values[n] for n in operand_names]
+        return _rng_distribution_compute(op_name, operands,
+                                         ops[0].get("kwargs") or {}, np)
     return _rng_compute(op_name, operands, ops[0].get("kwargs") or {},
                         uniform_fn, np)
 
@@ -7955,9 +8099,15 @@ def _execute_rocm_compiled_sort(artifact: RuntimeArtifact, args: Any) -> Any:
 # element; triples unrolled at generation time). f32, matches the numpy GA
 # reference. compiler_path="x86_clifford_compiled" / "rocm_clifford_compiled".
 # ─────────────────────────────────────────────────────────────────────────────
-_CLIFFORD_OPS = ("clifford_geometric_product", "clifford_wedge",
-                 "clifford_left_contraction", "clifford_inner",
-                 "clifford_rotor_sandwich")
+_CLIFFORD_OPS = (
+    "clifford_geometric_product", "clifford_wedge",
+    "clifford_left_contraction", "clifford_inner",
+    "clifford_rotor_sandwich", "clifford_reverse",
+    "clifford_grade_involution", "clifford_conjugate",
+    "clifford_grade_projection", "clifford_hodge_star",
+    "clifford_ext_deriv", "clifford_vec_deriv", "clifford_codiff",
+    "clifford_exp", "clifford_log", "clifford_norm",
+)
 _CLIFFORD_KIND = {"clifford_geometric_product": 0, "clifford_wedge": 1,
                   "clifford_left_contraction": 2}
 
@@ -7994,6 +8144,10 @@ def _clifford_compute(op_name: str, operands: list, kwargs: dict, target: str,
         r, x, _ = _clifford_bcast(operands[0], operands[1], np)
         rx = bilinear(r, x, 0, np)                          # R x
         return bilinear(rx, _clifford_reverse(r, np), 0, np)  # (R x) R†
+    import tessera._clifford_ops as ref
+    fn = getattr(ref, op_name, None)
+    if fn is not None:
+        return fn(*operands, **kwargs)
     raise ValueError(f"clifford executor: unknown op {op_name!r}")
 
 
@@ -10921,6 +11075,7 @@ _STRUCTURED_COMPUTE_OPS = (
     "tessera.attn_top_k_blocks",
     "tessera.linear_attn_state",
     "tessera.lookahead_sparse_attention",
+    "tessera.power_attn",
 )
 
 
@@ -10939,13 +11094,14 @@ def _execute_structured_compute_composite(
     """
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _STRUCTURED_COMPUTE_OPS:
+    op_records = list(metadata.get("ops") or [])
+    op_name = str(op_records[0].get("op_name", "")) if len(op_records) == 1 else ""
+    if len(op_records) != 1 or op_name not in _STRUCTURED_COMPUTE_OPS:
         raise ValueError(
             f"{target}_structured_compute_compiled executor handles one of "
-            f"{_STRUCTURED_COMPUTE_OPS}; got {[o.get('op_name') for o in ops]!r}")
-    op = ops[0]
+            f"{_STRUCTURED_COMPUTE_OPS}; "
+            f"got {[o.get('op_name') for o in op_records]!r}")
+    op = op_records[0]
     kwargs = dict(op.get("kwargs") or {})
     values = _bind_launch_args(args, arg_names)
     names = [str(n) for n in op.get("operands", [])]
@@ -11015,11 +11171,16 @@ def _execute_structured_compute_composite(
     if op_name == "tessera.attn_local_window_2d":
         return ops.attn_local_window_2d(*operands, **kwargs)
     if op_name == "tessera.attn_top_k_blocks":
+        if "scores" not in kwargs and len(operands) >= 4:
+            kwargs["scores"] = operands[3]
+            operands = operands[:3]
         return ops.attn_top_k_blocks(*operands, **kwargs)
     if op_name == "tessera.linear_attn_state":
         return ops.linear_attn_state(*operands, **kwargs)
     if op_name == "tessera.lookahead_sparse_attention":
         return ops.lookahead_sparse_attention(*operands, **kwargs)
+    if op_name == "tessera.power_attn":
+        return ops.power_attn(*operands, **kwargs)
     return ops.depthwise_conv1d(*operands, **kwargs)
 
 

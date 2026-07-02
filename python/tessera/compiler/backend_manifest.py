@@ -1886,6 +1886,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("complex_mul", "complex_div", "complex_conjugate",
                   "complex_abs", "complex_arg", "complex_exp", "complex_log",
                   "complex_sqrt", "complex_pow")},
+    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
+                  "laplacian_2d")},
+    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
+                  "laplacian_2d")},
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
@@ -1947,6 +1953,28 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_x86_nsa_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py"
        for op in ("linear_attn", "power_attn", "retention")},
+    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
+                  "rng_categorical", "rng_dirichlet", "rng_gamma",
+                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
+                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
+                  "rng_poisson", "rng_randint", "rng_truncated_normal",
+                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
+    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
+                  "rng_categorical", "rng_dirichlet", "rng_gamma",
+                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
+                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
+                  "rng_poisson", "rng_randint", "rng_truncated_normal",
+                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
+    **{(op, "x86"): "tests/unit/test_x86_structured_compute_compiled.py"
+       for op in ("attn_compressed_blocks", "attn_local_window_2d",
+                  "attn_top_k_blocks", "linear_attn_state",
+                  "lookahead_sparse_attention", "transpose")},
+    **{(op, "rocm"): "tests/unit/test_rocm_structured_compute_compiled.py"
+       for op in ("attn_compressed_blocks", "attn_local_window_2d",
+                  "attn_top_k_blocks", "linear_attn_state",
+                  "lookahead_sparse_attention", "power_attn", "transpose")},
     **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
                   "log_cosh_loss")},
@@ -3277,16 +3305,27 @@ _CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
                                   "clifford_norm_squared"})
 
 # P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops with a native x86 + ROCm device
-# lane: the table-driven Cl(3,0) bilinear products (geometric_product / wedge /
-# left_contraction) plus inner + rotor_sandwich, which compose on the same
-# bilinear kernel. x86 = fused (tessera_x86_clifford_bilinear_f32); ROCm =
-# compiled (generate-rocm-clifford-kernel). The rest stay reference/planned.
+# lane: table-driven Cl(3,0) bilinear products plus composite unary / field
+# wrappers that execute through runtime.launch() and compare against the
+# canonical flat Clifford shim. ``clifford_integral`` stays off this list until
+# it gets a flat X86/ROCm executor; today it remains Apple/CPU-owned.
 _CLIFFORD_DEVICE_COMPILED = frozenset({
     "clifford_geometric_product",
     "clifford_wedge",
     "clifford_left_contraction",
     "clifford_inner",
     "clifford_rotor_sandwich",
+    "clifford_reverse",
+    "clifford_grade_involution",
+    "clifford_conjugate",
+    "clifford_grade_projection",
+    "clifford_hodge_star",
+    "clifford_ext_deriv",
+    "clifford_codiff",
+    "clifford_vec_deriv",
+    "clifford_exp",
+    "clifford_log",
+    "clifford_norm",
 })
 
 
@@ -3896,6 +3935,8 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 _COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
     "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
     "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
+    "check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
+    "laplacian_2d",
 })
 
 
@@ -4127,6 +4168,7 @@ _ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
 _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     # rng
     "rng_bernoulli", "rng_beta", "rng_categorical", "rng_dirichlet",
+    "rng_clone", "rng_fold_in", "rng_key", "rng_split",
     "rng_gamma", "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
     "rng_mala_sample", "rng_multinomial", "rng_permutation", "rng_poisson",
     "rng_randint", "rng_truncated_normal",
@@ -4176,6 +4218,54 @@ _STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
     "tile_view", "unpack",
 })
 
+_RNG_DISTRIBUTION_COMPILED_OPS: frozenset[str] = frozenset({
+    "rng_bernoulli", "rng_beta", "rng_categorical", "rng_clone",
+    "rng_dirichlet", "rng_fold_in", "rng_gamma", "rng_gibbs_sample",
+    "rng_hmc_sample", "rng_key", "rng_langevin_sample", "rng_mala_sample",
+    "rng_multinomial", "rng_permutation", "rng_poisson", "rng_randint",
+    "rng_split", "rng_truncated_normal",
+})
+
+_STRUCTURED_COMPUTE_OVERLAY_OPS: frozenset[str] = frozenset({
+    "attn_compressed_blocks", "attn_local_window_2d", "attn_top_k_blocks",
+    "linear_attn_state", "lookahead_sparse_attention", "power_attn",
+    "transpose",
+})
+
+
+def _overlay_structured_compute_entries(
+    op_name: str,
+    entries: list[BackendKernelEntry],
+) -> list[BackendKernelEntry]:
+    if op_name not in _STRUCTURED_COMPUTE_OVERLAY_OPS:
+        return entries
+    dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    notes = (
+        "Single-GPU structured-compute executable lane: runtime.launch() "
+        "dispatches target-specific artifacts for attention/layout structure. "
+        "This is direct execute/compare evidence, not a claim of a bespoke "
+        "fused kernel."
+    )
+    out = [e for e in entries if e.target not in {"x86", "rocm"}]
+    out.append(BackendKernelEntry(
+        target="x86",
+        status=_COMPILED_STATUS,
+        dtypes=dtypes,
+        feature_flags=("avx512",),
+        notes=notes + " Executes via x86_structured_compute_compiled.",
+        execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
+    ))
+    out.append(BackendKernelEntry(
+        target="rocm",
+        status=_COMPILED_STATUS,
+        dtypes=dtypes,
+        feature_flags=("hip_runtime", "structured_compute"),
+        notes=notes + " Executes via rocm_structured_compute_compiled.",
+        execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+        hipcc_version_min="7.2.4",
+    ))
+    return out
+
 
 def _single_gpu_compute_reference_manifest_for(
     op_name: str,
@@ -4183,6 +4273,46 @@ def _single_gpu_compute_reference_manifest_for(
     if op_name not in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
         return []
     dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    if op_name in _RNG_DISTRIBUTION_COMPILED_OPS:
+        notes = (
+            "Single-GPU RNG executable lane: runtime.launch() dispatches the "
+            "compiler-visible RNGKey/Philox sampler contract. Uniform/normal "
+            "exercise backend Philox directly; distribution/key-state ops are "
+            "structured transforms over that deterministic stream."
+        )
+        return [
+            BackendKernelEntry(
+                target="cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "philox", "reference_execution"),
+                notes="RNGKey Philox reference path",
+            ),
+            BackendKernelEntry(
+                target="x86",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("avx512",),
+                notes=notes + " Executes via x86_rng_compiled.",
+                execute_compare_fixture="tests/unit/test_x86_rng_compiled.py",
+            ),
+            BackendKernelEntry(
+                target="apple_cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "philox", "reference_execution"),
+                notes="RNGKey Philox reference path",
+            ),
+            BackendKernelEntry(
+                target="rocm",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("hip_runtime", "philox", "rng_distribution"),
+                notes=notes + " Executes via rocm_rng_compiled.",
+                execute_compare_fixture="tests/unit/test_rocm_rng_compiled.py",
+                hipcc_version_min="7.2.4",
+            ),
+        ]
     if op_name in _STRUCTURED_COMPUTE_COMPILED_OPS:
         notes = (
             "Single-GPU structured-compute executable lane: runtime.launch() "
@@ -4577,6 +4707,7 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # ``execute_compare_fixture`` paths to entries that ship a real
     # numerical-correctness test. Replaces the conformance matrix's
     # filename/content heuristic with first-class manifest data.
+    entries = _overlay_structured_compute_entries(op_name, entries)
     entries = _attach_numerical_fixtures(op_name, entries)
 
     return entries
@@ -4600,6 +4731,10 @@ def all_manifests() -> Mapping[str, list[BackendKernelEntry]]:
         if m:
             out[name] = m
     for name in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
+        m = manifest_for(name)
+        if m:
+            out[name] = m
+    for name in _STRUCTURED_COMPUTE_OVERLAY_OPS:
         m = manifest_for(name)
         if m:
             out[name] = m

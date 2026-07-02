@@ -34,15 +34,16 @@ def _ref(scalar):
     return np.asarray(scalar)
 
 
-def _run(rt, op, *zs):
+def _run(rt, op, *zs, raw: bool = False, **kwargs):
     names = [f"a{i}" for i in range(len(zs))]
     art = rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_complex_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": names, "output_name": "o",
         "ops": [{"op_name": op, "result": "o", "operands": names,
-                 "kwargs": {}}]})
-    res = rt.launch(art, tuple(_il(z) for z in zs))
+                 "kwargs": dict(kwargs)}]})
+    args = zs if raw else tuple(_il(z) for z in zs)
+    res = rt.launch(art, args)
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "rocm_complex_compiled"
     return np.asarray(res["output"])
@@ -90,3 +91,25 @@ def test_complex_returning_real(op, ref):
     z, _ = _Z()
     out = _run(rt, op, z)
     np.testing.assert_allclose(out, np.asarray(ref(z)), atol=1e-4, rtol=1e-4)
+
+
+def test_complex_stencil_and_certificate_ops_on_gpu():
+    rt = _rocm_or_skip()
+    field = np.arange(25, dtype=np.float32).reshape(5, 5)
+    np.testing.assert_allclose(
+        _run(rt, "tessera.laplacian_2d", field, raw=True, dx=1.0),
+        C.laplacian_2d(field, dx=1.0),
+    )
+
+    def f(z):
+        return z * z
+
+    z0 = 0.5 + 0.25j
+    for op in ("check_cauchy_riemann", "conformal_jacobian", "dz", "dbar"):
+        got = _run(rt, f"tessera.{op}", f, z0, raw=True, h=1e-5)
+        exp = getattr(C, op)(f, z0, h=1e-5)
+        if isinstance(exp, tuple):
+            assert got[0] == exp[0]
+            np.testing.assert_allclose(got[1], exp[1])
+        else:
+            np.testing.assert_allclose(got, exp)

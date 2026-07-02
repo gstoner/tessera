@@ -154,6 +154,37 @@ def test_rocm_structured_attention_and_scan_match_reference_on_gpu():
     np.testing.assert_allclose(got_fwd, exp_fwd, atol=1e-6)
     np.testing.assert_allclose(got_bwd, exp_bwd, atol=1e-6)
 
+    q4 = rng.standard_normal((1, 2, 4, 8)).astype(np.float32)
+    scores = rng.standard_normal((1, 2, 4, 2)).astype(np.float32)
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.attn_compressed_blocks", ("q", "k", "v"),
+                (q4, q4, q4)),
+        ops.attn_compressed_blocks(q4, q4, q4),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.attn_top_k_blocks", ("q", "k", "v", "scores"),
+                (q4, q4, q4, scores), {"top_k": 1, "block_size": 2,
+                                        "causal": True}),
+        ops.attn_top_k_blocks(q4, q4, q4, scores=scores, top_k=1,
+                              block_size=2, causal=True),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.lookahead_sparse_attention", ("q", "k", "v"),
+                (q4, q4, q4), {"window_size": 2, "block_size": 2,
+                               "causal": True}),
+        ops.lookahead_sparse_attention(q4, q4, q4, window_size=2,
+                                       block_size=2, causal=True),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        _launch(rt, "tessera.power_attn", ("q", "k", "v"), (q4, q4, q4),
+                {"deg": 2, "causal": True}),
+        ops.power_attn(q4, q4, q4, deg=2, causal=True),
+        atol=1e-6,
+    )
+
 
 def test_rocm_structured_layout_tail_matches_reference_on_gpu():
     rt = _rocm_or_skip()

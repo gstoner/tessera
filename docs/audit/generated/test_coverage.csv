@@ -25,10 +25,10 @@ associative_scan,0,0,0,0,1,,structural_only,category default for 'control_flow'
 asymmetric_bce,8,0,0,8,0,f32,directly_tested,8 direct test references
 atan,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 atan2,4,0,0,4,0,,directly_tested,4 direct test references
-attn_compressed_blocks,9,2,0,11,0,fp16,directly_tested,11 direct test references
+attn_compressed_blocks,11,2,0,13,0,fp16,directly_tested,13 direct test references
 attn_local_window_2d,36,25,1,61,0,fp16 fp32,directly_tested,61 direct test references
 attn_sliding_window,17,2,2,19,0,,directly_tested,19 direct test references
-attn_top_k_blocks,7,2,1,9,0,,directly_tested,9 direct test references
+attn_top_k_blocks,11,2,1,13,0,fp16,directly_tested,13 direct test references
 autocast,0,0,0,0,1,,structural_only,category default for 'transform'
 avg_pool,4,0,0,4,0,,directly_tested,4 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -233,7 +233,7 @@ kv_cache_prune,4,0,1,4,0,fp16 fp32,directly_tested,4 direct test references
 kv_cache_read,2,0,1,2,0,fp16 fp32,directly_tested,2 direct test references
 label_smoothed_cross_entropy,8,0,0,8,0,,directly_tested,8 direct test references
 lamb,11,0,0,11,0,,directly_tested,11 direct test references
-laplacian_2d,2,0,0,2,0,,directly_tested,2 direct test references
+laplacian_2d,4,0,0,4,0,,directly_tested,4 direct test references
 latent_kv_compress,8,19,0,27,0,fp16 fp32,directly_tested,27 direct test references
 latent_kv_expand_k,5,8,0,13,0,fp16 fp32,directly_tested,13 direct test references
 latent_kv_expand_v,4,7,0,11,0,fp16 fp32,directly_tested,11 direct test references
@@ -258,7 +258,7 @@ logical_not,4,0,1,4,0,,directly_tested,4 direct test references
 logical_or,5,0,2,5,0,,directly_tested,5 direct test references
 logical_xor,3,0,0,3,0,,directly_tested,3 direct test references
 logsumexp,6,3,0,9,0,,directly_tested,9 direct test references
-lookahead_sparse_attention,15,4,1,19,0,,directly_tested,19 direct test references
+lookahead_sparse_attention,19,4,1,23,0,fp16,directly_tested,23 direct test references
 lora_linear,7,0,0,7,0,fp16,directly_tested,7 direct test references
 lt,4,0,2,4,0,bf16 f32,directly_tested,4 direct test references
 lu,5,1,0,6,0,bf16 f16 f32 fp16 fp32,directly_tested,6 direct test references
@@ -333,7 +333,7 @@ polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 popcount,9,0,0,9,0,,directly_tested,9 direct test references
 pow,5,0,2,5,0,bf16 f32,directly_tested,5 direct test references
-power_attn,8,0,1,8,0,,directly_tested,8 direct test references
+power_attn,12,0,1,12,0,fp16,directly_tested,12 direct test references
 ppo_policy_loss,14,11,1,25,0,bf16 f16 f32 fp16 fp32,directly_tested,25 direct test references
 prod,4,0,0,4,0,,directly_tested,4 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
@@ -358,13 +358,13 @@ retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
 rmsnorm,75,13,3,88,0,bf16 f16 f32 f64 fp32,directly_tested,88 direct test references
 rmsnorm_safe,6,5,0,11,0,bf16 f16 f32,directly_tested,11 direct test references
-rng_bernoulli,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_beta,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_categorical,0,0,0,0,1,,covered_by_family,category default for 'rng'
+rng_bernoulli,2,0,0,2,0,,directly_tested,2 direct test references
+rng_beta,2,0,0,2,0,,directly_tested,2 direct test references
+rng_categorical,2,0,0,2,0,,directly_tested,2 direct test references
 rng_clone,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_dirichlet,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_fold_in,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_gamma,0,0,0,0,1,,covered_by_family,category default for 'rng'
+rng_dirichlet,2,0,0,2,0,,directly_tested,2 direct test references
+rng_fold_in,2,0,0,2,0,,directly_tested,2 direct test references
+rng_gamma,2,0,0,2,0,,directly_tested,2 direct test references
 rng_gibbs_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_hmc_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_key,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -373,10 +373,10 @@ rng_mala_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_multinomial,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_normal,7,0,0,7,0,fp32,directly_tested,7 direct test references
 rng_permutation,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_poisson,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_randint,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_split,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_truncated_normal,0,0,0,0,1,,covered_by_family,category default for 'rng'
+rng_poisson,2,0,0,2,0,,directly_tested,2 direct test references
+rng_randint,2,0,0,2,0,,directly_tested,2 direct test references
+rng_split,2,0,0,2,0,,directly_tested,2 direct test references
+rng_truncated_normal,2,0,0,2,0,,directly_tested,2 direct test references
 rng_uniform,12,0,0,12,0,fp32,directly_tested,12 direct test references
 roll,4,0,0,4,0,,directly_tested,4 direct test references
 rope,20,10,0,30,0,bf16,directly_tested,30 direct test references

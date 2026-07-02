@@ -7,10 +7,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **480** ops in `primitive_coverage` registry.
-- **3820** total Python-test references, **961** total lit-fixture references.
-- **96** ops have **zero** references in either test surface.
-- **133** ops have ≤1 reference ("thinly tested").
-- **103** ops have ≥10 references ("well tested").
+- **3856** total Python-test references, **961** total lit-fixture references.
+- **86** ops have **zero** references in either test surface.
+- **123** ops have ≤1 reference ("thinly tested").
+- **105** ops have ≥10 references ("well tested").
 - **123** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **133** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **123** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **133** ops have at most one test reference across the whole test surface.
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 
-_(73 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(63 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,11 +117,11 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**133** ops have ≤1 direct test reference.  They break down as:
+**123** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
-| `covered_by_family`      |   40 | Tested via a parent op or family wrapper |
+| `covered_by_family`      |   30 | Tested via a parent op or family wrapper |
 | `structural_only`        |   89 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
@@ -145,7 +145,7 @@ These **4** ops need real device hardware (Phase G/H).  They cannot be tested wi
 | `ebm_sphere_langevin_sample` | manifold Langevin needs real GPU mesh (Phase G) |
 | `ebm_sphere_langevin_step` | manifold Langevin needs real GPU mesh (Phase G) |
 
-## `covered_by_family` — 40 ops
+## `covered_by_family` — 30 ops
 
 Tested through a parent op or family wrapper.  Sample (first 30):
 
@@ -173,16 +173,14 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `is_concyclic` | category default for 'elementwise' |
 | `mobius_from_three_points` | category default for 'elementwise' |
 | `persistent_cd_loss` | category default for 'loss' |
-| `rng_bernoulli` | category default for 'rng' |
-| `rng_beta` | category default for 'rng' |
-| `rng_categorical` | category default for 'rng' |
 | `rng_clone` | category default for 'rng' |
-| `rng_dirichlet` | category default for 'rng' |
-| `rng_fold_in` | category default for 'rng' |
-| `rng_gamma` | category default for 'rng' |
 | `rng_gibbs_sample` | category default for 'rng' |
-
-_(10 additional family-covered ops omitted; see `classify_thinly_tested()` for the full list.)_
+| `rng_hmc_sample` | category default for 'rng' |
+| `rng_key` | category default for 'rng' |
+| `rng_langevin_sample` | category default for 'rng' |
+| `rng_mala_sample` | category default for 'rng' |
+| `rng_multinomial` | category default for 'rng' |
+| `rng_permutation` | category default for 'rng' |
 
 ## `structural_only` — 89 ops
 

@@ -1211,6 +1211,32 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "Executes via runtime.launch() (rocm_fpquant_compiled).",
     } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    # Integer quantization — scalar qparam selection + int8 container conversion
+    # around generated ROCm unary/binary kernels. int4 is signed int4 values
+    # stored in int8 containers (not packed weights).
+    **{op: {
+        "dtypes": ("fp32", "int8") if "int8" in op else ("fp32",),
+        "feature_flags": ("elementwise", "hip_runtime"),
+        "notes": f"Integer quantization {op} — round/max/min/mul on generated "
+                 "ROCm unary/binary kernels + host qparam structure. Executes "
+                 "via runtime.launch() (rocm_intquant_compiled).",
+    } for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
+                 "dequantize_int4", "fake_quantize")},
+    **{op: {
+        "dtypes": ("fp32",),
+        "feature_flags": ("reduction", "hip_runtime"),
+        "notes": f"Pooling {op} — host window matrix + generated ROCm reduce "
+                 "kernel max/min/mean. Executes via runtime.launch() "
+                 "(rocm_pooling_compiled).",
+    } for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")},
+    "image_normalize": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("elementwise", "hip_runtime"),
+        "notes": "image_normalize ((x-mean)/std) composed on generated ROCm "
+                 "binary sub/div kernels with host layout and per-channel "
+                 "broadcast. Executes via runtime.launch() "
+                 "(rocm_image_affine_compiled).",
+    },
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("elementwise",),
@@ -1931,6 +1957,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    **{(op, "x86"): "tests/unit/test_x86_intquant_compiled.py"
+       for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
+                  "dequantize_int4", "fake_quantize")},
+    **{(op, "x86"): "tests/unit/test_x86_pooling_vision_compiled.py"
+       for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool",
+                  "image_normalize")},
     **{(op, "x86"): "tests/unit/test_x86_nvfp4_compiled.py"
        for op in ("quantize_nvfp4", "dequantize_nvfp4")},
     **{(op, "x86"): "tests/unit/test_x86_reduce_foundation_compiled.py"
@@ -2011,6 +2043,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                   "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
                   "quantize_nvfp4", "dequantize_nvfp4")},
+    **{(op, "rocm"): "tests/unit/test_rocm_intquant_compiled.py"
+       for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
+                  "dequantize_int4", "fake_quantize")},
+    **{(op, "rocm"): "tests/unit/test_rocm_pooling_vision_compiled.py"
+       for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool",
+                  "image_normalize")},
     **{(op, "rocm"): "tests/unit/test_rocm_reduce_foundation_compiled.py"
        for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
                   "log_softmax", "softmax_safe", "sigmoid_safe")},
@@ -2851,6 +2889,31 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_fpquant_compiled lane; f32 fake-quant, matches reference)",
     } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    # Integer quantization — scalar qparam selection + int8 container conversion
+    # around AVX-512 round/max/min/mul kernels. int4 is signed int4 values stored
+    # in int8 containers (not packed weights).
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32", "int8") if "int8" in op else ("fp32",),
+        "notes": f"AVX-512 integer quantization {op} "
+                 "(round/max/min/mul on libtessera_x86_elementwise.so; "
+                 "x86_intquant_compiled composite lane; matches reference)",
+    } for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
+                 "dequantize_int4", "fake_quantize")},
+    **{op: {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": f"AVX-512 pooling {op} "
+                 "(host window matrix + tessera_x86_avx512_reduce_f32 "
+                 "max/min/mean; x86_pooling_compiled lane; matches reference)",
+    } for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")},
+    "image_normalize": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 image_normalize ((x-mean)/std) composed on "
+                 "tessera_x86_avx512_binary_f32 sub/div with host layout and "
+                 "per-channel broadcast; x86_image_affine_compiled lane",
+    },
     # NVFP4 — block-scaled fp4 (E2M1 codes + per-block fp8-E4M3 scale) on the
     # AVX-512 fpquant kernel + host block structure (x86_nvfp4_compiled).
     **{op: {
@@ -4036,12 +4099,8 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     # loss
     "contrastive_loss", "cosine_embedding_loss", "ctc_loss", "info_nce_loss",
     "nt_xent_loss", "seq2seq_loss", "triplet_loss", "wasserstein_distance",
-    # quantization
-    "dequantize_int4", "dequantize_int8", "fake_quantize", "quantize_int4",
-    "quantize_int8",
     # vision / pooling
-    "adaptive_pool", "avg_pool", "center_crop", "image_normalize",
-    "image_resize", "interpolate", "max_pool", "min_pool",
+    "center_crop", "image_resize", "interpolate",
     # recurrent / model / layout
     "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell",
     "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",

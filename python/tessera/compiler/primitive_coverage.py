@@ -3751,7 +3751,14 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     # contract claim changes; `open_n = partial + planned` stays
     # invariant so the universal Phase G gate test is unaffected.
     # ────────────────────────────────────────────────────────────────────
-    _REAL_IMPLEMENTATION_STATUSES = {"fused", "compileable", "reference"}
+    _REAL_IMPLEMENTATION_STATUSES = {
+        "compiled",
+        "compileable",
+        "fused",
+        "hardware_verified",
+        "packaged",
+        "reference",
+    }
     for name, entry in list(entries.items()):
         if entry.contract_status.get("backend_kernel") != "planned":
             continue

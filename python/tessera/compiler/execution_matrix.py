@@ -357,6 +357,16 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(tessera_x86_avx512_fpquant_f32: getexp/roundscale/"
                             "scalef mantissa-snap, RNE); dequantize is the fp32 "
                             "passthrough. f32, matches the reference exactly",
+    "x86_intquant_compiled": "x86 CPU integer quantization — qparam selection and "
+                            "int8 container conversion around AVX-512 round/"
+                            "max/min/mul kernels; covers int8 and signed int4 "
+                            "values stored in int8 containers",
+    "x86_pooling_compiled": "x86 CPU pooling — host window matrix / adaptive "
+                            "window partitioning with max/min/mean on the "
+                            "AVX-512 reduce kernel",
+    "x86_image_affine_compiled": "x86 CPU image affine preprocessing — "
+                            "image_normalize as sub/div on AVX-512 binary "
+                            "kernels with host layout and per-channel broadcast",
     "x86_class_loss_compiled": "x86 CPU class-axis loss — cross_entropy / kl / "
                             "js / focal / label_smoothed_cross_entropy / z_loss: "
                             "exp/log on the AVX-512 transcendental kernel, "
@@ -612,6 +622,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "(quantize/dequantize fp8 / fp6 / fp4) — grid-snap on "
                             "generate-rocm-fpquant-kernel (log2/exp2/roundeven) + "
                             "per-tensor scale. ROCm mirror of x86_fpquant. f32",
+    "rocm_intquant_compiled": "AMD GPU RDNA integer quantization — qparam "
+                            "selection and int8 container conversion around "
+                            "generated ROCm unary/binary kernels; covers int8 "
+                            "and signed int4 values stored in int8 containers",
+    "rocm_pooling_compiled": "AMD GPU RDNA pooling — host window matrix / "
+                            "adaptive window partitioning with max/min/mean on "
+                            "the generated ROCm reduce kernel",
+    "rocm_image_affine_compiled": "AMD GPU RDNA image affine preprocessing — "
+                            "image_normalize as sub/div on generated ROCm "
+                            "binary kernels with host layout and per-channel "
+                            "broadcast",
     "rocm_dequant_gemm_compiled": "DK4 dequant-GEMM ROCm compiler path — "
                             "compiler-generated fused HIP/ROCDL packed-code "
                             "dequant-into-GEMM kernel (generate-rocm-dequant-"
@@ -794,6 +815,32 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "AVX-512 fpquant kernel (getexp/roundscale/scalef mantissa-snap, "
                "RNE), rescale; dequantize is the fp32 passthrough. Matches the "
                "tessera.ops reference exactly (0 abs err).",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_intquant_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_intquant_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_intquant_compiled", runtime_status="success",
+        reason="x86 intquant artifact runs quantize/dequantize int8/int4 and "
+               "fake_quantize: qparam selection and int8 container conversion on "
+               "host, round/max/min/mul on AVX-512 elementwise kernels. int4 is "
+               "signed int4 values in int8 containers. Matches "
+               "tessera.quantization reference exactly.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_pooling_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_pooling_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_pooling_compiled", runtime_status="success",
+        reason="x86 pooling artifact runs max/avg/min/adaptive_pool by forming "
+               "the pooling window matrix on host and reducing each row on "
+               "tessera_x86_avx512_reduce_f32. f32, matches nn.functional.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_image_affine_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_image_affine_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_image_affine_compiled", runtime_status="success",
+        reason="x86 image affine artifact runs image_normalize as "
+               "(x-mean)/std: layout and per-channel broadcast on host, sub/div "
+               "on tessera_x86_avx512_binary_f32. f32, matches tessera.ops.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_class_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_class_loss_compiled",
@@ -1800,6 +1847,31 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "per-tensor scale + grid-snap on the COMPILER-GENERATED fpquant "
                "kernel (generate-rocm-fpquant-kernel: log2/exp2/roundeven -> "
                "ROCDL). ROCm mirror of x86_fpquant. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_intquant_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_intquant_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_intquant_compiled", runtime_status="success",
+        reason="ROCm intquant artifact runs quantize/dequantize int8/int4 and "
+               "fake_quantize: qparam selection and int8 container conversion on "
+               "host, round/max/min/mul on generated ROCm unary/binary kernels. "
+               "int4 is signed int4 values in int8 containers.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_pooling_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_pooling_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_pooling_compiled", runtime_status="success",
+        reason="ROCm pooling artifact runs max/avg/min/adaptive_pool by forming "
+               "the pooling window matrix on host and reducing each row on the "
+               "generated ROCm reduce kernel. f32, matches nn.functional.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_image_affine_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_image_affine_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_image_affine_compiled", runtime_status="success",
+        reason="ROCm image affine artifact runs image_normalize as "
+               "(x-mean)/std: layout and per-channel broadcast on host, sub/div "
+               "on generated ROCm binary kernels. f32, matches tessera.ops.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_dequant_gemm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_dequant_gemm_compiled",

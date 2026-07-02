@@ -210,7 +210,7 @@ class TestG78NvccCompileValidator:
     def test_validator_imports_clean(self):
         body = NVCC_VALIDATOR.read_text()
         assert "PTX_PATTERN_STUBS" in body
-        assert "MIN_NVCC_VERSION = (13, 2, 1)" in body
+        assert "MIN_NVCC_VERSION = (13, 3, 0)" in body
 
     def test_validator_covers_g4_ptx_patterns(self):
         """Every PTX pattern asserted by a G-4 fixture should have a

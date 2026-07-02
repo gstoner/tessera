@@ -1045,6 +1045,12 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "this kernel via op-name dispatch but has no separate rocm op "
                  "row.)",
     },
+    "retention": {
+        "dtypes": ("fp16", "bf16"),
+        "notes": "Degree-2 retention (φ=x² plus optional decay) via the "
+                 "linear-attn kernel, dispatched by op name. Executes via "
+                 "runtime.launch() (rocm_linear_attn_compiled).",
+    },
     "fused_epilogue": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Matmul + fused bias/relu/gelu/silu epilogue on the f32 "
@@ -1842,6 +1848,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("linear_attn", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("lightning_attention", "rocm"):
         "tests/unit/test_rocm_linear_attn_compiled.py",
+    ("retention", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("fused_epilogue", "rocm"):
         "tests/unit/test_rocm_fused_epilogue_compiled.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
@@ -4131,6 +4138,9 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell",
     "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",
     "simple_rnn_cell",
+    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
+    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
+    "tile_view", "unpack",
     # smaller compute tails
     "cross_attention", "depthwise_conv1d", "edm_loss_weight",
     "edm_precondition", "factorized_pos_emb", "masked_scatter",
@@ -4152,12 +4162,68 @@ _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
 }
 
 
+_STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
+    "ctc_loss",
+    "center_crop", "image_resize", "interpolate",
+    "patchify", "pixel_shuffle", "pixel_unshuffle",
+    "conv1d", "conv_transpose", "lora_linear",
+    "gru_cell", "simple_rnn_cell",
+    "depthwise_conv1d",
+    "cross_attention", "perceiver_resampler",
+    "bidirectional_scan",
+    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
+    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
+    "tile_view", "unpack",
+})
+
+
 def _single_gpu_compute_reference_manifest_for(
     op_name: str,
 ) -> list[BackendKernelEntry]:
     if op_name not in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
         return []
     dtypes = _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES.get(op_name, ("fp32",))
+    if op_name in _STRUCTURED_COMPUTE_COMPILED_OPS:
+        notes = (
+            "Single-GPU structured-compute executable lane: runtime.launch() "
+            "dispatches target-specific artifacts for host-structured dynamic "
+            "programming, image/layout indexing, conv/recurrent cells, and "
+            "streaming depthwise convolution. This is direct execute/compare "
+            "evidence, not a claim of a bespoke fused kernel."
+        )
+        return [
+            BackendKernelEntry(
+                target="cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "reference_execution"),
+                notes="numpy reference path for structured compute",
+            ),
+            BackendKernelEntry(
+                target="x86",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("avx512",),
+                notes=notes + " Executes via x86_structured_compute_compiled.",
+                execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
+            ),
+            BackendKernelEntry(
+                target="apple_cpu",
+                status=_REFERENCE_STATUS,
+                dtypes=dtypes,
+                feature_flags=("numpy", "reference_execution"),
+                notes="numpy reference path for structured compute",
+            ),
+            BackendKernelEntry(
+                target="rocm",
+                status=_COMPILED_STATUS,
+                dtypes=dtypes,
+                feature_flags=("hip_runtime", "structured_compute"),
+                notes=notes + " Executes via rocm_structured_compute_compiled.",
+                execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+                hipcc_version_min="7.2.4",
+            ),
+        ]
     notes = (
         "Single-GPU closeout compute-tail reference owner: Python/numpy "
         "execution path. Native fused kernel remains tracked separately."

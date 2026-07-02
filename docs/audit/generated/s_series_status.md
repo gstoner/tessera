@@ -27,14 +27,14 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
 | `cpu` | 325 | 0 | 325 | 0 | 155 |
-| `x86` | 304 | 235 | 69 | 0 | 176 |
+| `x86` | 316 | 263 | 53 | 0 | 164 |
 | `apple_cpu` | 357 | 2 | 355 | 0 | 123 |
-| `apple_gpu` | 87 | 61 | 1 | 25 | 393 |
-| `rocm` | 313 | 243 | 0 | 70 | 167 |
-| `nvidia_sm80` | 96 | 0 | 0 | 96 | 384 |
-| `nvidia_sm90` | 128 | 0 | 0 | 128 | 352 |
-| `nvidia_sm100` | 96 | 0 | 0 | 96 | 384 |
-| `nvidia_sm120` | 96 | 1 | 0 | 95 | 384 |
+| `apple_gpu` | 86 | 60 | 1 | 25 | 394 |
+| `rocm` | 326 | 272 | 0 | 54 | 154 |
+| `nvidia_sm80` | 80 | 0 | 0 | 80 | 400 |
+| `nvidia_sm90` | 112 | 0 | 0 | 112 | 368 |
+| `nvidia_sm100` | 80 | 0 | 0 | 80 | 400 |
+| `nvidia_sm120` | 80 | 1 | 0 | 79 | 400 |
 
 ## Per-category breakdown
 

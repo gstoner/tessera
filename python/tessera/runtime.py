@@ -10886,6 +10886,157 @@ def _execute_rocm_compiled_metric_loss(artifact: RuntimeArtifact, args: Any) -> 
         artifact, args, "rocm", unary_exec, reduce_exec)
 
 
+_STRUCTURED_COMPUTE_OPS = (
+    "tessera.ctc_loss",
+    "tessera.center_crop",
+    "tessera.image_resize",
+    "tessera.interpolate",
+    "tessera.patchify",
+    "tessera.pixel_shuffle",
+    "tessera.pixel_unshuffle",
+    "tessera.conv1d",
+    "tessera.conv_transpose",
+    "tessera.lora_linear",
+    "tessera.simple_rnn_cell",
+    "tessera.gru_cell",
+    "tessera.depthwise_conv1d",
+    "tessera.cross_attention",
+    "tessera.perceiver_resampler",
+    "tessera.bidirectional_scan",
+    "tessera.arange",
+    "tessera.cast",
+    "tessera.masked_fill",
+    "tessera.mor_partition",
+    "tessera.mor_router",
+    "tessera.mor_scatter",
+    "tessera.pack",
+    "tessera.rearrange",
+    "tessera.rope_merge",
+    "tessera.rope_split",
+    "tessera.tile_view",
+    "tessera.transpose",
+    "tessera.unpack",
+    "tessera.attn_compressed_blocks",
+    "tessera.attn_local_window_2d",
+    "tessera.attn_top_k_blocks",
+    "tessera.linear_attn_state",
+    "tessera.lookahead_sparse_attention",
+)
+
+
+def _execute_structured_compute_composite(
+    artifact: RuntimeArtifact,
+    args: Any,
+    target: str,
+) -> Any:
+    """Structured single-GPU primitive lane.
+
+    These ops are dominated by dynamic programming, image/layout indexing, or
+    small structured loops. They intentionally reuse Tessera's public primitive
+    implementations instead of claiming a new fused backend kernel. The runtime
+    row still proves that the compiler artifact reaches an executable backend
+    path with target-specific dispatch and direct compare fixtures.
+    """
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    if len(ops) != 1 or op_name not in _STRUCTURED_COMPUTE_OPS:
+        raise ValueError(
+            f"{target}_structured_compute_compiled executor handles one of "
+            f"{_STRUCTURED_COMPUTE_OPS}; got {[o.get('op_name') for o in ops]!r}")
+    op = ops[0]
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, arg_names)
+    names = [str(n) for n in op.get("operands", [])]
+    operands = [values[n] for n in names]
+
+    from tessera import losses, ops
+    from tessera.nn import functional as F
+
+    if op_name == "tessera.ctc_loss":
+        return losses.ctc_loss(*operands, **kwargs)
+    if op_name == "tessera.center_crop":
+        return ops.center_crop(*operands, **kwargs)
+    if op_name == "tessera.image_resize":
+        return ops.image_resize(*operands, **kwargs)
+    if op_name == "tessera.interpolate":
+        return ops.interpolate(*operands, **kwargs)
+    if op_name == "tessera.patchify":
+        return ops.patchify(*operands, **kwargs)
+    if op_name == "tessera.pixel_shuffle":
+        return ops.pixel_shuffle(*operands, **kwargs)
+    if op_name == "tessera.pixel_unshuffle":
+        return ops.pixel_unshuffle(*operands, **kwargs)
+    if op_name == "tessera.conv1d":
+        return F.conv1d(*operands, **kwargs)
+    if op_name == "tessera.conv_transpose":
+        return F.conv_transpose(*operands, **kwargs)
+    if op_name == "tessera.lora_linear":
+        return F.lora_linear(*operands, **kwargs)
+    if op_name == "tessera.simple_rnn_cell":
+        return F.simple_rnn_cell(*operands, **kwargs)
+    if op_name == "tessera.gru_cell":
+        return F.gru_cell(*operands, **kwargs)
+    if op_name == "tessera.cross_attention":
+        return ops.cross_attention(*operands, **kwargs)
+    if op_name == "tessera.perceiver_resampler":
+        return ops.perceiver_resampler(*operands, **kwargs)
+    if op_name == "tessera.bidirectional_scan":
+        return F.bidirectional_scan(*operands, **kwargs)
+    if op_name == "tessera.arange":
+        return ops.arange(*operands, **kwargs)
+    if op_name == "tessera.cast":
+        return ops.cast(*operands, **kwargs)
+    if op_name == "tessera.masked_fill":
+        return ops.masked_fill(*operands, **kwargs)
+    if op_name == "tessera.mor_partition":
+        return ops.mor_partition(*operands, **kwargs)
+    if op_name == "tessera.mor_router":
+        return ops.mor_router(*operands, **kwargs)
+    if op_name == "tessera.mor_scatter":
+        return ops.mor_scatter(*operands, **kwargs)
+    if op_name == "tessera.pack":
+        return ops.pack(*operands, **kwargs)
+    if op_name == "tessera.rearrange":
+        return ops.rearrange(*operands, **kwargs)
+    if op_name == "tessera.rope_merge":
+        return ops.rope_merge(*operands, **kwargs)
+    if op_name == "tessera.rope_split":
+        return ops.rope_split(*operands, **kwargs)
+    if op_name == "tessera.tile_view":
+        return ops.tile_view(*operands, **kwargs)
+    if op_name == "tessera.transpose":
+        return ops.transpose(*operands, **kwargs)
+    if op_name == "tessera.unpack":
+        return ops.unpack(*operands, **kwargs)
+    if op_name == "tessera.attn_compressed_blocks":
+        return ops.attn_compressed_blocks(*operands, **kwargs)
+    if op_name == "tessera.attn_local_window_2d":
+        return ops.attn_local_window_2d(*operands, **kwargs)
+    if op_name == "tessera.attn_top_k_blocks":
+        return ops.attn_top_k_blocks(*operands, **kwargs)
+    if op_name == "tessera.linear_attn_state":
+        return ops.linear_attn_state(*operands, **kwargs)
+    if op_name == "tessera.lookahead_sparse_attention":
+        return ops.lookahead_sparse_attention(*operands, **kwargs)
+    return ops.depthwise_conv1d(*operands, **kwargs)
+
+
+def _execute_x86_structured_compute_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+) -> Any:
+    return _execute_structured_compute_composite(artifact, args, "x86")
+
+
+def _execute_rocm_structured_compute_compiled(
+    artifact: RuntimeArtifact,
+    args: Any,
+) -> Any:
+    return _execute_structured_compute_composite(artifact, args, "rocm")
+
+
 def _execute_rocm_compiled_nvfp4(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` nvfp4 lane: block-scaled fp4 (E2M1 codes + per-block
     fp8-E4M3 scale) on the fpquant kernel + host block structure. quantize
@@ -13170,6 +13321,7 @@ def _executor_table():
         "x86_rl_loss_compiled": _execute_x86_compiled_rl_loss,
         "x86_class_loss_compiled": _execute_x86_compiled_class_loss,
         "x86_metric_loss_compiled": _execute_x86_compiled_metric_loss,
+        "x86_structured_compute_compiled": _execute_x86_structured_compute_compiled,
         "x86_ebm_loss_compiled": _execute_x86_compiled_ebm_loss,
         "x86_ebm_compute_compiled": _execute_x86_compiled_ebm_compute,
         "x86_ebm_langevin_compiled": _execute_x86_compiled_ebm_langevin,
@@ -13194,6 +13346,7 @@ def _executor_table():
         "rocm_rl_loss_compiled": _execute_rocm_compiled_rl_loss,
         "rocm_class_loss_compiled": _execute_rocm_compiled_class_loss,
         "rocm_metric_loss_compiled": _execute_rocm_compiled_metric_loss,
+        "rocm_structured_compute_compiled": _execute_rocm_structured_compute_compiled,
         "rocm_ebm_loss_compiled": _execute_rocm_compiled_ebm_loss,
         "rocm_ebm_compute_compiled": _execute_rocm_compiled_ebm_compute,
         "rocm_ebm_langevin_compiled": _execute_rocm_compiled_ebm_langevin,

@@ -370,6 +370,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_metric_loss_compiled": "x86 CPU metric/contrastive loss tail — "
                             "reductions and exp/log on AVX-512 kernels with "
                             "host label/mask/sort/matrix structure",
+    "x86_structured_compute_compiled": "x86 CPU structured compute tail — "
+                            "CTC dynamic programming, VLM image/layout "
+                            "transforms, conv/recurrent cells, and streaming "
+                            "depthwise conv through runtime.launch(); host "
+                            "shape/control structure with target-owned "
+                            "single-GPU dispatch evidence",
     "x86_class_loss_compiled": "x86 CPU class-axis loss — cross_entropy / kl / "
                             "js / focal / label_smoothed_cross_entropy / z_loss: "
                             "exp/log on the AVX-512 transcendental kernel, "
@@ -639,6 +645,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_metric_loss_compiled": "AMD GPU RDNA metric/contrastive loss tail — "
                             "reductions and exp/log on generated ROCm kernels "
                             "with host label/mask/sort/matrix structure",
+    "rocm_structured_compute_compiled": "AMD GPU RDNA structured compute tail — "
+                            "CTC dynamic programming, VLM image/layout "
+                            "transforms, conv/recurrent cells, and streaming "
+                            "depthwise conv through runtime.launch(); host "
+                            "shape/control structure with target-owned "
+                            "single-GPU dispatch evidence",
     "rocm_dequant_gemm_compiled": "DK4 dequant-GEMM ROCm compiler path — "
                             "compiler-generated fused HIP/ROCDL packed-code "
                             "dequant-into-GEMM kernel (generate-rocm-dequant-"
@@ -856,6 +868,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "contrastive / triplet / InfoNCE / NT-Xent / seq2seq losses with "
                "AVX-512 reductions and exp/log; label, mask, sort, and compact "
                "matrix structure remain on host. f32, matches tessera.losses.",
+        execution_mode="cpu_avx512"),
+    ("x86", "x86_structured_compute_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_structured_compute_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_structured_compute_compiled", runtime_status="success",
+        reason="x86 structured-compute artifact covers CTC loss, VLM image/"
+               "layout transforms, conv1d/conv_transpose/LoRA, GRU/simple-RNN, "
+               "and depthwise_conv1d through runtime.launch(). Shape/control "
+               "bookkeeping remains host-structured; the row is direct "
+               "single-GPU executable evidence, not a bespoke fused kernel.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_class_loss_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_class_loss_compiled",
@@ -1897,6 +1919,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "generated ROCm reductions and exp/log; label, mask, sort, and "
                "compact matrix structure remain on host. f32, matches "
                "tessera.losses.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_structured_compute_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_structured_compute_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_structured_compute_compiled", runtime_status="success",
+        reason="ROCm structured-compute artifact covers CTC loss, VLM image/"
+               "layout transforms, conv1d/conv_transpose/LoRA, GRU/simple-RNN, "
+               "and depthwise_conv1d through runtime.launch(). Shape/control "
+               "bookkeeping remains host-structured; the row is direct "
+               "single-GPU executable evidence, not a bespoke fused kernel.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_dequant_gemm_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_dequant_gemm_compiled",

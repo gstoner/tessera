@@ -152,13 +152,7 @@ def test_compute_tail_backend_rows_are_pathway_owned() -> None:
 def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
     for op in (
         "rng_beta",
-        "image_resize",
-        "gru_cell",
-        "conv1d",
-        "patchify",
         "edm_precondition",
-        "cross_attention",
-        "depthwise_conv1d",
         "memory_read",
     ):
         entries = {entry.target: entry for entry in bm.manifest_for(op)}
@@ -177,6 +171,28 @@ def test_compute_tail_reference_manifests_cover_representative_ops() -> None:
             assert entries[target].cuda_arch_min == arch
             assert entries[target].nvcc_version_min == "13.3"
             assert "planned_kernel" in entries[target].feature_flags
+
+
+def test_compute_tail_structured_manifests_cover_promoted_ops() -> None:
+    for op in (
+        "image_resize",
+        "gru_cell",
+        "conv1d",
+        "patchify",
+        "cross_attention",
+        "depthwise_conv1d",
+    ):
+        entries = {entry.target: entry for entry in bm.manifest_for(op)}
+        assert entries["cpu"].status == "reference"
+        assert entries["apple_cpu"].status == "reference"
+        assert entries["x86"].status == "compiled"
+        assert entries["x86"].execute_compare_fixture == (
+            "tests/unit/test_x86_structured_compute_compiled.py"
+        )
+        assert entries["rocm"].status == "compiled"
+        assert entries["rocm"].execute_compare_fixture == (
+            "tests/unit/test_rocm_structured_compute_compiled.py"
+        )
 
 
 def test_host_only_categories_are_not_backend_kernel_unowned() -> None:

@@ -133,7 +133,9 @@ synthesizer for the crown-jewel GEMM/attention kernels.
 - Apple: 168 authored MSL kernels in `apple_gpu_runtime.mm`, `.mtlpackage` (PK).
 - NVIDIA: shipped `libtessera_nvidia_gemm.so`, future cuBLAS-class kernels.
 - ROCm: shipped `libtessera_rocm_{gemm,flash_attn}.so`, rocWMMA/AITER-derived.
-- x86: 40+ AMX/AVX-512 kernels.
+- x86: 40+ AMX/AVX-512 kernels; **AOCL-DLP** (AMD's BLIS-family DL primitives —
+  low-precision GEMM + batch + pre/post-ops, OpenMP) as an opt-in Zen candidate,
+  the CPU analog of cuBLAS/rocWMMA (see Refactor Plan C1).
 
 Tier 3 is not legacy. It is the reason rule #2 exists: the arbiter treats a
 hand-tuned kernel as the highest-priority candidate and only lets a compiled one

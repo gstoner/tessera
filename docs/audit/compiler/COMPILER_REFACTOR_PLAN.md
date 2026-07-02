@@ -121,7 +121,16 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   `spec_policy` declares which specialization modes the plugin supports (`static |
   bucket | dynamic`) + its bucketing strategy — so the static-shape gate now in
   the lowering (`"requires static shapes"` in `TileToX86Pass` / `MatmulToAppleCPU`)
-  is replaced by a *policy*, not re-hardcoded per backend.
+  is replaced by a *policy*, not re-hardcoded per backend. The **x86 plugin's
+  Tier-3 candidate set** should register **AOCL-DLP** ([amd/aocl-dlp](https://github.com/amd/aocl-dlp))
+  for the Zen family — AMD's BLIS-family DL primitives (low-precision GEMM/batch
+  GEMM incl. INT4/FP16, pre/post-ops matching `fused_epilogue`, symmetric quant,
+  OpenMP). It's AVX512-based (fits the Zen 5 fleet box, which has no AMX), fills
+  the x86 backend's OpenMP-threading + INT4/FP16 gaps, and is opt-in behind a
+  build flag (a BLAS-family library like Accelerate — Decision #23-clean, kept
+  behind the hardware-free Target IR). The arbiter (D1) selects it only where it
+  measures faster than the generic kernels on Zen; check its license before it
+  becomes a shipped/linked lane.
 - **C2 · NVIDIA in-process emit pipeline** `[MAC]` authoring → `[NV]` proof —
   `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
   `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize →

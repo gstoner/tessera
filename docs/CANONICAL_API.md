@@ -1,12 +1,12 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-06-16
+last_updated: 2026-07-02
 ---
 
 # Tessera Canonical API Quick Reference
 **Status:** Normative - grounded in `python/tessera/` active implementation  
-**Last updated:** June 16, 2026  
+**Last updated:** July 2, 2026  
 **Use this document** to resolve any naming disagreement in other docs. If something here conflicts with another doc, this file wins.
 
 > **Tensor attribute vocabulary lives in [`docs/reference/tessera_tensor_attributes.md`](reference/tessera_tensor_attributes.md).** That document is the canonical reference for the six tensor attributes (`shape`, `dtype`, `layout`, `device`/`target`, `distribution`, `numeric_policy`), the canonical dtype names + accepted aliases, the planned/gated dtype set (`uint*`, `complex*`, packed `int4`, `mxfp*`), and the JAX-like promotion direction. Every dtype string used in this file (`"fp32"`, `"bf16"`, `"fp16"`, `"fp8_e4m3"`, etc.) follows that vocabulary; aliases like `"f32"` are accepted at API boundaries but should normalize before storage.
@@ -235,12 +235,25 @@ def flash_attn_fwd(Q, K, V):
 | `ISA.SM_86` | RTX 30xx | ❌ | ❌ |
 | `ISA.SM_89` | RTX 40xx | ❌ | ❌ |
 | `ISA.SM_90` | H100 / GH200 | ✅ | ✅ |
-| `ISA.SM_100` | B100 / GB200 | ✅ | ✅ |
-| `ISA.SM_120` | Rubin placeholder | ✅ | ✅ |
+| `ISA.SM_100` | B100 / GB200 (Blackwell datacenter) | ✅ | ✅ |
+| `ISA.SM_120` | RTX 50-series — Blackwell consumer (GB20x, CC 12.0) | ❌¹ | ✅ |
 
 `GPUTargetProfile` key parameters: `isa`, `warps_per_cta` (default 4, must be power of 2), `shared_mem_bytes` (None = SM default), `pipeline_stages` (default 2).
 
-Key properties: `.supports_wgmma` / `.supports_tma` / `.supports_mbarrier` → `isa >= SM_90`; `.supports_tcgen05` / `.supports_tmem` / `.supports_cta_pairs` / `.supports_block_scaled_mma` → `isa >= SM_100`; `.runtime_arch` emits CUDA architecture strings such as `sm_90a`, `sm_100a`, and `sm_120`.
+Key properties (**all sourced from the per-SM CUDA 13.3 feature matrix in
+`gpu_target.py`, not a coarse `isa`-ordering**): `.supports_wgmma` / `.supports_tma`
+/ `.supports_mbarrier` (SM_90 / SM_100; sm_120 has `tma`+`mbarrier` but **not**
+`wgmma`); `.supports_tcgen05` / `.supports_tmem` / `.supports_cta_pairs` (datacenter
+SM_100 only — **not** consumer sm_120); `.supports_block_scaled_mma` (SM_100 via
+`tcgen05`, sm_120 via `mma.sync.block_scale`); `.runtime_arch` emits CUDA
+architecture strings such as `sm_90a`, `sm_100a`, and `sm_120`.
+
+> **¹ Consumer Blackwell sm_120 does not implement Hopper `wgmma`** (so
+> `.supports_wgmma` is `False`). It is **not** a superset of datacenter sm_100:
+> no `wgmma`, no `tcgen05`/TMEM. Its low-precision matrix path is 5th-gen Tensor
+> Core `mma.sync` (incl. FP4 `block_scale`, compile target `sm_120a`). The
+> `.supports_*` queries read the authoritative per-arch feature matrix, so they
+> return the hardware-correct answer per ISA.
 
 ### String target aliases
 

@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Documentation authority tree
-last_updated: 2026-06-16
+last_updated: 2026-07-02
 ---
 
 # Tessera Documentation Map
@@ -57,6 +57,14 @@ Compiler planning readers should use
 `docs/audit/compiler/COMPILER_AUDIT.md` for the current
 source-base review, next compiler milestones, and the Visual Complex Analysis
 assessment. Older audit files remain useful historical context.
+
+The **forward compiler direction (north star)** is the paired plan + theory set:
+`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first — the three-tier
+kernel model + accuracy-budgeted measured arbiter + the three-system fleet),
+`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md` (workstreams + coordination), and
+the reassessed `docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md` (F6 = the
+backend-build seam). These are *direction*; `docs/audit/MASTER_AUDIT.md` and the
+generated dashboards stay status truth.
 
 Reliability and validation readers should start with
 `docs/guides/Tessera_QA_Reliability_Guide.md`. It is the hands-on guide for
@@ -136,4 +144,4 @@ Use these labels consistently in active docs:
 | Runtime C ABI and Python wrapper | mock-runtime / hardware-runtime where C backend is built and device-present | `docs/spec/RUNTIME_ABI_SPEC.md`, `python/tessera/runtime.py`, `src/runtime/` |
 | Apple CPU backend | implemented / lit-testable / hardware-runtime via Accelerate + BNNS | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_Apple_Backend/`, `python/tessera/runtime.py`, Apple target-contract tests |
 | Apple GPU backend | implemented / lit-testable / hardware-runtime on Darwin via MPS, MPSGraph, custom MSL, Metal 4 lanes, and packaged `.mtlpackage` ABI validation | `python/tessera/compiler/target_ir.py`, `python/tessera/apple_mlpkg.py`, `python/tessera/compiler/apple_packaged_manifest.py`, `src/compiler/codegen/Tessera_Apple_Backend/`, Apple target-contract tests |
-| ROCm backend | implemented / lit-testable / artifact-only until Phase H hardware execution | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, ROCm target-contract tests |
+| ROCm backend | implemented / lit-testable / hardware-runtime on gfx1151 (Strix Halo, RDNA 3.5) via compiler-generated HIP `runtime.launch()` lanes; CDNA/MI300-class remains hardware-gated | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/Tessera_ROCM_Backend/`, `docs/audit/backend/rocm/ROCM_AUDIT.md`, ROCm target-contract tests |

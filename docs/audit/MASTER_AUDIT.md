@@ -32,6 +32,20 @@ work, and remaining work across the compiler, runtime/backend, platform
 backends, coverage, and domain tracks. Generated dashboards remain the source of
 truth for counts; theme audit documents carry the reasoning and work plan.
 
+> **North star for forward development (2026-07-02).** The go-forward compiler
+> direction is the paired plan + theory set under `compiler/`:
+> [`COMPILER_THEORY_OF_OPERATION.md`](compiler/COMPILER_THEORY_OF_OPERATION.md)
+> (read first — the three-tier kernel model, the **accuracy-budgeted measured
+> arbiter**, the Mac/Strix-Halo/NR2-Pro fleet, and the W1–W8 world-class scope
+> register), [`COMPILER_REFACTOR_PLAN.md`](compiler/COMPILER_REFACTOR_PLAN.md)
+> (Workstreams A–E spine + F–K world-class), and the reassessed
+> [`OPTIMIZING_COMPILER_PLAN.md`](compiler/OPTIMIZING_COMPILER_PLAN.md) (F6 = the
+> backend-build seam). Governing rule: **ROCm/CUDA are the lead performance
+> targets; the generic framework raises the floor and must never cap their
+> ceiling.** These docs are *direction*; this page + the generated dashboards
+> stay *status truth* (Decision #26). Full map in
+> [`README.md`](README.md#forward-plans--the-compiler-north-star).
+
 ## Current Truth Snapshot
 
 | Area | Current state | Still open |

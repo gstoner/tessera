@@ -22,11 +22,16 @@ heuristics. "Standalone" means runtime-independent of PyTorch / JAX / Flax
 Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm,
 x86 AMX/AVX512, Apple M-series CPU/GPU.
 
-**Execution reality:** the **x86 AMX/AVX512** backend and **Apple CPU
-(Accelerate) + GPU (MPS/MSL/MPSGraph)** backends execute natively today. NVIDIA
-and ROCm are toolchain-pinned Target IR + lit fixtures with native execution
-**hardware-gated** (Phase G/H). Other backends produce IR/artifacts until a
-hardware-gated proof row says otherwise. See
+**Execution reality (reconciled 2026-06-24 hardware bring-up):** the **x86
+AMX/AVX512** backend and **Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph)**
+backends execute natively. Non-Apple hardware is **no longer purely gated**:
+**ROCm gfx1151** (Strix Halo, RDNA 3.5) executes a compiler-generated matmul +
+flash-attention family via `runtime.launch()`, and **NVIDIA sm_120** (RTX 5070 Ti,
+consumer Blackwell) has a hardware-verified `mma.sync` matmul. Broader op coverage
+and datacenter archs (ROCm CDNA/MI300; NVIDIA Hopper sm_90 / datacenter sm_100)
+stay hardware-gated (Phase G/H). Everything else produces IR/artifacts until a
+hardware-gated proof row says otherwise — read the generated dashboards for what
+is actually proven, never counts copied into prose (Decision #26). See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
 
 ---
@@ -190,6 +195,8 @@ Per-phase deliverables and the open-work priority queue live in
 
 27. **Ground every Metal / Apple GPU API claim in a real source before declaring it possible or "blocked."** Authoritative sources, in reliability order: **(1) on-machine SDK headers** — `xcrun --show-sdk-path` → `…/System/Library/Frameworks/{Metal,MetalPerformanceShaders,MetalPerformanceShadersGraph,MetalPerformancePrimitives}.framework/Headers/`; **(2) user-provided doc dumps**; **(3) the `apple-metal-docs-urls` memory file**. **WebFetch caveat:** developer.apple.com is a JS-rendered SPA — `WebFetch` returns only the page title, not the API body — so it is NOT a reliable Metal-doc source. Anti-pattern: writing a "blocked / no API path" conclusion from absence of evidence in one source.
 
+28. **The forward compiler direction is the three-tier / measured-arbiter model — leads set the ceiling, the generic framework raises the floor.** (North star, 2026-07-02.) Kernels come from three tiers: **(1)** a generic synthesizer (arch-agnostic region-IR + F4 oracle + synth→compile→cache→launch loop), **(2)** a per-arch codegen plugin (`KernelEmitter`/`TargetPlugin`: MSL / PTX / AMDGCN / C-LLVM), **(3)** hand-tuned kernels. A **measured, accuracy-budgeted arbiter** picks the fastest *in-budget* candidate per `(op, shape-bucket, dtype, target)`. **ROCm and CUDA are the lead performance targets: shared infra must never cap their ceiling** — hand-emitted `wgmma`/`mma.sync`/MFMA/WMMA stay first-class arbiter candidates, displaced only when a compiled kernel is both faster and in accuracy budget. The synthesizer/plugin interface is **symbolic-dim-aware from day one** (`static | bucket | dynamic` policy; first impls bucket-specialize) so dynamic shapes never force an API break. Full model: [`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md); execution: [`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md). These are *direction*; MASTER_AUDIT + generated dashboards stay status truth.
+
 ---
 
 ## Key Design Contracts
@@ -317,6 +324,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | What you need | Where |
 |---------------|-------|
 | **START HERE — status + open-work queue** | `docs/audit/MASTER_AUDIT.md` (+ theme audits; `docs/audit/README.md` for the map) |
+| **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
 | **Generated dashboards** (count/status truth — never hand-edit) | `docs/audit/generated/` |
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |

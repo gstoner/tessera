@@ -343,20 +343,30 @@ class GPUTargetProfile:
 
     # ── Capability queries ────────────────────────────────────────────────────
 
+    # These queries consult the authoritative per-SM feature matrix
+    # (``_CUDA_13_3_FEATURES``) — NOT a coarse ``isa >= SM_x`` ordering.  The
+    # ordering is wrong for consumer Blackwell **sm_120**, which is *not* a
+    # superset of datacenter sm_100: it has no Hopper ``wgmma`` and no
+    # ``tcgen05``/TMEM (its matrix path is warp-level ``mma.sync``).  Sourcing
+    # every capability from the matrix keeps one source of truth.
+
     @property
     def supports_wgmma(self) -> bool:
-        """True for SM_90+ (Hopper). Enables wgmma.mma_async PTX path."""
-        return self.isa >= ISA.SM_90
+        """True when the ISA has Hopper ``wgmma.mma_async`` (SM_90 / SM_100 only —
+        consumer Blackwell sm_120 does NOT; its matrix path is ``mma.sync``)."""
+        return cuda_feature_status(self.isa, "wgmma") == "ready"
 
     @property
     def supports_tma(self) -> bool:
-        """True for SM_90+ (Hopper). Enables cp.async.bulk.tensor TMA path."""
-        return self.isa >= ISA.SM_90
+        """True when the ISA has the ``cp.async.bulk.tensor`` TMA path."""
+        return cuda_feature_status(self.isa, "tma") == "ready"
 
     @property
     def supports_mbarrier(self) -> bool:
-        """True for SM_90+ (Hopper). Enables async transaction barriers."""
-        return self.isa >= ISA.SM_90
+        """True for the Hopper+ async *transaction* barrier
+        (``mbarrier.arrive.expect_tx``).  Basic named mbarrier exists earlier but
+        is a different contract; this property means the transaction-count form."""
+        return cuda_feature_status(self.isa, "mbarrier_arrive_tx") == "ready"
 
     @property
     def supports_async_transaction_barrier(self) -> bool:
@@ -365,27 +375,31 @@ class GPUTargetProfile:
 
     @property
     def supports_tcgen05(self) -> bool:
-        """True for Blackwell SM_100+ Tensor Core generation 5 contracts."""
-        return self.isa >= ISA.SM_100
+        """True for datacenter Blackwell **sm_100** Tensor Core gen-5 (``tcgen05``).
+        Consumer sm_120 is False (tcgen05 is sm_100a-only)."""
+        return cuda_feature_status(self.isa, "tcgen05") == "ready"
 
     @property
     def supports_tmem(self) -> bool:
-        """True for Blackwell SM_100+ Tensor Memory accumulator contracts."""
-        return self.isa >= ISA.SM_100
+        """True for datacenter Blackwell **sm_100** Tensor Memory accumulators.
+        Consumer sm_120 is False."""
+        return cuda_feature_status(self.isa, "tmem") == "ready"
 
     @property
     def supports_cta_pairs(self) -> bool:
-        """True when CTA-pair scheduling metadata is available."""
-        return self.isa >= ISA.SM_100
+        """True when CTA-pair (``tcgen05_pair``) scheduling is available — sm_100
+        only; consumer sm_120 is False."""
+        return cuda_feature_status(self.isa, "tcgen05_pair") == "ready"
 
     @property
     def supports_block_scaled_mma(self) -> bool:
-        """True for Blackwell block-scaled MMA dtypes such as NVFP4/FP6."""
-        return self.isa >= ISA.SM_100
+        """True for block-scaled MMA dtypes (NVFP4/FP6).  sm_100 via ``tcgen05``,
+        sm_120 via ``mma.sync.block_scale`` — both report ready in the matrix."""
+        return cuda_feature_status(self.isa, "block_scaled_mma") == "ready"
 
     @property
     def supports_wgmma_sparse(self) -> bool:
-        """Sparse WGMMA variants (SM_90+ under CUDA 13.3)."""
+        """Sparse WGMMA variants (SM_90 / SM_100 under CUDA 13.3)."""
         return cuda_feature_status(self.isa, "wgmma_sparse") == "ready"
 
     @property

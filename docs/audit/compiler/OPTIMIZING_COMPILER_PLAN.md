@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-15
+last_updated: 2026-07-02
 audit_role: plan
 plan_state: open
 ---
@@ -11,6 +11,37 @@ plan_state: open
 > Scope: the execution middle-end.  The `@jit` frontend (Graph IR emission,
 > multi-output ops, scalar-attr lowering) is done; this plan is about what
 > *consumes* those graphs.
+
+> ## Reassessment — 2026-07-02 (read before §1)
+>
+> Two of this document's original assumptions have been overtaken by events.
+> **F0–F5 have landed on Apple** (§6), so §1's "op library + dispatcher, not an
+> optimizing compiler" describes the *pre-F0 starting point*, not today — the
+> middle-end synthesizer exists and is the Apple production path. The live edge
+> of this plan is **F6 (the backend lift)**, which is where specific backends get
+> built. F6 has been **rewritten below** because its central premise died:
+>
+> 1. **"This Mac can't provide a CUDA/ROCm runner, so silicon validation is
+>    deferred" is dead.** The **Strix Halo** box (Radeon 8060S **gfx1151**, ROCm
+>    7.2.4) and the **NR2 Pro** box (RTX 5070 Ti **sm_120**, CUDA 13.3) now exist
+>    and *execute* — ROCm gfx1151 runs a compiler-generated matmul + flash-attn
+>    family; NVIDIA sm_120 runs its first `mma.sync` matmul. F6 is no longer
+>    "design + assemble-on-CI, silicon deferred."
+> 2. **"Lift the design, swap the F2 emitter, keep F1/F3/F4/F5" is too simple and
+>    partly wrong as a governing rule.** ROCm and CUDA are the **lead performance
+>    targets** — their crown-jewel GEMM/attention is hand-emitted `wgmma` /
+>    `mma.sync` / MFMA / WMMA and must **not** be forced through the generic
+>    synthesizer. The correct model is the **three-tier / measured-arbiter** model
+>    in [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md): the
+>    synthesizer generalizes for the *fusable-DAG middle ground*; the leads keep
+>    hand-tuned kernels as first-class **arbiter candidates**. Also, the
+>    synthesizer is **not** cleanly liftable today — `fusion.py` welds the region
+>    model to MSL string emission (the `.msl` fields); the split into a
+>    `KernelEmitter` plugin is prerequisite work, tracked as Workstream B/C in
+>    [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md).
+>
+> §1–§5 below are preserved as the original design record (still accurate for the
+> Apple middle-end). The reassessed F6 supersedes the original F6.
 
 ## 1. The honest current state
 
@@ -85,7 +116,13 @@ as the epilogue**, replacing hand-writing.  Stage by family:
   covers gelu/rmsnorm/bias/silu/any pointwise chain);
 - F2b: reduction epilogues (softmax/rmsnorm *synthesized*, not hand-written);
 - F2c: attention (matmul → softmax → matmul) as a synthesized online-softmax
-  kernel, retiring the bespoke flash-attn variants.
+  kernel, retiring the bespoke flash-attn variants. **(Apple-scoped — see the
+  2026-07-02 reassessment banner.)** "Retiring the flash-attn variants" means the
+  *Apple* MSL catalog only; on the lead backends (ROCm/CUDA) hand-emitted
+  flash-attn (MFMA/WMMA, `mma.sync`) stays a first-class **arbiter candidate**
+  (F6c), never retired. Even on Apple this is partially deferred — runtime
+  attention dispatch is not yet wired (the transposed-K orientation issue in the
+  §6 "Deferred" note).
 - **Accept:** a synthesized kernel for a region *not* in the catalog passes the
   horizontal-equivalence oracle at rung 8 and beats per-op dispatch in
   `dlop_longtail_core`; the hand-written-kernel count starts *decreasing*.
@@ -115,15 +152,65 @@ accumulates `(region-shape → best-synthesis)` and distills to an O(1) decision
 - **Accept:** an autotuned synthesized kernel beats the hand-written one it
   replaced on this chip, recorded in the flywheel corpus.
 
-### F6 — The lift: one middle-end, many backends
-With general fusion + synthesis proven on Apple, lift the **region model + the
-synthesizer's IR-level structure** into the MLIR/LLVM production lane
-(`tessera_jit`, today a CPU Phase-0 JIT).  The same `fused_region` retargets to
-NVIDIA (PTX/WGMMA — currently rung 2.5, PTX *emitted*) and ROCm (MFMA) by
-swapping the F2 backend emitter, not the F1 discovery or F3/F4/F5 machinery.
-Apple proves the design; MLIR/LLVM scales it.  *(Hardware-gated: NVIDIA/ROCm
-execution needs a real CUDA/ROCm runner this Mac can't provide — F6 is design +
-emission + assemble-on-CI, with silicon validation deferred.)*
+### F6 — The lift: one middle-end, many backends *(rewritten 2026-07-02)*
+
+**This is where specific backends get built**, so it carries the governing rule
+from [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md): the
+leads (ROCm/CUDA) set the ceiling; the generic middle-end raises the floor and
+must never cap them. F6 is no longer a single "lift + swap emitter" step — it is
+the three-tier build-out, and it is **no longer hardware-deferred** (real gfx1151
++ sm_120 silicon exists).
+
+**What F0–F5 give F6:** a proven, arch-agnostic *design* — region discovery (F1),
+a cost model (F3), a codegen oracle (F4), and an autotuner (F5). What they do
+**not** give is a portable *synthesizer*: F2's output is MSL, welded into
+`fusion.py`. So F6 splits into three moves, executed as Workstreams **B/C/D** of
+[`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) (B = portable
+synthesizer, C = per-arch plugins, D = the measured arbiter that keeps the leads
+safe):
+
+- **F6a — make the synthesizer portable (prerequisite).** Split `fusion.py` into
+  the arch-agnostic core (`FusedRegion`/`EpilogueOp` semantics, F1 discovery, F4
+  oracle) and a `KernelEmitter` plugin (`emit(region, target)`). Apple MSL becomes
+  the reference plugin. F1/F3/F4/F5 lift *unchanged*; only F2's emission is
+  per-arch. *(This is the corrected form of the original "swap the F2 emitter"
+  claim — the swap point has to be built first.)*
+
+- **F6b — per-arch codegen plugins for the fusable middle ground.** Each backend
+  supplies a `TargetPlugin` (emitter + shape table + cost model + intrinsic set +
+  async model + compile fn). The synthesizer then covers *epilogues, pointwise
+  chains, and small attention* on NVIDIA (PTX), ROCm (AMDGCN/ROCDL), and x86
+  (C/LLVM) — the same generality it has on Apple. NVIDIA and ROCm supply the
+  *deepest* plugins because they own the richest hardware. **Note the oracle must
+  grow up here:** F4's Apple proving ground was fp32/f16 bit-close, but the leads'
+  frontier is fp8/fp4/MX — so the codegen oracle becomes **accuracy-budgeted**
+  (exact for int/fp32-accum, tolerance-aware for low precision), per
+  [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) §4.1. A
+  bit-exact gate would reject every low-precision kernel the leads exist to run.
+
+- **F6c — leave the crown jewels to the leads' hand-emitted paths, arbitrated.**
+  GEMM and large-attention on the leads stay hand-emitted (`wgmma`/`mma.sync`/
+  tcgen05, MFMA/WMMA — the real `ptx_emit.py` + ROCm `Generate*Kernel` paths) and
+  enter the **measured arbiter** as Tier-3 candidates. The synthesizer competes
+  only where it *measures* competitive on that silicon. This is the line the
+  original F6 lacked, and it is the reason a shared middle-end cannot regress a
+  lead.
+
+**Hardware status (superseding the original "deferred"):**
+- **ROCm gfx1151 (Strix Halo):** executes a compiler-generated matmul + flash-attn
+  family today. F6b/F6c land against real silicon; measured autotune (F5) runs
+  live. CDNA (MI300) stays hardware-gated (no box).
+- **NVIDIA sm_120 (NR2 Pro):** first `mma.sync` matmul hardware-verified; `ptxas`
+  (rung 3) + execute-compare (rung 7) are now reachable. The missing piece is the
+  **in-process `--tessera-emit-nvidia` pipeline** (Refactor Plan C2), not a runner.
+  sm_90/sm_100 stay gated (separate emit paths, no datacenter box).
+- **x86:** the AVX-512 plugin validates natively on the Strix Halo Zen 5 CPU; the
+  AMX fast-path stays hardware-gated (no AMX silicon in the fleet).
+
+**Coordination:** F6 work is authored host-free on the Mac (golden-IR gated) and
+proven on the box that owns the target — the three-system model in
+[`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) §6 and the
+routing matrix in [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §7.
 
 ## 4. Sequencing + why this order
 
@@ -134,9 +221,16 @@ portable.  Each phase is independently shippable and leaves `main` green —
 the same promotion-ladder discipline (reference → artifact → native, oracle-
 gated) used throughout the codebase.
 
-**Anti-goals:** do not add another hand-written fusion pass or MSL kernel after
-F2 lands — every new fusion must go through the synthesizer, or it is a
-regression in the thing this plan exists to fix.
+**Anti-goals (scoped 2026-07-02):** on **Apple**, do not add another hand-written
+fusion pass or MSL kernel after F2 lands — every new fusion goes through the
+synthesizer, or it is a regression in the thing this plan exists to fix. This
+anti-goal is about the *default path*, and it is **Apple-scoped**: on the **lead
+backends (ROCm/CUDA)**, hand-tuned kernels remain first-class — they enter the
+measured arbiter as Tier-3 candidates (Theory §3–4) and the synthesizer displaces
+them only when it measures at least as fast on that silicon. "No new hand-written
+kernel" never means "delete a faster hand-tuned lead kernel." The invariant is:
+*the synthesizer is the default for the fusable middle ground; hand-tuned kernels
+are candidates, not the only path — and never silently the slower one.*
 
 ## 5. First concrete step
 F0 + F1a + F2a as one vertical slice: a `fused_region` op, a `GeneralFusionPass`

@@ -38,10 +38,20 @@ class TestISACapabilities:
         assert p.supports_block_scaled_mma is True
         assert p.runtime_arch == "sm_100a"
 
-    def test_sm120_runtime_arch(self):
+    def test_sm120_consumer_blackwell_capabilities(self):
+        # Consumer Blackwell (RTX 50-series) is NOT a superset of datacenter
+        # sm_100: no Hopper wgmma, no tcgen05/TMEM/CTA-pairs. Its low-precision
+        # matrix path is warp-level mma.sync (incl. FP4 block_scale). Regression
+        # guard for the feature-matrix-sourced capability queries.
         p = GPUTargetProfile(isa=ISA.SM_120)
-        assert p.supports_tcgen05 is True
         assert p.runtime_arch == "sm_120"
+        assert p.supports_wgmma is False       # Hopper sm_90a only
+        assert p.supports_tcgen05 is False      # datacenter sm_100a only
+        assert p.supports_tmem is False         # datacenter sm_100a only
+        assert p.supports_cta_pairs is False    # datacenter sm_100a only
+        assert p.supports_block_scaled_mma is True   # FP4 via mma.sync.block_scale
+        assert p.supports_tma is True
+        assert p.supports_mbarrier is True
 
     def test_sm90_does_not_support_blackwell_capabilities(self):
         p = GPUTargetProfile(isa=ISA.SM_90)
@@ -59,7 +69,7 @@ class TestISACapabilities:
         p = GPUTargetProfile(isa=ISA.SM_80)
         assert p.supports_mbarrier is False
 
-    def test_rubin_placeholder_supports_low_precision_tensor_core_dtypes(self):
+    def test_sm120_consumer_blackwell_supports_low_precision_tensor_core_dtypes(self):
         p = GPUTargetProfile(isa=ISA.SM_120)
         for dtype in ("nvfp4", "fp4_e2m1", "fp6_e2m3", "fp6_e3m2", "fp8_e4m3", "fp8_e5m2"):
             assert p.supports_tensor_core_dtype(dtype)

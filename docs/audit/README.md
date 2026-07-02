@@ -79,6 +79,26 @@ and gates and are excluded from this contract.
 | [generated/compiler_progress.md](generated/compiler_progress.md) | Generated all-up compiler-progress dashboard: phase/IR state, primitives, integration, backend/codegen pathways, and open work. |
 | [generated/](generated/) | Script/test-owned generated dashboards. |
 
+## Forward Plans — the compiler north star
+
+The go-forward direction for compiler development (the **new north star**) is a
+paired plan + theory set under `compiler/`. Read these before starting backend or
+middle-end work; they supersede the pre-2026-07 "op-library" framing.
+
+| Doc | Role |
+|---|---|
+| [compiler/COMPILER_THEORY_OF_OPERATION.md](compiler/COMPILER_THEORY_OF_OPERATION.md) | **Read first.** Durable conceptual model — three-tier kernel model (generic framework / per-arch plugin / hand-tuned library), the accuracy-budgeted measured arbiter, the three-system fleet, and the W1–W8 world-class scope register. |
+| [compiler/COMPILER_REFACTOR_PLAN.md](compiler/COMPILER_REFACTOR_PLAN.md) | Execution plan — Workstreams A–E (kernel spine) + F–K (world-class dimensions), sequencing, and the Mac/Strix-Halo/NR2-Pro coordination + routing matrix. |
+| [compiler/OPTIMIZING_COMPILER_PLAN.md](compiler/OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis (F0–F5 landed on Apple); **F6 = the backend-build seam** (reassessed 2026-07-02). |
+| [compiler/EVALUATOR_PLAN.md](compiler/EVALUATOR_PLAN.md) | The scoring engine that gates every promotion in the plans above. |
+| [compiler/STAGE_A_EMIT_PLAN.md](compiler/STAGE_A_EMIT_PLAN.md) | Cross-vendor emit-ladder grounding. |
+
+Governing rule across all of them: **ROCm/CUDA are the lead performance targets;
+the generic framework raises the floor and must never cap their ceiling** (Theory
+§1). Status of what has landed vs. open still flows through
+[MASTER_AUDIT.md](MASTER_AUDIT.md) and the generated dashboards — the plans are
+*direction*, not status truth.
+
 ## Themes
 
 | Theme | Start here | Scope |

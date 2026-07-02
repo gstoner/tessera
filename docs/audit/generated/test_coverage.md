@@ -11,14 +11,14 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 - **81** ops have **zero** references in either test surface.
 - **118** ops have ≤1 reference ("thinly tested").
 - **108** ops have ≥10 references ("well tested").
-- **123** ops have at least one associated `pytest.raises` negative test.
+- **122** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  401 |  225 |  626 |  18 | `bf16`, `f16`, `f32`, `f64` … |
-| `flash_attn` |  105 |   57 |  162 |   8 | `bf16`, `f32`, `fp16`, `fp32` … |
+| `matmul` |  401 |  225 |  626 |  17 | `bf16`, `f16`, `f32`, `f64` … |
+| `flash_attn` |  105 |   57 |  162 |   7 | `bf16`, `f32`, `fp16`, `fp32` … |
 | `softmax` |  120 |   38 |  158 |  30 | `bf16`, `f16`, `f32`, `fp16` … |
 | `add` |  112 |   29 |  141 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  106 |   28 |  134 |   9 | `bf16`, `f16`, `f32`, `f64` … |
@@ -28,7 +28,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `rmsnorm` |   75 |   13 |   88 |   3 | `bf16`, `f16`, `f32`, `f64` … |
 | `gemm` |   78 |    2 |   80 |   7 | `bf16`, `f16`, `f32`, `fp16` … |
 | `selective_ssm` |   60 |   10 |   70 |   2 | `bf16`, `fp16`, `fp32` |
-| `gelu` |   46 |   19 |   65 |   1 | `bf16`, `f16`, `f32`, `f64` … |
+| `gelu` |   46 |   19 |   65 |   0 | `bf16`, `f16`, `f32`, `f64` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `cast` |   16 |   40 |   56 |   1 | `fp16`, `fp32` |
 | `msa_sparse_attention` |   44 |   11 |   55 |   1 |  |

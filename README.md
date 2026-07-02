@@ -256,6 +256,31 @@ kernels → one synthesized symbol set, `synth_matmul_epilogue{,_tiled,_f16}`), 
 retirement proven bit-close to the kernel it replaced on Metal. The catalog
 *shrinks* as the general path absorbs it.
 
+### Where the compiler is going (north star)
+
+Apple proved the middle-end; the forward direction generalizes it across all four
+backends. The go-forward plan is a paired plan + theory set under
+[`docs/audit/compiler/`](docs/audit/compiler/) (direction, not status — status
+stays in the generated dashboards):
+
+- [`COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md)
+  — the **three-tier kernel model** (generic synthesizer / per-arch codegen plugin
+  / hand-tuned library) with a **measured, accuracy-budgeted arbiter** that picks
+  the fastest in-budget candidate per `(op, shape-bucket, dtype, target)`.
+- [`COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md)
+  — workstreams to share the lowering spine, lift the synthesizer behind a
+  per-arch `KernelEmitter` plugin (MSL / PTX / AMDGCN / C-LLVM), and coordinate
+  development across the three build systems (Apple dev Mac, Strix Halo / ROCm,
+  NR2 Pro / CUDA).
+- [`OPTIMIZING_COMPILER_PLAN.md`](docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md)
+  — the F0–F6 middle-end plan (F0–F5 landed on Apple; F6 = the backend-build seam).
+
+Governing rule: **ROCm and CUDA are the lead performance targets; the generic
+framework raises the floor and must never cap their ceiling.** Hand-tuned
+`wgmma` / `mma.sync` / MFMA / WMMA kernels stay first-class candidates the arbiter
+measures — a compiled kernel wins only when it is both faster and in accuracy
+budget.
+
 ---
 
 ## Mathematical IR Surfaces

@@ -372,10 +372,14 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             "int8",
         ),
         features=(
-            "wgmma", "wgmma_sparse", "tma", "tma_swizzle_128b",
-            "cluster_launch", "mbarrier_arrive_tx",
-            "tcgen05", "tcgen05_pair", "tmem", "block_scaled_mma",
-            "cp_async_bulk", "async_proxy_fence", "cuda_13_3",
+            # Consumer Blackwell (RTX 50-series / GB20x) is NOT a superset of
+            # datacenter sm_100: NO Hopper `wgmma`/`wgmma_sparse`, NO `tcgen05`/
+            # `tcgen05_pair`/`tmem` (those are sm_100a only).  FP4 block-scaling
+            # goes through warp-level `mma.sync.block_scale`.  Mirrors the
+            # `cuda_feature_set(SM_120)` "ready" flags (guarded by
+            # test_compiler_capabilities.py::test_nvidia_features_match_cuda_matrix).
+            "tma", "tma_swizzle_128b", "cluster_launch", "mbarrier_arrive_tx",
+            "block_scaled_mma", "cp_async_bulk", "async_proxy_fence", "cuda_13_3",
         ),
     ),
     # Sprint H-1 (2026-05-11): ROCm 7.2.4 capability matrix.  Per-arch

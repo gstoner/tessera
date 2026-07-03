@@ -1,0 +1,8 @@
+module attributes {arch = "sm_120", target = "nvidia_sm120", target_features = "{\"device_timers\": false, \"family\": \"nvidia\", \"tensor_cores\": true}", tessera.ir.level = "target"} {
+  "tessera_nvidia.func"() ({
+    "tessera_nvidia.mma_sync"() {arch = "sm_120", block_scaled = false, dtype_ab = "bf16", dtype_c = "f32", launch = "{\"block\": \"warpgroup\", \"grid\": \"mn_tiles\", \"kernel_id\": \"matmul\", \"measurement\": \"wall_clock_pending\"}", ordinal = 0 : i64, resource = "{\"async_copy_bytes\": 64, \"barrier_count\": 2, \"queue_depth\": 2, \"register_estimate\": 64, \"shared_memory_bytes\": 65536}", result = "C", shape = "m16n8k16", source = "tessera.matmul"} : () -> ()
+    "tessera_nvidia.tma_async_copy"() {arch = "sm_120", bytes = 16 : i64, dst_space = "shared", launch = "{\"block\": \"warpgroup\", \"grid\": \"mn_tiles\", \"kernel_id\": \"matmul\", \"measurement\": \"wall_clock_pending\"}", ordinal = 0 : i64, resource = "{\"async_copy_bytes\": 64, \"barrier_count\": 2, \"queue_depth\": 2, \"register_estimate\": 64, \"shared_memory_bytes\": 65536}", result = "C", source = "tessera.matmul", src_space = "global"} : () -> ()
+    "tessera_nvidia.mbarrier"() {arch = "sm_120", ordinal = 0 : i64, scope = "cta"} : () -> ()
+    "tessera_nvidia.cuda_kernel"() {arch = "sm_120", kernel = "elementwise_contract", launch = "{\"block\": \"256\", \"grid\": \"rows\", \"kernel_id\": \"softmax\", \"measurement\": \"wall_clock_pending\"}", ordinal = 1 : i64, resource = "{\"async_copy_bytes\": 0, \"barrier_count\": 1, \"queue_depth\": 0, \"register_estimate\": 24, \"shared_memory_bytes\": 1024}", result = "P", source = "tessera.softmax", status = "artifact_only"} : () -> ()
+  }) {sym_name = "main"} : () -> ()
+}

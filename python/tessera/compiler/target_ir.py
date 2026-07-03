@@ -1702,7 +1702,18 @@ def _nvidia_arch(target_kind: str) -> str:
 def _format_attr_dict(attrs: dict[str, Any]) -> str:
     if not attrs:
         return "{}"
-    return "{" + ", ".join(f"{key} = {_format_attr_value(value)}" for key, value in attrs.items()) + "}"
+    # Emit attribute keys in a canonical (sorted) order so the rendered IR text
+    # is independent of the dict-construction path — a Phase-0 golden-IR
+    # determinism prerequisite (the C++ MLIR printer already sorts; this keeps
+    # the Python emitter in step so a refactor that merely reorders attr
+    # construction cannot spuriously trip the golden-IR regression gate).
+    return (
+        "{"
+        + ", ".join(
+            f"{key} = {_format_attr_value(attrs[key])}" for key in sorted(attrs)
+        )
+        + "}"
+    )
 
 
 def _format_attr_value(value: Any) -> str:

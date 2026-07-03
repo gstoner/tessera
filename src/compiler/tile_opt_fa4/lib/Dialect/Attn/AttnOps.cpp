@@ -209,26 +209,45 @@ mlir::LogicalResult LseLoadOp::verify() {
 }
 
 mlir::LogicalResult LseAccumulateOp::verify() {
+  // acc / output are the running attention accumulator [tile_q × d_v] — always
+  // 2-D ranked tensors of matching type.
   auto accType = mlir::dyn_cast<mlir::RankedTensorType>(getAcc().getType());
-  auto mType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
-  auto lType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
   auto outType = mlir::dyn_cast<mlir::RankedTensorType>(getOutput().getType());
-  auto lseType = mlir::dyn_cast<mlir::RankedTensorType>(getLse().getType());
-  if (!accType || !mType || !lType || !outType || !lseType)
-    return emitOpError("expects ranked tensor operands and results");
+  if (!accType || !outType)
+    return emitOpError("acc and output must be ranked tensors");
   if (accType.getRank() != 2 || outType.getRank() != 2)
     return emitOpError("acc and output must be 2-D tensors [tile_q, d_v]");
-  if (mType.getRank() != 1 || lType.getRank() != 1 || lseType.getRank() != 1)
-    return emitOpError("running_m, running_l, and lse must be rank-1 tensors");
   if (failed(verifySameRankedTensor(getOperation(), accType, outType,
                                     "acc/output")))
     return mlir::failure();
-  if (failed(verifySameRankedTensor(getOperation(), mType, lType,
-                                    "running_m/running_l")) ||
+
+  // running_m / running_l / lse are per-row softmax statistics — a scalar f32
+  // or a rank-1 [tile_q] tensor. This matches OnlineSoftmaxOp / LseLoadOp and
+  // what TileIRLoweringPass emits (scalar f32 in the reduced-loop form); a
+  // strict rank-1-only rule here rejected the pass's own output.
+  if (failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getRunningM().getType(), "running_m", /*maxRank=*/1)) ||
+      failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getRunningL().getType(), "running_l", /*maxRank=*/1)) ||
+      failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getLse().getType(), "lse", /*maxRank=*/1)))
+    return mlir::failure();
+
+  // Cross-shape checks only apply where a shape exists: two rank-1 statistics
+  // must agree, and a rank-1 running_m must match the acc tile_q. Scalars carry
+  // no shape, so they are accepted without a dimension comparison.
+  auto mType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
+  auto lType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
+  auto lseType = mlir::dyn_cast<mlir::RankedTensorType>(getLse().getType());
+  if (mType && lType &&
+      failed(verifySameRankedTensor(getOperation(), mType, lType,
+                                    "running_m/running_l")))
+    return mlir::failure();
+  if (mType && lseType &&
       failed(verifySameRankedTensor(getOperation(), mType, lseType,
                                     "running_m/lse")))
     return mlir::failure();
-  if (!attnDimsAgree(accType.getDimSize(0), mType.getDimSize(0)))
+  if (mType && !attnDimsAgree(accType.getDimSize(0), mType.getDimSize(0)))
     return emitOpError("acc tile_q must match running_m length");
   return mlir::success();
 }

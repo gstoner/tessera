@@ -321,7 +321,7 @@ partial_state_load,0,0,0,0,1,,structural_only,category default for 'serializatio
 partition_spec,0,0,0,0,1,,structural_only,category default for 'sharding'
 patchify,8,0,1,8,0,fp16,directly_tested,8 direct test references
 perceiver_resampler,6,0,0,6,0,fp16,directly_tested,6 direct test references
-permute,5,12,1,17,0,,directly_tested,17 direct test references
+permute,5,11,1,16,0,,directly_tested,16 direct test references
 persistent_cd_loss,1,0,0,1,1,,covered_by_family,category default for 'loss'
 pixel_shuffle,2,0,1,2,0,,directly_tested,2 direct test references
 pixel_unshuffle,8,0,1,8,0,,directly_tested,8 direct test references

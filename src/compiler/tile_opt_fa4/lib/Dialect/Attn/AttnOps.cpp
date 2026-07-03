@@ -31,6 +31,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Twine.h"
 
 // Sprint V7b (2026-05-22): the Attn dialect anchors its eager-load
 // extension on the parent `tessera` (Graph IR) dialect.  Including
@@ -209,27 +210,58 @@ mlir::LogicalResult LseLoadOp::verify() {
 }
 
 mlir::LogicalResult LseAccumulateOp::verify() {
+  // acc / output are the running attention accumulator [tile_q × d_v] — always
+  // 2-D ranked tensors of matching type.
   auto accType = mlir::dyn_cast<mlir::RankedTensorType>(getAcc().getType());
-  auto mType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
-  auto lType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
   auto outType = mlir::dyn_cast<mlir::RankedTensorType>(getOutput().getType());
-  auto lseType = mlir::dyn_cast<mlir::RankedTensorType>(getLse().getType());
-  if (!accType || !mType || !lType || !outType || !lseType)
-    return emitOpError("expects ranked tensor operands and results");
+  if (!accType || !outType)
+    return emitOpError("acc and output must be ranked tensors");
   if (accType.getRank() != 2 || outType.getRank() != 2)
     return emitOpError("acc and output must be 2-D tensors [tile_q, d_v]");
-  if (mType.getRank() != 1 || lType.getRank() != 1 || lseType.getRank() != 1)
-    return emitOpError("running_m, running_l, and lse must be rank-1 tensors");
   if (failed(verifySameRankedTensor(getOperation(), accType, outType,
                                     "acc/output")))
     return mlir::failure();
-  if (failed(verifySameRankedTensor(getOperation(), mType, lType,
-                                    "running_m/running_l")) ||
-      failed(verifySameRankedTensor(getOperation(), mType, lseType,
-                                    "running_m/lse")))
+
+  // running_m / running_l / lse are per-row softmax statistics — a scalar f32
+  // or a rank-1 [tile_q] tensor. This matches OnlineSoftmaxOp / LseLoadOp and
+  // what TileIRLoweringPass emits (scalar f32 in the reduced-loop form); a
+  // strict rank-1-only rule here rejected the pass's own output.
+  if (failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getRunningM().getType(), "running_m", /*maxRank=*/1)) ||
+      failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getRunningL().getType(), "running_l", /*maxRank=*/1)) ||
+      failed(verifyFloatScalarOrRankedTensor(
+          getOperation(), getLse().getType(), "lse", /*maxRank=*/1)))
     return mlir::failure();
-  if (!attnDimsAgree(accType.getDimSize(0), mType.getDimSize(0)))
-    return emitOpError("acc tile_q must match running_m length");
+
+  // Cross-shape checks apply to whichever statistics carry a per-row shape. A
+  // scalar (or rank-0) value broadcasts and carries none, but every rank-1
+  // statistic is a per-row [tile_q] vector: it must match the acc tile_q and
+  // agree with the other rank-1 statistics — independent of which (if any) of
+  // the three are scalar. Keying these off running_m alone would let a scalar
+  // running_m mask a mismatched rank-1 running_l/lse.
+  const std::pair<mlir::Type, llvm::StringRef> stats[] = {
+      {getRunningM().getType(), "running_m"},
+      {getRunningL().getType(), "running_l"},
+      {getLse().getType(), "lse"}};
+  mlir::RankedTensorType ref;
+  llvm::StringRef refLabel;
+  for (const auto &[type, label] : stats) {
+    auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(type);
+    if (!ranked || ranked.getRank() == 0)
+      continue; // scalar / rank-0 — no per-row [tile_q] shape to cross-check
+    if (!attnDimsAgree(accType.getDimSize(0), ranked.getDimSize(0)))
+      return emitOpError() << label << " length must match acc tile_q";
+    if (!ref) {
+      ref = ranked;
+      refLabel = label;
+      continue;
+    }
+    if (failed(verifySameRankedTensor(
+            getOperation(), ref, ranked,
+            (llvm::Twine(refLabel) + "/" + label).str())))
+      return mlir::failure();
+  }
   return mlir::success();
 }
 

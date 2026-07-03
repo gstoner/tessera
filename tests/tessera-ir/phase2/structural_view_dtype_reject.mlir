@@ -44,6 +44,16 @@ func.func @permute_bad_axis(%x: tensor<2x3xf32>) -> tensor<3x2xf32> {
 
 // -----
 
+func.func @permute_truncated_perm(%x: tensor<4x4xf32>) -> tensor<4x4xf32> {
+  // a truncated perm ([0] on a rank-2 tensor) is malformed — perm length must
+  // equal the input rank (it must never fold by matching an identity prefix).
+  // expected-error @+1 {{perm length must match input rank 2}}
+  %a = "tessera.permute"(%x) {perm = [0]} : (tensor<4x4xf32>) -> tensor<4x4xf32>
+  return %a : tensor<4x4xf32>
+}
+
+// -----
+
 func.func @permute_bad_attr_type(%x: tensor<2x3xf32>) -> tensor<3x2xf32> {
   // expected-error @+1 {{perm must be an array of integer axes}}
   %a = "tessera.permute"(%x) {perm = "bad"} : (tensor<2x3xf32>) -> tensor<3x2xf32>

@@ -11,13 +11,23 @@ func.func @identity_views(%x: tensor<3x4xf32>) -> tensor<3x4xf32> {
   // CHECK-NOT: tessera.unsqueeze
   // CHECK-NOT: tessera.expand
   // CHECK-NOT: tessera.broadcast
-  // CHECK-NOT: tessera.flatten
   %a = "tessera.squeeze"(%x) : (tensor<3x4xf32>) -> tensor<3x4xf32>
   %b = "tessera.expand"(%a) : (tensor<3x4xf32>) -> tensor<3x4xf32>
-  %c = "tessera.flatten"(%b) : (tensor<3x4xf32>) -> tensor<3x4xf32>
-  %d = "tessera.broadcast"(%c) : (tensor<3x4xf32>) -> tensor<3x4xf32>
+  %d = "tessera.broadcast"(%b) : (tensor<3x4xf32>) -> tensor<3x4xf32>
   // CHECK: return %arg0
   return %d : tensor<3x4xf32>
+}
+
+// A `flatten` whose result type equals its operand type is a no-op and folds to
+// its input. `flatten` collapses to rank-1 by default, so the identity case is a
+// rank-1 operand producing the same rank-1 result (a rank-2 self-flatten is not
+// valid IR — the verifier requires a rank-1 result).
+// CHECK-LABEL: func.func @identity_flatten
+func.func @identity_flatten(%x: tensor<12xf32>) -> tensor<12xf32> {
+  // CHECK-NOT: tessera.flatten
+  %a = "tessera.flatten"(%x) : (tensor<12xf32>) -> tensor<12xf32>
+  // CHECK: return %arg0
+  return %a : tensor<12xf32>
 }
 
 // CHECK-LABEL: func.func @identity_permute
@@ -47,11 +57,6 @@ func.func @dynamic_view_preserved(%x: tensor<?xf32>) -> tensor<?xf32> {
   return %a : tensor<?xf32>
 }
 
-// CHECK-LABEL: func.func @truncated_perm_preserved
-func.func @truncated_perm_preserved(%x: tensor<4x4xf32>) -> tensor<4x4xf32> {
-  // a truncated perm ([0] on a rank-2 tensor) is malformed/non-identity — it must
-  // NOT fold by matching an identity prefix.
-  // CHECK: tessera.permute %{{.*}} {perm = [0]}
-  %a = "tessera.permute"(%x) {perm = [0]} : (tensor<4x4xf32>) -> tensor<4x4xf32>
-  return %a : tensor<4x4xf32>
-}
+// NOTE: a truncated perm ([0] on a rank-2 tensor) is malformed IR — the verifier
+// now rejects it (perm length must equal the input rank), so it can never reach
+// canonicalization. That negative case lives in `structural_view_dtype_reject.mlir`.

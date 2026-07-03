@@ -108,47 +108,27 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
 
     Location loc = geluOp->getLoc();
     ModuleOp mod = geluOp->getParentOfType<ModuleOp>();
-    MLIRContext *ctx = geluOp->getContext();
-
-    Type i64Ty = rewriter.getI64Type();
-    Type i32Ty = rewriter.getI32Type();
     Type f32Ty = rewriter.getF32Type();
 
     auto aMemTy = MemRefType::get({M, K}, f32Ty);
     auto bMemTy = MemRefType::get({K, N}, f32Ty);
     auto oMemTy = MemRefType::get({M, N}, f32Ty);
+    auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
+
+    SmallVector<NamedAttribute> desc{
+        rewriter.getNamedAttr("tessera.fusion.kernel",
+                              rewriter.getStringAttr("synth_matmul_epilogue")),
+        rewriter.getNamedAttr("tessera.fusion.epilogue",
+                              rewriter.getStringAttr("gelu")),
+        rewriter.getNamedAttr(
+            "tessera.fusion.source",
+            rewriter.getStringAttr(descriptorDriven ? "descriptor"
+                                                    : "rediscovered"))};
 
     rewriter.setInsertionPoint(matmulOp);
-    Value aPtr = extractPtr(rewriter, loc, lhs, aMemTy);
-    Value bPtr = extractPtr(rewriter, loc, rhs, bMemTy);
-    auto oAlloc = rewriter.create<memref::AllocOp>(loc, oMemTy);
-    Value oPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, oAlloc);
-      oPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Mv = rewriter.create<arith::ConstantIntOp>(loc, M, 32);
-    Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
-    Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
-
-    FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kSynthEpilogueF32Symbol, fnTy);
-
-    auto callOp = rewriter.create<func::CallOp>(
-        loc, kSynthEpilogueF32Symbol, TypeRange{},
-        ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
-    callOp->setAttr("tessera.fusion.kernel",
-                    rewriter.getStringAttr("synth_matmul_epilogue"));
-    callOp->setAttr("tessera.fusion.epilogue", rewriter.getStringAttr("gelu"));
-    callOp->setAttr("tessera.fusion.source",
-                    rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
-
-    auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
+    Value result = tessera::common::emitFusionCall(
+        rewriter, loc, mod, kSynthEpilogueF32Symbol,
+        {{lhs, aMemTy}, {rhs, bMemTy}}, oMemTy, outTensorTy, {M, N, K}, desc);
     rewriter.replaceOp(geluOp, result);
     rewriter.eraseOp(matmulOp);
     return success();

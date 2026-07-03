@@ -143,48 +143,29 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
 
     Location loc = softmaxOp->getLoc();
     ModuleOp mod = softmaxOp->getParentOfType<ModuleOp>();
-    MLIRContext *ctx = softmaxOp->getContext();
-
-    Type i64Ty = rewriter.getI64Type();
-    Type i32Ty = rewriter.getI32Type();
 
     auto aMemTy = MemRefType::get({M, K}, smElem);
     auto bMemTy = MemRefType::get({K, N}, smElem);
     auto oMemTy = MemRefType::get({M, N}, smElem);
+    auto outTensorTy = RankedTensorType::get({M, N}, smElem);
+
+    SmallVector<NamedAttribute> desc;
+    desc.push_back(rewriter.getNamedAttr(
+        "tessera.fusion.kernel",
+        rewriter.getStringAttr(isSynth ? "synth_matmul_epilogue"
+                                       : "matmul_softmax")));
+    if (isSynth)
+      desc.push_back(rewriter.getNamedAttr("tessera.fusion.epilogue",
+                                           rewriter.getStringAttr("softmax")));
+    desc.push_back(rewriter.getNamedAttr(
+        "tessera.fusion.source",
+        rewriter.getStringAttr(descriptorDriven ? "descriptor"
+                                                : "rediscovered")));
 
     rewriter.setInsertionPoint(matmulOp);
-    Value aPtr = extractPtr(rewriter, loc, lhs, aMemTy);
-    Value bPtr = extractPtr(rewriter, loc, rhs, bMemTy);
-    auto oAlloc = rewriter.create<memref::AllocOp>(loc, oMemTy);
-    Value oPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, oAlloc);
-      oPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Mv = rewriter.create<arith::ConstantIntOp>(loc, M, 32);
-    Value Nv = rewriter.create<arith::ConstantIntOp>(loc, N, 32);
-    Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
-
-    FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, symbol, fnTy);
-
-    auto callOp = rewriter.create<func::CallOp>(
-        loc, symbol, TypeRange{},
-        ValueRange{aPtr, bPtr, oPtr, Mv, Nv, Kv});
-    callOp->setAttr("tessera.fusion.kernel",
-                    rewriter.getStringAttr(isSynth ? "synth_matmul_epilogue"
-                                                   : "matmul_softmax"));
-    if (isSynth)
-      callOp->setAttr("tessera.fusion.epilogue", rewriter.getStringAttr("softmax"));
-    callOp->setAttr("tessera.fusion.source",
-                    rewriter.getStringAttr(descriptorDriven ? "descriptor" : "rediscovered"));
-
-    auto outTensorTy = RankedTensorType::get({M, N}, smElem);
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
+    Value result = tessera::common::emitFusionCall(
+        rewriter, loc, mod, symbol, {{lhs, aMemTy}, {rhs, bMemTy}}, oMemTy,
+        outTensorTy, {M, N, K}, desc);
 
     // Replace the softmax op (chain consumer) with the fused result. Then
     // erase the matmul (now dead because its only use was softmax).

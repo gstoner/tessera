@@ -130,52 +130,28 @@ struct LowerSwigluFusedToAppleGPU : public RewritePattern {
 
     Location loc = op->getLoc();
     ModuleOp mod = op->getParentOfType<ModuleOp>();
-    MLIRContext *ctx = op->getContext();
-
-    Type i64Ty = rewriter.getI64Type();
-    Type i32Ty = rewriter.getI32Type();
 
     auto xMemTy = MemRefType::get({M, K}, elem);
     auto wgMemTy = MemRefType::get({K, H}, elem);
     auto wuMemTy = MemRefType::get({K, H}, elem);
     auto wdMemTy = MemRefType::get({H, Kout}, elem);
     auto oMemTy = MemRefType::get({M, Kout}, elem);
+    auto outTensorTy = RankedTensorType::get({M, Kout}, elem);
 
-    rewriter.setInsertionPoint(op);
-    Value xPtr = extractPtr(rewriter, loc, x, xMemTy);
-    Value wgPtr = extractPtr(rewriter, loc, wGate, wgMemTy);
-    Value wuPtr = extractPtr(rewriter, loc, wUp, wuMemTy);
-    Value wdPtr = extractPtr(rewriter, loc, wDown, wdMemTy);
-    auto oAlloc = rewriter.create<memref::AllocOp>(loc, oMemTy);
-    Value oPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, oAlloc);
-      oPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Mv = rewriter.create<arith::ConstantIntOp>(loc, M, 32);
-    Value Kv = rewriter.create<arith::ConstantIntOp>(loc, K, 32);
-    Value Hv = rewriter.create<arith::ConstantIntOp>(loc, H, 32);
-    Value Kov = rewriter.create<arith::ConstantIntOp>(loc, Kout, 32);
-
-    FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i64Ty, i64Ty, i32Ty, i32Ty, i32Ty, i32Ty},
-        {});
-    ensureExternalDecl(mod, symbol, fnTy);
-
-    auto callOp = rewriter.create<func::CallOp>(
-        loc, symbol, TypeRange{},
-        ValueRange{xPtr, wgPtr, wuPtr, wdPtr, oPtr, Mv, Kv, Hv, Kov});
     // Decision #19 — emit the fusion descriptor. swiglu lowers a pre-fused
     // tessera.swiglu_fused op, so the op itself is the descriptor (no chain
     // re-discovery): source = "composite_op".
-    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("swiglu"));
-    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
+    SmallVector<NamedAttribute> desc{
+        rewriter.getNamedAttr("tessera.fusion.kernel",
+                              rewriter.getStringAttr("swiglu")),
+        rewriter.getNamedAttr("tessera.fusion.source",
+                              rewriter.getStringAttr("composite_op"))};
 
-    auto outTensorTy = RankedTensorType::get({M, Kout}, elem);
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
+    rewriter.setInsertionPoint(op);
+    Value result = tessera::common::emitFusionCall(
+        rewriter, loc, mod, symbol,
+        {{x, xMemTy}, {wGate, wgMemTy}, {wUp, wuMemTy}, {wDown, wdMemTy}},
+        oMemTy, outTensorTy, {M, K, H, Kout}, desc);
 
     rewriter.replaceOp(op, result);
     return success();

@@ -96,57 +96,27 @@ struct LowerNSAFusionToAppleGPU : public RewritePattern {
 
     Location loc = op->getLoc();
     ModuleOp mod = op->getParentOfType<ModuleOp>();
-    MLIRContext *ctx = op->getContext();
-    Type i64Ty = rewriter.getI64Type();
-    Type i32Ty = rewriter.getI32Type();
 
     auto qMemTy = MemRefType::get({B, H, S, D}, elem);
     int64_t numBlocks = S / block;
     auto gateMemTy = MemRefType::get({B, H, S, numBlocks}, elem);
     auto oMemTy = MemRefType::get({B, H, S, D}, elem);
+    auto outTensorTy = RankedTensorType::get({B, H, S, D}, elem);
 
-    rewriter.setInsertionPoint(op);
-    Value qPtr = extractPtr(rewriter, loc, q, qMemTy);
-    Value kPtr = extractPtr(rewriter, loc, k, qMemTy);
-    Value vPtr = extractPtr(rewriter, loc, v, qMemTy);
-    Value gPtr = extractPtr(rewriter, loc, gate, gateMemTy);
-    auto oAlloc = rewriter.create<memref::AllocOp>(loc, oMemTy);
-    Value oPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, oAlloc);
-      oPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Bv = rewriter.create<arith::ConstantIntOp>(loc, B, 32);
-    Value Hv = rewriter.create<arith::ConstantIntOp>(loc, H, 32);
-    Value Sv = rewriter.create<arith::ConstantIntOp>(loc, S, 32);
-    Value Dv = rewriter.create<arith::ConstantIntOp>(loc, D, 32);
-    Value Wv = rewriter.create<arith::ConstantIntOp>(loc, window, 32);
-    Value Bkv = rewriter.create<arith::ConstantIntOp>(loc, block, 32);
-    Value Tkv = rewriter.create<arith::ConstantIntOp>(loc, topK, 32);
-    Value Cv = rewriter.create<arith::ConstantIntOp>(loc, causal ? 1 : 0, 32);
-
-    FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i64Ty, i64Ty,
-              i32Ty, i32Ty, i32Ty, i32Ty,
-              i32Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kNSASymbol, fnTy);
-
-    auto callOp = rewriter.create<func::CallOp>(
-        loc, kNSASymbol, TypeRange{},
-        ValueRange{qPtr, kPtr, vPtr, gPtr, oPtr,
-                   Bv, Hv, Sv, Dv, Wv, Bkv, Tkv, Cv});
     // Decision #19 — emit the fusion descriptor. NSA lowers a pre-fused
     // tessera.native_sparse_attn_fused op (the op is the descriptor):
     // source = "composite_op".
-    callOp->setAttr("tessera.fusion.kernel",
-                    rewriter.getStringAttr("native_sparse_attn"));
-    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
+    SmallVector<NamedAttribute> desc{
+        rewriter.getNamedAttr("tessera.fusion.kernel",
+                              rewriter.getStringAttr("native_sparse_attn")),
+        rewriter.getNamedAttr("tessera.fusion.source",
+                              rewriter.getStringAttr("composite_op"))};
 
-    auto outTensorTy = RankedTensorType::get({B, H, S, D}, elem);
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
+    rewriter.setInsertionPoint(op);
+    Value result = tessera::common::emitFusionCall(
+        rewriter, loc, mod, kNSASymbol,
+        {{q, qMemTy}, {k, qMemTy}, {v, qMemTy}, {gate, gateMemTy}}, oMemTy,
+        outTensorTy, {B, H, S, D, window, block, topK, causal ? 1 : 0}, desc);
     rewriter.replaceOp(op, result);
     return success();
   }

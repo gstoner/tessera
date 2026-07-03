@@ -21,7 +21,8 @@ namespace tessera {
 namespace {
 
 static constexpr int kHopperSM = 90;
-static constexpr int kBlackwellSM = 100;
+static constexpr int kBlackwellSM = 100;          // datacenter Blackwell (sm_100a)
+static constexpr int kConsumerBlackwellSM = 120;  // consumer Blackwell (sm_120)
 
 static StringRef archStringForSM(int sm) {
   if (sm >= 120)
@@ -102,8 +103,12 @@ struct LowerTileToNVIDIAPass
       attrs.push_back(builder.getNamedAttr("arch",
                                            builder.getStringAttr(archStringForSM(smVersion))));
 
-      if (name.starts_with("tile.tmem.") && smVersion < kBlackwellSM) {
-        op->emitError("NVIDIA TMEM lowering requires Blackwell SM100+");
+      if (name.starts_with("tile.tmem.") &&
+          (smVersion < kBlackwellSM || smVersion >= kConsumerBlackwellSM)) {
+        // TMEM is datacenter-Blackwell-only (sm_100a). Consumer Blackwell
+        // sm_120 has no TMEM — it is NOT a superset of sm_100.
+        op->emitError("NVIDIA TMEM lowering requires datacenter Blackwell "
+                      "SM100 (consumer sm_120 has no TMEM)");
         signalPassFailure();
         return;
       }
@@ -117,6 +122,29 @@ struct LowerTileToNVIDIAPass
 
         TypeRange resultTypes = op->getResultTypes();
         ValueRange operands = op->getOperands();
+        if (smVersion >= kConsumerBlackwellSM) {
+          // Consumer Blackwell (RTX 50-series, sm_120): warp-level `mma.sync`.
+          // NOT a superset of datacenter sm_100 — no tcgen05/TMEM, no Hopper
+          // wgmma (FP4 rides `mma.sync.aligned...block_scale`). Grounded in
+          // gpu_target._CUDA_13_3_FEATURES[SM_120]. Mirrors the Python emitter
+          // target_ir.py::_lower_nvidia_op; the tma_async_copy + mbarrier
+          // companions come from the separate tile.async_copy / tile.wait_async
+          // ops in the worklist (as with the wgmma path below).
+          attrs.push_back(builder.getNamedAttr("shape",
+                                               builder.getStringAttr("m16n8k16")));
+          attrs.push_back(builder.getNamedAttr("dtype_ab",
+                                               builder.getStringAttr("bf16")));
+          attrs.push_back(builder.getNamedAttr("dtype_c",
+                                               builder.getStringAttr("f32")));
+          attrs.push_back(builder.getNamedAttr("block_scaled",
+                                               builder.getBoolAttr(false)));
+          Operation *target = createContractOp(builder, loc,
+                                               "tessera_nvidia.mma_sync",
+                                               operands, resultTypes, attrs);
+          op->replaceAllUsesWith(target->getResults());
+          op->erase();
+          continue;
+        }
         if (smVersion >= kBlackwellSM) {
           attrs.push_back(builder.getNamedAttr("shape",
                                                builder.getStringAttr("m128n128k32")));
@@ -238,6 +266,8 @@ static StringRef markerForTargetOp(StringRef opName) {
   if (opName == "tessera_nvidia.mbarrier")
     return "llvm.nvvm.mbarrier.contract";
   if (opName == "tessera_nvidia.wmma")
+    return "llvm.nvvm.mma.sync.contract";
+  if (opName == "tessera_nvidia.mma_sync")  // consumer Blackwell sm_120 warp-level MMA
     return "llvm.nvvm.mma.sync.contract";
   if (opName == "tessera_nvidia.tcgen05_mma")
     return "llvm.nvvm.tcgen05.mma.contract";

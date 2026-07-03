@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
+#include "Tessera/Target/Apple/FusionChainUtils.h"
 #include "Tessera/Target/Apple/LoweringUtils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -58,10 +59,8 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
     Value geluIn = geluOp->getOperand(0);
 
     // Decision #19 — consume the compiler's fusion descriptor when present.
-    StringRef intent;
-    if (auto a = geluOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
-      intent = a.getValue();
-    bool descriptorDriven = (intent == "matmul_gelu");
+    bool descriptorDriven =
+        tessera::apple::fusionDescriptorDriven(geluOp, "matmul_gelu");
 
     auto gTy = dyn_cast<RankedTensorType>(geluIn.getType());
     if (!gTy || gTy.getRank() != 2)
@@ -69,20 +68,11 @@ struct LowerMatmulGeluFusionToAppleGPU : public RewritePattern {
     if (!gTy.getElementType().isF32())
       return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: f32 only");
 
-    Operation *defOp = geluIn.getDefiningOp();
-    if (!defOp)
-      return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: no defining op");
-    if (defOp->getName().getStringRef() != "tessera.matmul") {
-      if (descriptorDriven)  // Decision #21 — descriptor/IR disagreement.
-        geluOp->emitWarning(
-            "tessera.fusion.intent = \"matmul_gelu\" but gelu operand is not "
-            "from tessera.matmul — descriptor/IR mismatch; falling back");
-      return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: defining op is not tessera.matmul");
-    }
-    if (!geluIn.hasOneUse())
-      return rewriter.notifyMatchFailure(geluOp, "matmul_gelu fusion: matmul result has multiple uses");
-
-    Operation *matmulOp = defOp;
+    auto matmulOr = tessera::apple::walkChainProducer(
+        rewriter, geluOp, geluIn, "tessera.matmul", descriptorDriven);
+    if (failed(matmulOr))
+      return failure();
+    Operation *matmulOp = *matmulOr;
     if (matmulOp->getNumOperands() < 2) return failure();
     Value lhs = matmulOp->getOperand(0);
     Value rhs = matmulOp->getOperand(1);

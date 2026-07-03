@@ -32,6 +32,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
+#include "Tessera/Target/Apple/FusionChainUtils.h"
 #include "Tessera/Target/Apple/LoweringUtils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -83,26 +84,15 @@ struct LowerMatmulSoftmaxMatmulFusionToAppleGPU : public RewritePattern {
     // rather than re-discovering the fusion purely structurally. Absent the
     // intent, the structural walk below still recognizes the chain and the
     // call is tagged `source = "rediscovered"` (back-compat).
-    StringRef intent;
-    if (auto a = secondMatmulOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
-      intent = a.getValue();
-    bool descriptorDriven = (intent == "matmul_softmax_matmul");
+    bool descriptorDriven = tessera::apple::fusionDescriptorDriven(
+        secondMatmulOp, "matmul_softmax_matmul");
 
     // Walk: secondLhs must be the result of a tessera.softmax with one use.
-    Operation *softmaxOp = secondLhs.getDefiningOp();
-    if (!softmaxOp)
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: tail matmul lhs has no defining op");
-    if (softmaxOp->getName().getStringRef() != "tessera.softmax") {
-      // Decision #21 — a fusion intent that the IR structure contradicts is a
-      // real inconsistency; surface it by name instead of silently falling back.
-      if (descriptorDriven)
-        secondMatmulOp->emitWarning(
-            "tessera.fusion.intent = \"matmul_softmax_matmul\" but tail matmul "
-            "lhs is not a tessera.softmax — descriptor/IR mismatch; falling back");
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: tail matmul lhs is not a softmax");
-    }
-    if (!secondLhs.hasOneUse())
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: softmax result has multiple uses");
+    auto softmaxOr = tessera::apple::walkChainProducer(
+        rewriter, secondMatmulOp, secondLhs, "tessera.softmax", descriptorDriven);
+    if (failed(softmaxOr))
+      return failure();
+    Operation *softmaxOp = *softmaxOr;
 
     // axis: defaults to -1.
     int64_t axis = -1;
@@ -113,13 +103,13 @@ struct LowerMatmulSoftmaxMatmulFusionToAppleGPU : public RewritePattern {
     Value softmaxIn = softmaxOp->getOperand(0);
 
     // Walk: softmax input must be the result of a tessera.matmul with one use.
-    Operation *firstMatmulOp = softmaxIn.getDefiningOp();
-    if (!firstMatmulOp)
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: softmax input has no defining op");
-    if (firstMatmulOp->getName().getStringRef() != "tessera.matmul")
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: softmax input is not from matmul");
-    if (!softmaxIn.hasOneUse())
-      return rewriter.notifyMatchFailure(secondMatmulOp, "fusion3: first matmul result has multiple uses");
+    // (No descriptor warning on the inner hop — the intent names the tail.)
+    auto firstMatmulOr = tessera::apple::walkChainProducer(
+        rewriter, secondMatmulOp, softmaxIn, "tessera.matmul",
+        /*descriptorDriven=*/false);
+    if (failed(firstMatmulOr))
+      return failure();
+    Operation *firstMatmulOp = *firstMatmulOr;
 
     if (firstMatmulOp->getNumOperands() < 2) return failure();
     Value lhsA = firstMatmulOp->getOperand(0);

@@ -30,6 +30,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
+#include "Tessera/Target/Apple/FusionChainUtils.h"
 #include "Tessera/Target/Apple/LoweringUtils.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -76,10 +77,8 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
     Value softmaxIn = softmaxOp->getOperand(0);
 
     // Decision #19 — consume the compiler's fusion descriptor when present.
-    StringRef intent;
-    if (auto a = softmaxOp->getAttrOfType<StringAttr>("tessera.fusion.intent"))
-      intent = a.getValue();
-    bool descriptorDriven = (intent == "matmul_softmax");
+    bool descriptorDriven =
+        tessera::apple::fusionDescriptorDriven(softmaxOp, "matmul_softmax");
 
     // axis: defaults to -1. Anything else falls out of fusion.
     int64_t axis = -1;
@@ -100,20 +99,11 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
       return rewriter.notifyMatchFailure(softmaxOp, "fusion: axis must be -1");
 
     // The softmax input must be the result of a matmul, with no other uses.
-    Operation *defOp = softmaxIn.getDefiningOp();
-    if (!defOp)
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: softmax operand has no defining op");
-    if (defOp->getName().getStringRef() != "tessera.matmul") {
-      if (descriptorDriven)  // Decision #21 — descriptor/IR disagreement.
-        softmaxOp->emitWarning(
-            "tessera.fusion.intent = \"matmul_softmax\" but softmax operand is "
-            "not from tessera.matmul — descriptor/IR mismatch; falling back");
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: defining op is not tessera.matmul");
-    }
-    if (!softmaxIn.hasOneUse())
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul result has multiple uses");
-
-    Operation *matmulOp = defOp;
+    auto matmulOr = tessera::apple::walkChainProducer(
+        rewriter, softmaxOp, softmaxIn, "tessera.matmul", descriptorDriven);
+    if (failed(matmulOr))
+      return failure();
+    Operation *matmulOp = *matmulOr;
     if (matmulOp->getNumOperands() < 2)
       return failure();
     Value lhs = matmulOp->getOperand(0);

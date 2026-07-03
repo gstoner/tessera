@@ -832,6 +832,10 @@ class TargetIRVerifier:
             return
         if op.op_name == "tessera_nvidia.wgmma":
             self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c", "warpgroup")
+        elif op.op_name == "tessera_nvidia.mma_sync":
+            # Consumer Blackwell (sm_120) warp-level MMA — no warpgroup (mma.sync
+            # is warp-scoped, unlike Hopper's warpgroup-scoped wgmma).
+            self._require(op, diagnostics, "arch", "shape", "dtype_ab", "dtype_c")
         elif op.op_name == "tessera_nvidia.tma_async_copy":
             self._require(op, diagnostics, "arch", "src_space", "dst_space", "bytes")
         elif op.op_name == "tessera_nvidia.mbarrier":
@@ -1268,7 +1272,10 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
     base = _base_attrs(op)
     arch = _nvidia_arch(target_kind)
     if op.op_name == "tile.mma":
-        if target_kind in {"nvidia_sm100", "nvidia_sm120"}:
+        if target_kind == "nvidia_sm100":
+            # Datacenter Blackwell (sm_100a) only — tcgen05 + TMEM + CTA-pair
+            # block-scaled MMA. Consumer Blackwell (sm_120) is NOT a superset
+            # of this and is handled by its own branch below.
             return [
                 TargetOp("tessera_nvidia.tmem_alloc", {**base, "arch": arch, "columns": 128}),
                 TargetOp("tessera_nvidia.tcgen05_mma", {
@@ -1279,6 +1286,32 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
                     "cta_group": 2,
                     "block_scaled": True,
                 }),
+            ]
+        if target_kind == "nvidia_sm120":
+            # Consumer Blackwell (RTX 50-series, sm_120) has NO tcgen05/TMEM
+            # (datacenter sm_100a only) and NO Hopper wgmma — its matrix path is
+            # warp-level `mma.sync` (FP4 goes through `mma.sync.aligned...
+            # block_scale`). It DOES have tma + mbarrier, so the async-copy /
+            # barrier pair mirrors the wgmma path. Grounded in
+            # gpu_target._CUDA_13_3_FEATURES[ISA.SM_120]: wgmma/tcgen05/tmem =
+            # not_supported; tma/mbarrier/block_scaled_mma = ready.
+            return [
+                TargetOp("tessera_nvidia.mma_sync", {
+                    **base,
+                    "arch": arch,
+                    "shape": "m16n8k16",
+                    "dtype_ab": "bf16",
+                    "dtype_c": "f32",
+                    "block_scaled": False,
+                }),
+                TargetOp("tessera_nvidia.tma_async_copy", {
+                    **base,
+                    "arch": arch,
+                    "src_space": "global",
+                    "dst_space": "shared",
+                    "bytes": 16,
+                }),
+                TargetOp("tessera_nvidia.mbarrier", {"ordinal": base["ordinal"], "arch": arch, "scope": "cta"}),
             ]
         return [
             TargetOp("tessera_nvidia.wgmma", {

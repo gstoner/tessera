@@ -663,7 +663,12 @@ def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
 
 
 def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target_kind: str) -> str:
-    is_blackwell = target_kind in {"nvidia_sm100", "nvidia_sm120"}
+    # Datacenter Blackwell (sm_100a) only — tcgen05 + TMEM. Consumer Blackwell
+    # (sm_120) is NOT a superset: no tcgen05/TMEM, no Hopper wgmma — its matrix
+    # path is warp-level mma.sync (handled by its own branch below), mirroring
+    # target_ir.py::_lower_nvidia_op.
+    is_datacenter_blackwell = target_kind == "nvidia_sm100"
+    is_consumer_blackwell = target_kind == "nvidia_sm120"
     arch = {
         "nvidia_sm80": "sm_80",
         "nvidia_sm90": "sm_90a",
@@ -677,12 +682,22 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
         if op_name in MATMUL_OPS:
-            if is_blackwell:
+            if is_datacenter_blackwell:
                 lines.append(
                     f'    "tessera_nvidia.tmem_alloc"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", columns = 128 : i64}} : () -> ()'
                 )
                 lines.append(
                     f'    "tessera_nvidia.tcgen05_mma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", shape = "m128n128k32", accum = "tmem_f32", cta_group = 2 : i64, block_scaled = true}} : () -> ()'
+                )
+            elif is_consumer_blackwell:
+                lines.append(
+                    f'    "tessera_nvidia.mma_sync"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", shape = "m16n8k16", dtype_ab = "bf16", dtype_c = "f32", block_scaled = false}} : () -> ()'
+                )
+                lines.append(
+                    f'    "tessera_nvidia.tma_async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", src_space = "global", dst_space = "shared", bytes = 16 : i64}} : () -> ()'
+                )
+                lines.append(
+                    f'    "tessera_nvidia.mbarrier"() {{ordinal = {idx} : i64, arch = "{arch}", scope = "cta"}} : () -> ()'
                 )
             else:
                 lines.append(

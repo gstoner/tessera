@@ -148,8 +148,9 @@ The NVIDIA backend accepts Tile IR and emits `tessera_nvidia.*` Target IR contra
 | `tessera_nvidia.tma_async_copy` | Hopper SM90+ | TMA global-to-shared async movement contract. |
 | `tessera_nvidia.mbarrier` | Hopper SM90+ | Async transaction barrier contract. |
 | `tessera_nvidia.wmma` | Ampere/Ada fallback | Legacy WMMA contract. |
-| `tessera_nvidia.tcgen05_mma` | Blackwell SM100/SM120 | TCGEN05 MMA contract with TMEM accumulation. |
-| `tessera_nvidia.tmem_alloc/load/store` | Blackwell SM100/SM120 | Tensor Memory allocation and movement contracts. |
+| `tessera_nvidia.mma_sync` | Blackwell consumer SM120 | Warp-level `mma.sync` matmul contract (shape, dtype, accumulator dtype). Consumer Blackwell has no tcgen05/TMEM and no Hopper wgmma; FP4 goes through `mma.sync.aligned...block_scale`. |
+| `tessera_nvidia.tcgen05_mma` | Blackwell datacenter SM100 | TCGEN05 MMA contract with TMEM accumulation (datacenter sm_100a only — NOT consumer sm_120). |
+| `tessera_nvidia.tmem_alloc/load/store` | Blackwell datacenter SM100 | Tensor Memory allocation and movement contracts (datacenter sm_100a only — NOT consumer sm_120). |
 | `tessera_nvidia.cuda_kernel` | Optional runtime | CUDA/NVRTC runtime artifact marker. |
 | `tessera_nvidia.diagnostic` | Any NVIDIA target | Stable unsupported-feature diagnostic. |
 

@@ -267,7 +267,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,8,0,0,8,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,8 direct test references
 masked_scatter,12,0,1,12,0,fp16,directly_tested,12 direct test references
-matmul,401,225,17,626,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,626 direct test references
+matmul,402,225,17,627,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,627 direct test references
 max,6,0,2,6,0,bf16 f32,directly_tested,6 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,8,0,2,8,0,bf16 f32,directly_tested,8 direct test references

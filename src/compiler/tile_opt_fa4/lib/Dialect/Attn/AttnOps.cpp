@@ -31,6 +31,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Twine.h"
 
 // Sprint V7b (2026-05-22): the Attn dialect anchors its eager-load
 // extension on the parent `tessera` (Graph IR) dialect.  Including
@@ -233,22 +234,34 @@ mlir::LogicalResult LseAccumulateOp::verify() {
           getOperation(), getLse().getType(), "lse", /*maxRank=*/1)))
     return mlir::failure();
 
-  // Cross-shape checks only apply where a shape exists: two rank-1 statistics
-  // must agree, and a rank-1 running_m must match the acc tile_q. Scalars carry
-  // no shape, so they are accepted without a dimension comparison.
-  auto mType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningM().getType());
-  auto lType = mlir::dyn_cast<mlir::RankedTensorType>(getRunningL().getType());
-  auto lseType = mlir::dyn_cast<mlir::RankedTensorType>(getLse().getType());
-  if (mType && lType &&
-      failed(verifySameRankedTensor(getOperation(), mType, lType,
-                                    "running_m/running_l")))
-    return mlir::failure();
-  if (mType && lseType &&
-      failed(verifySameRankedTensor(getOperation(), mType, lseType,
-                                    "running_m/lse")))
-    return mlir::failure();
-  if (mType && !attnDimsAgree(accType.getDimSize(0), mType.getDimSize(0)))
-    return emitOpError("acc tile_q must match running_m length");
+  // Cross-shape checks apply to whichever statistics carry a per-row shape. A
+  // scalar (or rank-0) value broadcasts and carries none, but every rank-1
+  // statistic is a per-row [tile_q] vector: it must match the acc tile_q and
+  // agree with the other rank-1 statistics — independent of which (if any) of
+  // the three are scalar. Keying these off running_m alone would let a scalar
+  // running_m mask a mismatched rank-1 running_l/lse.
+  const std::pair<mlir::Type, llvm::StringRef> stats[] = {
+      {getRunningM().getType(), "running_m"},
+      {getRunningL().getType(), "running_l"},
+      {getLse().getType(), "lse"}};
+  mlir::RankedTensorType ref;
+  llvm::StringRef refLabel;
+  for (const auto &[type, label] : stats) {
+    auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(type);
+    if (!ranked || ranked.getRank() == 0)
+      continue; // scalar / rank-0 — no per-row [tile_q] shape to cross-check
+    if (!attnDimsAgree(accType.getDimSize(0), ranked.getDimSize(0)))
+      return emitOpError() << label << " length must match acc tile_q";
+    if (!ref) {
+      ref = ranked;
+      refLabel = label;
+      continue;
+    }
+    if (failed(verifySameRankedTensor(
+            getOperation(), ref, ranked,
+            (llvm::Twine(refLabel) + "/" + label).str())))
+      return mlir::failure();
+  }
   return mlir::success();
 }
 

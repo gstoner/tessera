@@ -31,6 +31,7 @@
 //   --prefer-amx  prefer AMX over AVX-512 (default true); set false to always
 //                 emit the AVX-512 call.
 
+#include "Tessera/Common/Lowering.h"
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -53,26 +54,11 @@ namespace {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Ensure a private external function declaration exists in the module.
-static func::FuncOp ensureExternalDecl(ModuleOp mod, StringRef name,
-                                       FunctionType fnTy) {
-  if (auto fn = mod.lookupSymbol<func::FuncOp>(name)) return fn;
-  OpBuilder b(mod.getBodyRegion());
-  b.setInsertionPointToStart(mod.getBody());
-  auto fn = b.create<func::FuncOp>(mod.getLoc(), name, fnTy);
-  fn.setPrivate();
-  return fn;
-}
-
-// Emit bufferization.to_memref and extract a raw pointer as i64.
-// Returns the i64 value representing the aligned data pointer.
-static Value extractPtr(OpBuilder &b, Location loc, Value tensor,
-                        MemRefType memTy) {
-  auto buf = b.create<bufferization::ToBufferOp>(loc, memTy, tensor);
-  auto ptrIdx =
-      b.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buf);
-  return b.create<arith::IndexCastOp>(loc, b.getI64Type(), ptrIdx);
-}
+// The bufferize->ptr->func.call C-ABI helpers are shared with the Apple backend
+// (Workstream A1) — see Tessera/Common/Lowering.h. `using` keeps the unqualified
+// call sites below (extractPtr / ensureExternalDecl) unchanged.
+using tessera::common::ensureExternalDecl;
+using tessera::common::extractPtr;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pattern: LowerMatmulToX86

@@ -54,19 +54,17 @@ module demo {
 # (golden name, target_kind, source) — matmul→softmax across the backends +
 # x86/CPU, plus flash-attn on two GPU lead lanes.
 #
-# NOTE — nvidia_sm120 is intentionally EXCLUDED: the Python Target-IR lowering
-# (target_ir.py::_lower_nvidia_op) currently lumps sm_120 with sm_100 and emits
-# `tcgen05_mma` / `tmem_alloc`, but consumer Blackwell sm_120 has NO tcgen05/TMEM
-# — its path is warp-level `mma.sync` (the same sm_120≠sm_100-superset bug fixed
-# in the capability queries). Snapshotting that output would bless the bug and
-# make the eventual mma.sync fix look like a regression. Re-add sm_120 to this
-# matrix once the emitter grows a correct mma.sync path (tracked follow-up).
+# nvidia_sm90 (Hopper) → wgmma; nvidia_sm120 (consumer Blackwell) → warp-level
+# `mma.sync` (NOT tcgen05/TMEM — that is datacenter sm_100a only). The two
+# distinct NVIDIA lead lanes are both snapshotted so the sm_120≠sm_100-superset
+# distinction is regression-locked in the emitter.
 _FIXTURES = [
     ("matmul_softmax", "cpu", _MATMUL_SOFTMAX),
     ("matmul_softmax", "apple_cpu", _MATMUL_SOFTMAX),
     ("matmul_softmax", "apple_gpu", _MATMUL_SOFTMAX),
     ("matmul_softmax", "rocm", _MATMUL_SOFTMAX),
     ("matmul_softmax", "nvidia_sm90", _MATMUL_SOFTMAX),
+    ("matmul_softmax", "nvidia_sm120", _MATMUL_SOFTMAX),
     ("flash_attn", "apple_gpu", _FLASH_ATTN),
     ("flash_attn", "nvidia_sm90", _FLASH_ATTN),
 ]

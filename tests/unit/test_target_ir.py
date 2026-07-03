@@ -154,6 +154,29 @@ def test_lower_tile_to_nvidia_blackwell_target_ir_maps_mma_to_tcgen05_tmem():
     assert "block_scaled = true" in text
 
 
+def test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync():
+    """Consumer Blackwell (sm_120) is NOT a superset of datacenter sm_100: it has
+    no tcgen05/TMEM and no Hopper wgmma. tile.mma must lower to warp-level
+    `mma.sync` (+ tma_async_copy + mbarrier), never tcgen05_mma/tmem_alloc."""
+    tile = TileIRModule(functions=[
+        TileFunction(
+            "main",
+            body=[TileOp("tile.mma", {"source": "tessera.matmul", "result": "C", "ordinal": 0})],
+            target="nvidia_sm120",
+        )
+    ])
+    target = lower_tile_to_target_ir(tile, target_kind="nvidia_sm120")
+    assert target.verify().ok
+    text = target.to_mlir()
+    assert 'arch = "sm_120"' in text
+    assert "tessera_nvidia.mma_sync" in text
+    assert "tessera_nvidia.tma_async_copy" in text
+    assert "tessera_nvidia.mbarrier" in text
+    # sm_120 has NO tcgen05/TMEM — those are datacenter sm_100a only.
+    assert "tessera_nvidia.tcgen05_mma" not in text
+    assert "tessera_nvidia.tmem_alloc" not in text
+
+
 def test_lower_tile_to_apple_gpu_target_ir_maps_fa4_to_msl_runtime_contract():
     """Phase 8.4.1 — a single-source flash_attn tile module qualifies for the
     runtime path; the lowering emits the MSL kernel + mps_dispatch contract

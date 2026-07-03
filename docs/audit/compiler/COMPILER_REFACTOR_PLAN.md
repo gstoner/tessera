@@ -61,10 +61,16 @@ for the routing matrix). `[MAC]` = host-free, done on the dev Mac.
 
 Pure mechanical dedup; zero behavior change; golden-IR-gated.
 
-- **A1 · `lowerToRuntimeCall(op, ABI, symbol)`** `[MAC]` — extract Apple's
-  `LoweringUtils.h::extractPtr`/`ensureExternalDecl` into
-  `src/transforms/lib/CommonLowering.{h,cpp}`; migrate `TileToX86Pass`,
-  `MatmulToAppleCPU/GPU`, `TileToROCM` inline copies.
+- **A1 · shared `extractPtr`/`ensureExternalDecl`** `[MAC]` — **landed 2026-07-02.**
+  Hoisted the byte-identical bufferize→ptr→`func.call` C-ABI helpers into
+  `src/compiler/mlir/include/Tessera/Common/Lowering.h` (`tessera::common`);
+  `TileToX86Pass.cpp` and Apple's `LoweringUtils.h` (~18 call sites) now `using`-
+  forward to it — zero call-site changes, lit byte-identical (x86 3/3, Apple 4/4).
+  **Scope correction:** the original plan listed `TileToROCM`, but ROCm does **not**
+  use this pattern — `TileToROCM` rewrites `tile.mma`→`tessera_rocm.mfma`/`wmma`
+  ops directly (op-rewriting, not a runtime C-ABI call), so it is out of scope for
+  this helper. A `lowerToRuntimeCall(op, ABI, symbol)` façade over the full
+  matmul-lowering boilerplate is the follow-on step.
 - **A2 · Declarative fusion matcher** `[MAC]` —
   `FusionPattern{opChain, rankConstraints, dtypes, dimCaps, symbol}` + one generic
   `RewritePattern`, replacing the 12+ `*FusionToAppleGPU.cpp` per-chain passes and

@@ -110,10 +110,6 @@ struct LowerMLADecodeFusionToAppleGPU : public RewritePattern {
 
     Location loc = op->getLoc();
     ModuleOp mod = op->getParentOfType<ModuleOp>();
-    MLIRContext *ctx = op->getContext();
-
-    Type i64Ty = rewriter.getI64Type();
-    Type i32Ty = rewriter.getI32Type();
 
     auto xMemTy = MemRefType::get({S_kv, D_x}, elem);
     auto wDkvMemTy = MemRefType::get({D_x, D_lat}, elem);
@@ -121,45 +117,22 @@ struct LowerMLADecodeFusionToAppleGPU : public RewritePattern {
     auto wUvMemTy = MemRefType::get({D_lat, D_h}, elem);
     auto qMemTy = MemRefType::get({B, S_q, D_h}, elem);
     auto oMemTy = MemRefType::get({B, S_q, D_h}, elem);
+    auto outTensorTy = RankedTensorType::get({B, S_q, D_h}, elem);
 
-    rewriter.setInsertionPoint(op);
-    Value xPtr = extractPtr(rewriter, loc, x, xMemTy);
-    Value wDkvPtr = extractPtr(rewriter, loc, wDkv, wDkvMemTy);
-    Value wUkPtr = extractPtr(rewriter, loc, wUk, wUkMemTy);
-    Value wUvPtr = extractPtr(rewriter, loc, wUv, wUvMemTy);
-    Value qPtr = extractPtr(rewriter, loc, q, qMemTy);
-    auto oAlloc = rewriter.create<memref::AllocOp>(loc, oMemTy);
-    Value oPtr;
-    {
-      auto pi =
-          rewriter.create<memref::ExtractAlignedPointerAsIndexOp>(loc, oAlloc);
-      oPtr = rewriter.create<arith::IndexCastOp>(loc, i64Ty, pi);
-    }
-
-    Value Bv = rewriter.create<arith::ConstantIntOp>(loc, B, 32);
-    Value Skv = rewriter.create<arith::ConstantIntOp>(loc, S_kv, 32);
-    Value Dx = rewriter.create<arith::ConstantIntOp>(loc, D_x, 32);
-    Value Dlat = rewriter.create<arith::ConstantIntOp>(loc, D_lat, 32);
-    Value Sq = rewriter.create<arith::ConstantIntOp>(loc, S_q, 32);
-    Value Dh = rewriter.create<arith::ConstantIntOp>(loc, D_h, 32);
-
-    FunctionType fnTy = FunctionType::get(
-        ctx, {i64Ty, i64Ty, i64Ty, i64Ty, i64Ty, i64Ty,
-              i32Ty, i32Ty, i32Ty, i32Ty, i32Ty, i32Ty}, {});
-    ensureExternalDecl(mod, kMLADecodeF32Symbol, fnTy);
-
-    auto callOp = rewriter.create<func::CallOp>(
-        loc, kMLADecodeF32Symbol, TypeRange{},
-        ValueRange{xPtr, wDkvPtr, wUkPtr, wUvPtr, qPtr, oPtr,
-                   Bv, Skv, Dx, Dlat, Sq, Dh});
     // Decision #19 — emit the fusion descriptor. MLA decode lowers a pre-fused
     // tessera.mla_decode_fused op (the op is the descriptor): source="composite_op".
-    callOp->setAttr("tessera.fusion.kernel", rewriter.getStringAttr("mla_decode"));
-    callOp->setAttr("tessera.fusion.source", rewriter.getStringAttr("composite_op"));
+    SmallVector<NamedAttribute> desc{
+        rewriter.getNamedAttr("tessera.fusion.kernel",
+                              rewriter.getStringAttr("mla_decode")),
+        rewriter.getNamedAttr("tessera.fusion.source",
+                              rewriter.getStringAttr("composite_op"))};
 
-    auto outTensorTy = RankedTensorType::get({B, S_q, D_h}, elem);
-    Value result =
-        rewriter.create<bufferization::ToTensorOp>(loc, outTensorTy, oAlloc);
+    rewriter.setInsertionPoint(op);
+    Value result = tessera::common::emitFusionCall(
+        rewriter, loc, mod, kMLADecodeF32Symbol,
+        {{x, xMemTy}, {wDkv, wDkvMemTy}, {wUk, wUkMemTy}, {wUv, wUvMemTy},
+         {q, qMemTy}},
+        oMemTy, outTensorTy, {B, S_kv, D_x, D_lat, S_q, D_h}, desc);
 
     rewriter.replaceOp(op, result);
     return success();

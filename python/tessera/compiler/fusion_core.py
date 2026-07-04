@@ -16,40 +16,55 @@ from typing import Any, Callable
 
 import numpy as np
 
-# B2: the target-agnostic emitter protocol. Importing only the (arch-neutral)
-# target-alias set here keeps fusion_core -> emit.kernel_emitter one-directional
-# (kernel_emitter has no runtime fusion_core dependency).
-from tessera.compiler.emit.kernel_emitter import METAL_TARGETS
+# B2: the target-agnostic emitter/runner protocol. Importing only the
+# (arch-neutral) target-alias set + runner accessor here keeps
+# fusion_core -> emit.kernel_emitter one-directional (kernel_emitter has no
+# runtime fusion_core dependency).
+from tessera.compiler.emit.kernel_emitter import (
+    METAL_TARGETS,
+    RunnerError,
+    active_runner as _active_runner,
+)
 
 
-# --- B2 seam ---------------------------------------------------------------
+# --- B2b seam --------------------------------------------------------------
 # The F4 oracles below are arch-agnostic (compare a synthesized kernel to the
-# numpy reference), but they need an *executor* to produce the "actual". Today
-# that executor is the Apple MSL runtime in emit.apple_msl; a lazy import keeps
-# core -> emit acyclic. Workstream B2 replaces this bridge with an injected
-# ``KernelEmitter`` runner so every backend wires through the same oracle.
-def _apple_msl():
-    from tessera.compiler.emit import apple_msl
-    return apple_msl
+# numpy reference), but they need an *executor* (a KernelRunner) to produce the
+# "actual". B2b injects it through the runner registry: whichever backend
+# registered a runner (Apple's AppleMSLRunner today) executes. If nothing has
+# registered yet — e.g. fusion_core is imported directly, without the Apple
+# emitter — we import apple_msl once (it self-registers), preserving B1's
+# import-safety while removing the hard-wired dependency. Workstream B3 passes
+# each backend's runner into verify_* explicitly.
+def _runner():
+    r = _active_runner()
+    if r is None:
+        from tessera.compiler.emit import apple_msl  # noqa: F401 — self-registers
+        r = _active_runner()
+    if r is None:
+        raise RunnerError(
+            "no KernelRunner registered to execute a synthesized region")
+    return r
+
 
 def run_fused_attention(*args, **kwargs):
-    """B2 seam: delegate to the Apple MSL runner (see _apple_msl)."""
-    return _apple_msl().run_fused_attention(*args, **kwargs)
+    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
+    return _runner().run_fused_attention(*args, **kwargs)
 
 
 def run_fused_region(*args, **kwargs):
-    """B2 seam: delegate to the Apple MSL runner (see _apple_msl)."""
-    return _apple_msl().run_fused_region(*args, **kwargs)
+    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
+    return _runner().run_fused_region(*args, **kwargs)
 
 
 def run_gated_matmul_region(*args, **kwargs):
-    """B2 seam: delegate to the Apple MSL runner (see _apple_msl)."""
-    return _apple_msl().run_gated_matmul_region(*args, **kwargs)
+    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
+    return _runner().run_gated_matmul_region(*args, **kwargs)
 
 
 def run_pointwise_graph(*args, **kwargs):
-    """B2 seam: delegate to the Apple MSL runner (see _apple_msl)."""
-    return _apple_msl().run_pointwise_graph(*args, **kwargs)
+    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
+    return _runner().run_pointwise_graph(*args, **kwargs)
 
 
 SYNTH_MAX_N = 1024

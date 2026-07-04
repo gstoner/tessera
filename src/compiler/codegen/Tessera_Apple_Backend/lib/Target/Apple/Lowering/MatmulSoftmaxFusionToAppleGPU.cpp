@@ -30,8 +30,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
-#include "Tessera/Target/Apple/FusionChainUtils.h"
-#include "Tessera/Target/Apple/LoweringUtils.h"
+#include "Tessera/Target/Apple/EpilogueFusion.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -72,96 +71,11 @@ struct LowerMatmulSoftmaxFusionToAppleGPU : public RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *softmaxOp,
                                 PatternRewriter &rewriter) const override {
-    if (softmaxOp->getNumOperands() < 1)
-      return failure();
-    Value softmaxIn = softmaxOp->getOperand(0);
-
-    // Decision #19 — consume the compiler's fusion descriptor when present.
-    bool descriptorDriven =
-        tessera::apple::fusionDescriptorDriven(softmaxOp, "matmul_softmax");
-
-    // axis: defaults to -1. Anything else falls out of fusion.
-    int64_t axis = -1;
-    if (auto attr = softmaxOp->getAttrOfType<IntegerAttr>("axis"))
-      axis = attr.getInt();
-
-    auto smTy = dyn_cast<RankedTensorType>(softmaxIn.getType());
-    if (!smTy || smTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: rank-2 only");
-    Type smElem = smTy.getElementType();
-    StringRef symbol = kSynthEpilogueF32Symbol;   // synthesized for all dtypes
-    bool isSynth = true;
-    if (!(smElem.isF32() || smElem.isF16() || smElem.isBF16())) {
-      return rewriter.notifyMatchFailure(
-          softmaxOp, "fusion: f32, f16, or bf16 only in Phase 8.4.4.2");
-    }
-    if (axis != -1 && axis != smTy.getRank() - 1)
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: axis must be -1");
-
-    // The softmax input must be the result of a matmul, with no other uses.
-    auto matmulOr = tessera::apple::walkChainProducer(
-        rewriter, softmaxOp, softmaxIn, "tessera.matmul", descriptorDriven);
-    if (failed(matmulOr))
-      return failure();
-    Operation *matmulOp = *matmulOr;
-    if (matmulOp->getNumOperands() < 2)
-      return failure();
-    Value lhs = matmulOp->getOperand(0);
-    Value rhs = matmulOp->getOperand(1);
-
-    auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
-    auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
-    if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul inputs not rank-2");
-    // The matmul element type must match the softmax (and softmax-result)
-    // element type. Mixed-dtype chains fall out of fusion.
-    if (lhsTy.getElementType() != smElem || rhsTy.getElementType() != smElem)
-      return rewriter.notifyMatchFailure(
-          softmaxOp, "fusion: matmul element types must match softmax dtype");
-    if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
-        rhsTy.isDynamicDim(0) || rhsTy.isDynamicDim(1))
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: requires static shapes");
-
-    int64_t M = lhsTy.getDimSize(0);
-    int64_t K = lhsTy.getDimSize(1);
-    int64_t N = rhsTy.getDimSize(1);
-    if (rhsTy.getDimSize(0) != K)
-      return rewriter.notifyMatchFailure(softmaxOp, "fusion: matmul K mismatch");
-    if (N > 256)
-      return rewriter.notifyMatchFailure(
-          softmaxOp, "fusion: GPU kernel limited to N <= 256");
-
-    Location loc = softmaxOp->getLoc();
-    ModuleOp mod = softmaxOp->getParentOfType<ModuleOp>();
-
-    auto aMemTy = MemRefType::get({M, K}, smElem);
-    auto bMemTy = MemRefType::get({K, N}, smElem);
-    auto oMemTy = MemRefType::get({M, N}, smElem);
-    auto outTensorTy = RankedTensorType::get({M, N}, smElem);
-
-    SmallVector<NamedAttribute> desc;
-    desc.push_back(rewriter.getNamedAttr(
-        "tessera.fusion.kernel",
-        rewriter.getStringAttr(isSynth ? "synth_matmul_epilogue"
-                                       : "matmul_softmax")));
-    if (isSynth)
-      desc.push_back(rewriter.getNamedAttr("tessera.fusion.epilogue",
-                                           rewriter.getStringAttr("softmax")));
-    desc.push_back(rewriter.getNamedAttr(
-        "tessera.fusion.source",
-        rewriter.getStringAttr(descriptorDriven ? "descriptor"
-                                                : "rediscovered")));
-
-    rewriter.setInsertionPoint(matmulOp);
-    Value result = tessera::common::emitFusionCall(
-        rewriter, loc, mod, symbol, {{lhs, aMemTy}, {rhs, bMemTy}}, oMemTy,
-        outTensorTy, {M, N, K}, desc);
-
-    // Replace the softmax op (chain consumer) with the fused result. Then
-    // erase the matmul (now dead because its only use was softmax).
-    rewriter.replaceOp(softmaxOp, result);
-    rewriter.eraseOp(matmulOp);
-    return success();
+    return tessera::apple::lowerMatmulEpilogueFusion(
+        rewriter, softmaxOp,
+        {/*epilogueLabel=*/"softmax", /*intentKernel=*/"matmul_softmax",
+         /*synthSymbol=*/kSynthEpilogueF32Symbol, /*allowHalfPrecision=*/true,
+         /*requireAxisMinusOne=*/true});
   }
 };
 

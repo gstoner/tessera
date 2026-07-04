@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from tessera.compiler.emit.kernel_cache import register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
@@ -2042,3 +2043,18 @@ class AppleMSLRunner(KernelRunner):
 
 
 register_runner(AppleMSLRunner())
+
+
+def _apple_compile_fn(source):
+    """B4: Apple's per-arch compile step — deferred (compile-on-launch).
+
+    Metal compiles a synthesized kernel on first launch inside ``run_*``
+    (``newLibraryWithSource`` in ``apple_gpu_runtime.mm``) and caches the pipeline
+    state there, keyed by ``source + '\\x1f' + entry``. So there is nothing to
+    compile ahead of time here — return ``None`` to record a compile-on-launch
+    kernel. Workstream C backends (x86 clang / NVIDIA ptxas / ROCm hipcc) register
+    a real ahead-of-time compile fn instead."""
+    return None
+
+
+register_compiler(_MSL_TARGET, _apple_compile_fn)

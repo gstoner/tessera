@@ -146,6 +146,17 @@ backends).
 - **B4 · Generic synth→compile→cache→launch loop** `[MAC]` for the loop; compile
   fn is per-arch — extract from `apple_gpu_runtime.mm` (`newLibraryWithSource` +
   sha256 `cache_key`); plugin supplies `metallib`/`ptxas`/`hipcc`/`clang`.
+  **B4a landed 2026-07-04:** `compiler/emit/kernel_cache.py` — the arch-neutral
+  driver: `cache_key(source, dtype, target)` (sha256 over the `source + '\x1f' +
+  entry` join the runtime already uses, extended with `spec`/`shape_key`/`dtype`/
+  `target` so bucket/dtype variants stay distinct); a `register_compiler(target,
+  fn)`/`get_compiler` plugin seam + `CompileError`; a content-addressed
+  `KernelCache` (hit/miss stats); and `build(region, target, spec, dims, dtype)` =
+  emit → key → cache-or-compile. Apple registers a **deferred** compiler
+  (compile-on-launch — Metal compiles inside `run_*`, cached in the runtime), so
+  the loop dedups and keys without duplicating work. **Launch** stays the B3
+  `KernelRunner`; the real ahead-of-time `compile_fn`s (`ptxas`/`hipcc`/`clang`)
+  are Workstream C.
 
 **Lead safety:** B targets the *fusable-DAG middle ground* (epilogues, pointwise
 chains, small attention). Crown-jewel GEMM stays Tier 2/3.

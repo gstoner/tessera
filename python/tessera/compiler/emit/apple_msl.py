@@ -25,9 +25,11 @@ import numpy as np
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
+    KernelRunner,
     KernelSource,
     SpecPolicy,
     register_emitter,
+    register_runner,
 )
 from tessera.compiler.fusion_core import (
     AttentionRegion,
@@ -1994,3 +1996,30 @@ class AppleMSLEmitter(KernelEmitter):
 
 
 register_emitter(AppleMSLEmitter())
+
+
+class AppleMSLRunner(KernelRunner):
+    """Reference :class:`KernelRunner` (B2b) — executes a synthesized region via
+    the Apple Metal runtime by delegating to this module's ``run_*`` functions.
+
+    It is the execute-half twin of :class:`AppleMSLEmitter`: the F4 oracles in
+    ``fusion_core`` call these through the injected-runner registry instead of a
+    hard ``import apple_msl``, so a non-Apple backend registers its own runner and
+    reuses the same oracle."""
+
+    target = _MSL_TARGET
+
+    def run_fused_region(self, region, *args, **kwargs):
+        return run_fused_region(region, *args, **kwargs)
+
+    def run_fused_attention(self, region, *args, **kwargs):
+        return run_fused_attention(region, *args, **kwargs)
+
+    def run_gated_matmul_region(self, region, *args, **kwargs):
+        return run_gated_matmul_region(region, *args, **kwargs)
+
+    def run_pointwise_graph(self, region, *args, **kwargs):
+        return run_pointwise_graph(region, *args, **kwargs)
+
+
+register_runner(AppleMSLRunner())

@@ -141,3 +141,85 @@ def emit_kernel(
 #: op-level ``emit(target)`` methods in ``fusion_core`` so a snippet request for
 #: any of these resolves to the MSL body.
 METAL_TARGETS = frozenset({"metal", "msl", "apple", "apple_gpu"})
+
+
+# --- runner: the execute half of the seam (B2b) ------------------------------
+#
+# A KernelEmitter produces *source*; a KernelRunner *executes* a synthesized
+# region on probe inputs and reports whether a real device kernel ran. The F4
+# oracles in fusion_core (``verify_synthesized_*``) need a runner to produce the
+# "actual" they compare against the numpy reference. B1 hard-wired that to a lazy
+# ``import apple_msl``; B2b injects it through this registry so every backend
+# wires the same oracle through its own runner (Decision #21 diagnostics; the
+# per-backend explicit-injection into ``verify_*`` is Workstream B3).
+
+
+class RunnerError(RuntimeError):
+    """No KernelRunner is available to execute a synthesized region — names the
+    gap so the caller can fall back or report (Decision #21: no silent no-op)."""
+
+
+class KernelRunner(ABC):
+    """Executes a synthesized fused region on probe inputs.
+
+    Each method returns ``(output, execution)`` where ``execution`` is a backend
+    tag (``"metal_runtime"`` when a real device kernel ran, ``"reference"`` /
+    ``"fallback"`` when it did not). The oracle trusts the numpy reference unless
+    a real kernel ran and *diverged*. Signatures accept ``*args, **kwargs`` so a
+    backend's ``run_*`` gaining an optional knob is not an interface break; the
+    documented positional args are what the oracles pass.
+    """
+
+    #: Backend identity, e.g. ``"apple_gpu"``. Subclasses set this.
+    target: str = ""
+
+    @abstractmethod
+    def run_fused_region(self, region: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
+        """Run a matmul-epilogue region on ``(A, B, bias=None, ...)``."""
+
+    @abstractmethod
+    def run_fused_attention(self, region: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
+        """Run an attention block on ``(Q, K, V)``."""
+
+    @abstractmethod
+    def run_gated_matmul_region(self, region: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
+        """Run a gated-matmul region on ``(A, Wg, Wu)``."""
+
+    @abstractmethod
+    def run_pointwise_graph(self, region: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
+        """Run a pointwise-DAG region on ``(arrays)`` (a list of probes)."""
+
+
+_RUNNERS: dict[str, KernelRunner] = {}
+_DEFAULT_RUNNER_TARGET: str | None = None
+
+
+def register_runner(runner: KernelRunner, *, default: bool | None = None) -> None:
+    """Register a target-bound runner. The first registered runner becomes the
+    active default; pass ``default=True`` to make a later one active (the hook the
+    arbiter/Workstream C use to swap execution backends)."""
+    global _DEFAULT_RUNNER_TARGET
+    if not runner.target:
+        raise ValueError("KernelRunner.target must be a non-empty backend id")
+    _RUNNERS[runner.target] = runner
+    if default or (_DEFAULT_RUNNER_TARGET is None and default is not False):
+        _DEFAULT_RUNNER_TARGET = runner.target
+
+
+def get_runner(target: str) -> KernelRunner:
+    """Look up the runner for ``target`` or raise a clear diagnostic."""
+    try:
+        return _RUNNERS[target]
+    except KeyError:
+        known = ", ".join(sorted(_RUNNERS)) or "<none registered>"
+        raise RunnerError(
+            f"no KernelRunner registered for target {target!r}; known: {known}"
+        ) from None
+
+
+def active_runner() -> KernelRunner | None:
+    """The default runner (first registered / explicitly defaulted), or ``None``
+    if nothing has registered yet."""
+    if _DEFAULT_RUNNER_TARGET is None:
+        return None
+    return _RUNNERS.get(_DEFAULT_RUNNER_TARGET)

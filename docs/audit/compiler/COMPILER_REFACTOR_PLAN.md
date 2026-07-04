@@ -113,9 +113,13 @@ backends).
   defines `SpecPolicy(static|bucket|dynamic)`, `KernelSource`, the `KernelEmitter`
   ABC + registry (`emit_kernel(region, target, spec)`); `EpilogueOp`/`ReductionOp`
   `.msl`→`.emit(target)` (unknown target raises, Decision #21); `AppleMSLEmitter`
-  wraps the `synthesize_*_msl` bodies byte-identically. **B2b** — replace B1's
-  oracle lazy `_apple_msl()` bridge with an injected runner registry (Apple
-  self-registers). **B2c** — carry symbolic dims on regions + wire `SpecPolicy`
+  wraps the `synthesize_*_msl` bodies byte-identically. **B2b** — **landed 2026-07-04:** `KernelRunner`
+  ABC + runner registry (`register_runner`/`get_runner`/`active_runner`) in
+  `emit/kernel_emitter.py`; `AppleMSLRunner` delegates to the `run_*` functions
+  and self-registers; `fusion_core`'s 4 oracle bridge wrappers now dispatch to the
+  registered active runner (lazy-register fallback preserves direct-import safety)
+  instead of a hard `import apple_msl`. **B2c** — carry symbolic dims on regions +
+  wire `SpecPolicy`
   so the `requires static shapes` gate becomes a policy; stub the `dynamic`
   emitter behind a clear diagnostic.
   **Symbolic-dim-aware from day one (dynamic-shapes decision, 2026-07-02):** the

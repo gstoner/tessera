@@ -17,6 +17,7 @@ whole synthesizer by implementing one interface. These tests lock:
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import tessera.compiler.fusion as F
@@ -29,12 +30,17 @@ from tessera.compiler.emit.apple_msl import (
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
     KernelEmitter,
+    KernelRunner,
     KernelSource,
     METAL_TARGETS,
+    RunnerError,
     SpecPolicy,
+    active_runner,
     emit_kernel,
     get_emitter,
+    get_runner,
     register_emitter,
+    register_runner,
 )
 
 
@@ -122,3 +128,61 @@ def test_register_emitter_requires_target():
 
 def test_spec_policy_has_static_bucket_dynamic():
     assert {p.value for p in SpecPolicy} == {"static", "bucket", "dynamic"}
+
+
+# ---- B2b: injected KernelRunner ---------------------------------------------
+
+def test_apple_runner_registered_and_active():
+    # importing the facade imported apple_msl, which self-registered its runner.
+    assert active_runner() is not None
+    assert get_runner("apple_gpu").target == "apple_gpu"
+
+
+def test_register_runner_requires_target():
+    class _Bad(KernelRunner):
+        target = ""
+        def run_fused_region(self, region, *a, **k): ...
+        def run_fused_attention(self, region, *a, **k): ...
+        def run_gated_matmul_region(self, region, *a, **k): ...
+        def run_pointwise_graph(self, region, *a, **k): ...
+    with pytest.raises(ValueError, match="non-empty backend id"):
+        register_runner(_Bad())
+
+
+def test_unknown_runner_target_diagnostic():
+    with pytest.raises(RunnerError, match="no KernelRunner registered"):
+        get_runner("nvidia")
+
+
+def test_oracle_routes_through_the_injected_runner():
+    # The F4 oracle must call whatever runner is registered as active — proving
+    # B2b injection replaced B1's hard-wired apple_msl import. Register a spy as
+    # the default, confirm the core bridge dispatches to it, then restore the
+    # global registry state (plain assignment — NOT monkeypatch, which would
+    # record and re-apply the spy value on teardown and leak it downstream).
+    import tessera.compiler.emit.kernel_emitter as ke
+    import tessera.compiler.fusion_core as core
+
+    calls: list[str] = []
+
+    class _Spy(KernelRunner):
+        target = "spy_backend"
+        def run_fused_region(self, region, *a, **k):
+            calls.append("region")
+            return np.zeros((8, 16), "float32"), "reference"
+        def run_fused_attention(self, region, *a, **k): ...
+        def run_gated_matmul_region(self, region, *a, **k): ...
+        def run_pointwise_graph(self, region, *a, **k): ...
+
+    saved = ke._DEFAULT_RUNNER_TARGET
+    try:
+        register_runner(_Spy(), default=True)
+        assert active_runner().target == "spy_backend"
+        # the core bridge (what the oracle calls) now dispatches to the spy
+        _out, ex = core.run_fused_region(F.FusedRegion(epilogue=("relu",)),
+                                         np.ones((8, 12), "float32"),
+                                         np.ones((12, 16), "float32"))
+        assert calls == ["region"] and ex == "reference"
+    finally:
+        ke._DEFAULT_RUNNER_TARGET = saved
+        ke._RUNNERS.pop("spy_backend", None)

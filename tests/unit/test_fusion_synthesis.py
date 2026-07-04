@@ -996,7 +996,11 @@ kernel void {F._ENTRY}(
     }}
 }}"""
 
-    monkeypatch.setattr(F, "synthesize_matmul_epilogue_msl", broken_synth)
+    # B1 split: run_fused_region resolves synthesize_matmul_epilogue_msl from
+    # its own module (emit.apple_msl), so patch it there, not on the facade.
+    monkeypatch.setattr(
+        "tessera.compiler.emit.apple_msl.synthesize_matmul_epilogue_msl",
+        broken_synth)
     clear_verification_cache()
     # Use a REDUCTION region so it routes through the scalar synthesizer under
     # test (pointwise regions now run on the coopmat path). The broken kernel
@@ -1034,7 +1038,11 @@ kernel void {F._ENTRY}(
     }}
 }}"""
 
-    monkeypatch.setattr(F, "synthesize_matmul_epilogue_msl", broken_synth)
+    # B1 split: run_fused_region resolves synthesize_matmul_epilogue_msl from
+    # its own module (emit.apple_msl), so patch it there, not on the facade.
+    monkeypatch.setattr(
+        "tessera.compiler.emit.apple_msl.synthesize_matmul_epilogue_msl",
+        broken_synth)
     F.clear_verification_cache()
     A = np.ones((4, 8), np.float32)
     B = np.ones((8, 6), np.float32)

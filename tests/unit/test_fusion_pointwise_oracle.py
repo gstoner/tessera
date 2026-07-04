@@ -56,7 +56,7 @@ def test_divergent_synthesizer_is_rejected(monkeypatch):
         # Pretend the GPU ran and produced garbage.
         return np.zeros_like(np.asarray(probes[0])) + 999.0, "metal_runtime"
 
-    monkeypatch.setattr(F, "run_pointwise_graph", _bad_run)
+    monkeypatch.setattr("tessera.compiler.emit.apple_msl.run_pointwise_graph",_bad_run)
     assert F.verify_synthesized_pointwise(region, force=True) is False
 
 
@@ -68,5 +68,5 @@ def test_reference_only_host_is_trusted(monkeypatch):
     def _ref_run(rgn, probes):
         return rgn.reference(*probes), "reference"
 
-    monkeypatch.setattr(F, "run_pointwise_graph", _ref_run)
+    monkeypatch.setattr("tessera.compiler.emit.apple_msl.run_pointwise_graph",_ref_run)
     assert F.verify_synthesized_pointwise(region, force=True) is True

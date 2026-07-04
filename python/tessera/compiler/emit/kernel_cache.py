@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from tessera.compiler.emit.kernel_emitter import (
+    METAL_TARGETS,
     KernelSource,
     SpecPolicy,
     emit_kernel,
@@ -105,7 +106,15 @@ def register_compiler(target: str, compile_fn: CompileFn) -> None:
 
 
 def get_compiler(target: str) -> CompileFn:
-    """The compile fn for ``target`` or a clear diagnostic."""
+    """The compile fn for ``target`` or a clear diagnostic.
+
+    Like ``get_emitter``, the built-in Apple compiler registers only as an
+    ``emit.apple_msl`` import side effect, so bootstrap it on demand when a Metal
+    target is probed before emission — otherwise a caller that selects compilers
+    up front would wrongly conclude the reference backend is unavailable purely
+    because of import order."""
+    if target not in _COMPILERS and target in METAL_TARGETS:
+        import tessera.compiler.emit.apple_msl  # noqa: F401 — self-registers
     try:
         return _COMPILERS[target]
     except KeyError:

@@ -15,7 +15,14 @@ lock:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
+
+_REPO = Path(__file__).resolve().parents[2]
 
 import tessera.compiler.fusion as F
 from tessera.compiler.emit.kernel_cache import (
@@ -116,6 +123,26 @@ def test_ahead_of_time_compiler_records_artifact():
 def test_unknown_compiler_target_raises():
     with pytest.raises(CompileError, match="no compiler registered"):
         get_compiler("nvidia")
+
+
+def test_get_compiler_bootstraps_apple_without_prior_import():
+    # Cold path: probe the compiler seam without importing the facade / apple_msl
+    # first. get_compiler must bootstrap the Apple reference compiler so the
+    # advertised backend is available regardless of import order (mirrors the
+    # emitter registry).
+    code = (
+        "from tessera.compiler.emit.kernel_cache import get_compiler\n"
+        "import tessera.compiler.emit.kernel_cache as kc\n"
+        "assert 'apple_gpu' not in kc._COMPILERS, 'apple must not be pre-registered'\n"
+        "fn = get_compiler('apple_gpu')\n"
+        "assert callable(fn) and fn(object()) is None  # deferred compile-on-launch\n"
+        "print('BOOTSTRAP_OK')\n"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        cwd=str(_REPO), env={**os.environ, "PYTHONPATH": "python"})
+    assert r.returncode == 0, r.stderr
+    assert "BOOTSTRAP_OK" in r.stdout
 
 
 def test_register_compiler_requires_target():

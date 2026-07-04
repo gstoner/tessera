@@ -134,10 +134,15 @@ backends).
   guards) emitter drops in **without an API break**. This is the "pull it
   forward" — the *interface* is dynamic-ready now; the *implementation* starts at
   bucket. See Theory §8 W2.
-- **B3 · F4 oracle as universal correctness gate** `[MAC]` — already
-  numpy-reference and arch-independent; wire every backend's synthesized kernel
-  through the same `verify_synthesized_*` before trust. This is what makes
-  compiled kernels *safe to prefer*.
+- **B3 · F4 oracle as universal correctness gate** `[MAC]` — **landed
+  2026-07-04:** the four `verify_synthesized_*` oracles gain an explicit
+  `runner: KernelRunner | None = None` — the same numpy-reference oracle now gates
+  *any* backend's synthesized kernel (`verify_synthesized_region(region,
+  runner=<backend>)`), not just Apple; `None` resolves the registered active
+  runner. The now-redundant B2b core bridge wrappers (`run_fused_region` etc. in
+  `fusion_core`) are removed — the oracles dispatch straight through
+  `(runner or _runner()).run_*`. This is what makes compiled kernels *safe to
+  prefer*.
 - **B4 · Generic synth→compile→cache→launch loop** `[MAC]` for the loop; compile
   fn is per-arch — extract from `apple_gpu_runtime.mm` (`newLibraryWithSource` +
   sha256 `cache_key`); plugin supplies `metallib`/`ptxas`/`hipcc`/`clang`.

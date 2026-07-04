@@ -270,11 +270,48 @@ def test_oracle_routes_through_the_injected_runner():
     try:
         register_runner(_Spy(), default=True)
         assert active_runner().target == "spy_backend"
-        # the core bridge (what the oracle calls) now dispatches to the spy
-        _out, ex = core.run_fused_region(F.FusedRegion(epilogue=("relu",)),
-                                         np.ones((8, 12), "float32"),
-                                         np.ones((12, 16), "float32"))
+        # _runner() (what an oracle resolves when no explicit runner is passed)
+        # now dispatches to the registered active runner — the spy.
+        _out, ex = core._runner().run_fused_region(F.FusedRegion(epilogue=("relu",)),
+                                                   np.ones((8, 12), "float32"),
+                                                   np.ones((12, 16), "float32"))
         assert calls == ["region"] and ex == "reference"
     finally:
         ke._DEFAULT_RUNNER_TARGET = saved
         ke._RUNNERS.pop("spy_backend", None)
+
+
+# ---- B3: F4 oracle as a universal, per-backend correctness gate -------------
+
+class _WrongRunner(KernelRunner):
+    """A runner whose 'device' kernel diverges from the numpy reference."""
+    target = "wrong_backend"
+    def run_fused_region(self, region, A, B, bias=None, *a, **k):
+        return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "metal_runtime"
+    def run_fused_attention(self, region, *a, **k): ...
+    def run_gated_matmul_region(self, region, *a, **k): ...
+    def run_pointwise_graph(self, region, *a, **k): ...
+
+
+class _RefRunner(_WrongRunner):
+    """A runner whose kernel matches the numpy reference exactly."""
+    target = "ref_backend"
+    def run_fused_region(self, region, A, B, bias=None, *a, **k):
+        return region.reference(A, B, bias), "metal_runtime"
+
+
+def test_verify_gates_the_explicitly_injected_runner():
+    # B3: the same numpy-reference oracle gates ANY backend's kernel via an
+    # explicit `runner=` — no registry mutation, no Metal. A diverging runner is
+    # rejected (False), a faithful one is trusted (True).
+    F.clear_verification_cache()
+    region = F.FusedRegion(epilogue=("relu",))
+    assert F.verify_synthesized_region(region, runner=_WrongRunner(), force=True) is False
+    assert F.verify_synthesized_region(region, runner=_RefRunner(), force=True) is True
+
+
+def test_verify_default_runner_unchanged_without_injection():
+    # Omitting runner keeps today's behavior: resolve the registered active
+    # runner (Apple). A correct synthesizer verifies True (or True when no Metal).
+    F.clear_verification_cache()
+    assert F.verify_synthesized_region(F.FusedRegion(epilogue=("relu",))) is True

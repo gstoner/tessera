@@ -20,6 +20,11 @@ REPO = Path(__file__).resolve().parents[2]
 PASS_SRC = (REPO / "src" / "compiler" / "codegen" / "Tessera_Apple_Backend" /
             "lib" / "Target" / "Apple" / "Lowering" /
             "MatmulSoftmaxMatmulFusionToAppleGPU.cpp")
+# A2b (2026-07): the intent-attr lookup + Decision #21 mismatch warning moved
+# into this shared chain-walk helper; each pass names its intent via
+# fusionDescriptorDriven(op, "<kernel>").
+CHAIN_UTILS = (REPO / "src" / "compiler" / "codegen" / "Tessera_Apple_Backend" /
+               "include" / "Tessera" / "Target" / "Apple" / "FusionChainUtils.h")
 _CANDIDATES = (
     REPO / "build" / "tools" / "tessera-opt" / "tessera-opt",
     REPO / "build-llvm22" / "tools" / "tessera-opt" / "tessera-opt",
@@ -57,11 +62,16 @@ func.func @rediscovered(%A: tensor<8x16xf32>, %B: tensor<16x32xf32>, %C: tensor<
 
 def test_pass_emits_and_consumes_the_descriptor_in_source():
     src = PASS_SRC.read_text()
-    assert 'tessera.fusion.intent' in src           # consumes the compiler intent
+    # The pass emits the first-class fusion descriptor on the fused call.
     assert 'tessera.fusion.kernel' in src           # emits the descriptor
     assert 'tessera.fusion.source' in src
     assert '"descriptor"' in src and '"rediscovered"' in src
-    assert 'descriptor/IR mismatch' in src          # Decision #21 diagnostic
+    # It consumes the compiler intent via the shared chain-walk helper (A2b):
+    # the pass names the intent, the helper reads the attr + warns on mismatch.
+    assert 'fusionDescriptorDriven' in src          # consumes the compiler intent
+    util = CHAIN_UTILS.read_text()
+    assert 'tessera.fusion.intent' in util          # helper reads the intent attr
+    assert 'descriptor/IR mismatch' in util         # Decision #21 diagnostic
 
 
 @_needs_opt

@@ -67,6 +67,50 @@ class KernelSource:
     shape_key: tuple[Any, ...] | None = None
 
 
+def _dim_bucket(n: int) -> int:
+    """Coarsen a dimension to its next power-of-two bucket, so one specialization
+    generalizes across nearby shapes instead of memorizing every exact size.
+    Matches ``emit.apple_msl._shape_bucket`` so the emitter's ``shape_key`` and
+    the autotune corpus key agree on bucket boundaries."""
+    b = 1
+    while b < n:
+        b *= 2
+    return b
+
+
+def bucket_key(
+    dims: tuple[int, ...] | None,
+    spec: SpecPolicy,
+    *,
+    dim_names: tuple[str, ...] | None = None,
+) -> tuple[Any, ...] | None:
+    """Compute the shape specialization key for ``dims`` under ``spec`` — the
+    ``(op, shape-bucket, dtype, target)`` arbiter/cache keys on this (D1).
+
+    * ``STATIC`` — the exact dims (one kernel per exact shape).
+    * ``BUCKET`` — each dim coarsened to its power-of-two bucket, so one kernel
+      serves a bucket of runtime shapes (seq-len / batch / KV-len).
+    * ``DYNAMIC`` — the *symbolic* identity (``dim_names``), not the values: one
+      kernel serves all shapes, so its key is shape-independent.
+
+    For ``STATIC``/``BUCKET``, ``dims is None`` yields ``None`` (shape-anonymous —
+    a fully static kernel whose shape is baked into the source needs no key). For
+    ``DYNAMIC`` the key is the *symbolic* identity and is independent of concrete
+    dims, so it is returned even when ``dims`` is omitted (an AOT symbolic kernel
+    emitted without example dims) — otherwise distinct dynamic kernels would
+    collapse to one anonymous key and the cache/arbiter could reuse the wrong
+    entry."""
+    if spec is SpecPolicy.DYNAMIC:
+        return tuple(dim_names) if dim_names else ()
+    if dims is None:
+        return None
+    if spec is SpecPolicy.STATIC:
+        return tuple(dims)
+    if spec is SpecPolicy.BUCKET:
+        return tuple(_dim_bucket(d) for d in dims)
+    raise ValueError(f"unknown SpecPolicy {spec!r}")  # pragma: no cover
+
+
 class KernelEmitter(ABC):
     """A per-target kernel emitter plugin.
 
@@ -92,12 +136,20 @@ class KernelEmitter(ABC):
 
     @abstractmethod
     def emit(
-        self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET, dtype: str = "f32"
+        self,
+        region: Any,
+        *,
+        spec: SpecPolicy = SpecPolicy.BUCKET,
+        dtype: str = "f32",
+        dims: tuple[int, ...] | None = None,
     ) -> KernelSource:
         """Emit a :class:`KernelSource` for ``region`` under ``spec``.
 
-        Raise :class:`EmitError` if the region or policy is unsupported — never
-        return a kernel specialized differently than requested.
+        ``dims`` is the concrete shape this call specializes for; the emitter
+        records the corresponding :func:`bucket_key` in ``KernelSource.shape_key``
+        (``None`` leaves it shape-anonymous). Raise :class:`EmitError` if the
+        region or policy is unsupported — never return a kernel specialized
+        differently than requested.
         """
 
 
@@ -139,11 +191,17 @@ def get_emitter(target: str) -> KernelEmitter:
 
 
 def emit_kernel(
-    region: Any, target: str, spec: SpecPolicy = SpecPolicy.BUCKET, *, dtype: str = "f32"
+    region: Any,
+    target: str,
+    spec: SpecPolicy = SpecPolicy.BUCKET,
+    *,
+    dtype: str = "f32",
+    dims: tuple[int, ...] | None = None,
 ) -> KernelSource:
     """The plan's ``KernelEmitter.emit(region, target, spec)`` — dispatch ``region``
-    to the emitter registered for ``target``."""
-    return get_emitter(target).emit(region, spec=spec, dtype=dtype)
+    to the emitter registered for ``target``. ``dims`` (concrete shape) is threaded
+    so the returned :class:`KernelSource` records its :func:`bucket_key`."""
+    return get_emitter(target).emit(region, spec=spec, dtype=dtype, dims=dims)
 
 
 #: Target aliases that mean "Apple GPU / Metal Shading Language" — shared by the

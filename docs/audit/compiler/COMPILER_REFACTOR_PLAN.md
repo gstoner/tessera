@@ -118,10 +118,14 @@ backends).
   `emit/kernel_emitter.py`; `AppleMSLRunner` delegates to the `run_*` functions
   and self-registers; `fusion_core`'s 4 oracle bridge wrappers now dispatch to the
   registered active runner (lazy-register fallback preserves direct-import safety)
-  instead of a hard `import apple_msl`. **B2c** — carry symbolic dims on regions +
-  wire `SpecPolicy`
-  so the `requires static shapes` gate becomes a policy; stub the `dynamic`
-  emitter behind a clear diagnostic.
+  instead of a hard `import apple_msl`. **B2c** — **landed 2026-07-04:**
+  `FusedRegion.dim_names` carries the Graph-IR symbolic dims; `bucket_key(dims,
+  spec, dim_names)` computes the shape-specialization key per policy (STATIC =
+  exact, BUCKET = next-pow-2 per dim matching `_shape_bucket`, DYNAMIC = symbolic
+  identity); `emit`/`emit_kernel` thread a concrete `dims` and record it in
+  `KernelSource.shape_key` (metadata, not codegen — source is dims-invariant). The
+  `dynamic` emitter stays stubbed behind the `EmitError` added in B2a's review
+  round; the full guarded runtime-dim emitter is Workstream W2.
   **Symbolic-dim-aware from day one (dynamic-shapes decision, 2026-07-02):** the
   `region` carries symbolic dims (from Graph-IR `dim_names`), and `spec` is the
   **specialization policy** `static | bucket | dynamic`. First impls emit

@@ -97,10 +97,16 @@ def test_emitter_intents_match_cpp_consumers():
     assert "tessera.fusion.intent" in header, (
         "the shared chain-walk helper must read tessera.fusion.intent")
     lowering = apple / "lib" / "Target" / "Apple" / "Lowering"
+    # A2c (2026-07): the epilogue trio (softmax/gelu/rmsnorm) share one body via
+    # `lowerMatmulEpilogueFusion(op, spec)` and name their intent in the spec; the
+    # 3-op pass still calls `fusionDescriptorDriven` directly. Either entry point
+    # counts as participating in intent consumption.
+    _consumes = ("fusionDescriptorDriven", "lowerMatmulEpilogueFusion",
+                 "tessera.fusion.intent")
     consumed = set()
     for cpp in lowering.glob("Matmul*FusionToAppleGPU.cpp"):
         src = cpp.read_text()
-        if "fusionDescriptorDriven" not in src and "tessera.fusion.intent" not in src:
+        if not any(marker in src for marker in _consumes):
             continue
         for kernel in _INTENT_KERNELS:
             if f'"{kernel}"' in src:

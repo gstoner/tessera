@@ -22,8 +22,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Target/Apple/Passes.h"
-#include "Tessera/Target/Apple/FusionChainUtils.h"
-#include "Tessera/Target/Apple/LoweringUtils.h"
+#include "Tessera/Target/Apple/EpilogueFusion.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -68,80 +67,12 @@ struct LowerMatmulRMSNormPatternBase : public RewritePattern {
 
   LogicalResult matchAndRewrite(Operation *normOp,
                                 PatternRewriter &rewriter) const override {
-    if (normOp->getNumOperands() < 1) return failure();
-    Value normIn = normOp->getOperand(0);
-
-    // Decision #19 — consume the compiler's fusion descriptor when present.
-    bool descriptorDriven =
-        tessera::apple::fusionDescriptorDriven(normOp, "matmul_rmsnorm");
-
-    auto nTy = dyn_cast<RankedTensorType>(normIn.getType());
-    if (!nTy || nTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: rank-2 only");
-    if (!nTy.getElementType().isF32())
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: f32 only");
-
-    auto matmulOr = tessera::apple::walkChainProducer(
-        rewriter, normOp, normIn, "tessera.matmul", descriptorDriven);
-    if (failed(matmulOr))
-      return failure();
-    Operation *matmulOp = *matmulOr;
-    if (matmulOp->getNumOperands() < 2) return failure();
-    Value lhs = matmulOp->getOperand(0);
-    Value rhs = matmulOp->getOperand(1);
-
-    auto lhsTy = dyn_cast<RankedTensorType>(lhs.getType());
-    auto rhsTy = dyn_cast<RankedTensorType>(rhs.getType());
-    if (!lhsTy || !rhsTy || lhsTy.getRank() != 2 || rhsTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: matmul inputs not rank-2");
-    if (!lhsTy.getElementType().isF32() || !rhsTy.getElementType().isF32())
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: matmul inputs not f32");
-    if (lhsTy.isDynamicDim(0) || lhsTy.isDynamicDim(1) ||
-        rhsTy.isDynamicDim(0) || rhsTy.isDynamicDim(1))
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: requires static shapes");
-
-    int64_t M = lhsTy.getDimSize(0);
-    int64_t K = lhsTy.getDimSize(1);
-    int64_t N = rhsTy.getDimSize(1);
-    if (rhsTy.getDimSize(0) != K)
-      return rewriter.notifyMatchFailure(normOp, "matmul_rmsnorm fusion: matmul K mismatch");
-    if (N > 256)
-      return rewriter.notifyMatchFailure(
-          normOp, "matmul_rmsnorm fusion: GPU kernel limited to N <= 256");
-
-    // eps from the rmsnorm op's attr (if present), else op-specific default.
-    float eps = defaultEps_;
-    if (auto attr = normOp->getAttrOfType<FloatAttr>("eps"))
-      eps = static_cast<float>(attr.getValueAsDouble());
-
-    Location loc = normOp->getLoc();
-    ModuleOp mod = normOp->getParentOfType<ModuleOp>();
-    Type f32Ty = rewriter.getF32Type();
-
-    auto aMemTy = MemRefType::get({M, K}, f32Ty);
-    auto bMemTy = MemRefType::get({K, N}, f32Ty);
-    auto oMemTy = MemRefType::get({M, N}, f32Ty);
-    auto outTensorTy = RankedTensorType::get({M, N}, f32Ty);
-
-    SmallVector<NamedAttribute> desc{
-        rewriter.getNamedAttr("tessera.fusion.kernel",
-                              rewriter.getStringAttr("synth_matmul_epilogue")),
-        rewriter.getNamedAttr("tessera.fusion.epilogue",
-                              rewriter.getStringAttr("rmsnorm")),
-        rewriter.getNamedAttr("tessera.fusion.eps",
-                              rewriter.getF32FloatAttr(eps)),
-        rewriter.getNamedAttr(
-            "tessera.fusion.source",
-            rewriter.getStringAttr(descriptorDriven ? "descriptor"
-                                                    : "rediscovered"))};
-
-    rewriter.setInsertionPoint(matmulOp);
-    Value result = tessera::common::emitFusionCall(
-        rewriter, loc, mod, kSynthEpilogueF32Symbol,
-        {{lhs, aMemTy}, {rhs, bMemTy}}, oMemTy, outTensorTy, {M, N, K}, desc);
-    rewriter.replaceOp(normOp, result);
-    rewriter.eraseOp(matmulOp);
-    return success();
+    return tessera::apple::lowerMatmulEpilogueFusion(
+        rewriter, normOp,
+        {/*epilogueLabel=*/"rmsnorm", /*intentKernel=*/"matmul_rmsnorm",
+         /*synthSymbol=*/kSynthEpilogueF32Symbol, /*allowHalfPrecision=*/false,
+         /*requireAxisMinusOne=*/false, /*hasEps=*/true,
+         /*defaultEps=*/defaultEps_});
   }
 };
 

@@ -65,7 +65,10 @@ def test_native_bf16_preserves_bf16_output_dtype():
 def test_native_bf16_helper_falls_back_cleanly_without_symbol(monkeypatch):
     # If the runtime symbol is unavailable, the native path declines (None,
     # "fallback") so the caller f32-emulates — never silently wrong.
-    monkeypatch.setattr(F, "_synth_f16_symbol", lambda: None)
+    # B1 split: _run_fused_region_bf16 resolves _synth_f16_symbol from its own
+    # module (emit.apple_msl); patch it there, not on the facade.
+    monkeypatch.setattr(
+        "tessera.compiler.emit.apple_msl._synth_f16_symbol", lambda: None)
     region = F.FusedRegion(epilogue=("gelu",))
     A = np.ones((4, 8), np.float32).astype(bf16)
     B = np.ones((8, 6), np.float32).astype(bf16)

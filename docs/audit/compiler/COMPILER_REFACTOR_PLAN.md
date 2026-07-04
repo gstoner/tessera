@@ -92,11 +92,19 @@ Turn Apple's MSL-welded synthesizer into a target-agnostic framework. Generalize
 `OPTIMIZING_COMPILER_PLAN` F2 (MSL synthesis) → F6 (one middle-end, many
 backends).
 
-- **B1 · Split `fusion.py`** `[MAC]` — arch-agnostic half (`FusedRegion`,
-  `EpilogueOp`/`ReductionOp` semantics, `discover_*`, `should_fuse_*`,
-  `verify_synthesized_*`) → `compiler/fusion_core.py`; MSL emit
-  (`synthesize_*_msl`, `.msl` fields) → `compiler/emit/apple_msl.py`. Pure
-  relocation, no behavior change.
+- **B1 · Split `fusion.py`** `[MAC]` — **landed 2026-07-04.** arch-agnostic half
+  (`FusedRegion`, `EpilogueOp`/`ReductionOp` semantics, `discover_*`,
+  `should_fuse_*`/`*_cost`, `verify_synthesized_*`) → `compiler/fusion_core.py`
+  (65 symbols); MSL emit + runtime dispatch + measured autotune loop
+  (`synthesize_*_msl`, `run_*`, `_synth_*_symbol`, corpus) →
+  `compiler/emit/apple_msl.py` (74 symbols); `compiler/fusion.py` is now a thin
+  re-export facade (`X as X` idiom) so all ~20 importers are untouched. Pure
+  relocation, no behavior change (full unit suite delta = 0 vs main; the ~181
+  ROCm `--generate-*-kernel` failures are a pre-existing `tessera-opt`
+  pass-registration carve-out, unrelated). **The one seam:** the F4 oracles reach
+  the Apple runner via a lazy `_apple_msl()` bridge (marked for B2 to replace with
+  the injected `KernelEmitter` runner) — keeps `core → emit` acyclic with no
+  behavior change.
 - **B2 · `KernelEmitter` plugin protocol** `[MAC]` — `EpilogueOp.msl` field
   becomes `EpilogueOp.emit(target)`; `KernelEmitter.emit(region, target, spec) →
   KernelSource`. Apple MSL is the reference impl (relocated, not rewritten).

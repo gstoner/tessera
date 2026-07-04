@@ -242,6 +242,12 @@ class FusedRegion:
     # indices of the prologue activation chain in the source graph, so the
     # orchestrator can mark them consumed. Empty unless discovery found a prologue.
     prologue_src_indices: tuple[int, ...] = ()
+    # B2c symbolic-dim carrier (dynamic-shapes decision): the Graph-IR dim names
+    # for the region's shape when it is symbolic — e.g. ("batch", "d_ff",
+    # "d_model"). NOT synthesis-semantic (the synth path derives concrete M/N/K
+    # from operands); it lets a SpecPolicy.DYNAMIC emitter key one kernel by
+    # symbolic identity rather than concrete values. ``None`` = anonymous/static.
+    dim_names: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         for op in self.epilogue:

@@ -28,6 +28,7 @@ from tessera.compiler.emit.kernel_emitter import (
     KernelRunner,
     KernelSource,
     SpecPolicy,
+    bucket_key,
     register_emitter,
     register_runner,
 )
@@ -1983,7 +1984,12 @@ class AppleMSLEmitter(KernelEmitter):
         return self._dispatch(region) is not None
 
     def emit(
-        self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET, dtype: str = "f32"
+        self,
+        region: Any,
+        *,
+        spec: SpecPolicy = SpecPolicy.BUCKET,
+        dtype: str = "f32",
+        dims: tuple[int, ...] | None = None,
     ) -> KernelSource:
         disp = self._dispatch(region)
         if disp is None:
@@ -1992,16 +1998,20 @@ class AppleMSLEmitter(KernelEmitter):
                 f"{type(region).__name__}")
         if spec is SpecPolicy.DYNAMIC:
             # The guarded runtime-dim (DYNAMIC) emitter is not built yet
-            # (Workstream B2c/W2). Refuse rather than emit the bucket body and
+            # (Workstream W2). Refuse rather than emit the bucket body and
             # mislabel it DYNAMIC — a generic runner/cache must not treat it as a
             # real dynamic kernel (Decision #21: no silent wrong specialization).
             raise EmitError(
                 "AppleMSLEmitter does not yet support SpecPolicy.DYNAMIC "
-                "(guarded runtime-dim emitter lands in Workstream B2c/W2); "
+                "(guarded runtime-dim emitter lands in Workstream W2); "
                 "request STATIC or BUCKET")
         synth, entry = disp
         source = synth(region, dtype=dtype)
-        return KernelSource(source=source, entry=entry, lang=self.lang, spec=spec)
+        # B2c: record the shape-specialization key. Symbolic dim identity comes
+        # from the region (dim_names) when present; STATIC/BUCKET key on `dims`.
+        key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
+        return KernelSource(source=source, entry=entry, lang=self.lang, spec=spec,
+                            shape_key=key)
 
 
 register_emitter(AppleMSLEmitter())

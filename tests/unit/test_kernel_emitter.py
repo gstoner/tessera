@@ -41,6 +41,7 @@ from tessera.compiler.emit.kernel_emitter import (
     RunnerError,
     SpecPolicy,
     active_runner,
+    bucket_key,
     emit_kernel,
     get_emitter,
     get_runner,
@@ -143,6 +144,51 @@ def test_apple_emitter_rejects_dynamic_spec():
     region = F.FusedRegion(epilogue=("relu",))
     with pytest.raises(EmitError, match="does not yet support SpecPolicy.DYNAMIC"):
         emit_kernel(region, "apple_gpu", SpecPolicy.DYNAMIC)
+
+
+# ---- B2c: symbolic dims + SpecPolicy shape bucketing ------------------------
+
+def test_bucket_key_per_policy():
+    assert bucket_key(None, SpecPolicy.BUCKET) is None            # shape-anonymous
+    assert bucket_key((8, 12, 16), SpecPolicy.STATIC) == (8, 12, 16)   # exact
+    assert bucket_key((7, 13, 30), SpecPolicy.BUCKET) == (8, 16, 32)   # next pow2
+    # DYNAMIC keys on symbolic identity, not values
+    assert bucket_key((7, 13), SpecPolicy.DYNAMIC, dim_names=("m", "n")) == ("m", "n")
+    assert bucket_key((7,), SpecPolicy.DYNAMIC) == ()            # no names -> all shapes
+
+
+def test_bucket_key_matches_apple_shape_bucket_convention():
+    # the emitter's bucketing must agree with the autotune corpus bucketing.
+    from tessera.compiler.emit.apple_msl import _shape_bucket
+    for n in (1, 2, 3, 31, 64, 65, 1000):
+        assert bucket_key((n,), SpecPolicy.BUCKET) == (_shape_bucket(n),)
+
+
+def test_emit_records_shape_key_per_policy():
+    region = F.FusedRegion(epilogue=("gelu",))
+    assert emit_kernel(region, "apple_gpu", SpecPolicy.STATIC, dims=(8, 12, 16)).shape_key == (8, 12, 16)
+    assert emit_kernel(region, "apple_gpu", SpecPolicy.BUCKET, dims=(7, 13, 30)).shape_key == (8, 16, 32)
+    assert emit_kernel(region, "apple_gpu", SpecPolicy.STATIC).shape_key is None   # no dims
+
+
+def test_shape_key_is_metadata_not_codegen():
+    # the specialization key must not change the emitted source — bucketing is a
+    # cache/arbiter concern, not a codegen one.
+    region = F.FusedRegion(epilogue=("gelu",))
+    a = emit_kernel(region, "apple_gpu", SpecPolicy.STATIC, dims=(8, 12, 16))
+    b = emit_kernel(region, "apple_gpu", SpecPolicy.BUCKET, dims=(64, 64, 64))
+    assert a.source == b.source
+
+
+def test_region_carries_symbolic_dim_names_non_semantically():
+    # the dim_names carrier is Graph-IR bookkeeping — present or absent, the
+    # synthesized source is identical (the synth path uses concrete operand dims).
+    plain = F.FusedRegion(epilogue=("gelu",))
+    symbolic = F.FusedRegion(epilogue=("gelu",), dim_names=("batch", "d_ff", "d_model"))
+    assert symbolic.dim_names == ("batch", "d_ff", "d_model")
+    assert plain.dim_names is None
+    assert (synthesize_matmul_epilogue_msl(symbolic)
+            == synthesize_matmul_epilogue_msl(plain))
 
 
 def test_get_emitter_bootstraps_apple_without_prior_import():

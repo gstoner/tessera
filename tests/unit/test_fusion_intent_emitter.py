@@ -83,16 +83,27 @@ def test_no_chain_no_stamp():
 def test_emitter_intents_match_cpp_consumers():
     # Loop contract: every intent the emitter produces is an intent some Apple
     # C++ fusion pass reads. Guards against the two halves drifting apart.
-    lowering = (Path(__file__).resolve().parents[2] / "src" / "compiler" /
-                "codegen" / "Tessera_Apple_Backend" / "lib" / "Target" / "Apple" /
-                "Lowering")
+    #
+    # A2b (2026-07): the `tessera.fusion.intent` attr lookup + Decision #21
+    # mismatch warning moved into the shared FusionChainUtils.h helper; each
+    # chain pass names the intent it consumes via
+    # `fusionDescriptorDriven(op, "<kernel>")` (legacy inline form was
+    # `intent == "<kernel>"`). Verify (a) the helper reads the intent attr and
+    # (b) every emitter intent is named by some pass.
+    apple = (Path(__file__).resolve().parents[2] / "src" / "compiler" /
+             "codegen" / "Tessera_Apple_Backend")
+    header = (apple / "include" / "Tessera" / "Target" / "Apple" /
+              "FusionChainUtils.h").read_text()
+    assert "tessera.fusion.intent" in header, (
+        "the shared chain-walk helper must read tessera.fusion.intent")
+    lowering = apple / "lib" / "Target" / "Apple" / "Lowering"
     consumed = set()
     for cpp in lowering.glob("Matmul*FusionToAppleGPU.cpp"):
         src = cpp.read_text()
-        if "tessera.fusion.intent" not in src:
+        if "fusionDescriptorDriven" not in src and "tessera.fusion.intent" not in src:
             continue
         for kernel in _INTENT_KERNELS:
-            if f'== "{kernel}"' in src or f'(intent == "{kernel}")' in src:
+            if f'"{kernel}"' in src:
                 consumed.add(kernel)
     assert _INTENT_KERNELS <= consumed, (
         f"emitter produces intents the C++ doesn't consume: {_INTENT_KERNELS - consumed}")

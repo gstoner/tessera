@@ -315,3 +315,18 @@ def test_verify_default_runner_unchanged_without_injection():
     # runner (Apple). A correct synthesizer verifies True (or True when no Metal).
     F.clear_verification_cache()
     assert F.verify_synthesized_region(F.FusedRegion(epilogue=("relu",))) is True
+
+
+def test_verify_cache_is_keyed_per_runner():
+    # B3 P1: a verdict from one runner must NOT be reused for another, even
+    # without force — the cache key includes the backend identity. Verify a
+    # faithful runner (True), then WITHOUT force a wrong runner must re-execute
+    # (distinct key) and be rejected (False), not return the cached True.
+    F.clear_verification_cache()
+    region = F.FusedRegion(epilogue=("relu",))
+    assert F.verify_synthesized_region(region, runner=_RefRunner()) is True
+    assert F.verify_synthesized_region(region, runner=_WrongRunner()) is False
+    # and the reverse order: wrong cached False must not block the faithful one
+    F.clear_verification_cache()
+    assert F.verify_synthesized_region(region, runner=_WrongRunner()) is False
+    assert F.verify_synthesized_region(region, runner=_RefRunner()) is True

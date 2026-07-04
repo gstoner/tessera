@@ -662,14 +662,18 @@ def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
     ``verify_synthesized_region``): run the synthesized kernel on a small probe
     and compare to the unfused numpy reference. ``True`` unless a kernel ran and
     diverged. Cached per gate-activation."""
-    key = ("G", region.gate_act)
+    r = runner or _runner()
+    # B3: key the verdict by backend identity too — a verdict from one runner
+    # must NOT be reused for another, else a faithful backend's cached True lets a
+    # wrong backend skip its own gate (and vice-versa).
+    key = (r.target, "G", region.gate_act)
     if not force and key in _GATED_VERIFY_CACHE:
         return _GATED_VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
     A = rng.standard_normal((8, 12)).astype(np.float32)
     Wg = rng.standard_normal((12, 16)).astype(np.float32)
     Wu = rng.standard_normal((12, 16)).astype(np.float32)
-    out, execution = (runner or _runner()).run_gated_matmul_region(region, A, Wg, Wu)
+    out, execution = r.run_gated_matmul_region(region, A, Wg, Wu)
     if execution != "metal_runtime":
         verdict = True
     else:
@@ -890,7 +894,10 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     B3: ``runner`` injects a specific backend's :class:`KernelRunner` so the same
     numpy-reference oracle gates *any* backend's synthesized kernel — the F4 gate
     is universal, not Apple-only. ``None`` uses the registered active runner."""
-    key = ("R", region.epilogue, region.reduction, region.has_bias,
+    r = runner or _runner()
+    # B3: key by backend identity too (see verify_synthesized_gated) so one
+    # runner's verdict is never reused for another.
+    key = (r.target, "R", region.epilogue, region.reduction, region.has_bias,
            region.prologue, region.has_residual, round(region.eps, 9))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
@@ -899,7 +906,7 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = (rng.standard_normal((16,)).astype(np.float32)
             if region.has_bias else None)
-    out, execution = (runner or _runner()).run_fused_region(region, A, B, bias)
+    out, execution = r.run_fused_region(region, A, B, bias)
     if execution != "metal_runtime":
         verdict = True                         # no synthesized kernel to distrust
     else:
@@ -913,14 +920,15 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
                                  runner: KernelRunner | None = None) -> bool:
     """Codegen-gated oracle for a synthesized attention block (see
     ``verify_synthesized_region``)."""
-    key = ("A", round(region.scale, 9), region.causal)
+    r = runner or _runner()
+    key = (r.target, "A", round(region.scale, 9), region.causal)
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
     Q = rng.standard_normal((8, 16)).astype(np.float32)
     K = rng.standard_normal((8, 16)).astype(np.float32)
     V = rng.standard_normal((8, 16)).astype(np.float32)
-    out, execution = (runner or _runner()).run_fused_attention(region, Q, K, V)
+    out, execution = r.run_fused_attention(region, Q, K, V)
     if execution != "metal_runtime":
         verdict = True
     else:
@@ -941,7 +949,8 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
     pointwise path to F4 parity with the matmul-epilogue / gated / attention
     region kinds — the gate that makes lane-by-lane numpy displacement safe.
     Verdicts are cached per region-class; pass ``force`` to re-probe."""
-    key = ("P", region.ops, len(region.inputs))
+    r = runner or _runner()
+    key = (r.target, "P", region.ops, len(region.inputs))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
@@ -953,7 +962,7 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
     # NaN/inf in both kernel and reference by design — silence the numpy warnings
     # and treat matched NaNs as agreement (equal_nan).
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-        out, execution = (runner or _runner()).run_pointwise_graph(region, probes)
+        out, execution = r.run_pointwise_graph(region, probes)
         if execution != "metal_runtime":
             verdict = True                     # no synthesized kernel to distrust
         else:

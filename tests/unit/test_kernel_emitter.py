@@ -157,6 +157,17 @@ def test_bucket_key_per_policy():
     assert bucket_key((7,), SpecPolicy.DYNAMIC) == ()            # no names -> all shapes
 
 
+def test_bucket_key_dynamic_symbolic_survives_missing_dims():
+    # AOT symbolic emit: no concrete example dims, but the symbolic identity must
+    # still key the kernel — DYNAMIC is handled before the dims-is-None early
+    # return, else distinct dynamic kernels collapse to one anonymous key.
+    assert bucket_key(None, SpecPolicy.DYNAMIC, dim_names=("m", "n")) == ("m", "n")
+    assert bucket_key(None, SpecPolicy.DYNAMIC) == ()
+    # STATIC/BUCKET still go shape-anonymous without dims (can't bucket values).
+    assert bucket_key(None, SpecPolicy.STATIC) is None
+    assert bucket_key(None, SpecPolicy.BUCKET) is None
+
+
 def test_bucket_key_matches_apple_shape_bucket_convention():
     # the emitter's bucketing must agree with the autotune corpus bucketing.
     from tessera.compiler.emit.apple_msl import _shape_bucket

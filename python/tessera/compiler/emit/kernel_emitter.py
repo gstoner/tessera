@@ -93,16 +93,21 @@ def bucket_key(
     * ``DYNAMIC`` — the *symbolic* identity (``dim_names``), not the values: one
       kernel serves all shapes, so its key is shape-independent.
 
-    ``dims is None`` yields ``None`` (shape-anonymous — e.g. a fully static kernel
-    whose shape is baked into the source and needs no bucket key)."""
+    For ``STATIC``/``BUCKET``, ``dims is None`` yields ``None`` (shape-anonymous —
+    a fully static kernel whose shape is baked into the source needs no key). For
+    ``DYNAMIC`` the key is the *symbolic* identity and is independent of concrete
+    dims, so it is returned even when ``dims`` is omitted (an AOT symbolic kernel
+    emitted without example dims) — otherwise distinct dynamic kernels would
+    collapse to one anonymous key and the cache/arbiter could reuse the wrong
+    entry."""
+    if spec is SpecPolicy.DYNAMIC:
+        return tuple(dim_names) if dim_names else ()
     if dims is None:
         return None
     if spec is SpecPolicy.STATIC:
         return tuple(dims)
     if spec is SpecPolicy.BUCKET:
         return tuple(_dim_bucket(d) for d in dims)
-    if spec is SpecPolicy.DYNAMIC:
-        return tuple(dim_names) if dim_names else ()
     raise ValueError(f"unknown SpecPolicy {spec!r}")  # pragma: no cover
 
 

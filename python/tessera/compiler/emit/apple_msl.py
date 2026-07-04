@@ -4,9 +4,14 @@ B1 split (COMPILER_REFACTOR_PLAN Workstream B, the keystone): the
 Metal-specific half of the former ``fusion.py`` — ``synthesize_*_msl`` string
 emitters, the ``run_*`` runtime-dispatch functions, ctypes symbol loaders, and
 the measured autotune loop + corpus. It consumes the arch-agnostic region model
-from :mod:`tessera.compiler.fusion_core`. Workstream B2 lifts these behind a
-``KernelEmitter`` plugin so non-Apple backends reuse the framework. Pure
-relocation — no behavior change.
+from :mod:`tessera.compiler.fusion_core`.
+
+B2 (COMPILER_REFACTOR_PLAN Workstream B2): :class:`AppleMSLEmitter` is the
+reference implementation of the :class:`~tessera.compiler.emit.kernel_emitter.KernelEmitter`
+plugin protocol — it *wraps* the ``synthesize_*_msl`` functions below (does not
+rewrite them) so a non-Apple backend reuses the whole synthesizer by implementing
+the same interface. Vocab snippets are now requested through ``EpilogueOp.emit``/
+``ReductionOp.emit`` (target-parametric) rather than a Metal-only field.
 """
 
 from __future__ import annotations
@@ -17,6 +22,15 @@ from typing import Any
 
 import numpy as np
 
+from tessera.compiler.emit.kernel_emitter import (
+    EmitError,
+    KernelEmitter,
+    KernelRunner,
+    KernelSource,
+    SpecPolicy,
+    register_emitter,
+    register_runner,
+)
 from tessera.compiler.fusion_core import (
     AttentionRegion,
     EPILOGUE_OPS,
@@ -37,6 +51,10 @@ from tessera.compiler.fusion_core import (
     select_attention_lowering,
     should_fuse_region,
 )
+
+#: The target id this module emits for — passed to the target-parametric
+#: ``EpilogueOp.emit`` / ``ReductionOp.emit`` vocab accessors (B2).
+_MSL_TARGET = "apple_gpu"
 
 _ENTRY = "synth_matmul_epi"
 
@@ -59,7 +77,7 @@ def _prologue_msl(region: "FusedRegion", indent: str) -> str:
     wrapped as ``{ float v = a; <op.msl>; a = v; }`` so the EPILOGUE_OPS bodies
     (which operate on ``v``) are reused verbatim.  Empty when no prologue."""
     return "".join(
-        f"{indent}{{ float v = a; {EPILOGUE_OPS[op].msl} a = v; }}\n"
+        f"{indent}{{ float v = a; {EPILOGUE_OPS[op].emit(_MSL_TARGET)} a = v; }}\n"
         for op in region.prologue)
 
 
@@ -139,7 +157,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
                       if region.has_residual else "")
     residual_add = ("        v += float(residual[o_off + n]);\n"
                     if region.has_residual else "")
-    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
     matmul_body = _matmul_body(variant, _prologue_msl(region, "        "))
 
     if region.reduction is None:
@@ -161,7 +179,7 @@ def synthesize_matmul_epilogue_msl(region: FusedRegion,
         scores[n] = v;
     }}
 """
-        red = REDUCTION_OPS[region.reduction].msl.format(eps=region.eps)
+        red = REDUCTION_OPS[region.reduction].emit(_MSL_TARGET).format(eps=region.eps)
         finalize = f"""    int o_off = row * N;
 {pw_pass}{red}"""
 
@@ -244,7 +262,7 @@ def synthesize_matmul_epilogue_msl_tiled(region: FusedRegion,
     io = _io_type(dtype)
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
-    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
 
     # M4 prologue: transform the loaded A element before the multiply. Empty form
     # keeps the original single-line accumulate byte-identical.
@@ -375,7 +393,7 @@ def synthesize_matmul_epilogue_coopmat_msl(region: FusedRegion,
     io = _io_type(dtype)
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
-    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
     sg_in = f"simdgroup_matrix<{io}, 8, 8>"
 
     return f"""#include <metal_stdlib>
@@ -514,7 +532,7 @@ def synthesize_matmul_reduction_coopmat_msl(region: FusedRegion,
     io = _io_type(dtype)
     bias_param = (f"    device const {io}* bias [[buffer(6)]],\n"
                   if region.has_bias else "")
-    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].msl}" for op in region.epilogue)
+    pointwise = "\n".join(f"            {EPILOGUE_OPS[op].emit(_MSL_TARGET)}" for op in region.epilogue)
     reduce_block = _COOPMAT_REDUCTIONS[region.reduction].format(io=io, eps=region.eps)
     sg_in = f"simdgroup_matrix<{io}, 8, 8>"
     bm = _COOPMAT_REDUCE_BM
@@ -1039,7 +1057,7 @@ def synthesize_norm_chain_msl(region: NormChainRegion, dtype: str = "f32") -> st
 {body}
         O[o_off + n] = ST(o);
     }}"""
-    red = REDUCTION_OPS[region.norm].msl.format(eps=region.eps)
+    red = REDUCTION_OPS[region.norm].emit(_MSL_TARGET).format(eps=region.eps)
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
@@ -1631,7 +1649,7 @@ def synthesize_gated_matmul_msl(region: GatedMatmulRegion = GatedMatmulRegion(),
     The gate activation runs in fp32; the O-write goes through ``ST(...)`` (bfloat
     rejects implicit float→bfloat). ``dtype`` selects the I/O type."""
     io = _io_type(dtype)
-    act = EPILOGUE_OPS[region.gate_act].msl        # operates on `v`
+    act = EPILOGUE_OPS[region.gate_act].emit(_MSL_TARGET)        # operates on `v`
     return f"""#include <metal_stdlib>
 using namespace metal;
 using ST = {io};
@@ -1918,3 +1936,99 @@ def autotune_coopmat_tile(region: FusedRegion, M: int, N: int, K: int, *,
         winner = min(eligible, key=lambda t: eligible[t])
         _COOPMAT_TILE_CORPUS[_corpus_key(region, M, N, K)] = winner
     return latencies
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B2 — KernelEmitter reference implementation (Apple MSL)
+#
+# AppleMSLEmitter adapts the synthesize_*_msl functions above to the generic
+# KernelEmitter protocol. It is a thin dispatcher — NOT a reimplementation — so a
+# non-Apple backend (Workstream C: x86 clang, NVIDIA PTX, ROCm AMDGCN) plugs into
+# the same fusion_core region model by writing its own emitter, without forking
+# the discovery/cost/oracle middle-end.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AppleMSLEmitter(KernelEmitter):
+    """Reference :class:`KernelEmitter` — wraps the ``synthesize_*_msl`` bodies.
+
+    Dispatches an arch-agnostic fused ``region`` to its Metal Shading Language
+    source + entry-point name and returns a :class:`KernelSource`. Variant/tile
+    selection (tiled / coopmat / online) stays in the ``run_*`` dispatch path;
+    this emitter yields the canonical scalar source form for the region, which is
+    what the generic synth→compile→cache→launch loop (Workstream B4) consumes.
+    """
+
+    target = _MSL_TARGET
+    lang = "msl"
+
+    #: region type → (synthesis callable, entry-point symbol). Ordered so a
+    #: reduction-terminated pointwise DAG matches before the plain DAG.
+    def _dispatch(self, region: Any):
+        if isinstance(region, FusedRegion):
+            return synthesize_matmul_epilogue_msl, _ENTRY
+        if isinstance(region, NormChainRegion):
+            return synthesize_norm_chain_msl, _NORM_CHAIN_ENTRY
+        if isinstance(region, PointwiseReduceRegion):
+            return synthesize_pointwise_reduce_msl, _PW_REDUCE_ENTRY
+        if isinstance(region, PointwiseGraphRegion):
+            return synthesize_pointwise_graph_msl, _PW_ENTRY
+        if isinstance(region, AttentionRegion):
+            return synthesize_attention_msl, _ATTN_ENTRY
+        if isinstance(region, GatedMatmulRegion):
+            return synthesize_gated_matmul_msl, _GATED_ENTRY
+        return None
+
+    def can_emit(self, region: Any) -> bool:
+        return self._dispatch(region) is not None
+
+    def emit(
+        self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET, dtype: str = "f32"
+    ) -> KernelSource:
+        disp = self._dispatch(region)
+        if disp is None:
+            raise EmitError(
+                f"AppleMSLEmitter cannot emit a region of type "
+                f"{type(region).__name__}")
+        if spec is SpecPolicy.DYNAMIC:
+            # The guarded runtime-dim (DYNAMIC) emitter is not built yet
+            # (Workstream B2c/W2). Refuse rather than emit the bucket body and
+            # mislabel it DYNAMIC — a generic runner/cache must not treat it as a
+            # real dynamic kernel (Decision #21: no silent wrong specialization).
+            raise EmitError(
+                "AppleMSLEmitter does not yet support SpecPolicy.DYNAMIC "
+                "(guarded runtime-dim emitter lands in Workstream B2c/W2); "
+                "request STATIC or BUCKET")
+        synth, entry = disp
+        source = synth(region, dtype=dtype)
+        return KernelSource(source=source, entry=entry, lang=self.lang, spec=spec)
+
+
+register_emitter(AppleMSLEmitter())
+
+
+class AppleMSLRunner(KernelRunner):
+    """Reference :class:`KernelRunner` (B2b) — executes a synthesized region via
+    the Apple Metal runtime by delegating to this module's ``run_*`` functions.
+
+    It is the execute-half twin of :class:`AppleMSLEmitter`: the F4 oracles in
+    ``fusion_core`` call these through the injected-runner registry instead of a
+    hard ``import apple_msl``, so a non-Apple backend registers its own runner and
+    reuses the same oracle."""
+
+    target = _MSL_TARGET
+
+    def run_fused_region(self, region, *args, **kwargs):
+        return run_fused_region(region, *args, **kwargs)
+
+    def run_fused_attention(self, region, *args, **kwargs):
+        return run_fused_attention(region, *args, **kwargs)
+
+    def run_gated_matmul_region(self, region, *args, **kwargs):
+        return run_gated_matmul_region(region, *args, **kwargs)
+
+    def run_pointwise_graph(self, region, *args, **kwargs):
+        return run_pointwise_graph(region, *args, **kwargs)
+
+
+register_runner(AppleMSLRunner())

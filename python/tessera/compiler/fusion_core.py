@@ -16,6 +16,11 @@ from typing import Any, Callable
 
 import numpy as np
 
+# B2: the target-agnostic emitter protocol. Importing only the (arch-neutral)
+# target-alias set here keeps fusion_core -> emit.kernel_emitter one-directional
+# (kernel_emitter has no runtime fusion_core dependency).
+from tessera.compiler.emit.kernel_emitter import METAL_TARGETS
+
 
 # --- B2 seam ---------------------------------------------------------------
 # The F4 oracles below are arch-agnostic (compare a synthesized kernel to the
@@ -59,12 +64,27 @@ SYNTH_MAX_D = 256
 
 @dataclass(frozen=True)
 class EpilogueOp:
-    """One pointwise epilogue op: how it lowers to MSL and to numpy."""
+    """One pointwise epilogue op: how it lowers to a target kernel and to numpy.
+
+    B2: the lowering is target-parametric — consumers request a snippet via
+    :meth:`emit` (``target``) instead of reading a Metal-only field. ``_msl`` is
+    the backing Metal Shading Language body (the reference target); Workstream C
+    backends add more languages behind the same :meth:`emit` seam."""
 
     name: str
-    msl: str                                  # operates on `v`, may read bias[n]
+    _msl: str                                 # metal body: operates on `v`, may read bias[n]
     ref: Callable[[np.ndarray], np.ndarray]   # numpy reference (no-bias ops)
     needs_bias: bool = False
+
+    def emit(self, target: str = "metal") -> str:
+        """Kernel snippet for this op on ``target`` (operates on ``v``; may read
+        ``bias[n]``). Unknown target raises — never silently emit the wrong
+        language (Decision #21)."""
+        if target in METAL_TARGETS:
+            return self._msl
+        raise ValueError(
+            f"EpilogueOp {self.name!r}: no kernel snippet for target {target!r} "
+            f"(known targets: {sorted(METAL_TARGETS)})")
 
 
 def _gelu(x: np.ndarray) -> np.ndarray:
@@ -105,12 +125,22 @@ class ReductionOp:
     """A terminal *reduction* epilogue (rmsnorm/softmax): a row reduction over the
     matmul-row accumulator ``scores[N]``, then a per-element finalize into ``O``.
     Unlike pointwise ops, it needs the whole row — so it comes last, after any
-    pointwise chain.  ``msl`` is a block (uses ``N``/``scores``/``O``/``o_off``,
-    ``{eps}`` substituted); ``ref(x, eps)`` is the numpy ground truth."""
+    pointwise chain.  :meth:`emit` returns a block (uses ``N``/``scores``/``O``/
+    ``o_off``; the caller substitutes ``{eps}``); ``ref(x, eps)`` is the numpy
+    ground truth. B2: target-parametric like :class:`EpilogueOp`."""
 
     name: str
-    msl: str
+    _msl: str
     ref: Callable[[np.ndarray, float], np.ndarray]
+
+    def emit(self, target: str = "metal") -> str:
+        """Reduction block for ``target`` (uses ``N``/``scores``/``O``/``o_off``;
+        caller substitutes ``{eps}``). Unknown target raises (Decision #21)."""
+        if target in METAL_TARGETS:
+            return self._msl
+        raise ValueError(
+            f"ReductionOp {self.name!r}: no kernel snippet for target {target!r} "
+            f"(known targets: {sorted(METAL_TARGETS)})")
 
 
 def _rmsnorm_ref(x: np.ndarray, eps: float) -> np.ndarray:

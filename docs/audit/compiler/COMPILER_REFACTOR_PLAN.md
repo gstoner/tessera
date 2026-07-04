@@ -108,6 +108,16 @@ backends).
 - **B2 · `KernelEmitter` plugin protocol** `[MAC]` — `EpilogueOp.msl` field
   becomes `EpilogueOp.emit(target)`; `KernelEmitter.emit(region, target, spec) →
   KernelSource`. Apple MSL is the reference impl (relocated, not rewritten).
+  Sequenced as three increments: **B2a** (protocol + `emit(target)` vocab +
+  `AppleMSLEmitter` wrapper) — **landed 2026-07-04:** `emit/kernel_emitter.py`
+  defines `SpecPolicy(static|bucket|dynamic)`, `KernelSource`, the `KernelEmitter`
+  ABC + registry (`emit_kernel(region, target, spec)`); `EpilogueOp`/`ReductionOp`
+  `.msl`→`.emit(target)` (unknown target raises, Decision #21); `AppleMSLEmitter`
+  wraps the `synthesize_*_msl` bodies byte-identically. **B2b** — replace B1's
+  oracle lazy `_apple_msl()` bridge with an injected runner registry (Apple
+  self-registers). **B2c** — carry symbolic dims on regions + wire `SpecPolicy`
+  so the `requires static shapes` gate becomes a policy; stub the `dynamic`
+  emitter behind a clear diagnostic.
   **Symbolic-dim-aware from day one (dynamic-shapes decision, 2026-07-02):** the
   `region` carries symbolic dims (from Graph-IR `dim_names`), and `spec` is the
   **specialization policy** `static | bucket | dynamic`. First impls emit

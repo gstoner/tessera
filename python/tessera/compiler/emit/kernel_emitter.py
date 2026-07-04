@@ -119,7 +119,16 @@ def register_emitter(emitter: KernelEmitter) -> None:
 
 
 def get_emitter(target: str) -> KernelEmitter:
-    """Look up the emitter for ``target`` or raise a clear diagnostic."""
+    """Look up the emitter for ``target`` or raise a clear diagnostic.
+
+    The built-in Apple reference emitter registers only as an import side effect
+    of ``emit.apple_msl``. So a caller that reaches this registry through the
+    public API (``emit_kernel``/``get_emitter``) without first importing the
+    facade or ``apple_msl`` would otherwise see an empty registry. Bootstrap the
+    Apple backend on demand so the advertised reference target is available
+    regardless of import order (Workstream C backends register the same way)."""
+    if target not in _EMITTERS and target in METAL_TARGETS:
+        import tessera.compiler.emit.apple_msl  # noqa: F401 — self-registers
     try:
         return _EMITTERS[target]
     except KeyError:

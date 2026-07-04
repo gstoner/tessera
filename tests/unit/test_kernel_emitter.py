@@ -17,6 +17,11 @@ whole synthesizer by implementing one interface. These tests lock:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -42,6 +47,8 @@ from tessera.compiler.emit.kernel_emitter import (
     register_emitter,
     register_runner,
 )
+
+_REPO = Path(__file__).resolve().parents[2]
 
 
 # ---- vocab is target-parametric (EpilogueOp/ReductionOp.emit) ---------------
@@ -128,6 +135,34 @@ def test_register_emitter_requires_target():
 
 def test_spec_policy_has_static_bucket_dynamic():
     assert {p.value for p in SpecPolicy} == {"static", "bucket", "dynamic"}
+
+
+def test_apple_emitter_rejects_dynamic_spec():
+    # DYNAMIC isn't implemented yet — the emitter must refuse, not emit the
+    # bucket body mislabeled as dynamic (Decision #21).
+    region = F.FusedRegion(epilogue=("relu",))
+    with pytest.raises(EmitError, match="does not yet support SpecPolicy.DYNAMIC"):
+        emit_kernel(region, "apple_gpu", SpecPolicy.DYNAMIC)
+
+
+def test_get_emitter_bootstraps_apple_without_prior_import():
+    # Cold path: reach the registry via the public API without importing the
+    # facade / apple_msl first. get_emitter must bootstrap the Apple reference
+    # emitter so "apple_gpu" is available regardless of import order.
+    code = (
+        "from tessera.compiler.emit.kernel_emitter import emit_kernel, SpecPolicy\n"
+        "from tessera.compiler.fusion_core import FusedRegion\n"
+        "import tessera.compiler.emit.kernel_emitter as ke\n"
+        "assert 'apple_gpu' not in ke._EMITTERS, 'apple must not be pre-registered'\n"
+        "ks = emit_kernel(FusedRegion(epilogue=('relu',)), 'apple_gpu', SpecPolicy.STATIC)\n"
+        "assert ks.lang == 'msl'\n"
+        "print('BOOTSTRAP_OK')\n"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        cwd=str(_REPO), env={**os.environ, "PYTHONPATH": "python"})
+    assert r.returncode == 0, r.stderr
+    assert "BOOTSTRAP_OK" in r.stdout
 
 
 # ---- B2b: injected KernelRunner ---------------------------------------------

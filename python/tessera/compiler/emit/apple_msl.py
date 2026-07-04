@@ -1990,6 +1990,15 @@ class AppleMSLEmitter(KernelEmitter):
             raise EmitError(
                 f"AppleMSLEmitter cannot emit a region of type "
                 f"{type(region).__name__}")
+        if spec is SpecPolicy.DYNAMIC:
+            # The guarded runtime-dim (DYNAMIC) emitter is not built yet
+            # (Workstream B2c/W2). Refuse rather than emit the bucket body and
+            # mislabel it DYNAMIC — a generic runner/cache must not treat it as a
+            # real dynamic kernel (Decision #21: no silent wrong specialization).
+            raise EmitError(
+                "AppleMSLEmitter does not yet support SpecPolicy.DYNAMIC "
+                "(guarded runtime-dim emitter lands in Workstream B2c/W2); "
+                "request STATIC or BUCKET")
         synth, entry = disp
         source = synth(region, dtype=dtype)
         return KernelSource(source=source, entry=entry, lang=self.lang, spec=spec)

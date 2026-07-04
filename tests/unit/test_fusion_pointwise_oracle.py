@@ -20,6 +20,13 @@ from tessera.compiler import fusion as F
 _RNG = np.random.default_rng(20260617)
 
 
+def _pkey(region):
+    # B3: verify verdicts are keyed by backend identity too. The default path
+    # resolves the registered active runner (Apple here).
+    from tessera.compiler.emit.kernel_emitter import active_runner
+    return (active_runner().target, "P", region.ops, len(region.inputs))
+
+
 def _gelu(v):
     t = np.clip(0.7978845608028654 * (v + 0.044715 * v**3), -30.0, 30.0)
     return 0.5 * v * (1.0 + np.tanh(t))
@@ -39,18 +46,18 @@ def test_correct_region_passes_oracle():
 
 def test_oracle_verdict_is_cached():
     region = _region()
-    F._VERIFY_CACHE.pop(("P", region.ops, len(region.inputs)), None)
+    F.clear_verification_cache()
     first = F.verify_synthesized_pointwise(region, force=True)
     # Second call (no force) must hit the cache and agree.
     assert F.verify_synthesized_pointwise(region) is first
-    assert ("P", region.ops, len(region.inputs)) in F._VERIFY_CACHE
+    assert _pkey(region) in F._VERIFY_CACHE
 
 
 def test_divergent_synthesizer_is_rejected(monkeypatch):
     """A synthesizer that returns a wrong-but-metal_runtime result must be
     refused by the oracle (verdict False), so the caller falls back."""
     region = _region()
-    F._VERIFY_CACHE.pop(("P", region.ops, len(region.inputs)), None)
+    F.clear_verification_cache()
 
     def _bad_run(_region, probes):
         # Pretend the GPU ran and produced garbage.
@@ -63,7 +70,7 @@ def test_divergent_synthesizer_is_rejected(monkeypatch):
 def test_reference_only_host_is_trusted(monkeypatch):
     """When no synthesized kernel runs (reference path), the oracle trusts it."""
     region = _region()
-    F._VERIFY_CACHE.pop(("P", region.ops, len(region.inputs)), None)
+    F.clear_verification_cache()
 
     def _ref_run(rgn, probes):
         return rgn.reference(*probes), "reference"

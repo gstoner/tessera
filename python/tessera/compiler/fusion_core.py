@@ -21,22 +21,23 @@ import numpy as np
 # fusion_core -> emit.kernel_emitter one-directional (kernel_emitter has no
 # runtime fusion_core dependency).
 from tessera.compiler.emit.kernel_emitter import (
+    KernelRunner,
     METAL_TARGETS,
     RunnerError,
     active_runner as _active_runner,
 )
 
 
-# --- B2b seam --------------------------------------------------------------
+# --- runner resolution (B2b/B3 seam) ---------------------------------------
 # The F4 oracles below are arch-agnostic (compare a synthesized kernel to the
 # numpy reference), but they need an *executor* (a KernelRunner) to produce the
-# "actual". B2b injects it through the runner registry: whichever backend
-# registered a runner (Apple's AppleMSLRunner today) executes. If nothing has
-# registered yet — e.g. fusion_core is imported directly, without the Apple
-# emitter — we import apple_msl once (it self-registers), preserving B1's
-# import-safety while removing the hard-wired dependency. Workstream B3 passes
-# each backend's runner into verify_* explicitly.
-def _runner():
+# "actual". B3: each verify_* takes an explicit ``runner`` so the SAME oracle
+# gates any backend's kernel; when omitted it resolves the registered active
+# runner here. Whichever backend registered a runner (Apple's AppleMSLRunner
+# today) executes. If nothing has registered yet — e.g. fusion_core is imported
+# directly, without the Apple emitter — we import apple_msl once (it
+# self-registers), preserving B1's import-safety while keeping core -> emit soft.
+def _runner() -> KernelRunner:
     r = _active_runner()
     if r is None:
         from tessera.compiler.emit import apple_msl  # noqa: F401 — self-registers
@@ -45,26 +46,6 @@ def _runner():
         raise RunnerError(
             "no KernelRunner registered to execute a synthesized region")
     return r
-
-
-def run_fused_attention(*args, **kwargs):
-    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
-    return _runner().run_fused_attention(*args, **kwargs)
-
-
-def run_fused_region(*args, **kwargs):
-    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
-    return _runner().run_fused_region(*args, **kwargs)
-
-
-def run_gated_matmul_region(*args, **kwargs):
-    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
-    return _runner().run_gated_matmul_region(*args, **kwargs)
-
-
-def run_pointwise_graph(*args, **kwargs):
-    """B2b seam: delegate to the registered KernelRunner (see _runner)."""
-    return _runner().run_pointwise_graph(*args, **kwargs)
 
 
 SYNTH_MAX_N = 1024
@@ -675,19 +656,24 @@ _GATED_VERIFY_CACHE: dict[Any, bool] = {}
 
 
 def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
-                             atol: float = 1e-3, force: bool = False) -> bool:
+                             atol: float = 1e-3, force: bool = False,
+                             runner: KernelRunner | None = None) -> bool:
     """Codegen-gated oracle for a gated-matmul region (see
     ``verify_synthesized_region``): run the synthesized kernel on a small probe
     and compare to the unfused numpy reference. ``True`` unless a kernel ran and
     diverged. Cached per gate-activation."""
-    key = ("G", region.gate_act)
+    r = runner or _runner()
+    # B3: key the verdict by backend identity too — a verdict from one runner
+    # must NOT be reused for another, else a faithful backend's cached True lets a
+    # wrong backend skip its own gate (and vice-versa).
+    key = (r.target, "G", region.gate_act)
     if not force and key in _GATED_VERIFY_CACHE:
         return _GATED_VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
     A = rng.standard_normal((8, 12)).astype(np.float32)
     Wg = rng.standard_normal((12, 16)).astype(np.float32)
     Wu = rng.standard_normal((12, 16)).astype(np.float32)
-    out, execution = run_gated_matmul_region(region, A, Wg, Wu)
+    out, execution = r.run_gated_matmul_region(region, A, Wg, Wu)
     if execution != "metal_runtime":
         verdict = True
     else:
@@ -894,7 +880,8 @@ def clear_verification_cache() -> None:
 
 
 def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
-                              atol: float = 1e-3, force: bool = False) -> bool:
+                              atol: float = 1e-3, force: bool = False,
+                              runner: KernelRunner | None = None) -> bool:
     """Codegen-gated oracle: run the *synthesized* kernel for ``region`` on a small
     probe and compare it to the unfused numpy reference.  Returns ``True`` only if
     the GPU result matches (a correct synthesizer) — or if no synthesized kernel
@@ -902,8 +889,15 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     ``False`` when a kernel ran and *diverged* — a synthesizer bug — so the caller
     falls back to the trusted per-op path.  This is the codegen analogue of the
     magellan/alphaevolve reward-hack rejection: a faster-but-wrong kernel is
-    refused.  Verdicts are cached per region-class; pass ``force`` to re-probe."""
-    key = ("R", region.epilogue, region.reduction, region.has_bias,
+    refused.  Verdicts are cached per region-class; pass ``force`` to re-probe.
+
+    B3: ``runner`` injects a specific backend's :class:`KernelRunner` so the same
+    numpy-reference oracle gates *any* backend's synthesized kernel — the F4 gate
+    is universal, not Apple-only. ``None`` uses the registered active runner."""
+    r = runner or _runner()
+    # B3: key by backend identity too (see verify_synthesized_gated) so one
+    # runner's verdict is never reused for another.
+    key = (r.target, "R", region.epilogue, region.reduction, region.has_bias,
            region.prologue, region.has_residual, round(region.eps, 9))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
@@ -912,7 +906,7 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = (rng.standard_normal((16,)).astype(np.float32)
             if region.has_bias else None)
-    out, execution = run_fused_region(region, A, B, bias)
+    out, execution = r.run_fused_region(region, A, B, bias)
     if execution != "metal_runtime":
         verdict = True                         # no synthesized kernel to distrust
     else:
@@ -922,17 +916,19 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
 
 
 def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
-                                 atol: float = 1e-3, force: bool = False) -> bool:
+                                 atol: float = 1e-3, force: bool = False,
+                                 runner: KernelRunner | None = None) -> bool:
     """Codegen-gated oracle for a synthesized attention block (see
     ``verify_synthesized_region``)."""
-    key = ("A", round(region.scale, 9), region.causal)
+    r = runner or _runner()
+    key = (r.target, "A", round(region.scale, 9), region.causal)
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
     Q = rng.standard_normal((8, 16)).astype(np.float32)
     K = rng.standard_normal((8, 16)).astype(np.float32)
     V = rng.standard_normal((8, 16)).astype(np.float32)
-    out, execution = run_fused_attention(region, Q, K, V)
+    out, execution = r.run_fused_attention(region, Q, K, V)
     if execution != "metal_runtime":
         verdict = True
     else:
@@ -942,7 +938,8 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
 
 
 def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
-                                 atol: float = 1e-3, force: bool = False) -> bool:
+                                 atol: float = 1e-3, force: bool = False,
+                                 runner: KernelRunner | None = None) -> bool:
     """Codegen-gated oracle for a synthesized pointwise-DAG kernel (see
     ``verify_synthesized_region``).  Runs the whole ``region`` on a small
     same-shape probe and compares to the unfused numpy reference; returns ``True``
@@ -952,7 +949,8 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
     pointwise path to F4 parity with the matmul-epilogue / gated / attention
     region kinds — the gate that makes lane-by-lane numpy displacement safe.
     Verdicts are cached per region-class; pass ``force`` to re-probe."""
-    key = ("P", region.ops, len(region.inputs))
+    r = runner or _runner()
+    key = (r.target, "P", region.ops, len(region.inputs))
     if not force and key in _VERIFY_CACHE:
         return _VERIFY_CACHE[key]
     rng = np.random.default_rng(seed)
@@ -964,7 +962,7 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
     # NaN/inf in both kernel and reference by design — silence the numpy warnings
     # and treat matched NaNs as agreement (equal_nan).
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
-        out, execution = run_pointwise_graph(region, probes)
+        out, execution = r.run_pointwise_graph(region, probes)
         if execution != "metal_runtime":
             verdict = True                     # no synthesized kernel to distrust
         else:

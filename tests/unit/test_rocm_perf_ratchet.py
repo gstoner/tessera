@@ -134,8 +134,14 @@ def test_ratchet_rejects_unknown_schema():
 
 
 # ── 3. Live ratchet (needs a live AMD GPU; slow) ──────────────────────
+#
+# Gated PER LANE, not by one blanket probe: the two ROCm hot paths have
+# independent availability (the shipped WMMA GEMM symbol vs the compiled FA-2
+# lane that shells to tessera-opt). A host with the GEMM lane but no compiled
+# flash lane records matmul only — so the flash live check must skip there, not
+# fail on the baseline's flash rows it legitimately can't re-time.
 
-def _rocm_live():
+def _rocm_wmma_live():
     try:
         from tessera import runtime as rt
         return rt._rocm_wmma_runtime_available()
@@ -143,18 +149,53 @@ def _rocm_live():
         return False
 
 
+def _rocm_flash_live():
+    try:
+        from tessera import runtime as rt
+        return rt._rocm_compiled_flash_attn_available()
+    except Exception:
+        return False
+
+
+def _live_ratchet_failures(rt, modes):
+    """Re-time only the hot paths in ``modes`` and gate them against the matching
+    baseline rows. Filtering the baseline to ``modes`` keeps an unavailable lane
+    from registering as a coverage hole (the recorder skip-cleans it)."""
+    baseline = json.loads(BASELINE.read_text())
+    rows = []
+    for op, shape, dtype, mode, thunk in recorder.hot_path_cases(rt):
+        if mode not in modes:
+            continue
+        med = recorder._median_ms(thunk, reps=10)
+        rows.append({"op": op, "shape": shape, "dtype": dtype,
+                     "mode": mode, "latency_ms": med})
+    gated = {"schema": baseline["schema"],
+             "rows": [r for r in baseline["rows"] if r["mode"] in modes]}
+    return perf_gate.evaluate_ratchet(rows, gated)
+
+
 @pytest.mark.slow
-@pytest.mark.skipif(not _rocm_live(), reason="live AMD GPU (gfx1151) required")
-def test_live_hot_paths_within_ratchet():
+@pytest.mark.skipif(not _rocm_wmma_live(),
+                    reason="live AMD GPU (gfx1151) WMMA lane required")
+def test_live_matmul_within_ratchet():
+    if not BASELINE.is_file():
+        pytest.skip("rocm baseline not recorded yet — run the recorder first")
+    from tessera import runtime as rt
+
+    failures = _live_ratchet_failures(rt, {"wmma"})
+    assert not failures, "\n".join(failures)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_flash_live(),
+                    reason="live compiled ROCm flash-attn lane required")
+def test_live_flash_attn_within_ratchet():
     if not BASELINE.is_file():
         pytest.skip("rocm baseline not recorded yet — run the recorder first")
     from tessera import runtime as rt
 
     baseline = json.loads(BASELINE.read_text())
-    rows = []
-    for op, shape, dtype, mode, thunk in recorder.hot_path_cases(rt):
-        med = recorder._median_ms(thunk, reps=10)
-        rows.append({"op": op, "shape": shape, "dtype": dtype,
-                     "mode": mode, "latency_ms": med})
-    failures = perf_gate.evaluate_ratchet(rows, baseline)
+    if not any(r["mode"] == "flash_attn" for r in baseline["rows"]):
+        pytest.skip("baseline has no flash_attn rows (recorded pre-flash lane)")
+    failures = _live_ratchet_failures(rt, {"flash_attn"})
     assert not failures, "\n".join(failures)

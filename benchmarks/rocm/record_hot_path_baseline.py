@@ -40,6 +40,13 @@ OUT = ROOT / "benchmarks" / "baselines" / "rocm_gfx1151_hot_paths.json"
 # a ratchet regression pins to the primitive, not to shape edge cases.
 HOT_PATH_SIZES = [(512, 512, 512), (1024, 1024, 1024), (2048, 2048, 2048)]
 
+# Compiled FA-2 flash_attn ladder, (batch, heads, seq, head_dim), f16 storage /
+# f32 accumulate — the SECOND executable ROCm hot path (compiler-generated WMMA
+# flash attention via ``rt._rocm_flash_attn``, which shells to ``tessera-opt``).
+# head_dim 64/128 covers the common attention regimes; recorded only when the
+# compiled lane is live (else the row skip-cleans — never fabricated).
+FLASH_ATTN_SHAPES = [(1, 8, 512, 64), (1, 8, 1024, 64), (1, 16, 1024, 128)]
+
 
 def _median_ms(fn, reps: int = 20, warmup: int = 3) -> float:
     for _ in range(warmup):
@@ -56,10 +63,15 @@ def hot_path_cases(rt):
     """(op, shape, dtype, mode, thunk) per named hot path — module-level so the
     ratchet test re-times the IDENTICAL work through the production symbol.
 
-    Each thunk calls the shipped `tessera_rocm_wmma_gemm_f16` C-ABI symbol
+    The matmul thunks call the shipped `tessera_rocm_wmma_gemm_f16` C-ABI symbol
     (host pointers; the lib does H2D/compute/D2H), the same symbol
     `_execute_rocm_wmma_artifact` dispatches to. Raises if the lib/symbol is
-    absent — callers gate on `_rocm_wmma_runtime_available()` first."""
+    absent — callers gate on `_rocm_wmma_runtime_available()` first.
+
+    The flash_attn thunks call `rt._rocm_flash_attn` (the compiler-generated
+    WMMA FA-2 forward). They are appended only when
+    `_rocm_compiled_flash_attn_available()` is True, so a box with the GEMM lane
+    but no compiled flash lane records matmul rows only (never fabricated)."""
     lib = rt._load_rocm_gemm_runtime()
     if lib is None:
         raise RuntimeError("libtessera_rocm_gemm.so not loadable — no ROCm lane")
@@ -83,9 +95,22 @@ def hot_path_cases(rt):
                 raise RuntimeError(f"{sym} rc={rc} at {m}x{n}x{k}")
         return _run
 
+    def _make_fa(b, h, s, d):
+        q = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        k = rng.standard_normal((b, h, s, d)).astype(np.float16)
+        v = rng.standard_normal((b, h, s, d)).astype(np.float16)
+
+        def _run():
+            rt._rocm_flash_attn(q, k, v, causal=True)
+        return _run
+
     cases = []
     for (m, n, k) in HOT_PATH_SIZES:
         cases.append(("matmul", f"{m}x{n}x{k}", "f16", "wmma", _make(m, n, k)))
+    if rt._rocm_compiled_flash_attn_available():
+        for (b, h, s, d) in FLASH_ATTN_SHAPES:
+            cases.append(("flash_attn", f"{b}x{h}x{s}x{d}", "f16",
+                          "flash_attn", _make_fa(b, h, s, d)))
     return cases
 
 

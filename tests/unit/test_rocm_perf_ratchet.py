@@ -54,11 +54,14 @@ def test_recorder_exposes_shared_surface():
 
 
 def test_runtime_availability_guard_is_honest():
-    # The recorder skip-cleans on this guard; it must exist and answer a bool
-    # WITHOUT raising on a GPU-less host (returns False here, True on the box).
+    # The recorder skip-cleans on these guards; each must exist and answer a
+    # bool WITHOUT raising on a GPU-less host (False here, True on the box).
+    # Two independent lanes: the shipped WMMA GEMM symbol, and the compiled
+    # FA-2 flash_attn forward (the second hot path gates on the latter).
     from tessera import runtime as rt
 
     assert isinstance(rt._rocm_wmma_runtime_available(), bool)
+    assert isinstance(rt._rocm_compiled_flash_attn_available(), bool)
 
 
 def test_baseline_well_formed_when_present():
@@ -68,11 +71,35 @@ def test_baseline_well_formed_when_present():
     assert doc["schema"] == "tessera.benchmark.ratchet.v1"
     rows = doc["rows"]
     ops = {(r["op"], r["shape"]) for r in rows}
+    # matmul WMMA ladder is always recorded.
     for (m, n, k) in recorder.HOT_PATH_SIZES:
         assert ("matmul", f"{m}x{n}x{k}") in ops, f"baseline missing {m}x{n}x{k}"
+    # flash_attn is the second hot path — recorded only on an FA-capable box, so
+    # its rows are optional; but IF any are present they must cover the full
+    # recorded ladder (a partial flash row set means a broken recording).
+    if any(r["mode"] == "flash_attn" for r in rows):
+        for (b, h, s, d) in recorder.FLASH_ATTN_SHAPES:
+            assert ("flash_attn", f"{b}x{h}x{s}x{d}") in ops, \
+                f"baseline missing flash_attn {b}x{h}x{s}x{d}"
     for r in rows:
-        assert r["mode"] == "wmma"
+        assert r["mode"] in {"wmma", "flash_attn"}
         assert r["max_latency_ms"] > r["median_ms"] > 0
+
+
+def test_hot_path_manifest_rows_carry_benchmark_json():
+    # E2 layer-1 linkage (Apple-style): the gfx1151 hot-path manifest rows point
+    # at the recorded ratchet baseline, and that file exists on disk. Runs
+    # GPU-free (manifest synthesis needs no device).
+    from tessera.compiler import backend_manifest as bm
+
+    rel = str(BASELINE.relative_to(REPO_ROOT))
+    for op in ("matmul", "flash_attn"):
+        rocm = [e for e in bm.manifest_for(op) if e.target == "rocm"]
+        assert rocm, f"no rocm manifest row for {op}"
+        linked = [e for e in rocm if e.benchmark_json == rel]
+        assert linked, f"{op} rocm row missing baseline pointer {rel}"
+        for e in linked:
+            assert (REPO_ROOT / e.benchmark_json).is_file()
 
 
 # ── 2. Evaluator semantics (GPU-free) ─────────────────────────────────

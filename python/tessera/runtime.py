@@ -1512,6 +1512,9 @@ def _execute_rocm_moe_transport_reference(artifact: RuntimeArtifact, args: Any) 
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_gemm_runtime: ctypes.CDLL | None = None
 _rocm_gemm_probe_ok: bool | None = None
+#: Cached probe for the compiler-generated ROCm WMMA flash_attn forward lane
+#: (separate from the GEMM lane — it shells to ``tessera-opt`` + a live GPU).
+_rocm_compiled_flash_attn_probe_ok: bool | None = None
 
 #: C-ABI GEMM symbols shipped by libtessera_rocm_gemm.so, keyed by storage dtype.
 _ROCM_GEMM_SYMBOLS = {
@@ -1603,6 +1606,31 @@ def _rocm_wmma_runtime_available() -> bool:
         return False
     _rocm_gemm_probe_ok = (rc == 0)
     return _rocm_gemm_probe_ok
+
+
+def _rocm_compiled_flash_attn_available() -> bool:
+    """Cached host probe: True iff the compiler-generated ROCm WMMA flash_attn
+    forward can actually run — i.e. ``tessera-opt`` is built AND a live gfx1151
+    executes the tiny probe attention without raising ``_RocmCompiledUnavailable``.
+    Separate from ``_rocm_wmma_runtime_available`` because the flash lane shells
+    out to the compiler rather than the shipped GEMM symbol. Never fabricates:
+    on a host without the compiler/GPU it returns False, so the perf recorder
+    skip-cleans the flash-attn row (repo Decision #26)."""
+    global _rocm_compiled_flash_attn_probe_ok
+    if _rocm_compiled_flash_attn_probe_ok is not None:
+        return _rocm_compiled_flash_attn_probe_ok
+    _rocm_compiled_flash_attn_probe_ok = False
+    try:
+        import numpy as np
+    except Exception:
+        return False
+    q = np.zeros((1, 1, 16, 16), np.float16)
+    try:
+        _rocm_flash_attn(q, q, q, causal=True)
+        _rocm_compiled_flash_attn_probe_ok = True
+    except Exception:
+        _rocm_compiled_flash_attn_probe_ok = False
+    return _rocm_compiled_flash_attn_probe_ok
 
 
 def _execute_rocm_wmma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:

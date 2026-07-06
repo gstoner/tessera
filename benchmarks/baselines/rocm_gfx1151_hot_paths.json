@@ -1,0 +1,54 @@
+{
+  "schema": "tessera.benchmark.ratchet.v1",
+  "margin": 2.0,
+  "rows": [
+    {
+      "op": "matmul",
+      "shape": "512x512x512",
+      "dtype": "f16",
+      "mode": "wmma",
+      "median_ms": 0.6494,
+      "max_latency_ms": 1.2989
+    },
+    {
+      "op": "matmul",
+      "shape": "1024x1024x1024",
+      "dtype": "f16",
+      "mode": "wmma",
+      "median_ms": 5.548,
+      "max_latency_ms": 11.096
+    },
+    {
+      "op": "matmul",
+      "shape": "2048x2048x2048",
+      "dtype": "f16",
+      "mode": "wmma",
+      "median_ms": 10.0927,
+      "max_latency_ms": 20.1853
+    },
+    {
+      "op": "flash_attn",
+      "shape": "1x8x512x64",
+      "dtype": "f16",
+      "mode": "flash_attn",
+      "median_ms": 2.8986,
+      "max_latency_ms": 5.7972
+    },
+    {
+      "op": "flash_attn",
+      "shape": "1x8x1024x64",
+      "dtype": "f16",
+      "mode": "flash_attn",
+      "median_ms": 4.7631,
+      "max_latency_ms": 9.5263
+    },
+    {
+      "op": "flash_attn",
+      "shape": "1x16x1024x128",
+      "dtype": "f16",
+      "mode": "flash_attn",
+      "median_ms": 11.4093,
+      "max_latency_ms": 22.8186
+    }
+  ]
+}

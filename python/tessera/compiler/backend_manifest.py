@@ -929,6 +929,9 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "register macro-tile (2x4 small / 3x4 large — the occupancy lever) "
             "(gfx1151 Strix Halo / gfx1100 WSL enumeration)"
         ),
+        # E2 (2026-07-06) — WMMA matmul ladder ratchet baseline, recorded on the
+        # gfx1151 box (real medians, repo Decision #26).
+        "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
         "notes": (
             "RDNA 3.5 WMMA matrix-core GEMM, f32<-{f16,bf16}, ROCm 7.2.4. "
             "DEFAULT execution lane (Stage L4): @jit(target='rocm') matmul runs "
@@ -956,6 +959,9 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "16x16x16 WMMA, online softmax, one wave per (query-tile, b*h). "
             "Correctness-first (no perf ladder yet)"
         ),
+        # E2 (2026-07-06) — compiled FA-2 flash_attn ladder ratchet baseline
+        # (rt._rocm_flash_attn), recorded on the gfx1151 box alongside matmul.
+        "benchmark_json": "benchmarks/baselines/rocm_gfx1151_hot_paths.json",
         "notes": (
             "RDNA 3.5 WMMA flash-attention forward executes on the AMD GPU "
             "through the shipped libtessera_rocm_flash_attn.so symbols "
@@ -4627,6 +4633,10 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 cuda_arch_min="sm_120a",
                 nvcc_version_min="13.3",
                 expected_mfu=_NVIDIA_KERNEL_MFU.get((op_name, "nvidia_sm120")),
+                # E2 — plumbing ready; stays None until the sm_120 box records
+                # benchmarks/baselines/nvidia_sm120_hot_paths.json (Decision #26
+                # forbids pointing at a baseline that does not yet exist).
+                benchmark_json=nv_hv.get("benchmark_json"),
             ))
             continue
         cap = _capability_status(target_name, op_name)
@@ -4685,6 +4695,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             shape_envelope=rocm_hv.get("shape_envelope"),
             hipcc_version_min="7.2.4",
             expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+            # E2 — hot-path rows carry their ratchet baseline (Apple-style
+            # layer-1 linkage); None for ops with no recorded gfx1151 baseline.
+            benchmark_json=rocm_hv.get("benchmark_json"),
         ))
     elif (rocm_c := _ROCM_COMPILED.get(op_name)) is not None:
         # Compiler-generated executing lane: runs on gfx1151 via runtime.launch()

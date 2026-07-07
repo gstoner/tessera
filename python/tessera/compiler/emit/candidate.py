@@ -53,6 +53,9 @@ OP_FUSED_REGION = "fused_region"
 OP_ATTENTION = "attention"
 OP_GATED_MATMUL = "gated_matmul"
 OP_POINTWISE = "pointwise"
+#: A bare matmul ``D = A @ B`` (no fusion) — the op-kind for plain-GEMM candidates
+#: (NVIDIA emitted mma.sync vs shipped GEMM). Keyed on ``fusion_core.MatmulRegion``.
+OP_MATMUL = "matmul"
 
 #: op-kind → (verify function name, KernelRunner method) — the seam that lets the
 #: arbiter reuse the exact universal F4 oracle for each candidate.
@@ -61,6 +64,7 @@ _OP_VERIFY = {
     OP_ATTENTION: ("verify_synthesized_attention", "run_fused_attention"),
     OP_GATED_MATMUL: ("verify_synthesized_gated", "run_gated_matmul_region"),
     OP_POINTWISE: ("verify_synthesized_pointwise", "run_pointwise_graph"),
+    OP_MATMUL: ("verify_synthesized_matmul", "run_matmul"),
 }
 
 
@@ -179,6 +183,9 @@ def _as_runner(candidate: Candidate) -> Any:
 
         def run_pointwise_graph(self, region, *a, **k):
             return self._route("run_pointwise_graph", region, a, k)
+
+        def run_matmul(self, region, *a, **k):
+            return self._route("run_matmul", region, a, k)
 
         def _route(self, called, region, a, k):
             if called != method:

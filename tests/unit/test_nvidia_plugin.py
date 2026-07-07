@@ -25,7 +25,7 @@ import pytest
 import tessera.compiler.fusion as F
 import tessera.compiler.emit.nvidia_cuda as nvidia  # noqa: F401 — self-registers
 from tessera.compiler.emit import candidate as C
-from tessera.compiler.emit.candidate import OP_FUSED_REGION, Tier
+from tessera.compiler.emit.candidate import OP_FUSED_REGION, OP_MATMUL, Tier
 from tessera.compiler.emit.kernel_emitter import (
     EmitError, SpecPolicy, get_emitter, get_runner,
 )
@@ -115,6 +115,36 @@ def test_nvidia_arbitrated_residual_threads_not_raises():
     np.testing.assert_allclose(out, region.reference(A, B, None, res), atol=1e-2)
 
 
+def test_nvidia_matmul_candidates_registered():
+    # B1: the bare-matmul op-kind + the two GEMM lanes (shipped Tier-3, emitted
+    # Tier-2) registered under (nvidia, matmul).
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_MATMUL)}
+    assert set(cands) == {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"}
+    assert cands["nvidia_mma_gemm_shipped"].tier == Tier.HAND_TUNED
+    assert cands["nvidia_mma_gemm_emitted"].tier == Tier.EMITTED
+    for c in cands.values():
+        assert c.op == OP_MATMUL
+        assert c.accuracy_atol == 5e-3                       # 16-bit storage budget
+        assert c.applies_to(F.MatmulRegion(dtype="bfloat16"))
+        assert c.applies_to(F.MatmulRegion(dtype="float16"))
+        assert not c.applies_to(F.MatmulRegion(dtype="float32"))     # not 16-bit
+        assert not c.applies_to(F.FusedRegion(epilogue=("relu",)))   # not a matmul
+
+
+def test_nvidia_matmul_off_gpu_arbitrates_to_reference():
+    # Host-free: with no GPU the candidates are unavailable, so the arbiter finds
+    # no winner and run_arbitrated returns the numpy reference (never raises).
+    if _nvidia_cuda_live():
+        pytest.skip("GPU present — covered by the live arbitration test")
+    region = F.MatmulRegion(dtype="bfloat16")
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((32, 32)).astype(np.float32)
+    B = rng.standard_normal((32, 16)).astype(np.float32)
+    out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B)
+    assert tag == "reference"
+    np.testing.assert_allclose(out, region.reference(A, B), atol=1e-3)
+
+
 def test_nvidia_missing_required_buffer_declines_not_segfault():
     # Same NULL-deref guard as x86/ROCm: a residual/bias region without the buffer
     # must not launch the CUDA kernel (which would deref a null). Child process so a
@@ -196,3 +226,39 @@ def test_live_nvidia_arbitrated_residual_executes():
     out, tag = C.run_arbitrated(region, OP_FUSED_REGION, "nvidia", A, B, None, res)
     assert tag == "nvidia_cuda"
     np.testing.assert_allclose(out, region.reference(A, B, None, res), atol=1e-3)
+
+
+def _nvidia_matmul_live() -> bool:
+    if not _nvidia_cuda_live():
+        return False
+    try:
+        from tessera import runtime as rt
+        return rt._load_nvidia_ptx_launch() is not None
+    except Exception:
+        return False
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_matmul_live(),
+                    reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
+@pytest.mark.parametrize("dtype", ["bfloat16", "float16"])
+@pytest.mark.parametrize("shape", [(16, 8, 16), (32, 16, 32), (64, 64, 64)],
+                         ids=lambda s: f"{s[0]}x{s[1]}x{s[2]}")
+def test_live_nvidia_matmul_arbitrated(dtype, shape):
+    # B1: the arbiter picks the hand-tuned shipped GEMM (Tier 3) by default and
+    # runs it on-GPU; the E3 escape hatch forces the compiler-emitted lane (Tier 2)
+    # through the PTX launch bridge. Both match the dtype-rounded reference.
+    F.clear_verification_cache()
+    M, N, K = shape
+    region = F.MatmulRegion(dtype=dtype)
+    rng = np.random.default_rng(M + K)
+    A = (rng.standard_normal((M, K)) * 0.4).astype(np.float32)
+    B = (rng.standard_normal((K, N)) * 0.4).astype(np.float32)
+    ref = region.reference(A, B)
+    out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B)
+    assert tag == "nvidia_mma_shipped"                       # Tier-3 default
+    np.testing.assert_allclose(out, ref, atol=5e-3, rtol=0)
+    out2, tag2 = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B,
+                                  force="nvidia_mma_gemm_emitted")
+    assert tag2 == "nvidia_ptx_gemm"                         # Tier-2, forced (E3)
+    np.testing.assert_allclose(out2, ref, atol=5e-3, rtol=0)

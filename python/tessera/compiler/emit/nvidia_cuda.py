@@ -46,6 +46,7 @@ from typing import Any
 from tessera.compiler.emit._fused_scalar_body import row_compute_body
 from tessera.compiler.emit.candidate import (
     OP_FUSED_REGION,
+    OP_MATMUL,
     Candidate,
     Tier,
     register_candidate,
@@ -61,7 +62,7 @@ from tessera.compiler.emit.kernel_emitter import (
     register_emitter,
     register_runner,
 )
-from tessera.compiler.fusion_core import FusedRegion
+from tessera.compiler.fusion_core import FusedRegion, MatmulRegion
 
 _TARGET = "nvidia"
 _LANG = "cuda"
@@ -275,9 +276,98 @@ class NvidiaGenericCudaCandidate(Candidate):
                                                residual=residual)
 
 
+# ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
+#
+# The arbiter enumerates these per (target="nvidia", op=matmul) and F4-gates each.
+# Tier-priority (Decision #28) prefers the hand-tuned shipped lane by default; D2's
+# measured loop lets the emitted lane win where it is faster + in accuracy budget.
+# Both are 16-bit storage (bf16/f16) → f32 accumulate, so they declare the f16
+# budget the oracle honors. Off an NVIDIA GPU / without the built libs they decline
+# to the reference and drop out of the enumeration.
+
+_GEMM_F16_ATOL = 5e-3          # 16-bit storage vs the f32 reference (Decision #28)
+_GEMM_DTYPES = ("bfloat16", "float16")
+
+
+def _aligned_2d(A: Any, B: Any) -> bool:
+    """A (M,K) @ B (K,N) with the emitted kernel's tile alignment (M%16,N%8,K%16)."""
+    import numpy as np
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        return False
+    M, K = Aa.shape
+    _, N = Ba.shape
+    return M % 16 == 0 and N % 8 == 0 and K % 16 == 0
+
+
+class NvidiaMmaGemmShippedCandidate(Candidate):
+    """Tier-3 (hand-tuned): the shipped ``libtessera_nvidia_gemm`` mma.sync GEMM —
+    the crown-jewel lane, arbiter default until D2 measures otherwise. Serves any
+    (unaligned OK) bf16/f16 matmul; declines off an NVIDIA GPU."""
+
+    name = "nvidia_mma_gemm_shipped"
+    tier = Tier.HAND_TUNED
+    target = _TARGET
+    op = OP_MATMUL
+    accuracy_atol = _GEMM_F16_ATOL
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
+
+    def run(self, region: Any, A: Any, B: Any, *a: Any, **k: Any) -> tuple[Any, str]:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_gemm_2d(A, B, region.dtype), "nvidia_mma_shipped"
+        except Exception:
+            return region.reference(A, B), "reference"
+
+
+class NvidiaMmaGemmEmittedCandidate(Candidate):
+    """Tier-2 (emitted): the compiler-EMITTED ``ptx_emit`` mma.sync GEMM driven
+    through the launch bridge — the C2 emit lane as a first-class arbiter candidate.
+    Serves ALIGNED (M%16/N%8/K%16) bf16/f16 matmuls; declines (to the reference) for
+    ragged shapes or off an NVIDIA GPU / without the built bridge."""
+
+    name = "nvidia_mma_gemm_emitted"
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_MATMUL
+    accuracy_atol = _GEMM_F16_ATOL
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return (rt._load_nvidia_ptx_launch() is not None
+                    and rt._nvidia_mma_runtime_available())
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return isinstance(region, MatmulRegion) and region.dtype in _GEMM_DTYPES
+
+    def run(self, region: Any, A: Any, B: Any, *a: Any, **k: Any) -> tuple[Any, str]:
+        if not _aligned_2d(A, B):              # emitter is aligned-only (for now)
+            return region.reference(A, B), "reference"
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_ptx_gemm_2d(A, B, region.dtype), "nvidia_ptx_gemm"
+        except Exception:
+            return region.reference(A, B), "reference"
+
+
 # ── registration (import side effect, exactly like rocm_hip / x86_llvm) ────────
 register_emitter(NvidiaCudaEmitter())
 register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)
 
 register_candidate(NvidiaGenericCudaCandidate())
+# Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
+register_candidate(NvidiaMmaGemmShippedCandidate())
+register_candidate(NvidiaMmaGemmEmittedCandidate())

@@ -308,13 +308,21 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   documented *instruction-encoding skeleton* (`emit_wgmma_matmul_ptx` — its own header
   says "NOT a complete assemblable kernel: needs smem matrix descriptors + TMA/cp.async
   + the full accumulator operand list"), so completing it is a real Hopper WGMMA-kernel
-  build (assemble-only here; execution needs Hopper) — **not** a bug fix; sm_100
-  tcgen05; and wiring the emit lane as a **Tier-2 EMITTED** arbiter candidate (blocked
-  on a bare-matmul op-kind — the candidate registry has no matmul op today, only
-  fused_region/attention/gated/pointwise). Unlike C3, NVIDIA has no *fused* shipped
-  kernel to register as a Tier-3 `FusedRegion` candidate yet (the shipped kernel is a
-  pure GEMM served by the
-  jit `nvidia_mma` executor).
+  build (assemble-only here; execution needs Hopper) — **not** a bug fix; and sm_100
+  tcgen05.
+  **B1 landed 2026-07-07 — the emit lane is now a first-class arbiter candidate.**
+  A bare-matmul op-kind (`candidate.OP_MATMUL` + `fusion_core.MatmulRegion` +
+  `verify_synthesized_matmul`) unblocks the D1 arbiter for plain GEMM. Two NVIDIA
+  matmul candidates register under `(nvidia, matmul)`: the **shipped** mma.sync GEMM
+  (`NvidiaMmaGemmShippedCandidate`, Tier-3 via `runtime._nvidia_mma_gemm_2d`) and the
+  **compiler-emitted** `ptx_emit` GEMM (`NvidiaMmaGemmEmittedCandidate`, Tier-2 via the
+  launch bridge, `runtime._nvidia_ptx_gemm_2d`). Both F4-gated by the universal oracle;
+  tier-priority picks the shipped lane by default (lead-safe, Decision #28), the E3
+  `force` hatch selects the emitted lane. Live-proven on sm_120 (bf16/f16 ×
+  16x8x16/32x16x32/64x64x64). So NVIDIA now has its Tier-3 *hand-tuned* GEMM candidate
+  (the pure-GEMM shipped kernel, previously only reachable via the jit `nvidia_mma`
+  executor) alongside the Tier-2 emitted lane — D2's measured loop is the follow-on
+  that lets Tier-2 win where faster.
 - **C3 · ROCm generic synth → HIP** — **generic lane LANDED 2026-07-06**, `[MAC]`
   author → `[AMD]` proof. `emit/rocm_hip.py` is now a **full three-seam plugin**
   (parallel to x86): `RocmHipEmitter` turns a `FusedRegion` into HIP source (a

@@ -228,6 +228,15 @@ class X86CRunner(KernelRunner):
                          *args: Any, residual: Any = None,
                          **kwargs: Any) -> tuple[Any, str]:
         import numpy as np
+        # Required-buffer guard BEFORE any launch: the emitted C dereferences
+        # bias[n] / residual[...] whenever the region declares them, so a missing
+        # buffer would pass a NULL pointer and segfault PAST Python's ``except``
+        # (an uncatchable SIGSEGV). Route such an ill-formed call through the numpy
+        # reference instead, which raises a clean, catchable ValueError naming the
+        # missing operand — never launch the kernel with a null it will deref.
+        if (region.has_bias and bias is None) or \
+                (region.has_residual and residual is None):
+            return region.reference(A, B, bias, residual), "reference"
         try:
             Af = np.ascontiguousarray(A, np.float32)
             Bf = np.ascontiguousarray(B, np.float32)

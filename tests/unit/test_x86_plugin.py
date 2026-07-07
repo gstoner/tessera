@@ -120,6 +120,40 @@ def test_x86_kernel_runs_and_matches_numpy(region):
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)
 
 
+def test_x86_missing_required_buffer_declines_not_segfault():
+    # A residual/bias region invoked WITHOUT the required buffer must NOT launch
+    # the kernel — the emitted C dereferences residual[...] / bias[n], so a null
+    # would SIGSEGV past Python's except. The runner routes through the reference,
+    # which raises a clean ValueError. Run in a CHILD process so a regression
+    # (segfault) surfaces as a failed assert, not a crashed test session.
+    import subprocess
+    import sys
+    import textwrap
+    code = textwrap.dedent(
+        """
+        import numpy as np
+        import tessera.compiler.fusion as F
+        import tessera.compiler.emit.x86_llvm as x86
+        r = x86.X86CRunner()
+        A = np.zeros((8, 12), np.float32)
+        B = np.zeros((12, 16), np.float32)
+        for region in (F.FusedRegion(epilogue=("relu",), residual=True),
+                       F.FusedRegion(epilogue=("bias", "relu"))):
+            try:
+                r.run_fused_region(region, A, B, None)
+                raise SystemExit("expected ValueError, got a result")
+            except ValueError:
+                pass
+        print("ok")
+        """
+    )
+    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert p.returncode == 0, (
+        f"missing-buffer guard failed (rc={p.returncode}, -11=SIGSEGV): "
+        f"{p.stderr[-300:]}")
+    assert "ok" in p.stdout
+
+
 @pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
 def test_x86_residual_path_matches_numpy():
     region = F.FusedRegion(epilogue=("gelu",), residual=True)

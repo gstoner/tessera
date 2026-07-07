@@ -32,6 +32,7 @@ import subprocess
 import tempfile
 from typing import Any
 
+from tessera.compiler.emit._fused_scalar_body import row_compute_body
 from tessera.compiler.emit.kernel_cache import build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
@@ -51,77 +52,12 @@ _ENTRY = "tessera_x86_fused"
 _REAL_TAG = "x86_native"
 
 
-# ── op-name → C snippet tables (match the fusion_core numpy references) ────────
-
-def _pointwise_c(op: str, var: str) -> str:
-    """C statement applying pointwise epilogue op ``op`` to lvalue ``var`` (f32).
-    Mirrors ``EPILOGUE_OPS[op].ref`` numerically. ``bias`` is handled separately
-    (it reads ``bias[n]``); the rest are pure activations valid in a prologue too."""
-    if op == "relu":
-        return f"{var} = {var} > 0.0f ? {var} : 0.0f;"
-    if op == "gelu":  # tanh approximation, clamped — identical to fusion_core._gelu
-        return (
-            f"{{ float _t = 0.7978845608028654f*({var}+0.044715f*{var}*{var}*{var});"
-            f" _t = _t < -30.0f ? -30.0f : (_t > 30.0f ? 30.0f : _t);"
-            f" {var} = 0.5f*{var}*(1.0f+tanhf(_t)); }}"
-        )
-    if op == "silu":
-        return f"{var} = {var} / (1.0f + expf(-{var}));"
-    if op == "sigmoid":
-        return f"{var} = 1.0f / (1.0f + expf(-{var}));"
-    if op == "tanh":
-        return f"{var} = tanhf({var});"
-    raise EmitError(f"x86: no C snippet for pointwise op {op!r}")
-
-
-def _reduction_c(name: str, eps: float) -> str:
-    """C block reducing over the length-``N`` row ``row`` in place (f32). Mirrors
-    ``REDUCTION_OPS[name].ref``."""
-    if name == "rmsnorm":
-        return (
-            "        { float _ss = 0.0f;\n"
-            "          for (int n = 0; n < N; ++n) _ss += row[n]*row[n];\n"
-            f"          float _inv = 1.0f/sqrtf(_ss/(float)N + {eps!r}f);\n"
-            "          for (int n = 0; n < N; ++n) row[n] = row[n]*_inv; }\n"
-        )
-    if name == "softmax":
-        return (
-            "        { float _mx = -INFINITY;\n"
-            "          for (int n = 0; n < N; ++n) if (row[n] > _mx) _mx = row[n];\n"
-            "          float _sm = 0.0f;\n"
-            "          for (int n = 0; n < N; ++n) { row[n] = expf(row[n]-_mx); _sm += row[n]; }\n"
-            "          for (int n = 0; n < N; ++n) row[n] = row[n]/_sm; }\n"
-        )
-    if name == "layer_norm":
-        return (
-            "        { float _mean = 0.0f;\n"
-            "          for (int n = 0; n < N; ++n) _mean += row[n];\n"
-            "          _mean /= (float)N;\n"
-            "          float _var = 0.0f;\n"
-            "          for (int n = 0; n < N; ++n) { float _d = row[n]-_mean; _var += _d*_d; }\n"
-            f"          float _inv = 1.0f/sqrtf(_var/(float)N + {eps!r}f);\n"
-            "          for (int n = 0; n < N; ++n) row[n] = (row[n]-_mean)*_inv; }\n"
-        )
-    raise EmitError(f"x86: no C snippet for reduction op {name!r}")
-
-
 def _synthesize_fused_c(region: FusedRegion) -> str:
-    """Emit the C source for a ``FusedRegion`` (f32). Signature is dims-invariant
+    """Emit the C source for a ``FusedRegion`` (f32) — a plain host function that
+    loops over rows and embeds the shared per-row body. Signature is dims-invariant
     (M/N/K are runtime args), so one kernel serves every shape — the arbiter/cache
-    key it shape-anonymously."""
-    prologue = "".join(
-        f"                {_pointwise_c(op, 'a')}\n" for op in region.prologue
-    )
-    epi_lines = []
-    for op in region.epilogue:
-        if op == "bias":
-            epi_lines.append("            v = v + bias[n];")
-        else:
-            epi_lines.append(f"            {_pointwise_c(op, 'v')}")
-    epilogue = "\n".join(epi_lines)
-    residual = ("            v = v + residual[(long)m*N + n];\n"
-                if region.has_residual else "")
-    reduction = _reduction_c(region.reduction, region.eps) if region.reduction else ""
+    key it shape-anonymously. The per-row math is shared with the ROCm HIP lane
+    (`_fused_scalar_body.row_compute_body`) so both stay locked to one reference."""
     return (
         "#include <math.h>\n"
         f"int {_ENTRY}(const float* A, const float* B, const float* bias,\n"
@@ -129,18 +65,7 @@ def _synthesize_fused_c(region: FusedRegion) -> str:
         "               int M, int N, int K) {\n"
         "    for (int m = 0; m < M; ++m) {\n"
         "        float* row = out + (long)m * N;\n"
-        "        for (int n = 0; n < N; ++n) {\n"
-        "            float v = 0.0f;\n"
-        "            for (int k = 0; k < K; ++k) {\n"
-        "                float a = A[(long)m*K + k];\n"
-        f"{prologue}"
-        "                v += a * B[(long)k*N + n];\n"
-        "            }\n"
-        f"{epilogue}\n"
-        f"{residual}"
-        "            row[n] = v;\n"
-        "        }\n"
-        f"{reduction}"
+        f"{row_compute_body(region)}"
         "    }\n"
         "    return 1;\n"
         "}\n"

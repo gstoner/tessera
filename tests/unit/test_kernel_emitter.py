@@ -116,8 +116,9 @@ def test_apple_emitter_rejects_unknown_region():
 
 def test_registry_resolves_apple_and_reports_unknown_target():
     assert get_emitter("apple_gpu").target == "apple_gpu"
+    # A genuinely unregistered target (x86/rocm now register real emitters).
     with pytest.raises(EmitError, match="no KernelEmitter registered"):
-        emit_kernel(F.FusedRegion(epilogue=("relu",)), "rocm")
+        emit_kernel(F.FusedRegion(epilogue=("relu",)), "no_such_backend")
 
 
 def test_register_emitter_requires_target():

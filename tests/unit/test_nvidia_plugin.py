@@ -416,6 +416,41 @@ def test_nvidia_pointwise_emits_gelu_and_nan_safe_shims():
     assert "isnan(x) ? x" in src                     # NaN-preserving
 
 
+def test_nvidia_pointwise_max_min_nan_shims_and_buffer_free():
+    # PR #297 review 2: max/min route through NaN-propagating shims (np.maximum/
+    # np.minimum semantics, not CUDA's NaN-suppressing max/min), and a partial
+    # cudaMalloc failure frees the buffers already allocated (no device leak).
+    e = get_emitter("nvidia")
+    mm = e.emit(F.PointwiseGraphRegion(
+        ops=(("maximum", ("a", "b"), "m"), ("minimum", ("m", "a"), "o")),
+        inputs=("a", "b"), output="o")).source
+    assert "tsr_max(" in mm and "tsr_min(" in mm
+    assert "(isnan(a)||isnan(b)) ? NAN" in mm
+    three = e.emit(F.PointwiseGraphRegion(
+        ops=(("add", ("a", "b"), "s"), ("mul", ("s", "c"), "o")),
+        inputs=("a", "b", "c"), output="o")).source
+    assert "cudaFree(d0); cudaFree(d1); return 3;" in three   # cumulative free
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_pointwise_max_min_preserve_nan():
+    # PR #297 review 2, on-GPU: maximum/minimum on NaN data must propagate NaN
+    # (np.maximum/np.minimum), not select the numeric operand like CUDA max/min.
+    r = get_runner("nvidia")
+    dag = F.PointwiseGraphRegion(
+        ops=(("maximum", ("a", "b"), "m"), ("relu", ("m",), "o")),
+        inputs=("a", "b"), output="o")
+    a = np.array([[np.nan, 2.0, -1.0]], np.float32)
+    b = np.array([[5.0, np.nan, -3.0]], np.float32)
+    out, tag = r.run_pointwise_graph(dag, [a, b])
+    assert tag == "nvidia_cuda"
+    ref = dag.reference(a, b)
+    np.testing.assert_array_equal(np.isnan(out), np.isnan(ref))   # NaN in place
+    np.testing.assert_allclose(out[~np.isnan(out)], ref[~np.isnan(ref)], atol=1e-6)
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(not _nvidia_cuda_live(),
                     reason="live NVIDIA GPU + nvcc required")

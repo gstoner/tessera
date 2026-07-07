@@ -243,10 +243,10 @@ def _pw_cvar(vid: str) -> str:
 def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
     """CUDA source for a same-shape pointwise DAG (f32) — one thread per element.
     The DAG is emitted from the ``POINTWISE_OPS`` C-expression table (topo order),
-    with device shims for the two ops the table names but CUDA doesn't define:
-    ``sign`` and ``clamp`` (the latter appears inside the ``gelu`` expression).
-    Both preserve NaN to match numpy (``np.sign`` / ``np.clip`` propagate NaN),
-    so a DAG on NaN-containing data agrees with the reference. One kernel per
+    with device shims for the ops the table names but whose CUDA builtins differ
+    from numpy: ``sign``/``clamp`` (undefined in CUDA) and ``max``/``min`` (CUDA's
+    suppress NaN; numpy's ``np.maximum``/``np.minimum`` propagate it). All preserve
+    NaN so a DAG on NaN-containing data agrees with the reference. One kernel per
     region (the DAG + input count are baked in)."""
     n = len(region.inputs)
     params = ", ".join(f"const float* i{j}" for j in range(n))
@@ -255,18 +255,32 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
     body = ""
     for key, ins, out in region.ops:
         _arity, expr, _ref = POINTWISE_OPS[key]
-        body += f"    float {_pw_cvar(out)} = {expr.format(*[_pw_cvar(i) for i in ins])};\n"
+        line = expr.format(*[_pw_cvar(i) for i in ins])
+        # Route the table's bare max()/min() through NaN-propagating shims (numpy
+        # semantics); word-boundary so fmaxf/fminf etc. are untouched.
+        line = re.sub(r"\bmax\(", "tsr_max(", re.sub(r"\bmin\(", "tsr_min(", line))
+        body += f"    float {_pw_cvar(out)} = {line};\n"
     hparams = ", ".join(f"const float* hi{j}" for j in range(n))
-    allocs = "".join(
-        f"    float* d{j}=0; if (cudaMalloc(&d{j},sz)!=cudaSuccess) return 3;\n"
-        f"    cudaMemcpy(d{j},hi{j},sz,cudaMemcpyHostToDevice);\n" for j in range(n))
+    # Free every already-allocated input buffer if a later cudaMalloc fails, so a
+    # partial-allocation failure under memory pressure does not leak device memory
+    # in the long-lived process (PR #297 review).
+    alloc_lines = []
+    for j in range(n):
+        prior = " ".join(f"cudaFree(d{p});" for p in range(j))
+        fail = f"{{ {prior} return 3; }}" if prior else "return 3;"
+        alloc_lines.append(
+            f"    float* d{j}=0; if (cudaMalloc(&d{j},sz)!=cudaSuccess) {fail}\n"
+            f"    cudaMemcpy(d{j},hi{j},sz,cudaMemcpyHostToDevice);\n")
+    allocs = "".join(alloc_lines)
+    all_free = " ".join(f"cudaFree(d{j});" for j in range(n))
     dargs = ", ".join(f"d{j}" for j in range(n))
-    frees = " ".join(f"cudaFree(d{j});" for j in range(n))
     return (
         "#include <cuda_runtime.h>\n"
         "#include <math.h>\n"
         "__device__ __forceinline__ float sign(float x){ return isnan(x) ? x : (float)((x>0.0f)-(x<0.0f)); }\n"
         "__device__ __forceinline__ float clamp(float x, float lo, float hi){ return isnan(x) ? x : fminf(fmaxf(x,lo),hi); }\n"
+        "__device__ __forceinline__ float tsr_max(float a, float b){ return (isnan(a)||isnan(b)) ? NAN : fmaxf(a,b); }\n"
+        "__device__ __forceinline__ float tsr_min(float a, float b){ return (isnan(a)||isnan(b)) ? NAN : fminf(a,b); }\n"
         f"__global__ void {_PW_ENTRY}_kernel({params}, float* out, long numel) {{\n"
         "    long idx = (long)blockIdx.x*blockDim.x + threadIdx.x;\n"
         "    if (idx >= numel) return;\n"
@@ -276,12 +290,12 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
         f'extern "C" int {_PW_ENTRY}({hparams}, float* hout, long numel) {{\n'
         "    size_t sz=(size_t)numel*4;\n"
         f"{allocs}"
-        "    float* dout=0; if (cudaMalloc(&dout,sz)!=cudaSuccess) return 3;\n"
+        f"    float* dout=0; if (cudaMalloc(&dout,sz)!=cudaSuccess) {{ {all_free} return 3; }}\n"
         "    int t=256; long b=(numel+t-1)/t;\n"
         f"    {_PW_ENTRY}_kernel<<<dim3((unsigned)b), dim3(t)>>>({dargs}, dout, numel);\n"
         "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "    if (ok==1) cudaMemcpy(hout,dout,sz,cudaMemcpyDeviceToHost);\n"
-        f"    {frees} cudaFree(dout);\n"
+        f"    {all_free} cudaFree(dout);\n"
         "    return ok;\n"
         "}\n"
     )

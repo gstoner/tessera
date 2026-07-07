@@ -49,6 +49,17 @@ def _runner() -> KernelRunner:
     return r
 
 
+def _effective_atol(runner: KernelRunner, atol: float) -> float:
+    """Oracle tolerance for ``runner``: the caller's ``atol`` widened to the
+    backend's declared precision budget (``runner.accuracy_atol``), so an f16 lead
+    kernel's rounding is not misread as a miscompile while an O(1) miscompile is
+    still caught. A ``None`` budget (f32/exact backends — Apple, x86) leaves
+    ``atol`` unchanged. Simplest slice of the accuracy-budgeted arbiter
+    (Decision #28 / plan D2)."""
+    budget = getattr(runner, "accuracy_atol", None)
+    return atol if budget is None else max(atol, budget)
+
+
 SYNTH_MAX_N = 1024
 
 #: Cap on head_dim for the ONLINE-softmax attention kernel (M2): it streams keys
@@ -678,7 +689,8 @@ def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
     if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
-        verdict = bool(np.allclose(out, region.reference(A, Wg, Wu), atol=atol))
+        verdict = bool(np.allclose(out, region.reference(A, Wg, Wu),
+                                   atol=_effective_atol(r, atol)))
     _GATED_VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -911,7 +923,8 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     if execution in REFERENCE_EXECUTIONS:
         verdict = True                         # no synthesized kernel to distrust
     else:
-        verdict = bool(np.allclose(out, region.reference(A, B, bias), atol=atol))
+        verdict = bool(np.allclose(out, region.reference(A, B, bias),
+                                   atol=_effective_atol(r, atol)))
     _VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -933,7 +946,8 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
     if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
-        verdict = bool(np.allclose(out, region.reference(Q, K, V), atol=atol))
+        verdict = bool(np.allclose(out, region.reference(Q, K, V),
+                                   atol=_effective_atol(r, atol)))
     _VERIFY_CACHE[key] = verdict
     return verdict
 
@@ -968,7 +982,8 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
             verdict = True                     # no synthesized kernel to distrust
         else:
             verdict = bool(np.allclose(out, region.reference(*probes),
-                                       atol=atol, equal_nan=True))
+                                       atol=_effective_atol(r, atol),
+                                       equal_nan=True))
     _VERIFY_CACHE[key] = verdict
     return verdict
 

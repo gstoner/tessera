@@ -252,6 +252,16 @@ class KernelRunner(ABC):
     #: Backend identity, e.g. ``"apple_gpu"``. Subclasses set this.
     target: str = ""
 
+    #: Precision budget: the largest absolute error this backend's *correct*
+    #: kernel may show vs the f32 numpy reference, for the F4 oracle to treat as
+    #: "right" rather than "buggy". ``None`` = use the oracle's default (an f32 /
+    #: exact backend, e.g. Apple, x86). A half-precision lead backend (ROCm f16
+    #: WMMA / flash-attn) sets a looser value so f16 rounding is not misread as a
+    #: miscompile — while an O(1) miscompile is still caught. This is the simplest
+    #: slice of the accuracy-budgeted arbiter (Decision #28 / plan D2); the oracle
+    #: takes ``max(caller_atol, accuracy_atol)``.
+    accuracy_atol: float | None = None
+
     @abstractmethod
     def run_fused_region(self, region: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
         """Run a matmul-epilogue region on ``(A, B, bias=None, ...)``."""

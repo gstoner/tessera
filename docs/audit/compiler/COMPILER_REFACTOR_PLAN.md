@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-02
+last_updated: 2026-07-06
 audit_role: plan
 plan_state: open
 ---
@@ -49,6 +49,41 @@ regression-gated on real silicon.
   generic synthesizer unless it *measures* competitive on that silicon.
 - It does **not** touch the `@jit` frontend (done per `OPTIMIZING_COMPILER_PLAN`).
 - It does **not** hand-edit generated dashboards (Decision #26).
+
+---
+
+## 2a. Status at a glance (updated 2026-07-06)
+
+Landed state per §4 phase. Inline **landed** notes in §3 carry the detail; this
+table is the single skim surface. `✅` done · `🟡` partial · `⬜` not started.
+
+| Phase | Task | Mac (`[MAC]`) | AMD (`[AMD]`) | NV (`[NV]`) |
+|---|---|:--:|:--:|:--:|
+| **0** | E1 golden-IR harness + determinism roundtrip | ✅ | — | — |
+| **0** | E2 real-hardware perf ratchet | ✅ (shape gate) | ✅ gfx1151 (matmul+flash, PR #284) | ⬜ sm_120 (needs box) |
+| **0** | E3 escape-hatch test | ⬜ | ⬜ | ⬜ |
+| **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
+| **1** | A2–A4 fusion matcher / verifiers / MMA selector | ⬜ | — | — |
+| **2** | B1 split `fusion.py` | ✅ | — | — |
+| **2** | B2a–c `KernelEmitter`/`Runner`/`SpecPolicy` | ✅ | — | — |
+| **2** | B3 F4 oracle universal (backend-agnostic, C0) | ✅ | — | — |
+| **2** | B4a `kernel_cache` synth→compile→cache loop | ✅ | — | — |
+| **2** | B4 real AOT `compile_fn`s (`clang`/`ptxas`/`hipcc`) | ⬜ (per-arch, → C) | ⬜ | ⬜ |
+| **3** | C0 backend-plugin handoff + non-Apple F4 gate | ✅ (PR #285) | — | — |
+| **3** | C1 x86 plugin (`emit/x86_llvm.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
+| **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
+| **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | — | ⬜ | — |
+| **4** | C2 NVIDIA emit pipeline + launch bridge | ⬜ | — | ⬜ |
+| **5** | C3 ROCm emit pipeline (generic synth → HIP) | ⬜ | ⬜ | — |
+| **3.5** | ROCm runner → F4 gate (`emit/rocm_hip.py`, shipped kernels, f16 budget) | ✅ | ✅ gfx1151 attn | — |
+| **6** | D1–D3 arbitration + measured autotune | ⬜ | ⬜ | ⬜ |
+
+**Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
+*lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
+so `[MAC]` + `[AMD]` work (A1, B1–B4a, C0, C1 authoring) has correctly proceeded;
+only the **`[NV]` sm_120 proofs** still gate on the NR2 Pro box (its E2 baseline
+can't be recorded yet). Do not read §4's hard-gate phrasing as blocking Mac/AMD
+authoring once E1 is green.
 
 ---
 
@@ -169,22 +204,47 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
 > framework calls into, with a copy-paste skeleton, the F4-verification recipe,
 > and the per-backend task cards (C1 x86 · C2 NVIDIA · C3 ROCm).
 
-- **C1 · `TargetPlugin` interface** `[MAC]` — `{emit_kernel, shape_table,
-  cost_model, intrinsic_set, async_model, compile_fn, spec_policy}`. Apple + x86
-  are the first two reference impls (simplest to validate host-free / on Zen 5).
-  `spec_policy` declares which specialization modes the plugin supports (`static |
-  bucket | dynamic`) + its bucketing strategy — so the static-shape gate now in
-  the lowering (`"requires static shapes"` in `TileToX86Pass` / `MatmulToAppleCPU`)
-  is replaced by a *policy*, not re-hardcoded per backend. The **x86 plugin's
-  Tier-3 candidate set** should register **AOCL-DLP** ([amd/aocl-dlp](https://github.com/amd/aocl-dlp))
-  for the Zen family — AMD's BLIS-family DL primitives (low-precision GEMM/batch
-  GEMM incl. INT4/FP16, pre/post-ops matching `fused_epilogue`, symmetric quant,
-  OpenMP). It's AVX512-based (fits the Zen 5 fleet box, which has no AMX), fills
-  the x86 backend's OpenMP-threading + INT4/FP16 gaps, and is opt-in behind a
-  build flag (a BLAS-family library like Accelerate — Decision #23-clean, kept
-  behind the hardware-free Target IR). The arbiter (D1) selects it only where it
-  measures faster than the generic kernels on Zen; check its license before it
-  becomes a shipped/linked lane.
+- **C1 · Per-arch plugin = three registered seams (NOT one `TargetPlugin`
+  struct)** `[MAC]` author → `[AMD]` execute on Zen 5. **Interface reconciled
+  2026-07-06:** the plan originally sketched a single `TargetPlugin` object with
+  seven fields; what B2/B4a + the C0 handoff actually shipped is **three separate
+  registries** a backend self-registers into on import (mirroring
+  `emit/apple_msl.py`) — this is the real, tested seam, and there is no bundled
+  struct. A backend adds one module `emit/<target>.py` implementing:
+  1. **`KernelEmitter`** (`register_emitter`) — `emit(region, spec, dtype, dims)
+     → KernelSource`. This is the original `emit_kernel` field.
+  2. **`compile_fn`** (`register_compiler`) — `source → artifact` (x86: `clang
+     -O3 -mavx512f -mavx512bf16 -shared` → `.so`). The original `compile_fn` field.
+  3. **`KernelRunner`** (`register_runner`, `default=False`) — `run_*(region,
+     *inputs) → (out, execution_tag)`; a real tag (`"x86_native"`) gets F4-gated,
+     a `REFERENCE_EXECUTIONS` tag declines.
+
+  The original seven fields map onto shipped reality as: **`emit_kernel`** =
+  `KernelEmitter`; **`compile_fn`** = `register_compiler`; **`spec_policy`** =
+  the `SpecPolicy(static|bucket|dynamic)` a `KernelEmitter` accepts +
+  `bucket_key`'s strategy (this is what replaces the hard `"requires static
+  shapes"` gate in `TileToX86Pass` / `MatmulToAppleCPU` — a policy, not a
+  per-backend hardcode). The remaining four were speculative and are **not**
+  first-class plugin fields: **`shape_table`** + **`cost_model`** live in the
+  shared MMA selector (A4 `MmaDescriptor`) and the arbiter (D1), keyed per
+  `(op, shape-bucket, dtype, target)` — not on the emitter; **`intrinsic_set`**
+  is a `compile_fn` build-flag detail (x86 = `-mavx512f -mavx512bf16`, **never
+  `-mavx*` AMX** on this AVX-512-only fleet), not a declared field;
+  **`async_model`** is a no-op for the synchronous CPU/x86 lane and is deferred
+  to the GPU emit lanes (C2/C3) that actually need an async-token model — do not
+  add it to the x86 plugin. **DoD splits by system:** `emit` is pure/host-free
+  (`[MAC]`: mypy + ruff + emitter unit tests); the clang compile + `ctypes`
+  launch + F4 execute-compare require the Zen 5 box (`[AMD]`).
+- **C1b · x86 Tier-3 candidate: AOCL-DLP** `[AMD]`, opt-in, **separated from
+  C1** — register **AOCL-DLP** ([amd/aocl-dlp](https://github.com/amd/aocl-dlp))
+  as a hand-tuned candidate the D1 arbiter measures, NOT part of the core plugin.
+  AMD's BLIS-family DL primitives (low-precision GEMM/batch GEMM incl. INT4/FP16,
+  pre/post-ops matching `fused_epilogue`, symmetric quant, OpenMP); AVX512-based
+  (fits the Zen 5 box, no AMX), fills the x86 backend's OpenMP-threading +
+  INT4/FP16 gaps, opt-in behind a build flag (a BLAS-family library like
+  Accelerate — Decision #23-clean, behind the hardware-free Target IR). The
+  arbiter selects it only where it measures faster than the generic kernels on
+  Zen; **check its license before it becomes a shipped/linked lane.**
 - **C2 · NVIDIA in-process emit pipeline** `[MAC]` authoring → `[NV]` proof —
   `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
   `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize →
@@ -200,6 +260,22 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   `--tessera-emit-rocm`: drives the existing gfx1151 WMMA + CDNA MFMA `Generate*`
   passes through the shared loop into the launch bridge; reuses the async-token
   SSA model in `ROCMWaveLdsPipeline`.
+- **C3-precursor (landed 2026-07-06): ROCm runner → F4 gate + oracle accuracy
+  budget** `[MAC]` author → `[AMD]` proof. Ahead of the full emit pipeline, the
+  *shipped* gfx1151 kernels are now wired into the universal F4 oracle:
+  `emit/rocm_hip.py` registers a **runner-only** plugin (no emitter/`compile_fn`
+  — ROCm's kernels are shipped, not synthesized) whose `run_fused_attention`
+  runs the compiled FA-2 lane on-device (tag `"rocm_hip"`) and is gated against
+  the numpy reference; other region kinds decline to the reference (honest — the
+  fused-epilogue GPU kernel is C3 proper). Because those kernels are **f16
+  storage**, this required the **accuracy-budget** seed (plan D2): a
+  `KernelRunner.accuracy_atol` the oracle widens its tolerance to, so f16
+  rounding (~2.5e-3 on the probes) is not misread as a miscompile while an O(1)
+  bug still is. Apple/x86 (f32/exact) declare no budget → unchanged. This is the
+  cross-backend differential-equivalence superpower (Theory §7.5) applied to the
+  lead's shipped kernels, and the first concrete slice of the accuracy-budgeted
+  arbiter. Proven live: `tests/unit/test_rocm_plugin.py` gates gfx1151 attention
+  across scale/causal on-device.
 
 ### Workstream D — Candidate arbitration + measured autotune
 
@@ -270,7 +346,7 @@ truth in `primitive_coverage.py`).
 
 | Risk | Mitigation |
 |---|---|
-| Shared abstraction crips a lead | Theory rule #1 + E1/E2: lead opts out per op; IR/perf gated |
+| Shared abstraction cripples a lead | Theory rule #1 + E1/E2: lead opts out per op; IR/perf gated |
 | Synthesizer split regresses Apple | B1–B3 pure relocation, oracle-gated, no new codegen; existing differential harness proves it |
 | NVIDIA/ROCm emit pipelines are the big new build | Additive lanes; shipped-symbol path stays until compiled lane ≥ parity (arbiter decides) |
 | Silicon boxes become a bottleneck | Mac-first routing (§7): only execute-compare + perf ratchet require a box |

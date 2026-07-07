@@ -103,6 +103,16 @@ def test_nvidia_flash_attn_candidate_registered_and_emits():
     assert "tessera_nvidia_attn" in src and "expf" in src and "<<<" in src
 
 
+def test_nvidia_mma_attn_candidate_registered():
+    # Tensor-core attention perf lane: Tier-2 emitted, f16 accuracy budget.
+    from tessera.compiler.emit.candidate import OP_ATTENTION
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_ATTENTION)}
+    assert "nvidia_mma_attn" in cands
+    mf = cands["nvidia_mma_attn"]
+    assert mf.tier == Tier.EMITTED and mf.accuracy_atol == 5e-3
+    assert mf.op == OP_ATTENTION
+
+
 def test_nvidia_mma_fused_candidate_registered_and_applies():
     # Tensor-core perf lane: a Tier-2 emitted FusedRegion candidate (mma.sync GEMM
     # + bias/activation epilogue), f16 storage → f16 accuracy budget.
@@ -388,10 +398,11 @@ def test_live_nvidia_flash_attention(scale, causal, shape):
     np.testing.assert_allclose(out, region.reference(Q, K, V), atol=1e-4)
     assert F.verify_synthesized_attention(region, runner=get_runner("nvidia"),
                                           force=True) is True
-    # the arbiter serves it as the Tier-1 attention candidate
+    # the arbiter serves attention on-GPU — it now prefers the Tier-2 tensor-core
+    # lane (f16 budget) over this Tier-1 scalar lane, so compare at the f16 budget.
     aout, atag = C.run_arbitrated(region, OP_ATTENTION, "nvidia", Q, K, V)
     assert atag == "nvidia_cuda"
-    np.testing.assert_allclose(aout, region.reference(Q, K, V), atol=1e-4)
+    np.testing.assert_allclose(aout, region.reference(Q, K, V), atol=5e-3)
 
 
 @pytest.mark.slow
@@ -531,3 +542,72 @@ def test_live_nvidia_mma_fused_tensor_core(epilogue):
     assert C.verify_candidate(mf, region) is True
     win = C.arbitrate(region, OP_FUSED_REGION, "nvidia")
     assert win is not None and win.name == "nvidia_mma_fused"    # Tier-2 > Tier-1
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize("scale,causal", [(0.125, False), (0.25, False), (0.125, True)])
+@pytest.mark.parametrize("shape", [(16, 16, 16, 16), (32, 48, 32, 64),
+                                   (64, 128, 64, 64)],
+                         ids=lambda s: "x".join(map(str, s)))
+def test_live_nvidia_mma_attn_tensor_core(scale, causal, shape):
+    # The tensor-core flash-attention lane (two mma.sync matmuls, smem-staged
+    # softmax, f16) runs on-GPU on well-conditioned inputs, matches the f32
+    # reference within the f16 budget, F4-passes, and the arbiter prefers it.
+    from tessera.compiler.emit.candidate import OP_ATTENTION
+    F.clear_verification_cache()
+    M, Nk, D, Dv = shape
+    region = F.AttentionRegion(scale=scale, causal=causal)
+    mf = next(c for c in C.candidates_for("nvidia", OP_ATTENTION)
+              if c.name == "nvidia_mma_attn")
+    rng = np.random.default_rng(M + Nk)
+    Q = rng.standard_normal((M, D)).astype(np.float32)      # amax ~ a few (safe)
+    K = rng.standard_normal((Nk, D)).astype(np.float32)
+    V = rng.standard_normal((Nk, Dv)).astype(np.float32)
+    out, tag = mf.run(region, Q, K, V)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(Q, K, V), atol=5e-3)
+    assert C.verify_candidate(mf, region) is True
+    win = C.arbitrate(region, OP_ATTENTION, "nvidia")
+    assert win is not None and win.name == "nvidia_mma_attn"
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_mma_attn_large_nk_delegates_to_scalar():
+    # A KV length past the smem cap delegates to the scalar flash lane rather than
+    # declining — still a real on-GPU kernel within budget.
+    from tessera.compiler.emit.candidate import OP_ATTENTION  # noqa: F401
+    region = F.AttentionRegion(scale=0.125)
+    mf = next(c for c in C.candidates_for("nvidia", "attention")
+              if c.name == "nvidia_mma_attn")
+    rng = np.random.default_rng(1)
+    Q = rng.standard_normal((16, 64)).astype(np.float32)
+    K = rng.standard_normal((2048, 64)).astype(np.float32)   # Nk > smem cap
+    V = rng.standard_normal((2048, 64)).astype(np.float32)
+    out, tag = mf.run(region, Q, K, V)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(Q, K, V), atol=5e-3)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_mma_attn_large_magnitude_delegates_not_degrades():
+    # PR #302 review: f16 rounding blows the 5e-3 budget on large-magnitude /
+    # large-scale f32 attention (softmax sharpens), which the F4 probe misses. The
+    # candidate must delegate those to the EXACT scalar lane, never silently degrade.
+    region = F.AttentionRegion(scale=1.0)              # sharp softmax
+    mf = next(c for c in C.candidates_for("nvidia", "attention")
+              if c.name == "nvidia_mma_attn")
+    rng = np.random.default_rng(2)
+    Q = (rng.standard_normal((32, 64)) * 100.0).astype(np.float32)   # amax ~ 350
+    K = (rng.standard_normal((48, 64)) * 100.0).astype(np.float32)
+    V = (rng.standard_normal((48, 64)) * 100.0).astype(np.float32)
+    out, tag = mf.run(region, Q, K, V)
+    assert tag == "nvidia_cuda"                        # delegated to the scalar lane
+    # the returned result tracks the f32 reference (not an f16-degraded one).
+    ref = region.reference(Q, K, V)
+    assert float(np.max(np.abs(out - ref))) / (float(np.max(np.abs(ref))) + 1e-9) < 1e-2

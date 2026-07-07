@@ -785,6 +785,183 @@ class NvidiaMmaFusedCandidate(Candidate):
         return region.reference(A, B, bias), "reference"
 
 
+# ── tensor-core ATTENTION lane — mma.sync flash, smem-staged softmax (Tier-2) ─
+#
+# The perf follow-on to the Tier-1 scalar flash lane. Two mma.sync matmuls (Q·Kᵀ
+# then P·V) with the row softmax staged through shared memory — this sidesteps the
+# accumulator→operand fragment shuffle (write scores to smem, softmax in smem, load
+# P back as the second mma's operand). One warp per 16-query tile; f16 operands /
+# f32 accumulate → f16 accuracy budget. Nk is capped by the smem the score tile
+# needs (16·Nk·4 bytes, opt-in up to ~96 KB); larger Nk delegates to the scalar
+# lane, which streams any length.
+
+_MMA_ATTN_ENTRY = "tessera_nvidia_mma_attn"
+#: Max KV length whose 16xNk f32 score tile fits the opt-in dynamic smem (~96 KB).
+_MMA_ATTN_NK_CAP = 1536
+#: f16 is only safe for the attention lane when BOTH hold: operand magnitude
+#: ``amax = max|Q|,|K|,|V|`` is small (bounds the f16 V-rounding output error) AND
+#: the softmax sharpness proxy ``scale·D·amax²`` is bounded (softmax(scale·Q·Kᵀ)
+#: sharpens with score magnitude, amplifying f16 Q/K rounding). Larger-magnitude /
+#: sharper f32 attention is delegated to the exact scalar lane rather than silently
+#: degraded (PR #302 review; both bounds empirically validated to keep the abs
+#: error under the 5e-3 budget across scale/D/magnitude).
+_MMA_ATTN_ABS_CAP = 5.0
+_MMA_ATTN_SHARPNESS_CAP = 500.0
+_mma_attn_fn_cache: list[Any] = []
+
+
+def _synthesize_mma_attn_cuda() -> str:
+    """CUDA source for ``O = softmax(scale·Q·Kᵀ)·V`` via two ``mma.sync.m16n8k16``
+    f16 matmuls with the row softmax staged in shared memory (16xNk f32 scores).
+    Natural Q(M,D)/K(Nk,D)/V(Nk,Dv), row-major; boundary-checked; causal masks
+    keys ``n > m``. One warp per 16-query block."""
+    e = _MMA_ATTN_ENTRY
+    MMA = ('asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "\n'
+           '        "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"\n'
+           '        :"+f"(d0),"+f"(d1),"+f"(d2),"+f"(d3):"r"(a0),"r"(a1),"r"(a2),'
+           '"r"(a3),"r"(b0),"r"(b1));')
+    return (
+        "#include <cuda_runtime.h>\n#include <cuda_fp16.h>\n#include <math.h>\n"
+        f"__global__ void {e}_kernel(const unsigned short* Q, const unsigned short* K,\n"
+        "    const unsigned short* V, float* O, int M, int Nk, int D, int Dv,\n"
+        "    float scale, int causal) {\n"
+        "  extern __shared__ float S[];\n"
+        "  int mt=blockIdx.x*16, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
+        "  for (int nt=0; nt<Nk; nt+=8) {\n"
+        "    float d0=0,d1=0,d2=0,d3=0;\n"
+        "    for (int k0=0;k0<D;k0+=16){\n"
+        "      auto lq=[&](int r,int c)->unsigned{int rr=mt+r,cc=k0+c;\n"
+        "        unsigned lo=(rr<M&&cc<D)?Q[rr*D+cc]:0u, hi=(rr<M&&cc+1<D)?Q[rr*D+cc+1]:0u; return (hi<<16)|lo;};\n"
+        "      auto lk=[&](int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
+        "        unsigned lo=(cc<Nk&&rr<D)?K[cc*D+rr]:0u, hi=(cc<Nk&&rr+1<D)?K[cc*D+rr+1]:0u; return (hi<<16)|lo;};\n"
+        "      unsigned a0=lq(gid,2*tig),a1=lq(gid+8,2*tig),a2=lq(gid,2*tig+8),a3=lq(gid+8,2*tig+8);\n"
+        "      unsigned b0=lk(2*tig,gid),b1=lk(2*tig+8,gid);\n"
+        f"      {MMA}\n"
+        "    }\n"
+        "    auto sst=[&](int r,int c,float v){int cc=nt+c;\n"
+        "      if (r<16 && cc<Nk){ float sv=v*scale; if(causal && cc>mt+r) sv=-INFINITY; S[r*Nk+cc]=sv; }};\n"
+        "    sst(gid,2*tig,d0);sst(gid,2*tig+1,d1);sst(gid+8,2*tig,d2);sst(gid+8,2*tig+1,d3);\n"
+        "  }\n"
+        "  __syncwarp();\n"
+        "  for (int row=lane; row<16; row+=32){\n"
+        "    if (mt+row>=M) continue;\n"
+        "    float mx=-INFINITY; for(int n=0;n<Nk;n++) mx=fmaxf(mx,S[row*Nk+n]);\n"
+        "    float sm=0; for(int n=0;n<Nk;n++){ float ex=__expf(S[row*Nk+n]-mx); S[row*Nk+n]=ex; sm+=ex; }\n"
+        "    float inv=(sm>0)?1.0f/sm:0.0f; for(int n=0;n<Nk;n++) S[row*Nk+n]*=inv;\n"
+        "  }\n"
+        "  __syncwarp();\n"
+        "  for (int nt=0; nt<Dv; nt+=8) {\n"
+        "    float d0=0,d1=0,d2=0,d3=0;\n"
+        "    for (int k0=0;k0<Nk;k0+=16){\n"
+        "      auto lp=[&](int r,int c)->unsigned{int cc=k0+c;\n"
+        "        unsigned short lo=(r<16&&cc<Nk)?__half_as_ushort(__float2half(S[r*Nk+cc])):(unsigned short)0;\n"
+        "        unsigned short hi=(r<16&&cc+1<Nk)?__half_as_ushort(__float2half(S[r*Nk+cc+1])):(unsigned short)0;\n"
+        "        return ((unsigned)hi<<16)|lo;};\n"
+        "      auto lv=[&](int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
+        "        unsigned lo=(rr<Nk&&cc<Dv)?V[rr*Dv+cc]:0u, hi=(rr+1<Nk&&cc<Dv)?V[(rr+1)*Dv+cc]:0u; return (hi<<16)|lo;};\n"
+        "      unsigned a0=lp(gid,2*tig),a1=lp(gid+8,2*tig),a2=lp(gid,2*tig+8),a3=lp(gid+8,2*tig+8);\n"
+        "      unsigned b0=lv(2*tig,gid),b1=lv(2*tig+8,gid);\n"
+        f"      {MMA}\n"
+        "    }\n"
+        "    auto ost=[&](int r,int c,float v){int rr=mt+r,cc=nt+c; if(rr<M&&cc<Dv) O[rr*Dv+cc]=v;};\n"
+        "    ost(gid,2*tig,d0);ost(gid,2*tig+1,d1);ost(gid+8,2*tig,d2);ost(gid+8,2*tig+1,d3);\n"
+        "  }\n"
+        "}\n"
+        f'extern "C" int {e}(const unsigned short* hQ, const unsigned short* hK,\n'
+        "    const unsigned short* hV, float* hO, int M, int Nk, int D, int Dv,\n"
+        "    float scale, int causal) {\n"
+        "  size_t szQ=(size_t)M*D*2, szK=(size_t)Nk*D*2, szV=(size_t)Nk*Dv*2, szO=(size_t)M*Dv*4;\n"
+        "  int smem=16*Nk*4;\n"
+        "  unsigned short *dQ=0,*dK=0,*dV=0; float* dO=0;\n"
+        "  if (cudaMalloc(&dQ,szQ)!=cudaSuccess) return 3;\n"
+        "  if (cudaMalloc(&dK,szK)!=cudaSuccess){cudaFree(dQ);return 3;}\n"
+        "  if (cudaMalloc(&dV,szV)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);return 3;}\n"
+        "  if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);cudaFree(dV);return 3;}\n"
+        "  cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice);\n"
+        "  cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice);\n"
+        "  cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice);\n"
+        f"  cudaFuncSetAttribute({e}_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem);\n"
+        f"  {e}_kernel<<<dim3((M+15)/16),dim3(32),smem>>>(dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
+        "  int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "  if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "  cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
+        "  return ok;\n"
+        "}\n"
+    )
+
+
+def _mma_attn_fn():
+    """Compile (once) the mma.sync attention kernel and return its bound entry:
+    ``int(Q f16, K f16, V f16, O f32, M,Nk,D,Dv, scale, causal)``."""
+    if _mma_attn_fn_cache:
+        return _mma_attn_fn_cache[0]
+    from tessera.compiler.emit.kernel_emitter import KernelSource
+    src = KernelSource(source=_synthesize_mma_attn_cuda(), entry=_MMA_ATTN_ENTRY,
+                       lang=_LANG)
+    fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_ATTN_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 4
+                   + [ctypes.c_float, ctypes.c_int])
+    _mma_attn_fn_cache.append(fn)
+    return fn
+
+
+class NvidiaMmaAttnCandidate(Candidate):
+    """Tier-2 (emitted): the tensor-core flash-attention lane — two ``mma.sync``
+    matmuls with a smem-staged row softmax, f16 operands / f32 accumulate. Serves
+    any ``AttentionRegion``; for a KV length past the smem cap it delegates to the
+    scalar flash lane (which streams any length), so it never declines a shape the
+    scalar lane can run. f16 accuracy budget."""
+
+    name = "nvidia_mma_attn"
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_ATTENTION
+    accuracy_atol = 5e-3                        # f16 storage budget (Decision #28)
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def run(self, region: Any, Q: Any, K: Any, V: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        try:
+            Qn, Kn = region._natural(Q, K)         # natural Q(M,D)/K(Nk,D), f32
+            Vf = np.asarray(V, np.float32)
+            M, D = Qn.shape
+            Nk, Dk = Kn.shape
+            Nkv, Dv = Vf.shape
+            if Dk != D or Nkv != Nk:
+                return region.reference(Q, K, V), "reference"
+            # Delegate to the EXACT scalar lane when the score tile won't fit smem
+            # OR when f16 would exceed the 5e-3 budget: softmax(scale·Q·Kᵀ) sharpens
+            # with score magnitude, so f16 rounding of large-magnitude / large-scale
+            # f32 attention diverges — which the fixed F4 probe doesn't exercise.
+            # This keeps the lane from silently degrading default f32 semantics
+            # (PR #302 review); ``scale·D·amax²`` is the validated sharpness proxy.
+            amax = max(float(np.max(np.abs(Qn))), float(np.max(np.abs(Kn))),
+                       float(np.max(np.abs(Vf))))
+            if (Nk > _MMA_ATTN_NK_CAP or amax > _MMA_ATTN_ABS_CAP
+                    or float(region.scale) * D * amax * amax > _MMA_ATTN_SHARPNESS_CAP):
+                return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
+            Qh = np.ascontiguousarray(Qn, np.float16)
+            Kh = np.ascontiguousarray(Kn, np.float16)
+            Vh = np.ascontiguousarray(Vf, np.float16)
+            out = np.zeros((M, Dv), np.float32)
+            rc = _mma_attn_fn()(_ptr(Qh), _ptr(Kh), _ptr(Vh), _ptr(out),
+                                M, Nk, D, Dv, ctypes.c_float(float(region.scale)),
+                                1 if region.causal else 0)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
+        return region.reference(Q, K, V), "reference"
+
+
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
 #
 # The arbiter enumerates these per (target="nvidia", op=matmul) and F4-gates each.
@@ -876,6 +1053,7 @@ register_runner(NvidiaCudaRunner(), default=False)
 register_candidate(NvidiaGenericCudaCandidate())
 register_candidate(NvidiaMmaFusedCandidate())         # tensor-core fused GEMM+epi
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
+register_candidate(NvidiaMmaAttnCandidate())          # tensor-core flash attention
 register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
 register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).

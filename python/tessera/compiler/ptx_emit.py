@@ -175,6 +175,15 @@ _MMA_SYNC_BF16_TILE: tuple[int, int, int] = (16, 8, 16)
 # is the runtime_symbol the C-ABI launcher dispatches on.
 MMA_SYNC_BF16_ENTRY = "tessera_mma_m16n8k16_bf16"
 
+# Entry names for the *general* aligned-M/N/K mma.sync GEMM kernels (K-loop +
+# grid-tiled over 16x8 output tiles), keyed by 16-bit operand dtype. The C-ABI
+# launcher dispatches its general-GEMM ABI on these (grid from M/N, runtime
+# M/N/K params). bf16/f16 share the m16n8k16 fragment layout.
+MMA_SYNC_GEMM_ENTRY: dict[str, str] = {
+    "bf16": "tessera_mma_gemm_bf16",
+    "f16": "tessera_mma_gemm_f16",
+}
+
 
 def is_valid_mma_sync_bf16_shape(m: int, n: int, k: int) -> bool:
     """The sm_120 warp-level mma.sync bf16 tile this emitter supports: exactly
@@ -306,6 +315,290 @@ def validate_mma_sync_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[
         problems.append("no global result stores (`st.global.f32`) emitted")
     if "mov.f32 %d0, 0f00000000" not in ptx:
         problems.append("accumulator not zero-initialized before the mma")
+    if not ptx.isascii():
+        problems.append("PTX contains non-ASCII bytes (driver JIT ptxas rejects these)")
+    if ptx.count("{") != ptx.count("}"):
+        problems.append("unbalanced braces")
+    if "ret;" not in ptx:
+        problems.append("kernel does not return (`ret;` missing)")
+    return problems
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# General aligned-M/N/K sm_120 mma.sync GEMM — the C2-tail-breadth generalization
+# of the single m16n8k16 tile above. Same warp-level fragment layout, now:
+#   * grid-tiled: one warp (block=32) per 16x8 output tile, grid = (M/16, N/8);
+#   * K-looped:   accumulate over K/16 tiles into the same d0..d3 registers;
+#   * runtime M/N/K (.u32 params) → one kernel serves every aligned shape;
+#   * dtype ∈ {bf16, f16} (identical m16n8k16 fragment layout, mnemonic differs).
+# Aligned only (M%16, N%8, K%16) — ragged boundary predication is a follow-on.
+# Layout: D[MxN] f32 (row-major) = A[MxK] (row-major) * B[KxN] (col-major),
+# f32 accumulate — the same convention the single-tile kernel + its bridge use.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def is_valid_mma_sync_gemm_shape(m: int, n: int, k: int) -> bool:
+    """The aligned tiling constraint for :func:`emit_mma_sync_gemm_ptx`:
+    ``M%16 == N%8 == K%16 == 0`` and all positive. One warp per 16x8 tile with a
+    K-loop; unaligned (ragged) M/N/K need boundary predication (a follow-on)."""
+    return m > 0 and n > 0 and k > 0 and m % 16 == 0 and n % 8 == 0 and k % 16 == 0
+
+
+def emit_mma_sync_gemm_ptx(
+    *,
+    dtype: str = "bf16",
+    arch: str = "sm_120a",
+    acc: str = "f32",
+    entry: str | None = None,
+) -> str:
+    """Emit a COMPLETE, assemblable, launchable sm_120 ``mma.sync`` GEMM kernel for
+    ARBITRARY aligned M/N/K, generalizing the single m16n8k16 tile.
+
+    One warp per 16x8 output tile (grid = ``M/16 x N/8``) accumulates over a
+    K-loop into f32; ``M``/``N``/``K`` are runtime ``.u32`` params, so one kernel
+    serves every aligned shape (``M%16 == N%8 == K%16 == 0``). ``dtype`` selects
+    the 16-bit operand type (``bf16``/``f16``) — identical fragment layout, only
+    the MMA mnemonic differs. Per-tile fragment math is byte-for-byte the proven
+    single-tile kernel's, plus the ``mt = ctaid.x*16`` / ``nt = ctaid.y*8`` tile
+    origin, runtime K/N strides, and the K accumulation loop. ASCII-only (the
+    driver JIT ``ptxas`` rejects non-ASCII)."""
+    if dtype not in ("bf16", "f16"):
+        raise ValueError(
+            f"emit_mma_sync_gemm_ptx supports bf16/f16 (16-bit m16n8k16), "
+            f"got {dtype!r}")
+    entry = entry or MMA_SYNC_GEMM_ENTRY[dtype]
+    mma = mma_sync_mnemonic(16, 8, 16, acc=acc, ab=dtype)
+    return f""".version {PTX_ISA_VERSION}
+.target {arch}
+.address_size 64
+
+// Tessera sm_120 mma.sync {dtype} GEMM -- arbitrary aligned M/N/K (M%16,N%8,K%16).
+// One warp per 16x8 output tile (grid M/16 x N/8), K-looped f32 accumulate.
+// D[MxN] f32 (row-major) = A[MxK] {dtype} (row-major) * B[KxN] {dtype} (col-major).
+.visible .entry {entry}(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_D,
+    .param .u32 p_M,
+    .param .u32 p_N,
+    .param .u32 p_K
+)
+{{
+    .reg .pred %p;
+    .reg .b32  %r<40>;
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b32  %N,%K,%k0;
+    .reg .b64  %A,%B,%D,%off,%addr;
+
+    ld.param.u64 %A, [p_A];  cvta.to.global.u64 %A, %A;
+    ld.param.u64 %B, [p_B];  cvta.to.global.u64 %B, %B;
+    ld.param.u64 %D, [p_D];  cvta.to.global.u64 %D, %D;
+    ld.param.u32 %N, [p_N];
+    ld.param.u32 %K, [p_K];
+
+    mov.u32 %r1, %tid.x;          // lane 0..31
+    shr.u32 %r2, %r1, 2;          // gid = lane>>2
+    and.b32 %r3, %r1, 3;          // tig = lane&3
+    shl.b32 %r4, %r3, 1;          // 2*tig
+
+    mov.u32 %r5, %ctaid.x;  mul.lo.s32 %r5, %r5, 16;   // mt = ctaid.x*16
+    mov.u32 %r6, %ctaid.y;  mul.lo.s32 %r6, %r6, 8;    // nt = ctaid.y*8
+
+    add.s32 %r7, %r5, %r2;        // rowA0 = mt+gid
+    add.s32 %r8, %r7, 8;          // rowA1 = mt+gid+8
+    mul.lo.s32 %r9,  %r7, %K;     // rowA0*K  (loop-invariant)
+    mul.lo.s32 %r10, %r8, %K;     // rowA1*K
+    add.s32 %r11, %r6, %r2;       // colB = nt+gid (col-major B: column index)
+    mul.lo.s32 %r12, %r11, %K;    // colB*K   (loop-invariant)
+
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    mov.u32 %k0, 0;
+$Lk_{entry}:
+    // ---- A fragment (elem 2 bytes): rows {{rowA0,rowA1}} x cols {{k0+2tig, +8}} ----
+    add.s32 %r20, %r9,  %k0;  add.s32 %r20, %r20, %r4;   // rowA0*K + k0 + 2tig
+    mul.wide.s32 %off, %r20, 2;  add.s64 %addr, %A, %off;  ld.global.b32 %a0, [%addr];
+    add.s32 %r21, %r10, %k0;  add.s32 %r21, %r21, %r4;   // rowA1*K + k0 + 2tig
+    mul.wide.s32 %off, %r21, 2;  add.s64 %addr, %A, %off;  ld.global.b32 %a1, [%addr];
+    add.s32 %r22, %r20, 8;    mul.wide.s32 %off, %r22, 2;  add.s64 %addr, %A, %off;  ld.global.b32 %a2, [%addr];
+    add.s32 %r23, %r21, 8;    mul.wide.s32 %off, %r23, 2;  add.s64 %addr, %A, %off;  ld.global.b32 %a3, [%addr];
+
+    // ---- B fragment (col-major, elem 2 bytes): b idx = colB*K + k0 + {{2tig, +8}} ----
+    add.s32 %r24, %r12, %k0;  add.s32 %r24, %r24, %r4;   // colB*K + k0 + 2tig
+    mul.wide.s32 %off, %r24, 2;  add.s64 %addr, %B, %off;  ld.global.b32 %b0, [%addr];
+    add.s32 %r25, %r24, 8;    mul.wide.s32 %off, %r25, 2;  add.s64 %addr, %B, %off;  ld.global.b32 %b1, [%addr];
+
+    // ---- warp MMA, accumulate into d0..d3 ----
+    {mma}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}};
+
+    add.s32 %k0, %k0, 16;
+    setp.lt.s32 %p, %k0, %K;
+    @%p bra $Lk_{entry};
+
+    // ---- D store (row-major, elem 4 bytes): d0 idx = (mt+gid)*N + (nt+2tig) ----
+    add.s32 %r30, %r6, %r4;       // nt + 2tig
+    mul.lo.s32 %r31, %r7, %N;  add.s32 %r31, %r31, %r30;   // (mt+gid)*N + nt+2tig
+    mul.wide.s32 %off, %r31, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d0;
+    add.s32 %r32, %r31, 1;    mul.wide.s32 %off, %r32, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d1;
+    mul.lo.s32 %r33, %r8, %N;  add.s32 %r33, %r33, %r30;   // (mt+gid+8)*N + nt+2tig
+    mul.wide.s32 %off, %r33, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d2;
+    add.s32 %r34, %r33, 1;    mul.wide.s32 %off, %r34, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d3;
+
+    ret;
+}}
+"""
+
+
+def validate_mma_sync_gemm_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
+    """Structural validation of an emitted general mma.sync GEMM (no toolchain):
+    a complete kernel with runtime M/N/K params, the K-loop, the mma, and global
+    ld/st. Empty list = well-formed."""
+    problems: list[str] = []
+    if f".version {PTX_ISA_VERSION}" not in ptx:
+        problems.append(f"missing `.version {PTX_ISA_VERSION}` directive")
+    if f".target {arch}" not in ptx:
+        problems.append(f"missing `.target {arch}` directive")
+    if ".visible .entry" not in ptx:
+        problems.append("no `.visible .entry` kernel")
+    if ".param .u32 p_K" not in ptx:
+        problems.append("no runtime K param (`.param .u32 p_K`) — not a general GEMM")
+    if "mma.sync.aligned.m16n8k16." not in ptx:
+        problems.append("no mma.sync matmul instruction emitted")
+    if "setp.lt.s32" not in ptx or "bra $Lk_" not in ptx:
+        problems.append("no K-accumulation loop (missing setp/bra back-edge)")
+    if "ld.global.b32" not in ptx:
+        problems.append("no global fragment loads (`ld.global.b32`) emitted")
+    if "st.global.f32" not in ptx:
+        problems.append("no global result stores (`st.global.f32`) emitted")
+    if not ptx.isascii():
+        problems.append("PTX contains non-ASCII bytes (driver JIT ptxas rejects these)")
+    if ptx.count("{") != ptx.count("}"):
+        problems.append("unbalanced braces")
+    if "ret;" not in ptx:
+        problems.append("kernel does not return (`ret;` missing)")
+    return problems
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NVFP4 block-scale matmul (spike #9 productized to emit+assemble) — the warp
+# ``mma.sync…m16n8k64…kind::mxf4nvf4.block_scale`` on sm_120a: fp4 (e2m1) A/B
+# operands with per-block ue4m3 scale factors, f32 accumulate. The instruction
+# encoding + a UNIT-scale data path are proven in
+# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu``. This emits
+# the complete kernel and (rung 3) assembles it with ptxas; on-device *execution*
+# and NON-unit scale numerics remain gated on the PTX-ISA scale-distribution spec
+# (NVIDIA_AUDIT "Still Open"), so this is deliberately emit+assemble only — the fp4
+# fragment packing + numpy reference is not wired into the launch bridge yet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Entry name for the sm_120a NVFP4 block-scale m16n8k64 tile.
+TESSERA_NVFP4_MMA_ENTRY = "tessera_nvfp4_mma_m16n8k64"
+
+#: The documented warp NVFP4 block-scale MMA mnemonic (per the proven spike).
+NVFP4_MMA_MNEMONIC = (
+    "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale.scale_vec::4X."
+    "f32.e2m1.e2m1.f32.ue4m3"
+)
+
+
+def emit_nvfp4_block_scale_mma_ptx(
+    *, arch: str = "sm_120a", entry: str = TESSERA_NVFP4_MMA_ENTRY
+) -> str:
+    """Emit a COMPLETE, assemblable sm_120a NVFP4 block-scale ``mma.sync`` kernel
+    (one warp, m16n8k64): D[16x8] f32 = A[16x64] · B[64x8], fp4 e2m1 operands with
+    per-lane ue4m3 block-scale selectors, f32 accumulate — the PTX of the proven
+    spike (unit-scale data path). Per-lane fragments: A = 4x`.b32`, B = 2x`.b32`,
+    scale-A/B = 1x`.b32`; the scale byte/thread selectors are `{0,0}` immediates.
+    Assemble-verifiable (rung 3) here; on-device execution + non-unit numerics stay
+    gated on the PTX-ISA scale spec (so this is emit+assemble, not launch)."""
+    return f""".version {PTX_ISA_VERSION}
+.target {arch}
+.address_size 64
+
+// Tessera sm_120a NVFP4 block-scale matmul (m16n8k64) -- complete, assemblable.
+// One warp: D[16x8] f32 = A[16x64] e2m1 * B[64x8] e2m1, ue4m3 per-block scales.
+// Emit+assemble productization of spikes/sm120_mma_sync/nvfp4_gemm.cu.
+.visible .entry {entry}(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_SFa,
+    .param .u64 p_SFb,
+    .param .u64 p_D
+)
+{{
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1,%sfa,%sfb;
+    .reg .b32  %lane,%idx;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b64  %A,%B,%SFa,%SFb,%D,%off,%addr;
+
+    ld.param.u64 %A,   [p_A];   cvta.to.global.u64 %A,   %A;
+    ld.param.u64 %B,   [p_B];   cvta.to.global.u64 %B,   %B;
+    ld.param.u64 %SFa, [p_SFa]; cvta.to.global.u64 %SFa, %SFa;
+    ld.param.u64 %SFb, [p_SFb]; cvta.to.global.u64 %SFb, %SFb;
+    ld.param.u64 %D,   [p_D];   cvta.to.global.u64 %D,   %D;
+
+    mov.u32 %lane, %tid.x;
+
+    // A fragment: 4 x .b32 at A[lane*4 + 0..3]
+    mul.lo.s32 %idx, %lane, 4;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %A, %off;  ld.global.b32 %a0, [%addr];
+    ld.global.b32 %a1, [%addr+4];
+    ld.global.b32 %a2, [%addr+8];
+    ld.global.b32 %a3, [%addr+12];
+
+    // B fragment: 2 x .b32 at B[lane*2 + 0..1]
+    mul.lo.s32 %idx, %lane, 2;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %B, %off;  ld.global.b32 %b0, [%addr];
+    ld.global.b32 %b1, [%addr+4];
+
+    // scale selectors: 1 x .b32 each at SF*[lane]
+    mul.wide.s32 %off, %lane, 4;
+    add.s64 %addr, %SFa, %off;  ld.global.b32 %sfa, [%addr];
+    add.s64 %addr, %SFb, %off;  ld.global.b32 %sfb, [%addr];
+
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    {NVFP4_MMA_MNEMONIC}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}},
+        {{%sfa}}, {{0, 0}}, {{%sfb}}, {{0, 0}};
+
+    // D store: 4 x f32 at D[lane*4 + 0..3]
+    mul.lo.s32 %idx, %lane, 4;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d0;
+    st.global.f32 [%addr+4],  %d1;
+    st.global.f32 [%addr+8],  %d2;
+    st.global.f32 [%addr+12], %d3;
+
+    ret;
+}}
+"""
+
+
+def validate_nvfp4_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
+    """Structural validation of the emitted NVFP4 block-scale kernel (no toolchain).
+    Empty list = well-formed: the block-scale mma, the 5 pointer params, the fp4
+    fragment loads, and the f32 store."""
+    problems: list[str] = []
+    if f".version {PTX_ISA_VERSION}" not in ptx:
+        problems.append(f"missing `.version {PTX_ISA_VERSION}` directive")
+    if f".target {arch}" not in ptx:
+        problems.append(f"missing `.target {arch}` directive")
+    if "kind::mxf4nvf4.block_scale" not in ptx:
+        problems.append("no NVFP4 block-scale mma emitted")
+    if ".param .u64 p_SFa" not in ptx or ".param .u64 p_SFb" not in ptx:
+        problems.append("missing the two block-scale factor params (SFa/SFb)")
+    if "ld.global.b32" not in ptx:
+        problems.append("no fp4 fragment loads emitted")
+    if "st.global.f32" not in ptx:
+        problems.append("no f32 result stores emitted")
     if not ptx.isascii():
         problems.append("PTX contains non-ASCII bytes (driver JIT ptxas rejects these)")
     if ptx.count("{") != ptx.count("}"):

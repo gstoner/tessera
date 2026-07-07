@@ -39,9 +39,14 @@ tsrRegisterGpuLauncher(tsrGpuLauncherFn fn, void* user);
 
 namespace {
 
-// ── the one on-silicon-proven kernel's ABI (extension point per Apple pattern) ─
+// ── per-kernel ABIs, keyed by entry name (extension point per Apple pattern) ───
+// The single on-silicon-proven m16n8k16 tile ...
 constexpr const char* kMmaEntry = "tessera_mma_m16n8k16_bf16";
 constexpr int kMmaM = 16, kMmaN = 8, kMmaK = 16;
+// ... and the general aligned mma.sync GEMM (K-loop + grid-tiled), bf16/f16.
+// Same 16-bit operand ABI (2-byte A/B, f32 D), grid derived from M/N.
+constexpr const char* kGemmBf16 = "tessera_mma_gemm_bf16";
+constexpr const char* kGemmF16 = "tessera_mma_gemm_f16";
 
 std::mutex g_mu;
 std::map<std::string, std::string> g_ptx;           // kernel name -> PTX text
@@ -122,6 +127,41 @@ int invokeMma(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
+// Launch the general aligned mma.sync 16-bit GEMM: buffers {A 16b, B 16b, D f32},
+// dims {M,N,K} (M%16,N%8,K%16); grid (M/16, N/8), block 32 (one warp per 16x8
+// tile); runtime M/N/K params. bf16 and f16 share this ABI (only the JIT'd PTX
+// differs). Returns the C-ABI rc.
+int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
+                    const int64_t* dims, size_t ndim) {
+    if (nbuf != 3 || ndim != 3) return 5;
+    int M = (int)dims[0], N = (int)dims[1], K = (int)dims[2];
+    if (M <= 0 || N <= 0 || K <= 0 || M % 16 || N % 8 || K % 16) return 5;
+    const void* A = buffers[0];
+    const void* B = buffers[1];
+    void* D = buffers[2];
+    const size_t sA = (size_t)M * K * 2;   // 16-bit A
+    const size_t sB = (size_t)K * N * 2;   // 16-bit B (col-major)
+    const size_t sD = (size_t)M * N * 4;   // f32 D
+    CUdeviceptr dA = 0, dB = 0, dD = 0;
+    if (cuMemAlloc(&dA, sA) != CUDA_SUCCESS) return 3;
+    if (cuMemAlloc(&dB, sB) != CUDA_SUCCESS) { cuMemFree(dA); return 3; }
+    if (cuMemAlloc(&dD, sD) != CUDA_SUCCESS) { cuMemFree(dA); cuMemFree(dB); return 3; }
+    int rc = 0;
+    do {
+        if (cuMemcpyHtoD(dA, A, sA) != CUDA_SUCCESS) { rc = 3; break; }
+        if (cuMemcpyHtoD(dB, B, sB) != CUDA_SUCCESS) { rc = 3; break; }
+        void* args[] = {&dA, &dB, &dD, &M, &N, &K};
+        unsigned gx = (unsigned)(M / 16), gy = (unsigned)(N / 8);
+        if (cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0) != CUDA_SUCCESS) {
+            rc = 3; break;
+        }
+        if (cuCtxSynchronize() != CUDA_SUCCESS) { rc = 3; break; }
+        if (cuMemcpyDtoH(D, dD, sD) != CUDA_SUCCESS) { rc = 3; break; }
+    } while (0);
+    cuMemFree(dA); cuMemFree(dB); cuMemFree(dD);
+    return rc;
+}
+
 // Shared launch body behind both the direct C-ABI and the tsrGpuLauncherFn.
 int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
                const int64_t* dims, size_t ndim) {
@@ -133,6 +173,9 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return g_ptx.count(kernel_name) ? 3 : 4;   // JIT failure vs no PTX
     if (std::strcmp(kernel_name, kMmaEntry) == 0)
         return invokeMma(fn, buffers, nbuf, dims, ndim);
+    if (std::strcmp(kernel_name, kGemmBf16) == 0 ||
+        std::strcmp(kernel_name, kGemmF16) == 0)
+        return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim);
     return 5;                                        // unknown kernel ABI
 }
 

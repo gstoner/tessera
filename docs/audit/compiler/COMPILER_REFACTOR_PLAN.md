@@ -74,8 +74,9 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
 | **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | — | ⬜ | — |
 | **4** | C2 NVIDIA emit pipeline + launch bridge | ⬜ | — | ⬜ |
-| **5** | C3 ROCm emit pipeline (generic synth → HIP) | ⬜ | ⬜ | — |
-| **3.5** | ROCm runner → F4 gate (`emit/rocm_hip.py`, shipped kernels, f16 budget) | ✅ | ✅ gfx1151 attn | — |
+| **5** | C3 ROCm generic synth → HIP (`emit/rocm_hip.py`: emitter + `hipcc` + runner) | ✅ emit host-free | ✅ gfx1151 FusedRegion | — |
+| **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ⬜ | ⬜ | — |
+| **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
 | **6** | D1–D3 arbitration + measured autotune | ⬜ | ⬜ | ⬜ |
 
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
@@ -256,10 +257,21 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   **bf16-only, few-shape** emitter, and today's executing sm_120 matmul runs via
   the shipped `libtessera_nvidia_gemm.so`, **not** the emit path — so the bridge
   is the long pole, ahead of broadening shapes/dtypes.
-- **C3 · ROCm in-process emit pipeline** `[MAC]` authoring → `[AMD]` proof —
-  `--tessera-emit-rocm`: drives the existing gfx1151 WMMA + CDNA MFMA `Generate*`
-  passes through the shared loop into the launch bridge; reuses the async-token
-  SSA model in `ROCMWaveLdsPipeline`.
+- **C3 · ROCm generic synth → HIP** — **generic lane LANDED 2026-07-06**, `[MAC]`
+  author → `[AMD]` proof. `emit/rocm_hip.py` is now a **full three-seam plugin**
+  (parallel to x86): `RocmHipEmitter` turns a `FusedRegion` into HIP source (a
+  one-thread-per-row `__global__` kernel + a host-pointer C-ABI wrapper doing
+  H2D/launch/D2H), `_rocm_hip_compile_fn` compiles it with `hipcc
+  --offload-arch=<gfx>` → `.so`, and `RocmHipRunner.run_fused_region` dlopens +
+  launches on gfx1151 (`"rocm_hip"`), F4-gated. The per-row scalar body is
+  **shared with the x86 C lane** (`emit/_fused_scalar_body.py`) so both stay
+  locked to the one `fusion_core` reference. Same NULL-buffer guard as x86.
+  **C3 tail (still open):** wire the existing gfx1151 WMMA + CDNA MFMA
+  `Generate*` passes (the hand-tuned MLIR kernel generators) through the shared
+  loop as Tier-3 arbiter candidates, reusing the async-token SSA model in
+  `ROCMWaveLdsPipeline` — the generic scalar HIP kernel above is a correctness-
+  first middle-ground candidate, NOT a replacement for those crown-jewel lanes
+  (lead-safety; the D1 arbiter picks per measured latency + accuracy budget).
 - **C3-precursor (landed 2026-07-06): ROCm runner → F4 gate + oracle accuracy
   budget** `[MAC]` author → `[AMD]` proof. Ahead of the full emit pipeline, the
   *shipped* gfx1151 kernels are now wired into the universal F4 oracle:

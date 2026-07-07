@@ -1,43 +1,225 @@
-"""Workstream C — ROCm gfx1151 plugin: wire the shipped hardware-verified
-gfx1151 kernels into the target-agnostic F4 oracle.
+"""Workstream C3 — ROCm gfx1151 codegen plugin: generic synth → HIP.
 
-Unlike the x86 plugin (which *emits* + compiles C), ROCm's lead kernels are the
-already-shipped, hardware-verified gfx1151 lanes (WMMA GEMM, compiled FA-2
-flash-attention). So this module registers a :class:`KernelRunner` **only** — no
-emitter, no ``compile_fn`` — which lets ROCm's real kernels be gated by the same
-universal F4 correctness oracle as the synthesized backends (the cross-backend
-differential-equivalence superpower, Theory §7.5) *without* claiming a generic
-ROCm emit lane (that is C3). For region kinds ROCm has no single fused GPU kernel
-for yet (matmul+epilogue / gated / pointwise), it declines to the numpy reference
-— honest, never a mislabeled kernel (Decision #21).
+Two lanes under one `target = "rocm"` plugin, both F4-gated on real silicon:
 
-Precision: the flash-attn lane is f16 storage / f32 accumulate, so the runner
-declares an f16 accuracy budget (:attr:`accuracy_atol`); the oracle widens its
-tolerance to it so f16 rounding is not misread as a miscompile, while an O(1)
-miscompile is still caught (Decision #28, the accuracy-budgeted arbiter).
+* **Generic compiled lane (C3)** — a full three seams for the fusable
+  middle ground (`FusedRegion`: matmul + prologue/epilogue/residual/reduction):
+  - :class:`RocmHipEmitter` (`register_emitter`) — region → HIP source (a
+    ``__global__`` one-thread-per-row kernel + a host-pointer C-ABI wrapper),
+    reusing the *same* scalar body as the x86 C lane
+    (`_fused_scalar_body.row_compute_body`) so both stay locked to the
+    `fusion_core` numpy reference.
+  - :func:`_rocm_hip_compile_fn` (`register_compiler`) — `hipcc
+    --offload-arch=<gfx> -O3 -shared` → a `.so` the runtime dlopens.
+  - :meth:`RocmHipRunner.run_fused_region` — H2D / launch / D2H via the shipped
+    lib's host-pointer ABI → `(out, "rocm_hip")`, else the reference.
+* **Shipped hand-tuned lane (Tier 3)** — :meth:`RocmHipRunner.run_fused_attention`
+  runs the shipped compiled FA-2 flash-attn kernel (not generically emitted); the
+  same universal oracle gates it. This is the cross-backend differential-
+  equivalence superpower on the lead's real kernels.
 
-Runs only where a live gfx1151 + the compiled flash lane are present (probed via
-``runtime._rocm_compiled_flash_attn_available``); on any other host it declines
-to the reference, so authoring/tests stay host-free.
+Lead-safety: the generic HIP kernel is a correctness-first candidate for the
+middle ground — crown-jewel WMMA/MFMA GEMM stays first-class (the D1 arbiter
+picks the generic lane only where it measures faster and in budget). Runs only
+where a live gfx1151 + `hipcc` are present; everywhere else it declines to the
+numpy reference so authoring/tests stay host-free.
+
+Precision: the flash lane is f16 storage, so the runner declares an f16
+`accuracy_atol` budget the oracle honors (Decision #28); the generic f32 HIP
+kernel is comfortably within it.
 """
 from __future__ import annotations
 
+import ctypes
+import os
+import shutil
+import subprocess
+import tempfile
 from typing import Any
 
-from tessera.compiler.emit.kernel_emitter import KernelRunner, register_runner
+from tessera.compiler.emit._fused_scalar_body import row_compute_body
+from tessera.compiler.emit.kernel_cache import build, register_compiler
+from tessera.compiler.emit.kernel_emitter import (
+    EmitError,
+    KernelEmitter,
+    KernelSource,
+    KernelRunner,
+    SpecPolicy,
+    bucket_key,
+    register_emitter,
+    register_runner,
+)
+from tessera.compiler.fusion_core import FusedRegion
 
 _TARGET = "rocm"
+_LANG = "hip"
+_ENTRY = "tessera_rocm_fused"
 _REAL_TAG = "rocm_hip"
-#: f16 storage budget for the WMMA / flash lanes vs the f32 reference. Loose
-#: enough for f16 rounding (measured max ~2.5e-3 on the oracle probes), tight
-#: enough that an O(1) miscompile (transpose / wrong softmax / wrong scale) is
-#: still caught.
+#: f16 storage budget for the shipped flash lane vs the f32 reference. Loose
+#: enough for f16 rounding (~2.5e-3 on the oracle probes), tight enough that an
+#: O(1) miscompile is still caught. The generic f32 HIP kernel is well within it.
 _F16_ATOL = 5e-3
+
+
+# ── HIP source synthesis (generic FusedRegion lane) ───────────────────────────
+
+def _synthesize_fused_hip(region: FusedRegion) -> str:
+    """HIP source for a ``FusedRegion`` (f32): a one-thread-per-row kernel embedding
+    the shared scalar body, plus a host-pointer C-ABI wrapper that does H2D /
+    launch / D2H (same shape as the shipped ``libtessera_rocm_gemm.so`` symbols).
+    Dims are runtime args, so one kernel serves every shape."""
+    return (
+        "#include <hip/hip_runtime.h>\n"
+        "#include <math.h>\n"
+        f"__global__ void {_ENTRY}_kernel(const float* A, const float* B,\n"
+        "        const float* bias, const float* residual, float* out,\n"
+        "        int M, int N, int K) {\n"
+        "    int m = blockIdx.x*blockDim.x + threadIdx.x;\n"
+        "    if (m >= M) return;\n"
+        "    float* row = out + (long)m * N;\n"
+        f"{row_compute_body(region)}"
+        "}\n"
+        f'extern "C" int {_ENTRY}(const float* hA, const float* hB,\n'
+        "        const float* hbias, const float* hresidual, float* hout,\n"
+        "        int M, int N, int K) {\n"
+        "    size_t szA=(size_t)M*K*sizeof(float), szB=(size_t)K*N*sizeof(float),\n"
+        "           szO=(size_t)M*N*sizeof(float);\n"
+        "    float *dA=0,*dB=0,*dbias=0,*dres=0,*dO=0;\n"
+        "    if (hipMalloc(&dA,szA)!=hipSuccess) return 2;\n"
+        "    if (hipMalloc(&dB,szB)!=hipSuccess) { hipFree(dA); return 2; }\n"
+        "    if (hipMalloc(&dO,szO)!=hipSuccess) { hipFree(dA); hipFree(dB); return 2; }\n"
+        "    hipMemcpy(dA,hA,szA,hipMemcpyHostToDevice);\n"
+        "    hipMemcpy(dB,hB,szB,hipMemcpyHostToDevice);\n"
+        "    if (hbias) { hipMalloc(&dbias,(size_t)N*sizeof(float));\n"
+        "        hipMemcpy(dbias,hbias,(size_t)N*sizeof(float),hipMemcpyHostToDevice); }\n"
+        "    if (hresidual) { hipMalloc(&dres,szO);\n"
+        "        hipMemcpy(dres,hresidual,szO,hipMemcpyHostToDevice); }\n"
+        "    int t=64, b=(M+t-1)/t;\n"
+        f"    hipLaunchKernelGGL({_ENTRY}_kernel, dim3(b), dim3(t), 0, 0,\n"
+        "        dA,dB,dbias,dres,dO,M,N,K);\n"
+        "    int ok = (hipDeviceSynchronize()==hipSuccess) ? 1 : 3;\n"
+        "    if (ok==1) hipMemcpy(hout,dO,szO,hipMemcpyDeviceToHost);\n"
+        "    hipFree(dA); hipFree(dB); hipFree(dO);\n"
+        "    if (dbias) hipFree(dbias);\n"
+        "    if (dres) hipFree(dres);\n"
+        "    return ok;\n"
+        "}\n"
+    )
+
+
+class RocmHipEmitter(KernelEmitter):
+    target = _TARGET
+    lang = _LANG
+
+    def can_emit(self, region: Any) -> bool:
+        return isinstance(region, FusedRegion)
+
+    def emit(self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET,
+             dtype: str = "f32", dims: tuple[int, ...] | None = None) -> KernelSource:
+        if not isinstance(region, FusedRegion):
+            raise EmitError(
+                f"RocmHipEmitter cannot emit a region of type "
+                f"{type(region).__name__} (only FusedRegion; attention uses the "
+                "shipped flash lane)")
+        if spec is SpecPolicy.DYNAMIC:
+            raise EmitError("RocmHipEmitter does not yet support SpecPolicy.DYNAMIC")
+        if dtype != "f32":
+            raise EmitError(f"RocmHipEmitter only supports f32 so far, got {dtype!r}")
+        source = _synthesize_fused_hip(region)
+        key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
+        return KernelSource(source=source, entry=_ENTRY, lang=self.lang,
+                            spec=spec, shape_key=key)
+
+
+# ── compile_fn (HIP → .so) ────────────────────────────────────────────────────
+
+def _rocm_arch() -> str:
+    """gfx target: ``$TESSERA_ROCM_ARCH`` override, else the live device's chip,
+    else gfx1151 (the Strix Halo default)."""
+    env = os.environ.get("TESSERA_ROCM_ARCH")
+    if env:
+        return env
+    try:
+        from tessera import runtime as rt
+        chip = rt._rocm_chip()
+        if chip:
+            return str(chip)
+    except Exception:
+        pass
+    return "gfx1151"
+
+
+def _rocm_hip_compile_fn(source: KernelSource) -> str:
+    """Compile the emitted HIP to a shared object with hipcc and return its path.
+    Raises on a missing toolchain/compile failure; ``build`` wraps in
+    ``CompileError`` (never a silent no-op)."""
+    hipcc = shutil.which("hipcc") or "/opt/rocm/bin/hipcc"
+    d = tempfile.mkdtemp(prefix="tessera_rocm_")
+    src = os.path.join(d, "kernel.hip")
+    so = os.path.join(d, "kernel.so")
+    with open(src, "w") as f:
+        f.write(source.source)
+    subprocess.run(
+        [hipcc, f"--offload-arch={_rocm_arch()}", "-O3", "-fPIC", "-shared",
+         src, "-o", so],
+        check=True, capture_output=True, text=True)
+    return so
+
+
+# ── runner (execute → (out, tag)) ─────────────────────────────────────────────
+
+_LIB_CACHE: dict[str, Any] = {}
+
+
+def _load_entry(artifact: str):
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    fn = getattr(lib, _ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 3
+    return fn
+
+
+def _ptr(arr):
+    return arr.ctypes.data_as(ctypes.c_void_p) if arr is not None else None
 
 
 class RocmHipRunner(KernelRunner):
     target = _TARGET
     accuracy_atol = _F16_ATOL
+
+    def run_fused_region(self, region: Any, A: Any, B: Any, bias: Any = None,
+                         *args: Any, residual: Any = None,
+                         **kwargs: Any) -> tuple[Any, str]:
+        import numpy as np
+        # Required-buffer guard BEFORE launch: the emitted HIP dereferences
+        # bias[n] / residual[...] whenever the region declares them, so a missing
+        # buffer would pass a null the kernel derefs. Route ill-formed calls
+        # through the reference (a clean, catchable ValueError) instead.
+        if (region.has_bias and bias is None) or \
+                (region.has_residual and residual is None):
+            return region.reference(A, B, bias, residual), "reference"
+        try:
+            Af = np.ascontiguousarray(A, np.float32)
+            Bf = np.ascontiguousarray(B, np.float32)
+            M, K = Af.shape
+            _, N = Bf.shape
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_entry(compiled.artifact)
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if bias is not None else None)
+            res_arr = (np.ascontiguousarray(residual, np.float32)
+                       if residual is not None else None)
+            out = np.zeros((M, N), np.float32)
+            rc = fn(_ptr(Af), _ptr(Bf), _ptr(bias_arr), _ptr(res_arr),
+                    _ptr(out), M, N, K)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
+        return region.reference(A, B, bias, residual), "reference"
 
     def run_fused_attention(self, region: Any, Q: Any, K: Any, V: Any,
                             *a: Any, **k: Any) -> tuple[Any, str]:
@@ -61,13 +243,7 @@ class RocmHipRunner(KernelRunner):
         except Exception:
             return region.reference(Q, K, V), "reference"
 
-    # No single fused GPU kernel for these yet (that is the C3 emit lane) —
-    # decline honestly to the numpy reference.
-    def run_fused_region(self, region: Any, A: Any, B: Any, bias: Any = None,
-                         *a: Any, residual: Any = None,
-                         **k: Any) -> tuple[Any, str]:
-        return region.reference(A, B, bias, residual), "reference"
-
+    # No single fused GPU kernel for these yet — decline to the numpy reference.
     def run_gated_matmul_region(self, region: Any, A: Any, Wg: Any, Wu: Any,
                                 *a: Any, **k: Any) -> tuple[Any, str]:
         return region.reference(A, Wg, Wu), "reference"
@@ -77,6 +253,7 @@ class RocmHipRunner(KernelRunner):
         return region.reference(*arrays), "reference"
 
 
-# Runner only (no emitter/compile_fn — ROCm's kernels are shipped, not
-# synthesized here). default=False so Apple stays the active default runner.
+# ── registration ──────────────────────────────────────────────────────────────
+register_emitter(RocmHipEmitter())
+register_compiler(_TARGET, _rocm_hip_compile_fn)
 register_runner(RocmHipRunner(), default=False)

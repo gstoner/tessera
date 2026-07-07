@@ -134,6 +134,34 @@ int main(int argc, char** argv) {
   for (int i=0;i<M*N;i++){ float d=std::fabs(D[i]-ref[i]); if(d>maxerr) maxerr=d; }
   if (maxerr > 1e-2f) { std::fprintf(stderr,"mma.sync maxerr=%g too high\n", maxerr); return 12; }
 
+  // ---- general aligned mma.sync GEMM (K-loop + grid-tiled), PTX from argv[2] ----
+  // A multi-tile, multi-K-iteration shape (32x16x32) through the SAME seam, proving
+  // the C2-tail-breadth emitter beyond the single 16x8x16 tile.
+  {
+    std::string gptx;
+    if (argc < 3 || !read_file(argv[2], gptx)) return 16;
+    if (tessera_nvidia_ptx_register("tessera_mma_gemm_bf16", gptx.c_str()) != 0) return 17;
+    const int M2=32, N2=16, K2=32;
+    std::vector<unsigned short> gA(M2*K2), gB(K2*N2);
+    std::vector<float> gD(M2*N2, 0.0f), gref(M2*N2), gfA(M2*K2), gfB(K2*N2);
+    for (int i=0;i<M2*K2;i++){ float v=(((i*29+5)%201)-100)/100.0f; gA[i]=f2bf16(v); gfA[i]=bf162f(gA[i]); }
+    for (int i=0;i<K2*N2;i++){ float v=(((i*41+3)%201)-100)/100.0f; gB[i]=f2bf16(v); gfB[i]=bf162f(gB[i]); }
+    for (int m=0;m<M2;m++) for (int n=0;n<N2;n++){
+      float a=0; for(int kk=0;kk<K2;kk++) a += gfA[m*K2+kk]*gfB[kk + n*K2];  // B col-major
+      gref[m*N2+n]=a;
+    }
+    tsrArtifact ga=nullptr; if (tsrCompileArtifact("tessera_mma_gemm_bf16",&opt,&ga)!=TSR_STATUS_SUCCESS) return 18;
+    tsrKernel gk=nullptr;   if (tsrGetKernel(ga,"tessera_mma_gemm_bf16",&gk)!=TSR_STATUS_SUCCESS) return 19;
+    void* gbufs[3]={gA.data(),gB.data(),gD.data()};
+    int64_t gdims[3]={M2,N2,K2};
+    tsrGpuLaunchParams gp{}; gp.buffers=gbufs; gp.num_buffers=3; gp.dims=gdims; gp.num_dims=3;
+    void* gargs[1]={&gp};
+    if (tsrLaunchKernel(s,gk,gargs,1)!=TSR_STATUS_SUCCESS) return 20;
+    float gmax=0.0f; for (int i=0;i<M2*N2;i++){ float d=std::fabs(gD[i]-gref[i]); if(d>gmax)gmax=d; }
+    if (gmax > 1e-2f) { std::fprintf(stderr,"general GEMM maxerr=%g\n",gmax); return 21; }
+    tsrDestroyKernel(gk); tsrDestroyArtifact(ga);
+  }
+
   // Negative: unregistered kernel still reports UNIMPLEMENTED.
   tsrArtifact art2=nullptr;
   if (tsrCompileArtifact("not_a_real_kernel", &opt, &art2)!=TSR_STATUS_SUCCESS) return 13;
@@ -157,11 +185,16 @@ def test_nvidia_mma_sync_gemm_executes_and_compares_through_bridge(tmp_path):
     if not RUNTIME_LIB.is_file():
         pytest.skip("build libtessera_runtime.a (ninja -C build tessera_runtime)")
 
-    # The kernel under test IS Tessera's emitted PTX — the whole point.
+    # The kernels under test ARE Tessera's emitted PTX — the whole point.
     ptx = P.emit_mma_sync_matmul_ptx()
     assert P.validate_mma_sync_ptx_structure(ptx) == []
     ptx_path = tmp_path / "tessera_mma.ptx"
     ptx_path.write_text(ptx)
+    # The general aligned-M/N/K GEMM (C2-tail breadth), passed as argv[2].
+    gptx = P.emit_mma_sync_gemm_ptx(dtype="bf16")
+    assert P.validate_mma_sync_gemm_ptx_structure(gptx) == []
+    gptx_path = tmp_path / "tessera_mma_gemm.ptx"
+    gptx_path.write_text(gptx)
 
     cuda_root = Path(nvcc).resolve().parents[1]
     stubs = cuda_root / "lib64" / "stubs"
@@ -200,7 +233,7 @@ def test_nvidia_mma_sync_gemm_executes_and_compares_through_bridge(tmp_path):
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = os.pathsep.join(
         run_libdirs + [env.get("LD_LIBRARY_PATH", "")]).strip(os.pathsep)
-    r = subprocess.run([str(binp), str(ptx_path)],
+    r = subprocess.run([str(binp), str(ptx_path), str(gptx_path)],
                        capture_output=True, text=True, timeout=120, env=env)
     out = r.stdout.strip()
     if out == "SKIP_NO_DEVICE":

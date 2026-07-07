@@ -120,3 +120,47 @@ def test_mma_sync_ptx_assembles_for_sm120a():
     skeleton). Runs only where ptxas is present (the NVIDIA box / CI)."""
     res = P.ptxas_assemble(P.emit_mma_sync_matmul_ptx(), arch="sm_120a")
     assert res.assembled, f"ptxas rejected the emitted mma.sync kernel: {res.detail}"
+
+
+# ── general aligned-M/N/K mma.sync GEMM (C2-tail breadth) ─────────────────────
+
+def test_mma_sync_gemm_emits_clean_for_bf16_and_f16():
+    for dt in ("bf16", "f16"):
+        ptx = P.emit_mma_sync_gemm_ptx(dtype=dt)
+        assert P.validate_mma_sync_gemm_ptx_structure(ptx) == [], dt
+        assert f".f32.{dt}.{dt}.f32" in ptx           # dtype in the mma mnemonic
+        assert ".param .u32 p_K" in ptx               # runtime shape params
+        assert "bra $Lk_" in ptx                      # the K-accumulation loop
+        assert ptx.isascii()
+
+
+def test_mma_sync_gemm_emit_is_deterministic():
+    assert P.emit_mma_sync_gemm_ptx(dtype="bf16") == P.emit_mma_sync_gemm_ptx(dtype="bf16")
+
+
+def test_mma_sync_gemm_rejects_non_16bit_dtype():
+    with pytest.raises(ValueError, match="bf16/f16"):
+        P.emit_mma_sync_gemm_ptx(dtype="tf32")
+
+
+def test_mma_sync_gemm_shape_predicate_requires_aligned_tiles():
+    assert P.is_valid_mma_sync_gemm_shape(64, 64, 64)
+    assert P.is_valid_mma_sync_gemm_shape(128, 8, 16)
+    assert not P.is_valid_mma_sync_gemm_shape(17, 8, 16)      # M not %16
+    assert not P.is_valid_mma_sync_gemm_shape(16, 7, 16)      # N not %8
+    assert not P.is_valid_mma_sync_gemm_shape(16, 8, 17)      # K not %16
+    assert not P.is_valid_mma_sync_gemm_shape(0, 8, 16)
+
+
+def test_mma_sync_gemm_validator_catches_missing_loop():
+    ptx = P.emit_mma_sync_gemm_ptx(dtype="bf16").replace("setp.lt.s32", "setp.eq.s32")
+    assert any("K-accumulation loop" in p
+               for p in P.validate_mma_sync_gemm_ptx_structure(ptx))
+
+
+@pytest.mark.skipif(shutil.which("ptxas") is None, reason="ptxas not on PATH")
+def test_mma_sync_gemm_ptx_assembles_for_sm120a():
+    """Rung 3 — the general aligned-M/N/K GEMM assembles for both 16-bit dtypes."""
+    for dt in ("bf16", "f16"):
+        res = P.ptxas_assemble(P.emit_mma_sync_gemm_ptx(dtype=dt), arch="sm_120a")
+        assert res.assembled, f"ptxas rejected the {dt} GEMM: {res.detail}"

@@ -484,6 +484,130 @@ def validate_mma_sync_gemm_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> 
     return problems
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NVFP4 block-scale matmul (spike #9 productized to emit+assemble) — the warp
+# ``mma.sync…m16n8k64…kind::mxf4nvf4.block_scale`` on sm_120a: fp4 (e2m1) A/B
+# operands with per-block ue4m3 scale factors, f32 accumulate. The instruction
+# encoding + a UNIT-scale data path are proven in
+# ``docs/audit/backend/nvidia/spikes/sm120_mma_sync/nvfp4_gemm.cu``. This emits
+# the complete kernel and (rung 3) assembles it with ptxas; on-device *execution*
+# and NON-unit scale numerics remain gated on the PTX-ISA scale-distribution spec
+# (NVIDIA_AUDIT "Still Open"), so this is deliberately emit+assemble only — the fp4
+# fragment packing + numpy reference is not wired into the launch bridge yet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Entry name for the sm_120a NVFP4 block-scale m16n8k64 tile.
+TESSERA_NVFP4_MMA_ENTRY = "tessera_nvfp4_mma_m16n8k64"
+
+#: The documented warp NVFP4 block-scale MMA mnemonic (per the proven spike).
+NVFP4_MMA_MNEMONIC = (
+    "mma.sync.aligned.m16n8k64.row.col.kind::mxf4nvf4.block_scale.scale_vec::4X."
+    "f32.e2m1.e2m1.f32.ue4m3"
+)
+
+
+def emit_nvfp4_block_scale_mma_ptx(
+    *, arch: str = "sm_120a", entry: str = TESSERA_NVFP4_MMA_ENTRY
+) -> str:
+    """Emit a COMPLETE, assemblable sm_120a NVFP4 block-scale ``mma.sync`` kernel
+    (one warp, m16n8k64): D[16x8] f32 = A[16x64] · B[64x8], fp4 e2m1 operands with
+    per-lane ue4m3 block-scale selectors, f32 accumulate — the PTX of the proven
+    spike (unit-scale data path). Per-lane fragments: A = 4x`.b32`, B = 2x`.b32`,
+    scale-A/B = 1x`.b32`; the scale byte/thread selectors are `{0,0}` immediates.
+    Assemble-verifiable (rung 3) here; on-device execution + non-unit numerics stay
+    gated on the PTX-ISA scale spec (so this is emit+assemble, not launch)."""
+    return f""".version {PTX_ISA_VERSION}
+.target {arch}
+.address_size 64
+
+// Tessera sm_120a NVFP4 block-scale matmul (m16n8k64) -- complete, assemblable.
+// One warp: D[16x8] f32 = A[16x64] e2m1 * B[64x8] e2m1, ue4m3 per-block scales.
+// Emit+assemble productization of spikes/sm120_mma_sync/nvfp4_gemm.cu.
+.visible .entry {entry}(
+    .param .u64 p_A,
+    .param .u64 p_B,
+    .param .u64 p_SFa,
+    .param .u64 p_SFb,
+    .param .u64 p_D
+)
+{{
+    .reg .b32  %a0,%a1,%a2,%a3,%b0,%b1,%sfa,%sfb;
+    .reg .b32  %lane,%idx;
+    .reg .f32  %d0,%d1,%d2,%d3;
+    .reg .b64  %A,%B,%SFa,%SFb,%D,%off,%addr;
+
+    ld.param.u64 %A,   [p_A];   cvta.to.global.u64 %A,   %A;
+    ld.param.u64 %B,   [p_B];   cvta.to.global.u64 %B,   %B;
+    ld.param.u64 %SFa, [p_SFa]; cvta.to.global.u64 %SFa, %SFa;
+    ld.param.u64 %SFb, [p_SFb]; cvta.to.global.u64 %SFb, %SFb;
+    ld.param.u64 %D,   [p_D];   cvta.to.global.u64 %D,   %D;
+
+    mov.u32 %lane, %tid.x;
+
+    // A fragment: 4 x .b32 at A[lane*4 + 0..3]
+    mul.lo.s32 %idx, %lane, 4;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %A, %off;  ld.global.b32 %a0, [%addr];
+    ld.global.b32 %a1, [%addr+4];
+    ld.global.b32 %a2, [%addr+8];
+    ld.global.b32 %a3, [%addr+12];
+
+    // B fragment: 2 x .b32 at B[lane*2 + 0..1]
+    mul.lo.s32 %idx, %lane, 2;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %B, %off;  ld.global.b32 %b0, [%addr];
+    ld.global.b32 %b1, [%addr+4];
+
+    // scale selectors: 1 x .b32 each at SF*[lane]
+    mul.wide.s32 %off, %lane, 4;
+    add.s64 %addr, %SFa, %off;  ld.global.b32 %sfa, [%addr];
+    add.s64 %addr, %SFb, %off;  ld.global.b32 %sfb, [%addr];
+
+    mov.f32 %d0, 0f00000000;
+    mov.f32 %d1, 0f00000000;
+    mov.f32 %d2, 0f00000000;
+    mov.f32 %d3, 0f00000000;
+
+    {NVFP4_MMA_MNEMONIC}
+        {{%d0,%d1,%d2,%d3}}, {{%a0,%a1,%a2,%a3}}, {{%b0,%b1}}, {{%d0,%d1,%d2,%d3}},
+        {{%sfa}}, {{0, 0}}, {{%sfb}}, {{0, 0}};
+
+    // D store: 4 x f32 at D[lane*4 + 0..3]
+    mul.lo.s32 %idx, %lane, 4;
+    mul.wide.s32 %off, %idx, 4;  add.s64 %addr, %D, %off;  st.global.f32 [%addr], %d0;
+    st.global.f32 [%addr+4],  %d1;
+    st.global.f32 [%addr+8],  %d2;
+    st.global.f32 [%addr+12], %d3;
+
+    ret;
+}}
+"""
+
+
+def validate_nvfp4_ptx_structure(ptx: str, *, arch: str = "sm_120a") -> list[str]:
+    """Structural validation of the emitted NVFP4 block-scale kernel (no toolchain).
+    Empty list = well-formed: the block-scale mma, the 5 pointer params, the fp4
+    fragment loads, and the f32 store."""
+    problems: list[str] = []
+    if f".version {PTX_ISA_VERSION}" not in ptx:
+        problems.append(f"missing `.version {PTX_ISA_VERSION}` directive")
+    if f".target {arch}" not in ptx:
+        problems.append(f"missing `.target {arch}` directive")
+    if "kind::mxf4nvf4.block_scale" not in ptx:
+        problems.append("no NVFP4 block-scale mma emitted")
+    if ".param .u64 p_SFa" not in ptx or ".param .u64 p_SFb" not in ptx:
+        problems.append("missing the two block-scale factor params (SFa/SFb)")
+    if "ld.global.b32" not in ptx:
+        problems.append("no fp4 fragment loads emitted")
+    if "st.global.f32" not in ptx:
+        problems.append("no f32 result stores emitted")
+    if not ptx.isascii():
+        problems.append("PTX contains non-ASCII bytes (driver JIT ptxas rejects these)")
+    if ptx.count("{") != ptx.count("}"):
+        problems.append("unbalanced braces")
+    if "ret;" not in ptx:
+        problems.append("kernel does not return (`ret;` missing)")
+    return problems
+
+
 @dataclass(frozen=True)
 class AssembleResult:
     """Outcome of a real ``ptxas`` assembly attempt (rung 3)."""

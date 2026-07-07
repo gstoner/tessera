@@ -164,3 +164,28 @@ def test_mma_sync_gemm_ptx_assembles_for_sm120a():
     for dt in ("bf16", "f16"):
         res = P.ptxas_assemble(P.emit_mma_sync_gemm_ptx(dtype=dt), arch="sm_120a")
         assert res.assembled, f"ptxas rejected the {dt} GEMM: {res.detail}"
+
+
+# ── NVFP4 block-scale mma (emit + assemble; execution/numerics still gated) ────
+
+def test_nvfp4_emits_clean_with_block_scale_and_scale_params():
+    ptx = P.emit_nvfp4_block_scale_mma_ptx()
+    assert P.validate_nvfp4_ptx_structure(ptx) == []
+    assert "kind::mxf4nvf4.block_scale.scale_vec::4X" in ptx
+    assert ".param .u64 p_SFa" in ptx and ".param .u64 p_SFb" in ptx
+    assert ptx.isascii()
+
+
+def test_nvfp4_validator_catches_missing_scale_params():
+    ptx = P.emit_nvfp4_block_scale_mma_ptx().replace(".param .u64 p_SFa,\n", "")
+    assert any("block-scale factor params" in p
+               for p in P.validate_nvfp4_ptx_structure(ptx))
+
+
+@pytest.mark.skipif(shutil.which("ptxas") is None, reason="ptxas not on PATH")
+def test_nvfp4_block_scale_ptx_assembles_for_sm120a():
+    """Rung 3 — the NVFP4 block-scale kernel assembles on sm_120a (the encoding is
+    productized). On-device execution + non-unit-scale numerics stay gated on the
+    PTX-ISA scale-distribution spec, so this proves assembly, not launch."""
+    res = P.ptxas_assemble(P.emit_nvfp4_block_scale_mma_ptx(), arch="sm_120a")
+    assert res.assembled, f"ptxas rejected the NVFP4 block-scale kernel: {res.detail}"

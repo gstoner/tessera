@@ -294,13 +294,26 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   `tsrLaunchKernel` seam. **Live-proven on sm_120** (RTX 5070 Ti): the emitted
   `mma.sync m16n8k16` bf16 GEMM runs on-GPU and matches the numpy oracle (max err
   ~2.4e-7), the module cache reuses, and an unregistered kernel declines honestly.
-  **Still open:** the emitter is **bf16-only, single-tile (m16n8k16)** — broadening
-  shapes/dtypes, the `wgmma` sm_90a path (whose emit currently fails `ptxas` assembly —
-  a latent `emit_wgmma_matmul_ptx` defect, no Hopper needed to fix), sm_100 tcgen05,
-  and wiring this as a **Tier-2 EMITTED** arbiter candidate (blocked on a bare-matmul
-  op-kind — the candidate registry has no matmul op today, only fused_region/attention/
-  gated/pointwise). Unlike C3, NVIDIA has no *fused* shipped kernel to register as a
-  Tier-3 `FusedRegion` candidate yet (the shipped kernel is a pure GEMM served by the
+  **Emit breadth landed 2026-07-07:** `emit_mma_sync_gemm_ptx(dtype=bf16|f16)` now
+  emits a general **aligned-M/N/K** kernel (K-loop + grid-tiled over 16x8 tiles,
+  runtime M/N/K params); the bridge grows a general-GEMM ABI (`invokeMmaGemm16`).
+  ptxas-assembled + execute-compared on sm_120 through the `tsrLaunchKernel` seam
+  (32x16x32 multi-tile/multi-K) and a numpy sweep (~1e-7 rel). **NVFP4 block-scale**
+  (`emit_nvfp4_block_scale_mma_ptx`, `mma.sync…m16n8k64…kind::mxf4nvf4.block_scale`)
+  is productized to **emit + ptxas-assemble** on sm_120a (unit-scale data path proven
+  in `spikes/`); on-device execution + non-unit-scale numerics stay gated on the
+  PTX-ISA scale-distribution spec.
+  **Still open:** **ragged (unaligned) M/N/K** (need boundary predication), **tf32**
+  (m16n8k8) / **fp8** (m16n8k32) fragment layouts; the **`wgmma` sm_90a** path is a
+  documented *instruction-encoding skeleton* (`emit_wgmma_matmul_ptx` — its own header
+  says "NOT a complete assemblable kernel: needs smem matrix descriptors + TMA/cp.async
+  + the full accumulator operand list"), so completing it is a real Hopper WGMMA-kernel
+  build (assemble-only here; execution needs Hopper) — **not** a bug fix; sm_100
+  tcgen05; and wiring the emit lane as a **Tier-2 EMITTED** arbiter candidate (blocked
+  on a bare-matmul op-kind — the candidate registry has no matmul op today, only
+  fused_region/attention/gated/pointwise). Unlike C3, NVIDIA has no *fused* shipped
+  kernel to register as a Tier-3 `FusedRegion` candidate yet (the shipped kernel is a
+  pure GEMM served by the
   jit `nvidia_mma` executor).
 - **C3 · ROCm generic synth → HIP** — **generic lane LANDED 2026-07-06**, `[MAC]`
   author → `[AMD]` proof. `emit/rocm_hip.py` is now a **full three-seam plugin**

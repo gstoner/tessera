@@ -2000,6 +2000,42 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     return D
 
 
+_nvidia_device_name_probe: Any = False       # False = unprobed; None/str after
+
+
+def _nvidia_device_name() -> str | None:
+    """Best-effort stable per-device tag (``"sm_<cc>"``, e.g. ``"sm_120"``) for
+    autotune-cache keying — so a config measured on one device is never reused on
+    another. Cached; returns None (never raises) with no usable CUDA driver."""
+    global _nvidia_device_name_probe
+    if _nvidia_device_name_probe is not False:
+        return _nvidia_device_name_probe
+    _nvidia_device_name_probe = None
+    try:
+        cu = None
+        for cand in ("libcuda.so.1", "libcuda.so"):
+            try:
+                cu = ctypes.CDLL(cand)
+                break
+            except OSError:
+                continue
+        if cu is None:
+            return None
+        if cu.cuInit(0) != 0:
+            return None
+        dev = ctypes.c_int(0)
+        if cu.cuDeviceGet(ctypes.byref(dev), 0) != 0:
+            return None
+        major, minor = ctypes.c_int(), ctypes.c_int()
+        # CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_{MAJOR,MINOR} = 75, 76
+        cu.cuDeviceGetAttribute(ctypes.byref(major), 75, dev)
+        cu.cuDeviceGetAttribute(ctypes.byref(minor), 76, dev)
+        _nvidia_device_name_probe = f"sm_{major.value}{minor.value}"
+    except Exception:
+        _nvidia_device_name_probe = None
+    return _nvidia_device_name_probe
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage L4 — the COMPILED GEMM lane (the default rocm matmul execution path).
 #

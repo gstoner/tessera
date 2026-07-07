@@ -262,3 +262,50 @@ def test_live_nvidia_matmul_arbitrated(dtype, shape):
                                   force="nvidia_mma_gemm_emitted")
     assert tag2 == "nvidia_ptx_gemm"                         # Tier-2, forced (E3)
     np.testing.assert_allclose(out2, ref, atol=5e-3, rtol=0)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_matmul_live(),
+                    reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
+def test_live_nvidia_matmul_measured_autotune():
+    # D2: measured_arbitrate times BOTH GEMM lanes on-device and caches the winner
+    # by (device, target, op, bucket, dtype) — measure-at-first-miss.
+    from tessera.compiler.emit import autotune as AT
+    F.clear_verification_cache()
+    region = F.MatmulRegion(dtype="bfloat16")
+    rng = np.random.default_rng(0)
+    A = (rng.standard_normal((64, 64)) * 0.4).astype(np.float32)
+    B = (rng.standard_normal((64, 64)) * 0.4).astype(np.float32)
+    cache = AT.MeasureCache()
+    win = AT.measured_arbitrate(region, OP_MATMUL, "nvidia", A, B,
+                                dims=(64, 64, 64), dtype="bfloat16",
+                                cache=cache, reps=6, warmup=2)
+    assert win is not None and win.name in (
+        "nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted")
+    assert cache.misses == 1 and cache.size == 1
+    rec = next(iter(cache.to_dict().values()))
+    assert set(rec.candidates) == {"nvidia_mma_gemm_shipped", "nvidia_mma_gemm_emitted"}
+    AT.measured_arbitrate(region, OP_MATMUL, "nvidia", A, B, dims=(64, 64, 64),
+                          dtype="bfloat16", cache=cache, reps=6, warmup=2)
+    assert cache.hits == 1                                   # re-query hits the cache
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_matmul_live(),
+                    reason="live NVIDIA GPU + shipped GEMM + PTX launch bridge required")
+def test_live_nvidia_emitted_ragged_degrade_is_logged():
+    # D3: force the emitted lane on a RAGGED shape it verifies (on the aligned
+    # probe) but cannot run — it declines to the reference at execution time, which
+    # the arbiter log records as a silent degrade (selected != reference tag).
+    F.clear_verification_cache()
+    region = F.MatmulRegion(dtype="bfloat16")
+    rng = np.random.default_rng(0)
+    A = (rng.standard_normal((24, 16)) * 0.4).astype(np.float32)   # M=24 not %16
+    B = (rng.standard_normal((16, 8)) * 0.4).astype(np.float32)
+    C.reset_arbiter_dispatch_log()
+    out, tag = C.run_arbitrated(region, OP_MATMUL, "nvidia", A, B,
+                                force="nvidia_mma_gemm_emitted")
+    assert tag == "reference"                                # declined (ragged)
+    np.testing.assert_allclose(out, region.reference(A, B), atol=5e-3)
+    hist = C.arbiter_dispatch_histogram(target="nvidia", op=OP_MATMUL)
+    assert hist[("nvidia", OP_MATMUL)]["degraded"] == 1

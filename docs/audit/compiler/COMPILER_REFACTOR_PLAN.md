@@ -80,7 +80,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
 | **6** | D1 candidate registry + F4-gate + tier-priority arbiter + `force` (E3) | ✅ (`emit/candidate.py`) | ✅ gfx1151 enumerate+select | — |
-| **6** | D2 measured autotune loop · D3 fallback log | ⬜ | ⬜ | ⬜ |
+| **6** | D2 measured autotune loop · D3 fallback log | ✅ (`emit/autotune.py` + arbiter log) | ⬜ | ✅ sm_120 (matmul measure+cache) |
 
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
 *lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
@@ -376,13 +376,26 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   (generic C / AOCL-DLP). **Still open:** the shape-bucket key on selection (today
   keyed per `(target, op)`; `bucket_key` exists and threads in when D2 lands) and
   generalizing Apple's `select_variant` + `best_record` into it.
-- **D2 · Measured autotune loop** — `[AMD]` on gfx1151, `[NV]` on sm_120 run
-  live; CDNA/sm_90/sm_100 fall back to analytical roofline + `MmaDescriptor` cost
-  model until silicon. Measure-at-first-miss + cache keyed by
-  `device+shape-bucket+accuracy-margin`.
-- **D3 · Fallback log everywhere** `[MAC]` — generalize
-  `dispatch_fallback_log`/`fallback_histogram` so "did the compiled path win or
-  silently degrade?" is answerable per backend.
+- **D2 · Measured autotune loop** — **core landed 2026-07-07** (`emit/autotune.py`).
+  `measured_arbitrate()` layers on the D1 arbiter's `measure` seam: it F4-gates the
+  candidates, times each survivor on-device (`measure_latency`, median of N after
+  warmup), and caches the fastest in a `MeasureCache` keyed by `(device, target, op,
+  shape-bucket, dtype)` — **measure-at-first-miss** (a re-query hits the cache, no
+  re-timing). Lead-safety holds: only in-budget F4-passing candidates are timed, so a
+  faster-but-wrong kernel can't win. **Live on sm_120** (RTX 5070 Ti): times the
+  shipped vs emitted GEMM lanes and caches the winner per bucket
+  (`test_nvidia_plugin.py`); `_nvidia_device_name()` supplies the `sm_<cc>` device
+  tag. **Still open:** persisting the cache as the committed *fleet-shared autotune
+  corpus* (Theory §7.5 — hangs off `MeasureCache.to_dict`); `[AMD]` gfx1151 wiring;
+  CDNA/sm_90/sm_100 analytical-roofline + `MmaDescriptor` fallback until silicon.
+- **D3 · Fallback log everywhere** — **landed 2026-07-07.** The arbiter records every
+  dispatch as `(target, op, selected, tag)` (`candidate._note_arbiter_dispatch`, wired
+  into `run_arbitrated` + `run_measured_arbitrated`); `arbiter_dispatch_histogram()`
+  answers **"did the compiled path win, silently degrade, or was there no candidate?"**
+  per `(target, op)` — a selection that ran but returned a reference tag is the silent
+  degrade (the arbiter-layer analog of `runtime.dispatch_fallback_log`). Proven both
+  host-free and live (the emitted lane forced on a ragged shape it can't run logs a
+  `degraded`).
 
 ### Workstream E — Regression guardrails (continuous, not last)
 

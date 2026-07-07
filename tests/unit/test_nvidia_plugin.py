@@ -2,17 +2,15 @@
 
 Two layers:
 
-1. **Registration + emit + decline paths (host-free)** — a full three-seam plugin
-   for target "nvidia": the emitter turns a FusedRegion into CUDA source;
-   attention / gated / pointwise regions (no fused CUDA kernel yet) decline to the
-   numpy reference; unsupported regions/policies/dtypes raise EmitError.
-2. **Live gate (needs a live NVIDIA GPU + nvcc)** — the generically-synthesized
-   CUDA FusedRegion kernel compiles with nvcc, runs on-device ("nvidia_cuda"),
-   matches numpy (f32), and passes the same universal F4 oracle as ROCm/x86.
-
-The generic CUDA lane is the Tier-1 candidate; NVIDIA has no fused hand-tuned
-FusedRegion kernel to register as Tier-3 yet (the shipped mma.sync GEMM is a pure
-matmul, served by the jit nvidia_mma executor).
+1. **Registration + emit paths (host-free)** — a full three-seam plugin for
+   target "nvidia": the emitter turns fused / attention / gated / pointwise regions
+   into CUDA source; unsupported regions/policies/dtypes raise EmitError.
+2. **Live gates (needs a live NVIDIA GPU + nvcc)** — the generically-synthesized
+   CUDA kernels compile with nvcc, run on-device ("nvidia_cuda"), match numpy, and
+   pass the same universal F4 oracle as ROCm/x86. The generic lane covers all four
+   fusion_core region kinds (FusedRegion, AttentionRegion — C4, GatedMatmulRegion +
+   PointwiseGraphRegion — C5); bare GEMM is served by the B1 matmul candidates
+   (shipped + emitted mma.sync).
 """
 from __future__ import annotations
 
@@ -70,22 +68,28 @@ def test_nvidia_emit_is_deterministic():
 def test_nvidia_emitter_rejects_unsupported():
     e = get_emitter("nvidia")
     with pytest.raises(EmitError, match="cannot emit"):
-        e.emit(F.GatedMatmulRegion())              # FusedRegion/AttentionRegion only
+        e.emit(F.MatmulRegion())                   # bare GEMM → the GEMM candidates
     with pytest.raises(EmitError, match="DYNAMIC"):
         e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
     with pytest.raises(EmitError, match="f32"):
         e.emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
 
 
-def test_nvidia_declines_gated_and_pointwise():
-    # No single fused CUDA kernel for gated / pointwise yet — always the reference.
-    # (Attention IS implemented — the flash lane; see the C4 tests below.)
-    r = get_runner("nvidia")
-    A = np.zeros((8, 12), np.float32)
-    _, ex = r.run_gated_matmul_region(F.GatedMatmulRegion(),
-                                      A, np.zeros((12, 16), np.float32),
-                                      np.zeros((12, 16), np.float32))
-    assert ex == "reference"
+def test_nvidia_c5_candidates_registered_and_emit():
+    # C5: the generic lane now covers gated (SwiGLU) + pointwise-DAG region kinds
+    # too — Tier-1 candidates + emitter support (attention landed in C4).
+    from tessera.compiler.emit.candidate import OP_GATED_MATMUL, OP_POINTWISE
+    gated = {c.name for c in C.candidates_for("nvidia", OP_GATED_MATMUL)}
+    pw = {c.name for c in C.candidates_for("nvidia", OP_POINTWISE)}
+    assert "nvidia_gated" in gated and "nvidia_pointwise" in pw
+    e = get_emitter("nvidia")
+    gsrc = e.emit(F.GatedMatmulRegion(gate_act="silu")).source
+    assert "tessera_nvidia_gated" in gsrc and "<<<" in gsrc
+    region = F.PointwiseGraphRegion(
+        ops=(("add", ("a", "b"), "s"), ("relu", ("s",), "o")),
+        inputs=("a", "b"), output="o")
+    psrc = e.emit(region).source
+    assert "tessera_nvidia_pointwise" in psrc and "sign" in psrc   # sign shim
 
 
 def test_nvidia_flash_attn_candidate_registered_and_emits():
@@ -359,3 +363,81 @@ def test_live_nvidia_flash_attention(scale, causal, shape):
     aout, atag = C.run_arbitrated(region, OP_ATTENTION, "nvidia", Q, K, V)
     assert atag == "nvidia_cuda"
     np.testing.assert_allclose(aout, region.reference(Q, K, V), atol=1e-4)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize("act", ["silu", "gelu", "relu"])
+def test_live_nvidia_gated_swiglu(act):
+    # C5: the synthesized SwiGLU-gate lane executes on-GPU and matches.
+    F.clear_verification_cache()
+    region = F.GatedMatmulRegion(gate_act=act)
+    rng = np.random.default_rng(hash(act) % 1000)
+    A = rng.standard_normal((16, 32)).astype(np.float32)
+    Wg = rng.standard_normal((32, 24)).astype(np.float32)
+    Wu = rng.standard_normal((32, 24)).astype(np.float32)
+    out, tag = get_runner("nvidia").run_gated_matmul_region(region, A, Wg, Wu)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(A, Wg, Wu), atol=1e-3)
+    assert F.verify_synthesized_gated(region, runner=get_runner("nvidia"),
+                                      force=True) is True
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_pointwise_dag():
+    # C5: the synthesized pointwise-DAG lane — d = relu(a+b) * sigmoid(c) — runs
+    # on-GPU (from the POINTWISE_OPS C-expr table) and matches.
+    F.clear_verification_cache()
+    region = F.PointwiseGraphRegion(
+        ops=(("add", ("a", "b"), "s"), ("relu", ("s",), "ra"),
+             ("sigmoid", ("c",), "sc"), ("mul", ("ra", "sc"), "o")),
+        inputs=("a", "b", "c"), output="o")
+    rng = np.random.default_rng(0)
+    arrs = [rng.standard_normal((6, 7)).astype(np.float32) for _ in range(3)]
+    out, tag = get_runner("nvidia").run_pointwise_graph(region, arrs)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(*arrs), atol=1e-5)
+    assert F.verify_synthesized_pointwise(region, runner=get_runner("nvidia"),
+                                          force=True) is True
+
+
+def test_nvidia_pointwise_emits_gelu_and_nan_safe_shims():
+    # PR #297 review: gelu's POINTWISE_OPS template uses clamp() (no CUDA builtin),
+    # and sign must preserve NaN like np.sign. The emitted source defines both
+    # shims, NaN-aware.
+    dag = F.PointwiseGraphRegion(ops=(("add", ("a", "b"), "s"),
+                                      ("gelu", ("s",), "o")),
+                                 inputs=("a", "b"), output="o")
+    src = get_emitter("nvidia").emit(dag).source
+    assert "float clamp(float" in src and "float sign(float" in src
+    assert "isnan(x) ? x" in src                     # NaN-preserving
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_pointwise_gelu_and_nan_sign():
+    # PR #297 review, on-GPU: a gelu DAG must COMPILE + run (was failing on the
+    # undefined clamp), and a sign chain must preserve NaN (np.sign semantics).
+    r = get_runner("nvidia")
+    gelu = F.PointwiseGraphRegion(ops=(("add", ("a", "b"), "s"),
+                                       ("gelu", ("s",), "o")),
+                                  inputs=("a", "b"), output="o")
+    rng = np.random.default_rng(1)
+    a = rng.standard_normal((5, 6)).astype(np.float32)
+    b = rng.standard_normal((5, 6)).astype(np.float32)
+    out, tag = r.run_pointwise_graph(gelu, [a, b])
+    assert tag == "nvidia_cuda"                       # compiled + ran (not declined)
+    np.testing.assert_allclose(out, gelu.reference(a, b), atol=1e-4)
+
+    sign = F.PointwiseGraphRegion(ops=(("abs", ("a",), "aa"), ("sign", ("aa",), "o")),
+                                  inputs=("a",), output="o")
+    x = np.array([[1.0, -2.0, np.nan, 0.0]], np.float32)
+    sout, stag = r.run_pointwise_graph(sign, [x])
+    assert stag == "nvidia_cuda"
+    ref = sign.reference(x)
+    np.testing.assert_array_equal(np.isnan(sout), np.isnan(ref))   # NaN preserved
+    np.testing.assert_allclose(sout[~np.isnan(sout)], ref[~np.isnan(ref)], atol=1e-6)

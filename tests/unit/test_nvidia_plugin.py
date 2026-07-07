@@ -103,6 +103,35 @@ def test_nvidia_flash_attn_candidate_registered_and_emits():
     assert "tessera_nvidia_attn" in src and "expf" in src and "<<<" in src
 
 
+def test_nvidia_mma_fused_candidate_registered_and_applies():
+    # Tensor-core perf lane: a Tier-2 emitted FusedRegion candidate (mma.sync GEMM
+    # + bias/activation epilogue), f16 storage → f16 accuracy budget.
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_FUSED_REGION)}
+    assert "nvidia_mma_fused" in cands
+    mf = cands["nvidia_mma_fused"]
+    assert mf.tier == Tier.EMITTED and mf.accuracy_atol == 5e-3
+    # fusable: bias?, one activation, no reduction/residual/prologue.
+    assert mf.applies_to(F.FusedRegion(epilogue=("bias", "gelu")))
+    assert mf.applies_to(F.FusedRegion(epilogue=("relu",)))
+    assert not mf.applies_to(F.FusedRegion(epilogue=("bias",), reduction="softmax"))
+    assert not mf.applies_to(F.FusedRegion(epilogue=("relu",), residual=True))
+    assert not mf.applies_to(F.FusedRegion(epilogue=("gelu",), prologue=("relu",)))
+
+
+def test_nvidia_mma_fused_rejects_bad_inputs():
+    # PR #301 review: a mismatched contraction dim or a short bias must raise (like
+    # FusedRegion.reference), not launch the C ABI on an overreading buffer.
+    # Host-free — validated before any GPU work.
+    mf = next(c for c in C.candidates_for("nvidia", OP_FUSED_REGION)
+              if c.name == "nvidia_mma_fused")
+    region = F.FusedRegion(epilogue=("bias", "relu"))
+    A = np.zeros((16, 16), np.float32)
+    with pytest.raises(ValueError):                 # K 24 != A's K 16
+        mf.run(region, A, np.zeros((24, 8), np.float32), np.zeros((8,), np.float32))
+    with pytest.raises(ValueError):                 # bias len 7 != N 8
+        mf.run(region, A, np.zeros((16, 8), np.float32), np.zeros((7,), np.float32))
+
+
 def test_nvidia_generic_candidate_registered():
     cands = C.candidates_for("nvidia", OP_FUSED_REGION)
     names = [c.name for c in cands]
@@ -476,3 +505,29 @@ def test_live_nvidia_pointwise_gelu_and_nan_sign():
     ref = sign.reference(x)
     np.testing.assert_array_equal(np.isnan(sout), np.isnan(ref))   # NaN preserved
     np.testing.assert_allclose(sout[~np.isnan(sout)], ref[~np.isnan(ref)], atol=1e-6)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize("epilogue", [("bias", "gelu"), ("relu",), ("silu",),
+                                      ("bias", "relu")])
+def test_live_nvidia_mma_fused_tensor_core(epilogue):
+    # The tensor-core fused lane (mma.sync GEMM + bias/activation, f16) runs on-GPU,
+    # matches the f32 reference within the f16 budget, F4-passes, and the arbiter
+    # prefers it (Tier-2) over the scalar generic lane (Tier-1).
+    F.clear_verification_cache()
+    region = F.FusedRegion(epilogue=epilogue)
+    mf = next(c for c in C.candidates_for("nvidia", OP_FUSED_REGION)
+              if c.name == "nvidia_mma_fused")
+    rng = np.random.default_rng(len(epilogue))
+    A = (rng.standard_normal((64, 64)) * 0.3).astype(np.float32)
+    B = (rng.standard_normal((64, 64)) * 0.3).astype(np.float32)
+    bias = ((rng.standard_normal((64,)) * 0.3).astype(np.float32)
+            if region.has_bias else None)
+    out, tag = mf.run(region, A, B, bias)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(A, B, bias), atol=5e-3)
+    assert C.verify_candidate(mf, region) is True
+    win = C.arbitrate(region, OP_FUSED_REGION, "nvidia")
+    assert win is not None and win.name == "nvidia_mma_fused"    # Tier-2 > Tier-1

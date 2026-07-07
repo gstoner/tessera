@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -47,7 +48,9 @@ from tessera.compiler.emit._fused_scalar_body import row_compute_body
 from tessera.compiler.emit.candidate import (
     OP_ATTENTION,
     OP_FUSED_REGION,
+    OP_GATED_MATMUL,
     OP_MATMUL,
+    OP_POINTWISE,
     Candidate,
     Tier,
     register_candidate,
@@ -63,12 +66,21 @@ from tessera.compiler.emit.kernel_emitter import (
     register_emitter,
     register_runner,
 )
-from tessera.compiler.fusion_core import AttentionRegion, FusedRegion, MatmulRegion
+from tessera.compiler.fusion_core import (
+    POINTWISE_OPS,
+    AttentionRegion,
+    FusedRegion,
+    GatedMatmulRegion,
+    MatmulRegion,
+    PointwiseGraphRegion,
+)
 
 _TARGET = "nvidia"
 _LANG = "cuda"
 _ENTRY = "tessera_nvidia_fused"
 _ATTN_ENTRY = "tessera_nvidia_attn"
+_GATED_ENTRY = "tessera_nvidia_gated"
+_PW_ENTRY = "tessera_nvidia_pointwise"
 _REAL_TAG = "nvidia_cuda"
 #: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
 #: online-softmax accumulator; larger Dv declines to the reference.
@@ -181,21 +193,112 @@ def _synthesize_attention_cuda() -> str:
     )
 
 
+def _synthesize_gated_cuda(region: GatedMatmulRegion) -> str:
+    """CUDA source for the SwiGLU gate ``O = f(A @ Wg) ⊙ (A @ Wu)`` (f32) — one
+    thread per output row, sharing the A load across the two K-contractions, then
+    the gate activation + elementwise multiply. A(M,K), Wg/Wu(K,H), O(M,H)."""
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    act = pointwise_snippet(region.gate_act, "g")     # e.g. g = g/(1+expf(-g));
+    return (
+        "#include <cuda_runtime.h>\n"
+        "#include <math.h>\n"
+        f"__global__ void {_GATED_ENTRY}_kernel(const float* A, const float* Wg,\n"
+        "        const float* Wu, float* O, int M, int K, int H) {\n"
+        "    int m = blockIdx.x*blockDim.x + threadIdx.x;\n"
+        "    if (m >= M) return;\n"
+        "    for (int h=0; h<H; ++h) {\n"
+        "        float g=0.0f, u=0.0f;\n"
+        "        for (int k=0; k<K; ++k) { float a=A[(long)m*K+k];\n"
+        "            g += a*Wg[(long)k*H+h]; u += a*Wu[(long)k*H+h]; }\n"
+        f"        {act}\n"
+        "        O[(long)m*H+h] = g * u;\n"
+        "    }\n"
+        "}\n"
+        f'extern "C" int {_GATED_ENTRY}(const float* hA, const float* hWg,\n'
+        "        const float* hWu, float* hO, int M, int K, int H) {\n"
+        "    size_t szA=(size_t)M*K*4, szW=(size_t)K*H*4, szO=(size_t)M*H*4;\n"
+        "    float *dA=0,*dWg=0,*dWu=0,*dO=0;\n"
+        "    if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
+        "    if (cudaMalloc(&dWg,szW)!=cudaSuccess){cudaFree(dA);return 3;}\n"
+        "    if (cudaMalloc(&dWu,szW)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);return 3;}\n"
+        "    if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);return 3;}\n"
+        "    cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);\n"
+        "    cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);\n"
+        "    cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
+        "    int t=128, b=(M+t-1)/t;\n"
+        f"    {_GATED_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(dA,dWg,dWu,dO,M,K,H);\n"
+        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "    cudaFree(dA); cudaFree(dWg); cudaFree(dWu); cudaFree(dO);\n"
+        "    return ok;\n"
+        "}\n"
+    )
+
+
+def _pw_cvar(vid: str) -> str:
+    """A valid C identifier for a pointwise value-id."""
+    return "v_" + re.sub(r"\W", "_", str(vid))
+
+
+def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
+    """CUDA source for a same-shape pointwise DAG (f32) — one thread per element.
+    The DAG is emitted from the ``POINTWISE_OPS`` C-expression table (topo order),
+    with a ``sign`` device shim (the one op with no CUDA builtin). One kernel per
+    region (the DAG + input count are baked in)."""
+    n = len(region.inputs)
+    params = ", ".join(f"const float* i{j}" for j in range(n))
+    loads = "".join(f"    float {_pw_cvar(v)} = i{j}[idx];\n"
+                    for j, v in enumerate(region.inputs))
+    body = ""
+    for key, ins, out in region.ops:
+        _arity, expr, _ref = POINTWISE_OPS[key]
+        body += f"    float {_pw_cvar(out)} = {expr.format(*[_pw_cvar(i) for i in ins])};\n"
+    hparams = ", ".join(f"const float* hi{j}" for j in range(n))
+    allocs = "".join(
+        f"    float* d{j}=0; if (cudaMalloc(&d{j},sz)!=cudaSuccess) return 3;\n"
+        f"    cudaMemcpy(d{j},hi{j},sz,cudaMemcpyHostToDevice);\n" for j in range(n))
+    dargs = ", ".join(f"d{j}" for j in range(n))
+    frees = " ".join(f"cudaFree(d{j});" for j in range(n))
+    return (
+        "#include <cuda_runtime.h>\n"
+        "#include <math.h>\n"
+        "__device__ __forceinline__ float sign(float x){ return (float)((x>0.0f)-(x<0.0f)); }\n"
+        f"__global__ void {_PW_ENTRY}_kernel({params}, float* out, long numel) {{\n"
+        "    long idx = (long)blockIdx.x*blockDim.x + threadIdx.x;\n"
+        "    if (idx >= numel) return;\n"
+        f"{loads}{body}"
+        f"    out[idx] = {_pw_cvar(region.output)};\n"
+        "}\n"
+        f'extern "C" int {_PW_ENTRY}({hparams}, float* hout, long numel) {{\n'
+        "    size_t sz=(size_t)numel*4;\n"
+        f"{allocs}"
+        "    float* dout=0; if (cudaMalloc(&dout,sz)!=cudaSuccess) return 3;\n"
+        "    int t=256; long b=(numel+t-1)/t;\n"
+        f"    {_PW_ENTRY}_kernel<<<dim3((unsigned)b), dim3(t)>>>({dargs}, dout, numel);\n"
+        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    if (ok==1) cudaMemcpy(hout,dout,sz,cudaMemcpyDeviceToHost);\n"
+        f"    {frees} cudaFree(dout);\n"
+        "    return ok;\n"
+        "}\n"
+    )
+
+
 class NvidiaCudaEmitter(KernelEmitter):
     target = _TARGET
     lang = _LANG
 
     def can_emit(self, region: Any) -> bool:
-        return isinstance(region, (FusedRegion, AttentionRegion))
+        return isinstance(region, (FusedRegion, AttentionRegion,
+                                   GatedMatmulRegion, PointwiseGraphRegion))
 
     def emit(self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET,
              dtype: str = "f32", dims: tuple[int, ...] | None = None) -> KernelSource:
-        if not isinstance(region, (FusedRegion, AttentionRegion)):
+        if not self.can_emit(region):
             raise EmitError(
                 f"NvidiaCudaEmitter cannot emit a region of type "
-                f"{type(region).__name__} (FusedRegion / AttentionRegion; the "
-                "shipped mma.sync GEMM lane serves single matmuls via the jit "
-                "nvidia_mma executor)")
+                f"{type(region).__name__} (FusedRegion / AttentionRegion / "
+                "GatedMatmulRegion / PointwiseGraphRegion; the shipped mma.sync "
+                "GEMM lane serves single matmuls via the jit nvidia_mma executor)")
         if spec is SpecPolicy.DYNAMIC:
             raise EmitError("NvidiaCudaEmitter does not yet support SpecPolicy.DYNAMIC "
                             "(bucket/static only)")
@@ -203,6 +306,10 @@ class NvidiaCudaEmitter(KernelEmitter):
             raise EmitError(f"NvidiaCudaEmitter only supports f32 so far, got {dtype!r}")
         if isinstance(region, AttentionRegion):
             source, entry = _synthesize_attention_cuda(), _ATTN_ENTRY
+        elif isinstance(region, GatedMatmulRegion):
+            source, entry = _synthesize_gated_cuda(region), _GATED_ENTRY
+        elif isinstance(region, PointwiseGraphRegion):
+            source, entry = _synthesize_pointwise_cuda(region), _PW_ENTRY
         else:
             source, entry = _synthesize_fused_cuda(region), _ENTRY
         key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
@@ -245,6 +352,16 @@ def _nvidia_cuda_compile_fn(source: KernelSource) -> str:
 # ── runner (execute → (out, tag)) ─────────────────────────────────────────────
 
 _LIB_CACHE: dict[str, Any] = {}
+
+
+def _load_lib(artifact: str):
+    """dlopen ``artifact`` (cached) and return the raw handle — callers bind the
+    entry symbol + argtypes for their own ABI."""
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    return lib
 
 
 def _load_entry(artifact: str):
@@ -344,10 +461,50 @@ class NvidiaCudaRunner(KernelRunner):
 
     def run_gated_matmul_region(self, region: Any, A: Any, Wg: Any, Wu: Any,
                                 *a: Any, **k: Any) -> tuple[Any, str]:
+        # C5: the SwiGLU gate lane O = gate_act(A@Wg) * (A@Wu), one row per thread.
+        import numpy as np
+        try:
+            Af = np.ascontiguousarray(A, np.float32)
+            Wgf = np.ascontiguousarray(Wg, np.float32)
+            Wuf = np.ascontiguousarray(Wu, np.float32)
+            M, K = Af.shape
+            Kg, H = Wgf.shape
+            if Kg != K or Wuf.shape != (K, H):
+                return region.reference(A, Wg, Wu), "reference"
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = getattr(_load_lib(compiled.artifact), _GATED_ENTRY)
+            fn.restype = ctypes.c_int
+            fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
+            out = np.zeros((M, H), np.float32)
+            rc = fn(_ptr(Af), _ptr(Wgf), _ptr(Wuf), _ptr(out), M, K, H)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
         return region.reference(A, Wg, Wu), "reference"
 
     def run_pointwise_graph(self, region: Any, arrays: Any,
                             *a: Any, **k: Any) -> tuple[Any, str]:
+        # C5: the same-shape pointwise-DAG lane, one thread per element.
+        import numpy as np
+        try:
+            ins = [np.ascontiguousarray(x, np.float32) for x in arrays]
+            if len(ins) != len(region.inputs) or not ins:
+                return region.reference(*arrays), "reference"
+            shape = ins[0].shape
+            if any(x.shape != shape for x in ins):
+                return region.reference(*arrays), "reference"
+            numel = int(np.prod(shape)) if shape else 1
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = getattr(_load_lib(compiled.artifact), _PW_ENTRY)
+            fn.restype = ctypes.c_int
+            fn.argtypes = [ctypes.c_void_p] * len(ins) + [ctypes.c_void_p, ctypes.c_long]
+            out = np.zeros(shape, np.float32)
+            rc = fn(*[_ptr(x) for x in ins], _ptr(out), numel)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
         return region.reference(*arrays), "reference"
 
 
@@ -398,6 +555,33 @@ class NvidiaFlashAttnCandidate(Candidate):
     def run(self, region: Any, Q: Any, K: Any, V: Any,
             *a: Any, **k: Any) -> tuple[Any, str]:
         return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
+
+
+class NvidiaGatedCandidate(Candidate):
+    """Tier-1 (C5): the synthesized SwiGLU-gate CUDA lane
+    (``O = gate_act(A·Wg) ⊙ (A·Wu)``). Serves any ``GatedMatmulRegion``."""
+
+    name = "nvidia_gated"
+    tier = Tier.SYNTHESIZED
+    target = _TARGET
+    op = OP_GATED_MATMUL
+
+    def run(self, region: Any, A: Any, Wg: Any, Wu: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_gated_matmul_region(region, A, Wg, Wu)
+
+
+class NvidiaPointwiseCandidate(Candidate):
+    """Tier-1 (C5): the synthesized same-shape pointwise-DAG CUDA lane (one thread
+    per element). Serves any ``PointwiseGraphRegion``."""
+
+    name = "nvidia_pointwise"
+    tier = Tier.SYNTHESIZED
+    target = _TARGET
+    op = OP_POINTWISE
+
+    def run(self, region: Any, arrays: Any, *a: Any, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_pointwise_graph(region, arrays)
 
 
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
@@ -493,6 +677,8 @@ register_runner(NvidiaCudaRunner(), default=False)
 
 register_candidate(NvidiaGenericCudaCandidate())
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
+register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
+register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
 register_candidate(NvidiaMmaGemmShippedCandidate())
 register_candidate(NvidiaMmaGemmEmittedCandidate())

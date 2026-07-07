@@ -134,7 +134,7 @@ disagree with prose. As of the June 29, 2026 review:
 | CPU / x86 | `tessera_jit` MLIR->LLVM CPU execution for the covered op set; native x86 AMX/AVX512 runtime rows for matmul, elementwise, reductions, softmax/norm, losses, FFT/spectral, sparse, linalg, optimizer, RNG, SSM, and related families. | Broader dtype/layout/aliasing and buffer-binding contracts; more Graph IR canonicalizers reaching the executed path. |
 | Apple CPU/GPU | Apple CPU uses Accelerate/BNNS lanes. Apple GPU uses MPS, MPSGraph, MSL, packaged kernels, GA/EBM kernels, fused MoE expert FFN, and additive Metal 4 lanes where documented. | Apple hardware proof requires a capable Darwin host; non-Darwin stubs are CI fallbacks only. |
 | ROCm | gfx1151 has real `runtime.launch()` lanes, including compiler-generated HIP for matmul-family, attention-family, elementwise, reductions, softmax/norm, losses, quant, FFT/spectral, linalg, sparse, scan, SSM, MoE, RoPE/ALiBi, GA/conformal, and where/argreduce. | CDNA/MI300-class proof, remaining target-map promotions, and performance hardening. |
-| NVIDIA | sm_120 has a hardware-verified `mma.sync` matmul lane through CUDA runtime. | Hopper sm_90, datacenter sm_100, broader Blackwell op coverage, and non-matmul kernels. |
+| NVIDIA | The execution matrix records sm_120's shipped `mma.sync` GEMM lane (`nvidia_mma`, `libtessera_nvidia_gemm.so`). Beyond it, a compiler-generated CUDA lane (`emit/nvidia_cuda.py`, all four fusable region kinds) plus hand-emitted tensor-core GEMM+epilogue (~6×) and flash-attention (~2.7×) lanes run through the accuracy-budgeted arbiter and are hardware-proven on an RTX 5070 Ti by the plugin/perf/conformance test gates (`test_nvidia_plugin.py`, `test_nvidia_perf_ratchet.py`) — not yet promoted into the execution matrix. | Promote the arbiter/emit lanes into the execution matrix; Hopper sm_90, datacenter sm_100, `wgmma`/`tcgen05`, NVFP4 execution, and broader op coverage. |
 | Distributed GPU | APIs, sharding surfaces, and NCCL/RCCL adapter scaffolding exist; mock collectives cover development paths. | Real multi-rank NCCL/RCCL execution and overlap proof. |
 
 ---
@@ -258,10 +258,16 @@ retirement proven bit-close to the kernel it replaced on Metal. The catalog
 
 ### Where the compiler is going (north star)
 
-Apple proved the middle-end; the forward direction generalizes it across all four
-backends. The go-forward plan is a paired plan + theory set under
-[`docs/audit/compiler/`](docs/audit/compiler/) (direction, not status — status
-stays in the generated dashboards):
+Apple proved the middle-end; the framework that generalizes it across all four
+backends is now largely built. As of 2026-07, the three-tier kernel model +
+measured arbiter is implemented in [`python/tessera/compiler/emit/`](python/tessera/compiler/emit/):
+the `KernelEmitter`/`KernelRunner` plugin protocol + universal F4 oracle
+(`kernel_emitter.py`), the `kernel_cache.py` synth→compile→cache loop, per-arch
+plugins (`nvidia_cuda.py`, `rocm_hip.py`, `x86_llvm.py`), and the accuracy-budgeted
+arbiter (`candidate.py`) + measured autotune (`autotune.py`) — with NVIDIA sm_120,
+ROCm gfx1151, and x86 Zen 5 lanes executing on real hardware. The paired plan +
+theory set under [`docs/audit/compiler/`](docs/audit/compiler/) carries the
+direction and the landed annotations (status stays in the generated dashboards):
 
 - [`COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md)
   — the **three-tier kernel model** (generic synthesizer / per-arch codegen plugin

@@ -1,11 +1,25 @@
 ---
-last_updated: 2026-06-30
+last_updated: 2026-07-07
 audit_role: root
 ---
 
 # Tessera Audit Master
 
-**Last updated:** 2026-06-30
+**Last updated:** 2026-07-07
+
+> **Reconciled 2026-07-07 (compiler A–E spine wave, PRs #274–#302):** Workstreams
+> **A** (shared lowering dedup), **B** (the synthesizer generalized behind the
+> `KernelEmitter`/`KernelRunner`/`compile_fn` plugin protocol + the universal F4
+> oracle + `kernel_cache` synth→compile→cache loop), **C** (per-arch plugins:
+> `emit/nvidia_cuda.py`, `emit/rocm_hip.py`, `emit/x86_llvm.py` +
+> `emit/x86_aocl_dlp.py`), **D** (the accuracy-budgeted measured arbiter
+> `emit/candidate.py` + autotune `emit/autotune.py` + fallback log), and **E2/E3**
+> (perf ratchet + escape-hatch) **landed** — most of it hardware-proven. NVIDIA
+> sm_120 now runs a generic CUDA lane over all four fusable region kinds **plus**
+> hand-emitted tensor-core Tier-2 lanes (fused `mma.sync` GEMM+epilogue ~6×,
+> flash-attention ~2.7×) the arbiter selects, through a shipped PTX launch bridge —
+> no longer "one op × one arch." The snapshot rows below were refreshed; the
+> plan's landed annotations + generated dashboards carry the detail/counts.
 
 > **Reconciled 2026-06-24 (hardware bring-up):** the Runtime/backend + NVIDIA +
 > ROCm rows were refreshed against merged reality — they had drifted badly behind
@@ -57,10 +71,10 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 | Area | Current state | Still open |
 |---|---|---|
 | Compiler and IR | Canonical compile, IR bundle, named gates, and conformance matrix exist; a single generated-doc registry (`tessera.compiler.generated_docs`) now drives both the CI gate and one `--write` sprint regen, the compiler-progress rollup is CSV-canonical, and the surface (6->1) + test-coverage (2->1) dashboards were consolidated. | Multi-op metadata, fusion groups, and layout contracts are now carried through the compile artifact and authoritative for dispatch (2026-06-22). Remaining: fixture-driven numerical proof for complete cells, Tile IR/native Target IR long tail, and per-backend promotion. (COMPILER_AUDIT Phase 1 closed 2026-06-22: effect interfaces, opt-in `LayoutAssignmentPass` wiring, and `reshape` folder coverage all landed.) |
-| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm gfx1151 executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()` (see ROCm row below); NVIDIA has its first executable lane — sm_120 `mma.sync` matmul hardware-verified on an RTX 5070 Ti (#106). | NVIDIA execution is one op × one arch (sm_120) so far; ROCm is RDNA-only (CDNA/MI300 unproven); MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. Row authority: `generated/runtime_execution_matrix.md`. |
+| Runtime/backend | Runtime execution matrix and C ABI dashboards are generated and drift-gated; the distributed MegaMoE stack (expert-parallel 2× all-to-all, FP8×FP4, async comm/compute overlap) runs with the expert FFN on Apple GPU; ROCm gfx1151 executes a compiler-generated matmul + flash-attention family on real hardware via `runtime.launch()` (see ROCm row below); NVIDIA sm_120 now runs a generic CUDA lane over all four fusable region kinds **plus** hand-emitted tensor-core GEMM/flash-attn lanes selected by the accuracy-budgeted arbiter (see NVIDIA row); x86 executes a `clang`-compiled generic lane on Zen 5 (`emit/x86_llvm.py`). | NVIDIA/x86/ROCm generic lanes are sm_120 / Zen 5 / gfx1151-only respectively (Hopper sm_90, datacenter sm_100, CDNA/MI300 unproven); MegaMoE multi-rank is mock-collective until a real NCCL/RCCL (or Apple multi-GPU) lane exists. Row authority: `generated/runtime_execution_matrix.md`. |
 | Apple backend | Apple CPU/GPU are runtime-backed; Metal 4, MPSGraph, encode-session, and packaged-kernel lifecycle work exist. | Apple binding specs, feature-limit-guided lowering, production packaged kernels, and canonical one-command-buffer JIT path remain. |
-| NVIDIA (Phase G) | CUDA 13.3 pinned; **sm_120 `mma.sync` matmul is hardware-verified end-to-end on a real RTX 5070 Ti (consumer Blackwell)** — `emit_mma_sync_matmul_ptx` → PTX → assemble → CUDA launch bridge (`tsrRegisterGpuLauncher`) → execute-and-compare (#106). | One op (matmul) × one arch (sm_120). Hopper sm_90 / datacenter sm_100 unproven (sm_90a WGMMA emit won't run on sm_120 and vice-versa); the rest of the op surface is artifact_only; broaden coverage + add the flash-attn family. |
-| ROCm (Phase H) | **RDNA gfx1151 (Strix Halo)**: a compiler-generated matmul + flash-attention family executes on real hardware via `runtime.launch()` — `matmul` (perf ladder + fused bias/relu/gelu/silu epilogue), `flash_attn` **forward + backward**, and `GQA/MQA` **forward + backward**. Sliding-window + Gemma-2 logit-softcap forward land via #109/#110. | **CDNA (MI300X/MI325X)** unproven — distinct MFMA shape table + FP4/FP6, hardware-gated. RDNA op surface beyond matmul + attention stays artifact_only; the per-primitive `backend_kernel` axis still needs all targets. Row/count authority: `generated/runtime_execution_matrix.md`, `generated/rocm_target_map.md`. |
+| NVIDIA (Phase G) | CUDA 13.3 pinned; **sm_120 (RTX 5070 Ti, consumer Blackwell) executes a generic CUDA lane** (`emit/nvidia_cuda.py`, all four fusable region kinds — matmul-epilogue, attention, gated-SwiGLU, pointwise-DAG — compiled in-process via `nvcc`), **plus hand-emitted tensor-core Tier-2 lanes** the accuracy-budgeted arbiter selects: fused `mma.sync` GEMM + bias/activation epilogue (~6×) and flash-attention (~2.7×, with an f16-sharpness safety gate). Emitted `mma.sync` PTX runs through a **shipped launch bridge** (`runtime/cuda/tessera_nvidia_ptx_launch.cpp` — driver-JITs + caches by kernel name). All candidates F4-oracle-gated within the f16 accuracy budget; hardware-proven end-to-end (#290–#302). | Broaden shapes/dtypes further + `wgmma` for sm_90a + `tcgen05` for sm_100; NVFP4 block-scale is emit + ptxas-assemble-landed but execution stays gated on the PTX-ISA scale spec; Hopper sm_90 / datacenter sm_100 unproven; the rest of the op surface is artifact_only. Detail: `backend/nvidia/NVIDIA_AUDIT.md`. |
+| ROCm (Phase H) | **RDNA gfx1151 (Strix Halo)**: a compiler-generated matmul + flash-attention family executes on real hardware via `runtime.launch()` — `matmul` (perf ladder + fused bias/relu/gelu/silu epilogue), `flash_attn` **forward + backward**, and `GQA/MQA` **forward + backward**. Sliding-window + Gemma-2 logit-softcap forward land via #109/#110. Now also a **generic synth → HIP plugin lane** (`emit/rocm_hip.py`, `hipcc`, FusedRegion) + a hand-tuned WMMA GEMM Tier-3 candidate + the shipped FA-2 flash-attn — all F4-oracle-gated through the arbiter (#288/#289). | **CDNA (MI300X/MI325X)** unproven — distinct MFMA shape table + FP4/FP6, hardware-gated. RDNA op surface beyond matmul + attention stays artifact_only; the per-primitive `backend_kernel` axis still needs all targets. Row/count authority: `generated/runtime_execution_matrix.md`, `generated/rocm_target_map.md`. |
 | Coverage | Partial-op uplift is closed; direct-test debt is not ordinary missing tests. | Backend-kernel axis is still open across all S-series primitives; batching/transpose/sharding have smaller long-tail gaps. |
 | Domain tracks | GA/EBM, attention, CorrDiff/SciML, sharding, and autodiff plans have been reduced to clearer scope locks and implementation history. | Domain claims must stay tied to generated coverage and backend proof, not old roadmap prose. |
 

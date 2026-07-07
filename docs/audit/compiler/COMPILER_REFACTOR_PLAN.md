@@ -61,7 +61,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 |---|---|:--:|:--:|:--:|
 | **0** | E1 golden-IR harness + determinism roundtrip | ✅ | — | — |
 | **0** | E2 real-hardware perf ratchet | ✅ (shape gate) | ✅ gfx1151 (matmul+flash, PR #284) | ✅ sm_120 (RTX 5070 Ti mma.sync ladder, live-gated) |
-| **0** | E3 escape-hatch test | ⬜ | ⬜ | ⬜ |
+| **0** | E3 escape-hatch test | ✅ (landed in D1 `force` + PR #298 test) | ✅ gfx1151 | ✅ sm_120 |
 | **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
 | **1** | A2–A4 fusion matcher / verifiers / MMA selector | ⬜ | — | — |
 | **2** | B1 split `fusion.py` | ✅ | — | — |
@@ -414,9 +414,11 @@ Operationalizes Theory rule #3. **Built in Phase 0, before any refactor lands.**
   latency floors recorded as committed JSON (`rocm_*_hot_paths.json`,
   `nvidia_*_hot_paths.json`), mirroring `apple_gpu_hot_paths.json` +
   `perf_gate --ratchet`. No merge regresses a lead.
-- **E3 · Escape-hatch test** `[MAC]` per backend — assert a hand-tuned kernel
-  *can* be forced and *does* win when the cost model says so. Proves Tier 3 is
-  never orphaned.
+- **E3 · Escape-hatch test** `[MAC]` per backend — **landed 2026-07-07:** the
+  arbiter's `force=<name>` path (`emit/candidate.py`) forces a named candidate and
+  raises `ArbiterError` if it is absent; PR #298 added the escape-hatch test that
+  asserts a hand-tuned Tier-3 kernel *can* be forced and *does* win. Proves Tier 3
+  is never orphaned.
 
 ---
 

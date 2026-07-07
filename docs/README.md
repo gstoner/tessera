@@ -63,8 +63,13 @@ The **forward compiler direction (north star)** is the paired plan + theory set:
 kernel model + accuracy-budgeted measured arbiter + the three-system fleet),
 `docs/audit/compiler/COMPILER_REFACTOR_PLAN.md` (workstreams + coordination), and
 the reassessed `docs/audit/compiler/OPTIMIZING_COMPILER_PLAN.md` (F6 = the
-backend-build seam). These are *direction*; `docs/audit/MASTER_AUDIT.md` and the
-generated dashboards stay status truth.
+backend-build seam). As of 2026-07 the framework it describes is largely **built
+and hardware-proven** — the `KernelEmitter`/`KernelRunner`/`compile_fn` plugin
+protocol + universal F4 oracle + measured arbiter live in
+`python/tessera/compiler/emit/`, with NVIDIA sm_120, ROCm gfx1151, and x86 Zen 5
+plugins executing (see the plan's landed annotations + `WORKSTREAM_C_HANDOFF.md`).
+These docs are *direction*; `docs/audit/MASTER_AUDIT.md` and the generated
+dashboards stay status truth.
 
 Reliability and validation readers should start with
 `docs/guides/Tessera_QA_Reliability_Guide.md`. It is the hands-on guide for
@@ -136,6 +141,7 @@ Use these labels consistently in active docs:
 | x86 AMX / AVX512 lowering and execution | implemented / hardware-runtime | `docs/spec/COMPILER_REFERENCE.md`, `python/tessera/compiler/matmul_pipeline.py`, `src/transforms/`, `src/compiler/codegen/tessera_x86_backend/` |
 | CPU `tessera_jit` MLIR→LLVM JIT — the executed `@jit(target="cpu")` path for the covered op set (f32/f16/bf16/f64); numpy fallback otherwise | implemented / hardware-runtime | `docs/spec/COMPILER_REFERENCE.md` §2.3, `docs/audit/compiler/COMPILER_AUDIT.md`, `tools/tessera-jit/tessera_jit.cpp`, `tests/unit/test_native_cpu_jit.py` |
 | NVIDIA SM90+ WGMMA/TMA, Blackwell TCGEN05/TMEM, and FA-4 target artifacts | implemented / lit-testable | `docs/spec/COMPILER_REFERENCE.md`, `src/compiler/tile_opt_fa4/`, `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
+| NVIDIA sm_120 (RTX 5070 Ti) generic CUDA lane (matmul-epilogue/attention/gated/pointwise) + hand-emitted tensor-core `mma.sync` GEMM+epilogue & flash-attn lanes selected by the arbiter, via a shipped PTX launch bridge | implemented / hardware-runtime on sm_120 | `python/tessera/compiler/emit/nvidia_cuda.py`, `runtime/cuda/tessera_nvidia_ptx_launch.cpp`, `docs/audit/backend/nvidia/NVIDIA_AUDIT.md` |
 | Distributed collectives and planner foundation | implemented / scaffolded | `src/collectives/`, `python/tessera/testing/mock_collective.py`, `tests/unit/test_nccl_adapter.py` |
 | Solver, RNG, sparse, linalg, and resilience passes | implemented / lit-testable | `src/solvers/`, `tests/unit/test_*solver*.py`, `tests/tessera-ir/phase5/` |
 | Clifford / geometric algebra surface | implemented / lit-testable / hardware-runtime for 17/17 registered Apple GPU fused GA kernels, benchmarked by `benchmark_ga_ebm.py --ci` | `docs/spec/CLIFFORD_SPEC.md`, `docs/spec/GA_EBM_EXECUTION_STATUS.md`, `python/tessera/ga/`, `python/tessera/autodiff/geometric/`, `src/solvers/clifford/` |

@@ -402,3 +402,42 @@ def test_live_nvidia_pointwise_dag():
     np.testing.assert_allclose(out, region.reference(*arrs), atol=1e-5)
     assert F.verify_synthesized_pointwise(region, runner=get_runner("nvidia"),
                                           force=True) is True
+
+
+def test_nvidia_pointwise_emits_gelu_and_nan_safe_shims():
+    # PR #297 review: gelu's POINTWISE_OPS template uses clamp() (no CUDA builtin),
+    # and sign must preserve NaN like np.sign. The emitted source defines both
+    # shims, NaN-aware.
+    dag = F.PointwiseGraphRegion(ops=(("add", ("a", "b"), "s"),
+                                      ("gelu", ("s",), "o")),
+                                 inputs=("a", "b"), output="o")
+    src = get_emitter("nvidia").emit(dag).source
+    assert "float clamp(float" in src and "float sign(float" in src
+    assert "isnan(x) ? x" in src                     # NaN-preserving
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_pointwise_gelu_and_nan_sign():
+    # PR #297 review, on-GPU: a gelu DAG must COMPILE + run (was failing on the
+    # undefined clamp), and a sign chain must preserve NaN (np.sign semantics).
+    r = get_runner("nvidia")
+    gelu = F.PointwiseGraphRegion(ops=(("add", ("a", "b"), "s"),
+                                       ("gelu", ("s",), "o")),
+                                  inputs=("a", "b"), output="o")
+    rng = np.random.default_rng(1)
+    a = rng.standard_normal((5, 6)).astype(np.float32)
+    b = rng.standard_normal((5, 6)).astype(np.float32)
+    out, tag = r.run_pointwise_graph(gelu, [a, b])
+    assert tag == "nvidia_cuda"                       # compiled + ran (not declined)
+    np.testing.assert_allclose(out, gelu.reference(a, b), atol=1e-4)
+
+    sign = F.PointwiseGraphRegion(ops=(("abs", ("a",), "aa"), ("sign", ("aa",), "o")),
+                                  inputs=("a",), output="o")
+    x = np.array([[1.0, -2.0, np.nan, 0.0]], np.float32)
+    sout, stag = r.run_pointwise_graph(sign, [x])
+    assert stag == "nvidia_cuda"
+    ref = sign.reference(x)
+    np.testing.assert_array_equal(np.isnan(sout), np.isnan(ref))   # NaN preserved
+    np.testing.assert_allclose(sout[~np.isnan(sout)], ref[~np.isnan(ref)], atol=1e-6)

@@ -243,7 +243,10 @@ def _pw_cvar(vid: str) -> str:
 def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
     """CUDA source for a same-shape pointwise DAG (f32) — one thread per element.
     The DAG is emitted from the ``POINTWISE_OPS`` C-expression table (topo order),
-    with a ``sign`` device shim (the one op with no CUDA builtin). One kernel per
+    with device shims for the two ops the table names but CUDA doesn't define:
+    ``sign`` and ``clamp`` (the latter appears inside the ``gelu`` expression).
+    Both preserve NaN to match numpy (``np.sign`` / ``np.clip`` propagate NaN),
+    so a DAG on NaN-containing data agrees with the reference. One kernel per
     region (the DAG + input count are baked in)."""
     n = len(region.inputs)
     params = ", ".join(f"const float* i{j}" for j in range(n))
@@ -262,7 +265,8 @@ def _synthesize_pointwise_cuda(region: PointwiseGraphRegion) -> str:
     return (
         "#include <cuda_runtime.h>\n"
         "#include <math.h>\n"
-        "__device__ __forceinline__ float sign(float x){ return (float)((x>0.0f)-(x<0.0f)); }\n"
+        "__device__ __forceinline__ float sign(float x){ return isnan(x) ? x : (float)((x>0.0f)-(x<0.0f)); }\n"
+        "__device__ __forceinline__ float clamp(float x, float lo, float hi){ return isnan(x) ? x : fminf(fmaxf(x,lo),hi); }\n"
         f"__global__ void {_PW_ENTRY}_kernel({params}, float* out, long numel) {{\n"
         "    long idx = (long)blockIdx.x*blockDim.x + threadIdx.x;\n"
         "    if (idx >= numel) return;\n"

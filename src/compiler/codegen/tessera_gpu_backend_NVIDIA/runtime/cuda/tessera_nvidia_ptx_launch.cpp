@@ -134,8 +134,21 @@ int invokeMma(CUfunction fn, void** buffers, size_t nbuf,
 int invokeMmaGemm16(CUfunction fn, void** buffers, size_t nbuf,
                     const int64_t* dims, size_t ndim) {
     if (nbuf != 3 || ndim != 3) return 5;
-    int M = (int)dims[0], N = (int)dims[1], K = (int)dims[2];
-    if (M <= 0 || N <= 0 || K <= 0 || M % 16 || N % 8 || K % 16) return 5;
+    const long long M64 = dims[0], N64 = dims[1], K64 = dims[2];
+    if (M64 <= 0 || N64 <= 0 || K64 <= 0) return 5;
+    if (M64 % 16 || N64 % 8 || K64 % 16) return 5;   // aligned tiles only (for now)
+    // The emitted PTX addresses elements with 32-bit signed indices, so an
+    // operand's LARGEST index (element count - 1) must fit INT32_MAX. Reject only
+    // shapes whose element count EXCEEDS 2^31 (a count of exactly 2^31 has max
+    // index 2^31-1 == INT32_MAX, which is representable) — Decision #21: honest
+    // invalid-args, never silent corruption. 64-bit index math in the emitter is
+    // the follow-on that lifts this cap.
+    const long long kMaxElems = 1LL << 31;           // max operand element count
+    // Each dim < 2^31 keeps the int (int32) cast below well-defined and the int64
+    // products overflow-free (no valid shape reaches a dim of 2^31 anyway).
+    if (M64 >= kMaxElems || N64 >= kMaxElems || K64 >= kMaxElems) return 5;
+    if (M64 * K64 > kMaxElems || K64 * N64 > kMaxElems || M64 * N64 > kMaxElems) return 5;
+    int M = (int)M64, N = (int)N64, K = (int)K64;
     const void* A = buffers[0];
     const void* B = buffers[1];
     void* D = buffers[2];

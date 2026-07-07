@@ -152,6 +152,16 @@ def test_mma_sync_gemm_shape_predicate_requires_aligned_tiles():
     assert not P.is_valid_mma_sync_gemm_shape(0, 8, 16)
 
 
+def test_mma_sync_gemm_shape_predicate_rejects_i32_index_overflow():
+    # The emitted kernel indexes in .s32: an operand's largest index is (count-1),
+    # so a count of EXACTLY 2**31 (max index 2**31-1 = INT32_MAX) is valid; only a
+    # count PAST 2**31 wraps and must be refused (PR #291/#292 review).
+    assert P.is_valid_mma_sync_gemm_shape(65536, 32768, 16)      # M*N == 2**31: OK
+    assert not P.is_valid_mma_sync_gemm_shape(65552, 32768, 16)  # M*N > 2**31: reject
+    assert not P.is_valid_mma_sync_gemm_shape(32784, 8, 65536)   # M*K > 2**31: reject
+    assert P.is_valid_mma_sync_gemm_shape(32768, 8, 65520)       # M*K < 2**31: OK
+
+
 def test_mma_sync_gemm_validator_catches_missing_loop():
     ptx = P.emit_mma_sync_gemm_ptx(dtype="bf16").replace("setp.lt.s32", "setp.eq.s32")
     assert any("K-accumulation loop" in p

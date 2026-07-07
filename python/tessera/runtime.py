@@ -1887,9 +1887,18 @@ def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
 
 def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     """Shipped ``libtessera_nvidia_gemm`` mma.sync GEMM on 2D ``A @ B`` -> f32.
-    ``B`` is row-major (the shipped convention). Raises on no lib / GPU / kernel
-    error (the caller declines to the reference)."""
+    ``B`` is row-major (the shipped convention). Raises on shape mismatch / no lib
+    / GPU / kernel error (the caller declines to the reference)."""
     import numpy as np
+    # Validate the contraction dim BEFORE any side effect: the C ABI takes a
+    # single K and copies K*N from B, so a mismatched K (A is MxK, B is K2xN)
+    # would overread B or compute against the wrong slice. Raise like
+    # MatmulRegion.reference / the JIT path instead (PR #294 review).
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got "
+            f"{Aa.shape} @ {Ba.shape}")
     lib = _load_nvidia_gemm_runtime()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_gemm.so not loadable")
@@ -1900,8 +1909,8 @@ def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     store = np.float16 if dtype == "float16" else _bfloat16_dtype()
     if store is None:
         raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
-    Ac = np.ascontiguousarray(A, store)
-    Bc = np.ascontiguousarray(B, store)
+    Ac = np.ascontiguousarray(Aa, store)
+    Bc = np.ascontiguousarray(Ba, store)
     M, K = Ac.shape
     _, N = Bc.shape
     D = np.zeros((M, N), np.float32)
@@ -1971,9 +1980,16 @@ def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
     """Compiler-EMITTED mma.sync GEMM (ptx_emit) via the launch bridge on 2D
     ``A @ B`` -> f32. Registers the emitted general-GEMM PTX once per dtype, then
     invokes it. The emitted kernel wants ``B`` col-major (converted here) and
-    aligned M%16 / N%8 / K%16. Raises on no lib / GPU / launch error."""
+    aligned M%16 / N%8 / K%16. Raises on shape mismatch / no lib / GPU / launch
+    error."""
     import numpy as np
     from tessera.compiler import ptx_emit as pe
+    # Validate the contraction dim before any side effect (see _nvidia_mma_gemm_2d).
+    Aa, Ba = np.asarray(A), np.asarray(B)
+    if Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]:
+        raise ValueError(
+            f"nvidia GEMM needs rank-2 A @ B with matching K; got "
+            f"{Aa.shape} @ {Ba.shape}")
     lib = _load_nvidia_ptx_launch()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")

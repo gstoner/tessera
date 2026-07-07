@@ -2395,6 +2395,34 @@ def _rocm_wmma_fused_2d(a: Any, b: Any, bias: Any = None,
     return d
 
 
+_rocm_wmma_fused_probe_ok: bool | None = None
+
+
+def _rocm_wmma_fused_available() -> bool:
+    """Cached host probe: True iff the COMPILER-GENERATED fused WMMA GEMM lane can
+    actually run here — i.e. ``tessera-opt`` is built AND a live gfx1151 executes a
+    tiny fused GEMM through :func:`_rocm_wmma_fused_2d` itself. This is stricter
+    than :func:`_rocm_wmma_runtime_available` (which probes only the *shipped* GEMM
+    symbol): the fused-epilogue path additionally needs ``tessera-opt`` + the
+    generated kernel, so a host with the shipped lib but no compiler would pass the
+    shipped probe yet fail here. The D1 WMMA candidate gates ``available()`` on this
+    so it never wins arbitration and then silently declines to the reference,
+    starving the generic lane (PR #289 review)."""
+    global _rocm_wmma_fused_probe_ok
+    if _rocm_wmma_fused_probe_ok is not None:
+        return _rocm_wmma_fused_probe_ok
+    _rocm_wmma_fused_probe_ok = False
+    try:
+        import numpy as np
+        a = np.zeros((16, 16), np.float16)
+        b = np.zeros((16, 16), np.float16)
+        _rocm_wmma_fused_2d(a, b, None, "relu")
+        _rocm_wmma_fused_probe_ok = True
+    except Exception:
+        _rocm_wmma_fused_probe_ok = False
+    return _rocm_wmma_fused_probe_ok
+
+
 def _rocm_batched_gemm(a: Any, b: Any) -> Any:
     """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the WMMA
     kernel. ``b`` may be rank-2 (shared across the batch) or batched to match."""

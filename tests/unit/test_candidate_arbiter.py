@@ -14,6 +14,7 @@ from tessera.compiler.emit import candidate as C
 from tessera.compiler.emit.candidate import (
     OP_FUSED_REGION, ArbiterError, Candidate, Tier,
 )
+from tessera.compiler.emit.kernel_emitter import KernelRunner
 
 _TGT = "faketarget"
 
@@ -172,3 +173,59 @@ def test_accuracy_budget_admits_f16_grade_candidate():
     nobudget = _F16("synth", Tier.SYNTHESIZED, atol=None)
     assert C.verify_candidate(within, _region()) is True
     assert C.verify_candidate(nobudget, _region()) is False
+
+
+# ── PR #289 review fixes ──────────────────────────────────────────────────────
+
+class _Declines(_Correct):
+    """A candidate whose run() *declines to the numpy reference* (no real kernel) —
+    models a lane whose available() was optimistic (e.g. a fused path that the
+    device probe missed) or an unwired opt-in library."""
+    def run(self, region, A, B, bias=None, *a, **k):
+        return region.reference(A, B, bias), "reference"
+
+
+def test_reference_decliner_is_not_a_viable_candidate():
+    # P2: a reference-declining candidate must NOT count as F4-verified for
+    # arbitration — otherwise it wins by tier and then returns only the reference.
+    assert C.verify_candidate(_Declines("d", Tier.HAND_TUNED), _region()) is False
+
+
+def test_reference_decliner_does_not_win_over_working_lower_tier():
+    # P2 end-to-end: the high-tier lane declines; arbitration must fall to the
+    # working Tier-1 lane, NOT crown the decliner and hand back the reference.
+    C.register_candidate(_Declines("hand", Tier.HAND_TUNED))
+    C.register_candidate(_Correct("synth", Tier.SYNTHESIZED))
+    win = C.arbitrate(_region(), OP_FUSED_REGION, _TGT)
+    assert win is not None and win.name == "synth"
+    region = _region()
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    _, tag = C.run_arbitrated(region, OP_FUSED_REGION, _TGT, A, B, None)
+    assert tag == "synth_tag"
+
+
+def test_candidate_probe_does_not_poison_shared_oracle_cache():
+    # P1: a candidate F4 probe must land on a candidate-private cache key, never
+    # the real backend runner's. A failing Tier-3 probe on target _TGT must not
+    # make a later (non-forced) verification of a real runner on _TGT reuse its
+    # verdict — which would disable a correct kernel for that region-class.
+    F.clear_verification_cache()
+    region = _region()
+    assert C.verify_candidate(_Wrong("hand", Tier.HAND_TUNED), region) is False
+
+    class _RealRunner(KernelRunner):
+        target = _TGT                      # same backend id the candidate carried
+        def run_fused_region(self, region, A, B, bias=None, *a, **k):
+            return region.reference(A, B, bias), "real_tag"   # correct kernel
+        def run_fused_attention(self, region, *a, **k):
+            raise NotImplementedError
+        def run_gated_matmul_region(self, region, *a, **k):
+            raise NotImplementedError
+        def run_pointwise_graph(self, region, *a, **k):
+            raise NotImplementedError
+
+    # Non-forced: reads the shared cache. Must re-probe the real runner (True),
+    # not reuse the candidate's False verdict.
+    assert F.verify_synthesized_region(region, runner=_RealRunner()) is True

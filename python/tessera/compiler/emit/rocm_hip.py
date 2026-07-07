@@ -338,9 +338,13 @@ class RocmWmmaGemmCandidate(Candidate):
     accuracy_atol = _F16_ATOL              # f16 storage budget (Decision #28)
 
     def available(self) -> bool:
+        # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just
+        # the shipped GEMM symbol — else this could win arbitration on a host where
+        # only the shipped lib probes OK and then decline to the reference, starving
+        # the working generic lane (PR #289 review).
         try:
             from tessera import runtime as rt
-            return rt._rocm_wmma_runtime_available()
+            return rt._rocm_wmma_fused_available()
         except Exception:
             return False
 

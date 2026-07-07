@@ -141,51 +141,81 @@ def candidates_for(target: str, op: str) -> list[Candidate]:
 
 
 # --- F4-gate adapter: reuse the universal oracle per candidate ----------------
+#: Namespace for a candidate probe's synthetic runner target, so its verdict lands
+#: on a *candidate-private* oracle cache key — never colliding with the real
+#: backend runner or a sibling candidate for the same target (PR #289 review, P1).
+_PROBE_NS = "candidate"
+
+
 def _as_runner(candidate: Candidate) -> Any:
     """Wrap a :class:`Candidate` as a :class:`KernelRunner` so the existing
     ``fusion_core.verify_synthesized_*`` oracle gates it unchanged — the whole
     point of D1's F4 reuse. Only the candidate's own op method is wired; the other
-    three raise (the oracle never calls them for this op)."""
+    three raise (the oracle never calls them for this op).
+
+    The adapter's ``target`` is **namespaced per candidate** (``candidate::<target>
+    ::<name>``): the oracle keys its verdict cache by ``runner.target``, so a shared
+    ``target`` would let a Tier-3 probe's verdict be reused for the real runner or
+    another candidate on the same backend. ``last_execution`` records the probe's
+    execution tag so the arbiter can tell a real kernel run from a reference decline
+    (a decliner provides no kernel for this region and must not win — P2)."""
     from tessera.compiler.emit.kernel_emitter import KernelRunner
 
     _, method = _OP_VERIFY[candidate.op]
 
     class _CandidateRunner(KernelRunner):
-        target = candidate.target
+        target = f"{_PROBE_NS}::{candidate.target}::{candidate.name}"
         accuracy_atol = candidate.accuracy_atol
+        last_execution: str | None = None
 
         def run_fused_region(self, region, *a, **k):
-            return self._route("run_fused_region", region, a, k)
+            return self._route("run_fused_region", region, a)
 
         def run_fused_attention(self, region, *a, **k):
-            return self._route("run_fused_attention", region, a, k)
+            return self._route("run_fused_attention", region, a)
 
         def run_gated_matmul_region(self, region, *a, **k):
-            return self._route("run_gated_matmul_region", region, a, k)
+            return self._route("run_gated_matmul_region", region, a)
 
         def run_pointwise_graph(self, region, *a, **k):
-            return self._route("run_pointwise_graph", region, a, k)
+            return self._route("run_pointwise_graph", region, a)
 
-        def _route(self, called, region, a, k):
+        def _route(self, called, region, a):
             if called != method:
                 raise NotImplementedError(
                     f"candidate {candidate.name!r} serves {method}, not {called}")
-            return candidate.run(region, *a)
+            out, tag = candidate.run(region, *a)
+            self.last_execution = tag
+            return out, tag
 
     return _CandidateRunner()
 
 
 def verify_candidate(candidate: Candidate, region: Any, *, atol: float = 1e-3,
                      seed: int = 0) -> bool:
-    """F4-gate ``candidate`` on ``region``: run the universal numpy-reference oracle
-    for the candidate's op-kind, honoring its ``accuracy_atol`` budget. ``True`` iff
-    a real kernel ran and matched (or it declined to the trusted reference)."""
+    """F4-gate ``candidate`` on ``region`` **for arbitration**: ``True`` iff the
+    candidate ran a *real* device kernel that matched the numpy reference within its
+    ``accuracy_atol`` budget.
+
+    This reuses the universal ``fusion_core.verify_synthesized_*`` oracle but adds
+    one arbiter-specific rule: a candidate that **declined to the reference** on the
+    probe returns ``False`` here. The oracle itself trusts a decline (returns
+    ``True`` — "no kernel ran, nothing to distrust") for its own trust-by-
+    construction path, but a decliner provides no kernel for this region; if it
+    counted as verified it would win by tier and then hand back only the numpy
+    reference, starving a lower tier that actually executes (PR #289 review, P2)."""
     from tessera.compiler import fusion_core
+    from tessera.compiler.emit.kernel_emitter import REFERENCE_EXECUTIONS
 
     verify_name, _ = _OP_VERIFY[candidate.op]
     verify = getattr(fusion_core, verify_name)
-    return bool(verify(region, runner=_as_runner(candidate), force=True,
-                       atol=atol, seed=seed))
+    adapter = _as_runner(candidate)
+    matched = bool(verify(region, runner=adapter, force=True, atol=atol, seed=seed))
+    if not matched:
+        return False
+    # Ran-a-real-kernel gate: a reference decline is correct-by-construction but not
+    # a viable arbitration winner (see docstring).
+    return adapter.last_execution not in REFERENCE_EXECUTIONS
 
 
 # --- the arbiter -------------------------------------------------------------

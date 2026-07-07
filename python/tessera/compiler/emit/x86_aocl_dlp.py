@@ -41,6 +41,13 @@ from tessera.compiler.fusion_core import FusedRegion
 
 _TARGET = "x86"
 _REAL_TAG = "x86_aocl_dlp"
+#: The concrete aocl-dlp GEMM post-op ctypes ABI is not yet bound (pending real
+#: headers + license review on a licensed install). Until an implementer wires
+#: :func:`_aocl_dlp_gemm` and flips this ``True``, the candidate stays UNAVAILABLE
+#: even when ``$TESSERA_AOCL_DLP_LIB``/``$TESSERA_AOCL_DLP_SGEMM`` resolve a real
+#: symbol — an opt-in install must never silently demote a supported fused GEMM to
+#: the numpy reference by winning arbitration and then declining (PR #289 review).
+_ABI_WIRED = False
 #: Activations AOCL-DLP fuses as a GEMM post-op, applied after the bias add — the
 #: same bias-then-activation envelope the region must match (mirrors the ROCm WMMA
 #: candidate's fusable set so both crown-jewel GEMM lanes share one applicability).
@@ -91,6 +98,10 @@ def _aocl_dlp_gemm(a: Any, b: Any, bias: Any, activation: str) -> Any | None:
     real aocl-dlp headers on a licensed install** — until the symbol named by
     ``$TESSERA_AOCL_DLP_SGEMM`` resolves, this returns ``None`` so the candidate
     declines honestly rather than call an unverified signature (Decision #21/#27)."""
+    if not _ABI_WIRED:
+        # ABI not bound yet — decline unconditionally (the candidate is also
+        # unavailable, so this is only reachable via a forced, unverified run).
+        return None
     lib = _aocl_dlp_lib()
     if lib is None:
         return None
@@ -117,9 +128,12 @@ class X86AoclDlpCandidate(Candidate):
     op = OP_FUSED_REGION
 
     def available(self) -> bool:
-        # Present iff the library loads AND the verified GEMM entry point resolves.
-        # Both are env-gated, so this is False on any host without a wired install.
-        if _aocl_dlp_lib() is None:
+        # Present iff the post-op ABI is actually bound (`_ABI_WIRED`) AND the
+        # library + verified GEMM entry point resolve. The `_ABI_WIRED` gate is
+        # what stops a real symbol from making this "available" while the run path
+        # still declines — which would let it win by tier and demote a supported
+        # fused GEMM to the reference (PR #289 review).
+        if not _ABI_WIRED or _aocl_dlp_lib() is None:
             return False
         sym = os.environ.get("TESSERA_AOCL_DLP_SGEMM")
         return bool(sym and getattr(_aocl_dlp_lib(), sym, None))

@@ -226,15 +226,27 @@ class RunnerError(RuntimeError):
     gap so the caller can fall back or report (Decision #21: no silent no-op)."""
 
 
+#: Execution tags that mean *no real device kernel ran* — the runner fell back to
+#: the numpy reference. The F4 oracle trusts these by construction (there is
+#: nothing device-emitted to distrust); ANY OTHER tag means a real kernel ran and
+#: the oracle compares it to the numpy reference. A new backend therefore returns
+#: its own real-execution tag (e.g. ``"x86_native"`` / ``"rocm_hip"`` / ``"cuda"``)
+#: to get gated, and one of these when it declines — it does NOT need to pretend
+#: to be Metal. This is what makes the F4 gate backend-agnostic (B3).
+REFERENCE_EXECUTIONS = frozenset({"reference", "fallback"})
+
+
 class KernelRunner(ABC):
     """Executes a synthesized fused region on probe inputs.
 
     Each method returns ``(output, execution)`` where ``execution`` is a backend
-    tag (``"metal_runtime"`` when a real device kernel ran, ``"reference"`` /
-    ``"fallback"`` when it did not). The oracle trusts the numpy reference unless
-    a real kernel ran and *diverged*. Signatures accept ``*args, **kwargs`` so a
-    backend's ``run_*`` gaining an optional knob is not an interface break; the
-    documented positional args are what the oracles pass.
+    tag: a real-execution tag (``"metal_runtime"``, ``"x86_native"``, …) when a
+    real device kernel ran, or a tag in :data:`REFERENCE_EXECUTIONS`
+    (``"reference"`` / ``"fallback"``) when it fell back to numpy. The F4 oracle
+    compares to the numpy reference iff a real kernel ran, and trusts the
+    reference otherwise. Signatures accept ``*args, **kwargs`` so a backend's
+    ``run_*`` gaining an optional knob is not an interface break; the documented
+    positional args are what the oracles pass.
     """
 
     #: Backend identity, e.g. ``"apple_gpu"``. Subclasses set this.

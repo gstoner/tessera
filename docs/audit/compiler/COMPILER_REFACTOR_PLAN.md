@@ -163,6 +163,12 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
 
 ### Workstream C — Per-arch codegen plugin interface + the missing lead lanes
 
+> **Picking this up on the Strix Halo / NR2 Pro box?** Start at
+> [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md) — the build recipe for the
+> three plugin seams (emitter / compile_fn / runner) the merged Workstream B
+> framework calls into, with a copy-paste skeleton, the F4-verification recipe,
+> and the per-backend task cards (C1 x86 · C2 NVIDIA · C3 ROCm).
+
 - **C1 · `TargetPlugin` interface** `[MAC]` — `{emit_kernel, shape_table,
   cost_model, intrinsic_set, async_model, compile_fn, spec_policy}`. Apple + x86
   are the first two reference impls (simplest to validate host-free / on Zen 5).

@@ -63,14 +63,24 @@ This document consolidates NVIDIA-specific audit material.
 ## Still Open
 
 The original "no execution row / not hardware-proven" gaps are **closed**
-(above). What remains is breadth beyond the first proven kernel:
+(above), and the **compiler-generated lane is now landed + hardware-proven** on
+sm_120 (RTX 5070 Ti, PRs #290–#297):
 
-- **Compiler-GENERATED NVIDIA lane** — the analog of ROCm's `rocm_compiled`
-  (a `tessera-opt` NVIDIA pipeline that generates + serializes the kernel
-  in-process, rather than dispatching the hand-shipped `libtessera_nvidia_gemm`
-  symbol). Today's `nvidia_mma` lane mirrors `rocm_wmma` (shipped symbol), not
-  the compiler-generated path.
-- **NVFP4 block-scale matmul (#9)** — the warp `mma.sync…block_scale`
+- **Compiler-GENERATED NVIDIA lane — LANDED.** `emit/nvidia_cuda.py` is a full
+  three-seam plugin (emitter + `nvcc` compile + ctypes runner) that synthesizes,
+  compiles, and launches kernels in-process for **all four `fusion_core` region
+  kinds** — fused matmul-epilogue, flash-attention (C4), SwiGLU gate + pointwise
+  DAG (C5) — each F4-gated on-device. The emit-path `mma.sync` GEMM
+  (`ptx_emit.py` → the shipped `tessera_nvidia_ptx_launch` bridge: driver-JIT +
+  `cuLaunchKernel`) executes the *emitted* PTX, distinct from the hand-shipped
+  `libtessera_nvidia_gemm` symbol. Both are first-class D1 arbiter candidates:
+  the shipped GEMM is **Tier-3 hand-tuned**, the emitted GEMM **Tier-2 emitted**
+  (B1), with D2 measured autotune + D3 fallback logging choosing/observing between
+  them. So NVIDIA now has the `rocm_compiled` analog it lacked, plus the arbiter
+  surface.
+- **NVFP4 block-scale matmul (#9)** — **emit + ptxas-assemble landed** (#291,
+  `emit_nvfp4_block_scale_mma_ptx`); on-device execution + non-unit-scale numerics
+  stay gated on the PTX-ISA scale-distribution spec. The warp `mma.sync…block_scale`
   instruction already assembles + executes on `sm_120a` (see
   `spikes/sm120_mma_sync/`); productization is pending the PTX ISA
   scale-distribution spec for numerics.
@@ -87,14 +97,20 @@ The original "no execution row / not hardware-proven" gaps are **closed**
 
 ## Next Work
 
-1. Build the compiler-generated NVIDIA lane (the `rocm_compiled` analog) via a
-   `tessera-opt` NVIDIA pipeline; add its executable matrix row.
-2. Land NVFP4 block-scale matmul once the scale-distribution numerics are
-   grounded; flip its manifest row when execute-and-compare passes on `sm_120a`.
-3. Bring the sm_120 `mma.sync` flash-attention forward to the same
-   execute-and-compare bar (attention analog of the GEMM proof).
-4. Author an sm_120 `mma.sync` kernel inventory (sibling to
-   `docs/nvidia_cuda13_kernel_inventory.md`).
+Done (2026-07-07): the compiler-generated lane (#290–#297), the sm_120 `mma.sync`
+flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
+(`docs/nvidia_sm120_mma_sync_kernel_inventory.md`). Remaining:
+
+1. **NVFP4 block-scale execution + numerics** — bind the fp4 fragment packing and
+   flip the manifest row once execute-and-compare passes on `sm_120a` and the
+   scale-distribution numerics are grounded (emit + ptxas-assemble already land).
+2. **mma.sync tensor-core versions** of the flash-attention + fused lanes (the
+   correctness-first synth lanes are proven; these are the perf follow-on) + the
+   **D2 fleet-shared autotune corpus** (persist `MeasureCache`, Theory §7.5).
+3. **Dtypes beyond f32** for the fused / attention / gated lanes (16-bit storage
+   is served by the B1 matmul lane today).
+4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real
+   Hopper WGMMA kernel (assemble-only until a Hopper box) — and **sm_100 tcgen05**.
 5. Promote sm_80/90/100 manifest rows only when their own silicon is available
    and the generated dashboards agree.
 

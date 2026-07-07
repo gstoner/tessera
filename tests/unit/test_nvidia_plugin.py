@@ -115,6 +115,19 @@ def test_nvidia_arbitrated_residual_threads_not_raises():
     np.testing.assert_allclose(out, region.reference(A, B, None, res), atol=1e-2)
 
 
+def test_nvidia_gemm_helpers_reject_mismatched_k():
+    # PR #294 review: a mismatched contraction dim (A is MxK, B is K2xN, K != K2)
+    # must raise before the C ABI overreads B — validated ahead of the lib load,
+    # so this is host-free (like MatmulRegion.reference / the JIT path).
+    from tessera import runtime as rt
+    A = np.zeros((32, 16), np.float32)
+    B = np.zeros((24, 8), np.float32)          # K 24 != A's K 16
+    with pytest.raises(ValueError, match="matching K"):
+        rt._nvidia_mma_gemm_2d(A, B, "bfloat16")
+    with pytest.raises(ValueError, match="matching K"):
+        rt._nvidia_ptx_gemm_2d(A, B, "bfloat16")
+
+
 def test_nvidia_matmul_candidates_registered():
     # B1: the bare-matmul op-kind + the two GEMM lanes (shipped Tier-3, emitted
     # Tier-2) registered under (nvidia, matmul).

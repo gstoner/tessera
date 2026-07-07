@@ -1,16 +1,23 @@
-"""Stage D (NVIDIA) — sm_120 mma.sync GEMM executes through the C-ABI bridge.
+"""Stage D (NVIDIA) — sm_120 mma.sync GEMM executes through the SHIPPED C-ABI bridge.
 
 The consumer-Blackwell counterpart to ``test_rocm_wmma_execute_compare.py``. The
 launched kernel is the **Tessera-emitted PTX** from
 ``ptx_emit.emit_mma_sync_matmul_ptx`` (NOT a hand-written nvcc kernel): a
 warp-level ``mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32`` that computes a
-16×8×16 ``f32 ← bf16`` GEMM. The C-ABI launcher loads that emitted PTX via the
-CUDA Driver API (``cuModuleLoadDataEx`` — runs ptxas in-driver), launches it
-through ``tsrLaunchKernel``, and execute-and-compares against a host reference.
+16×8×16 ``f32 ← bf16`` GEMM.
+
+C2 tail (COMPILER_REFACTOR_PLAN): the launcher is no longer an inline throwaway —
+it is the **shipped** ``tessera_nvidia_ptx_launch.cpp`` (the counterpart to Apple's
+``apple_gpu_runtime.mm``), compiled straight from source here. The harness registers
+the emitted PTX (``tessera_nvidia_ptx_register``), registers the shipped launcher on
+the ``tsrRegisterGpuLauncher`` seam (``tessera_nvidia_register_ptx_launcher``), then
+drives it through ``tsrLaunchKernel`` and execute-and-compares against a host
+reference. The shipped bridge driver-JITs the PTX (``cuModuleLoadDataEx``, cached by
+kernel name) and launches it (``cuLaunchKernel``).
 
 This is the first real **`backend_kernel` execution** for a Tessera matmul on
-NVIDIA silicon: the emitted PTX runs through the runtime bridge and matches the
-oracle, closing the rung ladder emit → assemble → launch → compare on sm_120.
+NVIDIA silicon: the emitted PTX runs through the shipped runtime bridge and matches
+the oracle, closing the rung ladder emit → assemble → launch → compare on sm_120.
 
 Skip-clean: no nvcc / no built runtime lib / no usable GPU (CUDA probe).
 """
@@ -29,6 +36,10 @@ from tessera.compiler import ptx_emit as P
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LIB = REPO_ROOT / "build" / "src" / "runtime" / "libtessera_runtime.a"
 RUNTIME_INCLUDE = REPO_ROOT / "src" / "runtime" / "include"
+# The shipped C2-tail launch bridge (compiled from source into the harness).
+BRIDGE_DIR = (REPO_ROOT / "src" / "compiler" / "codegen"
+              / "tessera_gpu_backend_NVIDIA" / "runtime" / "cuda")
+BRIDGE_SRC = BRIDGE_DIR / "tessera_nvidia_ptx_launch.cpp"
 
 
 def _nvcc() -> str | None:
@@ -39,25 +50,25 @@ def _nvcc() -> str | None:
     )
 
 
-# The launcher loads the emitted PTX (path passed as argv[1]) via the Driver API
-# and runs it through tsrLaunchKernel. buffers = {A(bf16), B(bf16), D(f32)};
-# dims = {M,N,K} (this kernel: 16,8,16).
+# The harness registers the emitted PTX (read from argv[1]) with the SHIPPED
+# bridge, registers the shipped launcher on the tsrRegisterGpuLauncher seam, then
+# runs it through tsrLaunchKernel. buffers = {A(bf16), B(bf16), D(f32)};
+# dims = {M,N,K} (this kernel: 16,8,16). The launcher body lives in the shipped
+# tessera_nvidia_ptx_launch.cpp (compiled alongside this harness) — NOT inline.
 _HARNESS = r"""
 #include "tessera/tessera_runtime.h"
+#include "tessera_nvidia_ptx_launch.h"
 #include <cuda.h>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #define M 16
 #define N 8
 #define K 16
-
-static const char* g_ptx_path = nullptr;
-static CUfunction  g_fn = nullptr;
-static bool        g_loaded = false;
 
 // bf16 round-to-nearest-even, packed in uint16 (host side, no SDK dependency).
 static unsigned short f2bf16(float f){
@@ -66,52 +77,13 @@ static unsigned short f2bf16(float f){
 }
 static float bf162f(unsigned short h){ unsigned int x=((unsigned int)h)<<16; float f; std::memcpy(&f,&x,4); return f; }
 
-static bool ensure_module() {
-  if (g_loaded) return g_fn != nullptr;
-  g_loaded = true;
-  FILE* fp = std::fopen(g_ptx_path, "rb");
+static bool read_file(const char* path, std::string& out) {
+  FILE* fp = std::fopen(path, "rb");
   if (!fp) return false;
   std::fseek(fp,0,SEEK_END); long sz=std::ftell(fp); std::fseek(fp,0,SEEK_SET);
-  std::vector<char> ptx(sz+1); if (std::fread(ptx.data(),1,sz,fp)!=(size_t)sz){std::fclose(fp);return false;} ptx[sz]=0; std::fclose(fp);
-  char log[8192]; log[0]=0;
-  CUjit_option o[]={CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES};
-  void* ov[]={(void*)log,(void*)(size_t)sizeof(log)};
-  CUmodule mod;
-  if (cuModuleLoadDataEx(&mod, ptx.data(), 2, o, ov) != CUDA_SUCCESS) {
-    std::fprintf(stderr,"cuModuleLoadDataEx: %s\n", log); return false;
-  }
-  if (cuModuleGetFunction(&g_fn, mod, "tessera_mma_m16n8k16_bf16") != CUDA_SUCCESS) return false;
-  return true;
-}
-
-static TsrStatus nvidia_mma_launcher(const char* target, const char* name,
-                                     const tsrGpuLaunchParams* p, void*) {
-  if (std::strncmp(target, "nvidia", 6) != 0) return TSR_STATUS_NOT_FOUND;
-  if (std::strcmp(name, "tessera_mma_m16n8k16_bf16") != 0) return TSR_STATUS_NOT_FOUND;
-  if (p->num_buffers != 3 || p->num_dims != 3) return TSR_STATUS_INVALID_ARGUMENT;
-  if (p->dims[0] != M || p->dims[1] != N || p->dims[2] != K)
-    return TSR_STATUS_INVALID_ARGUMENT;   // this proof is a single 16x8x16 tile
-  if (!ensure_module()) return TSR_STATUS_INTERNAL;
-
-  const unsigned short* A = (const unsigned short*)p->buffers[0];
-  const unsigned short* B = (const unsigned short*)p->buffers[1];
-  float* D = (float*)p->buffers[2];
-  size_t sA=M*K*2, sB=K*N*2, sD=M*N*4;
-  CUdeviceptr dA=0,dB=0,dD=0;
-  if (cuMemAlloc(&dA,sA)!=CUDA_SUCCESS) return TSR_STATUS_INTERNAL;
-  if (cuMemAlloc(&dB,sB)!=CUDA_SUCCESS){cuMemFree(dA);return TSR_STATUS_INTERNAL;}
-  if (cuMemAlloc(&dD,sD)!=CUDA_SUCCESS){cuMemFree(dA);cuMemFree(dB);return TSR_STATUS_INTERNAL;}
-  TsrStatus rc = TSR_STATUS_SUCCESS;
-  do {
-    if (cuMemcpyHtoD(dA,A,sA)!=CUDA_SUCCESS){rc=TSR_STATUS_INTERNAL;break;}
-    if (cuMemcpyHtoD(dB,B,sB)!=CUDA_SUCCESS){rc=TSR_STATUS_INTERNAL;break;}
-    void* args[]={&dA,&dB,&dD};
-    if (cuLaunchKernel(g_fn, 1,1,1, 32,1,1, 0, 0, args, 0)!=CUDA_SUCCESS){rc=TSR_STATUS_INTERNAL;break;}
-    if (cuCtxSynchronize()!=CUDA_SUCCESS){rc=TSR_STATUS_INTERNAL;break;}
-    if (cuMemcpyDtoH(D,dD,sD)!=CUDA_SUCCESS){rc=TSR_STATUS_INTERNAL;break;}
-  } while(0);
-  cuMemFree(dA); cuMemFree(dB); cuMemFree(dD);
-  return rc;
+  std::vector<char> buf(sz+1);
+  if (std::fread(buf.data(),1,sz,fp)!=(size_t)sz){std::fclose(fp);return false;}
+  buf[sz]=0; std::fclose(fp); out.assign(buf.data()); return true;
 }
 
 static bool gpu_usable() {
@@ -125,9 +97,12 @@ static bool gpu_usable() {
 
 int main(int argc, char** argv) {
   if (argc < 2) { std::fprintf(stderr,"usage: %s <ptx>\n", argv[0]); return 2; }
-  g_ptx_path = argv[1];
   if (!gpu_usable()) { std::printf("SKIP_NO_DEVICE\n"); return 0; }
-  if (tsrRegisterGpuLauncher(nvidia_mma_launcher, nullptr) != TSR_STATUS_SUCCESS) return 5;
+  std::string ptx;
+  if (!read_file(argv[1], ptx)) return 3;
+  // Hand the emitted PTX to the shipped bridge, then register it on the seam.
+  if (tessera_nvidia_ptx_register("tessera_mma_m16n8k16_bf16", ptx.c_str()) != 0) return 4;
+  if (tessera_nvidia_register_ptx_launcher() != 0) return 5;
   if (tsrInit() != TSR_STATUS_SUCCESS) return 6;
   tsrDevice dev=nullptr; if (tsrGetDevice(0,&dev)!=TSR_STATUS_SUCCESS) return 7;
   tsrStream s=nullptr;   if (tsrCreateStream(dev,&s)!=TSR_STATUS_SUCCESS) return 8;
@@ -201,13 +176,21 @@ def test_nvidia_mma_sync_gemm_executes_and_compares_through_bridge(tmp_path):
     # Compile (two-step: nvcc's driver would try to compile the .a positionally).
     r = subprocess.run(
         [nvcc, "-std=c++17", "-O2", "-I", str(RUNTIME_INCLUDE),
-         "-c", str(src), "-o", str(obj)],
+         "-I", str(BRIDGE_DIR), "-c", str(src), "-o", str(obj)],
         capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, f"nvcc compile failed:\n{r.stderr[:4000]}"
 
+    # Compile the SHIPPED bridge source (not an inline copy) into the harness.
+    bridge_obj = tmp_path / "tessera_nvidia_ptx_launch.o"
+    r = subprocess.run(
+        [nvcc, "-std=c++17", "-O2", "-I", str(RUNTIME_INCLUDE),
+         "-I", str(BRIDGE_DIR), "-c", str(BRIDGE_SRC), "-o", str(bridge_obj)],
+        capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0, f"nvcc bridge compile failed:\n{r.stderr[:4000]}"
+
     link_libdirs = [str(d) for d in (stubs, wsl_lib) if d.is_dir()]
     r = subprocess.run(
-        [nvcc, str(obj), str(RUNTIME_LIB),
+        [nvcc, str(obj), str(bridge_obj), str(RUNTIME_LIB),
          *[f"-L{d}" for d in link_libdirs], "-lcuda", "-lpthread", "-o", str(binp)],
         capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, f"nvcc link failed:\n{r.stderr[:4000]}"

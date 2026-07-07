@@ -74,7 +74,8 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
 | **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | 🟡 candidate wired host-free | 🟡 generic Tier-1 proven on Zen; AOCL lane library-gated | — |
 | **4** | C2 NVIDIA generic synth → CUDA (`emit/nvidia_cuda.py`: emitter + `nvcc` + runner) | ✅ emit host-free | — | ✅ sm_120 FusedRegion (RTX 5070 Ti) |
-| **4** | C2 tail — `ptx_emit` mma.sync/wgmma emit → `ptxas`→CUBIN→launch bridge | ⬜ | — | ⬜ (box present) |
+| **4** | C2 tail — mma.sync PTX → shipped launch bridge (`tessera_nvidia_ptx_launch`) | ✅ host-free (g++/nvcc) | — | ✅ sm_120 m16n8k16 (RTX 5070 Ti) |
+| **4** | C2 tail — broaden shapes/dtypes + `wgmma` sm_90a + arbiter Tier-2 wiring | ⬜ | — | ⬜ |
 | **5** | C3 ROCm generic synth → HIP (`emit/rocm_hip.py`: emitter + `hipcc` + runner) | ✅ emit host-free | ✅ gfx1151 FusedRegion | — |
 | **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
@@ -89,9 +90,11 @@ are **no longer gated on a remote box**: the C2 generic-CUDA `FusedRegion` lane 
 hardware-verified on it (`emit/nvidia_cuda.py`; F4-gated + arbiter-selected on-GPU,
 `test_nvidia_plugin.py` live gates), and the **E2 sm_120 perf-ratchet baseline is
 recorded** (`benchmarks/baselines/nvidia_sm120_hot_paths.json` — the shipped mma.sync
-GEMM ladder; `test_nvidia_perf_ratchet.py` live-gates it). What remains `[NV]`-open is
-the **C2 tail** (`ptx_emit`→`ptxas`→CUBIN→launch bridge for the crown-jewel mma.sync/
-wgmma GEMM). Do not read §4's hard-gate phrasing as blocking Mac/AMD authoring once E1
+GEMM ladder; `test_nvidia_perf_ratchet.py` live-gates it). The **C2-tail launch bridge
+is also landed + proven** (`tessera_nvidia_ptx_launch` driver-JITs + launches the
+emitted `mma.sync` PTX on-GPU). What remains `[NV]`-open is **broadening** that emit
+lane (shapes/dtypes, `wgmma` sm_90a, sm_100) and its Tier-2 arbiter wiring. Do not read
+§4's hard-gate phrasing as blocking Mac/AMD authoring once E1
 is green.
 
 ---
@@ -277,17 +280,28 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   layer_norm/prologue) compiles, runs on-GPU, matches numpy (f32), passes the same
   universal F4 oracle, and the D1 arbiter selects it (`test_nvidia_plugin.py` live
   gates). Same NULL-buffer guard as x86/ROCm.
-  **C2 tail (the emit GEMM lane — still open):** the crown-jewel `mma.sync`/`wgmma`
-  path via `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
-  `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize → launch
-  bridge. **Scope correction (§9.1(2), source-verified):** the bulk of the tail is the
-  **net-new serialize→`ptxas`→CUBIN→`tsrRegisterGpuLauncher` bridge + kernel/artifact
-  cache** (the NVIDIA counterpart to Apple's `apple_gpu_runtime.mm`). `ptx_emit.py` is
-  a clean but **bf16-only, few-shape** emitter, and today's executing sm_120 matmul
-  runs via the shipped `libtessera_nvidia_gemm.so`, **not** the emit path — so the
-  bridge is the long pole, ahead of broadening shapes/dtypes. Unlike C3, NVIDIA has no
-  *fused* shipped kernel to register as a Tier-3 `FusedRegion` candidate yet (the
-  shipped kernel is a pure GEMM served by the jit `nvidia_mma` executor).
+  **C2 tail — launch bridge LANDED + hardware-proven 2026-07-07.** The long pole the
+  plan flagged (§9.1(2)) is built: `runtime/cuda/tessera_nvidia_ptx_launch.{cpp,h}` is
+  the shipped NVIDIA counterpart to Apple's `apple_gpu_runtime.mm` — it driver-JITs
+  Tessera's *emitted* `ptx_emit.py` PTX (`cuModuleLoadDataEx`, **cached by kernel
+  name**) and launches it (`cuLaunchKernel`), exposing both the direct
+  `tessera_nvidia_ptx_register`/`_invoke` C-ABI (dlopen-able standalone; the seam is a
+  **weak** `tsrRegisterGpuLauncher` ref so the `.so` loads without the core runtime)
+  and the `tsrGpuLauncherFn` registered via `tessera_nvidia_register_ptx_launcher`.
+  CMake target added alongside the shipped GEMM lib. This **promoted the throwaway
+  inline launcher** in `test_conformance_execute_compare_nvidia.py` into shipped code;
+  that test now compiles the shipped source and drives it through the real
+  `tsrLaunchKernel` seam. **Live-proven on sm_120** (RTX 5070 Ti): the emitted
+  `mma.sync m16n8k16` bf16 GEMM runs on-GPU and matches the numpy oracle (max err
+  ~2.4e-7), the module cache reuses, and an unregistered kernel declines honestly.
+  **Still open:** the emitter is **bf16-only, single-tile (m16n8k16)** — broadening
+  shapes/dtypes, the `wgmma` sm_90a path (whose emit currently fails `ptxas` assembly —
+  a latent `emit_wgmma_matmul_ptx` defect, no Hopper needed to fix), sm_100 tcgen05,
+  and wiring this as a **Tier-2 EMITTED** arbiter candidate (blocked on a bare-matmul
+  op-kind — the candidate registry has no matmul op today, only fused_region/attention/
+  gated/pointwise). Unlike C3, NVIDIA has no *fused* shipped kernel to register as a
+  Tier-3 `FusedRegion` candidate yet (the shipped kernel is a pure GEMM served by the
+  jit `nvidia_mma` executor).
 - **C3 · ROCm generic synth → HIP** — **generic lane LANDED 2026-07-06**, `[MAC]`
   author → `[AMD]` proof. `emit/rocm_hip.py` is now a **full three-seam plugin**
   (parallel to x86): `RocmHipEmitter` turns a `FusedRegion` into HIP source (a

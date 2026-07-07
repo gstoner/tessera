@@ -38,6 +38,13 @@ import tempfile
 from typing import Any
 
 from tessera.compiler.emit._fused_scalar_body import row_compute_body
+from tessera.compiler.emit.candidate import (
+    OP_ATTENTION,
+    OP_FUSED_REGION,
+    Candidate,
+    Tier,
+    register_candidate,
+)
 from tessera.compiler.emit.kernel_cache import build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
@@ -55,6 +62,10 @@ _TARGET = "rocm"
 _LANG = "hip"
 _ENTRY = "tessera_rocm_fused"
 _REAL_TAG = "rocm_hip"
+#: Real-execution tag for the fused WMMA matrix-core lane (distinct from the
+#: generic scalar HIP lane's "rocm_hip") so the arbiter/fallback log can tell
+#: which candidate actually ran.
+_WMMA_TAG = "rocm_wmma"
 #: f16 storage budget for the shipped flash lane vs the f32 reference. Loose
 #: enough for f16 rounding (~2.5e-3 on the oracle probes), tight enough that an
 #: O(1) miscompile is still caught. The generic f32 HIP kernel is well within it.
@@ -253,7 +264,143 @@ class RocmHipRunner(KernelRunner):
         return region.reference(*arrays), "reference"
 
 
+# ── D1 candidates (C3 tail) ───────────────────────────────────────────────────
+#
+# The arbiter (emit/candidate.py) enumerates these per (target, op) and F4-gates
+# each. Three ROCm lanes become first-class candidates:
+#   • generic scalar HIP  — Tier 1 (synthesized), serves ANY FusedRegion.
+#   • fused WMMA GEMM      — Tier 3 (hand-tuned, the `generate-wmma-gemm-kernel`
+#                            `Generate*` pass), serves the bias/relu/gelu/silu
+#                            middle ground on matrix cores. THIS is the C3 tail:
+#                            the crown-jewel GEMM driven through the same loop.
+#   • compiled FA-2 flash  — Tier 3 (hand-tuned), serves attention.
+# Lead-safety (Decision #28): the default arbiter prefers the highest tier, so
+# WMMA wins over the generic lane wherever it applies — until D2's measured loop
+# proves the generic lane faster + in budget on a given shape-bucket.
+
+_SHARED_RUNNER = RocmHipRunner()
+
+#: Activations the WMMA `generate-wmma-gemm-kernel` epilogue fuses (bias is a
+#: separate flag). The kernel applies bias FIRST, then one of these — so a region
+#: is representable only when its epilogue is a bias-before-activation subsequence.
+_WMMA_ACTS = ("relu", "gelu", "silu")
+
+
+def _wmma_epilogue(region: Any) -> tuple[bool, str] | None:
+    """Map ``region`` to the fused WMMA kernel's ``(has_bias, activation)`` epilogue,
+    or ``None`` when the region is not representable on that kernel. Representable
+    iff: a ``FusedRegion`` with no reduction / residual / prologue, and an epilogue
+    that is an ordered subsequence of ``[bias?, <one of relu/gelu/silu>?]`` (the
+    kernel does bias-add then a single pointwise activation before the store)."""
+    if not isinstance(region, FusedRegion):
+        return None
+    if region.reduction is not None or region.residual or region.prologue:
+        return None
+    epi = list(region.epilogue)
+    has_bias = False
+    if epi and epi[0] == "bias":
+        has_bias = True
+        epi = epi[1:]
+    if not epi:
+        return has_bias, "none"
+    if len(epi) == 1 and epi[0] in _WMMA_ACTS:
+        return has_bias, epi[0]
+    return None                               # bias-after-act, or an unfusable op
+
+
+class RocmGenericHipCandidate(Candidate):
+    """Tier-1: the generic one-thread-per-row HIP lane (arch-agnostic synth). Serves
+    any ``FusedRegion`` — the floor-raising middle ground that is correctness-first,
+    not a matrix-core GEMM."""
+
+    name = "rocm_generic_hip"
+    tier = Tier.SYNTHESIZED
+    target = _TARGET
+    op = OP_FUSED_REGION
+
+    def run(self, region: Any, A: Any, B: Any, bias: Any = None,
+            *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
+                                               residual=residual)
+
+
+class RocmWmmaGemmCandidate(Candidate):
+    """Tier-3: the hand-tuned WMMA GEMM (`generate-wmma-gemm-kernel` pass) with a
+    fused bias/relu/gelu/silu epilogue on the matrix cores, f16 storage / f32
+    accumulate — the C3 tail's crown-jewel candidate. Declines (to the reference)
+    off gfx1151 or for a region it cannot fuse, so it simply drops out of the
+    arbiter's enumeration there."""
+
+    name = "rocm_wmma_gemm"
+    tier = Tier.HAND_TUNED
+    target = _TARGET
+    op = OP_FUSED_REGION
+    accuracy_atol = _F16_ATOL              # f16 storage budget (Decision #28)
+
+    def available(self) -> bool:
+        # Probe the ACTUAL fused path (tessera-opt + generated kernel), not just
+        # the shipped GEMM symbol — else this could win arbitration on a host where
+        # only the shipped lib probes OK and then decline to the reference, starving
+        # the working generic lane (PR #289 review).
+        try:
+            from tessera import runtime as rt
+            return rt._rocm_wmma_fused_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return _wmma_epilogue(region) is not None
+
+    def run(self, region: Any, A: Any, B: Any, bias: Any = None,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        epi = _wmma_epilogue(region)
+        if epi is None:                    # not representable — honest decline
+            return region.reference(A, B, bias), "reference"
+        has_bias, activation = epi
+        if has_bias and bias is None:      # NULL-buffer guard (as x86/generic)
+            return region.reference(A, B, bias), "reference"
+        try:
+            from tessera import runtime as rt
+            Ah = np.ascontiguousarray(A, np.float16)
+            Bh = np.ascontiguousarray(B, np.float16)
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if has_bias else None)
+            out = rt._rocm_wmma_fused_2d(Ah, Bh, bias_arr, activation)
+            return np.asarray(out, np.float32), _WMMA_TAG
+        except Exception:
+            return region.reference(A, B, bias), "reference"
+
+
+class RocmFlashAttnCandidate(Candidate):
+    """Tier-3: the shipped compiled FA-2 flash-attention lane (not generically
+    emitted) — the crown-jewel attention candidate, gated by the same oracle."""
+
+    name = "rocm_flash_attn"
+    tier = Tier.HAND_TUNED
+    target = _TARGET
+    op = OP_ATTENTION
+    accuracy_atol = _F16_ATOL
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._rocm_compiled_flash_attn_available()
+        except Exception:
+            return False
+
+    def run(self, region: Any, Q: Any, K: Any, V: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
+
+
 # ── registration ──────────────────────────────────────────────────────────────
 register_emitter(RocmHipEmitter())
 register_compiler(_TARGET, _rocm_hip_compile_fn)
 register_runner(RocmHipRunner(), default=False)
+
+# D1 arbiter candidates — the generic lane and the crown-jewel WMMA/flash lanes
+# side by side under one target, each independently F4-gated (C3 tail).
+register_candidate(RocmGenericHipCandidate())
+register_candidate(RocmWmmaGemmCandidate())
+register_candidate(RocmFlashAttnCandidate())

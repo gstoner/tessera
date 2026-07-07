@@ -33,6 +33,12 @@ import tempfile
 from typing import Any
 
 from tessera.compiler.emit._fused_scalar_body import row_compute_body
+from tessera.compiler.emit.candidate import (
+    OP_FUSED_REGION,
+    Candidate,
+    Tier,
+    register_candidate,
+)
 from tessera.compiler.emit.kernel_cache import build, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
     EmitError,
@@ -199,7 +205,34 @@ class X86CRunner(KernelRunner):
         return region.reference(*arrays), "reference"
 
 
+# ── D1 candidate (C1) ─────────────────────────────────────────────────────────
+
+_SHARED_RUNNER = X86CRunner()
+
+
+class X86GenericCCandidate(Candidate):
+    """Tier-1: the generic scalar-C lane (arch-agnostic synth, AVX-512 via
+    ``-march=native``). Serves any ``FusedRegion`` — the x86 floor the AOCL-DLP
+    Tier-3 candidate (C1b) is measured against."""
+
+    name = "x86_generic_c"
+    tier = Tier.SYNTHESIZED
+    target = _TARGET
+    op = OP_FUSED_REGION
+
+    def run(self, region: Any, A: Any, B: Any, bias: Any = None,
+            *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
+                                               residual=residual)
+
+
 # ── registration (import side effect, exactly like apple_msl) ─────────────────
 register_emitter(X86CEmitter())
 register_compiler(_TARGET, _x86_compile_fn)
 register_runner(X86CRunner(), default=False)
+
+# D1 arbiter candidates: the generic C lane (Tier 1) + the opt-in AOCL-DLP lane
+# (Tier 3, C1b) — importing the opt-in module self-registers it, arbiter-visible
+# even when the library is absent (its available() gates actual selection).
+register_candidate(X86GenericCCandidate())
+import tessera.compiler.emit.x86_aocl_dlp  # noqa: E402,F401 — self-registers

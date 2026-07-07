@@ -72,12 +72,13 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **3** | C0 backend-plugin handoff + non-Apple F4 gate | ✅ (PR #285) | — | — |
 | **3** | C1 x86 plugin (`emit/x86_llvm.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
-| **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | — | ⬜ | — |
+| **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | 🟡 candidate wired host-free | 🟡 generic Tier-1 proven on Zen; AOCL lane library-gated | — |
 | **4** | C2 NVIDIA emit pipeline + launch bridge | ⬜ | — | ⬜ |
 | **5** | C3 ROCm generic synth → HIP (`emit/rocm_hip.py`: emitter + `hipcc` + runner) | ✅ emit host-free | ✅ gfx1151 FusedRegion | — |
-| **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ⬜ | ⬜ | — |
+| **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
-| **6** | D1–D3 arbitration + measured autotune | ⬜ | ⬜ | ⬜ |
+| **6** | D1 candidate registry + F4-gate + tier-priority arbiter + `force` (E3) | ✅ (`emit/candidate.py`) | ✅ gfx1151 enumerate+select | — |
+| **6** | D2 measured autotune loop · D3 fallback log | ⬜ | ⬜ | ⬜ |
 
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
 *lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
@@ -246,6 +247,14 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   Accelerate — Decision #23-clean, behind the hardware-free Target IR). The
   arbiter selects it only where it measures faster than the generic kernels on
   Zen; **check its license before it becomes a shipped/linked lane.**
+  **Landed 2026-07-07 (arbiter-facing seam, host-free):** `emit/x86_aocl_dlp.py`
+  registers `X86AoclDlpCandidate` (Tier-3) alongside the new `X86GenericCCandidate`
+  (Tier-1) under `target="x86"`. `available()` probes `$TESSERA_AOCL_DLP_LIB` +
+  `$TESSERA_AOCL_DLP_SGEMM`; absent here, so it is arbiter-visible but never
+  mis-selects (arbitration falls to the generic C lane, proven on Zen 5). **Still
+  open (needs a licensed aocl-dlp install):** bind the concrete GEMM post-op ctypes
+  ABI against real headers (deliberately *not* guessed — `_aocl_dlp_gemm` declines
+  until wired), run the license review, then F4-gate + measure on Zen.
 - **C2 · NVIDIA in-process emit pipeline** `[MAC]` authoring → `[NV]` proof —
   `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
   `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize →
@@ -266,12 +275,19 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   launches on gfx1151 (`"rocm_hip"`), F4-gated. The per-row scalar body is
   **shared with the x86 C lane** (`emit/_fused_scalar_body.py`) so both stay
   locked to the one `fusion_core` reference. Same NULL-buffer guard as x86.
-  **C3 tail (still open):** wire the existing gfx1151 WMMA + CDNA MFMA
-  `Generate*` passes (the hand-tuned MLIR kernel generators) through the shared
-  loop as Tier-3 arbiter candidates, reusing the async-token SSA model in
-  `ROCMWaveLdsPipeline` — the generic scalar HIP kernel above is a correctness-
-  first middle-ground candidate, NOT a replacement for those crown-jewel lanes
-  (lead-safety; the D1 arbiter picks per measured latency + accuracy budget).
+  **C3 tail (WMMA landed 2026-07-07):** the gfx1151 WMMA `generate-wmma-gemm-kernel`
+  `Generate*` pass is now a **Tier-3 D1 candidate** (`RocmWmmaGemmCandidate` in
+  `emit/rocm_hip.py`) driven through the shared loop: `runtime._rocm_wmma_fused_2d`
+  runs the compiler-generated fused GEMM+bias+{relu,gelu,silu} on matrix cores
+  (f16 storage / f32 accum), gated by the *same* universal F4 oracle as the generic
+  lane and registered alongside it under `target="rocm"`. The generic scalar HIP
+  kernel stays the Tier-1 middle-ground candidate; the flash-attn lane is the Tier-3
+  attention candidate. Default (tier-priority) arbitration picks WMMA where it
+  applies and falls to the generic lane for a reduction it cannot fuse; the E3
+  escape hatch forces either. Live-proven on gfx1151 (`test_rocm_plugin.py` §4).
+  **Still open:** CDNA **MFMA** `Generate*` passes as candidates (analytical-only
+  until CDNA silicon — gfx1151 is RDNA3.5/WMMA, no MFMA); D2 measured selection
+  replaces tier-priority with real on-device latency per shape-bucket.
 - **C3-precursor (landed 2026-07-06): ROCm runner → F4 gate + oracle accuracy
   budget** `[MAC]` author → `[AMD]` proof. Ahead of the full emit pipeline, the
   *shipped* gfx1151 kernels are now wired into the universal F4 oracle:
@@ -291,10 +307,18 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
 
 ### Workstream D — Candidate arbitration + measured autotune
 
-- **D1 · Candidate registry** `[MAC]` — per `(op, shape-bucket, dtype, target)`
-  enumerate `{synthesized, tier2_emitted, hand_tuned_1..n}`; generalize Apple's
-  `select_variant` + `best_record`. The key is **shape-bucket, not exact shape**
-  (dynamic-shapes decision) so one tuned kernel serves a bucket of runtime shapes.
+- **D1 · Candidate registry** `[MAC]` — **core landed 2026-07-07**
+  (`emit/candidate.py`). A `Candidate` ABC (`tier`/`target`/`op`/`available()`/
+  `applies_to()`/`run()`) + a registry keyed per `(target, op)` enumerates
+  `{synthesized (Tier 1), emitted (Tier 2), hand_tuned (Tier 3)}`. `arbitrate()`
+  filters by applicability + availability, F4-gates each candidate through the
+  *same* universal oracle (a `KernelRunner` adapter reuses
+  `verify_synthesized_*`), then selects by **tier priority** (crown-jewel first —
+  lead-safe, Decision #28) with a pluggable `measure` hook (the D2 seam) and a
+  `force` escape hatch (E3). Wired for ROCm (generic HIP / WMMA / flash) and x86
+  (generic C / AOCL-DLP). **Still open:** the shape-bucket key on selection (today
+  keyed per `(target, op)`; `bucket_key` exists and threads in when D2 lands) and
+  generalizing Apple's `select_variant` + `best_record` into it.
 - **D2 · Measured autotune loop** — `[AMD]` on gfx1151, `[NV]` on sm_120 run
   live; CDNA/sm_90/sm_100 fall back to analytical roofline + `MmaDescriptor` cost
   model until silicon. Measure-at-first-miss + cache keyed by

@@ -164,3 +164,73 @@ def test_x86_residual_path_matches_numpy():
     out, execution = get_runner("x86").run_fused_region(region, A, B, None, residual=R)
     assert execution == "x86_native"
     assert np.allclose(out, region.reference(A, B, None, R), atol=1e-3)
+
+
+# ── D1 candidates + C1b AOCL-DLP (host-free) ──────────────────────────────────
+#
+# The generic C lane is the x86 Tier-1 candidate; AOCL-DLP (C1b) is the opt-in
+# Tier-3 candidate the arbiter measures. On a host without a wired aocl-dlp
+# install the Tier-3 lane is arbiter-visible but unavailable, so it never
+# mis-selects — arbitration falls to the generic lane.
+
+def test_x86_candidates_registered_with_tiers():
+    from tessera.compiler.emit.candidate import (
+        OP_FUSED_REGION, Tier, candidates_for,
+    )
+    cands = {c.name: c for c in candidates_for("x86", OP_FUSED_REGION)}
+    assert cands["x86_generic_c"].tier is Tier.SYNTHESIZED
+    assert cands["x86_aocl_dlp"].tier is Tier.HAND_TUNED
+
+
+def test_aocl_dlp_unavailable_without_wired_install(monkeypatch):
+    # No env → library absent → candidate declines out of arbitration.
+    from tessera.compiler.emit.candidate import (
+        OP_FUSED_REGION, candidates_for,
+    )
+    monkeypatch.delenv("TESSERA_AOCL_DLP_LIB", raising=False)
+    monkeypatch.delenv("TESSERA_AOCL_DLP_SGEMM", raising=False)
+    aocl = {c.name: c for c in
+            candidates_for("x86", OP_FUSED_REGION)}["x86_aocl_dlp"]
+    assert aocl.available() is False
+    # applies_to is independent of availability (matmul-bound epilogue envelope):
+    assert aocl.applies_to(F.FusedRegion(epilogue=("bias", "gelu")))
+    assert not aocl.applies_to(F.FusedRegion(epilogue=("bias",),
+                                             reduction="softmax"))
+
+
+def test_aocl_dlp_declines_honestly_when_unwired():
+    # Even if forced to run(), an unwired AOCL-DLP lane returns the reference —
+    # never a mislabeled kernel (Decision #21).
+    from tessera.compiler.emit.candidate import (
+        OP_FUSED_REGION, candidates_for,
+    )
+    aocl = {c.name: c for c in
+            candidates_for("x86", OP_FUSED_REGION)}["x86_aocl_dlp"]
+    region = F.FusedRegion(epilogue=("bias", "relu"))
+    A = np.zeros((8, 12), np.float32)
+    B = np.zeros((12, 16), np.float32)
+    bias = np.zeros((16,), np.float32)
+    _, tag = aocl.run(region, A, B, bias)
+    assert tag == "reference"
+
+
+def test_force_aocl_dlp_raises_when_unavailable():
+    from tessera.compiler.emit.candidate import ArbiterError, OP_FUSED_REGION, arbitrate
+    with pytest.raises(ArbiterError, match="x86_aocl_dlp"):
+        arbitrate(F.FusedRegion(epilogue=("bias", "gelu")),
+                  OP_FUSED_REGION, "x86", force="x86_aocl_dlp")
+
+
+@pytest.mark.skipif(not _HAVE_CC, reason="no C compiler (clang/cc/gcc) on host")
+def test_x86_arbiter_falls_to_generic_when_aocl_absent():
+    # With AOCL-DLP unavailable, the arbiter runs the generic C lane on Zen — the
+    # crown-jewel slot is empty, the floor still executes and F4-gates.
+    from tessera.compiler.emit.candidate import OP_FUSED_REGION, run_arbitrated
+    region = F.FusedRegion(epilogue=("bias", "gelu"))
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    bias = rng.standard_normal((16,)).astype(np.float32)
+    out, tag = run_arbitrated(region, OP_FUSED_REGION, "x86", A, B, bias)
+    assert tag == "x86_native"
+    assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)

@@ -2289,6 +2289,112 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
     return d
 
 
+def _rocm_wmma_fused_2d(a: Any, b: Any, bias: Any = None,
+                        activation: str = "none") -> Any:
+    """Run ONE 2-D WMMA GEMM with a **fused epilogue** — a per-column bias add
+    and/or a pointwise activation (``relu``/``gelu``/``silu``) applied on the f32
+    accumulator *before the store*, all inside the one COMPILER-GENERATED kernel
+    (the ``generate-wmma-gemm-kernel`` pass with ``bias``/``activation`` set). This
+    is the fused-region analog of :func:`_rocm_wmma_gemm_2d`; it is the direct
+    entry the D1 arbiter's Tier-3 WMMA candidate calls to serve a ``FusedRegion``
+    whose epilogue is ``bias`` + one of relu/gelu/silu (float storage only). ``a``/
+    ``b`` are f16/bf16 [M,K]@[K,N]; ``bias`` (if given) is f32 [N]. Returns the
+    [M,N] f32 result. Raises ``_RocmCompiledUnavailable`` when the lane can't run
+    here, ``ValueError`` on a bad dtype/shape, ``RuntimeError`` on a kernel error."""
+    import numpy as np
+
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"_rocm_wmma_fused_2d needs rank-2 operands with matching K; got "
+            f"{a.shape} @ {b.shape}")
+    if activation not in ("none", "relu", "gelu", "silu"):
+        raise ValueError(
+            "_rocm_wmma_fused_2d activation must be none/relu/gelu/silu; got "
+            f"{activation!r}")
+    dtype_tag, store, out_dt = _rocm_compiled_dtype(a, b)
+    if dtype_tag is None or dtype_tag in ("int8", "int4"):
+        # The fused epilogue is float-only (gelu/silu are transcendentals; bias is
+        # an fadd) — be explicit rather than emit an int directive the generator
+        # rejects. Plain int GEMM stays on :func:`_rocm_wmma_gemm_2d`.
+        raise ValueError(
+            "rocm WMMA fused epilogue is float-only (f16/bf16 storage, f32 acc); "
+            f"got {a.dtype} @ {b.dtype}")
+    m, k = a.shape
+    n = b.shape[1]
+    has_bias = bias is not None
+    bias_arr = None
+    if has_bias:
+        bias_arr = np.ascontiguousarray(bias, dtype=np.float32)
+        if bias_arr.shape != (n,):
+            raise ValueError(
+                f"rocm WMMA bias must have shape ({n},) (one per output column); "
+                f"got {bias_arr.shape}")
+    mt, nt = _rocm_prod_tile(m, n, k)
+    hsaco = _build_compiled_gemm_hsaco(
+        mt, nt, dtype_tag, bias=has_bias, activation=activation)
+
+    hip = _load_hip_for_launch()
+    if hip is None:
+        raise _RocmCompiledUnavailable(
+            "libamdhip64.so not loadable — no ROCm execution lane on this host")
+    if hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm WMMA fused: hipInit failed")
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            "rocm WMMA fused: no usable AMD GPU (module load failed)")
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
+        raise RuntimeError("rocm WMMA fused: kernel symbol 'gemm' not found")
+
+    a_c = np.ascontiguousarray(a, dtype=store)
+    b_c = np.ascontiguousarray(b, dtype=store)
+    d = np.zeros((m, n), dtype=out_dt)
+    ab = a_c.itemsize
+    nb = (ab * m * k, ab * k * n, 4 * m * n)
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    devs = [da, db, dd]
+    for dev, size in ((da, nb[0]), (db, nb[1]), (dd, nb[2])):
+        if hip.hipMalloc(ctypes.byref(dev), size) != 0:
+            raise RuntimeError("rocm WMMA fused: hipMalloc failed")
+    hip.hipMemcpy(da, a_c.ctypes.data_as(ctypes.c_void_p), nb[0], 1)
+    hip.hipMemcpy(db, b_c.ctypes.data_as(ctypes.c_void_p), nb[1], 1)
+    dbias = None
+    if has_bias:
+        dbias = ctypes.c_void_p()
+        if hip.hipMalloc(ctypes.byref(dbias), 4 * n) != 0:
+            for dev in devs:
+                hip.hipFree(dev)
+            raise RuntimeError("rocm WMMA fused: hipMalloc (bias) failed")
+        devs.append(dbias)
+        assert bias_arr is not None
+        hip.hipMemcpy(dbias, bias_arr.ctypes.data_as(ctypes.c_void_p), 4 * n, 1)
+
+    def _mr(p, size):
+        return [ctypes.c_void_p(p.value), ctypes.c_void_p(p.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args = (_mr(da, m * k) + _mr(db, k * n) + _mr(dd, m * n)
+                   + [ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
+    if has_bias:
+        launch_args += _mr(dbias, n)
+    arr = (ctypes.c_void_p * len(launch_args))()
+    for i, val in enumerate(launch_args):
+        arr[i] = ctypes.cast(ctypes.byref(val), ctypes.c_void_p)
+    gx = (n + 16 * nt - 1) // (16 * nt)
+    gy = (m + 16 * mt - 1) // (16 * mt)
+    rc = hip.hipModuleLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, None, arr, None)
+    if rc != 0:
+        for dev in devs:
+            hip.hipFree(dev)
+        raise RuntimeError(f"rocm WMMA fused: kernel launch failed rc={rc}")
+    hip.hipDeviceSynchronize()
+    hip.hipMemcpy(d.ctypes.data_as(ctypes.c_void_p), dd, nb[2], 2)
+    for dev in devs:
+        hip.hipFree(dev)
+    return d
+
+
 def _rocm_batched_gemm(a: Any, b: Any) -> Any:
     """np.matmul semantics over leading batch dims, each [M,K]@[K,N] on the WMMA
     kernel. ``b`` may be rank-2 (shared across the batch) or batched to match."""

@@ -22,6 +22,10 @@ import pytest
 
 import tessera.compiler.fusion as F
 import tessera.compiler.emit.rocm_hip as rocm  # noqa: F401 — self-registers
+from tessera.compiler.emit import candidate as C
+from tessera.compiler.emit.candidate import (
+    OP_ATTENTION, OP_FUSED_REGION, Tier,
+)
 from tessera.compiler.emit.kernel_emitter import (
     EmitError, KernelRunner, SpecPolicy, get_emitter, get_runner,
 )
@@ -215,3 +219,122 @@ def test_live_rocm_attention_gated(scale, causal):
     assert execution == "rocm_hip"
     # ...and the universal F4 oracle gates it within the f16 budget.
     assert F.verify_synthesized_attention(region, runner=runner, force=True) is True
+
+
+# ── 4. D1 candidates + arbiter (C3 tail) ──────────────────────────────────────
+#
+# The crown-jewel WMMA GEMM `Generate*` kernel and the generic scalar HIP lane are
+# both registered as arbiter candidates for target "rocm"; the flash lane is the
+# attention candidate. Host-free: registration + tiers + applicability. Live: each
+# candidate F4-gated on-device, the arbiter's tier-priority pick, and the E3
+# escape hatch that forces the generic lane over the crown jewel.
+
+# WMMA fuses bias-then-{relu,gelu,silu}; the arbiter must pick it for these and
+# fall to the generic lane for a reduction it cannot fuse.
+_WMMA_CHAINS = [
+    F.FusedRegion(epilogue=("relu",)),
+    F.FusedRegion(epilogue=("gelu",)),
+    F.FusedRegion(epilogue=("silu",)),
+    F.FusedRegion(epilogue=("bias",)),
+    F.FusedRegion(epilogue=("bias", "gelu")),
+]
+
+
+def test_rocm_candidates_registered_with_tiers():
+    fr = {c.name: c for c in C.candidates_for("rocm", OP_FUSED_REGION)}
+    at = {c.name: c for c in C.candidates_for("rocm", OP_ATTENTION)}
+    assert fr["rocm_generic_hip"].tier is Tier.SYNTHESIZED
+    assert fr["rocm_wmma_gemm"].tier is Tier.HAND_TUNED
+    assert fr["rocm_wmma_gemm"].accuracy_atol == 5e-3
+    assert at["rocm_flash_attn"].tier is Tier.HAND_TUNED
+
+
+def test_wmma_candidate_applicability():
+    wmma = {c.name: c for c in
+            C.candidates_for("rocm", OP_FUSED_REGION)}["rocm_wmma_gemm"]
+    assert wmma.applies_to(F.FusedRegion(epilogue=("bias", "gelu")))
+    assert wmma.applies_to(F.FusedRegion(epilogue=("relu",)))
+    # act-before-bias, a non-fusable activation, and a reduction all decline:
+    assert not wmma.applies_to(F.FusedRegion(epilogue=("gelu", "bias")))
+    assert not wmma.applies_to(F.FusedRegion(epilogue=("sigmoid",)))
+    assert not wmma.applies_to(F.FusedRegion(epilogue=("bias",),
+                                             reduction="softmax"))
+    assert not wmma.applies_to(F.FusedRegion(epilogue=("relu",), residual=True))
+
+
+def test_wmma_candidate_declines_unrepresentable_host_free():
+    # run() on a region it cannot fuse must return the honest reference, never a
+    # mislabeled kernel — checkable without a GPU (it never reaches the device).
+    wmma = {c.name: c for c in
+            C.candidates_for("rocm", OP_FUSED_REGION)}["rocm_wmma_gemm"]
+    region = F.FusedRegion(epilogue=("bias",), reduction="softmax")
+    A = np.zeros((8, 12), np.float32)
+    B = np.zeros((12, 16), np.float32)
+    bias = np.zeros((16,), np.float32)
+    _, tag = wmma.run(region, A, B, bias)
+    assert tag == "reference"
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_hip_live(),
+                    reason="live gfx1151 + WMMA GEMM lane required")
+@pytest.mark.parametrize("region", _WMMA_CHAINS,
+                         ids=lambda r: f"{r.epilogue}")
+def test_live_wmma_candidate_gated(region):
+    # C3 tail: the hand-tuned WMMA GEMM Generate* kernel runs on gfx1151 with its
+    # fused epilogue ("rocm_wmma"), matches numpy within the f16 budget, and passes
+    # the same universal F4 oracle as the generic lane.
+    F.clear_verification_cache()
+    wmma = {c.name: c for c in
+            C.candidates_for("rocm", OP_FUSED_REGION)}["rocm_wmma_gemm"]
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    bias = rng.standard_normal((16,)).astype(np.float32) if region.has_bias else None
+    out, tag = wmma.run(region, A, B, bias)
+    assert tag == "rocm_wmma"
+    assert np.allclose(out, region.reference(A, B, bias), atol=5e-3)
+    assert C.verify_candidate(wmma, region) is True
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_hip_live(),
+                    reason="live gfx1151 + WMMA GEMM lane required")
+def test_live_arbiter_prefers_wmma_but_falls_to_generic():
+    # Default (tier-priority) arbitration: the crown-jewel WMMA wins where it
+    # applies; a softmax region it cannot fuse falls to the generic HIP lane.
+    F.clear_verification_cache()
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    bias = rng.standard_normal((16,)).astype(np.float32)
+
+    fusable = F.FusedRegion(epilogue=("bias", "gelu"))
+    out, tag = C.run_arbitrated(fusable, OP_FUSED_REGION, "rocm", A, B, bias)
+    assert tag == "rocm_wmma"
+    assert np.allclose(out, fusable.reference(A, B, bias), atol=5e-3)
+
+    reduce_region = F.FusedRegion(epilogue=("bias",), reduction="softmax")
+    out2, tag2 = C.run_arbitrated(reduce_region, OP_FUSED_REGION, "rocm",
+                                  A, B, bias)
+    assert tag2 == "rocm_hip"            # generic lane; WMMA cannot fuse softmax
+    assert np.allclose(out2, reduce_region.reference(A, B, bias), atol=1e-3)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _rocm_hip_live(),
+                    reason="live gfx1151 + WMMA GEMM lane required")
+def test_live_escape_hatch_forces_generic_over_crown_jewel():
+    # E3: a hand-tuned candidate is never orphaned AND a lower tier can be forced.
+    # Force the generic HIP lane on a region WMMA would otherwise win by tier.
+    F.clear_verification_cache()
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    region = F.FusedRegion(epilogue=("relu",))
+    out, tag = C.run_arbitrated(region, OP_FUSED_REGION, "rocm", A, B, None,
+                                force="rocm_generic_hip")
+    assert tag == "rocm_hip"
+    out_w, tag_w = C.run_arbitrated(region, OP_FUSED_REGION, "rocm", A, B, None,
+                                    force="rocm_wmma_gemm")
+    assert tag_w == "rocm_wmma"

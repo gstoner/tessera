@@ -243,8 +243,9 @@ def test_register_runner_requires_target():
 
 
 def test_unknown_runner_target_diagnostic():
+    # A target that no plugin registers (nvidia/rocm/x86/apple are all real now).
     with pytest.raises(RunnerError, match="no KernelRunner registered"):
-        get_runner("nvidia")
+        get_runner("no_such_backend")
 
 
 def test_oracle_routes_through_the_injected_runner():

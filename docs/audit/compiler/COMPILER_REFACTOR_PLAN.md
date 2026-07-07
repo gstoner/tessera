@@ -1,7 +1,7 @@
 ---
-last_updated: 2026-07-06
+last_updated: 2026-07-07
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
 # Tessera Compiler — Refactor + Enhancement Plan
@@ -52,7 +52,7 @@ regression-gated on real silicon.
 
 ---
 
-## 2a. Status at a glance (updated 2026-07-06)
+## 2a. Status at a glance (updated 2026-07-07)
 
 Landed state per §4 phase. Inline **landed** notes in §3 carry the detail; this
 table is the single skim surface. `✅` done · `🟡` partial · `⬜` not started.
@@ -60,7 +60,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | Phase | Task | Mac (`[MAC]`) | AMD (`[AMD]`) | NV (`[NV]`) |
 |---|---|:--:|:--:|:--:|
 | **0** | E1 golden-IR harness + determinism roundtrip | ✅ | — | — |
-| **0** | E2 real-hardware perf ratchet | ✅ (shape gate) | ✅ gfx1151 (matmul+flash, PR #284) | ⬜ sm_120 (needs box) |
+| **0** | E2 real-hardware perf ratchet | ✅ (shape gate) | ✅ gfx1151 (matmul+flash, PR #284) | ✅ sm_120 (RTX 5070 Ti mma.sync ladder, live-gated) |
 | **0** | E3 escape-hatch test | ⬜ | ⬜ | ⬜ |
 | **1** | A1 shared `extractPtr`/`ensureExternalDecl` | ✅ | — | — |
 | **1** | A2–A4 fusion matcher / verifiers / MMA selector | ⬜ | — | — |
@@ -73,7 +73,8 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **3** | C1 x86 plugin (`emit/x86_llvm.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
 | **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | 🟡 candidate wired host-free | 🟡 generic Tier-1 proven on Zen; AOCL lane library-gated | — |
-| **4** | C2 NVIDIA emit pipeline + launch bridge | ⬜ | — | ⬜ |
+| **4** | C2 NVIDIA generic synth → CUDA (`emit/nvidia_cuda.py`: emitter + `nvcc` + runner) | ✅ emit host-free | — | ✅ sm_120 FusedRegion (RTX 5070 Ti) |
+| **4** | C2 tail — `ptx_emit` mma.sync/wgmma emit → `ptxas`→CUBIN→launch bridge | ⬜ | — | ⬜ (box present) |
 | **5** | C3 ROCm generic synth → HIP (`emit/rocm_hip.py`: emitter + `hipcc` + runner) | ✅ emit host-free | ✅ gfx1151 FusedRegion | — |
 | **5** | C3 tail — drive WMMA/MFMA `Generate*` passes through the loop | ✅ WMMA host-free | ✅ gfx1151 fused WMMA F4-gated (MFMA=CDNA-gated) | — |
 | **3.5** | ROCm shipped-kernel → F4 gate (flash-attn, f16 budget) + shared scalar body | ✅ | ✅ gfx1151 attn | — |
@@ -82,10 +83,16 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 
 **Gate reality (softens §4/§9.2):** "Phase 0 gates everything" holds only for the
 *lead-execution* proofs. The Mac-side E1 gate is green and gfx1151 E2 is recorded,
-so `[MAC]` + `[AMD]` work (A1, B1–B4a, C0, C1 authoring) has correctly proceeded;
-only the **`[NV]` sm_120 proofs** still gate on the NR2 Pro box (its E2 baseline
-can't be recorded yet). Do not read §4's hard-gate phrasing as blocking Mac/AMD
-authoring once E1 is green.
+so `[MAC]` + `[AMD]` work (A1, B1–B4a, C0, C1 authoring) has correctly proceeded.
+**A live sm_120 box is now present** (RTX 5070 Ti, CUDA 13.3) — the `[NV]` proofs
+are **no longer gated on a remote box**: the C2 generic-CUDA `FusedRegion` lane is
+hardware-verified on it (`emit/nvidia_cuda.py`; F4-gated + arbiter-selected on-GPU,
+`test_nvidia_plugin.py` live gates), and the **E2 sm_120 perf-ratchet baseline is
+recorded** (`benchmarks/baselines/nvidia_sm120_hot_paths.json` — the shipped mma.sync
+GEMM ladder; `test_nvidia_perf_ratchet.py` live-gates it). What remains `[NV]`-open is
+the **C2 tail** (`ptx_emit`→`ptxas`→CUBIN→launch bridge for the crown-jewel mma.sync/
+wgmma GEMM). Do not read §4's hard-gate phrasing as blocking Mac/AMD authoring once E1
+is green.
 
 ---
 
@@ -255,17 +262,32 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   open (needs a licensed aocl-dlp install):** bind the concrete GEMM post-op ctypes
   ABI against real headers (deliberately *not* guessed — `_aocl_dlp_gemm` declines
   until wired), run the license review, then F4-gate + measure on Zen.
-- **C2 · NVIDIA in-process emit pipeline** `[MAC]` authoring → `[NV]` proof —
-  `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
-  `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize →
-  launch bridge. **New lead capability**, not a refactor: NVIDIA gains an
-  in-process compiled lane alongside the shipped `.so`. **Scope correction
-  (§9.1(2), source-verified):** the bulk of C2 is the **net-new serialize→`ptxas`
-  →CUBIN→`tsrRegisterGpuLauncher` bridge + kernel/artifact cache** (the NVIDIA
-  counterpart to Apple's `apple_gpu_runtime.mm`). `ptx_emit.py` is a clean but
-  **bf16-only, few-shape** emitter, and today's executing sm_120 matmul runs via
-  the shipped `libtessera_nvidia_gemm.so`, **not** the emit path — so the bridge
-  is the long pole, ahead of broadening shapes/dtypes.
+- **C2 · NVIDIA emit lanes** `[MAC]` authoring → `[NV]` proof. Two lanes, mirroring
+  the ROCm split:
+  **Generic CUDA lane — LANDED + hardware-proven 2026-07-07.** `emit/nvidia_cuda.py`
+  is a **full three-seam plugin** (parallel to `rocm_hip`/`x86_llvm`):
+  `NvidiaCudaEmitter` turns a `FusedRegion` into CUDA source (a `__global__`
+  one-thread-per-row kernel + a host-pointer C-ABI wrapper doing H2D/launch/D2H),
+  reusing the *same* scalar body as x86/ROCm (`_fused_scalar_body.row_compute_body`)
+  so all three stay locked to the one `fusion_core` reference; `_nvidia_cuda_compile_fn`
+  compiles it with `nvcc -arch=sm_120a -O3 --shared` → `.so`; `NvidiaCudaRunner`
+  dlopens + launches (`"nvidia_cuda"`), else declines to the reference. Registered as
+  the Tier-1 `NvidiaGenericCudaCandidate`. **Live-proven on sm_120** (RTX 5070 Ti,
+  CUDA 13.3): the generic `FusedRegion` family (relu/bias-gelu/silu/softmax/rmsnorm/
+  layer_norm/prologue) compiles, runs on-GPU, matches numpy (f32), passes the same
+  universal F4 oracle, and the D1 arbiter selects it (`test_nvidia_plugin.py` live
+  gates). Same NULL-buffer guard as x86/ROCm.
+  **C2 tail (the emit GEMM lane — still open):** the crown-jewel `mma.sync`/`wgmma`
+  path via `tessera-opt --tessera-emit-nvidia`: Tile IR → `ptx_emit.py` (keep sm_120
+  `mma.sync`; extend `wgmma` for sm_90a; stub sm_100 tcgen05) → serialize → launch
+  bridge. **Scope correction (§9.1(2), source-verified):** the bulk of the tail is the
+  **net-new serialize→`ptxas`→CUBIN→`tsrRegisterGpuLauncher` bridge + kernel/artifact
+  cache** (the NVIDIA counterpart to Apple's `apple_gpu_runtime.mm`). `ptx_emit.py` is
+  a clean but **bf16-only, few-shape** emitter, and today's executing sm_120 matmul
+  runs via the shipped `libtessera_nvidia_gemm.so`, **not** the emit path — so the
+  bridge is the long pole, ahead of broadening shapes/dtypes. Unlike C3, NVIDIA has no
+  *fused* shipped kernel to register as a Tier-3 `FusedRegion` candidate yet (the
+  shipped kernel is a pure GEMM served by the jit `nvidia_mma` executor).
 - **C3 · ROCm generic synth → HIP** — **generic lane LANDED 2026-07-06**, `[MAC]`
   author → `[AMD]` proof. `emit/rocm_hip.py` is now a **full three-seam plugin**
   (parallel to x86): `RocmHipEmitter` turns a `FusedRegion` into HIP source (a
@@ -433,6 +455,17 @@ committed artifacts. Once committed, the Mac's host-free gate asserts their
 *shape* (fixture exists, ratchet not regressed) between silicon runs — so a
 Mac-authored change stays honest about the leads without a GPU present.
 
+### 7.4 Per-system setup pins (from `docs/GETTING_STARTED.md`)
+
+- **Mac:** Homebrew LLVM/MLIR **22.1.6** at `/opt/homebrew/opt/llvm`; off-venv
+  `python3` 3.14.5.
+- **Strix Halo:** Ubuntu 24.04 + `scripts/setup_ubuntu.sh` (LLVM/MLIR 22 from
+  apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm **7.2.4** at `/opt/rocm`;
+  `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; `.venv` numpy<2.2.
+  gfx1151 = RDNA 3.5, WMMA 16×16×16, **no FP8 WMMA**.
+- **NR2 Pro:** CUDA **13.3** (PTX ISA 9.3); target `sm_120a` (FP4
+  `mma.sync.block_scale`); smem 100 KB/SM. `-DTESSERA_ENABLE_CUDA=ON`.
+
 ### 7.5 Two fleet superpowers to exploit (not just coordinate)
 
 Three silicon systems are a capability, not only a logistics problem:
@@ -448,17 +481,6 @@ Three silicon systems are a capability, not only a logistics problem:
   across runs (extends Decision #11's SQLite warm-start to the §7.3 sync
   contract). Wire into D1/D2.
 
-### 7.4 Per-system setup pins (from `docs/GETTING_STARTED.md`)
-
-- **Mac:** Homebrew LLVM/MLIR **22.1.6** at `/opt/homebrew/opt/llvm`; off-venv
-  `python3` 3.14.5.
-- **Strix Halo:** Ubuntu 24.04 + `scripts/setup_ubuntu.sh` (LLVM/MLIR 22 from
-  apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm **7.2.4** at `/opt/rocm`;
-  `-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON`; `.venv` numpy<2.2.
-  gfx1151 = RDNA 3.5, WMMA 16×16×16, **no FP8 WMMA**.
-- **NR2 Pro:** CUDA **13.3** (PTX ISA 9.3); target `sm_120a` (FP4
-  `mma.sync.block_scale`); smem 100 KB/SM. `-DTESSERA_ENABLE_CUDA=ON`.
-
 ---
 
 ## 8. Beyond this plan — the world-class dimensions (tracked, not on the critical path)
@@ -471,7 +493,8 @@ They graduate into workstreams **after** the spine is proven, in this rough
 priority (highest DL leverage first):
 
 - **F · Low-precision numerics (W1)** — build the tolerance derivation + the
-  end-to-end accuracy guard behind the §4.1 budget mechanism. *Highest priority:
+  end-to-end accuracy guard behind the accuracy-budget mechanism (C3-precursor
+  `KernelRunner.accuracy_atol` + D2). *Highest priority:
   it is the precision frontier and it is already half-specified.* Proof: `[AMD]`
   RDNA4/CDNA fp8, `[NV]` sm_120 fp4.
 - **G · Dynamic shapes (W2) — partly pulled into the spine (decision 2026-07-02).**

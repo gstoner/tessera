@@ -45,6 +45,7 @@ from typing import Any
 
 from tessera.compiler.emit._fused_scalar_body import row_compute_body
 from tessera.compiler.emit.candidate import (
+    OP_ATTENTION,
     OP_FUSED_REGION,
     OP_MATMUL,
     Candidate,
@@ -62,12 +63,16 @@ from tessera.compiler.emit.kernel_emitter import (
     register_emitter,
     register_runner,
 )
-from tessera.compiler.fusion_core import FusedRegion, MatmulRegion
+from tessera.compiler.fusion_core import AttentionRegion, FusedRegion, MatmulRegion
 
 _TARGET = "nvidia"
 _LANG = "cuda"
 _ENTRY = "tessera_nvidia_fused"
+_ATTN_ENTRY = "tessera_nvidia_attn"
 _REAL_TAG = "nvidia_cuda"
+#: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
+#: online-softmax accumulator; larger Dv declines to the reference.
+_ATTN_DV_CAP = 256
 
 
 # ── CUDA source synthesis (generic FusedRegion lane) ──────────────────────────
@@ -116,28 +121,92 @@ def _synthesize_fused_cuda(region: FusedRegion) -> str:
     )
 
 
+def _synthesize_attention_cuda() -> str:
+    """CUDA source for ``O = softmax(scale * Q @ K^T) @ V`` (f32) — a **flash**
+    kernel: one thread per query row streams the KV sequence with an online
+    (numerically-stable) softmax, so no O(Nk) score buffer is needed. The
+    per-thread output accumulator is capped at ``_ATTN_DV_CAP``; larger head dims
+    are rejected (rc 2) and the runner declines to the reference. Q(M,D) row-major,
+    K(Nk,D) row-major, V(Nk,Dv) row-major, O(M,Dv) row-major — the natural
+    orientation the runner feeds after applying the region's transpose flags."""
+    return (
+        "#include <cuda_runtime.h>\n"
+        "#include <math.h>\n"
+        f"#define DV_CAP {_ATTN_DV_CAP}\n"
+        f"__global__ void {_ATTN_ENTRY}_kernel(const float* Q, const float* K,\n"
+        "        const float* V, float* O, int M, int Nk, int D, int Dv,\n"
+        "        float scale, int causal) {\n"
+        "    int m = blockIdx.x*blockDim.x + threadIdx.x;\n"
+        "    if (m >= M) return;\n"
+        "    float acc[DV_CAP];\n"
+        "    for (int dv=0; dv<Dv; ++dv) acc[dv]=0.0f;\n"
+        "    float mi = -INFINITY, li = 0.0f;\n"
+        "    for (int n=0; n<Nk; ++n) {\n"
+        "        if (causal && n > m) continue;\n"
+        "        float s = 0.0f;\n"
+        "        for (int d=0; d<D; ++d) s += Q[(long)m*D+d]*K[(long)n*D+d];\n"
+        "        s *= scale;\n"
+        "        float mnew = fmaxf(mi, s);\n"
+        "        float corr = expf(mi - mnew);\n"
+        "        float p = expf(s - mnew);\n"
+        "        li = li*corr + p;\n"
+        "        for (int dv=0; dv<Dv; ++dv) acc[dv] = acc[dv]*corr + p*V[(long)n*Dv+dv];\n"
+        "        mi = mnew;\n"
+        "    }\n"
+        "    float inv = (li > 0.0f) ? 1.0f/li : 0.0f;\n"
+        "    for (int dv=0; dv<Dv; ++dv) O[(long)m*Dv+dv] = acc[dv]*inv;\n"
+        "}\n"
+        f'extern "C" int {_ATTN_ENTRY}(const float* hQ, const float* hK,\n'
+        "        const float* hV, float* hO, int M, int Nk, int D, int Dv,\n"
+        "        float scale, int causal) {\n"
+        "    if (Dv > DV_CAP) return 2;\n"
+        "    size_t szQ=(size_t)M*D*4, szK=(size_t)Nk*D*4, szV=(size_t)Nk*Dv*4,\n"
+        "           szO=(size_t)M*Dv*4;\n"
+        "    float *dQ=0,*dK=0,*dV=0,*dO=0;\n"
+        "    if (cudaMalloc(&dQ,szQ)!=cudaSuccess) return 3;\n"
+        "    if (cudaMalloc(&dK,szK)!=cudaSuccess){cudaFree(dQ);return 3;}\n"
+        "    if (cudaMalloc(&dV,szV)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);return 3;}\n"
+        "    if (cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dQ);cudaFree(dK);cudaFree(dV);return 3;}\n"
+        "    cudaMemcpy(dQ,hQ,szQ,cudaMemcpyHostToDevice);\n"
+        "    cudaMemcpy(dK,hK,szK,cudaMemcpyHostToDevice);\n"
+        "    cudaMemcpy(dV,hV,szV,cudaMemcpyHostToDevice);\n"
+        "    int t=128, b=(M+t-1)/t;\n"
+        f"    {_ATTN_ENTRY}_kernel<<<dim3(b), dim3(t)>>>(\n"
+        "        dQ,dK,dV,dO,M,Nk,D,Dv,scale,causal);\n"
+        "    int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "    if (ok==1) cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
+        "    cudaFree(dQ); cudaFree(dK); cudaFree(dV); cudaFree(dO);\n"
+        "    return ok;\n"
+        "}\n"
+    )
+
+
 class NvidiaCudaEmitter(KernelEmitter):
     target = _TARGET
     lang = _LANG
 
     def can_emit(self, region: Any) -> bool:
-        return isinstance(region, FusedRegion)
+        return isinstance(region, (FusedRegion, AttentionRegion))
 
     def emit(self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET,
              dtype: str = "f32", dims: tuple[int, ...] | None = None) -> KernelSource:
-        if not isinstance(region, FusedRegion):
+        if not isinstance(region, (FusedRegion, AttentionRegion)):
             raise EmitError(
                 f"NvidiaCudaEmitter cannot emit a region of type "
-                f"{type(region).__name__} (only FusedRegion; the shipped mma.sync "
-                "GEMM lane serves single matmuls via the jit nvidia_mma executor)")
+                f"{type(region).__name__} (FusedRegion / AttentionRegion; the "
+                "shipped mma.sync GEMM lane serves single matmuls via the jit "
+                "nvidia_mma executor)")
         if spec is SpecPolicy.DYNAMIC:
             raise EmitError("NvidiaCudaEmitter does not yet support SpecPolicy.DYNAMIC "
                             "(bucket/static only)")
         if dtype != "f32":
             raise EmitError(f"NvidiaCudaEmitter only supports f32 so far, got {dtype!r}")
-        source = _synthesize_fused_cuda(region)
+        if isinstance(region, AttentionRegion):
+            source, entry = _synthesize_attention_cuda(), _ATTN_ENTRY
+        else:
+            source, entry = _synthesize_fused_cuda(region), _ENTRY
         key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))
-        return KernelSource(source=source, entry=_ENTRY, lang=self.lang,
+        return KernelSource(source=source, entry=entry, lang=self.lang,
                             spec=spec, shape_key=key)
 
 
@@ -191,6 +260,20 @@ def _load_entry(artifact: str):
     return fn
 
 
+def _load_attn_entry(artifact: str):
+    """dlopen ``artifact`` (cached) and bind the flash-attention entry: ``int(Q, K,
+    V, O, M, Nk, D, Dv, scale, causal)``."""
+    lib = _LIB_CACHE.get(artifact)
+    if lib is None:
+        lib = ctypes.CDLL(artifact)
+        _LIB_CACHE[artifact] = lib
+    fn = getattr(lib, _ATTN_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = ([ctypes.c_void_p] * 4 + [ctypes.c_int] * 4
+                   + [ctypes.c_float, ctypes.c_int])
+    return fn
+
+
 def _ptr(arr):
     return arr.ctypes.data_as(ctypes.c_void_p) if arr is not None else None
 
@@ -230,10 +313,33 @@ class NvidiaCudaRunner(KernelRunner):
             pass
         return region.reference(A, B, bias, residual), "reference"
 
-    # No single fused CUDA kernel for these yet — decline honestly (the numpy
-    # reference, tagged so the oracle trusts rather than gates it).
     def run_fused_attention(self, region: Any, Q: Any, K: Any, V: Any,
                             *a: Any, **k: Any) -> tuple[Any, str]:
+        # C4: the synthesized flash-attention lane — O = softmax(scale*Q@K^T)@V,
+        # one query per thread, online softmax. Orient Q/K per the region's
+        # transpose flags (f32), then build + launch; decline to the reference off
+        # an NVIDIA GPU / for a head dim past the accumulator cap.
+        import numpy as np
+        try:
+            Qn, Kn = region._natural(Q, K)          # f32, natural Q(M,D)/K(Nk,D)
+            Qn = np.ascontiguousarray(Qn, np.float32)
+            Kn = np.ascontiguousarray(Kn, np.float32)
+            Vn = np.ascontiguousarray(V, np.float32)
+            M, D = Qn.shape
+            Nk, Dk = Kn.shape
+            Nkv, Dv = Vn.shape
+            if Dk != D or Nkv != Nk or Dv > _ATTN_DV_CAP:
+                return region.reference(Q, K, V), "reference"
+            compiled = build(region, _TARGET, dtype="f32", dims=None)
+            fn = _load_attn_entry(compiled.artifact)
+            out = np.zeros((M, Dv), np.float32)
+            rc = fn(_ptr(Qn), _ptr(Kn), _ptr(Vn), _ptr(out),
+                    M, Nk, D, Dv, ctypes.c_float(float(region.scale)),
+                    1 if region.causal else 0)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
         return region.reference(Q, K, V), "reference"
 
     def run_gated_matmul_region(self, region: Any, A: Any, Wg: Any, Wu: Any,
@@ -274,6 +380,24 @@ class NvidiaGenericCudaCandidate(Candidate):
         # guard and raises (PR #290 review).
         return _SHARED_RUNNER.run_fused_region(region, A, B, bias,
                                                residual=residual)
+
+
+class NvidiaFlashAttnCandidate(Candidate):
+    """Tier-1 (C4): the synthesized flash-attention CUDA lane
+    (``O = softmax(scale·Q·Kᵀ)·V``, one query per thread, online softmax). Serves
+    any ``AttentionRegion``; declines (to the reference) off an NVIDIA GPU / for a
+    head dim past the accumulator cap. NVIDIA has no *shipped* attention kernel, so
+    this correctness-first synth is the only attention candidate — an mma.sync
+    tensor-core flash version is the perf follow-on."""
+
+    name = "nvidia_flash_attn"
+    tier = Tier.SYNTHESIZED
+    target = _TARGET
+    op = OP_ATTENTION
+
+    def run(self, region: Any, Q: Any, K: Any, V: Any,
+            *a: Any, **k: Any) -> tuple[Any, str]:
+        return _SHARED_RUNNER.run_fused_attention(region, Q, K, V)
 
 
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
@@ -368,6 +492,7 @@ register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)
 
 register_candidate(NvidiaGenericCudaCandidate())
+register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
 # Bare-GEMM lanes: hand-tuned shipped (Tier 3) + compiler-emitted (Tier 2).
 register_candidate(NvidiaMmaGemmShippedCandidate())
 register_candidate(NvidiaMmaGemmEmittedCandidate())

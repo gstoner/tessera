@@ -77,8 +77,13 @@ The original "no execution row / not hardware-proven" gaps are **closed**
 - **Other NVIDIA SMs stay `artifact_only`** — sm_80/90/100 are proven only on
   sm_120 silicon; promoting them needs their own hardware (Hopper box for
   sm_90a WGMMA; datacenter Blackwell for sm_100 `tcgen05`/TMEM).
-- **`flash_attn` on `nvidia_sm120`** remains unproven on hardware (the matmul
-  lane is the first and only `hardware_verified` NVIDIA row so far).
+- **`flash_attn` on `nvidia_sm120`** — **proven on hardware 2026-07-07** (C4): the
+  synthesized flash-attention CUDA lane (`emit/nvidia_cuda.py`
+  `NvidiaFlashAttnCandidate` / `run_fused_attention`) computes
+  `O = softmax(scale·Q·Kᵀ)·V` with a one-query-per-thread online softmax, executes
+  on sm_120, and matches the numpy reference across scale/causal/shape
+  (`test_nvidia_plugin.py::test_live_nvidia_flash_attention`), passing the same
+  universal F4 oracle. An mma.sync tensor-core flash version is the perf follow-on.
 
 ## Next Work
 

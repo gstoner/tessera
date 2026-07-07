@@ -70,26 +70,33 @@ def test_nvidia_emit_is_deterministic():
 def test_nvidia_emitter_rejects_unsupported():
     e = get_emitter("nvidia")
     with pytest.raises(EmitError, match="cannot emit"):
-        e.emit(F.AttentionRegion())
+        e.emit(F.GatedMatmulRegion())              # FusedRegion/AttentionRegion only
     with pytest.raises(EmitError, match="DYNAMIC"):
         e.emit(F.FusedRegion(epilogue=("relu",)), spec=SpecPolicy.DYNAMIC)
     with pytest.raises(EmitError, match="f32"):
         e.emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
 
 
-def test_nvidia_declines_attention_gated_pointwise():
-    # No single fused CUDA kernel for these yet — always the numpy reference.
+def test_nvidia_declines_gated_and_pointwise():
+    # No single fused CUDA kernel for gated / pointwise yet — always the reference.
+    # (Attention IS implemented — the flash lane; see the C4 tests below.)
     r = get_runner("nvidia")
     A = np.zeros((8, 12), np.float32)
     _, ex = r.run_gated_matmul_region(F.GatedMatmulRegion(),
                                       A, np.zeros((12, 16), np.float32),
                                       np.zeros((12, 16), np.float32))
     assert ex == "reference"
-    _, ex2 = r.run_fused_attention(F.AttentionRegion(scale=0.25),
-                                   np.zeros((4, 8), np.float32),
-                                   np.zeros((4, 8), np.float32),
-                                   np.zeros((4, 8), np.float32))
-    assert ex2 == "reference"
+
+
+def test_nvidia_flash_attn_candidate_registered_and_emits():
+    # C4: the synthesized flash-attention lane — a Tier-1 attention candidate, and
+    # the emitter produces CUDA for an AttentionRegion.
+    from tessera.compiler.emit.candidate import OP_ATTENTION
+    cands = {c.name: c for c in C.candidates_for("nvidia", OP_ATTENTION)}
+    assert "nvidia_flash_attn" in cands
+    assert cands["nvidia_flash_attn"].tier == Tier.SYNTHESIZED
+    src = get_emitter("nvidia").emit(F.AttentionRegion(scale=0.25)).source
+    assert "tessera_nvidia_attn" in src and "expf" in src and "<<<" in src
 
 
 def test_nvidia_generic_candidate_registered():
@@ -322,3 +329,33 @@ def test_live_nvidia_emitted_ragged_degrade_is_logged():
     np.testing.assert_allclose(out, region.reference(A, B), atol=5e-3)
     hist = C.arbiter_dispatch_histogram(target="nvidia", op=OP_MATMUL)
     assert hist[("nvidia", OP_MATMUL)]["degraded"] == 1
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+@pytest.mark.parametrize("scale,causal", [(1.0, False), (0.25, False), (0.125, True)])
+@pytest.mark.parametrize("shape", [(8, 8, 16, 16), (16, 24, 32, 64)],
+                         ids=lambda s: "x".join(map(str, s)))
+def test_live_nvidia_flash_attention(scale, causal, shape):
+    # C4: the synthesized flash-attention kernel (online softmax) runs on-GPU,
+    # matches the numpy reference, and passes the same universal F4 oracle — the
+    # attention analog of the GEMM execute-compare proof.
+    from tessera.compiler.emit.candidate import OP_ATTENTION
+    from tessera.compiler.emit.kernel_emitter import get_runner
+    F.clear_verification_cache()
+    M, Nk, D, Dv = shape
+    region = F.AttentionRegion(scale=scale, causal=causal)
+    rng = np.random.default_rng(M + Nk + D)
+    Q = rng.standard_normal((M, D)).astype(np.float32)
+    K = rng.standard_normal((Nk, D)).astype(np.float32)
+    V = rng.standard_normal((Nk, Dv)).astype(np.float32)
+    out, tag = get_runner("nvidia").run_fused_attention(region, Q, K, V)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(Q, K, V), atol=1e-4)
+    assert F.verify_synthesized_attention(region, runner=get_runner("nvidia"),
+                                          force=True) is True
+    # the arbiter serves it as the Tier-1 attention candidate
+    aout, atag = C.run_arbitrated(region, OP_ATTENTION, "nvidia", Q, K, V)
+    assert atag == "nvidia_cuda"
+    np.testing.assert_allclose(aout, region.reference(Q, K, V), atol=1e-4)

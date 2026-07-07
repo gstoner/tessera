@@ -85,6 +85,10 @@ _REAL_TAG = "nvidia_cuda"
 #: Max head dim (Dv) the one-thread-per-query flash kernel holds in its per-thread
 #: online-softmax accumulator; larger Dv declines to the reference.
 _ATTN_DV_CAP = 256
+#: 16-bit storage accuracy budget vs the f32 reference (Decision #28) — shared by
+#: the tensor-core fused lane and the bf16/f16 GEMM candidates.
+_GEMM_F16_ATOL = 5e-3
+_GEMM_DTYPES = ("bfloat16", "float16")
 
 
 # ── CUDA source synthesis (generic FusedRegion lane) ──────────────────────────
@@ -602,6 +606,176 @@ class NvidiaPointwiseCandidate(Candidate):
         return _SHARED_RUNNER.run_pointwise_graph(region, arrays)
 
 
+# ── tensor-core FUSED lane — mma.sync GEMM + bias/activation epilogue (Tier-2) ─
+#
+# The perf follow-on to the Tier-1 scalar generic lane for the fusable middle
+# ground: a warp-tiled `mma.sync.m16n8k16` GEMM (bf16 operands, f32 accumulate)
+# with a fused bias + single-activation epilogue at the store — the MLP hot path.
+# bf16 storage → declares the f16 accuracy budget the oracle honors (Decision #28);
+# arch alignment/boundary handling mirrors the shipped `libtessera_nvidia_gemm`
+# tiled kernel. Serves the FusedRegion subset it can fuse (bias?, one activation,
+# no reduction/residual/prologue); everything else stays on the scalar lane.
+
+_MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
+#: Activations the mma.sync fused epilogue applies after the (optional) bias add.
+_MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
+_mma_fused_fn_cache: dict[tuple[bool, str | None], Any] = {}
+
+
+def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
+    """Map ``region`` to the mma.sync fused kernel's ``(has_bias, activation)``
+    epilogue, or ``None`` when it is not representable. Representable iff a
+    ``FusedRegion`` with no reduction/residual/prologue and an epilogue that is an
+    ordered subsequence of ``[bias?, <one of _MMA_FUSED_ACTS>?]`` (bias-add then a
+    single pointwise activation before the store)."""
+    if not isinstance(region, FusedRegion):
+        return None
+    if region.reduction is not None or region.residual or region.prologue:
+        return None
+    epi = list(region.epilogue)
+    has_bias = False
+    if epi and epi[0] == "bias":
+        has_bias, epi = True, epi[1:]
+    if not epi:
+        return has_bias, None
+    if len(epi) == 1 and epi[0] in _MMA_FUSED_ACTS:
+        return has_bias, epi[0]
+    return None                               # bias-after-act / unfusable op
+
+
+def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None) -> str:
+    """CUDA source for a warp-tiled ``mma.sync.m16n8k16`` f16 GEMM (row-major A/B,
+    f32 accumulate) with a fused ``bias? + activation?`` epilogue. One warp per
+    16x8 output tile, K-looped, boundary-checked (same fragment layout as the
+    shipped tiled kernel). f16 (10-bit mantissa) keeps the rounding vs the f32
+    reference inside the 5e-3 budget where bf16 (7-bit) would not."""
+    from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
+    bias_param = "const float* bias, " if has_bias else ""
+
+    def epi(var: str, col: str) -> str:
+        s = ""
+        if has_bias:
+            s += f"    if (nt+{col} < N) {var} += bias[nt+{col}];\n"
+        if act:
+            s += f"    {pointwise_snippet(act, var)}\n"
+        return s
+
+    epilogue = (epi("d0", "2*tig") + epi("d1", "2*tig+1")
+                + epi("d2", "2*tig") + epi("d3", "2*tig+1"))
+    return (
+        "#include <cuda_runtime.h>\n"
+        "#include <math.h>\n"
+        f"extern \"C\" __global__ void {_MMA_FUSED_ENTRY}_kernel(\n"
+        "    const unsigned short* A, const unsigned short* B, const float* bias,\n"
+        "    float* D, int M, int N, int K) {\n"
+        "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
+        "  float d0=0,d1=0,d2=0,d3=0;\n"
+        "  for (int k0=0;k0<K;k0+=16){\n"
+        "    auto la=[&](int r,int c)->unsigned{int rr=mt+r,cc=k0+c;\n"
+        "      unsigned lo=(rr<M&&cc<K)?A[rr*K+cc]:0u, hi=(rr<M&&cc+1<K)?A[rr*K+cc+1]:0u; return (hi<<16)|lo;};\n"
+        "    auto lb=[&](int r,int c)->unsigned{int rr=k0+r,cc=nt+c;\n"
+        "      unsigned lo=(rr<K&&cc<N)?B[rr*N+cc]:0u, hi=(rr+1<K&&cc<N)?B[(rr+1)*N+cc]:0u; return (hi<<16)|lo;};\n"
+        "    unsigned a0=la(gid,2*tig),a1=la(gid+8,2*tig),a2=la(gid,2*tig+8),a3=la(gid+8,2*tig+8);\n"
+        "    unsigned b0=lb(2*tig,gid),b1=lb(2*tig+8,gid);\n"
+        "    asm volatile(\"mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 \"\n"
+        "      \"{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n\"\n"
+        "      :\"+f\"(d0),\"+f\"(d1),\"+f\"(d2),\"+f\"(d3):\"r\"(a0),\"r\"(a1),\"r\"(a2),\"r\"(a3),\"r\"(b0),\"r\"(b1));\n"
+        "  }\n"
+        f"{epilogue}"
+        "  auto st=[&](int r,int c,float v){int rr=mt+r,cc=nt+c;if(rr<M&&cc<N)D[rr*N+cc]=v;};\n"
+        "  st(gid,2*tig,d0);st(gid,2*tig+1,d1);st(gid+8,2*tig,d2);st(gid+8,2*tig+1,d3);\n"
+        "}\n"
+        f'extern "C" int {_MMA_FUSED_ENTRY}(const unsigned short* hA,\n'
+        "    const unsigned short* hB, const float* hbias, float* hD,\n"
+        "    int M, int N, int K) {\n"
+        "  size_t szA=(size_t)M*K*2, szB=(size_t)K*N*2, szO=(size_t)M*N*4, szBias=(size_t)N*4;\n"
+        "  unsigned short *dA=0,*dB=0; float *dbias=0,*dD=0;\n"
+        "  if (cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
+        "  if (cudaMalloc(&dB,szB)!=cudaSuccess){cudaFree(dA);return 3;}\n"
+        "  if (cudaMalloc(&dD,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dB);return 3;}\n"
+        "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);\n"
+        "  cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice);\n"
+        "  if (hbias){ if (cudaMalloc(&dbias,szBias)!=cudaSuccess){cudaFree(dA);cudaFree(dB);cudaFree(dD);return 3;}\n"
+        "    cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice); }\n"
+        "  dim3 grid((M+15)/16,(N+7)/8), block(32);\n"
+        f"  {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
+        "  int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
+        "  if (ok==1) cudaMemcpy(hD,dD,szO,cudaMemcpyDeviceToHost);\n"
+        "  cudaFree(dA); cudaFree(dB); cudaFree(dD); if (dbias) cudaFree(dbias);\n"
+        "  return ok;\n"
+        "}\n"
+    )
+
+
+def _mma_fused_fn(has_bias: bool, act: str | None):
+    """Compile (once per epilogue signature) the mma.sync fused kernel and return
+    its bound entry symbol: ``int(A bf16, B bf16, bias f32|NULL, D f32, M,N,K)``."""
+    sig = (has_bias, act)
+    fn = _mma_fused_fn_cache.get(sig)
+    if fn is not None:
+        return fn
+    from tessera.compiler.emit.kernel_emitter import KernelSource
+    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act),
+                       entry=_MMA_FUSED_ENTRY, lang=_LANG)
+    artifact = _nvidia_cuda_compile_fn(src)
+    lib = _load_lib(artifact)
+    fn = getattr(lib, _MMA_FUSED_ENTRY)
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p] * 4 + [ctypes.c_int] * 3
+    _mma_fused_fn_cache[sig] = fn
+    return fn
+
+
+class NvidiaMmaFusedCandidate(Candidate):
+    """Tier-2 (emitted): the warp-tiled ``mma.sync`` GEMM + bias/activation epilogue
+    — the tensor-core perf lane for the fusable matmul-epilogue middle ground. bf16
+    operands / f32 accumulate, so it declares the f16 accuracy budget; the arbiter
+    prefers it over the Tier-1 scalar lane where it applies + measures faster + in
+    budget. Declines (to the reference) off an NVIDIA GPU, for a region it cannot
+    fuse, or when a required bias buffer is missing."""
+
+    name = "nvidia_mma_fused"
+    tier = Tier.EMITTED
+    target = _TARGET
+    op = OP_FUSED_REGION
+    accuracy_atol = _GEMM_F16_ATOL
+
+    def available(self) -> bool:
+        try:
+            from tessera import runtime as rt
+            return rt._nvidia_mma_runtime_available()
+        except Exception:
+            return False
+
+    def applies_to(self, region: Any) -> bool:
+        return _mma_fused_epilogue(region) is not None
+
+    def run(self, region: Any, A: Any, B: Any, bias: Any = None,
+            *a: Any, residual: Any = None, **k: Any) -> tuple[Any, str]:
+        import numpy as np
+        epi = _mma_fused_epilogue(region)
+        if epi is None:
+            return region.reference(A, B, bias), "reference"
+        has_bias, act = epi
+        if has_bias and bias is None:              # NULL-buffer guard (as scalar lane)
+            return region.reference(A, B, bias), "reference"
+        try:
+            Ab = np.ascontiguousarray(A, np.float16)   # f16 storage, f32 accumulate
+            Bb = np.ascontiguousarray(B, np.float16)
+            M, K = Ab.shape
+            _, N = Bb.shape
+            bias_arr = (np.ascontiguousarray(bias, np.float32)
+                        if has_bias else None)
+            out = np.zeros((M, N), np.float32)
+            fn = _mma_fused_fn(has_bias, act)
+            rc = fn(_ptr(Ab), _ptr(Bb), _ptr(bias_arr), _ptr(out), M, N, K)
+            if rc == 1:
+                return out, _REAL_TAG
+        except Exception:
+            pass
+        return region.reference(A, B, bias), "reference"
+
+
 # ── D1 matmul candidates (B1) — bare GEMM, Tier-2 emitted vs Tier-3 shipped ────
 #
 # The arbiter enumerates these per (target="nvidia", op=matmul) and F4-gates each.
@@ -610,9 +784,6 @@ class NvidiaPointwiseCandidate(Candidate):
 # Both are 16-bit storage (bf16/f16) → f32 accumulate, so they declare the f16
 # budget the oracle honors. Off an NVIDIA GPU / without the built libs they decline
 # to the reference and drop out of the enumeration.
-
-_GEMM_F16_ATOL = 5e-3          # 16-bit storage vs the f32 reference (Decision #28)
-_GEMM_DTYPES = ("bfloat16", "float16")
 
 
 def _aligned_2d(A: Any, B: Any) -> bool:
@@ -694,6 +865,7 @@ register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)
 
 register_candidate(NvidiaGenericCudaCandidate())
+register_candidate(NvidiaMmaFusedCandidate())         # tensor-core fused GEMM+epi
 register_candidate(NvidiaFlashAttnCandidate())        # C4: synthesized attention
 register_candidate(NvidiaGatedCandidate())            # C5: SwiGLU gate
 register_candidate(NvidiaPointwiseCandidate())        # C5: pointwise DAG

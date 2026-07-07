@@ -104,9 +104,13 @@ flash-attention execute-compare (C4), and the sm_120 kernel-inventory doc
 1. **NVFP4 block-scale execution + numerics** — bind the fp4 fragment packing and
    flip the manifest row once execute-and-compare passes on `sm_120a` and the
    scale-distribution numerics are grounded (emit + ptxas-assemble already land).
-2. **mma.sync tensor-core versions** of the flash-attention + fused lanes (the
-   correctness-first synth lanes are proven; these are the perf follow-on) + the
-   **D2 fleet-shared autotune corpus** (persist `MeasureCache`, Theory §7.5).
+2. **mma.sync tensor-core FUSED lane — LANDED** (`NvidiaMmaFusedCandidate`, Tier-2):
+   a warp-tiled `mma.sync.m16n8k16` f16 GEMM + bias/activation epilogue, ~6x faster
+   than the scalar generic lane on 512³, F4-gated within the f16 budget, arbiter-
+   preferred over Tier-1. **Still open:** the tensor-core **flash-attention** version
+   (the scalar online-softmax lane is proven; warp-level mma.sync flash is the harder
+   follow-on) + the **D2 fleet-shared autotune corpus** (persist `MeasureCache`,
+   Theory §7.5).
 3. **Dtypes beyond f32** for the fused / attention / gated lanes (16-bit storage
    is served by the B1 matmul lane today).
 4. **`wgmma` sm_90a** — complete the instruction-encoding skeleton into a real

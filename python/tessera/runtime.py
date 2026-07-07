@@ -1879,6 +1879,127 @@ def _execute_nvidia_mma_artifact(artifact: RuntimeArtifact, args: Any) -> Any:
     return d
 
 
+# ── 2D GEMM execution helpers for the D1 arbiter's NVIDIA matmul candidates ────
+# Two lanes for a bare ``D = A @ B`` (f32 accumulate), both keyed by 16-bit
+# storage dtype ("bfloat16"/"float16"): the shipped hand-tuned symbol (Tier 3)
+# and the compiler-EMITTED ptx_emit kernel via the launch bridge (Tier 2). The
+# arbiter (emit/candidate.py) F4-gates and selects between them.
+
+def _nvidia_mma_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
+    """Shipped ``libtessera_nvidia_gemm`` mma.sync GEMM on 2D ``A @ B`` -> f32.
+    ``B`` is row-major (the shipped convention). Raises on no lib / GPU / kernel
+    error (the caller declines to the reference)."""
+    import numpy as np
+    lib = _load_nvidia_gemm_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_gemm.so not loadable")
+    sym = _NVIDIA_GEMM_SYMBOLS.get(dtype)
+    fn = getattr(lib, sym, None) if sym else None
+    if fn is None:
+        raise RuntimeError(f"shipped GEMM lacks a symbol for dtype {dtype!r}")
+    store = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    if store is None:
+        raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+    Ac = np.ascontiguousarray(A, store)
+    Bc = np.ascontiguousarray(B, store)
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.zeros((M, N), np.float32)
+    rc = fn(Ac.ctypes.data_as(ctypes.c_void_p), Bc.ctypes.data_as(ctypes.c_void_p),
+            D.ctypes.data_as(ctypes.c_void_p), int(M), int(N), int(K))
+    if rc != 0:
+        raise RuntimeError(f"shipped nvidia GEMM returned rc={rc}")
+    return D
+
+
+_nvidia_ptx_launch_lib: ctypes.CDLL | None = None
+_nvidia_ptx_registered: set[str] = set()
+
+
+def _nvidia_ptx_launch_lib_path() -> Optional[Path]:
+    """Locate the PTX launch-bridge lib (env override -> canonical CMake build)."""
+    env = os.environ.get("TESSERA_NVIDIA_PTX_LAUNCH_LIB")
+    candidates: list[Path] = []
+    if env:
+        candidates.append(Path(env))
+    root = Path(__file__).resolve().parents[2]
+    candidates.append(
+        root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda"
+        / "libtessera_nvidia_ptx_launch.so")
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def _load_nvidia_ptx_launch() -> ctypes.CDLL | None:
+    """Load the PTX launch bridge once (preloading libcuda globally so its weak
+    ``tsrRegisterGpuLauncher`` ref and cuda deps resolve). Returns None (never
+    raises) when the lib / CUDA deps are absent."""
+    global _nvidia_ptx_launch_lib
+    if _nvidia_ptx_launch_lib is not None:
+        return _nvidia_ptx_launch_lib
+    path = _nvidia_ptx_launch_lib_path()
+    if path is None:
+        return None
+    cuda_dirs = ["/usr/lib/wsl/lib",
+                 os.path.join(os.environ.get("CUDA_PATH", "/usr/local/cuda"), "lib64")]
+    for dep in ("libcuda.so.1", "libcuda.so"):
+        for d in cuda_dirs:
+            p = os.path.join(d, dep)
+            if os.path.isfile(p):
+                try:
+                    ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                except OSError:
+                    pass
+                break
+    try:
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    lib.tessera_nvidia_ptx_register.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    lib.tessera_nvidia_ptx_register.restype = ctypes.c_int
+    lib.tessera_nvidia_ptx_invoke.argtypes = [
+        ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t]
+    lib.tessera_nvidia_ptx_invoke.restype = ctypes.c_int
+    _nvidia_ptx_launch_lib = lib
+    return lib
+
+
+def _nvidia_ptx_gemm_2d(A: Any, B: Any, dtype: str = "bfloat16") -> Any:
+    """Compiler-EMITTED mma.sync GEMM (ptx_emit) via the launch bridge on 2D
+    ``A @ B`` -> f32. Registers the emitted general-GEMM PTX once per dtype, then
+    invokes it. The emitted kernel wants ``B`` col-major (converted here) and
+    aligned M%16 / N%8 / K%16. Raises on no lib / GPU / launch error."""
+    import numpy as np
+    from tessera.compiler import ptx_emit as pe
+    lib = _load_nvidia_ptx_launch()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
+    edt = "f16" if dtype == "float16" else "bf16"
+    entry = pe.MMA_SYNC_GEMM_ENTRY[edt]
+    if entry not in _nvidia_ptx_registered:
+        ptx = pe.emit_mma_sync_gemm_ptx(dtype=edt)
+        if lib.tessera_nvidia_ptx_register(entry.encode(), ptx.encode()) != 0:
+            raise RuntimeError(f"ptx register failed for {entry}")
+        _nvidia_ptx_registered.add(entry)
+    store = np.float16 if dtype == "float16" else _bfloat16_dtype()
+    if store is None:
+        raise RuntimeError("bfloat16 dtype unavailable (ml_dtypes not installed)")
+    Ac = np.ascontiguousarray(A, store)                       # row-major A
+    Bc = np.asfortranarray(np.ascontiguousarray(B, store))    # col-major B storage
+    M, K = Ac.shape
+    _, N = Bc.shape
+    D = np.zeros((M, N), np.float32)
+    bufs = (ctypes.c_void_p * 3)(Ac.ctypes.data, Bc.ctypes.data, D.ctypes.data)
+    dims = (ctypes.c_int64 * 3)(int(M), int(N), int(K))
+    rc = lib.tessera_nvidia_ptx_invoke(entry.encode(), bufs, 3, dims, 3)
+    if rc != 0:
+        raise RuntimeError(f"emitted nvidia GEMM invoke rc={rc}")
+    return D
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage L4 — the COMPILED GEMM lane (the default rocm matmul execution path).
 #

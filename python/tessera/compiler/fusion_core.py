@@ -302,6 +302,41 @@ class FusedRegion:
         return out.astype(np.float32)
 
 
+def _round_to_storage(x: "np.ndarray", dtype: str) -> "np.ndarray":
+    """Round f32 ``x`` to the 16-bit storage ``dtype`` and back to f32, so a
+    reference sees the same rounded operands the 16-bit GEMM kernels do."""
+    a = np.ascontiguousarray(x, np.float32)
+    if dtype in ("float16", "f16"):
+        return a.astype(np.float16).astype(np.float32)
+    if dtype in ("bfloat16", "bf16"):
+        try:
+            import ml_dtypes
+            return a.astype(ml_dtypes.bfloat16).astype(np.float32)
+        except Exception:                      # round-to-nearest-even fallback
+            u = a.view(np.uint32).astype(np.uint64)
+            bits = (((u + 0x7FFF + ((u >> 16) & 1)) >> 16) << 16).astype(np.uint32)
+            return bits.view(np.float32)
+    raise ValueError(f"unsupported matmul storage dtype {dtype!r}")
+
+
+@dataclass(frozen=True)
+class MatmulRegion:
+    """A bare matmul ``D = A @ B`` (no fusion) — the region kind the D1 arbiter
+    keys a plain-GEMM candidate on (there is no matmul feature in ``FusedRegion``,
+    which always carries at least one fused op). ``dtype`` is the 16-bit storage
+    (``bfloat16``/``float16``); the accumulate is f32, matching the emitted
+    ``mma.sync`` and shipped GEMM kernels."""
+
+    dtype: str = "bfloat16"
+
+    def reference(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
+        """The f32 result of ``A @ B`` with both operands rounded to ``dtype``
+        first — the horizontal-oracle ground truth the GEMM candidate matches."""
+        Aq = _round_to_storage(A, self.dtype)
+        Bq = _round_to_storage(B, self.dtype)
+        return (Aq @ Bq).astype(np.float32)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # F2b-tiled — threadgroup-tiled synthesis for large N (the stack kernel caps at
 # SYNTH_MAX_N; this lifts it to SYNTH_MAX_N_TILED via dynamic threadgroup memory)
@@ -929,6 +964,36 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
         verdict = True                         # no synthesized kernel to distrust
     else:
         verdict = bool(np.allclose(out, region.reference(A, B, bias, residual),
+                                   atol=_effective_atol(r, atol)))
+    _VERIFY_CACHE[key] = verdict
+    return verdict
+
+
+def verify_synthesized_matmul(region: "MatmulRegion", *, seed: int = 0,
+                              atol: float = 1e-3, force: bool = False,
+                              runner: KernelRunner | None = None) -> bool:
+    """Codegen-gated oracle for a bare-matmul candidate (see
+    ``verify_synthesized_region``): run the candidate's GEMM on an aligned probe
+    and compare to the dtype-rounded ``A @ B`` reference. Arbiter-only — the
+    ``runner`` is a candidate adapter exposing ``run_matmul``; a runner without it
+    (a real backend runner) trusts the reference, since nothing device-emitted is
+    in play for this op."""
+    r = runner or _runner()
+    run = getattr(r, "run_matmul", None)
+    if run is None:
+        return True
+    key = (r.target, "M", region.dtype)
+    if not force and key in _VERIFY_CACHE:
+        return _VERIFY_CACHE[key]
+    rng = np.random.default_rng(seed)
+    M, N, K = 32, 16, 32                        # aligned probe (M%16, N%8, K%16)
+    A = (rng.standard_normal((M, K)) * 0.4).astype(np.float32)
+    B = (rng.standard_normal((K, N)) * 0.4).astype(np.float32)
+    out, execution = run(region, A, B)
+    if execution in REFERENCE_EXECUTIONS:
+        verdict = True
+    else:
+        verdict = bool(np.allclose(out, region.reference(A, B),
                                    atol=_effective_atol(r, atol)))
     _VERIFY_CACHE[key] = verdict
     return verdict

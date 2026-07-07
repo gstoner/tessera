@@ -1,7 +1,6 @@
 ---
 last_updated: 2026-07-06
-audit_role: handoff
-plan_state: open
+audit_role: reference
 ---
 
 # Backend Plugin Handoff — pick up Workstream C on your box

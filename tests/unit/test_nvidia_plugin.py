@@ -100,6 +100,21 @@ def test_nvidia_generic_candidate_registered():
     assert gen.tier == Tier.SYNTHESIZED and gen.target == "nvidia"
 
 
+def test_nvidia_arbitrated_residual_threads_not_raises():
+    # PR #290 review: a residual FusedRegion routed through run_arbitrated passes
+    # inputs positionally (A, B, bias, residual). The candidate must thread the
+    # residual (not drop it into *a → missing-buffer guard → ValueError). Host-free:
+    # off-GPU the candidate declines and the arbiter falls back to the numpy
+    # reference — the point is it returns a correct result, never raises.
+    region = F.FusedRegion(epilogue=("relu",), residual=True)
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    res = rng.standard_normal((8, 16)).astype(np.float32)
+    out, tag = C.run_arbitrated(region, OP_FUSED_REGION, "nvidia", A, B, None, res)
+    np.testing.assert_allclose(out, region.reference(A, B, None, res), atol=1e-2)
+
+
 def test_nvidia_missing_required_buffer_declines_not_segfault():
     # Same NULL-deref guard as x86/ROCm: a residual/bias region without the buffer
     # must not launch the CUDA kernel (which would deref a null). Child process so a
@@ -163,3 +178,21 @@ def test_live_nvidia_generic_cuda_gated(region):
     assert execution == "nvidia_cuda"
     np.testing.assert_allclose(out, region.reference(A, B, bias), atol=1e-3)
     assert F.verify_synthesized_region(region, runner=runner, force=True) is True
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _nvidia_cuda_live(),
+                    reason="live NVIDIA GPU + nvcc required")
+def test_live_nvidia_arbitrated_residual_executes():
+    # PR #290 review: an arbitrated residual fusion must EXECUTE on-GPU (residual
+    # threaded through the positional inputs), not fall back / raise. Verify
+    # (default) also exercises the residual probe added to the F4 oracle.
+    F.clear_verification_cache()
+    region = F.FusedRegion(epilogue=("relu",), residual=True)
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((8, 12)).astype(np.float32)
+    B = rng.standard_normal((12, 16)).astype(np.float32)
+    res = rng.standard_normal((8, 16)).astype(np.float32)
+    out, tag = C.run_arbitrated(region, OP_FUSED_REGION, "nvidia", A, B, None, res)
+    assert tag == "nvidia_cuda"
+    np.testing.assert_allclose(out, region.reference(A, B, None, res), atol=1e-3)

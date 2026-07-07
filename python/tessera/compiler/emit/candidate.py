@@ -169,22 +169,24 @@ def _as_runner(candidate: Candidate) -> Any:
         last_execution: str | None = None
 
         def run_fused_region(self, region, *a, **k):
-            return self._route("run_fused_region", region, a)
+            return self._route("run_fused_region", region, a, k)
 
         def run_fused_attention(self, region, *a, **k):
-            return self._route("run_fused_attention", region, a)
+            return self._route("run_fused_attention", region, a, k)
 
         def run_gated_matmul_region(self, region, *a, **k):
-            return self._route("run_gated_matmul_region", region, a)
+            return self._route("run_gated_matmul_region", region, a, k)
 
         def run_pointwise_graph(self, region, *a, **k):
-            return self._route("run_pointwise_graph", region, a)
+            return self._route("run_pointwise_graph", region, a, k)
 
-        def _route(self, called, region, a):
+        def _route(self, called, region, a, k):
             if called != method:
                 raise NotImplementedError(
                     f"candidate {candidate.name!r} serves {method}, not {called}")
-            out, tag = candidate.run(region, *a)
+            # Forward kwargs so a keyword-passed operand (e.g. residual=) reaches
+            # the candidate — the oracle passes residual by keyword.
+            out, tag = candidate.run(region, *a, **k)
             self.last_execution = tag
             return out, tag
 

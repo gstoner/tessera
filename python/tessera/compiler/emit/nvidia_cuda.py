@@ -759,9 +759,18 @@ class NvidiaMmaFusedCandidate(Candidate):
         has_bias, act = epi
         if has_bias and bias is None:              # NULL-buffer guard (as scalar lane)
             return region.reference(A, B, bias), "reference"
+        # Validate operands BEFORE the launch: the C ABI copies K*N*2 bytes from B
+        # and N*4 from bias off A's K / B's N, so a mismatched contraction or a
+        # short bias would overread. Route invalid inputs through the reference,
+        # which raises (like FusedRegion.reference / the GEMM helpers) — never
+        # launch on a bad buffer (PR #301 review).
+        Aa, Ba = np.asarray(A), np.asarray(B)
+        if (Aa.ndim != 2 or Ba.ndim != 2 or Aa.shape[1] != Ba.shape[0]
+                or (has_bias and np.asarray(bias).shape != (Ba.shape[1],))):
+            return region.reference(A, B, bias), "reference"
         try:
-            Ab = np.ascontiguousarray(A, np.float16)   # f16 storage, f32 accumulate
-            Bb = np.ascontiguousarray(B, np.float16)
+            Ab = np.ascontiguousarray(Aa, np.float16)  # f16 storage, f32 accumulate
+            Bb = np.ascontiguousarray(Ba, np.float16)
             M, K = Ab.shape
             _, N = Bb.shape
             bias_arr = (np.ascontiguousarray(bias, np.float32)

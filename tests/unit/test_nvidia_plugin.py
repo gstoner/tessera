@@ -118,6 +118,20 @@ def test_nvidia_mma_fused_candidate_registered_and_applies():
     assert not mf.applies_to(F.FusedRegion(epilogue=("gelu",), prologue=("relu",)))
 
 
+def test_nvidia_mma_fused_rejects_bad_inputs():
+    # PR #301 review: a mismatched contraction dim or a short bias must raise (like
+    # FusedRegion.reference), not launch the C ABI on an overreading buffer.
+    # Host-free — validated before any GPU work.
+    mf = next(c for c in C.candidates_for("nvidia", OP_FUSED_REGION)
+              if c.name == "nvidia_mma_fused")
+    region = F.FusedRegion(epilogue=("bias", "relu"))
+    A = np.zeros((16, 16), np.float32)
+    with pytest.raises(ValueError):                 # K 24 != A's K 16
+        mf.run(region, A, np.zeros((24, 8), np.float32), np.zeros((8,), np.float32))
+    with pytest.raises(ValueError):                 # bias len 7 != N 8
+        mf.run(region, A, np.zeros((16, 8), np.float32), np.zeros((7,), np.float32))
+
+
 def test_nvidia_generic_candidate_registered():
     cands = C.candidates_for("nvidia", OP_FUSED_REGION)
     names = [c.name for c in cands]

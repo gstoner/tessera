@@ -33,6 +33,7 @@ change. Fallback logging is **D3**.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import deque
 from enum import IntEnum
 from typing import Any, Callable
 
@@ -280,9 +281,63 @@ def run_arbitrated(region: Any, op: str, target: str, *inputs: Any,
     """Arbitrate then execute: pick the winning candidate and run it on
     ``inputs`` → ``(output, tag)``. When no candidate applies/verifies, fall back
     to ``region.reference(*inputs)`` tagged ``"reference"`` (Decision #21: honest —
-    never a mislabeled kernel)."""
+    never a mislabeled kernel). Every dispatch is recorded in the D3 arbiter log."""
     winner = arbitrate(region, op, target, verify=verify, force=force,
                        measure=measure)
     if winner is None:
+        _note_arbiter_dispatch(target, op, None, "reference")
         return region.reference(*inputs), "reference"
-    return winner.run(region, *inputs)
+    out, tag = winner.run(region, *inputs)
+    _note_arbiter_dispatch(target, op, winner.name, tag)
+    return out, tag
+
+
+# --- D3: arbiter dispatch log (did the compiled path win or silently degrade?) --
+#
+# Every arbitrated dispatch records ``(target, op, selected_candidate | None,
+# execution_tag)``. The arbiter *selects* a candidate, but that candidate's
+# ``run`` may still decline to the numpy reference at execution time (a device
+# error, an unsupported shape) — a **silent degrade** the tag reveals: the
+# selection is non-None but the tag is a reference tag. This is the observability
+# the plan's D3 asks for, generalized across every backend the arbiter serves
+# (the analog of ``runtime.dispatch_fallback_log`` for the arbiter layer).
+
+_ARBITER_LOG: "deque[tuple[str, str, str | None, str]]" = deque(maxlen=4096)
+
+
+def _note_arbiter_dispatch(target: str, op: str, selected: str | None,
+                           tag: str) -> None:
+    _ARBITER_LOG.append((target, op, selected, tag))
+
+
+def arbiter_dispatch_log() -> list[tuple[str, str, str | None, str]]:
+    """The ``(target, op, selected, tag)`` of each arbitrated dispatch this process
+    (most recent 4096). A ``selected`` that ran but whose ``tag`` is a reference
+    tag is a silent degrade."""
+    return list(_ARBITER_LOG)
+
+
+def reset_arbiter_dispatch_log() -> None:
+    _ARBITER_LOG.clear()
+
+
+def arbiter_dispatch_histogram(target: str | None = None, op: str | None = None
+                               ) -> dict[tuple[str, str], dict[str, int]]:
+    """Per ``(target, op)`` counts of ``{won, degraded, no_candidate}`` — did the
+    compiled path win, silently degrade to the reference, or was no candidate
+    available? Optionally filtered to a ``target`` / ``op``."""
+    from tessera.compiler.emit.kernel_emitter import REFERENCE_EXECUTIONS
+    hist: dict[tuple[str, str], dict[str, int]] = {}
+    for (t, o, selected, tag) in _ARBITER_LOG:
+        if target is not None and t != target:
+            continue
+        if op is not None and o != op:
+            continue
+        bucket = hist.setdefault((t, o), {"won": 0, "degraded": 0, "no_candidate": 0})
+        if selected is None:
+            bucket["no_candidate"] += 1
+        elif tag in REFERENCE_EXECUTIONS:
+            bucket["degraded"] += 1
+        else:
+            bucket["won"] += 1
+    return hist

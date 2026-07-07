@@ -23,6 +23,7 @@ import numpy as np
 from tessera.compiler.emit.kernel_emitter import (
     KernelRunner,
     METAL_TARGETS,
+    REFERENCE_EXECUTIONS,
     RunnerError,
     active_runner as _active_runner,
 )
@@ -674,7 +675,7 @@ def verify_synthesized_gated(region: GatedMatmulRegion, *, seed: int = 0,
     Wg = rng.standard_normal((12, 16)).astype(np.float32)
     Wu = rng.standard_normal((12, 16)).astype(np.float32)
     out, execution = r.run_gated_matmul_region(region, A, Wg, Wu)
-    if execution != "metal_runtime":
+    if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
         verdict = bool(np.allclose(out, region.reference(A, Wg, Wu), atol=atol))
@@ -907,7 +908,7 @@ def verify_synthesized_region(region: FusedRegion, *, seed: int = 0,
     bias = (rng.standard_normal((16,)).astype(np.float32)
             if region.has_bias else None)
     out, execution = r.run_fused_region(region, A, B, bias)
-    if execution != "metal_runtime":
+    if execution in REFERENCE_EXECUTIONS:
         verdict = True                         # no synthesized kernel to distrust
     else:
         verdict = bool(np.allclose(out, region.reference(A, B, bias), atol=atol))
@@ -929,7 +930,7 @@ def verify_synthesized_attention(region: AttentionRegion, *, seed: int = 0,
     K = rng.standard_normal((8, 16)).astype(np.float32)
     V = rng.standard_normal((8, 16)).astype(np.float32)
     out, execution = r.run_fused_attention(region, Q, K, V)
-    if execution != "metal_runtime":
+    if execution in REFERENCE_EXECUTIONS:
         verdict = True
     else:
         verdict = bool(np.allclose(out, region.reference(Q, K, V), atol=atol))
@@ -963,7 +964,7 @@ def verify_synthesized_pointwise(region: PointwiseGraphRegion, *, seed: int = 0,
     # and treat matched NaNs as agreement (equal_nan).
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
         out, execution = r.run_pointwise_graph(region, probes)
-        if execution != "metal_runtime":
+        if execution in REFERENCE_EXECUTIONS:
             verdict = True                     # no synthesized kernel to distrust
         else:
             verdict = bool(np.allclose(out, region.reference(*probes),

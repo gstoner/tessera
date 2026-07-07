@@ -317,6 +317,37 @@ def test_verify_default_runner_unchanged_without_injection():
     assert F.verify_synthesized_region(F.FusedRegion(epilogue=("relu",))) is True
 
 
+class _X86Wrong(KernelRunner):
+    """A non-Metal backend whose kernel diverges — returns its OWN real tag."""
+    target = "x86"
+    def run_fused_region(self, region, A, B, bias=None, *a, **k):
+        return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "x86_native"
+    def run_fused_attention(self, region, *a, **k): ...
+    def run_gated_matmul_region(self, region, *a, **k): ...
+    def run_pointwise_graph(self, region, *a, **k): ...
+
+
+def test_oracle_gates_non_metal_backends():
+    # The F4 gate is backend-agnostic: a runner returning its own real-execution
+    # tag ("x86_native", not "metal_runtime") is still compared to the reference,
+    # so a non-Apple backend is genuinely gated — not trusted by default. A
+    # reference/fallback tag (no real kernel) is still trusted.
+    F.clear_verification_cache()
+    region = F.FusedRegion(epilogue=("relu",))
+
+    class _X86Ref(_X86Wrong):
+        def run_fused_region(self, region, A, B, bias=None, *a, **k):
+            return region.reference(A, B, bias), "x86_native"
+
+    class _X86Fallback(_X86Wrong):
+        def run_fused_region(self, region, A, B, bias=None, *a, **k):
+            return None, "fallback"
+
+    assert F.verify_synthesized_region(region, runner=_X86Wrong(), force=True) is False
+    assert F.verify_synthesized_region(region, runner=_X86Ref(), force=True) is True
+    assert F.verify_synthesized_region(region, runner=_X86Fallback(), force=True) is True
+
+
 def test_verify_cache_is_keyed_per_runner():
     # B3 P1: a verdict from one runner must NOT be reused for another, even
     # without force — the cache key includes the backend identity. Verify a

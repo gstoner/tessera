@@ -325,6 +325,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 |---------------|-------|
 | **START HERE — status + open-work queue** | `docs/audit/MASTER_AUDIT.md` (+ theme audits; `docs/audit/README.md` for the map) |
 | **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
+| **Backend plugin handoff** — picking up Workstream C (x86/NVIDIA/ROCm) on the Strix Halo / NR2 Pro box against the merged synthesizer framework | `docs/audit/compiler/WORKSTREAM_C_HANDOFF.md` (the 3-seam build recipe + skeleton + F4-verify + per-backend cards) |
 | **Generated dashboards** (count/status truth — never hand-edit) | `docs/audit/generated/` |
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |

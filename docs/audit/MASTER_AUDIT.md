@@ -45,6 +45,12 @@ truth for counts; theme audit documents carry the reasoning and work plan.
 > ceiling.** These docs are *direction*; this page + the generated dashboards
 > stay *status truth* (Decision #26). Full map in
 > [`README.md`](README.md#forward-plans--the-compiler-north-star).
+>
+> **On the Strix Halo / NR2 Pro box picking up a backend?** Workstream B (the
+> target-agnostic synthesizer framework: emitter + runner + compile-cache loop +
+> universal F4 oracle) is **merged**; the build recipe for your per-arch plugin
+> (Workstream C: x86 / NVIDIA / ROCm) is
+> [`compiler/WORKSTREAM_C_HANDOFF.md`](compiler/WORKSTREAM_C_HANDOFF.md).
 
 ## Current Truth Snapshot
 
